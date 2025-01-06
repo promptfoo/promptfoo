@@ -50,6 +50,7 @@ describe('EvalOutputCell', () => {
       provider: 'test-provider',
       score: 0.8,
       text: 'Test output text',
+      testCase: {},
     },
     maxTextLength: 100,
     onRating: mockOnRating,
@@ -92,6 +93,7 @@ describe('EvalOutputCell', () => {
       provider: 'test-provider',
       score: 0.8,
       text: 'Test output text',
+      testCase: {},
     },
     promptIndex: 0,
     rowIndex: 0,
@@ -226,6 +228,7 @@ describe('EvalOutputCell provider override', () => {
       provider: 'test-provider',
       score: 0.8,
       text: 'Test output text',
+      testCase: {},
     },
     maxTextLength: 100,
     onRating: vi.fn(),
@@ -273,14 +276,17 @@ describe('EvalOutputCell provider override', () => {
         provider: 'openai:gpt-4',
         testCase: {
           provider: {
-            modelName: 'gpt-4-mini',
+            id: 'openai:gpt-4-mini',
+            config: {
+              model: 'gpt-4-mini',
+            },
           },
         },
       },
     };
 
     const { container } = renderWithProviders(<EvalOutputCell {...props} />);
-    expect(container.querySelector('.provider.pill')).toHaveTextContent('gpt-4-mini');
+    expect(container.querySelector('.provider.pill')).toHaveTextContent('openai:gpt-4-mini');
   });
 
   it('does not show provider override when test case has no provider', () => {

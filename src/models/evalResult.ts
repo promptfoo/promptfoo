@@ -5,6 +5,7 @@ import { evalResultsTable } from '../database/tables';
 import { getEnvBool } from '../envars';
 import { hashPrompt } from '../prompts/utils';
 import type {
+  ApiProvider,
   AtomicTestCase,
   GradingResult,
   Prompt,
@@ -44,7 +45,14 @@ export default class EvalResult {
       testCase: {
         ...testCase,
         ...(testCase.provider && {
-          provider: JSON.parse(safeJsonStringify(testCase.provider) as string),
+          provider: (() => {
+            try {
+              if (typeof testCase.provider === 'object' && (testCase.provider as ApiProvider)?.id) {
+                return (testCase.provider as ApiProvider).id();
+              }
+            } catch {}
+            return JSON.parse(safeJsonStringify(testCase.provider) as string);
+          })(),
         }),
       },
       promptIdx: result.promptIdx,

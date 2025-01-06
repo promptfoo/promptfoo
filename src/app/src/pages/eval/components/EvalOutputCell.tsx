@@ -491,10 +491,21 @@ function EvalOutputCell({
   };
 
   const providerOverride = useMemo(() => {
-    const testCaseProvider =
-      typeof output.testCase?.provider === 'string'
-        ? output.testCase.provider
-        : output.testCase?.provider?.modelName;
+    const provider = output.testCase?.provider;
+    let testCaseProvider: string | null = null;
+
+    if (!provider) {
+      return null;
+    }
+
+    if (typeof provider === 'string') {
+      testCaseProvider = provider;
+    } else if (typeof provider === 'object' && 'id' in provider) {
+      const id = provider.id;
+      if (typeof id === 'string') {
+        testCaseProvider = id;
+      }
+    }
 
     if (testCaseProvider) {
       return (
