@@ -388,7 +388,7 @@ redteam:
     - id: 'harmful:specialized-advice'
       severity: 'critical'
     - id: 'rbac'
-      severity: 'critical
+      severity: 'critical'
     - id: 'contracts'
       severity: 'low'
 ```
@@ -781,6 +781,14 @@ There are two approaches:
 
 Either way, this will allow you to evaluate your custom tests.
 
+:::warning
+The `redteam.yaml` file contains a metadata section with a configHash value at the end. When adding custom tests:
+
+1. Do not modify or remove the metadata section
+2. Keep a backup of your custom tests
+
+:::
+
 ### Loading custom tests from CSV
 
 Promptfoo supports loading tests from CSV as well as Google Sheets. See [CSV loading](/docs/configuration/guide/#loading-tests-from-csv) and [Google Sheets](/docs/integrations/google-sheets/) for more info.
@@ -795,9 +803,9 @@ tests: huggingface://datasets/fka/awesome-chatgpt-prompts
 
 # Or with query parameters
 
+```yaml
 tests: huggingface://datasets/fka/awesome-chatgpt-prompts?split=train&config=custom
-
-````
+```
 
 Each row in the dataset becomes a test case, with dataset fields available as variables in your prompts:
 
@@ -806,6 +814,6 @@ prompts:
   - "Question: {{question}}\nExpected: {{answer}}"
 
 tests: huggingface://datasets/rajpurkar/squad
-````
+```
 
 For detailed information about query parameters, dataset configuration, and more examples, see the [HuggingFace provider documentation](/docs/providers/huggingface/#datasets).
