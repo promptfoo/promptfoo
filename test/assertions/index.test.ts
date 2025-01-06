@@ -3938,6 +3938,151 @@ describe('runAssertion', () => {
       expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/schema.json', 'utf8');
       expect(result.pass).toBe(true);
     });
+
+    it('should handle JavaScript file reference with function name', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'file:///path/to/assert.js:customFunction',
+      };
+
+      const mockFn = jest.fn((output: string) => true);
+      jest.doMock(
+        path.resolve('/path/to/assert.js'),
+        () => ({
+          customFunction: mockFn,
+        }),
+        { virtual: true },
+      );
+
+      const output = 'Expected output';
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const providerResponse = { output };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+
+      expect(mockFn).toHaveBeenCalledWith('Expected output', {
+        prompt: 'Some prompt',
+        vars: {},
+        test: {},
+        provider,
+        providerResponse,
+      });
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should handle Python file reference with function name', async () => {
+      const assertion: Assertion = {
+        type: 'python',
+        value: 'file:///path/to/assert.py:custom_function',
+      };
+
+      const mockOutput = true;
+      jest.mocked(runPython).mockResolvedValueOnce(mockOutput);
+
+      const output = 'Expected output';
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const providerResponse = { output };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+
+      expect(runPython).toHaveBeenCalledWith(
+        path.resolve('/path/to/assert.py'),
+        'custom_function',
+        [
+          output,
+          {
+            prompt: 'Some prompt',
+            vars: {},
+            test: {},
+            provider,
+            providerResponse,
+          },
+        ],
+      );
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should ignore function name in file path for non-JS/Python files', async () => {
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'file:///path/to/text.txt:ignored',
+      };
+
+      const expectedContent = 'Expected output';
+      jest.mocked(fs.readFileSync).mockReturnValue(expectedContent);
+      jest.mocked(path.resolve).mockReturnValue('/base/path/path/to/text.txt:ignored');
+      jest.mocked(path.extname).mockReturnValue('.txt');
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Expected output' },
+      });
+
+      expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/path/to/text.txt:ignored', 'utf8');
+      expect(result.pass).toBe(true);
+    });
+
+    it('should use default function name for Python when none specified', async () => {
+      const assertion: Assertion = {
+        type: 'python',
+        value: 'file:///path/to/assert.py',
+      };
+
+      const mockOutput = true;
+      jest.mocked(runPython).mockResolvedValueOnce(mockOutput);
+
+      const output = 'Expected output';
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const providerResponse = { output };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+
+      expect(runPython).toHaveBeenCalledWith(
+        path.resolve('/path/to/assert.py'),
+        'get_assert', // Default function name
+        [
+          output,
+          {
+            prompt: 'Some prompt',
+            vars: {},
+            test: {},
+            provider,
+            providerResponse,
+          },
+        ],
+      );
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
   });
 });
 
