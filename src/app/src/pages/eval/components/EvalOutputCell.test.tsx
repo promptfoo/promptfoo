@@ -10,12 +10,18 @@ import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
 import type { EvalOutputCellProps } from './EvalOutputCell';
 import EvalOutputCell from './EvalOutputCell';
 
+const renderWithProviders = (ui: React.ReactElement) => {
+  return render(<ShiftKeyProvider>{ui}</ShiftKeyProvider>);
+};
+
 vi.mock('./store', () => ({
   useStore: () => ({
     prettifyJson: false,
     renderMarkdown: true,
     showPassFail: true,
     showPrompts: true,
+    maxImageWidth: 256,
+    maxImageHeight: 256,
   }),
 }));
 
@@ -31,10 +37,6 @@ interface MockEvalOutputCellProps extends EvalOutputCellProps {
 
 describe('EvalOutputCell', () => {
   const mockOnRating = vi.fn();
-
-  const renderWithProviders = (ui: React.ReactElement) => {
-    return render(<ShiftKeyProvider>{ui}</ShiftKeyProvider>);
-  };
 
   const defaultProps: MockEvalOutputCellProps = {
     firstOutput: {
@@ -238,6 +240,7 @@ describe('EvalOutputCell provider override', () => {
       provider: 'test-provider',
       score: 0.8,
       text: 'Test output text',
+      testCase: {},
     },
     promptIndex: 0,
     rowIndex: 0,
@@ -259,7 +262,7 @@ describe('EvalOutputCell provider override', () => {
     };
 
     const { container } = renderWithProviders(<EvalOutputCell {...props} />);
-    expect(container.querySelector('.provider')).toHaveTextContent('openai:gpt-4-mini');
+    expect(container.querySelector('.provider.pill')).toHaveTextContent('openai:gpt-4-mini');
   });
 
   it('shows provider override when test case has a provider object', () => {
@@ -277,7 +280,7 @@ describe('EvalOutputCell provider override', () => {
     };
 
     const { container } = renderWithProviders(<EvalOutputCell {...props} />);
-    expect(container.querySelector('.provider')).toHaveTextContent('gpt-4-mini');
+    expect(container.querySelector('.provider.pill')).toHaveTextContent('gpt-4-mini');
   });
 
   it('does not show provider override when test case has no provider', () => {
@@ -291,6 +294,6 @@ describe('EvalOutputCell provider override', () => {
     };
 
     const { container } = renderWithProviders(<EvalOutputCell {...props} />);
-    expect(container.querySelector('.provider')).not.toBeInTheDocument();
+    expect(container.querySelector('.provider.pill')).not.toBeInTheDocument();
   });
 });
