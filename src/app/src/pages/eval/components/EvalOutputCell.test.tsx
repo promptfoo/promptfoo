@@ -212,31 +212,85 @@ describe('EvalOutputCell', () => {
 });
 
 describe('EvalOutputCell provider override', () => {
-  it('shows provider override when test case uses different provider', () => {
-    const output = {
-      provider: 'openai:gpt-4o',
-      testCase: {
-        provider: {
-          modelName: 'gpt-4o-mini',
+  const defaultProps: MockEvalOutputCellProps = {
+    firstOutput: {
+      cost: 0,
+      id: 'test-id',
+      latencyMs: 100,
+      namedScores: {},
+      pass: true,
+      failureReason: ResultFailureReason.NONE,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      score: 0.8,
+      text: 'Test output text',
+    },
+    maxTextLength: 100,
+    onRating: vi.fn(),
+    output: {
+      cost: 0,
+      id: 'test-id',
+      latencyMs: 100,
+      namedScores: {},
+      pass: true,
+      failureReason: ResultFailureReason.NONE,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      score: 0.8,
+      text: 'Test output text',
+    },
+    promptIndex: 0,
+    rowIndex: 0,
+    searchText: '',
+    showDiffs: false,
+    showStats: true,
+  };
+
+  it('shows provider override when test case has a provider string', () => {
+    const props = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        provider: 'openai:gpt-4',
+        testCase: {
+          provider: 'openai:gpt-4-mini',
         },
       },
     };
 
-    const { container } = render(<EvalOutputCell output={output} {...defaultProps} />);
-    expect(container.querySelector('.provider')).toHaveTextContent('openai:gpt-4o-mini');
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+    expect(container.querySelector('.provider')).toHaveTextContent('openai:gpt-4-mini');
   });
 
-  it('does not show provider override when providers match', () => {
-    const output = {
-      provider: 'openai:gpt-4o',
-      testCase: {
-        provider: {
-          modelName: 'gpt-4o',
+  it('shows provider override when test case has a provider object', () => {
+    const props = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        provider: 'openai:gpt-4',
+        testCase: {
+          provider: {
+            modelName: 'gpt-4-mini',
+          },
         },
       },
     };
 
-    const { container } = render(<EvalOutputCell output={output} {...defaultProps} />);
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+    expect(container.querySelector('.provider')).toHaveTextContent('gpt-4-mini');
+  });
+
+  it('does not show provider override when test case has no provider', () => {
+    const props = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        provider: 'openai:gpt-4',
+        testCase: {},
+      },
+    };
+
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
     expect(container.querySelector('.provider')).not.toBeInTheDocument();
   });
 });

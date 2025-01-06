@@ -3,11 +3,7 @@ import { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useShiftKey } from '@app/hooks/useShiftKey';
 import Tooltip from '@mui/material/Tooltip';
-import {
-  ResultFailureReason,
-  type EvaluateTableOutput,
-  type ProviderOptions,
-} from '@promptfoo/types';
+import { ResultFailureReason, type EvaluateTableOutput } from '@promptfoo/types';
 import { diffSentences, diffJson, diffWords } from 'diff';
 import remarkGfm from 'remark-gfm';
 import CustomMetrics from './CustomMetrics';
@@ -495,18 +491,15 @@ function EvalOutputCell({
   };
 
   const providerOverride = useMemo(() => {
-    const defaultProviderId = output.provider;
-    const overrideProviderId = typeof output.testCase?.provider === 'string'
-      ? output.testCase.provider
-      : output.testCase?.provider?.modelName as string;
+    const testCaseProvider =
+      typeof output.testCase?.provider === 'string'
+        ? output.testCase.provider
+        : output.testCase?.provider?.modelName;
 
-    console.log('testCase', output.testCase);
-    console.log('Provider IDs:', JSON.stringify({ defaultProviderId, overrideProviderId, testCaseProvider: output.testCase?.provider, isOverridden: overrideProviderId !== defaultProviderId }));
-
-    if (overrideProviderId && defaultProviderId && overrideProviderId !== defaultProviderId) {
+    if (testCaseProvider) {
       return (
         <Tooltip title="Model override for this test" arrow placement="top">
-          <span className="provider">{overrideProviderId}</span>
+          <span className="provider pill">{testCaseProvider}</span>
         </Tooltip>
       );
     }
@@ -517,11 +510,13 @@ function EvalOutputCell({
     <div className="cell" style={cellStyle}>
       {showPassFail && (
         <div className={`status ${output.pass ? 'pass' : 'fail'}`}>
-          <div className="pill">
-            {passFailText}
-            {scoreString && <span className="score"> {scoreString}</span>}
+          <div className="status-row">
+            <div className="pill">
+              {passFailText}
+              {scoreString && <span className="score"> {scoreString}</span>}
+            </div>
+            {providerOverride}
           </div>
-          {providerOverride}
           <CustomMetrics lookup={output.namedScores} />
           {!output.pass && (
             <span className="fail-reason">
