@@ -142,10 +142,11 @@ export async function runAssertion({
     ...(assertion.config ? { config: assertion.config } : {}),
   };
 
-  if (testIndex !== undefined) {
+  const assertList = test['assert'] ? test['assert'] : [];
+  if (testIndex !== undefined && testIndex >= 0 && testIndex < assertList.length) {
     // HACK but treat the deserialized config as a brand new object
     // thus eliminating the possibility of a circular reference
-    const assertionConfig = test['assert'][testIndex] ? test['assert'][testIndex]['config'] : {};
+    const assertionConfig = assertList[testIndex] ? assertList[testIndex]['config'] : {};
     if (assertionConfig !== undefined) {
       context.config = JSON.parse(JSON.stringify(assertionConfig));
     }

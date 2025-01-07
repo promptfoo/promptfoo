@@ -425,6 +425,10 @@ const AssertionSetSchema = z.object({
   metric: z.string().optional(),
   // The required score for this assert set. If not provided, the test case is graded pass/fail.
   threshold: z.number().optional(),
+
+  // An external mapping of arbitrary strings to values that is defined
+  // for every assertion in the set and passed into each assert
+  config: z.record(z.string(), z.any()).optional(),
 });
 
 export type AssertionSet = z.infer<typeof AssertionSetSchema>;
@@ -438,7 +442,7 @@ export const AssertionSchema = z.object({
   value: z.custom<AssertionValue>().optional(),
 
   // An external mapping of arbitrary strings to values that is passed
-  // to the assertion for custom javascript asserts
+  // to the assertion for custom asserts
   config: z.record(z.string(), z.any()).optional(),
 
   // The threshold value, only applicable for similarity (cosine distance)
