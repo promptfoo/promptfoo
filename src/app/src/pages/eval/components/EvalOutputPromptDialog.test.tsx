@@ -1,35 +1,35 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import React from 'react';
 import type { AssertionType, GradingResult } from '@promptfoo/types';
 import userEvent from '@testing-library/user-event';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 
-describe('EvalOutputPromptDialog', () => {
-  const mockOnClose = vi.fn();
-  const defaultProps = {
-    open: true,
-    onClose: mockOnClose,
-    prompt: 'Test prompt',
-    provider: 'test-provider',
-    output: 'Test output',
-    gradingResults: [
-      {
-        pass: true,
-        score: 1.0,
-        assertion: {
-          type: 'contains',
-          value: 'expected value',
-          metric: 'Custom Metric Name',
-        },
-        reason: 'Test reason',
-      } satisfies GradingResult,
-    ],
-    metadata: {
-      testKey: 'testValue',
-    },
-  };
+const mockOnClose = vi.fn();
+const defaultProps = {
+  open: true,
+  onClose: mockOnClose,
+  prompt: 'Test prompt',
+  provider: 'test-provider',
+  output: 'Test output',
+  gradingResults: [
+    {
+      pass: true,
+      score: 1.0,
+      assertion: {
+        type: 'contains',
+        value: 'expected value',
+        metric: 'Custom Metric Name',
+      },
+      reason: 'Test reason',
+    } satisfies GradingResult,
+  ],
+  metadata: {
+    testKey: 'testValue',
+  },
+};
 
+describe('EvalOutputPromptDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -121,6 +121,91 @@ describe('EvalOutputPromptDialog', () => {
     render(<EvalOutputPromptDialog {...propsWithLongValue} />);
     const truncatedCell = screen.getByText(/^a+\.\.\.$/);
     await userEvent.click(truncatedCell);
+    expect(screen.getByText(longValue)).toBeInTheDocument();
+  });
+});
+
+describe('EvalOutputPromptDialog metadata interaction', () => {
+  let user: ReturnType<typeof userEvent.setup>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    user = userEvent.setup();
+  });
+
+  it('expands metadata value on single click', async () => {
+    const longValue = 'a'.repeat(400);
+    const propsWithLongValue = {
+      ...defaultProps,
+      metadata: {
+        testKey: longValue,
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithLongValue} />);
+    const truncatedCell = screen.getByText(/^a+\.\.\.$/);
+
+    await act(async () => {
+      await user.click(truncatedCell);
+    });
+
+    expect(screen.getByText(longValue)).toBeInTheDocument();
+  });
+
+  it('collapses metadata value on double click', async () => {
+    const longValue = 'a'.repeat(400);
+    const propsWithLongValue = {
+      ...defaultProps,
+      metadata: {
+        testKey: longValue,
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithLongValue} />);
+    const cell = screen.getByText(/^a+\.\.\.$/);
+
+    // First click to expand
+    await act(async () => {
+      await user.click(cell);
+    });
+    expect(screen.getByText(longValue)).toBeInTheDocument();
+
+    // Quick second click to collapse (within 300ms threshold)
+    await act(async () => {
+      await user.click(cell);
+    });
+
+    expect(screen.getByText(/^a+\.\.\.$/)).toBeInTheDocument();
+  });
+
+  it('maintains expanded state if second click is after threshold', async () => {
+    const longValue = 'a'.repeat(400);
+    const propsWithLongValue = {
+      ...defaultProps,
+      metadata: {
+        testKey: longValue,
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithLongValue} />);
+    const cell = screen.getByText(/^a+\.\.\.$/);
+
+    // First click to expand
+    await act(async () => {
+      await user.click(cell);
+    });
+    expect(screen.getByText(longValue)).toBeInTheDocument();
+
+    // Wait just over the double-click threshold (300ms)
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 301));
+    });
+
+    // Second click should keep it expanded
+    await act(async () => {
+      await user.click(cell);
+    });
+
     expect(screen.getByText(longValue)).toBeInTheDocument();
   });
 });
