@@ -2,7 +2,7 @@
 prompts:
   - 'Tell me about {{topic}} in three words'
 providers:
-  - openai:gpt-4o
+  - echo
 
 tests:
   - vars:

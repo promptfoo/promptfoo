@@ -610,6 +610,11 @@ describe('runAssertion', () => {
     },
   };
 
+  const javascriptBooleanAssertionWithoutConfig: Assertion = {
+    type: 'javascript',
+    value: 'output.length <= context.config.maximumOutputSize',
+  };
+
   const javascriptStringAssertionWithNumberAndThreshold: Assertion = {
     type: 'javascript',
     value: 'output.length * 10',
@@ -1572,6 +1577,62 @@ describe('runAssertion', () => {
       assertion: javascriptBooleanAssertionWithConfig,
       test: {} as AtomicTestCase,
       providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1.0,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should disregard invalid inputs for assert index', async () => {
+    const output = 'Expected output';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: javascriptBooleanAssertionWithConfig,
+      test: {
+        assert: [
+          {
+            type: 'javascript',
+            value: 'output.length <= context.config.maximumOutputSize',
+            config: {
+              maximumOutputSize: 1,
+            },
+          } as Assertion,
+        ],
+      } as AtomicTestCase,
+      providerResponse: { output },
+      assertIndex: 45,
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1.0,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should correctly set configuration from the test case when assert index is valid', async () => {
+    const output = 'Expected output';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: javascriptBooleanAssertionWithoutConfig,
+      test: {
+        assert: [
+          {
+            type: 'javascript',
+            value: 'output.length <= context.config.maximumOutputSize',
+            config: {
+              maximumOutputSize: 50,
+            },
+          } as Assertion,
+        ],
+      } as AtomicTestCase,
+      providerResponse: { output },
+      assertIndex: 0,
     });
     expect(result).toMatchObject({
       pass: true,

@@ -101,7 +101,7 @@ export async function runAssertion({
   test,
   latencyMs,
   providerResponse,
-  testIndex,
+  assertIndex,
 }: {
   prompt?: string;
   provider?: ApiProvider;
@@ -109,7 +109,7 @@ export async function runAssertion({
   test: AtomicTestCase;
   providerResponse: ProviderResponse;
   latencyMs?: number;
-  testIndex?: number;
+  assertIndex?: number;
 }): Promise<GradingResult> {
   const { cost, logProbs, output: originalOutput } = providerResponse;
   let output = originalOutput;
@@ -143,10 +143,10 @@ export async function runAssertion({
   };
 
   const assertList = test['assert'] ? test['assert'] : [];
-  if (testIndex !== undefined && testIndex >= 0 && testIndex < assertList.length) {
+  if (assertIndex !== undefined && assertIndex >= 0 && assertIndex < assertList.length) {
     // HACK but treat the deserialized config as a brand new object
     // thus eliminating the possibility of a circular reference
-    const assertionConfig = assertList[testIndex] ? assertList[testIndex]['config'] : {};
+    const assertionConfig = assertList[assertIndex] ? assertList[assertIndex]['config'] : {};
     if (assertionConfig !== undefined) {
       context.config = JSON.parse(JSON.stringify(assertionConfig));
     }
@@ -367,7 +367,7 @@ export async function runAssertions({
         assertion,
         test,
         latencyMs,
-        testIndex: index,
+        assertIndex: index,
       });
 
       assertResult.addResult({
