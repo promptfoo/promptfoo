@@ -88,6 +88,7 @@ async function runRedteamConversation({
     output: string;
     score: number;
     isOnTopic: boolean;
+    graderPassed: boolean | undefined;
   }[] = [];
   let finalIteration = 0;
   let finalTargetPrompt: string | undefined = undefined;
@@ -203,7 +204,7 @@ async function runRedteamConversation({
       const grader = getGraderById(assertToUse.type);
       if (grader) {
         const { grade } = await grader.getResult(
-          targetPrompt,
+          goal as string,
           targetResponse.output,
           test,
           redteamProvider,
@@ -295,6 +296,7 @@ async function runRedteamConversation({
       output: targetResponse.output,
       score: currentScore,
       isOnTopic,
+      graderPassed,
     });
 
     if (currentScore >= 10 || graderPassed === false) {
@@ -417,6 +419,7 @@ class RedteamIterativeProvider implements ApiProvider {
       numIterations: this.numIterations,
       context,
       options,
+      test: context.test,
     });
   }
 }
