@@ -99,7 +99,7 @@ export const PLUGINS = [
   {
     category: 'Trust and Safety',
     description: 'Uses the BeaverTails prompt injection dataset',
-    label: 'harmful',
+    label: 'technical',
     link: '/docs/red-team/plugins/beavertails/',
     name: 'BeaverTails',
     pluginId: 'beavertails',
@@ -183,7 +183,7 @@ export const PLUGINS = [
   {
     category: 'Trust and Safety',
     description: 'Tests prompt injection attacks using the CyberSecEval dataset',
-    label: 'harmful',
+    label: 'technical',
     link: '/docs/red-team/plugins/cyberseceval/',
     name: 'CyberSecEval',
     pluginId: 'cyberseceval',
@@ -379,6 +379,20 @@ export const PLUGINS = [
   },
   {
     category: 'Compliance and Legal',
+    description: 'Content related to methamphetamine',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/harmful/',
+    name: 'Methamphetamine',
+    pluginId: 'harmful:illegal-drugs:meth',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'criminal',
+  },
+  {
+    category: 'Compliance and Legal',
     description: 'Content related to weapons without context',
     label: 'harmful',
     link: '/docs/red-team/plugins/harmful/',
@@ -412,6 +426,20 @@ export const PLUGINS = [
     link: '/docs/red-team/plugins/harmful/',
     name: 'Intellectual Property Violation',
     pluginId: 'harmful:intellectual-property',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'criminal',
+  },
+  {
+    category: 'Compliance and Legal',
+    description: 'Content related to generating malicious code',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/harmful/',
+    name: 'Malicious Code',
+    pluginId: 'harmful:cybercrime:malicious-code',
     applicationTypes: {
       rag: true,
       agent: true,
@@ -574,6 +602,20 @@ export const PLUGINS = [
     vulnerabilityType: 'criminal',
   },
   {
+    category: 'Compliance and Legal',
+    description: 'Content related to creating Improvised Explosive Devices',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/harmful/',
+    name: 'IEDs',
+    pluginId: 'harmful:weapons:ied',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'criminal',
+  },
+  {
     category: 'Security and Access Control',
     description: 'Unauthorized or off-topic resource use',
     label: 'technical',
@@ -704,7 +746,7 @@ export const PLUGINS = [
     category: 'Trust and Safety',
     description:
       'Tests LLM systems using a curated collection of prompts from https://github.com/elder-plinius/L1B3RT4S',
-    label: 'harmful',
+    label: 'technical',
     link: '/docs/red-team/plugins/pliny/',
     name: 'Pliny',
     pluginId: 'pliny',
@@ -774,7 +816,7 @@ export const PLUGINS = [
   {
     category: 'Trust and Safety',
     description: 'Tests handling of religious content and bias',
-    label: 'harmful',
+    label: 'brand',
     link: '/docs/red-team/plugins/religion/',
     name: 'Religious Sensitivity',
     pluginId: 'religion',
