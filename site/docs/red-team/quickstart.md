@@ -6,22 +6,23 @@ sidebar_label: Quickstart
 import CodeBlock from '@theme/CodeBlock';
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
+import styles from '@site/src/pages/quickstart.module.css';
 
 # Quickstart
 
 Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for red teaming gen AI applications.
 
 - **Automatically scans 50+ vulnerability types**:
-  - <a href="/docs/red-team/llm-vulnerability-types/#privacy-and-security" style={{background: '#f0f0f0', borderRadius: '4px', padding: '2px 4px', fontSize: '14px'}}>Security & data privacy</a>: jailbreaks, injections, RAG poisoning, etc.
-  - <a href="/docs/red-team/llm-vulnerability-types/" style={{background: '#f0f0f0', borderRadius: '4px', padding: '2px 4px', fontSize: '14px'}}>Compliance & ethics</a>: harmful & biased content, content filter validation, OWASP/NIST/EU compliance, etc.
-  - <a href="/docs/red-team/configuration/#custom-policies" style={{background: '#f0f0f0', borderRadius: '4px', padding: '2px 4px', fontSize: '14px'}}>Custom policies</a>: enforce organizational guidelines.
+  - <a href="/docs/red-team/llm-vulnerability-types/#privacy-and-security" className={styles.badge}>Security & data privacy</a>: jailbreaks, injections, RAG poisoning, etc.
+  - <a href="/docs/red-team/llm-vulnerability-types/" className={styles.badge}>Compliance & ethics</a>: harmful & biased content, content filter validation, OWASP/NIST/EU compliance, etc.
+  - <a href="/docs/red-team/configuration/#custom-policies" className={styles.badge}>Custom policies</a>: enforce organizational guidelines.
 - Generates **dynamic attack probes** tailored to your application using specialized uncensored models.
 - Implements state-of-the-art **adversarial ML research** from [Microsoft](/docs/red-team/strategies/multi-turn/), [Meta](/docs/red-team/strategies/goat/), and others.
 - Integrates with [CI/CD](/docs/integrations/ci-cd/).
 - Tests via [HTTP API](#attacking-an-api-endpoint), [browser](/docs/providers/browser/), or [direct model access](#alternative-test-specific-prompts-and-models).
 
-<div style={{maxWidth: 460, margin: '0 auto'}}>
-![llm red team report](/img/riskreport-1@2x.png)
+<div className={styles.imageContainer}>
+  ![llm red team report](/img/riskreport-1@2x.png)
 </div>
 
 ## Prerequisites
@@ -85,8 +86,6 @@ Because the Promptfoo scanner runs locally on your machine, it can attack any en
 
 ![llm red team setup](/img/docs/setup/target.png)
 
----
-
 ### Select plugins
 
 Next, select the plugins that you want to use. [Plugins](/docs/red-team/plugins/) are adversarial generators. They produce malicious inputs that are sent to your application.
@@ -95,8 +94,6 @@ Check off the individual plugins you want to use, or select a preset that includ
 
 ![llm red team setup](/img/docs/setup/plugins.png)
 
----
-
 ### Select attack strategies
 
 Now we select strategies. [Strategies](/docs/red-team/strategies/) are techniques that wrap the generated inputs in a specific attack pattern.
@@ -104,8 +101,6 @@ Now we select strategies. [Strategies](/docs/red-team/strategies/) are technique
 This is how Promptfoo generates more sophisticated jailbreaks and injections.
 
 ![llm red team setup](/img/docs/setup/strategy.png)
-
----
 
 ### Review and save
 
