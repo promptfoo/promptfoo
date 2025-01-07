@@ -376,7 +376,11 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
           )}
 
           {/* Tabs */}
-          <Tabs value={tabValue} onChange={(_, newValue) => onTabChange(newValue)} sx={{ mb: 2 }}>
+          <Tabs
+            value={tabValue}
+            onChange={(_, newValue) => onTabChange(newValue)}
+            sx={{ mt: 3, mb: 2 }}
+          >
             <Tab
               label={`Successful Attacks (${strategyStats[selectedStrategy].total - strategyStats[selectedStrategy].pass})`}
             />

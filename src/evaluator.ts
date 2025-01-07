@@ -220,6 +220,7 @@ class Evaluator {
             prompt,
             filters,
             originalProvider: provider,
+            test,
 
             // All of these are removed in python and script providers, but every Javascript provider gets them
             logger,
