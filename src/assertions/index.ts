@@ -146,20 +146,23 @@ export async function runAssertion({
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
-      let filePath = path.resolve(basePath, renderedValue.slice('file://'.length));
-
+      const fileRef = renderedValue.slice('file://'.length);
+      let filePath = fileRef;
       let functionName: string | undefined;
 
-      if (filePath.includes(':')) {
-        const splits = filePath.split(':');
-        if (splits[0] && (isJavascriptFile(splits[0]) || splits[0].endsWith('.py'))) {
-          [filePath, functionName] = splits;
-        }
+      if (fileRef.includes(':')) {
+        const [pathPart, funcPart] = fileRef.split(':');
+        filePath = pathPart;
+        functionName = funcPart;
       }
+
+      filePath = path.resolve(basePath, filePath);
 
       if (isJavascriptFile(filePath)) {
         const requiredModule = await importModule(filePath, functionName);
-        if (typeof requiredModule === 'function') {
+        if (functionName && typeof requiredModule[functionName] === 'function') {
+          valueFromScript = await Promise.resolve(requiredModule[functionName](output, context));
+        } else if (typeof requiredModule === 'function') {
           valueFromScript = await Promise.resolve(requiredModule(output, context));
         } else if (requiredModule.default && typeof requiredModule.default === 'function') {
           valueFromScript = await Promise.resolve(requiredModule.default(output, context));
@@ -171,7 +174,7 @@ export async function runAssertion({
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.py')) {
         try {
-          const pythonScriptOutput = await runPython(filePath, functionName ?? 'get_assert', [
+          const pythonScriptOutput = await runPython(filePath, functionName || 'get_assert', [
             output,
             context,
           ]);
