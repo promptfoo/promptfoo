@@ -3,14 +3,14 @@ import { v4 as uuidv4 } from 'uuid';
 import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai';
 import type { TreeSearchOutput } from '../../../src/redteam/providers/iterativeTree';
 import {
-  renderSystemPrompts,
+  checkIfOnTopic,
+  createTreeNode,
   evaluateResponse,
   getNewPrompt,
-  checkIfOnTopic,
-  updateRedteamHistory,
-  createTreeNode,
-  selectNodes,
   MAX_WIDTH,
+  renderSystemPrompts,
+  selectNodes,
+  updateRedteamHistory,
 } from '../../../src/redteam/providers/iterativeTree';
 import {
   ATTACKER_SYSTEM_PROMPT,
@@ -764,6 +764,7 @@ describe('Tree Structure and Metadata', () => {
           prompt: 'root prompt',
           score: 5,
           wasSelected: true,
+          graderPassed: true,
         },
         {
           depth: 1,
@@ -775,6 +776,7 @@ describe('Tree Structure and Metadata', () => {
           prompt: 'child prompt',
           score: 8,
           wasSelected: true,
+          graderPassed: false,
         },
       ]),
     };
@@ -794,8 +796,10 @@ describe('Tree Structure and Metadata', () => {
     expect(treeOutputs[0]).toHaveProperty('isOnTopic');
     expect(treeOutputs[0]).toHaveProperty('depth');
     expect(treeOutputs[0]).toHaveProperty('wasSelected');
+    expect(treeOutputs[0]).toHaveProperty('graderPassed');
 
     expect(treeOutputs[1].parentId).toBe('root');
     expect(treeOutputs[1].improvement).toBe('improvement');
+    expect(treeOutputs[1].graderPassed).toBe(false);
   });
 });
