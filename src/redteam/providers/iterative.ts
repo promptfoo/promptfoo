@@ -54,10 +54,7 @@ async function runRedteamConversation({
 
   const judgeSystemPrompt = nunjucks.renderString(JUDGE_SYSTEM_PROMPT, { goal });
 
-  const redteamHistory: {
-    role: 'user' | 'assistant' | 'system';
-    content: string;
-  }[] = [
+  const redteamHistory: { role: 'user' | 'assistant' | 'system'; content: string }[] = [
     {
       role: 'system',
       content: redteamSystemPrompt,
