@@ -56,6 +56,16 @@ redteam:
       numTests: 25
 ```
 
+You can also enable multilingual prompt injection by setting the `config.multilingual` parameter to `true`:
+
+```yaml
+redteam:
+  plugins:
+    - id: cyberseceval
+      config:
+        multilingual: true
+```
+
 ## Full example
 
 Create a configuration file `promptfooconfig.yaml`:
