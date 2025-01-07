@@ -201,6 +201,14 @@ async function runRedteamConversation({
           assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
         );
         graderPassed = grade.pass;
+        if (grade.tokensUsed) {
+          totalTokenUsage.total += grade.tokensUsed.total || 0;
+          totalTokenUsage.prompt += grade.tokensUsed.prompt || 0;
+          totalTokenUsage.completion += grade.tokensUsed.completion || 0;
+          totalTokenUsage.cached += grade.tokensUsed.cached || 0;
+        } else {
+          totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
+        }
       }
     }
     // Calculate the score
@@ -289,11 +297,6 @@ async function runRedteamConversation({
       graderPassed,
     });
 
-    if (currentScore >= 10 || graderPassed === false) {
-      finalIteration = i + 1;
-      break;
-    }
-
     if (redteamResp.tokenUsage) {
       totalTokenUsage.total += redteamResp.tokenUsage.total || 0;
       totalTokenUsage.prompt += redteamResp.tokenUsage.prompt || 0;
@@ -336,6 +339,11 @@ async function runRedteamConversation({
       totalTokenUsage.cached += targetResponse.tokenUsage.cached || 0;
     } else {
       totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
+    }
+
+    if (currentScore >= 10 || graderPassed === false) {
+      finalIteration = i + 1;
+      break;
     }
   }
 
