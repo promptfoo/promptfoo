@@ -190,7 +190,9 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
 
       {testResult && (
         <Box mt={2}>
-          <Alert severity={testResult.success ? 'success' : 'error'}>{testResult.message}</Alert>
+          {testResult.success != null && (
+            <Alert severity={testResult.success ? 'success' : 'error'}>{testResult.message}</Alert>
+          )}
           {testResult.suggestions && (
             <Box mt={2}>
               <Typography variant="subtitle1" gutterBottom>
