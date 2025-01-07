@@ -16,6 +16,7 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import type { ProviderResponse, ProviderTestResponse } from '@promptfoo/types';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import type { ProviderOptions } from '../../types';
 import Prompts from '../Prompts';
@@ -80,17 +81,10 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   );
   const [testingTarget, setTestingTarget] = useState(false);
   const [testResult, setTestResult] = useState<{
-    success: boolean;
-    message: string;
+    success?: boolean;
+    message?: string;
     suggestions?: string[];
-    providerResponse?: {
-      raw: string;
-      output: string;
-      sessionId?: string;
-      metadata?: {
-        headers?: Record<string, string>;
-      };
-    };
+    providerResponse?: ProviderResponse;
   } | null>(null);
   const [hasTestedTarget, setHasTestedTarget] = useState(false);
   const [bodyError, setBodyError] = useState<string | null>(null);
@@ -270,27 +264,25 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         throw new Error('Network response was not ok');
       }
 
-      const data = await response.json();
-      const result = data.test_result;
+      const data = (await response.json()) as ProviderTestResponse;
+      const result = data.testResult;
 
       if (result.error) {
         setTestResult({
-          success: false,
-          message: result.error,
-          providerResponse: data.provider_response,
+          providerResponse: data.providerResponse,
         });
       } else if (result.changes_needed) {
         setTestResult({
           success: false,
           message: result.changes_needed_reason,
           suggestions: result.changes_needed_suggestions,
-          providerResponse: data.provider_response,
+          providerResponse: data.providerResponse,
         });
       } else {
         setTestResult({
           success: true,
           message: 'Target configuration is valid!',
-          providerResponse: data.provider_response,
+          providerResponse: data.providerResponse,
         });
         setHasTestedTarget(true);
       }
