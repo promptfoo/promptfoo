@@ -91,7 +91,7 @@ Restrict who can modify training data or initiate training processes.
 
 - **Model Red Teaming**: Run an initial [red team](https://www.promptfoo.dev/docs/red-team/) assessment against any models pulled from shared or public repositories like Hugging Face.
 - **Test Hallucination**: Test for hallucination with [Promptfoo's plugin](https://www.promptfoo.dev/docs/red-team/plugins/hallucination/). You can also [assess hallucinations at a more granular level](https://www.promptfoo.dev/docs/guides/prevent-llm-hallucations/) with Promptfoo's eval framework.
-- **Assess Bias**: In Promptfoo's eval framework, use Promptfoo's [classifier assert type](https://www.promptfoo.dev/docs/configuration/expected-outputs/classifier/#bias-detection-example) to assess grounding, factuality, and bias in models pulled from Hugging Face. 
+- **Assess Bias**: In Promptfoo's eval framework, use Promptfoo's [classifier assert type](https://www.promptfoo.dev/docs/configuration/expected-outputs/classifier/#bias-detection-example) to assess grounding, factuality, and bias in models pulled from Hugging Face.
 - **Test RAG Poisoning**: Test for RAG poisoning with [Promptfoo's RAG poisoning plugin](https://www.promptfoo.dev/docs/red-team/plugins/rag-poisoning/).
 
 Implementing these [AI security strategies](https://www.promptfoo.dev/security/) will help safeguard your models against various threats.
@@ -115,5 +115,3 @@ Promptfoo is an open-source platform that tests and secures large language model
 Developers, security experts, product managers, and researchers rely on Promptfoo to enhance the safety and reliability of AI systems. With over 30,000 users worldwide, including major companies like Shopify and Microsoft, the platform has proven its effectiveness. Its open-source nature and active community support ensure ongoing improvements to address emerging AI security challenges.
 
 [Secure your LLM applications](https://www.promptfoo.dev/llm-vulnerability-scanner/) today using Promptfoo's comprehensive security checks and custom probes tailored to your needs. With Promptfoo, you can build safer AI systems and protect your organization from data poisoning attacks and other threats. Explore features like the LLM vulnerability scanner and resources for [securing RAG systems](https://www.promptfoo.dev/docs/red-team/rag/) to fortify your defenses.
-
-
