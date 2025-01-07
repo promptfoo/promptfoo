@@ -1,10 +1,20 @@
 ---
 sidebar_label: Defending Against Data Poisoning Attacks on LLMs—A Comprehensive Guide
-image: /img/blog/data-poisoning/backdoor-panda.png
+image: /img/blog/data-poisoning/poisoning-panda.jpeg
 date: 2025-01-07
 ---
 
 # Defending Against Data Poisoning Attacks on LLMs: A Comprehensive Guide
+
+<figure>
+  <div style={{ textAlign: 'center' }}>
+    <img
+      src="/img/blog/data-poisoning/poisoning-panda.jpeg"
+      alt="Promptfoo Panda in the EU"
+      style={{ width: '70%' }}
+    />
+  </div>
+</figure>
 
 Data poisoning remains a top concern on the [OWASP Top 10 for 2025](https://owasp.org/www-project-top-10-for-large-language-model-applications/). However, the scope of data poisoning has expanded since the 2023 version. Data poisoning is no longer strictly a risk during the training of Large Language Models (LLMs); it now encompasses all three stages of the LLM lifecycle: pre-training, fine-tuning, and embeddings from external sources. OWASP also highlights the risk of model poisoning from shared repositories or open-source platforms, where models may contain backdoors or embedded malware.
 
