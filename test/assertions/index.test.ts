@@ -561,23 +561,6 @@ describe('runAssertion', () => {
     value: 'output === "Expected output"',
   };
 
-  const javascriptMultilineStringAssertion: Assertion = {
-    type: 'javascript',
-    value: `
-      if (output === "Expected output") {
-        return {
-          pass: true,
-          score: 0.5,
-          reason: 'Assertion passed',
-        };
-      }
-      return {
-        pass: false,
-        score: 0,
-        reason: 'Assertion failed',
-      };`,
-  };
-
   const javascriptStringAssertionWithNumber: Assertion = {
     type: 'javascript',
     value: 'output.length * 10',
@@ -600,26 +583,6 @@ describe('runAssertion', () => {
     type: 'javascript',
     value: 'output.length * 10',
     threshold: 0.5,
-  };
-
-  const javascriptFunctionAssertion: Assertion = {
-    type: 'javascript',
-    value: async (output: string) => ({
-      pass: true,
-      score: 0.5,
-      reason: 'Assertion passed',
-      assertion: null,
-    }),
-  };
-
-  const javascriptFunctionFailAssertion: Assertion = {
-    type: 'javascript',
-    value: async (output: string) => ({
-      pass: false,
-      score: 0.5,
-      reason: 'Assertion failed',
-      assertion: null,
-    }),
   };
 
   it('should pass when the equality assertion passes', async () => {
