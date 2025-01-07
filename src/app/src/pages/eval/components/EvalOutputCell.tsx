@@ -490,35 +490,51 @@ function EvalOutputCell({
       .join('\n\n');
   };
 
+  const providerOverride = useMemo(() => {
+    const provider = output.testCase?.provider;
+    let testCaseProvider: string | null = null;
+
+    if (!provider) {
+      return null;
+    }
+
+    if (typeof provider === 'string') {
+      testCaseProvider = provider;
+    } else if (typeof provider === 'object' && 'id' in provider) {
+      const id = provider.id;
+      if (typeof id === 'string') {
+        testCaseProvider = id;
+      }
+    }
+
+    if (testCaseProvider) {
+      return (
+        <Tooltip title="Model override for this test" arrow placement="top">
+          <span className="provider pill">{testCaseProvider}</span>
+        </Tooltip>
+      );
+    }
+    return null;
+  }, [output]);
+
   return (
     <div className="cell" style={cellStyle}>
       {showPassFail && (
-        <>
-          {output.pass ? (
-            <>
-              <div className="status pass">
-                <div className="pill">
-                  {passFailText}
-                  {scoreString && <span className="score"> {scoreString}</span>}
-                </div>
-                <CustomMetrics lookup={output.namedScores} />
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="status fail">
-                <div className="pill">
-                  {passFailText}
-                  {scoreString && <span className="score"> {scoreString}</span>}
-                </div>
-                <CustomMetrics lookup={output.namedScores} />
-                <span className="fail-reason">
-                  <FailReasonCarousel failReasons={failReasons} />
-                </span>
-              </div>
-            </>
+        <div className={`status ${output.pass ? 'pass' : 'fail'}`}>
+          <div className="status-row">
+            <div className="pill">
+              {passFailText}
+              {scoreString && <span className="score"> {scoreString}</span>}
+            </div>
+            {providerOverride}
+          </div>
+          <CustomMetrics lookup={output.namedScores} />
+          {!output.pass && (
+            <span className="fail-reason">
+              <FailReasonCarousel failReasons={failReasons} />
+            </span>
           )}
-        </>
+        </div>
       )}
       {showPrompts && firstOutput.prompt && (
         <div className="prompt">

@@ -90,6 +90,13 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
   );
 }
 
+interface ExpandedMetadataState {
+  [key: string]: {
+    expanded: boolean;
+    lastClickTime: number;
+  };
+}
+
 interface EvalOutputPromptDialogProps {
   open: boolean;
   onClose: () => void;
@@ -110,7 +117,7 @@ export default function EvalOutputPromptDialog({
   metadata,
 }: EvalOutputPromptDialogProps) {
   const [copied, setCopied] = useState(false);
-  const [expandedMetadata, setExpandedMetadata] = useState<{ [key: string]: boolean }>({});
+  const [expandedMetadata, setExpandedMetadata] = useState<ExpandedMetadataState>({});
 
   useEffect(() => {
     setCopied(false);
@@ -121,8 +128,18 @@ export default function EvalOutputPromptDialog({
     setCopied(true);
   };
 
-  const toggleMetadataExpand = (key: string) => {
-    setExpandedMetadata((prev) => ({ ...prev, [key]: !prev[key] }));
+  const handleMetadataClick = (key: string) => {
+    const now = Date.now();
+    const lastClick = expandedMetadata[key]?.lastClickTime || 0;
+    const isDoubleClick = now - lastClick < 300; // 300ms threshold
+
+    setExpandedMetadata((prev) => ({
+      ...prev,
+      [key]: {
+        expanded: isDoubleClick ? false : true,
+        lastClickTime: now,
+      },
+    }));
   };
 
   let parsedMessages: Message[] = [];
@@ -200,16 +217,15 @@ export default function EvalOutputPromptDialog({
                   {Object.entries(metadata).map(([key, value]) => {
                     const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
                     const truncatedValue = ellipsize(stringValue, 300);
-                    const isExpanded = expandedMetadata[key] || false;
 
                     return (
                       <TableRow key={key}>
                         <TableCell>{key}</TableCell>
                         <TableCell
                           style={{ whiteSpace: 'pre-wrap', cursor: 'pointer' }}
-                          onClick={() => toggleMetadataExpand(key)}
+                          onClick={() => handleMetadataClick(key)}
                         >
-                          {isExpanded ? stringValue : truncatedValue}
+                          {expandedMetadata[key]?.expanded ? stringValue : truncatedValue}
                         </TableCell>
                       </TableRow>
                     );

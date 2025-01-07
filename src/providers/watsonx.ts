@@ -380,6 +380,16 @@ export class WatsonXProvider implements ApiProvider {
       this.env?.WATSONX_AI_BEARER_TOKEN ||
       getEnvString('WATSONX_AI_BEARER_TOKEN');
 
+    const authType = this.env?.WATSONX_AI_AUTH_TYPE || getEnvString('WATSONX_AI_AUTH_TYPE');
+
+    if (authType === 'iam' && apiKey) {
+      logger.info('Using IAM Authentication based on WATSONX_AI_AUTH_TYPE.');
+      return new IamAuthenticator({ apikey: apiKey });
+    } else if (authType === 'bearertoken' && bearerToken) {
+      logger.info('Using Bearer Token Authentication based on WATSONX_AI_AUTH_TYPE.');
+      return new BearerTokenAuthenticator({ bearerToken });
+    }
+
     if (apiKey) {
       logger.info('Using IAM Authentication.');
       return new IamAuthenticator({ apikey: apiKey });

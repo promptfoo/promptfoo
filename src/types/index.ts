@@ -234,20 +234,21 @@ export interface EvaluateResult {
 }
 
 export interface EvaluateTableOutput {
-  id: string;
-  pass: boolean;
-  failureReason: ResultFailureReason;
-  score: number;
-  namedScores: Record<string, number>;
-  text: string;
-  prompt: string;
-  latencyMs: number;
-  provider?: string;
-  tokenUsage?: Partial<TokenUsage>;
-  gradingResult?: GradingResult | null;
   cost: number;
+  failureReason: ResultFailureReason;
+  gradingResult?: GradingResult | null;
+  id: string;
+  latencyMs: number;
   metadata?: Record<string, any>;
+  namedScores: Record<string, number>;
+  pass: boolean;
+  prompt: string;
+  provider?: string;
   response?: ProviderResponse;
+  score: number;
+  testCase: AtomicTestCase;
+  text: string;
+  tokenUsage?: Partial<TokenUsage>;
 }
 
 export interface EvaluateTableRow {

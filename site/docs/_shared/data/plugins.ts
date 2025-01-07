@@ -618,10 +618,10 @@ export const PLUGINS = [
   },
   {
     category: 'Custom',
-    description: 'Probes the model to answer specific questions set by your organization',
+    description: 'Probes the model with specific inputs',
     label: 'technical',
     link: '/docs/red-team/plugins/intent/',
-    name: 'Intent',
+    name: 'Custom Prompts',
     pluginId: 'intent',
     applicationTypes: {
       rag: true,
@@ -720,7 +720,7 @@ export const PLUGINS = [
     description: 'Violates a custom configured policy',
     label: 'technical',
     link: '/docs/red-team/plugins/custom/',
-    name: 'Custom Policy',
+    name: 'Custom Topic',
     pluginId: 'policy',
     applicationTypes: {
       rag: true,
