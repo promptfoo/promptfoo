@@ -1,21 +1,24 @@
-import type winston from 'winston';
+import type winston from "winston";
 
-import type { AtomicTestCase } from './';
-import type { EnvOverrides } from './env';
-import type { Prompt } from './prompts';
-import type {
-  NunjucksFilterMap,
-  TokenUsage,
-} from './shared';
+import type { AtomicTestCase } from "./";
+import type { EnvOverrides } from "./env";
+import type { Prompt } from "./prompts";
+import type { NunjucksFilterMap, TokenUsage } from "./shared";
 
 export type ProviderId = string;
 export type ProviderLabel = string;
-export type ProviderFunction = ApiProvider['callApi'];
+export type ProviderFunction = ApiProvider["callApi"];
 export type ProviderOptionsMap = Record<ProviderId, ProviderOptions>;
 
-export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation';
+export type ProviderType =
+  | "embedding"
+  | "classification"
+  | "text"
+  | "moderation";
 
-export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
+export type ProviderTypeMap = Partial<
+  Record<ProviderType, string | ProviderOptions | ApiProvider>
+>;
 
 export interface ProviderModerationResponse {
   error?: string;
@@ -58,7 +61,9 @@ export interface ApiProvider {
   id: () => string;
   callApi: CallApiFunction;
   callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
-  callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
+  callClassificationApi?: (
+    prompt: string,
+  ) => Promise<ProviderClassificationResponse>;
   label?: ProviderLabel;
   transform?: string;
   delay?: number;
@@ -71,15 +76,23 @@ export interface ApiEmbeddingProvider extends ApiProvider {
 }
 
 export interface ApiSimilarityProvider extends ApiProvider {
-  callSimilarityApi: (reference: string, input: string) => Promise<ProviderSimilarityResponse>;
+  callSimilarityApi: (
+    reference: string,
+    input: string,
+  ) => Promise<ProviderSimilarityResponse>;
 }
 
 export interface ApiClassificationProvider extends ApiProvider {
-  callClassificationApi: (prompt: string) => Promise<ProviderClassificationResponse>;
+  callClassificationApi: (
+    prompt: string,
+  ) => Promise<ProviderClassificationResponse>;
 }
 
 export interface ApiModerationProvider extends ApiProvider {
-  callModerationApi: (prompt: string, response: string) => Promise<ProviderModerationResponse>;
+  callModerationApi: (
+    prompt: string,
+    response: string,
+  ) => Promise<ProviderModerationResponse>;
 }
 
 export interface ProviderResponse {
@@ -129,18 +142,18 @@ export type CallApiFunction = {
 
 export function isApiProvider(provider: any): provider is ApiProvider {
   return (
-    typeof provider === 'object' &&
+    typeof provider === "object" &&
     provider != null &&
-    'id' in provider &&
-    typeof provider.id === 'function'
+    "id" in provider &&
+    typeof provider.id === "function"
   );
 }
 
 export function isProviderOptions(provider: any): provider is ProviderOptions {
   return (
-    typeof provider === 'object' &&
+    typeof provider === "object" &&
     provider != null &&
-    'id' in provider &&
-    typeof provider.id === 'string'
+    "id" in provider &&
+    typeof provider.id === "string"
   );
 }
