@@ -15,7 +15,6 @@ import invariant from '../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
-import { getGraderById } from '../graders';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
 import type { TargetResponse } from './shared';
@@ -198,7 +197,7 @@ async function runRedteamConversation({
     invariant(targetResponse.output, '[Iterative] Target did not return an output');
 
     const assertToUse = test?.assert?.find((a: { type: string }) => a.type);
-
+    const { getGraderById } = await import('../graders');
     let graderPassed: boolean | undefined;
     if (test && assertToUse) {
       const grader = getGraderById(assertToUse.type);
