@@ -17,6 +17,7 @@ import { maybeEmitAzureOpenAiWarning } from './providers/azureUtil';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import {
+  ResultFailureReason,
   type ApiProvider,
   type Assertion,
   type CompletedPrompt,
@@ -25,7 +26,6 @@ import {
   type EvaluateStats,
   type Prompt,
   type ProviderResponse,
-  ResultFailureReason,
   type RunEvalOptions,
   type TestSuite,
 } from './types';
@@ -373,9 +373,7 @@ class Evaluator {
     const assertionTypes = new Set<string>();
     const rowsWithSelectBestAssertion = new Set<number>();
 
-    await runExtensionHook(testSuite.extensions, 'beforeAll', {
-      suite: testSuite,
-    });
+    await runExtensionHook(testSuite.extensions, 'beforeAll', { suite: testSuite });
 
     if (options.generateSuggestions) {
       // TODO(ian): Move this into its own command/file
@@ -571,14 +569,8 @@ class Evaluator {
       // Handle default properties
       testCase.assert = [...(testSuite.defaultTest?.assert || []), ...(testCase.assert || [])];
       testCase.threshold = testCase.threshold ?? testSuite.defaultTest?.threshold;
-      testCase.options = {
-        ...testSuite.defaultTest?.options,
-        ...testCase.options,
-      };
-      testCase.metadata = {
-        ...testSuite.defaultTest?.metadata,
-        ...testCase.metadata,
-      };
+      testCase.options = { ...testSuite.defaultTest?.options, ...testCase.options };
+      testCase.metadata = { ...testSuite.defaultTest?.metadata, ...testCase.metadata };
       testCase.provider = testCase.provider || testSuite.defaultTest?.provider;
 
       const prependToPrompt =

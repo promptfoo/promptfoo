@@ -48,17 +48,11 @@ async function runRedteamConversation({
   const nunjucks = getNunjucksEngine();
   const goal = vars[injectVar];
 
-  const redteamSystemPrompt = nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, {
-    goal,
-  });
+  const redteamSystemPrompt = nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal });
 
-  const onTopicSystemPrompt = nunjucks.renderString(ON_TOPIC_SYSTEM_PROMPT, {
-    goal,
-  });
+  const onTopicSystemPrompt = nunjucks.renderString(ON_TOPIC_SYSTEM_PROMPT, { goal });
 
-  const judgeSystemPrompt = nunjucks.renderString(JUDGE_SYSTEM_PROMPT, {
-    goal,
-  });
+  const judgeSystemPrompt = nunjucks.renderString(JUDGE_SYSTEM_PROMPT, { goal });
 
   const redteamHistory: {
     role: 'user' | 'assistant' | 'system';
