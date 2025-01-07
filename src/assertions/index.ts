@@ -145,7 +145,7 @@ export async function runAssertion({
   if (testIndex !== undefined) {
     // HACK but treat the deserialized config as a brand new object
     // thus eliminating the possibility of a circular reference
-    const assertionConfig = test['assert'][testIndex]['config'];
+    const assertionConfig = test['assert'][testIndex] ? test['assert'][testIndex]['config'] : {};
     if (assertionConfig !== undefined) {
       context.config = JSON.parse(JSON.stringify(assertionConfig));
     }
