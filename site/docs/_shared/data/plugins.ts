@@ -99,7 +99,7 @@ export const PLUGINS = [
   {
     category: 'Trust and Safety',
     description: 'Uses the BeaverTails prompt injection dataset',
-    label: 'technical',
+    label: 'harmful',
     link: '/docs/red-team/plugins/beavertails/',
     name: 'BeaverTails',
     pluginId: 'beavertails',
