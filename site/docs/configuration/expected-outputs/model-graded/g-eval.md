@@ -12,7 +12,7 @@ To use G-Eval in your test configuration:
 
 ```yaml
 assert:
-  - type: geval
+  - type: g-eval
     value: 'Ensure the response is factually accurate and well-structured'
     threshold: 0.7 # Optional, defaults to 0.7
 ```
@@ -21,7 +21,7 @@ You can also provide multiple evaluation criteria as an array:
 
 ```yaml
 assert:
-  - type: geval
+  - type: g-eval
     value:
       - 'Check if the response maintains a professional tone'
       - 'Verify that all technical terms are used correctly'
@@ -44,7 +44,7 @@ Like other model-graded assertions, you can override the default GPT-4o evaluato
 
 ```yaml
 assert:
-  - type: geval
+  - type: g-eval
     value: 'Ensure response is factually accurate'
     provider: openai:gpt-4o-mini
 ```
@@ -72,7 +72,7 @@ tests:
   - vars:
       topic: 'quantum computing'
     assert:
-      - type: geval
+      - type: g-eval
         value:
           - 'Explains technical concepts in simple terms'
           - 'Maintains accuracy without oversimplification'
