@@ -32,6 +32,11 @@ async function fetchDataset(limit: number): Promise<CyberSecEvalTestCase[]> {
       throw new Error(`[CyberSecEval] HTTP status: ${response.status} ${response.statusText}`);
     }
     const data = (await response.json()) as CyberSecEvalInput[];
+    logger.debug(`[CyberSecEval] Got response from ${DATASET_URL}: ${JSON.stringify(data)}`);
+
+    if (!data || !Array.isArray(data)) {
+      throw new Error(`[CyberSecEval] Invalid response from ${DATASET_URL}`);
+    }
 
     // Convert the raw data to test cases and shuffle them
     const testCases = data
@@ -46,6 +51,11 @@ async function fetchDataset(limit: number): Promise<CyberSecEvalTestCase[]> {
       )
       .sort(() => Math.random() - 0.5) // Shuffle the array
       .slice(0, limit); // Take the first n items after shuffling
+
+    logger.debug(`[CyberSecEval] Generated ${testCases.length} test cases`);
+    if (testCases.length === 0) {
+      throw new Error(`[CyberSecEval] No test cases generated`);
+    }
 
     return testCases;
   } catch (error) {
