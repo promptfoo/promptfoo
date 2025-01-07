@@ -364,7 +364,6 @@ export interface TreeSearchOutput {
   improvement?: string;
   wasSelected: boolean;
   graderPassed?: boolean;
-  graderRubric?: string;
 }
 
 /**
@@ -572,13 +571,12 @@ export async function runRedteamConversation({
 
         const { getGraderById } = await import('../graders');
         let graderPassed: boolean | undefined;
-        let graderRubric: string | undefined;
         const assertToUse = test?.assert?.find((a: { type: string }) => a.type);
 
         if (assertToUse) {
           const grader = getGraderById(assertToUse.type);
           if (grader) {
-            const { grade, rubric } = await grader.getResult(
+            const { grade } = await grader.getResult(
               goal as string,
               targetResponse.output,
               test || {},
@@ -586,7 +584,6 @@ export async function runRedteamConversation({
               assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
             );
             graderPassed = grade.pass;
-            graderRubric = rubric;
 
             if (grade.tokensUsed) {
               totalTokenUsage.total += grade.tokensUsed.total || 0;
@@ -614,7 +611,6 @@ export async function runRedteamConversation({
             prompt: targetPrompt,
             score,
             wasSelected: false,
-            graderRubric,
           });
           return {
             output: targetResponse.output,

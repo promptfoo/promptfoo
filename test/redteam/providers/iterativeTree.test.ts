@@ -3,14 +3,14 @@ import { v4 as uuidv4 } from 'uuid';
 import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai';
 import type { TreeSearchOutput } from '../../../src/redteam/providers/iterativeTree';
 import {
-  renderSystemPrompts,
+  checkIfOnTopic,
+  createTreeNode,
   evaluateResponse,
   getNewPrompt,
-  checkIfOnTopic,
-  updateRedteamHistory,
-  createTreeNode,
-  selectNodes,
   MAX_WIDTH,
+  renderSystemPrompts,
+  selectNodes,
+  updateRedteamHistory,
 } from '../../../src/redteam/providers/iterativeTree';
 import {
   ATTACKER_SYSTEM_PROMPT,
@@ -764,6 +764,7 @@ describe('Tree Structure and Metadata', () => {
           prompt: 'root prompt',
           score: 5,
           wasSelected: true,
+          graderPassed: true,
         },
         {
           depth: 1,
@@ -775,6 +776,7 @@ describe('Tree Structure and Metadata', () => {
           prompt: 'child prompt',
           score: 8,
           wasSelected: true,
+          graderPassed: false,
         },
       ]),
     };
@@ -794,8 +796,65 @@ describe('Tree Structure and Metadata', () => {
     expect(treeOutputs[0]).toHaveProperty('isOnTopic');
     expect(treeOutputs[0]).toHaveProperty('depth');
     expect(treeOutputs[0]).toHaveProperty('wasSelected');
+    expect(treeOutputs[0]).toHaveProperty('graderPassed');
 
     expect(treeOutputs[1].parentId).toBe('root');
     expect(treeOutputs[1].improvement).toBe('improvement');
+    expect(treeOutputs[1].graderPassed).toBe(false);
+  });
+
+  it('should handle grader results in tree outputs', () => {
+    const treeOutputs: TreeSearchOutput[] = [
+      {
+        depth: 0,
+        id: 'root',
+        isOnTopic: true,
+        output: 'root output',
+        prompt: 'root prompt',
+        score: 5,
+        wasSelected: true,
+        graderPassed: true,
+      },
+      {
+        depth: 1,
+        id: 'child1',
+        improvement: 'improvement1',
+        isOnTopic: true,
+        output: 'child1 output',
+        parentId: 'root',
+        prompt: 'child1 prompt',
+        score: 7,
+        wasSelected: true,
+        graderPassed: false,
+      },
+    ];
+
+    expect(treeOutputs[0].graderPassed).toBe(true);
+    expect(treeOutputs[1].graderPassed).toBe(false);
+  });
+
+  it('should handle GRADER_FAILED stopping reason', () => {
+    const metadata = {
+      attempts: 5,
+      highestScore: 6,
+      redteamFinalPrompt: 'final prompt',
+      stoppingReason: 'GRADER_FAILED' as const,
+      treeOutputs: JSON.stringify([
+        {
+          depth: 0,
+          id: 'root',
+          isOnTopic: true,
+          output: 'root output',
+          prompt: 'root prompt',
+          score: 6,
+          wasSelected: true,
+          graderPassed: false,
+        },
+      ]),
+    };
+
+    expect(metadata.stoppingReason).toBe('GRADER_FAILED');
+    const treeOutputs = JSON.parse(metadata.treeOutputs);
+    expect(treeOutputs[0].graderPassed).toBe(false);
   });
 });
