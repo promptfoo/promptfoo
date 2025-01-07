@@ -59,6 +59,10 @@ defaultTest:
 tests: file://prompt_injection.json
 ```
 
+:::info
+To test multilingual prompt injection across 15 common languages, use `prompt_injection_multilingual.json` instead.
+:::
+
 We'll set up a basic prompt file `prompt.json` that just passes through each prompt from the CyberSecEval dataset:
 
 ```json

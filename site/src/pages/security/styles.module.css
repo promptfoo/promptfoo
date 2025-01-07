@@ -3,9 +3,32 @@
   --secondary-color: #17a2b8;
   --text-color: #333;
   --background-color: #f8f9fa;
+  --card-background: #fff;
+  --card-shadow: rgba(0, 0, 0, 0.1);
+  --text-secondary: #666;
+  --border-color: #e0e0e0;
+  --hover-color: #004494;
 
   color: var(--text-color);
   background-color: var(--background-color);
+}
+
+[data-theme='dark'] .securityLandingPage {
+  --primary-color: #3b82f6;
+  --secondary-color: #06b6d4;
+  --text-color: #f1f5f9;
+  --background-color: #0d1117;
+  --card-background: #21262d;
+  --card-shadow: rgba(0, 0, 0, 0.5);
+  --text-secondary: #94a3b8;
+  --border-color: #30363d;
+  --hover-color: #2563eb;
+  --card-hover-background: #334155;
+  --button-secondary-bg: #1e293b;
+  --button-secondary-hover: #334155;
+  --logo-section-bg: #f6f8fa;
+  --logo-section-text: #24292f;
+  --logo-section-border: #d0d7de;
 }
 
 .container {
@@ -40,12 +63,34 @@
   background-color: #004494;
 }
 
+.buttonPrimary {
+  background-color: var(--primary-color);
+  color: #fff;
+}
+
+.buttonPrimary:hover {
+  background-color: #004494;
+  color: #fff;
+  text-decoration: none;
+}
+
 .buttonSecondary {
   background-color: var(--secondary-color);
 }
 
 .buttonSecondary:hover {
   background-color: #138496;
+}
+
+@media (prefers-color-scheme: dark) {
+  .buttonSecondary {
+    background-color: var(--button-secondary-bg);
+  }
+
+  .buttonSecondary:hover {
+    background-color: var(--button-secondary-hover);
+    border-color: var(--primary-color);
+  }
 }
 
 .hero {
@@ -371,6 +416,26 @@
   padding: 2rem;
 }
 
+.featureContent h3 {
+  color: var(--primary-color);
+  margin-bottom: 1rem;
+}
+
+.featureContent p {
+  color: var(--text-color);
+  margin-bottom: 1rem;
+}
+
+.featureContent a {
+  color: var(--primary-color);
+  text-decoration: none;
+}
+
+.featureContent a:hover {
+  color: var(--hover-color);
+  text-decoration: underline;
+}
+
 .featureImageWrapper {
   width: 45%;
 }
@@ -499,4 +564,173 @@
 .faqAnswer {
   padding: 0 1rem 1rem;
   color: var(--text-color);
+}
+
+[data-theme='dark'] .featureItem {
+  border: 1px solid var(--border-color);
+  background-color: var(--card-background);
+}
+
+[data-theme='dark'] .featureContent {
+  background-color: transparent;
+  border: none;
+  box-shadow: none;
+  color: var(--text-color);
+}
+
+[data-theme='dark'] .featureContent h3 {
+  color: var(--primary-color);
+}
+
+[data-theme='dark'] .featureContent p {
+  color: var(--text-color);
+}
+
+[data-theme='dark'] .featureContent a,
+[data-theme='dark'] .featureInfoLink {
+  color: var(--primary-color);
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+[data-theme='dark'] .featureContent a:hover,
+[data-theme='dark'] .featureInfoLink:hover {
+  color: var(--hover-color);
+  text-decoration: underline;
+}
+
+[data-theme='dark'] .heroVideo {
+  border: 1px solid var(--border-color);
+}
+
+[data-theme='dark'] .logoSection {
+  background-color: var(--logo-section-bg);
+  border-top: 1px solid var(--logo-section-border);
+  border-bottom: 1px solid var(--logo-section-border);
+}
+
+[data-theme='dark'] .logoIntro {
+  color: var(--logo-section-text);
+}
+
+[data-theme='dark'] .statItem:hover {
+  border-color: var(--primary-color);
+  background-color: var(--card-hover-background);
+}
+
+[data-theme='dark'] .buttonSecondary {
+  background-color: var(--button-secondary-bg);
+}
+
+[data-theme='dark'] .buttonSecondary:hover {
+  background-color: var(--button-secondary-hover);
+  border-color: var(--primary-color);
+}
+
+[data-theme='dark'] .statsSection {
+  background-color: var(--background-color);
+}
+
+[data-theme='dark'] .statItem {
+  background-color: var(--card-background);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 6px var(--card-shadow);
+}
+
+[data-theme='dark'] .statDescription {
+  color: var(--text-secondary);
+}
+
+[data-theme='dark'] .statTitle {
+  color: var(--text-color);
+}
+
+[data-theme='dark'] .statNumber {
+  color: var(--primary-color);
+}
+
+[data-theme='dark'] .statIcon {
+  color: var(--primary-color);
+}
+
+[data-theme='dark'] .featureContent {
+  background-color: var(--card-background);
+  border-radius: 8px;
+  padding: 2rem;
+}
+
+[data-theme='dark'] .featureContent p {
+  color: var(--text-color);
+}
+
+[data-theme='dark'] .featureContent a {
+  color: var(--primary-color);
+}
+
+[data-theme='dark'] .featureContent a:hover {
+  color: var(--hover-color);
+}
+
+[data-theme='dark'] .featureContent h3 {
+  color: var(--primary-color);
+}
+
+[data-theme='dark'] .featureInfoLink {
+  color: var(--primary-color);
+}
+
+[data-theme='dark'] .featureInfoLink:hover {
+  color: var(--hover-color);
+  text-decoration: none;
+}
+
+[data-theme='dark'] .faqSection {
+  background-color: var(--background-color);
+}
+
+[data-theme='dark'] .faqItem {
+  background-color: var(--card-background);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 6px var(--card-shadow);
+}
+
+[data-theme='dark'] .faqQuestion {
+  color: var(--text-color);
+}
+
+[data-theme='dark'] .faqAnswer {
+  color: var(--text-secondary);
+}
+
+[data-theme='dark'] .faqItem:hover {
+  border-color: var(--primary-color);
+}
+
+[data-theme='dark'] .featuresSection {
+  background-color: var(--background-color);
+}
+
+[data-theme='dark'] .featuresSummary {
+  color: var(--text-color);
+}
+
+[data-theme='dark'] .featureContent {
+  background-color: var(--card-background);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 6px var(--card-shadow);
+}
+
+[data-theme='dark'] .whyPromptfooSection {
+  background-color: var(--primary-color);
+  color: #fff;
+}
+
+[data-theme='dark'] .whyPromptfooSection .sectionTitle {
+  color: #fff;
+}
+
+[data-theme='dark'] .whyPromptfooSection .statItem {
+  background-color: var(--card-background);
+  border: 1px solid var(--border-color);
 }

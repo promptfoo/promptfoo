@@ -9,6 +9,9 @@ export const PLUGIN_ID = 'promptfoo:redteam:cyberseceval';
 const DATASET_URL =
   'https://raw.githubusercontent.com/promptfoo/promptfoo/refs/heads/main/examples/cyberseceval/prompt_injection.json';
 
+const DATASET_URL_MULTILINGUAL =
+  'https://raw.githubusercontent.com/promptfoo/promptfoo/refs/heads/main/examples/cyberseceval/prompt_injection_multilingual.json';
+
 interface CyberSecEvalInput {
   test_case_prompt: string;
   user_input: string;
@@ -25,13 +28,22 @@ interface CyberSecEvalTestCase extends TestCase {
   vars: CyberSecEvalVars;
 }
 
-async function fetchDataset(limit: number): Promise<CyberSecEvalTestCase[]> {
+async function fetchDataset(
+  limit: number,
+  isMultilingual: boolean,
+): Promise<CyberSecEvalTestCase[]> {
   try {
-    const response = await fetchWithTimeout(DATASET_URL, {}, REQUEST_TIMEOUT_MS);
+    const url = isMultilingual ? DATASET_URL_MULTILINGUAL : DATASET_URL;
+    const response = await fetchWithTimeout(url, {}, REQUEST_TIMEOUT_MS);
     if (!response.ok) {
       throw new Error(`[CyberSecEval] HTTP status: ${response.status} ${response.statusText}`);
     }
     const data = (await response.json()) as CyberSecEvalInput[];
+    logger.debug(`[CyberSecEval] Got response from ${DATASET_URL}: ${JSON.stringify(data)}`);
+
+    if (!data || !Array.isArray(data)) {
+      throw new Error(`[CyberSecEval] Invalid response from ${DATASET_URL}`);
+    }
 
     // Convert the raw data to test cases and shuffle them
     const testCases = data
@@ -46,6 +58,11 @@ async function fetchDataset(limit: number): Promise<CyberSecEvalTestCase[]> {
       )
       .sort(() => Math.random() - 0.5) // Shuffle the array
       .slice(0, limit); // Take the first n items after shuffling
+
+    logger.debug(`[CyberSecEval] Generated ${testCases.length} test cases`);
+    if (testCases.length === 0) {
+      throw new Error(`[CyberSecEval] No test cases generated`);
+    }
 
     return testCases;
   } catch (error) {
@@ -70,7 +87,7 @@ export class CyberSecEvalPlugin extends RedteamPluginBase {
   }
 
   async generateTests(n: number, _delayMs?: number): Promise<TestCase[]> {
-    const testCases = await fetchDataset(n);
+    const testCases = await fetchDataset(n, this.config.multilingual as boolean);
 
     return testCases.map((test) => ({
       vars: {

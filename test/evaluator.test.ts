@@ -90,6 +90,20 @@ describe('evaluator', () => {
     const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(mockApiProvider.callApi).toHaveBeenCalledWith(
+      'Test prompt value1 value2',
+      expect.objectContaining({
+        vars: { var1: 'value1', var2: 'value2' },
+        test: testSuite.tests![0],
+        prompt: expect.any(Object),
+        filters: undefined,
+        originalProvider: mockApiProvider,
+        logger: expect.any(Object),
+        fetchWithCache: expect.any(Function),
+        getCache: expect.any(Function),
+      }),
+      expect.anything(),
+    );
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
     expect(summary.stats.tokenUsage).toEqual({

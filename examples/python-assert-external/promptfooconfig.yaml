@@ -9,7 +9,8 @@ tests:
       topic: yellow fruits
     assert:
       - type: python
-        value: file://assert.py
+        # Optionally specify a function name. Defaults to `get_assert` if not provided.
+        value: file://assert.py:get_assert
   - vars:
       topic: fruits high in potassium
     assert:

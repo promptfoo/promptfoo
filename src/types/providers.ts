@@ -12,6 +12,17 @@ export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation
 
 export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
 
+// Local interface to avoid circular dependency with src/types/index.ts
+interface AtomicTestCase {
+  description?: string;
+  vars?: Record<string, string | object>;
+  providerResponse?: ProviderResponse;
+  tokenUsage?: TokenUsage;
+  success?: boolean;
+  score?: number;
+  failureReason?: string;
+}
+
 export interface ProviderModerationResponse {
   error?: string;
   flags?: ModerationFlag[];
@@ -42,6 +53,7 @@ export interface CallApiContextParams {
   prompt: Prompt;
   vars: Record<string, string | object>;
   debug?: boolean;
+  test?: AtomicTestCase;
 }
 
 export interface CallApiOptionsParams {

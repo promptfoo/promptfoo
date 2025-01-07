@@ -4,10 +4,11 @@ import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
 import {
   type ApiProvider,
+  type AtomicTestCase,
   type CallApiContextParams,
   type CallApiOptionsParams,
-  type Prompt,
   type NunjucksFilterMap,
+  type Prompt,
   type RedteamFileConfig,
 } from '../../types';
 import invariant from '../../util/invariant';
@@ -30,6 +31,7 @@ async function runRedteamConversation({
   prompt,
   redteamProvider,
   targetProvider,
+  test,
   vars,
 }: {
   context?: CallApiContextParams;
@@ -40,6 +42,7 @@ async function runRedteamConversation({
   prompt: Prompt;
   redteamProvider: ApiProvider;
   targetProvider: ApiProvider;
+  test?: AtomicTestCase;
   vars: Record<string, string | object>;
 }) {
   const nunjucks = getNunjucksEngine();
@@ -70,8 +73,13 @@ async function runRedteamConversation({
     cached: 0,
   };
 
-  const previousOutputs: { prompt: string; output: string; score: number; isOnTopic: boolean }[] =
-    [];
+  const previousOutputs: {
+    prompt: string;
+    output: string;
+    score: number;
+    isOnTopic: boolean;
+    graderPassed: boolean | undefined;
+  }[] = [];
   let finalIteration = 0;
   let finalTargetPrompt: string | undefined = undefined;
 
@@ -179,6 +187,30 @@ async function runRedteamConversation({
     }
     invariant(targetResponse.output, '[Iterative] Target did not return an output');
 
+    const assertToUse = test?.assert?.find((a: { type: string }) => a.type);
+    const { getGraderById } = await import('../graders');
+    let graderPassed: boolean | undefined;
+    if (test && assertToUse) {
+      const grader = getGraderById(assertToUse.type);
+      if (grader) {
+        const { grade } = await grader.getResult(
+          goal as string,
+          targetResponse.output,
+          test,
+          redteamProvider,
+          assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+        );
+        graderPassed = grade.pass;
+        if (grade.tokensUsed) {
+          totalTokenUsage.total += grade.tokensUsed.total || 0;
+          totalTokenUsage.prompt += grade.tokensUsed.prompt || 0;
+          totalTokenUsage.completion += grade.tokensUsed.completion || 0;
+          totalTokenUsage.cached += grade.tokensUsed.cached || 0;
+        } else {
+          totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
+        }
+      }
+    }
     // Calculate the score
     const judgeBody = JSON.stringify([
       {
@@ -262,12 +294,8 @@ async function runRedteamConversation({
       output: targetResponse.output,
       score: currentScore,
       isOnTopic,
+      graderPassed,
     });
-
-    if (currentScore >= 10) {
-      finalIteration = i + 1;
-      break;
-    }
 
     if (redteamResp.tokenUsage) {
       totalTokenUsage.total += redteamResp.tokenUsage.total || 0;
@@ -311,6 +339,11 @@ async function runRedteamConversation({
       totalTokenUsage.cached += targetResponse.tokenUsage.cached || 0;
     } else {
       totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
+    }
+
+    if (currentScore >= 10 || graderPassed === false) {
+      finalIteration = i + 1;
+      break;
     }
   }
 
@@ -384,6 +417,7 @@ class RedteamIterativeProvider implements ApiProvider {
       numIterations: this.numIterations,
       context,
       options,
+      test: context.test,
     });
   }
 }

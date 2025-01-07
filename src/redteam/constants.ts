@@ -489,6 +489,15 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
   },
 };
 
+// These are exposed on the frontend under the framework compliance section
+export const FRAMEWORK_COMPLIANCE_IDS = [
+  'mitre:atlas',
+  'nist:ai:measure',
+  'owasp:api',
+  'owasp:llm',
+] as const;
+export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
+
 export const DEFAULT_STRATEGIES = ['jailbreak', 'jailbreak:composite'] as const;
 export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 
