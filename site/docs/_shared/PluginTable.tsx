@@ -37,8 +37,8 @@ const styles = {
   },
   // Column-specific widths
   columns: {
-    category: { width: '15%' },
-    name: { width: '20%' },
+    category: { width: '15%', fontWeight: 'bold' },
+    name: { width: '20%', fontWeight: 'bold' },
     description: { width: '40%', whiteSpace: 'normal' as const },
     pluginId: { width: '15%' },
     indicator: { width: '5%', textAlign: 'center' as const },

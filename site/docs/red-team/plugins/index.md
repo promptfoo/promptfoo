@@ -41,9 +41,9 @@ Promptfoo also supports various risk management frameworks based on common secur
 
 ## Plugin Table
 
-You can click on a plugin to see its documentation.
+Click on a plugin to see its documentation.
 
-<PluginTable />
+<PluginTable shouldGroupByCategory />
 
 Some plugins point to your own LLM provider to generate adversarial probes (like `policy` and `intent`), while others must point to Promptfoo's remote generation endpoint for specialized attack generation (like `harmful:*` and security-focused plugins).
 
