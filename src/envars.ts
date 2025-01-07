@@ -122,6 +122,7 @@ export type EnvVars = {
   WATSONX_AI_APIKEY?: string;
   WATSONX_AI_PROJECT_ID?: string;
   WATSONX_AI_BEARER_TOKEN?: string;
+  WATSONX_AI_AUTH_TYPE?: string;
 
   // node/npm
   NODE_ENV?: string;
