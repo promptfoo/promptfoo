@@ -113,6 +113,7 @@ export async function runPython(
   };
 
   try {
+    logger.debug(`Args before safeStringify are ${JSON.stringify(args)}`);
     await fs.writeFileSync(tempJsonPath, safeJsonStringify(args) as string, 'utf-8');
     logger.debug(`Running Python wrapper with args: ${safeJsonStringify(args)}`);
 

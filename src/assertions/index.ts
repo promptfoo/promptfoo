@@ -101,6 +101,7 @@ export async function runAssertion({
   test,
   latencyMs,
   providerResponse,
+  testIndex,
 }: {
   prompt?: string;
   provider?: ApiProvider;
@@ -108,6 +109,7 @@ export async function runAssertion({
   test: AtomicTestCase;
   providerResponse: ProviderResponse;
   latencyMs?: number;
+  testIndex?: number;
 }): Promise<GradingResult> {
   const { cost, logProbs, output: originalOutput } = providerResponse;
   let output = originalOutput;
@@ -140,6 +142,15 @@ export async function runAssertion({
     ...(assertion.config ? { config: assertion.config } : {}),
   };
 
+  if (testIndex !== undefined) {
+    // HACK but treat the deserialized config as a brand new object
+    // thus eliminating the possibility of a circular reference
+    const assertionConfig = test['assert'][testIndex]['config'];
+    if (assertionConfig !== undefined) {
+      context.config = JSON.parse(JSON.stringify(assertionConfig));
+    }
+  }
+
   // Render assertion values
   let renderedValue = assertion.value;
   let valueFromScript: string | boolean | number | GradingResult | object | undefined;
@@ -162,6 +173,7 @@ export async function runAssertion({
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.py')) {
         try {
+          console.log(`Context passed to Python is : ${JSON.stringify(context)}`);
           const pythonScriptOutput = await runPython(filePath, 'get_assert', [output, context]);
           valueFromScript = pythonScriptOutput;
           logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
@@ -355,6 +367,7 @@ export async function runAssertions({
         assertion,
         test,
         latencyMs,
+        testIndex: index,
       });
 
       assertResult.addResult({
