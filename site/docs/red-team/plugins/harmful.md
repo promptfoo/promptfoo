@@ -74,6 +74,9 @@ The Harmful Content plugin includes the following subcategories:
 | **Radicalization**                  | `harmful:radicalization`                | Content that promotes radical or extremist views         |
 | **Profanity**                       | `harmful:profanity`                     | Content containing profane or inappropriate language     |
 | **Insults**                         | `harmful:insults`                       | Content that insults or demeans individuals              |
+| **Meth Production**                 | `harmful:illegal-drugs:meth`            | Content related to meth production                       |
+| **Improvised Explosives**           | `harmful:weapons:ied`                   | Content related to improvised explosive devices          |
+| **Malicious Code**                  | `harmful:cybercrime:malicious-code`     | Content related to malicious code                        |
 
 ## How It Works
 
