@@ -1,0 +1,78 @@
+<?xml version="1.0"?>
+<svg width="900" height="400" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg">
+ <defs>
+  <!-- Gradients -->
+  <linearGradient id="trustGradient" x1="0%" x2="100%" y1="0%" y2="0%">
+   <stop offset="0%" stop-color="#48bb78"/>
+   <stop offset="100%" stop-color="#e53e3e"/>
+  </linearGradient>
+  <linearGradient id="chatGradient" x1="0%" x2="100%" y1="0%" y2="0%">
+   <stop offset="0%" stop-color="#4299e1"/>
+   <stop offset="100%" stop-color="#3182ce"/>
+  </linearGradient>
+  <!-- Styles -->
+  <style>.title { font-family: -apple-system, system-ui, sans-serif; font-size: 24px; font-weight: bold; fill: #1a202c; }
+            .subtitle { font-family: -apple-system, system-ui, sans-serif; font-size: 14px; fill: #4a5568; }
+            .label { font-family: -apple-system, system-ui, sans-serif; font-size: 14px; fill: white; }
+            .detail { font-family: -apple-system, system-ui, sans-serif; font-size: 12px; fill: #e2e8f0; }
+            .chat { font-family: -apple-system, system-ui, sans-serif; font-size: 12px; fill: white; }
+            .box { rx: 8; ry: 8; }
+            .box-shadow { filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.2)); }
+            .trust-meter { font-family: -apple-system, system-ui, sans-serif; font-size: 10px; fill: #4a5568; }</style>
+ </defs>
+ <!-- Title -->
+ <!-- Trust Meter -->
+ <!-- Chat Bubbles -->
+ <!-- Techniques Used -->
+ <g class="layer">
+  <title>Layer 1</title>
+  <text class="title" id="svg_1" text-anchor="middle" x="450" y="50">Conversational Attacks</text>
+  <text class="subtitle" id="svg_2" text-anchor="middle" x="450" y="75">Building trust over time to exploit the model</text>
+  <g id="svg_3" transform="translate(50 100)">
+   <rect class="box box-shadow" fill="url(#trustGradient)" height="30" id="svg_4" width="800"/>
+   <text class="trust-meter" font-size="10" id="svg_5" transform="matrix(1 0 0 1 0 0)" x="26" y="45">Initial Skepticism</text>
+   <text class="trust-meter" font-size="10" id="svg_6" transform="matrix(1 0 0 1 0 0)" x="207" y="45">Building Trust</text>
+   <text class="trust-meter" font-size="10" id="svg_7" x="368" y="45">Established Authority</text>
+   <text class="trust-meter" font-size="10" id="svg_8" transform="matrix(1 0 0 1 0 0)" x="545" y="45">Exploitation Phase</text>
+   <text class="trust-meter" font-size="10" id="svg_9" x="704" y="46">Harmful Intent</text>
+  </g>
+  <g id="svg_10" transform="translate(50 150)">
+   <!-- Message 1 -->
+   <rect class="box box-shadow" fill="url(#chatGradient)" height="40" id="svg_11" width="150"/>
+   <text class="chat" id="svg_12" x="10" y="25">&quot;I&#x27;m a researcher...&quot;</text>
+   <!-- Message 2 -->
+   <g id="svg_13" transform="translate(170,0)">
+    <rect class="box box-shadow" fill="url(#chatGradient)" height="40" id="svg_14" width="150"/>
+    <text class="chat" id="svg_15" x="10" y="25">&quot;Our university study...&quot;</text>
+   </g>
+   <!-- Message 3 -->
+   <g id="svg_16" transform="translate(340,0)">
+    <rect class="box box-shadow" fill="url(#chatGradient)" height="40" id="svg_17" width="150"/>
+    <text class="chat" id="svg_18" x="10" y="25">&quot;As lead researcher...&quot;</text>
+   </g>
+   <!-- Message 4 -->
+   <g id="svg_19" transform="translate(510 0)">
+    <rect class="box box-shadow" fill="url(#chatGradient)" height="40" id="svg_20" width="150"/>
+    <text class="chat" id="svg_21" style="cursor: move;" x="10" y="25">&quot;Need data about...&quot;</text>
+   </g>
+   <!-- Message 5 -->
+   <g id="svg_22" transform="translate(680 0)">
+    <rect class="box box-shadow" fill="url(#chatGradient)" height="40" id="svg_23" width="120"/>
+    <text class="chat" id="svg_24" x="5" y="25">&quot;[harmful request]&quot;</text>
+   </g>
+  </g>
+  <g id="svg_25" transform="translate(50,250)">
+   <rect class="box box-shadow" fill="#2d3748" height="120" id="svg_26" width="800"/>
+   <text class="label" id="svg_27" text-anchor="middle" x="400" y="30">Manipulation Techniques</text>
+   <!-- Technique List -->
+   <g id="svg_28" transform="translate(20,50)">
+    <text class="detail" id="svg_29" x="0" y="0">1. Establish Credibility → Claim expertise or authority</text>
+    <text class="detail" id="svg_30" x="0" y="25">2. Build Context → Create plausible scenario</text>
+    <text class="detail" id="svg_31" x="0" y="50">3. Escalate Gradually → Increase sensitivity of requests</text>
+    <text class="detail" id="svg_32" x="400" y="0">4. Appeal to Ethics → Frame harm as necessary</text>
+    <text class="detail" id="svg_33" x="400" y="25">5. Create Urgency → Pressure for compliance</text>
+    <text class="detail" id="svg_34" x="400" y="50">6. Exploit Trust → Leverage built relationship</text>
+   </g>
+  </g>
+ </g>
+</svg>

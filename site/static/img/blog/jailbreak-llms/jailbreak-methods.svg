@@ -1,0 +1,83 @@
+<svg width="900" height="325" viewBox="0 0 900 325" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <!-- Gradient Definitions with more muted colors -->
+        <linearGradient id="headerGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#2c5282;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#2a4365;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="promptGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#276749;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#22543d;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="contextGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#975a16;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#744210;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="technicalGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#553c9a;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#44337a;stop-opacity:1" />
+        </linearGradient>
+
+        <!-- Styles -->
+        <style>
+            .title { font-family: -apple-system, system-ui, sans-serif; font-size: 24px; font-weight: bold; fill: white; }
+            .subtitle { font-family: -apple-system, system-ui, sans-serif; font-size: 14px; fill: #e2e8f0; }
+            .method-title { font-family: -apple-system, system-ui, sans-serif; font-size: 16px; font-weight: bold; fill: white; }
+            .method-detail { font-family: -apple-system, system-ui, sans-serif; font-size: 12px; fill: #f7fafc; }
+            .box { rx: 10; ry: 10; }
+            .box-shadow { filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.2)); }
+        </style>
+    </defs>
+
+    <!-- Title Box -->
+    <g transform="translate(0,0)">
+        <rect width="900" height="80" fill="url(#headerGradient)" class="box box-shadow"/>
+        <text x="450" y="40" text-anchor="middle" class="title">LLM Jailbreak Methodologies</text>
+        <text x="450" y="65" text-anchor="middle" class="subtitle">Common techniques used to bypass LLM safety measures</text>
+    </g>
+
+    <!-- Main Methods - Adjusted width and spacing -->
+    <!-- Prompt Engineering -->
+    <g transform="translate(20,120)">
+        <rect width="205" height="200" fill="url(#promptGradient)" class="box box-shadow"/>
+        <text x="102.5" y="40" text-anchor="middle" class="method-title">Prompt Engineering</text>
+        <text x="20" y="70" class="method-detail">• Direct Injection</text>
+        <text x="20" y="95" class="method-detail">• System Override</text>
+        <text x="20" y="120" class="method-detail">• Academic Framing</text>
+        <text x="20" y="145" class="method-detail">• Role-Playing</text>
+        <text x="20" y="170" class="method-detail">• Meta-Prompting</text>
+    </g>
+
+    <!-- Context Manipulation -->
+    <g transform="translate(240,120)">
+        <rect width="205" height="200" fill="url(#contextGradient)" class="box box-shadow"/>
+        <text x="102.5" y="40" text-anchor="middle" class="method-title">Context Manipulation</text>
+        <text x="20" y="70" class="method-detail">• Fictional Scenarios</text>
+        <text x="20" y="95" class="method-detail">• Historical Context</text>
+        <text x="20" y="120" class="method-detail">• Alternate Reality</text>
+        <text x="20" y="145" class="method-detail">• Expert Authority</text>
+        <text x="20" y="170" class="method-detail">• Narrative Engineering</text>
+    </g>
+
+    <!-- Technical Exploits -->
+    <g transform="translate(460,120)">
+        <rect width="205" height="200" fill="url(#technicalGradient)" class="box box-shadow"/>
+        <text x="102.5" y="40" text-anchor="middle" class="method-title">Technical Exploits</text>
+        <text x="20" y="70" class="method-detail">• Token Splitting</text>
+        <text x="20" y="95" class="method-detail">• Unicode Tricks</text>
+        <text x="20" y="120" class="method-detail">• Homoglyphs</text>
+        <text x="20" y="145" class="method-detail">• Hidden Text</text>
+        <text x="20" y="170" class="method-detail">• Encoding Tricks</text>
+    </g>
+
+    <!-- Conversational Attacks -->
+    <g transform="translate(680,120)">
+        <rect width="205" height="200" fill="url(#promptGradient)" class="box box-shadow"/>
+        <text x="102.5" y="40" text-anchor="middle" class="method-title">Conversational</text>
+        <text x="20" y="70" class="method-detail">• Trust Building</text>
+        <text x="20" y="95" class="method-detail">• Topic Evolution</text>
+        <text x="20" y="120" class="method-detail">• Logical Traps</text>
+        <text x="20" y="145" class="method-detail">• Empathy Abuse</text>
+        <text x="20" y="170" class="method-detail">• False Dichotomies</text>
+    </g>
+</svg>
