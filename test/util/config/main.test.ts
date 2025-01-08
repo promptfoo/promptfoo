@@ -29,7 +29,6 @@ describe('config', () => {
   });
 
   afterEach(() => {
-    // Reset configDirectoryPath after each test
     setConfigDirectoryPath(undefined);
   });
 
