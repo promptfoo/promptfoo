@@ -442,6 +442,11 @@ export class HttpProvider implements ApiProvider {
       };
     }
     logger.debug(`\tHTTP response: ${response.data}`);
+    if (response.status < 200 || response.status >= 300) {
+      return {
+        error: `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
+      };
+    }
     const ret: ProviderResponse = {};
     if (context?.debug) {
       ret.raw = response.data;
