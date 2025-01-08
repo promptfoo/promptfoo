@@ -14,16 +14,28 @@ $ promptfoo eval --no-cache
 # Or in promptfooconfig.yaml:
 # evaluateOptions:
 #   cache: false
+# or `PROMPTFOO_CACHE_ENABLED=false` in your environment
 
 # Clear the cache
 $ promptfoo cache clear
 ```
 
+## Node Package
+
+When using promptfoo as a Node.js package, you can control caching through the options object:
+
 ```js
-// Disable cache in code
+// Disable cache for a single evaluation
 promptfoo.evaluate(testSuite, {
   cache: false,
 });
+
+// Or in your configuration file
+const config = {
+  evaluateOptions: {
+    cache: false,
+  },
+};
 ```
 
 For CI environments and testing frameworks ([jest](/docs/integrations/jest), [mocha](/docs/integrations/mocha-chai)):
