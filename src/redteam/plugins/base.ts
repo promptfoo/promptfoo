@@ -219,12 +219,16 @@ export abstract class RedteamGraderBase {
       const extractedVars = extractVariablesFromTemplate(this.rubric);
       const missingVars = extractedVars.filter((v) => !(v in vars));
       const availableVars = extractedVars.filter((v) => v in vars);
+      const nullOrUndefinedVars = extractedVars.filter(
+        (v) => vars[v] === null || vars[v] === undefined,
+      );
 
       logger.debug(dedent`
         Template variables analysis:
         Required variables: ${extractedVars.join(', ')}
         Available variables: ${availableVars.join(', ')}
         Missing variables: ${missingVars.join(', ')}
+        Null/undefined variables: ${nullOrUndefinedVars.join(', ')}
       `);
 
       const err = error as Error;
@@ -234,6 +238,7 @@ export abstract class RedteamGraderBase {
         Required variables: ${extractedVars.join(', ')}
         Missing variables: ${missingVars.length > 0 ? missingVars.join(', ') : 'none'}
         Available variables: ${availableVars.join(', ')}
+        Null/undefined variables: ${nullOrUndefinedVars.join(', ')}
 
         Template: ${this.rubric}
 
