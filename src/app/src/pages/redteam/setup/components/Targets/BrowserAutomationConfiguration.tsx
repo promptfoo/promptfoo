@@ -57,7 +57,7 @@ const BrowserAutomationConfiguration: React.FC<BrowserAutomationConfigurationPro
 
         <TextField
           fullWidth
-          label="Response Parser"
+          label="Response Transform"
           value={selectedTarget.config.transformResponse || ''}
           onChange={(e) => updateCustomTarget('transformResponse', e.target.value)}
           margin="normal"

@@ -78,7 +78,7 @@ export async function createSessionParser(
       return requiredModule;
     }
     throw new Error(
-      `Response parser malformed: ${filename} must export a function or have a default export as a function`,
+      `Response transform malformed: ${filename} must export a function or have a default export as a function`,
     );
   } else if (typeof parser === 'string') {
     return ({ headers }) => {
@@ -86,7 +86,7 @@ export async function createSessionParser(
     };
   }
   throw new Error(
-    `Unsupported response parser type: ${typeof parser}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
+    `Unsupported response transform type: ${typeof parser}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
   );
 }
 
@@ -102,7 +102,7 @@ export async function createTransformResponse(
         const result = parser(data, text);
         return { output: result };
       } catch (err) {
-        logger.error(`Error in response parser function: ${String(err)}`);
+        logger.error(`Error in response transform function: ${String(err)}`);
         throw err;
       }
     };
@@ -124,7 +124,7 @@ export async function createTransformResponse(
       return requiredModule;
     }
     throw new Error(
-      `Response parser malformed: ${filename} must export a function or have a default export as a function`,
+      `Response transform malformed: ${filename} must export a function or have a default export as a function`,
     );
   } else if (typeof parser === 'string') {
     return (data, text) => ({
@@ -132,7 +132,7 @@ export async function createTransformResponse(
     });
   }
   throw new Error(
-    `Unsupported response parser type: ${typeof parser}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
+    `Unsupported response transform type: ${typeof parser}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
   );
 }
 
