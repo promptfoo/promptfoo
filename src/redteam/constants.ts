@@ -509,7 +509,6 @@ export type AgenticStrategy = (typeof AGENTIC_STRATEGIES)[number];
 
 export const ADDITIONAL_STRATEGIES = [
   'prompt-injection',
-  'ascii-smuggling',
   'base64',
   'citation',
   'crescendo',
@@ -1007,7 +1006,6 @@ export const pluginDescriptions: Record<Plugin, string> = {
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
-  'ascii-smuggling': 'Evaluates system resilience against Unicode tag-based instruction smuggling',
   base64: 'Tests detection and handling of Base64-encoded malicious payloads',
   basic: 'Establishes baseline security posture through fundamental test cases',
   'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
@@ -1026,7 +1024,6 @@ export const strategyDescriptions: Record<Strategy, string> = {
 };
 
 export const strategyDisplayNames: Record<Strategy, string> = {
-  'ascii-smuggling': 'ASCII Smuggling',
   base64: 'Base64 Encoding',
   basic: 'Basic',
   'best-of-n': 'Best-of-N',
