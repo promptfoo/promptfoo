@@ -42,7 +42,10 @@ const COMPLETION_PROVIDERS: (keyof DefaultProviders)[] = [
   'synthesizeProvider',
 ];
 
+const EMBEDDING_PROVIDERS: (keyof DefaultProviders)[] = ['embeddingProvider'];
+
 let defaultCompletionProvider: ApiProvider;
+let defaultEmbeddingProvider: ApiProvider;
 
 /**
  * This will override all of the completion type providers defined in the constant COMPLETION_PROVIDERS
@@ -50,6 +53,10 @@ let defaultCompletionProvider: ApiProvider;
  */
 export async function setDefaultCompletionProviders(provider: ApiProvider) {
   defaultCompletionProvider = provider;
+}
+
+export async function setDefaultEmbeddingProviders(provider: ApiProvider) {
+  defaultEmbeddingProvider = provider;
 }
 
 export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultProviders> {
@@ -147,6 +154,12 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     logger.debug(`Overriding default completion provider: ${defaultCompletionProvider.id()}`);
     COMPLETION_PROVIDERS.forEach((provider) => {
       providers[provider] = defaultCompletionProvider;
+    });
+  }
+
+  if (defaultEmbeddingProvider) {
+    EMBEDDING_PROVIDERS.forEach((provider) => {
+      providers[provider] = defaultEmbeddingProvider;
     });
   }
   return providers;
