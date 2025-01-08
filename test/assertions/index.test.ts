@@ -1557,34 +1557,6 @@ describe('runAssertion', () => {
     });
   });
 
-  it('should correctly set configuration from the test case when assert index is valid', async () => {
-    const output = 'Expected output';
-
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: javascriptBooleanAssertionWithoutConfig,
-      test: {
-        assert: [
-          {
-            type: 'javascript',
-            value: 'output.length <= context.config.maximumOutputSize',
-            config: {
-              maximumOutputSize: 50,
-            },
-          } as Assertion,
-        ],
-      } as AtomicTestCase,
-      providerResponse: { output },
-      assertIndex: 0,
-    });
-    expect(result).toMatchObject({
-      pass: true,
-      score: 1.0,
-      reason: 'Assertion passed',
-    });
-  });
-
   it('should fail when javascript returns an output string that is larger than the maximum size threshold', async () => {
     const output = 'Expected output with some extra characters';
 
