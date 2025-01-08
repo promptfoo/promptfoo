@@ -6,9 +6,9 @@ image: /img/blog/jailbreak-llms/get-out-of-jail-free.jpg
 import ChatInterface from './goat/components/ChatInterface';
 import RedTeamDemo from './goat/components/RedTeamDemo';
 
-# How to Jailbreak LLMs: A Comprehensive Guide
+# Jailbreaking LLMs: A Comprehensive Guide
 
-Let's face it - LLMs are gullible. In fact, with just a few carefully chosen words, you can make even the most advanced AI models ignore their safety guardrails and do almost anything you ask.
+Let's face it - LLMs are gullible. With a few carefully chosen words, you can make even the most advanced AI models ignore their safety guardrails and do almost anything you ask.
 
 As LLMs become increasingly integrated into apps, understanding these vulnerabilities is essential for developers and security professionals. This post examines common techniques that malicious actors use to compromise LLM systems, and more importantly, how to protect against them.
 
