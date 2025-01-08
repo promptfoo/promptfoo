@@ -215,6 +215,7 @@ async function runRedteamConversation({
   context?: CallApiContextParams;
   options?: CallApiOptionsParams;
 }) {
+  // Assume redteam provider is also a vision model
   const visionProvider = redteamProvider;
   const nunjucks = getNunjucksEngine();
   const goal = vars[injectVar];
@@ -299,7 +300,6 @@ async function runRedteamConversation({
         targetProvider,
       );
 
-      // Check if prompt is on topic
       const isOnTopicBody = JSON.stringify([
         {
           role: 'system',
@@ -359,7 +359,6 @@ async function runRedteamConversation({
         totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
       }
 
-      // Parse URL and get image description
       const urlRegex = /(https?:\/\/[^\s)]+)/g;
       const url = targetResponse.output.match(urlRegex);
       let imageDescription;
@@ -432,7 +431,6 @@ async function runRedteamConversation({
         continue;
       }
 
-      // Calculate the score with improved context
       const judgeBody: string = JSON.stringify([
         {
           role: 'system',
@@ -507,7 +505,6 @@ async function runRedteamConversation({
           finalIteration = i + 1;
         }
 
-        // Update history with detailed feedback
         redteamHistory.push({
           role: 'user',
           content: dedent`
