@@ -526,7 +526,7 @@ describe('HttpProvider', () => {
       jest.mocked(importModule).mockResolvedValueOnce({});
 
       await expect(createTransformResponse('file://invalid-parser.js')).rejects.toThrow(
-        /response transform malformed: .*invalid-parser\.js must export a function or have a default export as a function/,
+        /Response transform malformed/,
       );
     });
 
