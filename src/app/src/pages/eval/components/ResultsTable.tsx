@@ -301,7 +301,8 @@ function ResultsTable({
               return (
                 failureFilter[columnId] &&
                 !output.pass &&
-                (!columnVisibilityIsSet || columnVisibility[columnId])
+                (!columnVisibilityIsSet || columnVisibility[columnId]) &&
+                output.failureReason !== ResultFailureReason.ERROR
               );
             });
           } else if (filterMode === 'errors') {
