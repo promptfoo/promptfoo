@@ -19,13 +19,9 @@ describe('Mistral', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.mocked(fetchWithCache).mockReset();
+    jest.mocked(isCacheEnabled).mockReturnValue(false);
     jest.mocked(getCache).mockReturnValue({
-      get: jest.fn().mockResolvedValue({
-        output: 'Cached output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        cached: true,
-        cost: 0.000005,
-      }),
+      get: jest.fn().mockResolvedValue(null),
       set: jest.fn(),
       wrap: jest.fn(),
       del: jest.fn(),
@@ -63,9 +59,12 @@ describe('Mistral', () => {
         choices: [{ message: { content: 'Test output' } }],
         usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
       };
-      jest
-        .mocked(fetchWithCache)
-        .mockResolvedValue({ data: mockResponse, cached: false, status: 200, statusText: 'OK' });
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       const result = await provider.callApi('Test prompt');
 
@@ -134,9 +133,12 @@ describe('Mistral', () => {
         usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
       };
       jest.mocked(isCacheEnabled).mockReturnValue(false);
-      jest
-        .mocked(fetchWithCache)
-        .mockResolvedValue({ data: mockResponse, cached: false, status: 200, statusText: 'OK' });
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       const result = await provider.callApi('Test prompt');
 
@@ -158,8 +160,9 @@ describe('Mistral', () => {
     });
 
     it('should handle API errors', async () => {
+      jest.mocked(isCacheEnabled).mockReturnValue(false);
       const mockError = new Error('API Error');
-      jest.mocked(fetchWithCache).mockRejectedValue(mockError);
+      jest.mocked(fetchWithCache).mockRejectedValueOnce(mockError);
 
       const result = await provider.callApi('Test prompt');
 
@@ -177,9 +180,12 @@ describe('Mistral', () => {
         choices: [{ message: { content: 'Custom API response' } }],
         usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
       };
-      jest
-        .mocked(fetchWithCache)
-        .mockResolvedValue({ data: mockResponse, cached: false, status: 200, statusText: 'OK' });
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       await customProvider.callApi('Test prompt');
 
@@ -199,9 +205,12 @@ describe('Mistral', () => {
         choices: [{ message: { content: 'Custom API response' } }],
         usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
       };
-      jest
-        .mocked(fetchWithCache)
-        .mockResolvedValue({ data: mockResponse, cached: false, status: 200, statusText: 'OK' });
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       await customProvider.callApi('Test prompt');
 
