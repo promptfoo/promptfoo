@@ -134,6 +134,84 @@ describe('fetchWithProxy', () => {
     );
   });
 
+  it('should warn and prefer existing Authorization header over URL credentials', async () => {
+    const url = 'https://username:password@example.com/api';
+    const options = {
+      headers: {
+        Authorization: 'Bearer token123',
+      },
+    };
+
+    await fetchWithProxy(url, options);
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Both URL credentials and Authorization header present'),
+    );
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://example.com/api',
+      expect.objectContaining({
+        headers: {
+          Authorization: 'Bearer token123',
+          'x-promptfoo-version': VERSION,
+        },
+      }),
+    );
+  });
+
+  it('should handle empty username or password in URL', async () => {
+    const url = 'https://:password@example.com/api';
+    await fetchWithProxy(url);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://example.com/api',
+      expect.objectContaining({
+        headers: {
+          Authorization: 'Basic OnBhc3N3b3Jk',
+          'x-promptfoo-version': VERSION,
+        },
+      }),
+    );
+  });
+
+  it('should handle URLs with only username', async () => {
+    const url = 'https://username@example.com/api';
+    await fetchWithProxy(url);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://example.com/api',
+      expect.objectContaining({
+        headers: {
+          Authorization: 'Basic dXNlcm5hbWU6', // Base64 encoded 'username:'
+          'x-promptfoo-version': VERSION,
+        },
+      }),
+    );
+  });
+
+  it('should preserve existing headers when adding Authorization from URL credentials', async () => {
+    const url = 'https://username:password@example.com/api';
+    const options = {
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Custom-Header': 'value',
+      },
+    };
+
+    await fetchWithProxy(url, options);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://example.com/api',
+      expect.objectContaining({
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Custom-Header': 'value',
+          Authorization: 'Basic dXNlcm5hbWU6cGFzc3dvcmQ=',
+          'x-promptfoo-version': VERSION,
+        },
+      }),
+    );
+  });
+
   // New CA certificate tests
   it('should use custom CA certificate when PROMPTFOO_CA_CERT_PATH is set', async () => {
     const mockCertPath = '/path/to/cert.pem';
@@ -277,6 +355,16 @@ describe('isRateLimited', () => {
       }),
     });
     expect(isRateLimited(tokenResponse)).toBe(true);
+  });
+
+  it('should return false when not rate limited', () => {
+    const response = createMockResponse({
+      headers: new Headers({
+        'X-RateLimit-Remaining': '10',
+      }),
+      status: 200,
+    });
+    expect(isRateLimited(response)).toBe(false);
   });
 });
 
