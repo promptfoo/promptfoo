@@ -264,7 +264,7 @@ export default function Home(): JSX.Element {
         <section className={styles.logoSection}>
           <div className="container">
             <h2>Trusted by developers at</h2>
-            <LogoContainer />
+            <LogoContainer noBackground noBorder />
           </div>
         </section>
         <HomepageFeatures />
