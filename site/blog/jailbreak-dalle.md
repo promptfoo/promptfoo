@@ -260,6 +260,24 @@ See the [getting started](/docs/red-team) instructions for general LLM red teami
 
 ### Dall-E jailbreak quickstart
 
+Want to reproduce the examples shown above? The easiest way to get started is to use our example template, which includes the test cases from this blog post:
+
+```sh
+# Initialize the example project
+npx promptfoo@latest init --example redteam-dalle
+
+# Set your OpenAI API key
+export OPENAI_API_KEY=your_key_here
+
+# Run the evaluation
+npx promptfoo@latest eval
+
+# View results in the web UI
+npx promptfoo@latest view
+```
+
+Alternatively, you can set it up manually:
+
 Start by initializing the promptfoo CLI:
 
 ```
