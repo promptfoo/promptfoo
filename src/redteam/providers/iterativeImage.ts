@@ -42,10 +42,6 @@ interface BestResponse extends TargetResponse {
   };
 }
 
-const NUM_ITERATIONS = process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS
-  ? Number.parseInt(process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS, 10)
-  : 4;
-
 // Based on: https://arxiv.org/abs/2312.02119
 
 const ATTACKER_SYSTEM_PROMPT = dedent`
@@ -248,7 +244,10 @@ async function runRedteamConversation({
   };
 
   let targetPrompt: string | null = null;
-  for (let i = 0; i < NUM_ITERATIONS; i++) {
+
+  const numIterations = Number.parseInt(process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS ?? '4', 10);
+
+  for (let i = 0; i < numIterations; i++) {
     try {
       const redteamBody = JSON.stringify(redteamHistory);
 
