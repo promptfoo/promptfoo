@@ -68,7 +68,7 @@ tests:
 
 ### Overriding the LLM grader
 
-By default, `llm-rubric` uses GPT-4 for grading. You can override this in several ways:
+By default, `llm-rubric` uses GPT-4o for grading. You can override this in several ways:
 
 1. Using the `--grader` CLI option:
 

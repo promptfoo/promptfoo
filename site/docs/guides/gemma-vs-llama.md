@@ -178,7 +178,7 @@ tests:
       message: what are the most common non-investor roles at early stage venture capital firms?
 ```
 
-(Note that `llm-rubric` uses GPT-4 by default, which requires the `OPENAI_API_KEY` environment variable. You can [override the grader](/docs/configuration/expected-outputs/model-graded#overriding-the-llm-grader) to a model of your choice.
+(Note that `llm-rubric` uses GPT-4o by default, which requires the `OPENAI_API_KEY` environment variable. You can [override the grader](/docs/configuration/expected-outputs/model-graded#overriding-the-llm-grader) to a model of your choice.
 
 ## Step 3: Running the Comparison
 
