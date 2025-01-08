@@ -14,17 +14,6 @@ export interface Strategy {
 export const strategies: Strategy[] = [
   {
     category: 'Static (Single-Turn)',
-    strategy: 'ascii-smuggling',
-    displayName: 'ASCII Smuggling',
-    description: 'Unicode tag-based instruction smuggling',
-    longDescription:
-      'Tests system resilience against Unicode tag-based instruction smuggling attacks that can bypass content filters and security controls',
-    cost: 'Low',
-    asrIncrease: '20-30%',
-    link: '/docs/red-team/strategies/ascii-smuggling/',
-  },
-  {
-    category: 'Static (Single-Turn)',
     strategy: 'base64',
     displayName: 'Base64',
     description: 'Base64 encoding bypass',
