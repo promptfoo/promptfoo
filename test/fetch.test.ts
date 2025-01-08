@@ -13,7 +13,6 @@ import logger from '../src/logger';
 import { sleep } from '../src/util/time';
 import { createMockResponse } from './util/utils';
 
-// Mock modules
 jest.mock('../src/util/time', () => ({
   sleep: jest.fn().mockResolvedValue(undefined),
 }));
@@ -22,7 +21,6 @@ jest.mock('proxy-agent', () => {
   return {
     ProxyAgent: jest.fn().mockImplementation((options) => ({
       options,
-      // Add required agent methods
       addRequest: jest.fn(),
       destroy: jest.fn(),
     })),
@@ -31,8 +29,8 @@ jest.mock('proxy-agent', () => {
 
 jest.mock('../src/logger');
 jest.mock('../src/envars', () => ({
-  getEnvString: jest.fn(),
-  getEnvBool: jest.fn(),
+  getEnvString: jest.fn().mockImplementation((key: string, defaultValue: string = '') => ''),
+  getEnvBool: jest.fn().mockImplementation((key: string, defaultValue: boolean = false) => false),
   getEnvInt: jest.fn().mockReturnValue(100),
 }));
 
@@ -51,7 +49,6 @@ describe('fetchWithProxy', () => {
     jest.resetAllMocks();
   });
 
-  // Original tests
   it('should add version header to all requests', async () => {
     const url = 'https://example.com/api';
     await fetchWithProxy(url);
@@ -181,7 +178,7 @@ describe('fetchWithProxy', () => {
       'https://example.com/api',
       expect.objectContaining({
         headers: {
-          Authorization: 'Basic dXNlcm5hbWU6', // Base64 encoded 'username:'
+          Authorization: 'Basic dXNlcm5hbWU6',
           'x-promptfoo-version': VERSION,
         },
       }),
@@ -212,22 +209,21 @@ describe('fetchWithProxy', () => {
     );
   });
 
-  // New CA certificate tests
   it('should use custom CA certificate when PROMPTFOO_CA_CERT_PATH is set', async () => {
     const mockCertPath = '/path/to/cert.pem';
     const mockCertContent = 'mock-cert-content';
 
-    jest.mocked(getEnvString).mockImplementation((key: string) => {
+    jest.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
       if (key === 'PROMPTFOO_CA_CERT_PATH') {
         return mockCertPath;
       }
-      return undefined;
+      return defaultValue;
     });
-    jest.mocked(getEnvBool).mockImplementation((key: string) => {
+    jest.mocked(getEnvBool).mockImplementation((key: string, defaultValue: boolean = false) => {
       if (key === 'PROMPTFOO_INSECURE_SSL') {
         return false;
       }
-      return undefined;
+      return defaultValue;
     });
     jest.mocked(fs.readFileSync).mockReturnValue(mockCertContent);
 
@@ -248,11 +244,11 @@ describe('fetchWithProxy', () => {
   it('should handle missing CA certificate file gracefully', async () => {
     const mockCertPath = '/path/to/nonexistent.pem';
 
-    jest.mocked(getEnvString).mockImplementation((key: string) => {
+    jest.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
       if (key === 'PROMPTFOO_CA_CERT_PATH') {
         return mockCertPath;
       }
-      return undefined;
+      return defaultValue;
     });
     jest.mocked(fs.readFileSync).mockImplementation(() => {
       throw new Error('File not found');
@@ -272,12 +268,14 @@ describe('fetchWithProxy', () => {
   });
 
   it('should disable SSL verification when PROMPTFOO_INSECURE_SSL is true', async () => {
-    jest.mocked(getEnvString).mockReturnValue(undefined);
-    jest.mocked(getEnvBool).mockImplementation((key: string) => {
+    jest
+      .mocked(getEnvString)
+      .mockImplementation((key: string, defaultValue: string = '') => defaultValue);
+    jest.mocked(getEnvBool).mockImplementation((key: string, defaultValue: boolean = false) => {
       if (key === 'PROMPTFOO_INSECURE_SSL') {
         return true;
       }
-      return undefined;
+      return defaultValue;
     });
 
     const mockFetch = jest.fn().mockResolvedValue(new Response());
@@ -447,7 +445,7 @@ describe('fetchWithRetries', () => {
     await fetchWithRetries('https://example.com', {}, 1000, 0);
 
     expect(global.fetch).toHaveBeenCalledTimes(1);
-    expect(sleep).not.toHaveBeenCalled(); // Should not sleep when retries=0
+    expect(sleep).not.toHaveBeenCalled();
   });
 
   it('should handle negative retry values by treating them as 0', async () => {
@@ -484,7 +482,9 @@ describe('fetchWithRetries', () => {
 
   it('should handle 5XX errors when PROMPTFOO_RETRY_5XX is true', async () => {
     jest.mocked(getEnvBool).mockImplementation((key: string) => {
-      if (key === 'PROMPTFOO_RETRY_5XX') return true;
+      if (key === 'PROMPTFOO_RETRY_5XX') {
+        return true;
+      }
       return false;
     });
 
