@@ -28,9 +28,26 @@ This example demonstrates how to use promptfoo to automatically discover jailbre
    ```
 
 3. View the results in the web UI:
+
    ```sh
    npx promptfoo@latest view
    ```
+
+   Important table settings:
+
+   - Under TABLE SETTINGS, enable "Render model outputs as Markdown" to display generated images
+   - Set "Max text length" to unlimited to view complete responses
+
+## Expected Behavior
+
+During evaluation, you may see error messages like:
+
+```
+Error from target provider: 400 Your request was rejected as a result of our safety system.
+Error from target provider: 400 This request has been blocked by our content filters.
+```
+
+This is normal expected behavior. Promptfoo automatically retries with modified prompts in a loop until it succeeds or reaches the maximum number of iterations.
 
 ## Configuration
 

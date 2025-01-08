@@ -178,7 +178,6 @@ async function runRedteamConversation({
       // Get new prompt
       const redteamResp = await redteamProvider.callApi(redteamBody);
       if (redteamProvider.delay) {
-        logger.debug(`[IterativeImage] Sleeping for ${redteamProvider.delay}ms`);
         await sleep(redteamProvider.delay);
       }
 
@@ -194,7 +193,7 @@ async function runRedteamConversation({
       }
 
       if (redteamResp.error) {
-        logger.warn(`Error from redteam provider: ${redteamResp.error}`);
+        logger.warn(`Iteration ${i + 1}: Redteam provider error: ${redteamResp.error}`);
         continue;
       }
 
@@ -206,13 +205,13 @@ async function runRedteamConversation({
         }>(redteamResp.output);
         improvement = parsed.improvement;
         newInjectVar = parsed.prompt;
+        logger.debug(
+          `Iteration ${i + 1}: Generated new prompt with improvement: ${improvement.slice(0, 100)}${improvement.length > 100 ? '...' : ''}`,
+        );
       } catch (err) {
-        logger.warn(`Failed to parse redteam response: ${err}`);
+        logger.warn(`Iteration ${i + 1}: Failed to parse redteam response: ${err}`);
         continue;
       }
-
-      logger.debug(`Iteration ${i + 1}: Redteam response: ${redteamResp.output}`);
-      logger.debug(`New injectVar: ${newInjectVar}, improvement: ${improvement}`);
 
       targetPrompt = await renderPrompt(
         prompt,
@@ -256,8 +255,9 @@ async function runRedteamConversation({
       try {
         const parsed = extractFirstJsonObject<{ onTopic: boolean }>(isOnTopicResp.output);
         isOnTopic = parsed.onTopic;
+        logger.debug(`Iteration ${i + 1}: Prompt on-topic check: ${isOnTopic}`);
       } catch (err) {
-        logger.warn(`Failed to parse onTopic response: ${err}`);
+        logger.warn(`Iteration ${i + 1}: Failed to parse on-topic response: ${err}`);
         continue;
       }
 
@@ -268,7 +268,7 @@ async function runRedteamConversation({
         options,
       );
       if (targetResponse.error) {
-        logger.warn(`Error from target provider: ${targetResponse.error}`);
+        logger.warn(`Iteration ${i + 1}: Target provider error: ${targetResponse.error}`);
         continue;
       }
 
@@ -331,7 +331,7 @@ async function runRedteamConversation({
           }
 
           if (visionResponse.error) {
-            logger.warn(`Vision API error: ${visionResponse.error}`);
+            logger.warn(`Iteration ${i + 1}: Vision API error: ${visionResponse.error}`);
             continue;
           }
 
@@ -340,19 +340,19 @@ async function runRedteamConversation({
               visionResponse.output,
             );
             imageDescription = parsedResponse.description;
-            logger.debug(`Iteration ${i + 1}: Image description: ${imageDescription}`);
-          } catch (parseErr) {
-            logger.warn(
-              `Failed to parse vision response as JSON: ${parseErr}. Raw response: ${visionResponse.output}`,
+            logger.debug(
+              `Iteration ${i + 1}: Processed image description (${imageDescription.length} chars)`,
             );
+          } catch (parseErr) {
+            logger.warn(`Iteration ${i + 1}: Failed to parse vision response: ${parseErr}`);
             imageDescription = visionResponse.output; // Fallback to raw output if JSON parsing fails
           }
         } catch (err) {
-          logger.warn(`Failed to get vision response: ${err}`);
+          logger.warn(`Iteration ${i + 1}: Vision API call failed: ${err}`);
           continue;
         }
       } else {
-        logger.warn(`No image URL found in response: ${safeJsonStringify(targetResponse)}`);
+        logger.warn(`Iteration ${i + 1}: No image URL in response`);
         continue;
       }
 
