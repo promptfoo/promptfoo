@@ -13,8 +13,7 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
-import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
-import { EXAMPLE_CONFIG } from '../hooks/useRedTeamConfig';
+import { EXAMPLE_CONFIG, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 
 interface PromptsProps {
   onNext: () => void;
@@ -209,7 +208,8 @@ export default function Purpose({ onNext }: PromptsProps) {
       <Dialog open={confirmDialogOpen} onClose={() => setConfirmDialogOpen(false)}>
         <DialogTitle>Load Example Configuration?</DialogTitle>
         <DialogContent>
-          This will overwrite your current configuration. Are you sure you want to continue?
+          Load example configuration with demo chat endpoint and sample application details? Current
+          settings will be replaced.
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setConfirmDialogOpen(false)}>Cancel</Button>
