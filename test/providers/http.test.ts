@@ -146,7 +146,7 @@ describe('HttpProvider', () => {
   ];
 
   testCases.forEach(({ parser, expected }) => {
-    it(`should handle response parser type: ${parser}`, async () => {
+    it(`should handle response transform type: ${parser}`, async () => {
       provider = new HttpProvider(mockUrl, {
         config: {
           body: { key: '{{ prompt }}' },
@@ -485,7 +485,7 @@ describe('HttpProvider', () => {
 
     it('should throw error for unsupported parser type', async () => {
       await expect(createTransformResponse(123 as any)).rejects.toThrow(
-        "Unsupported response parser type: number. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.",
+        "Unsupported response transform type: number. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.",
       );
     });
 
@@ -526,7 +526,7 @@ describe('HttpProvider', () => {
       jest.mocked(importModule).mockResolvedValueOnce({});
 
       await expect(createTransformResponse('file://invalid-parser.js')).rejects.toThrow(
-        /Response parser malformed: .*invalid-parser\.js must export a function or have a default export as a function/,
+        /Response transform malformed/,
       );
     });
 
@@ -536,7 +536,7 @@ describe('HttpProvider', () => {
       expect(result.output).toEqual({ key: 'value' });
     });
 
-    it('should handle response parser file with default export', async () => {
+    it('should handle response transform file with default export', async () => {
       const mockParser = jest.fn((data) => data.defaultField);
       jest.mocked(importModule).mockResolvedValueOnce(mockParser);
 
@@ -569,7 +569,7 @@ describe('HttpProvider', () => {
     expect(result.output).toEqual({ key: 'value' });
   });
 
-  it('should handle response parser returning an object', async () => {
+  it('should handle response transform returning an object', async () => {
     const provider = new HttpProvider(mockUrl, {
       config: {
         body: { key: 'value' },
