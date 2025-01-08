@@ -150,3 +150,15 @@ export function isProviderOptions(provider: any): provider is ProviderOptions {
     typeof provider.id === 'string'
   );
 }
+
+export interface ProviderTestResponse {
+  testResult: {
+    error?: string;
+    changes_needed?: boolean;
+    changes_needed_reason?: string;
+    changes_needed_suggestions?: string[];
+  };
+  providerResponse: ProviderResponse;
+  unalignedProviderResult?: ProviderResponse;
+  redteamProviderResult?: ProviderResponse;
+}

@@ -100,6 +100,8 @@ export async function doGenerateRedteam(
     name: 'generate redteam - started',
     numPrompts: testSuite.prompts.length,
     numTestsExisting: (testSuite.tests || []).length,
+    plugins: redteamConfig?.plugins?.map((p) => p.id) || [],
+    strategies: redteamConfig?.strategies?.map((s) => (typeof s === 'string' ? s : s.id)) || [],
   });
   await telemetry.send();
 
@@ -289,6 +291,8 @@ export async function doGenerateRedteam(
     numPrompts: testSuite.prompts.length,
     numTestsExisting: (testSuite.tests || []).length,
     numTestsGenerated: redteamTests.length,
+    plugins: plugins.map((p) => p.id),
+    strategies: strategies.map((s) => (typeof s === 'string' ? s : s.id)),
   });
   await telemetry.send();
   return ret;

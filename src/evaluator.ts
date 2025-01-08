@@ -17,7 +17,6 @@ import { maybeEmitAzureOpenAiWarning } from './providers/azureUtil';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import {
-  ResultFailureReason,
   type ApiProvider,
   type Assertion,
   type CompletedPrompt,
@@ -26,6 +25,7 @@ import {
   type EvaluateStats,
   type Prompt,
   type ProviderResponse,
+  ResultFailureReason,
   type RunEvalOptions,
   type TestSuite,
 } from './types';

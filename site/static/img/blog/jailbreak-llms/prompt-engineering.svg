@@ -1,0 +1,83 @@
+<svg width="900" height="600" viewBox="0 0 900 600" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <!-- Gradients -->
+        <linearGradient id="modelGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#4a5568;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#2d3748;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="attackGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#c53030;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#9b2c2c;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="inputGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#2b6cb0;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#2c5282;stop-opacity:1" />
+        </linearGradient>
+
+        <!-- Styles -->
+        <style>
+            .title { font-family: -apple-system, system-ui, sans-serif; font-size: 24px; font-weight: bold; fill: #1a202c; }
+            .subtitle { font-family: -apple-system, system-ui, sans-serif; font-size: 14px; fill: #4a5568; }
+            .label { font-family: -apple-system, system-ui, sans-serif; font-size: 14px; fill: white; }
+            .detail { font-family: -apple-system, system-ui, sans-serif; font-size: 12px; fill: #e2e8f0; }
+            .arrow { fill: none; stroke: #4a5568; stroke-width: 2; marker-end: url(#arrowhead); }
+            .flow-label { font-family: -apple-system, system-ui, sans-serif; font-size: 12px; fill: #4a5568; font-weight: bold; }
+            .box { rx: 8; ry: 8; }
+            .box-shadow { filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.2)); }
+        </style>
+
+        <!-- Arrow Marker -->
+        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#4a5568"/>
+        </marker>
+    </defs>
+
+    <!-- Title -->
+    <text x="450" y="50" text-anchor="middle" class="title">Prompt Engineering Attack Flow</text>
+    <text x="450" y="75" text-anchor="middle" class="subtitle">How attackers manipulate input to bypass LLM safety measures</text>
+
+    <!-- User Input (Top) -->
+    <g transform="translate(350,100)">
+        <rect width="200" height="60" fill="url(#inputGradient)" class="box box-shadow"/>
+        <text x="100" y="35" text-anchor="middle" class="label">User Input</text>
+    </g>
+
+    <!-- Attack Methods (Middle) -->
+    <g transform="translate(50,200)">
+        <rect width="350" height="180" fill="url(#attackGradient)" class="box box-shadow"/>
+        <text x="175" y="30" text-anchor="middle" class="label">Direct Methods</text>
+        <text x="30" y="60" class="detail">1. System Override</text>
+        <text x="30" y="85" class="detail">2. Direct Injection</text>
+        <text x="30" y="110" class="detail">3. Superior Model Claims</text>
+        <text x="30" y="135" class="detail">4. Meta-Prompting</text>
+        <text x="30" y="160" class="detail">5. Role-Based Override</text>
+    </g>
+
+    <g transform="translate(500,200)">
+        <rect width="350" height="180" fill="url(#attackGradient)" class="box box-shadow"/>
+        <text x="175" y="30" text-anchor="middle" class="label">Indirect Methods</text>
+        <text x="30" y="60" class="detail">1. Academic Framing</text>
+        <text x="30" y="85" class="detail">2. Documentation Style</text>
+        <text x="30" y="110" class="detail">3. Code Analysis</text>
+        <text x="30" y="135" class="detail">4. One-Shot Learning</text>
+        <text x="30" y="160" class="detail">5. Socratic Questioning</text>
+    </g>
+
+    <!-- Model (Bottom) -->
+    <g transform="translate(300,500)">
+        <rect width="300" height="60" fill="url(#modelGradient)" class="box box-shadow"/>
+        <text x="150" y="35" text-anchor="middle" class="label">Language Model</text>
+    </g>
+
+    <!-- Flow Arrows with Curved Paths -->
+    <path d="M 450,160 Q 450,180 225,200" class="arrow"/>
+    <path d="M 450,160 Q 450,180 675,200" class="arrow"/>
+    <path d="M 225,380 Q 225,440 450,500" class="arrow"/>
+    <path d="M 675,380 Q 675,440 450,500" class="arrow"/>
+
+    <!-- Labels -->
+    <text x="270" y="175" text-anchor="middle" class="flow-label">Transform Input</text>
+    <text x="630" y="175" text-anchor="middle" class="flow-label">Obfuscate Intent</text>
+    <text x="230" y="450" text-anchor="middle" class="flow-label">Bypass Filters</text>
+    <text x="670" y="450" text-anchor="middle" class="flow-label">Exploit Trust</text>
+</svg>

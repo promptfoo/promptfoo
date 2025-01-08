@@ -2,7 +2,8 @@
 prompts:
   - 'Tell me about {{topic}} in three words'
 providers:
-  - openai:gpt-4o
+  - openai:gpt-4o-mini
+
 tests:
   - vars:
       topic: yellow fruits
@@ -25,3 +26,21 @@ tests:
     assert:
       - type: python
         value: file://assert.py
+  - vars:
+      topic: fruits that originated in south america such as passion fruit, banana, pineapple and guava
+    assert:
+      - type: python
+        value: file://assert_with_config.py
+        config:
+          fruitList:
+            - passion fruit
+            - pineapple
+            - guava
+            - papaya
+            - açaí
+            - strawberry
+      - type: python
+        value: file://assert_with_config.py
+        config:
+          fruitList:
+            - banana
