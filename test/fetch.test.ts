@@ -319,6 +319,30 @@ describe('handleRateLimit', () => {
       expect.stringMatching(/Rate limited, waiting \d+ms before retry/),
     );
   });
+
+  it('should handle Retry-After headers', async () => {
+    const response = createMockResponse({
+      headers: new Headers({
+        'Retry-After': '5',
+      }),
+    });
+
+    const promise = handleRateLimit(response);
+    jest.advanceTimersByTime(5000);
+    await promise;
+
+    expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 5000ms before retry');
+  });
+
+  it('should use default wait time when no headers present', async () => {
+    const response = createMockResponse();
+
+    const promise = handleRateLimit(response);
+    jest.advanceTimersByTime(60000);
+    await promise;
+
+    expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 60000ms before retry');
+  });
 });
 
 describe('fetchWithRetries', () => {
@@ -357,5 +381,74 @@ describe('fetchWithRetries', () => {
 
     expect(global.fetch).toHaveBeenCalledTimes(3); // Initial attempt + 2 retries
     expect(sleep).toHaveBeenCalledTimes(2); // Should sleep between attempts, but not after last attempt
+  });
+
+  it('should not sleep after the final attempt', async () => {
+    jest.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
+
+    await expect(fetchWithRetries('https://example.com', {}, 1000, 1)).rejects.toThrow(
+      'Request failed after 1 retries: Network error',
+    );
+
+    expect(global.fetch).toHaveBeenCalledTimes(2); // Initial attempt + 1 retry
+    expect(sleep).toHaveBeenCalledTimes(1); // Should only sleep once between attempts
+  });
+
+  it('should handle 5XX errors when PROMPTFOO_RETRY_5XX is true', async () => {
+    jest.mocked(getEnvBool).mockImplementation((key: string) => {
+      if (key === 'PROMPTFOO_RETRY_5XX') return true;
+      return false;
+    });
+
+    const errorResponse = createMockResponse({
+      status: 502,
+      statusText: 'Bad Gateway',
+    });
+    const successResponse = createMockResponse();
+
+    const mockFetch = jest
+      .fn()
+      .mockResolvedValueOnce(errorResponse)
+      .mockResolvedValueOnce(successResponse);
+    global.fetch = mockFetch;
+
+    await fetchWithRetries('https://example.com', {}, 1000, 2);
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it('should handle rate limits with proper backoff', async () => {
+    const rateLimitedResponse = createMockResponse({
+      status: 429,
+      headers: new Headers({
+        'Retry-After': '1',
+      }),
+    });
+    const successResponse = createMockResponse();
+
+    const mockFetch = jest
+      .fn()
+      .mockResolvedValueOnce(rateLimitedResponse)
+      .mockResolvedValueOnce(successResponse);
+    global.fetch = mockFetch;
+
+    await fetchWithRetries('https://example.com', {}, 1000, 2);
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Rate limited on URL'));
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it('should respect maximum retry count', async () => {
+    const mockFetch = jest.fn().mockRejectedValue(new Error('Network error'));
+    global.fetch = mockFetch;
+
+    await expect(fetchWithRetries('https://example.com', {}, 1000, 2)).rejects.toThrow(
+      'Request failed after 2 retries: Network error',
+    );
+
+    expect(mockFetch).toHaveBeenCalledTimes(3); // Initial attempt + 2 retries
+    expect(sleep).toHaveBeenCalledTimes(2);
   });
 });
