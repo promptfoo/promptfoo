@@ -574,11 +574,6 @@ describe('runAssertion', () => {
     },
   };
 
-  const javascriptBooleanAssertionWithoutConfig: Assertion = {
-    type: 'javascript',
-    value: 'output.length <= context.config.maximumOutputSize',
-  };
-
   const javascriptStringAssertionWithNumberAndThreshold: Assertion = {
     type: 'javascript',
     value: 'output.length * 10',
