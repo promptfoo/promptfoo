@@ -1,6 +1,8 @@
 import chalk from 'chalk';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
+import * as os from 'os';
+import * as path from 'path';
 import { doEval } from '../commands/eval';
 import logger, { setLogCallback, setLogLevel } from '../logger';
 import type Eval from '../models/eval';
@@ -22,7 +24,8 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
 
   if (options.liveRedteamConfig) {
     // Write liveRedteamConfig to a temporary file
-    const tmpFile = fs.mkdtempSync('/tmp/redteam-') + '/redteam.yaml';
+    const tmpFile = path.join(os.tmpdir(), `redteam-${Date.now()}`) + '/redteam.yaml';
+    fs.mkdirSync(path.dirname(tmpFile), { recursive: true });
     fs.writeFileSync(tmpFile, yaml.dump(options.liveRedteamConfig));
     redteamPath = tmpFile;
     // Do not use default config.
