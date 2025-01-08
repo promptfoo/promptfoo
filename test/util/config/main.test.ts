@@ -28,6 +28,10 @@ describe('config', () => {
     delete process.env.PROMPTFOO_CONFIG_DIR;
   });
 
+  afterEach(() => {
+    setConfigDirectoryPath(undefined);
+  });
+
   describe('getConfigDirectoryPath', () => {
     it('returns default path when no custom path is set', () => {
       expect(getConfigDirectoryPath()).toBe(defaultConfigPath);
