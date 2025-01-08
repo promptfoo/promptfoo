@@ -345,7 +345,7 @@ async function runRedteamConversation({
         options,
       );
       if (targetResponse.error) {
-        logger.warn(`Iteration ${i + 1}: Target provider error: ${targetResponse.error}`);
+        logger.debug(`Iteration ${i + 1}: Target provider error: ${targetResponse.error}`);
         continue;
       }
 
