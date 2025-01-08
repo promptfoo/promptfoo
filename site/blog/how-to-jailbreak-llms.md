@@ -6,7 +6,7 @@ image: /img/blog/jailbreak-llms/get-out-of-jail-free.jpg
 import ChatInterface from './goat/components/ChatInterface';
 import RedTeamDemo from './goat/components/RedTeamDemo';
 
-# Jailbreaking LLMs: A Comprehensive Guide
+# Jailbreaking LLMs: A Comprehensive Guide (With Examples)
 
 Let's face it - LLMs are gullible. With a few carefully chosen words, you can make even the most advanced AI models ignore their safety guardrails and do almost anything you ask.
 
