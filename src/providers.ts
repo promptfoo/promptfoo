@@ -211,6 +211,20 @@ export async function loadApiProvider(
         apiKeyEnvar: 'GITHUB_TOKEN',
       },
     });
+  } else if (providerPath.startsWith('f5')) {
+    const splits = providerPath.split(':');
+    let endpoint = splits.slice(1).join(':');
+    if (endpoint.startsWith('/')) {
+      endpoint = endpoint.slice(1);
+    }
+    ret = new OpenAiChatCompletionProvider(endpoint, {
+      ...providerOptions,
+      config: {
+        ...providerOptions.config,
+        apiBaseUrl: providerOptions.config?.apiBaseUrl + '/' + endpoint,
+        apiKeyEnvar: 'F5_API_KEY',
+      },
+    });
   } else if (providerPath.startsWith('togetherai:')) {
     ret = createTogetherAiProvider(providerPath, {
       config: providerOptions,
