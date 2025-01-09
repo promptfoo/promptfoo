@@ -290,6 +290,13 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     const isExpanded = expandedCategories.has(category);
     const selectedCount = pluginsToShow.filter((plugin) => selectedPlugins.has(plugin)).length;
 
+    const getPluginCategory = (plugin: Plugin) => {
+      if (category !== 'Recently Used') {
+        return null;
+      }
+      return Object.entries(riskCategories).find(([_, plugins]) => plugins.includes(plugin))?.[0];
+    };
+
     return (
       <Accordion
         key={category}
@@ -411,6 +418,21 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                       }
                       label={
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                          {category === 'Recently Used' && getPluginCategory(plugin) && (
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                backgroundColor: 'action.hover',
+                                px: 1,
+                                py: 0.25,
+                                borderRadius: 1,
+                                color: 'text.secondary',
+                                alignSelf: 'flex-start',
+                              }}
+                            >
+                              {getPluginCategory(plugin)}
+                            </Typography>
+                          )}
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                             {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
                           </Box>
