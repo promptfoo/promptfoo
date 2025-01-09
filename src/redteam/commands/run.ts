@@ -12,46 +12,6 @@ import { poisonCommand } from './poison';
 
 const UUID_REGEX = /^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$/;
 
-export async function redteamRun(opts: RedteamRunOptions) {
-  setupEnv(opts.envPath);
-  telemetry.record('command_used', {
-    name: 'redteam run',
-  });
-  await telemetry.send();
-
-  if (opts.verbose) {
-    setLogLevel('debug');
-  }
-  let autoShare = false;
-
-  if (opts.config && UUID_REGEX.test(opts.config)) {
-    const config = await getConfigFromCloud(opts.config);
-    opts.liveRedteamConfig = config;
-    opts.config = undefined;
-    autoShare = true;
-  }
-
-  try {
-    if (opts.remote) {
-      cliState.remote = true;
-    }
-    const result = await doRedteamRun(opts);
-    if (result && autoShare) {
-      await createShareableUrl(result, false);
-    }
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      logger.error('Invalid options:');
-      error.errors.forEach((err: z.ZodIssue) => {
-        logger.error(`  ${err.path.join('.')}: ${err.message}`);
-      });
-    } else {
-      logger.error('An unexpected error occurred:', error);
-    }
-    process.exitCode = 1;
-  }
-}
-
 export function redteamRunCommand(program: Command) {
   program
     .command('run')
@@ -80,7 +40,43 @@ export function redteamRunCommand(program: Command) {
       'Only run tests with these providers (regex match)',
     )
     .action(async (opts: RedteamRunOptions) => {
-      await redteamRun(opts);
+      setupEnv(opts.envPath);
+      telemetry.record('command_used', {
+        name: 'redteam run',
+      });
+      await telemetry.send();
+
+      if (opts.verbose) {
+        setLogLevel('debug');
+      }
+
+      let autoShare = false;
+      if (opts.config && UUID_REGEX.test(opts.config)) {
+        const config = await getConfigFromCloud(opts.config);
+        opts.liveRedteamConfig = config;
+        opts.config = undefined;
+        autoShare = true;
+      }
+
+      try {
+        if (opts.remote) {
+          cliState.remote = true;
+        }
+        const result = await doRedteamRun(opts);
+        if (result && autoShare) {
+          await createShareableUrl(result, false);
+        }
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          logger.error('Invalid options:');
+          error.errors.forEach((err: z.ZodIssue) => {
+            logger.error(`  ${err.path.join('.')}: ${err.message}`);
+          });
+        } else {
+          logger.error('An unexpected error occurred:', error);
+        }
+        process.exitCode = 1;
+      }
     });
 
   poisonCommand(program);
