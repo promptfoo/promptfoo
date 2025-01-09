@@ -320,11 +320,3 @@ jobs:
       - name: Run actionlint
         id: actionlint
         uses: raven-actions/actionlint@v2
-        with:
-          matcher: true # Enable GitHub annotations
-          cache: true # Use GitHub cache for faster runs
-          shellcheck: true # Enable shellcheck integration
-          pyflakes: true # Enable pyflakes integration
-          fail-on-error: true # Fail the action if there are any errors
-          group-result: true # Group results in the logs
-          files: '.github/workflows/*.yml' # Explicitly set which files to check
