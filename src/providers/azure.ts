@@ -24,6 +24,8 @@ import invariant from '../util/invariant';
 import { sleep } from '../util/time';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase, calculateCost } from './shared';
 
+export const DEFAULT_AZURE_API_VERSION = '2024-12-01-preview';
+
 interface AzureCompletionOptions {
   // Azure identity params
   azureClientId?: string;
@@ -401,7 +403,7 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
     try {
       ({ data, cached } = (await fetchWithCache(
         `${this.getApiBaseUrl()}/openai/deployments/${this.deploymentName}/embeddings?api-version=${
-          this.config.apiVersion || '2023-12-01-preview'
+          this.config.apiVersion || DEFAULT_AZURE_API_VERSION
         }`,
         {
           method: 'POST',
@@ -505,7 +507,7 @@ export class AzureCompletionProvider extends AzureGenericProvider {
       ({ data, cached } = (await fetchWithCache(
         `${this.getApiBaseUrl()}/openai/deployments/${
           this.deploymentName
-        }/completions?api-version=${this.config.apiVersion || '2023-12-01-preview'}`,
+        }/completions?api-version=${this.config.apiVersion || DEFAULT_AZURE_API_VERSION}`,
         {
           method: 'POST',
           headers: {
@@ -625,10 +627,10 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       const url = config.dataSources
         ? `${this.getApiBaseUrl()}/openai/deployments/${
             this.deploymentName
-          }/extensions/chat/completions?api-version=${config.apiVersion || '2023-12-01-preview'}`
+          }/extensions/chat/completions?api-version=${config.apiVersion || DEFAULT_AZURE_API_VERSION}`
         : `${this.getApiBaseUrl()}/openai/deployments/${
             this.deploymentName
-          }/chat/completions?api-version=${config.apiVersion || '2023-12-01-preview'}`;
+          }/chat/completions?api-version=${config.apiVersion || DEFAULT_AZURE_API_VERSION}`;
 
       const {
         data: responseData,
