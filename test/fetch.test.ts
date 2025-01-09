@@ -1,4 +1,5 @@
 import fs from 'fs';
+import path from 'path';
 import { ProxyAgent } from 'proxy-agent';
 import cliState from '../src/cliState';
 import { VERSION } from '../src/constants';
@@ -217,7 +218,7 @@ describe('fetchWithProxy', () => {
   });
 
   it('should use custom CA certificate when PROMPTFOO_CA_CERT_PATH is set', async () => {
-    const mockCertPath = '/path/to/cert.pem';
+    const mockCertPath = path.normalize('/path/to/cert.pem');
     const mockCertContent = 'mock-cert-content';
 
     jest.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
@@ -239,7 +240,9 @@ describe('fetchWithProxy', () => {
 
     await fetchWithProxy('https://example.com');
 
-    expect(fs.readFileSync).toHaveBeenCalledWith(mockCertPath);
+    expect(path.normalize(jest.mocked(fs.readFileSync).mock.calls[0][0] as string)).toBe(
+      mockCertPath,
+    );
     expect(ProxyAgent).toHaveBeenCalledWith(
       expect.objectContaining({
         ca: mockCertContent,
@@ -249,7 +252,7 @@ describe('fetchWithProxy', () => {
   });
 
   it('should handle missing CA certificate file gracefully', async () => {
-    const mockCertPath = '/path/to/nonexistent.pem';
+    const mockCertPath = path.normalize('/path/to/nonexistent.pem');
 
     jest.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
       if (key === 'PROMPTFOO_CA_CERT_PATH') {
@@ -266,7 +269,9 @@ describe('fetchWithProxy', () => {
 
     await fetchWithProxy('https://example.com');
 
-    expect(fs.readFileSync).toHaveBeenCalledWith(mockCertPath);
+    expect(path.normalize(jest.mocked(fs.readFileSync).mock.calls[0][0] as string)).toBe(
+      mockCertPath,
+    );
     expect(ProxyAgent).toHaveBeenCalledWith(
       expect.objectContaining({
         rejectUnauthorized: true,
@@ -298,7 +303,7 @@ describe('fetchWithProxy', () => {
   });
 
   it('should resolve CA certificate path relative to basePath when available', async () => {
-    const mockBasePath = '/base/path';
+    const mockBasePath = path.normalize('/base/path');
     const mockCertPath = 'certs/cert.pem';
     const mockCertContent = 'mock-cert-content';
 
@@ -324,9 +329,12 @@ describe('fetchWithProxy', () => {
 
     await fetchWithProxy('https://example.com');
 
-    // Should resolve to /base/path/certs/cert.pem
-    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining(mockBasePath));
-    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining(mockCertPath));
+    const expectedPath = path.normalize(path.join(mockBasePath, mockCertPath));
+    const actualPath = path.normalize(jest.mocked(fs.readFileSync).mock.calls[0][0] as string);
+
+    expect(actualPath).toBe(expectedPath);
+    expect(actualPath).toContain(path.normalize(mockBasePath));
+    expect(actualPath).toContain(path.normalize(mockCertPath));
     expect(ProxyAgent).toHaveBeenCalledWith(
       expect.objectContaining({
         ca: mockCertContent,
