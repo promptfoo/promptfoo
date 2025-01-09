@@ -604,13 +604,22 @@
 }
 
 [data-theme='dark'] .logoSection {
-  background-color: var(--logo-section-bg);
-  border-top: 1px solid var(--logo-section-border);
-  border-bottom: 1px solid var(--logo-section-border);
+  background-color: inherit;
+  border-top: inherit;
+  border-bottom: inherit;
 }
 
 [data-theme='dark'] .logoIntro {
-  color: var(--logo-section-text);
+  color: var(--text-color);
+}
+
+[data-theme='dark'] .logoItem {
+  filter: brightness(0) invert(1);
+  opacity: 0.8;
+}
+
+[data-theme='dark'] .logoItem:hover {
+  opacity: 1;
 }
 
 [data-theme='dark'] .statItem:hover {
