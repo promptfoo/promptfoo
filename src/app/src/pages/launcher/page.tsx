@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import logoPanda from '@app/assets/logo-panda.svg';
 import { Terminal as TerminalIcon } from '@mui/icons-material';
 import LanguageIcon from '@mui/icons-material/Language';
 import {
@@ -175,7 +176,7 @@ export default function LauncherPage() {
           }}
         >
           <img
-            src="/src/assets/logo-panda.svg"
+            src={logoPanda}
             alt="Promptfoo Logo"
             style={{
               width: isLargeScreen ? '80px' : '64px',
