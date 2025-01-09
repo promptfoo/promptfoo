@@ -418,35 +418,30 @@ export class HttpProvider implements ApiProvider {
     }
 
     logger.debug(`Calling HTTP provider: ${url} with config: ${safeJsonStringify(renderedConfig)}`);
-    let response;
-    try {
-      response = await fetchWithCache(
-        url,
-        {
-          method: renderedConfig.method,
-          headers: renderedConfig.headers,
-          ...(method !== 'GET' && {
-            body: contentTypeIsJson(headers)
-              ? JSON.stringify(renderedConfig.body)
-              : String(renderedConfig.body)?.trim(),
-          }),
-        },
-        REQUEST_TIMEOUT_MS,
-        'text',
-        context?.debug,
-        this.config.maxRetries,
-      );
-    } catch (err) {
-      return {
-        error: `HTTP call error: ${String(err)}`,
-      };
-    }
+    const response = await fetchWithCache(
+      url,
+      {
+        method: renderedConfig.method,
+        headers: renderedConfig.headers,
+        ...(method !== 'GET' && {
+          body: contentTypeIsJson(headers)
+            ? JSON.stringify(renderedConfig.body)
+            : String(renderedConfig.body)?.trim(),
+        }),
+      },
+      REQUEST_TIMEOUT_MS,
+      'text',
+      context?.debug,
+      this.config.maxRetries,
+    );
+
     logger.debug(`\tHTTP response: ${response.data}`);
     if (response.status < 200 || response.status >= 300) {
-      return {
-        error: `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
-      };
+      throw new Error(
+        `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
+      );
     }
+
     const ret: ProviderResponse = {};
     if (context?.debug) {
       ret.raw = response.data;
@@ -462,28 +457,24 @@ export class HttpProvider implements ApiProvider {
     } catch {
       parsedData = null;
     }
+
+    const parsedOutput = (await this.transformResponse)(parsedData, rawText);
+    ret.output = parsedOutput.output || parsedOutput;
     try {
-      const parsedOutput = (await this.transformResponse)(parsedData, rawText);
-      ret.output = parsedOutput.output || parsedOutput;
-      try {
-        const sessionId =
-          response.headers && this.sessionParser !== null
-            ? (await this.sessionParser)({ headers: response.headers })
-            : undefined;
-        if (sessionId) {
-          ret.sessionId = sessionId;
-        }
-      } catch (err) {
-        logger.error(
-          `Error parsing session ID: ${String(err)}. Got headers: ${safeJsonStringify(response.headers)}`,
-        );
+      const sessionId =
+        response.headers && this.sessionParser !== null
+          ? (await this.sessionParser)({ headers: response.headers })
+          : undefined;
+      if (sessionId) {
+        ret.sessionId = sessionId;
       }
-      return ret;
     } catch (err) {
-      logger.error(`Error parsing response: ${String(err)}. Got response: ${rawText}`);
-      ret.error = `Error parsing response: ${String(err)}. Got response: ${rawText}`;
-      return ret;
+      logger.error(
+        `Error parsing session ID: ${String(err)}. Got headers: ${safeJsonStringify(response.headers)}`,
+      );
+      throw err;
     }
+    return ret;
   }
 
   private async callApiWithRawRequest(vars: Record<string, any>): Promise<ProviderResponse> {
@@ -499,26 +490,26 @@ export class HttpProvider implements ApiProvider {
 
     logger.debug(`Calling HTTP provider with raw request: ${url}`);
     logger.debug(`Calling HTTP provider with raw request: ${parsedRequest}`);
-    let response;
-    try {
-      response = await fetchWithCache(
-        url,
-        {
-          method: parsedRequest.method,
-          headers: parsedRequest.headers,
-          ...(parsedRequest.body && { body: parsedRequest.body.text.trim() }),
-        },
-        REQUEST_TIMEOUT_MS,
-        'text',
-        undefined,
-        this.config.maxRetries,
-      );
-    } catch (err) {
-      return {
-        error: `HTTP call error: ${String(err)}`,
-      };
-    }
+    const response = await fetchWithCache(
+      url,
+      {
+        method: parsedRequest.method,
+        headers: parsedRequest.headers,
+        ...(parsedRequest.body && { body: parsedRequest.body.text.trim() }),
+      },
+      REQUEST_TIMEOUT_MS,
+      'text',
+      undefined,
+      this.config.maxRetries,
+    );
+
     logger.debug(`\tHTTP response: ${response.data}`);
+
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(
+        `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
+      );
+    }
 
     const rawText = response.data as string;
     let parsedData;
@@ -528,16 +519,9 @@ export class HttpProvider implements ApiProvider {
       parsedData = null;
     }
 
-    try {
-      const parsedOutput = (await this.transformResponse)(parsedData, rawText);
-      return {
-        output: parsedOutput.output || parsedOutput,
-      };
-    } catch (err) {
-      logger.error(`Error parsing response: ${String(err)}. Got response: ${rawText}`);
-      return {
-        error: `Error parsing response: ${String(err)}. Got response: ${rawText}`,
-      };
-    }
+    const parsedOutput = (await this.transformResponse)(parsedData, rawText);
+    return {
+      output: parsedOutput.output || parsedOutput,
+    };
   }
 }

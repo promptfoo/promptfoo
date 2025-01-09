@@ -513,3 +513,30 @@ Use the generator below to create an HTTP provider configuration based on your e
 import { HttpConfigGenerator } from '@site/src/components/HttpConfigGenerator';
 
 <HttpConfigGenerator />
+
+## Error Handling
+
+The HTTP provider throws errors in the following scenarios:
+
+- Non-200 HTTP status codes (any response with status < 200 or >= 300)
+- Network errors or request failures
+- Invalid response parsing
+- Session parsing errors
+- Invalid request configurations
+
+These errors will propagate up to your application, allowing you to handle them appropriately. For example:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://example.com/api'
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/json'
+      body:
+        prompt: '{{prompt}}'
+      maxRetries: 3 # Will retry on network errors or rate limits
+```
+
+Note that while the provider will automatically retry on certain errors (like rate limits) based on the `maxRetries` configuration, other errors will be thrown immediately.
