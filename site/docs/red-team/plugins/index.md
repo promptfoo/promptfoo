@@ -15,7 +15,11 @@ CATEGORY_DESCRIPTIONS,
 
 ## What are Plugins?
 
-Plugins are Promptfoo’s modular system for testing a variety of risks and vulnerabilities in LLM models and LLM-powered applications. They serve as adversarial input generators that produce malicious payloads to reveal specific weaknesses or unwanted behaviors.
+Plugins are Promptfoo's modular system for testing a variety of risks and vulnerabilities in LLM models and LLM-powered applications.
+
+Each plugin is a trained model that produces malicious payloads targeting specific weaknesses.
+
+![Plugin Flow](/img/docs/plugin-flow.svg)
 
 Promptfoo supports {PLUGINS.length} plugins across {PLUGIN_CATEGORIES.length} categories: {humanReadableCategoryList.toLowerCase()}.
 

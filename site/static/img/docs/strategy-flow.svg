@@ -1,0 +1,150 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 500">
+    <!-- [Previous defs section remains the same] -->
+    <defs>
+        <!-- Gradients -->
+        <linearGradient id="pluginGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#4F46E5;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#7C3AED;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="payloadGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#DC2626;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#EF4444;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="variantGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#991B1B;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#B91C1C;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="appGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#059669;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#10B981;stop-opacity:1" />
+        </linearGradient>
+        
+        <!-- Arrow marker -->
+        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#6B7280"/>
+        </marker>
+        
+        <!-- Drop Shadow Filter -->
+        <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.3"/>
+        </filter>
+    </defs>
+    
+    <!-- Plugin Box with Stack Effect -->
+    <g transform="translate(50, 150)">
+        <rect width="160" height="100" rx="10" x="16" y="16" fill="#4F46E5" opacity="0.3" />
+        <rect width="160" height="100" rx="10" x="8" y="8" fill="#4F46E5" opacity="0.5" />
+        <rect width="160" height="100" rx="10" x="0" y="0" fill="url(#pluginGradient)" filter="url(#shadow)" />
+        <text x="80" y="45" font-family="system-ui" font-size="16" text-anchor="middle" fill="white" font-weight="bold">Plugin</text>
+        <text x="80" y="65" font-family="system-ui" font-size="12" text-anchor="middle" fill="white">Adversarial LLM</text>
+    </g>
+    
+    <!-- Initial Payload Boxes -->
+    <g transform="translate(300, 80)">
+        <!-- Each payload with red gradient -->
+        <g>
+            <rect width="140" height="60" rx="8" fill="url(#payloadGradient)" filter="url(#shadow)" />
+            <text x="70" y="35" font-family="system-ui" font-size="14" text-anchor="middle" fill="white">Payload 1</text>
+        </g>
+        <g transform="translate(0, 100)">
+            <rect width="140" height="60" rx="8" fill="url(#payloadGradient)" filter="url(#shadow)" />
+            <text x="70" y="35" font-family="system-ui" font-size="14" text-anchor="middle" fill="white">Payload 2</text>
+        </g>
+        <g transform="translate(0, 200)">
+            <rect width="140" height="60" rx="8" fill="url(#payloadGradient)" filter="url(#shadow)" />
+            <text x="70" y="35" font-family="system-ui" font-size="14" text-anchor="middle" fill="white">Payload 3</text>
+        </g>
+    </g>
+
+    <!-- Variant Boxes -->
+    <g transform="translate(600, 0)">
+        <!-- [Previous variant boxes with updated y-position] -->
+        <!-- Variants for Payload 1 -->
+        <g>
+            <rect width="120" height="40" rx="6" fill="url(#variantGradient)" filter="url(#shadow)" />
+            <text x="60" y="25" font-family="system-ui" font-size="12" text-anchor="middle" fill="white">Variant 1.1</text>
+        </g>
+        <g transform="translate(0, 45)">
+            <rect width="120" height="40" rx="6" fill="url(#variantGradient)" filter="url(#shadow)" />
+            <text x="60" y="25" font-family="system-ui" font-size="12" text-anchor="middle" fill="white">Variant 1.2</text>
+        </g>
+        <g transform="translate(0, 90)">
+            <rect width="120" height="40" rx="6" fill="url(#variantGradient)" filter="url(#shadow)" />
+            <text x="60" y="25" font-family="system-ui" font-size="12" text-anchor="middle" fill="white">Variant 1.3</text>
+        </g>
+
+        <!-- Variants for Payload 2 -->
+        <g transform="translate(0, 150)">
+            <rect width="120" height="40" rx="6" fill="url(#variantGradient)" filter="url(#shadow)" />
+            <text x="60" y="25" font-family="system-ui" font-size="12" text-anchor="middle" fill="white">Variant 2.1</text>
+        </g>
+        <g transform="translate(0, 195)">
+            <rect width="120" height="40" rx="6" fill="url(#variantGradient)" filter="url(#shadow)" />
+            <text x="60" y="25" font-family="system-ui" font-size="12" text-anchor="middle" fill="white">Variant 2.2</text>
+        </g>
+        <g transform="translate(0, 240)">
+            <rect width="120" height="40" rx="6" fill="url(#variantGradient)" filter="url(#shadow)" />
+            <text x="60" y="25" font-family="system-ui" font-size="12" text-anchor="middle" fill="white">Variant 2.3</text>
+        </g>
+
+        <!-- Variants for Payload 3 -->
+        <g transform="translate(0, 300)">
+            <rect width="120" height="40" rx="6" fill="url(#variantGradient)" filter="url(#shadow)" />
+            <text x="60" y="25" font-family="system-ui" font-size="12" text-anchor="middle" fill="white">Variant 3.1</text>
+        </g>
+        <g transform="translate(0, 345)">
+            <rect width="120" height="40" rx="6" fill="url(#variantGradient)" filter="url(#shadow)" />
+            <text x="60" y="25" font-family="system-ui" font-size="12" text-anchor="middle" fill="white">Variant 3.2</text>
+        </g>
+        <g transform="translate(0, 390)">
+            <rect width="120" height="40" rx="6" fill="url(#variantGradient)" filter="url(#shadow)" />
+            <text x="60" y="25" font-family="system-ui" font-size="12" text-anchor="middle" fill="white">Variant 3.3</text>
+        </g>
+    </g>
+    
+    <!-- Application Box -->
+    <g transform="translate(900, 150)">
+        <rect width="160" height="100" rx="10" fill="url(#appGradient)" />
+        <text x="80" y="55" font-family="system-ui" font-size="16" text-anchor="middle" fill="white" font-weight="bold">Application</text>
+    </g>
+    
+    <!-- Connecting Lines -->
+    <g>
+        <!-- Plugin to Payloads -->
+        <line x1="210" y1="180" x2="300" y2="110" stroke="#6B7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+        <line x1="210" y1="190" x2="300" y2="210" stroke="#6B7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+        <line x1="210" y1="200" x2="300" y2="310" stroke="#6B7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+        
+        <!-- Payloads to Variants -->
+        <!-- Payload 1 to its variants -->
+        <line x1="440" y1="110" x2="600" y2="20" stroke="#6B7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+        <line x1="440" y1="110" x2="600" y2="65" stroke="#6B7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+        <line x1="440" y1="110" x2="600" y2="110" stroke="#6B7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+        
+        <!-- Payload 2 to its variants -->
+        <line x1="440" y1="210" x2="600" y2="170" stroke="#6B7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+        <line x1="440" y1="210" x2="600" y2="215" stroke="#6B7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+        <line x1="440" y1="210" x2="600" y2="260" stroke="#6B7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+        
+        <!-- Payload 3 to its variants -->
+        <line x1="440" y1="310" x2="600" y2="320" stroke="#6B7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+        <line x1="440" y1="310" x2="600" y2="365" stroke="#6B7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+        <line x1="440" y1="310" x2="600" y2="410" stroke="#6B7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+        <!-- Variants to Application -->
+        <!-- First set -->
+        <line x1="720" y1="20" x2="900" y2="170" stroke="#6B7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+        <line x1="720" y1="65" x2="900" y2="180" stroke="#6B7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+        <line x1="720" y1="110" x2="900" y2="190" stroke="#6B7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+        
+        <!-- Second set -->
+        <line x1="720" y1="170" x2="900" y2="200" stroke="#6B7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+        <line x1="720" y1="215" x2="900" y2="210" stroke="#6B7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+        <line x1="720" y1="260" x2="900" y2="220" stroke="#6B7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+        
+        <!-- Third set -->
+        <line x1="720" y1="320" x2="900" y2="230" stroke="#6B7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+        <line x1="720" y1="365" x2="900" y2="240" stroke="#6B7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+        <line x1="720" y1="410" x2="900" y2="250" stroke="#6B7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+    </g>
+</svg>
