@@ -178,6 +178,7 @@ const sidebars = {
             'red-team/plugins/shell-injection',
             'red-team/plugins/sql-injection',
             'red-team/plugins/ssrf',
+            'red-team/plugins/system-prompt-override',
           ],
         },
         {
