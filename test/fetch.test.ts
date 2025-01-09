@@ -240,9 +240,10 @@ describe('fetchWithProxy', () => {
 
     await fetchWithProxy('https://example.com');
 
-    expect(path.normalize(jest.mocked(fs.readFileSync).mock.calls[0][0] as string)).toBe(
-      mockCertPath,
-    );
+    const actualPath = jest.mocked(fs.readFileSync).mock.calls[0][0] as string;
+    const normalizedActual = path.normalize(actualPath).replace(/^\w:/, '');
+    const normalizedExpected = path.normalize(mockCertPath).replace(/^\w:/, '');
+    expect(normalizedActual).toBe(normalizedExpected);
     expect(ProxyAgent).toHaveBeenCalledWith(
       expect.objectContaining({
         ca: mockCertContent,
@@ -269,9 +270,10 @@ describe('fetchWithProxy', () => {
 
     await fetchWithProxy('https://example.com');
 
-    expect(path.normalize(jest.mocked(fs.readFileSync).mock.calls[0][0] as string)).toBe(
-      mockCertPath,
-    );
+    const actualPath = jest.mocked(fs.readFileSync).mock.calls[0][0] as string;
+    const normalizedActual = path.normalize(actualPath).replace(/^\w:/, '');
+    const normalizedExpected = path.normalize(mockCertPath).replace(/^\w:/, '');
+    expect(normalizedActual).toBe(normalizedExpected);
     expect(ProxyAgent).toHaveBeenCalledWith(
       expect.objectContaining({
         rejectUnauthorized: true,
@@ -330,11 +332,16 @@ describe('fetchWithProxy', () => {
     await fetchWithProxy('https://example.com');
 
     const expectedPath = path.normalize(path.join(mockBasePath, mockCertPath));
-    const actualPath = path.normalize(jest.mocked(fs.readFileSync).mock.calls[0][0] as string);
+    const actualPath = jest.mocked(fs.readFileSync).mock.calls[0][0] as string;
 
-    expect(actualPath).toBe(expectedPath);
-    expect(actualPath).toContain(path.normalize(mockBasePath));
-    expect(actualPath).toContain(path.normalize(mockCertPath));
+    const normalizedActual = path.normalize(actualPath).replace(/^\w:/, '');
+    const normalizedExpected = path.normalize(expectedPath).replace(/^\w:/, '');
+    const normalizedBasePath = path.normalize(mockBasePath).replace(/^\w:/, '');
+    const normalizedCertPath = path.normalize(mockCertPath);
+
+    expect(normalizedActual).toBe(normalizedExpected);
+    expect(normalizedActual).toContain(normalizedBasePath);
+    expect(normalizedActual).toContain(normalizedCertPath);
     expect(ProxyAgent).toHaveBeenCalledWith(
       expect.objectContaining({
         ca: mockCertContent,
