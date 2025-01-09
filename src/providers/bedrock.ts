@@ -520,15 +520,34 @@ export const BEDROCK_MODEL = {
       try {
         const parsed = JSON.parse(prompt);
         if (Array.isArray(parsed)) {
-          messages = parsed
-            .map((msg) => ({
+          const systemMessages = parsed.filter((msg) => msg.role === 'system');
+          const nonSystemMessages = parsed.filter((msg) => msg.role !== 'system');
+
+          // NOTE: Claude models handle system prompts differently than OpenAI models.
+          // For compatibility with prompts designed for OpenAI like the factuality
+          // llm-as-a-judge prompts, we convert lone system messages into user messages
+          // since Bedrock Claude doesn't support system-only prompts.
+          if (systemMessages.length === 1 && nonSystemMessages.length === 0) {
+            // If only system message, convert to user message
+            messages = [
+              {
+                role: 'user',
+                content: Array.isArray(systemMessages[0].content)
+                  ? systemMessages[0].content
+                  : [{ type: 'text', text: systemMessages[0].content }],
+              },
+            ];
+            systemPrompt = undefined;
+          } else {
+            // Normal case - keep system message as system prompt
+            messages = nonSystemMessages.map((msg) => ({
               role: msg.role,
               content: Array.isArray(msg.content)
                 ? msg.content
                 : [{ type: 'text', text: msg.content }],
-            }))
-            .filter((msg) => msg.role !== 'system');
-          systemPrompt = parsed.find((msg) => msg.role === 'system')?.content;
+            }));
+            systemPrompt = systemMessages[0]?.content;
+          }
         } else {
           const { system, extractedMessages } = parseMessages(prompt);
           messages = extractedMessages;
