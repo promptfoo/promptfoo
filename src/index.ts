@@ -1,6 +1,5 @@
 import assertions from './assertions';
 import * as cache from './cache';
-import { login } from './commands/auth';
 import { evaluate as doEvaluate } from './evaluator';
 import logger from './logger';
 import { runDbMigrations } from './migrate';
@@ -8,7 +7,6 @@ import Eval from './models/eval';
 import { readPrompts, readProviderPromptMap } from './prompts';
 import providers, { loadApiProvider } from './providers';
 import { loadApiProviders } from './providers';
-import { redteamRun } from './redteam/commands/run';
 import { extractEntities } from './redteam/extraction/entities';
 import { extractSystemPurpose } from './redteam/extraction/purpose';
 import { GRADERS } from './redteam/graders';
@@ -153,16 +151,7 @@ const redteam = {
   },
 };
 
-const commands = {
-  auth: {
-    login,
-  },
-  redteam: {
-    run: redteamRun,
-  },
-};
-
-export { assertions, cache, evaluate, providers, redteam, commands };
+export { assertions, cache, evaluate, providers, redteam };
 
 export default {
   assertions,
@@ -170,5 +159,4 @@ export default {
   evaluate,
   providers,
   redteam,
-  commands,
 };

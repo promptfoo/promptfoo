@@ -42,7 +42,6 @@ describe('index.ts exports', () => {
     'isProviderOptions',
     'providers',
     'redteam',
-    'commands',
   ];
 
   const expectedSchemaExports = [
@@ -113,7 +112,6 @@ describe('index.ts exports', () => {
       evaluate: index.evaluate,
       providers: index.providers,
       redteam: index.redteam,
-      commands: index.commands,
     });
   });
 
