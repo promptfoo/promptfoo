@@ -86,7 +86,9 @@ jobs:
           npm exec check-dependency-version-consistency
 
       - name: Check for circular dependencies
-        run: npx madge $(git ls-files '*.ts') --circular
+        run: |
+          # shellcheck disable=SC2046
+          npx madge $(git ls-files '*.ts') --circular
 
   assets:
     name: Generate Assets
@@ -306,3 +308,17 @@ jobs:
       - name: Run Redteam
         run: |
           npm run test:redteam:integration
+
+  actionlint:
+    name: GitHub Actions Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Run actionlint
+        id: actionlint
+        uses: raven-actions/actionlint@v2

@@ -181,6 +181,18 @@ const config = {
             ],
           },
           { to: '/pricing/', label: 'Enterprise', position: 'left' },
+          {
+            href: 'https://github.com/promptfoo/promptfoo',
+            position: 'right',
+            className: 'header-github-link',
+            'aria-label': 'GitHub repository',
+          },
+          {
+            href: 'https://discord.gg/gHPS9jjfbs',
+            position: 'right',
+            className: 'header-discord-link',
+            'aria-label': 'Discord community',
+          },
         ],
       },
       footer: {
