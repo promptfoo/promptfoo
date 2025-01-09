@@ -63,8 +63,10 @@ async function runRedteamConversation({
 
   let highestScore = 0;
   let bestResponse = '';
-
+  let finalIteration = 0;
+  let bestInjectVar: string | undefined = undefined;
   let targetPrompt: string | null = null;
+
   const totalTokenUsage = {
     total: 0,
     prompt: 0,
@@ -80,8 +82,6 @@ async function runRedteamConversation({
     isOnTopic: boolean;
     graderPassed: boolean | undefined;
   }[] = [];
-  let finalIteration = 0;
-  let finalTargetPrompt: string | undefined = undefined;
 
   for (let i = 0; i < numIterations; i++) {
     const redteamBody = JSON.stringify(redteamHistory);
@@ -262,7 +262,7 @@ async function runRedteamConversation({
       if (currentScore > highestScore) {
         highestScore = currentScore;
         bestResponse = targetResponse.output;
-        finalTargetPrompt = targetPrompt;
+        bestInjectVar = newInjectVar;
       }
 
       // Update the user message to include both scores
@@ -353,7 +353,7 @@ async function runRedteamConversation({
       finalIteration,
       highestScore,
       previousOutputs: JSON.stringify(previousOutputs, null, 2),
-      redteamFinalPrompt: finalTargetPrompt,
+      redteamFinalPrompt: bestInjectVar,
     },
     tokenUsage: totalTokenUsage,
   };
