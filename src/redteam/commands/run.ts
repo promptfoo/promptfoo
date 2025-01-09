@@ -2,6 +2,7 @@ import type { Command } from 'commander';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import logger, { setLogLevel } from '../../logger';
+import { createShareableUrl } from '../../share';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
 import { getConfigFromCloud } from '../../util/cloud';
@@ -10,6 +11,46 @@ import type { RedteamRunOptions } from '../types';
 import { poisonCommand } from './poison';
 
 const UUID_REGEX = /^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$/;
+
+export async function redteamRun(opts: RedteamRunOptions) {
+  setupEnv(opts.envPath);
+  telemetry.record('command_used', {
+    name: 'redteam run',
+  });
+  await telemetry.send();
+
+  if (opts.verbose) {
+    setLogLevel('debug');
+  }
+  let autoShare = false;
+
+  if (opts.config && UUID_REGEX.test(opts.config)) {
+    const config = await getConfigFromCloud(opts.config);
+    opts.liveRedteamConfig = config;
+    opts.config = undefined;
+    autoShare = true;
+  }
+
+  try {
+    if (opts.remote) {
+      cliState.remote = true;
+    }
+    const result = await doRedteamRun(opts);
+    if (result && autoShare) {
+      await createShareableUrl(result, false);
+    }
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      logger.error('Invalid options:');
+      error.errors.forEach((err: z.ZodIssue) => {
+        logger.error(`  ${err.path.join('.')}: ${err.message}`);
+      });
+    } else {
+      logger.error('An unexpected error occurred:', error);
+    }
+    process.exitCode = 1;
+  }
+}
 
 export function redteamRunCommand(program: Command) {
   program
@@ -39,38 +80,7 @@ export function redteamRunCommand(program: Command) {
       'Only run tests with these providers (regex match)',
     )
     .action(async (opts: RedteamRunOptions) => {
-      setupEnv(opts.envPath);
-      telemetry.record('command_used', {
-        name: 'redteam run',
-      });
-      await telemetry.send();
-
-      if (opts.verbose) {
-        setLogLevel('debug');
-      }
-
-      if (opts.config && UUID_REGEX.test(opts.config)) {
-        const config = await getConfigFromCloud(opts.config);
-        opts.liveRedteamConfig = config;
-        opts.config = undefined;
-      }
-
-      try {
-        if (opts.remote) {
-          cliState.remote = true;
-        }
-        await doRedteamRun(opts);
-      } catch (error) {
-        if (error instanceof z.ZodError) {
-          logger.error('Invalid options:');
-          error.errors.forEach((err: z.ZodIssue) => {
-            logger.error(`  ${err.path.join('.')}: ${err.message}`);
-          });
-        } else {
-          logger.error('An unexpected error occurred:', error);
-        }
-        process.exitCode = 1;
-      }
+      await redteamRun(opts);
     });
 
   poisonCommand(program);

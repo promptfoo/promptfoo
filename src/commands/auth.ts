@@ -4,7 +4,7 @@ import dedent from 'dedent';
 import readline from 'readline';
 import { fetchWithProxy } from '../fetch';
 import { getUserEmail, setUserEmail } from '../globalConfig/accounts';
-import { cloudConfig } from '../globalConfig/cloud';
+import { API_HOST, cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import telemetry from '../telemetry';
 
@@ -31,6 +31,13 @@ async function promptForToken(): Promise<string> {
 
 async function promptForEmail(): Promise<string> {
   return promptForInput('Please enter your email: ');
+}
+
+export async function login(token: string, apiHost?: string) {
+  const { user } = await cloudConfig.validateAndSetApiToken(token, apiHost ?? API_HOST);
+
+  // Store token in global config
+  setUserEmail(user.email);
 }
 
 export function authCommand(program: Command) {
@@ -84,11 +91,7 @@ export function authCommand(program: Command) {
           // Prompt for token
           token = await promptForToken();
         }
-        const { user } = await cloudConfig.validateAndSetApiToken(token, apiHost);
-
-        // Store token in global config
-        setUserEmail(user.email);
-
+        await login(token, apiHost);
         telemetry.record('command_used', {
           name: 'auth login',
         });
