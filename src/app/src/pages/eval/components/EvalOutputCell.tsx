@@ -1,27 +1,17 @@
 import * as React from 'react';
 import { useMemo } from 'react';
-
-import {
-  diffJson,
-  diffSentences,
-  diffWords,
-} from 'diff';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-
 import { useShiftKey } from '@app/hooks/useShiftKey';
 import Tooltip from '@mui/material/Tooltip';
-import {
-  type EvaluateTableOutput,
-  ResultFailureReason,
-} from '@promptfoo/types';
-
+import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
+import { diffJson, diffSentences, diffWords } from 'diff';
+import remarkGfm from 'remark-gfm';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
-import { useStore as useResultsViewStore } from './store';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
+import { useStore as useResultsViewStore } from './store';
 
 type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;

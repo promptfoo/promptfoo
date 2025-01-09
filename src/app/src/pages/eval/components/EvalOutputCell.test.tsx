@@ -1,22 +1,11 @@
-import {
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from 'vitest';
-
+import { render, screen } from '@testing-library/react';
 import {
   type AssertionType,
   type EvaluateTableOutput,
   ResultFailureReason,
 } from '@promptfoo/types';
-import {
-  render,
-  screen,
-} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
 import type { EvalOutputCellProps } from './EvalOutputCell';
 import EvalOutputCell from './EvalOutputCell';
