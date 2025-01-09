@@ -1,5 +1,11 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
+import {
+  Assertion,
+  AssertionSet,
+  AtomicTestCase,
+} from 'src/types';
+
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
@@ -14,7 +20,10 @@ import type {
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import {
+  getRemoteGenerationUrl,
+  neverGenerateRemote,
+} from '../remoteGeneration';
 import type { Message } from './shared';
 import { getLastMessageContent } from './shared';
 
@@ -78,7 +87,18 @@ export default class GoatProvider implements ApiProvider {
       cached: 0,
     };
 
+    let assertToUse: Assertion | AssertionSet | undefined;
+    let graderPassed: boolean | undefined;
+    const { getGraderById } = await import('../graders');
+    let test: AtomicTestCase | undefined;
+
+    if (context?.test) {
+      test = context?.test;
+      assertToUse = test?.assert?.find((a: { type: string }) => a.type);
+    }
+
     for (let turn = 0; turn < this.maxTurns; turn++) {
+      logger.warn(`Remote generation URL: ${getRemoteGenerationUrl()}`);
       try {
         response = await fetch(getRemoteGenerationUrl(), {
           body: JSON.stringify({
@@ -184,6 +204,30 @@ export default class GoatProvider implements ApiProvider {
         } else {
           totalTokenUsage.numRequests += 1;
         }
+
+        const grader = assertToUse ? getGraderById(assertToUse.type) : undefined;
+        if (test && grader) {
+          const { grade } = await grader.getResult(
+            context?.vars[this.injectVar] as string,
+            attackerMessage.content,
+            test,
+            targetProvider,
+            assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+          );
+          graderPassed = grade.pass;
+          if (grade.tokensUsed) {
+            totalTokenUsage.total += grade.tokensUsed.total || 0;
+            totalTokenUsage.prompt += grade.tokensUsed.prompt || 0;
+            totalTokenUsage.completion += grade.tokensUsed.completion || 0;
+            totalTokenUsage.cached += grade.tokensUsed.cached || 0;
+          } else {
+            totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
+          }
+        }
+
+        if (graderPassed === false) {
+          break;
+        }
       } catch (err) {
         logger.error(`Error in GOAT turn ${turn}: ${err}`);
       }
@@ -195,6 +239,7 @@ export default class GoatProvider implements ApiProvider {
       metadata: {
         redteamFinalPrompt: getLastMessageContent(messages, 'user'),
         messages: JSON.stringify(messages, null, 2),
+        stopReason: graderPassed === false ? 'Grader failed' : 'Max turns reached',
       },
       tokenUsage: totalTokenUsage,
     };
