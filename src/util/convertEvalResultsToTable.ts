@@ -1,8 +1,8 @@
 import {
-  ResultFailureReason,
   type CompletedPrompt,
   type EvaluateTable,
   type EvaluateTableRow,
+  ResultFailureReason,
   type ResultsFile,
   type TokenUsage,
 } from '../types';
@@ -75,6 +75,8 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
         : [],
       test: result.testCase,
     };
+
+    result.vars['prompt'] = result.metadata?.redteamFinalPrompt || result.vars['prompt'];
     varValuesForRow.set(result.testIdx, result.vars as Record<string, string>);
     rowMap[result.testIdx] = row;
 
