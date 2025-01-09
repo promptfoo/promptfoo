@@ -306,6 +306,47 @@ describe('AwsBedrockGenericProvider', () => {
       ]);
       expect(params.system).toBe('You are a helpful assistant.');
     });
+
+    it('should convert lone system message to user message', () => {
+      const config: BedrockClaudeMessagesCompletionOptions = {
+        region: 'us-east-1',
+      };
+
+      // Test with string content
+      const promptWithStringContent = JSON.stringify([
+        { role: 'system', content: 'You are a helpful assistant.' },
+      ]);
+      const paramsWithString = modelHandler.params(config, promptWithStringContent);
+      expect(paramsWithString.messages).toEqual([
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'You are a helpful assistant.' }],
+        },
+      ]);
+      expect(paramsWithString.system).toBeUndefined();
+
+      // Test with array content
+      const promptWithArrayContent = JSON.stringify([
+        {
+          role: 'system',
+          content: [
+            { type: 'text', text: 'You are a helpful assistant.' },
+            { type: 'text', text: 'Additional context.' },
+          ],
+        },
+      ]);
+      const paramsWithArray = modelHandler.params(config, promptWithArrayContent);
+      expect(paramsWithArray.messages).toEqual([
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'You are a helpful assistant.' },
+            { type: 'text', text: 'Additional context.' },
+          ],
+        },
+      ]);
+      expect(paramsWithArray.system).toBeUndefined();
+    });
   });
 
   describe('BEDROCK_MODEL AI21', () => {
