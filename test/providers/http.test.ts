@@ -100,10 +100,7 @@ describe('HttpProvider', () => {
     const mockError = new Error('Network error');
     jest.mocked(fetchWithCache).mockRejectedValueOnce(mockError);
 
-    const result = await provider.callApi('test prompt');
-    expect(result).toEqual({
-      error: 'HTTP call error: Error: Network error',
-    });
+    await expect(provider.callApi('test prompt')).rejects.toThrow('Network error');
   });
 
   it('should use custom method/headers/queryParams', async () => {
@@ -1497,5 +1494,77 @@ describe('session handling', () => {
     const result = await provider.callApi('test');
     expect(result.sessionId).toBe('test-session');
     expect(sessionParser).toHaveBeenCalledWith({ headers: mockResponse.headers });
+  });
+});
+
+describe('error handling', () => {
+  it('should throw error for non-200 responses', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+      },
+    });
+
+    const mockResponse = {
+      data: 'Error message',
+      status: 400,
+      statusText: 'Bad Request',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await expect(provider.callApi('test')).rejects.toThrow(
+      'HTTP call failed with status 400 Bad Request: Error message',
+    );
+  });
+
+  it('should throw session parsing errors', async () => {
+    const sessionParser = jest.fn().mockImplementation(() => {
+      throw new Error('Session parsing failed');
+    });
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+        sessionParser,
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+      headers: { 'x-session-id': 'test-session' },
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await expect(provider.callApi('test')).rejects.toThrow('Session parsing failed');
+  });
+
+  it('should throw error for raw request with non-200 response', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        request: dedent`
+          GET /api/data HTTP/1.1
+          Host: example.com
+        `,
+      },
+    });
+
+    const mockResponse = {
+      data: 'Error occurred',
+      status: 500,
+      statusText: 'Internal Server Error',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await expect(provider.callApi('test')).rejects.toThrow(
+      'HTTP call failed with status 500 Internal Server Error: Error occurred',
+    );
   });
 });
