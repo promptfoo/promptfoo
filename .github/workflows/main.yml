@@ -86,7 +86,9 @@ jobs:
           npm exec check-dependency-version-consistency
 
       - name: Check for circular dependencies
-        run: npx madge "$(git ls-files '*.ts')" --circular
+        run: |
+          # shellcheck disable=SC2046
+          npx madge $(git ls-files '*.ts') --circular
 
   assets:
     name: Generate Assets
