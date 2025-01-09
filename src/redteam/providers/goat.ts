@@ -1,11 +1,6 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
-import {
-  Assertion,
-  AssertionSet,
-  AtomicTestCase,
-} from 'src/types';
-
+import type { Assertion, AssertionSet, AtomicTestCase } from 'src/types';
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
@@ -20,10 +15,7 @@ import type {
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
-import {
-  getRemoteGenerationUrl,
-  neverGenerateRemote,
-} from '../remoteGeneration';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import type { Message } from './shared';
 import { getLastMessageContent } from './shared';
 
@@ -98,7 +90,6 @@ export default class GoatProvider implements ApiProvider {
     }
 
     for (let turn = 0; turn < this.maxTurns; turn++) {
-      logger.warn(`Remote generation URL: ${getRemoteGenerationUrl()}`);
       try {
         response = await fetch(getRemoteGenerationUrl(), {
           body: JSON.stringify({
@@ -208,8 +199,8 @@ export default class GoatProvider implements ApiProvider {
         const grader = assertToUse ? getGraderById(assertToUse.type) : undefined;
         if (test && grader) {
           const { grade } = await grader.getResult(
-            context?.vars[this.injectVar] as string,
             attackerMessage.content,
+            stringifiedOutput,
             test,
             targetProvider,
             assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
