@@ -1,11 +1,22 @@
-import { render, screen } from '@testing-library/react';
 import {
-  ResultFailureReason,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
+
+import {
   type AssertionType,
   type EvaluateTableOutput,
+  ResultFailureReason,
 } from '@promptfoo/types';
+import {
+  render,
+  screen,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
 import type { EvalOutputCellProps } from './EvalOutputCell';
 import EvalOutputCell from './EvalOutputCell';
@@ -301,5 +312,94 @@ describe('EvalOutputCell provider override', () => {
 
     const { container } = renderWithProviders(<EvalOutputCell {...props} />);
     expect(container.querySelector('.provider.pill')).not.toBeInTheDocument();
+  });
+});
+
+describe('EvalOutputCell redteam prompt', () => {
+  const defaultProps: MockEvalOutputCellProps = {
+    firstOutput: {
+      cost: 0,
+      id: 'test-id',
+      latencyMs: 100,
+      namedScores: {},
+      pass: true,
+      failureReason: ResultFailureReason.NONE,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      score: 0.8,
+      text: 'Test output text',
+      testCase: {},
+    },
+    maxTextLength: 100,
+    onRating: vi.fn(),
+    output: {
+      cost: 0,
+      gradingResult: {
+        comment: 'Initial comment',
+        componentResults: [
+          {
+            assertion: {
+              metric: 'accuracy',
+              type: 'contains' as AssertionType,
+              value: 'expected value',
+            },
+            pass: true,
+            reason: 'Perfect match',
+            score: 1.0,
+          },
+          {
+            assertion: {
+              metric: 'relevance',
+              type: 'similar',
+              value: 'another value',
+            },
+            pass: false,
+            reason: 'Partial match',
+            score: 0.6,
+          },
+        ],
+        pass: true,
+        reason: 'Test reason',
+        score: 0.8,
+      },
+      id: 'test-id',
+      latencyMs: 100,
+      namedScores: {},
+      pass: true,
+      failureReason: ResultFailureReason.NONE,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      score: 0.8,
+      text: 'Test output text',
+      testCase: {},
+      metadata: {
+        redteamFinalPrompt: 'Redteam modified prompt',
+      },
+    },
+    promptIndex: 0,
+    rowIndex: 0,
+    searchText: '',
+    showDiffs: false,
+    showStats: true,
+  };
+
+  it('displays redteam final prompt when available', () => {
+    renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    expect(screen.getByText('Redteam Final Prompt')).toBeInTheDocument();
+  });
+
+  it('does not display redteam final prompt when not available', () => {
+    const propsWithoutRedteam = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        metadata: {},
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithoutRedteam} />);
+
+    expect(screen.queryByText('Redteam Final Prompt')).not.toBeInTheDocument();
   });
 });
