@@ -19,14 +19,31 @@ Cache entries are stored using composite keys that include:
 - Provider configuration
 - Context variables (when applicable)
 
-This ensures that changes to any of these components will result in a new cache entry.
+For example:
+
+```js
+// OpenAI - model, messages, settings
+`openai:gpt-4:${JSON.stringify({
+  "messages": [...],
+  "temperature": 0
+})}`
+
+// HTTP - URL and request details
+`fetch:v2:https://api.example.com/v1/chat:${JSON.stringify({
+  "method": "POST",
+  "body": {...}
+})}`
+```
 
 ### Cache Behavior
 
 - Successful API responses are cached with their complete response data
 - Error responses are not cached to allow for retry attempts
-- Cache entries respect TTL settings
-- Cache is automatically invalidated when size limits are reached or the TTL expires
+- Cache is automatically invalidated when:
+  - TTL expires (default: 14 days)
+  - Cache size exceeds limit (default: 10MB)
+  - Cache file count exceeds limit (default: 10,000)
+  - Cache is manually cleared
 - Memory storage is used automatically when `NODE_ENV=test`
 
 ## Command Line
@@ -73,7 +90,30 @@ The cache is configurable through environment variables:
 - Empty responses are not cached
 - HTTP 500 responses can be retried by setting `PROMPTFOO_RETRY_5XX=true`
 
-## Advanced Usage
+## Managing the Cache
+
+### Clearing the Cache
+
+You can clear the cache in several ways:
+
+1. Using the CLI command:
+
+```bash
+promptfoo cache clear
+```
+
+2. Through the Node.js API:
+
+```javascript
+const promptfoo = require('promptfoo');
+await promptfoo.cache.clearCache();
+```
+
+3. Manually delete the cache directory:
+
+```bash
+rm -rf ~/.promptfoo/cache
+```
 
 ### Cache Busting
 
