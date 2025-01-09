@@ -557,7 +557,6 @@ export async function runRedteamConversation({
           logger.debug(`[Depth ${depth}, Attempt ${attempts}] New max score: ${maxScore}`);
         } else if (score > bestScore) {
           bestScore = score;
-          bestNode.prompt = newInjectVar;
           noImprovementCount = 0;
           logger.debug(
             `[Depth ${depth}, Attempt ${attempts}] New best score: ${score}. Max score: ${maxScore}`,
