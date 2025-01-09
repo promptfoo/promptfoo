@@ -1,10 +1,10 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
-import type { Assertion, AssertionSet, AtomicTestCase } from 'src/types';
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
+import type { Assertion, AssertionSet, AtomicTestCase } from '../../types';
 import type {
   ApiProvider,
   CallApiContextParams,
