@@ -306,3 +306,25 @@ jobs:
       - name: Run Redteam
         run: |
           npm run test:redteam:integration
+
+  actionlint:
+    name: GitHub Actions Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Run actionlint
+        id: actionlint
+        uses: raven-actions/actionlint@v2
+        with:
+          matcher: true # Enable GitHub annotations
+          cache: true # Use GitHub cache for faster runs
+          shellcheck: true # Enable shellcheck integration
+          pyflakes: true # Enable pyflakes integration
+          fail-on-error: true # Fail the action if there are any errors
+          group-result: true # Group results in the logs
+          files: '.github/workflows/*.yml' # Explicitly set which files to check
