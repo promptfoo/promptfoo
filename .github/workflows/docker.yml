@@ -76,7 +76,7 @@ jobs:
           platforms: linux/amd64
           build-args: |
             BUILD_VERSION=${{ github.ref_name }}
-            BUILD_DATE=${{ fromJSON('["' + github.event.head_commit.timestamp + '", "' + github.event.pull_request.updated_at + '"]')[github.event.pull_request && 1 || 0] || format('2006-01-02T15:04:05Z', github.event.repository.updated_at) }}
+            BUILD_DATE=${{ github.event_name == 'pull_request' && github.event.pull_request.updated_at || github.event.head_commit.timestamp || github.event.repository.updated_at }}
             GIT_SHA=${{ github.sha }}
 
       - name: Run Docker container for testing
@@ -188,7 +188,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             BUILD_VERSION=${{ github.ref_name }}
-            BUILD_DATE=${{ fromJSON('["' + github.event.head_commit.timestamp + '", "' + github.event.pull_request.updated_at + '"]')[github.event.pull_request && 1 || 0] || format('2006-01-02T15:04:05Z', github.event.repository.updated_at) }}
+            BUILD_DATE=${{ github.event_name == 'pull_request' && github.event.pull_request.updated_at || github.event.head_commit.timestamp || github.event.repository.updated_at }}
             GIT_SHA=${{ github.sha }}
           outputs: |
             type=image,name=target,annotation-index.org.opencontainers.image.description=promptfoo is a tool for testing evaluating and red-teaming LLM apps.
