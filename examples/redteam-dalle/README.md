@@ -39,6 +39,8 @@ This example demonstrates how to use promptfoo to automatically discover jailbre
    - Set "Max text length" to unlimited to view complete responses
    - Click the magnifying glass icon (🔍) in the "View output and test details" column to see the final modified prompt that was used, complete conversation history, and scoring breakdown for each iteration.
 
+   **Image Saving**: DALL-E image URLs expire after 2 hours. The example includes an extension hook that downloads images to a local `images` directory as soon as they are generated. Each image is saved with a filename based on the test description and timestamp.
+
 ## Expected Behavior
 
 During evaluation, you may see error messages like:
