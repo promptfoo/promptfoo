@@ -553,9 +553,11 @@ export async function runRedteamConversation({
         if (score > maxScore) {
           maxScore = score;
           bestResponse = targetResponse.output;
+          bestNode.prompt = newInjectVar;
           logger.debug(`[Depth ${depth}, Attempt ${attempts}] New max score: ${maxScore}`);
         } else if (score > bestScore) {
           bestScore = score;
+          bestNode.prompt = newInjectVar;
           noImprovementCount = 0;
           logger.debug(
             `[Depth ${depth}, Attempt ${attempts}] New best score: ${score}. Max score: ${maxScore}`,
@@ -616,7 +618,7 @@ export async function runRedteamConversation({
             output: targetResponse.output,
             metadata: {
               highestScore: maxScore,
-              redteamFinalPrompt: targetPrompt,
+              redteamFinalPrompt: bestNode.prompt,
               stoppingReason,
               attempts,
               treeOutputs: JSON.stringify(treeOutputs, null, 2),
@@ -644,7 +646,7 @@ export async function runRedteamConversation({
             output: bestResponse,
             metadata: {
               highestScore: maxScore,
-              redteamFinalPrompt: targetPrompt,
+              redteamFinalPrompt: bestNode.prompt,
               stoppingReason,
               attempts,
               treeOutputs: JSON.stringify(treeOutputs, null, 2),
@@ -673,7 +675,7 @@ export async function runRedteamConversation({
             output: bestResponse,
             metadata: {
               highestScore: maxScore,
-              redteamFinalPrompt: targetPrompt,
+              redteamFinalPrompt: bestNode.prompt,
               stoppingReason,
               attempts,
               treeOutputs: JSON.stringify(treeOutputs, null, 2),
@@ -762,7 +764,7 @@ export async function runRedteamConversation({
     output: bestResponse,
     metadata: {
       highestScore: maxScore,
-      redteamFinalPrompt: finalTargetPrompt,
+      redteamFinalPrompt: bestNode.prompt,
       stoppingReason,
       attempts,
       treeOutputs: JSON.stringify(treeOutputs, null, 2),
