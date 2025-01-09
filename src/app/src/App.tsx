@@ -28,7 +28,7 @@ const basename = import.meta.env.VITE_PUBLIC_BASENAME || '';
 function TelemetryTracker() {
   const location = useLocation();
   const { recordEvent } = useTelemetry();
-  const { status: healthStatus } = useApiHealth(true, 5000);
+  const { status: healthStatus, hasBeenConnected, isInitialConnection } = useApiHealth(true, 5000);
 
   useEffect(() => {
     recordEvent('webui_page_view', { path: location.pathname });
@@ -37,7 +37,12 @@ function TelemetryTracker() {
   return (
     <>
       <Collapse
-        in={healthStatus === 'blocked' && location.pathname !== '/launcher'}
+        in={
+          hasBeenConnected &&
+          !isInitialConnection &&
+          healthStatus === 'blocked' &&
+          location.pathname !== '/launcher'
+        }
         sx={{
           position: 'fixed',
           top: 16,

@@ -97,7 +97,11 @@ export default function LauncherPage() {
   const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
   const [darkMode, setDarkMode] = useState<boolean | null>(null);
   const isLargeScreen = useMediaQuery('(min-width:1200px)');
-  const { status: healthStatus } = useApiHealth(true, 2000, DEFAULT_LOCAL_API_URL); // Pass default URL to health check
+  const {
+    status: healthStatus,
+    hasBeenConnected,
+    isInitialConnection,
+  } = useApiHealth(true, 2000, DEFAULT_LOCAL_API_URL);
   const { apiBaseUrl, setApiBaseUrl, enablePersistApiBaseUrl } = useApiConfig();
 
   // Initialize API URL if not set
@@ -141,11 +145,14 @@ export default function LauncherPage() {
   useEffect(() => {
     if (healthStatus === 'connected') {
       setIsConnecting(false);
-      setTimeout(() => navigate('/eval'), 1000);
+      // Only auto-navigate if this is the initial connection
+      if (isInitialConnection) {
+        setTimeout(() => navigate('/eval'), 1000);
+      }
     } else if (healthStatus === 'blocked' || healthStatus === 'disabled') {
       setIsConnecting(true);
     }
-  }, [healthStatus, navigate]);
+  }, [healthStatus, navigate, isInitialConnection]);
 
   if (darkMode === null) {
     return null; // Wait for theme to be determined
@@ -170,7 +177,7 @@ export default function LauncherPage() {
         }}
       >
         <Collapse
-          in={healthStatus === 'blocked'}
+          in={hasBeenConnected && !isInitialConnection && healthStatus === 'blocked'}
           sx={{
             position: 'fixed',
             top: 16,

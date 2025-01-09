@@ -9,10 +9,32 @@ interface HealthResponse {
   message: string;
 }
 
+const CONNECTION_STATE_KEY = 'promptfoo_connection_state';
+
+interface ConnectionState {
+  hasBeenConnected: boolean;
+  lastConnectedAt?: number;
+}
+
+function getStoredConnectionState(): ConnectionState {
+  try {
+    const stored = localStorage.getItem(CONNECTION_STATE_KEY);
+    return stored ? JSON.parse(stored) : { hasBeenConnected: false };
+  } catch {
+    return { hasBeenConnected: false };
+  }
+}
+
+function updateStoredConnectionState(state: ConnectionState) {
+  localStorage.setItem(CONNECTION_STATE_KEY, JSON.stringify(state));
+}
+
 export function useApiHealth(enableKeepalive = false, interval = 10000, baseUrlOverride?: string) {
   const [status, setStatus] = useState<ApiHealthStatus>('unknown');
   const [message, setMessage] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(false);
+  const [connectionState, setConnectionState] = useState<ConnectionState>(getStoredConnectionState);
+  const [isInitialConnection, setIsInitialConnection] = useState(!connectionState.hasBeenConnected);
 
   const performHealthCheck = useCallback(async () => {
     try {
@@ -22,7 +44,17 @@ export function useApiHealth(enableKeepalive = false, interval = 10000, baseUrlO
       if (data.status === 'DISABLED') {
         setStatus('disabled');
       } else {
-        setStatus(data.status === 'OK' ? 'connected' : 'blocked');
+        const isConnected = data.status === 'OK';
+        setStatus(isConnected ? 'connected' : 'blocked');
+        if (isConnected) {
+          const newState = {
+            hasBeenConnected: true,
+            lastConnectedAt: Date.now(),
+          };
+          setConnectionState(newState);
+          updateStoredConnectionState(newState);
+          setIsInitialConnection(false);
+        }
       }
       setMessage(data.message);
     } catch {
@@ -49,5 +81,13 @@ export function useApiHealth(enableKeepalive = false, interval = 10000, baseUrlO
     }
   }, [enableKeepalive, interval, checkHealth]);
 
-  return { status, message, checkHealth, isChecking };
+  return {
+    status,
+    message,
+    checkHealth,
+    isChecking,
+    hasBeenConnected: connectionState.hasBeenConnected,
+    isInitialConnection,
+    lastConnectedAt: connectionState.lastConnectedAt,
+  };
 }
