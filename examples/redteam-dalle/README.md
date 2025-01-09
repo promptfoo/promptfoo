@@ -59,11 +59,14 @@ This is normal expected behavior. Promptfoo automatically retries with modified 
   ```
 
 - For debugging or to see the internal workings, enable debug logging:
+
   ```sh
   LOG_LEVEL=debug npx promptfoo@latest eval -j 1
   ```
 
 ## Troubleshooting
+
+Note: DALL-E image URLs expire after 2 hours. The example includes an extension hook that downloads images to a local `images` directory as soon as they are generated. Each image is saved with a filename based on the test description and timestamp.
 
 - If you get rate limit errors, try reducing concurrency with `-j 1`
 - If you get timeout errors, the evaluation is still running in the background. Wait a few minutes and check the results
