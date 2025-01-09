@@ -1,5 +1,7 @@
 import fs from 'fs';
+import path from 'path';
 import { ProxyAgent } from 'proxy-agent';
+import cliState from './cliState';
 import { VERSION } from './constants';
 import { getEnvInt, getEnvBool, getEnvString } from './envars';
 import logger from './logger';
@@ -55,9 +57,10 @@ export async function fetchWithProxy(
   const caCertPath = getEnvString('PROMPTFOO_CA_CERT_PATH');
   if (caCertPath) {
     try {
-      const ca = fs.readFileSync(caCertPath);
+      const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
+      const ca = fs.readFileSync(resolvedPath);
       agentOptions.ca = ca;
-      logger.debug(`Using custom CA certificate from ${caCertPath}`);
+      logger.debug(`Using custom CA certificate from ${resolvedPath}`);
     } catch (e) {
       logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
     }

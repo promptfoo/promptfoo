@@ -1,5 +1,6 @@
 import fs from 'fs';
 import { ProxyAgent } from 'proxy-agent';
+import cliState from '../src/cliState';
 import { VERSION } from '../src/constants';
 import { getEnvString, getEnvBool } from '../src/envars';
 import {
@@ -36,6 +37,12 @@ jest.mock('../src/envars', () => ({
 
 jest.mock('fs', () => ({
   readFileSync: jest.fn(),
+}));
+
+jest.mock('../src/cliState', () => ({
+  default: {
+    basePath: undefined,
+  },
 }));
 
 describe('fetchWithProxy', () => {
@@ -288,6 +295,47 @@ describe('fetchWithProxy', () => {
         rejectUnauthorized: false,
       }),
     );
+  });
+
+  it('should resolve CA certificate path relative to basePath when available', async () => {
+    const mockBasePath = '/base/path';
+    const mockCertPath = 'certs/cert.pem';
+    const mockCertContent = 'mock-cert-content';
+
+    // Update basePath in cliState
+    cliState.basePath = mockBasePath;
+
+    jest.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
+      if (key === 'PROMPTFOO_CA_CERT_PATH') {
+        return mockCertPath;
+      }
+      return defaultValue;
+    });
+    jest.mocked(getEnvBool).mockImplementation((key: string, defaultValue: boolean = false) => {
+      if (key === 'PROMPTFOO_INSECURE_SSL') {
+        return false;
+      }
+      return defaultValue;
+    });
+    jest.mocked(fs.readFileSync).mockReturnValue(mockCertContent);
+
+    const mockFetch = jest.fn().mockResolvedValue(new Response());
+    global.fetch = mockFetch;
+
+    await fetchWithProxy('https://example.com');
+
+    // Should resolve to /base/path/certs/cert.pem
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining(mockBasePath));
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining(mockCertPath));
+    expect(ProxyAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ca: mockCertContent,
+        rejectUnauthorized: true,
+      }),
+    );
+
+    // Reset basePath
+    cliState.basePath = undefined;
   });
 });
 
