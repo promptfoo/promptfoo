@@ -233,6 +233,7 @@ const sidebars = {
             'red-team/strategies/best-of-n',
             'red-team/strategies/citation',
             'red-team/strategies/leetspeak',
+            'red-team/strategies/likert',
             'red-team/strategies/math-prompt',
             'red-team/strategies/multilingual',
             'red-team/strategies/prompt-injection',
