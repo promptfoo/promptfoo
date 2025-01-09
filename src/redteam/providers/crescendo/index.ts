@@ -6,10 +6,11 @@ import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
 import telemetry from '../../../telemetry';
 import type {
   ApiProvider,
+  AtomicTestCase,
   CallApiContextParams,
   CallApiOptionsParams,
-  Prompt,
   NunjucksFilterMap,
+  Prompt,
   RedteamFileConfig,
   TokenUsage,
 } from '../../../types';
@@ -26,7 +27,7 @@ import {
   redteamProviderManager,
   type TargetResponse,
 } from '../shared';
-import { CRESCENDO_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT } from './prompts';
+import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from './prompts';
 
 const DEFAULT_MAX_ROUNDS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
@@ -157,6 +158,7 @@ class CrescendoProvider implements ApiProvider {
       provider: context.originalProvider,
       context,
       options,
+      test: context.test,
     });
   }
 
@@ -167,6 +169,7 @@ class CrescendoProvider implements ApiProvider {
     provider,
     context,
     options,
+    test,
   }: {
     prompt: Prompt;
     filters: NunjucksFilterMap | undefined;
@@ -174,6 +177,7 @@ class CrescendoProvider implements ApiProvider {
     provider: ApiProvider;
     context?: CallApiContextParams;
     options?: CallApiOptionsParams;
+    test?: AtomicTestCase;
   }) {
     logger.debug(
       `[Crescendo] Starting attack with: prompt=${JSON.stringify(prompt)}, filtersPresent=${!!filters}, varsKeys=${Object.keys(vars)}, providerType=${provider.constructor.name}`,
@@ -207,6 +211,10 @@ class CrescendoProvider implements ApiProvider {
       role: 'system',
       content: systemPrompt,
     });
+
+    const assertToUse = test?.assert?.find((a: { type: string }) => a.type);
+    const { getGraderById } = await import('../../graders');
+    let graderPassed: boolean | undefined;
 
     while (roundNum < this.maxRounds) {
       roundNum++;
@@ -295,6 +303,30 @@ class CrescendoProvider implements ApiProvider {
         continue;
       }
 
+      if (test && assertToUse) {
+        const grader = getGraderById(assertToUse.type);
+        if (grader) {
+          const { grade } = await grader.getResult(
+            this.userGoal as string,
+            lastResponse.output,
+            test,
+            provider,
+            assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+          );
+          graderPassed = grade.pass;
+          if (grade.tokensUsed) {
+            totalTokenUsage.total += grade.tokensUsed.total || 0;
+            totalTokenUsage.prompt += grade.tokensUsed.prompt || 0;
+            totalTokenUsage.completion += grade.tokensUsed.completion || 0;
+            totalTokenUsage.cached += grade.tokensUsed.cached || 0;
+          } else {
+            totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
+          }
+        }
+      }
+
+      logger.debug(`[Crescendo] graderPassed: ${graderPassed}`);
+
       const [evalScore, evalTokenUsage] = await this.getEvalScore(lastResponse.output);
       if (evalTokenUsage) {
         totalTokenUsage.total += evalTokenUsage.total || 0;
@@ -311,7 +343,7 @@ class CrescendoProvider implements ApiProvider {
       };
       logger.debug(`[Crescendo] Eval score: flag=${evalFlag}, percentage=${evalPercentage}`);
 
-      if (evalPercentage === 100) {
+      if (evalPercentage === 100 || graderPassed === false) {
         logger.debug(`[Crescendo] Jailbreak Successful, EXITING at ROUND ${roundNum}`);
         break;
       }
@@ -344,6 +376,7 @@ class CrescendoProvider implements ApiProvider {
         crescendoBacktrackCount: backtrackCount,
         crescendoResult: evalFlag,
         crescendoConfidence: evalPercentage,
+        stopReason: graderPassed === false ? 'Grader failed' : 'Max backtracks reached',
       },
       tokenUsage: totalTokenUsage,
     };
@@ -426,7 +459,7 @@ class CrescendoProvider implements ApiProvider {
 
     for (const key of expectedKeys) {
       if (!(key in parsedOutput)) {
-        logger.warning(`[Crescendo] Missing key in response: ${key}`);
+        logger.warn(`[Crescendo] Missing key in response: ${key}`);
       }
     }
 
