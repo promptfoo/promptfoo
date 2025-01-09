@@ -196,7 +196,29 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       <Grid container spacing={2} sx={{ mb: 4 }}>
         {singleTurnStrategies.map((strategy) => (
           <Grid item xs={12} sm={6} md={4} key={strategy.id}>
-            <Paper elevation={1} sx={{ p: 2, height: '100%' }}>
+            <Paper
+              elevation={1}
+              sx={{
+                p: 2,
+                height: '100%',
+                borderRadius: 2,
+                border: (theme) =>
+                  selectedStrategies.some((s) => getStrategyId(s) === strategy.id)
+                    ? `1px solid ${theme.palette.primary.main}`
+                    : '1px solid transparent',
+                backgroundColor: (theme) =>
+                  selectedStrategies.some((s) => getStrategyId(s) === strategy.id)
+                    ? alpha(theme.palette.primary.main, 0.04)
+                    : 'background.paper',
+                transition: 'all 0.2s ease-in-out',
+                '&:hover': {
+                  backgroundColor: (theme) =>
+                    selectedStrategies.some((s) => getStrategyId(s) === strategy.id)
+                      ? alpha(theme.palette.primary.main, 0.08)
+                      : alpha(theme.palette.action.hover, 0.04),
+                },
+              }}
+            >
               <Box
                 sx={{
                   display: 'flex',
@@ -279,7 +301,29 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       <Grid container spacing={2} sx={{ mb: 3 }}>
         {multiTurnStrategies.map((strategy) => (
           <Grid item xs={12} sm={6} md={4} key={strategy.id}>
-            <Paper elevation={1} sx={{ p: 2, height: '100%' }}>
+            <Paper
+              elevation={1}
+              sx={{
+                p: 2,
+                height: '100%',
+                borderRadius: 2,
+                border: (theme) =>
+                  selectedStrategies.some((s) => getStrategyId(s) === strategy.id)
+                    ? `1px solid ${theme.palette.primary.main}`
+                    : '1px solid transparent',
+                backgroundColor: (theme) =>
+                  selectedStrategies.some((s) => getStrategyId(s) === strategy.id)
+                    ? alpha(theme.palette.primary.main, 0.04)
+                    : 'background.paper',
+                transition: 'all 0.2s ease-in-out',
+                '&:hover': {
+                  backgroundColor: (theme) =>
+                    selectedStrategies.some((s) => getStrategyId(s) === strategy.id)
+                      ? alpha(theme.palette.primary.main, 0.08)
+                      : alpha(theme.palette.action.hover, 0.04),
+                },
+              }}
+            >
               <Box
                 sx={{
                   display: 'flex',
