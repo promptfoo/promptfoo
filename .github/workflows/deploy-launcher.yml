@@ -1,0 +1,48 @@
+name: 'Deploy Launcher'
+run-name: 'Deploy Launcher'
+
+on:
+  # Runs on pushes targeting the default branch
+  push:
+    branches: ['main']
+    paths:
+      - 'src/app/**' # Only trigger on changes to frontend code
+  pull_request:
+    branches: ['main']
+    paths:
+      - 'src/app/**' # Only trigger on changes to frontend code
+
+jobs:
+  deploy:
+    name: Deploy to Cloudflare Pages
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    env:
+      VITE_PROMPTFOO_LAUNCHER: true
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run App Tests
+        run: npm run test:app
+
+      - name: Build
+        run: npm run build:app
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: promptfoo-launcher
+          directory: src/app/dist
+          wranglerVersion: '3'

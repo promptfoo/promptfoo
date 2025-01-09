@@ -8,7 +8,6 @@ import LauncherPage from './page';
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
-// Mock localStorage
 const mockLocalStorage = {
   getItem: vi.fn(),
   setItem: vi.fn(),
@@ -17,14 +16,12 @@ Object.defineProperty(window, 'localStorage', {
   value: mockLocalStorage,
 });
 
-// Mock matchMedia for useMediaQuery
 const mockMatchMedia = vi.fn();
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
   value: mockMatchMedia,
 });
 
-// Default matchMedia mock implementation
 mockMatchMedia.mockImplementation((query) => ({
   matches: false,
   media: query,
@@ -159,7 +156,6 @@ describe('LauncherPage', () => {
 
   it('uses system preference for dark mode when no localStorage value exists', async () => {
     mockLocalStorage.getItem.mockReturnValue(null);
-    // Mock system preference to dark
     mockMatchMedia.mockImplementation((query) => ({
       matches: query === '(prefers-color-scheme: dark)',
       media: query,
