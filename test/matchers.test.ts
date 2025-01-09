@@ -1189,6 +1189,120 @@ describe('matchesContextFaithfulness', () => {
 
     mockCallApi.mockRestore();
   });
+
+  it('should handle LLM responses with no clear verdicts', async () => {
+    const mockTextProvider = {
+      id: () => 'mock-provider',
+      callApi: jest.fn()
+        .mockResolvedValueOnce({ output: 'Some statements', tokenUsage: { total: 10, prompt: 5, completion: 5, cached: false } })
+        .mockResolvedValueOnce({ output: 'I apologize, but I cannot make a clear assessment.', tokenUsage: { total: 20, prompt: 10, completion: 10, cached: false } }),
+    };
+
+    const result = await matchesContextFaithfulness('query', 'output', 'context', 0.5, { provider: mockTextProvider });
+    expect(result).toEqual({
+      pass: false,
+      reason: 'LLM unable to make faithfulness assessment',
+      tokensUsed: { total: 30, prompt: 15, completion: 15, cached: 0 },
+    });
+  });
+
+  it('should handle alternative yes/no formats', async () => {
+    const mockTextProvider = {
+      id: () => 'mock-provider',
+      callApi: jest.fn()
+        .mockResolvedValueOnce({ output: 'Some statements', tokenUsage: { total: 10, prompt: 5, completion: 5, cached: false } })
+        .mockResolvedValueOnce({ output: 'Yes, this is correct. No, this is not accurate.', tokenUsage: { total: 20, prompt: 10, completion: 10, cached: false } }),
+    };
+
+    const result = await matchesContextFaithfulness('query', 'output', 'context', 0.5, { provider: mockTextProvider });
+    expect(result).toEqual({
+      pass: true,
+      score: 0.5,
+      reason: 'Faithfulness 0.50 is >= 0.5',
+      tokensUsed: { total: 30, prompt: 15, completion: 15, cached: 0 },
+    });
+  });
+
+  it('should fail when no valid verdicts are found', async () => {
+    const mockTextProvider = {
+      id: () => 'mock-provider',
+      callApi: jest.fn()
+        .mockResolvedValueOnce({ output: 'Some statements', tokenUsage: { total: 10, prompt: 5, completion: 5, cached: false } })
+        .mockResolvedValueOnce({ output: 'Maybe, not sure, possibly.', tokenUsage: { total: 20, prompt: 10, completion: 10, cached: false } }),
+    };
+
+    const result = await matchesContextFaithfulness('query', 'output', 'context', 0.5, { provider: mockTextProvider });
+    expect(result).toEqual({
+      pass: false,
+      reason: 'No valid verdicts found in LLM response',
+      tokensUsed: { total: 30, prompt: 15, completion: 15, cached: 0 },
+    });
+  });
+
+  it('should handle empty verdict lists', async () => {
+    const mockTextProvider = {
+      id: () => 'mock-provider',
+      callApi: jest.fn()
+        .mockResolvedValueOnce({ output: 'Some statements', tokenUsage: { total: 10, prompt: 5, completion: 5, cached: false } })
+        .mockResolvedValueOnce({ output: 'Final verdict for each statement in order:', tokenUsage: { total: 20, prompt: 10, completion: 10, cached: false } }),
+    };
+
+    const result = await matchesContextFaithfulness('query', 'output', 'context', 0.5, { provider: mockTextProvider });
+    expect(result).toEqual({
+      pass: false,
+      reason: 'No valid verdicts found in LLM response',
+      tokensUsed: { total: 30, prompt: 15, completion: 15, cached: 0 },
+    });
+  });
+
+  it('should handle non-yes/no verdicts', async () => {
+    const mockTextProvider = {
+      id: () => 'mock-provider',
+      callApi: jest.fn()
+        .mockResolvedValueOnce({ output: 'Some statements', tokenUsage: { total: 10, prompt: 5, completion: 5, cached: false } })
+        .mockResolvedValueOnce({ output: 'Final verdict for each statement in order: maybe. uncertain.', tokenUsage: { total: 20, prompt: 10, completion: 10, cached: false } }),
+    };
+
+    const result = await matchesContextFaithfulness('query', 'output', 'context', 0.5, { provider: mockTextProvider });
+    expect(result).toEqual({
+      pass: false,
+      reason: 'No valid yes/no verdicts found in LLM response',
+      tokensUsed: { total: 30, prompt: 15, completion: 15, cached: 0 },
+    });
+  });
+
+  it('should ensure score is within valid bounds', async () => {
+    const mockTextProvider = {
+      id: () => 'mock-provider',
+      callApi: jest.fn()
+        .mockResolvedValueOnce({ output: 'Some statements', tokenUsage: { total: 10, prompt: 5, completion: 5, cached: false } })
+        .mockResolvedValueOnce({ output: 'verdict: yes\nverdict: yes\nverdict: yes', tokenUsage: { total: 20, prompt: 10, completion: 10, cached: false } }),
+    };
+
+    const result = await matchesContextFaithfulness('query', 'output', 'context', 0.5, { provider: mockTextProvider });
+    expect(result).toEqual({
+      pass: true,
+      score: 1,
+      reason: 'Faithfulness 1.00 is >= 0.5',
+      tokensUsed: { total: 30, prompt: 15, completion: 15, cached: 0 },
+    });
+  });
+
+  it('should handle errors in score calculation', async () => {
+    const mockTextProvider = {
+      id: () => 'mock-provider',
+      callApi: jest.fn()
+        .mockResolvedValueOnce({ output: 'Some statements', tokenUsage: { total: 10, prompt: 5, completion: 5, cached: false } })
+        .mockResolvedValueOnce({ output: undefined, tokenUsage: { total: 20, prompt: 10, completion: 10, cached: false } }),
+    };
+
+    const result = await matchesContextFaithfulness('query', 'output', 'context', 0.5, { provider: mockTextProvider });
+    expect(result).toEqual({
+      pass: false,
+      reason: 'No output',
+      tokensUsed: { total: 30, prompt: 15, completion: 15, cached: 0 },
+    });
+  });
 });
 
 describe('matchesContextRecall', () => {

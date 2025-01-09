@@ -900,6 +900,7 @@ export async function matchesContextFaithfulness(
   }
 
   invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
+  const firstCallTokens = resp.tokenUsage || { total: 0, prompt: 0, completion: 0, cached: 0 };
 
   const statements = resp.output.split('\n');
   promptText = nunjucks.renderString(nliPrompt, {
@@ -914,20 +915,87 @@ export async function matchesContextFaithfulness(
   }
 
   invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
+  const secondCallTokens = resp.tokenUsage || { total: 0, prompt: 0, completion: 0, cached: 0 };
 
   let finalAnswer = 'Final verdict for each statement in order:';
   finalAnswer = finalAnswer.toLowerCase();
-  let verdicts = resp.output.toLowerCase().trim();
+  const verdicts = resp.output.toLowerCase().trim();
   let score: number;
-  if (verdicts.includes(finalAnswer)) {
-    verdicts = verdicts.slice(verdicts.indexOf(finalAnswer) + finalAnswer.length);
-    score =
-      verdicts.split('.').filter((answer) => answer.trim() !== '' && !answer.includes('yes'))
-        .length / statements.length;
-  } else {
-    score = (verdicts.split('verdict: no').length - 1) / statements.length;
+  try {
+    if (verdicts.includes(finalAnswer)) {
+      const verdictList = verdicts
+        .slice(verdicts.indexOf(finalAnswer) + finalAnswer.length)
+        .split('.')
+        .map(v => v.trim())
+        .filter(v => v.length > 0);
+
+      if (verdictList.length === 0) {
+        return fail('No valid verdicts found in LLM response', {
+          total: (firstCallTokens.total || 0) + (secondCallTokens.total || 0),
+          prompt: (firstCallTokens.prompt || 0) + (secondCallTokens.prompt || 0),
+          completion: (firstCallTokens.completion || 0) + (secondCallTokens.completion || 0),
+          cached: (firstCallTokens.cached || 0) + (secondCallTokens.cached || 0),
+        });
+      }
+
+      const validVerdicts = verdictList.filter(v => v.includes('yes') || v.includes('no'));
+      if (validVerdicts.length === 0) {
+        return fail('No valid yes/no verdicts found in LLM response', {
+          total: (firstCallTokens.total || 0) + (secondCallTokens.total || 0),
+          prompt: (firstCallTokens.prompt || 0) + (secondCallTokens.prompt || 0),
+          completion: (firstCallTokens.completion || 0) + (secondCallTokens.completion || 0),
+          cached: (firstCallTokens.cached || 0) + (secondCallTokens.cached || 0),
+        });
+      }
+
+      score = 1 - (validVerdicts.filter(v => !v.includes('yes')).length / validVerdicts.length);
+    } else {
+      // Check for standard "verdict: no" format
+      const noVerdicts = verdicts.match(/verdict:\s*no/gi) || [];
+      const yesVerdicts = verdicts.match(/verdict:\s*yes/gi) || [];
+      let totalVerdicts = noVerdicts.length + yesVerdicts.length;
+
+      if (totalVerdicts === 0) {
+        // No clear verdicts found
+        if (verdicts.toLowerCase().includes('cannot') || 
+            verdicts.toLowerCase().includes('apologize') ||
+            verdicts.toLowerCase().includes('sorry')) {
+          return fail('LLM unable to make faithfulness assessment', {
+            total: (firstCallTokens.total || 0) + (secondCallTokens.total || 0),
+            prompt: (firstCallTokens.prompt || 0) + (secondCallTokens.prompt || 0),
+            completion: (firstCallTokens.completion || 0) + (secondCallTokens.completion || 0),
+            cached: (firstCallTokens.cached || 0) + (secondCallTokens.cached || 0),
+          });
+        }
+        // Try to find any yes/no mentions as a fallback
+        const noCount = (verdicts.match(/\b(no|false|incorrect)\b/gi) || []).length;
+        const yesCount = (verdicts.match(/\b(yes|true|correct)\b/gi) || []).length;
+        totalVerdicts = noCount + yesCount;
+        
+        if (totalVerdicts === 0) {
+          return fail('No valid verdicts found in LLM response', {
+            total: (firstCallTokens.total || 0) + (secondCallTokens.total || 0),
+            prompt: (firstCallTokens.prompt || 0) + (secondCallTokens.prompt || 0),
+            completion: (firstCallTokens.completion || 0) + (secondCallTokens.completion || 0),
+            cached: (firstCallTokens.cached || 0) + (secondCallTokens.cached || 0),
+          });
+        }
+        score = yesCount / totalVerdicts;
+      } else {
+        score = yesVerdicts.length / totalVerdicts;
+      }
+    }
+
+    // Ensure score is within valid bounds
+    score = Math.max(0, Math.min(1, score));
+  } catch (error: unknown) {
+    return fail(`Error calculating faithfulness score: ${error instanceof Error ? error.message : String(error)}`, {
+      total: (firstCallTokens.total || 0) + (secondCallTokens.total || 0),
+      prompt: (firstCallTokens.prompt || 0) + (secondCallTokens.prompt || 0),
+      completion: (firstCallTokens.completion || 0) + (secondCallTokens.completion || 0),
+      cached: (firstCallTokens.cached || 0) + (secondCallTokens.cached || 0),
+    });
   }
-  score = 1 - score;
   const pass = score >= threshold - Number.EPSILON;
   return {
     pass,
@@ -936,10 +1004,10 @@ export async function matchesContextFaithfulness(
       ? `Faithfulness ${score.toFixed(2)} is >= ${threshold}`
       : `Faithfulness ${score.toFixed(2)} is < ${threshold}`,
     tokensUsed: {
-      total: resp.tokenUsage?.total || 0,
-      prompt: resp.tokenUsage?.prompt || 0,
-      completion: resp.tokenUsage?.completion || 0,
-      cached: resp.tokenUsage?.cached || 0,
+      total: (firstCallTokens.total || 0) + (secondCallTokens.total || 0),
+      prompt: (firstCallTokens.prompt || 0) + (secondCallTokens.prompt || 0),
+      completion: (firstCallTokens.completion || 0) + (secondCallTokens.completion || 0),
+      cached: (firstCallTokens.cached || 0) + (secondCallTokens.cached || 0),
     },
   };
 }
