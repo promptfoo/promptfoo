@@ -1,6 +1,5 @@
 import dedent from 'dedent';
 import { v4 as uuidv4 } from 'uuid';
-
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
@@ -16,10 +15,7 @@ import type {
   TokenUsage,
 } from '../../../types';
 import invariant from '../../../util/invariant';
-import {
-  extractFirstJsonObject,
-  safeJsonStringify,
-} from '../../../util/json';
+import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
 import { shouldGenerateRemote } from '../../remoteGeneration';
@@ -31,11 +27,7 @@ import {
   redteamProviderManager,
   type TargetResponse,
 } from '../shared';
-import {
-  CRESCENDO_SYSTEM_PROMPT,
-  EVAL_SYSTEM_PROMPT,
-  REFUSAL_SYSTEM_PROMPT,
-} from './prompts';
+import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from './prompts';
 
 const DEFAULT_MAX_ROUNDS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
