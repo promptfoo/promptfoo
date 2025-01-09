@@ -1,6 +1,9 @@
+import fs from 'fs';
+import path from 'path';
 import { ProxyAgent } from 'proxy-agent';
+import cliState from './cliState';
 import { VERSION } from './constants';
-import { getEnvInt, getEnvBool } from './envars';
+import { getEnvInt, getEnvBool, getEnvString } from './envars';
 import logger from './logger';
 import invariant from './util/invariant';
 import { sleep } from './util/time';
@@ -46,9 +49,24 @@ export async function fetchWithProxy(
     }
   }
 
-  const agent = new ProxyAgent({
-    rejectUnauthorized: false,
-  });
+  const agentOptions: Record<string, any> = {
+    rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', false),
+  };
+
+  // Support custom CA certificates
+  const caCertPath = getEnvString('PROMPTFOO_CA_CERT_PATH');
+  if (caCertPath) {
+    try {
+      const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
+      const ca = fs.readFileSync(resolvedPath);
+      agentOptions.ca = ca;
+      logger.debug(`Using custom CA certificate from ${resolvedPath}`);
+    } catch (e) {
+      logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
+    }
+  }
+
+  const agent = new ProxyAgent(agentOptions);
 
   return fetch(finalUrl, { ...finalOptions, agent } as RequestInit);
 }

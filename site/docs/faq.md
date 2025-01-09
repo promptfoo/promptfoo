@@ -62,6 +62,21 @@ No, we do not collect any personally identifiable information (PII).
 
 Requests to most providers are made via [proxy-agent](https://www.npmjs.com/package/proxy-agent), which respects `HTTP_PROXY` and `HTTPS_PROXY` [environment variables](https://www.npmjs.com/package/proxy-from-env#environment-variables) of the form `[protocol://]<host>[:port]`.
 
+### How do I configure SSL certificates and security?
+
+For environments with custom certificate authorities (like corporate environments), you can configure SSL/TLS settings using these environment variables:
+
+1. `PROMPTFOO_CA_CERT_PATH`: Path to a custom CA certificate bundle. For example:
+
+   ```bash
+   export PROMPTFOO_CA_CERT_PATH=/path/to/ca-bundle.crt
+   ```
+
+2. `PROMPTFOO_INSECURE_SSL`: Set to `true` to disable SSL certificate verification (not recommended for production):
+   ```bash
+   export PROMPTFOO_INSECURE_SSL=true
+   ```
+
 ### How does Promptfoo integrate with existing development workflows?
 
 Promptfoo can be integrated into CI/CD pipelines via [GitHub Action](https://github.com/promptfoo/promptfoo-action), used with testing frameworks like Jest and Vitest, and incorporated into various stages of the development process.
