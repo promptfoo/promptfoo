@@ -85,15 +85,13 @@ jobs:
       - name: Verify Python and promptfoo
         run: |
           echo "Checking Python version:"
-          docker exec promptfoo-container python --version
-          if [ $? -ne 0 ]; then
+          if ! docker exec promptfoo-container python --version; then
             echo "Python check failed"
             exit 1
           fi
 
           echo "Checking promptfoo version:"
-          docker exec promptfoo-container promptfoo --version
-          if [ $? -ne 0 ]; then
+          if ! docker exec promptfoo-container promptfoo --version; then
             echo "promptfoo check failed"
             exit 1
           fi
@@ -101,7 +99,7 @@ jobs:
       - name: Run health check
         run: |
           # Loop to check if the server is up
-          for i in {1..10}; do
+          for ((retry=1; retry<=10; retry++)); do
             if curl -f http://localhost:3000/health; then
               echo -e "\nHealth check passed"
               HEALTH_CHECK_PASS=true
