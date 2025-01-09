@@ -61,6 +61,7 @@
     "transpiling",
     "unindented",
     "uuidv",
+    "watsonx",
     "webui"
   ],
   "jest.jestCommandLine": "npm run test --",
