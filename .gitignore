@@ -20,4 +20,4 @@ __pycache__
 
 # examples related
 examples/**/package-lock.json
-examples/redteam-dalle/saved_images
+examples/redteam-dalle/images

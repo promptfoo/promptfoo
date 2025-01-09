@@ -28,7 +28,7 @@ module.exports = {
 
     try {
       // Create images directory if it doesn't exist
-      const imagesDir = path.join(__dirname, 'saved_images');
+      const imagesDir = path.join(__dirname, 'images');
       await fs.promises.mkdir(imagesDir, { recursive: true });
 
       // Generate filename from test description and timestamp
