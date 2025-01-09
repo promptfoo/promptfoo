@@ -5,6 +5,9 @@ prompts:
 providers:
   - openai:image:dall-e-3
 
+extensions:
+  - file://save.js:hook
+
 defaultTest:
   # Use the iterative red team technique for each test
   provider: promptfoo:redteam:iterative:image
