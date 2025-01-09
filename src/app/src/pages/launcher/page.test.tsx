@@ -73,7 +73,7 @@ describe('LauncherPage', () => {
   it('shows connecting status initially', async () => {
     renderLauncher();
     await waitFor(() => {
-      expect(screen.getByText(/Connecting to Promptfoo on localhost:15501/)).toBeInTheDocument();
+      expect(screen.getByText(/Connecting to Promptfoo on localhost:15500/)).toBeInTheDocument();
       expect(screen.getByRole('progressbar')).toBeInTheDocument();
     });
   });
@@ -92,9 +92,9 @@ describe('LauncherPage', () => {
     renderLauncher();
 
     await waitFor(() => {
-      expect(screen.getByText(/Connecting to Promptfoo on localhost:15501/)).toBeInTheDocument();
+      expect(screen.getByText(/Connecting to Promptfoo on localhost:15500/)).toBeInTheDocument();
     });
-    expect(mockFetch).toHaveBeenCalledWith('http://localhost:15501/api/health');
+    expect(mockFetch).toHaveBeenCalledWith('http://localhost:15500/api/health');
   });
 
   it('loads dark mode preference from localStorage', async () => {

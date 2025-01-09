@@ -123,7 +123,7 @@ export default function LauncherPage() {
   useEffect(() => {
     const checkConnection = async () => {
       try {
-        const response = await fetch('http://localhost:15501/api/health');
+        const response = await fetch('http://localhost:15500/api/health');
         if (response.ok) {
           setIsConnecting(false);
           setTimeout(() => navigate('/eval'), 1000);
@@ -207,7 +207,7 @@ export default function LauncherPage() {
           >
             {isConnecting ? (
               <>
-                Connecting to Promptfoo on localhost:15501
+                Connecting to Promptfoo on localhost:15500
                 <CircularProgress size={16} color="inherit" />
               </>
             ) : (
