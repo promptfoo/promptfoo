@@ -8,8 +8,10 @@ import {
   useLocation,
   Outlet,
 } from 'react-router-dom';
+import { Alert, Collapse } from '@mui/material';
 import PageShell from './components/PageShell';
 import { ToastProvider } from './contexts/ToastContext';
+import { useApiHealth } from './hooks/useApiHealth';
 import { useTelemetry } from './hooks/useTelemetry';
 import DatasetsPage from './pages/datasets/page';
 import EvalCreatorPage from './pages/eval-creator/page';
@@ -26,12 +28,42 @@ const basename = import.meta.env.VITE_PUBLIC_BASENAME || '';
 function TelemetryTracker() {
   const location = useLocation();
   const { recordEvent } = useTelemetry();
+  const { status: healthStatus } = useApiHealth(true, 5000);
 
   useEffect(() => {
     recordEvent('webui_page_view', { path: location.pathname });
   }, [location, recordEvent]);
 
-  return <Outlet />;
+  return (
+    <>
+      <Collapse
+        in={healthStatus === 'blocked' && location.pathname !== '/launcher'}
+        sx={{
+          position: 'fixed',
+          top: 16,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 1000,
+          width: 'auto',
+          maxWidth: '90vw',
+        }}
+      >
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Connection lost. Try visiting{' '}
+          <a
+            href="https://local.promptfoo.app"
+            style={{ color: 'inherit' }}
+            target="_blank"
+            rel="noopener"
+          >
+            local.promptfoo.app
+          </a>{' '}
+          instead
+        </Alert>
+      </Collapse>
+      <Outlet />
+    </>
+  );
 }
 
 const router = createBrowserRouter(

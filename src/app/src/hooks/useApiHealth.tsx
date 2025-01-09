@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { callApi } from '@app/utils/api';
 import { useDebounce } from 'use-debounce';
 
@@ -9,14 +9,14 @@ interface HealthResponse {
   message: string;
 }
 
-export function useApiHealth() {
+export function useApiHealth(enableKeepalive = false, interval = 10000, baseUrlOverride?: string) {
   const [status, setStatus] = useState<ApiHealthStatus>('unknown');
   const [message, setMessage] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(false);
 
   const performHealthCheck = useCallback(async () => {
     try {
-      const response = await callApi('/remote-health');
+      const response = await callApi('/remote-health', {}, baseUrlOverride);
       const data = (await response.json()) as HealthResponse;
 
       if (data.status === 'DISABLED') {
@@ -31,7 +31,7 @@ export function useApiHealth() {
     } finally {
       setIsChecking(false);
     }
-  }, []);
+  }, [baseUrlOverride]);
 
   const [debouncedHealthCheck] = useDebounce(performHealthCheck, 300);
 
@@ -40,6 +40,14 @@ export function useApiHealth() {
     setStatus('loading');
     await debouncedHealthCheck();
   }, [debouncedHealthCheck]);
+
+  useEffect(() => {
+    if (enableKeepalive) {
+      checkHealth(); // Initial check
+      const keepaliveInterval = setInterval(checkHealth, interval);
+      return () => clearInterval(keepaliveInterval);
+    }
+  }, [enableKeepalive, interval, checkHealth]);
 
   return { status, message, checkHealth, isChecking };
 }

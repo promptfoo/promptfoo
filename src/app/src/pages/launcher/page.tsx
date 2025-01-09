@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import logoPanda from '@app/assets/logo-panda.svg';
+import useApiConfig from '@app/stores/apiConfig';
 import { Terminal as TerminalIcon } from '@mui/icons-material';
 import LanguageIcon from '@mui/icons-material/Language';
 import {
@@ -13,8 +14,13 @@ import {
   styled,
   ThemeProvider,
   createTheme,
+  Alert,
+  Collapse,
 } from '@mui/material';
 import DarkModeToggle from '../../components/DarkMode';
+import { useApiHealth } from '../../hooks/useApiHealth';
+
+const DEFAULT_LOCAL_API_URL = 'http://localhost:15500';
 
 // Create theme function (copied from PageShell.tsx)
 const createAppTheme = (darkMode: boolean) =>
@@ -91,6 +97,16 @@ export default function LauncherPage() {
   const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
   const [darkMode, setDarkMode] = useState<boolean | null>(null);
   const isLargeScreen = useMediaQuery('(min-width:1200px)');
+  const { status: healthStatus } = useApiHealth(true, 2000, DEFAULT_LOCAL_API_URL); // Pass default URL to health check
+  const { apiBaseUrl, setApiBaseUrl, enablePersistApiBaseUrl } = useApiConfig();
+
+  // Initialize API URL if not set
+  useEffect(() => {
+    if (!apiBaseUrl) {
+      setApiBaseUrl(DEFAULT_LOCAL_API_URL);
+      enablePersistApiBaseUrl();
+    }
+  }, [apiBaseUrl, setApiBaseUrl, enablePersistApiBaseUrl]);
 
   useEffect(() => {
     // Initialize from localStorage, fallback to system preference
@@ -121,23 +137,15 @@ export default function LauncherPage() {
     }
   }, [darkMode]);
 
+  // Handle connection status and navigation
   useEffect(() => {
-    const checkConnection = async () => {
-      try {
-        const response = await fetch('http://localhost:15500/api/health');
-        if (response.ok) {
-          setIsConnecting(false);
-          setTimeout(() => navigate('/eval'), 1000);
-        }
-      } catch {
-        setIsConnecting(true);
-      }
-    };
-
-    checkConnection();
-    const interval = setInterval(checkConnection, 2000);
-    return () => clearInterval(interval);
-  }, [navigate]);
+    if (healthStatus === 'connected') {
+      setIsConnecting(false);
+      setTimeout(() => navigate('/eval'), 1000);
+    } else if (healthStatus === 'blocked' || healthStatus === 'disabled') {
+      setIsConnecting(true);
+    }
+  }, [healthStatus, navigate]);
 
   if (darkMode === null) {
     return null; // Wait for theme to be determined
@@ -161,6 +169,27 @@ export default function LauncherPage() {
           position: 'relative',
         }}
       >
+        <Collapse
+          in={healthStatus === 'blocked'}
+          sx={{
+            position: 'fixed',
+            top: 16,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 1000,
+            width: 'auto',
+            maxWidth: '90vw',
+          }}
+        >
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            Connection lost. Try visiting{' '}
+            <Link href="https://local.promptfoo.app" target="_blank" rel="noopener">
+              local.promptfoo.app
+            </Link>{' '}
+            instead
+          </Alert>
+        </Collapse>
+
         <Box sx={{ position: 'absolute', top: 16, right: 16 }}>
           <DarkModeToggle onToggleDarkMode={toggleDarkMode} />
         </Box>
@@ -232,7 +261,14 @@ export default function LauncherPage() {
               <TerminalIcon color="primary" fontSize="small" />
               <StyledHeading>Getting Started</StyledHeading>
             </Box>
-            <StyledText sx={{ mb: 2 }}>Make sure Promptfoo server is up and running:</StyledText>
+            <StyledText sx={{ mb: 2 }}>
+              This app will proxy requests to <code>localhost:15500</code> by default. You can also
+              visit{' '}
+              <Link href="http://localhost:15500" target="_blank">
+                localhost:15500
+              </Link>{' '}
+              directly.
+            </StyledText>
             <Box component="ol" sx={{ pl: 2.5 }}>
               <ListItem>
                 Check our{' '}
