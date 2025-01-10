@@ -107,6 +107,88 @@ interface EvalOutputPromptDialogProps {
   metadata?: Record<string, any>;
 }
 
+interface RedteamHistoryEntry {
+  prompt: string;
+  output: string;
+  score: number;
+  isOnTopic: boolean;
+  graderPassed: boolean | undefined;
+}
+
+function RedteamHistory({ history }: { history: RedteamHistoryEntry[] }) {
+  const codeBlockSx = {
+    whiteSpace: 'pre-wrap',
+    fontFamily: 'monospace',
+    backgroundColor: (theme: any) =>
+      theme.palette.mode === 'dark' ? theme.palette.grey[900] : theme.palette.grey[100],
+    color: (theme: any) => theme.palette.text.primary,
+    p: 1.5,
+    borderRadius: 1,
+    border: (theme: any) => `1px solid ${theme.palette.divider}`,
+  } as const;
+
+  return (
+    <Box mt={2} mb={3}>
+      <Typography variant="subtitle1" gutterBottom>
+        Red Team Testing History
+      </Typography>
+      {history.map((entry, index) => (
+        <Box
+          key={index}
+          sx={{
+            mb: 3,
+            pb: 3,
+            borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
+            '&:last-child': {
+              borderBottom: 'none',
+              pb: 0,
+            },
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+            <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>
+              Attempt {index + 1} - Score: {entry.score}
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              {entry.isOnTopic && (
+                <Typography variant="body2" color="success.main">
+                  On Topic
+                </Typography>
+              )}
+              {entry.graderPassed !== undefined && (
+                <Typography
+                  variant="body2"
+                  color={entry.graderPassed ? 'success.main' : 'error.main'}
+                >
+                  {entry.graderPassed ? 'Passed' : 'Failed'}
+                </Typography>
+              )}
+            </Box>
+          </Box>
+
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+              Prompt
+            </Typography>
+            <Typography variant="body2" sx={codeBlockSx}>
+              {entry.prompt}
+            </Typography>
+          </Box>
+
+          <Box>
+            <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+              Output
+            </Typography>
+            <Typography variant="body2" sx={codeBlockSx}>
+              {entry.output}
+            </Typography>
+          </Box>
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
 export default function EvalOutputPromptDialog({
   open,
   onClose,
@@ -194,6 +276,7 @@ export default function EvalOutputPromptDialog({
             />
           </Box>
         )}
+        {metadata?.redteamHistory && <RedteamHistory history={metadata.redteamHistory} />}
         <AssertionResults gradingResults={gradingResults} />
         {parsedMessages && parsedMessages.length > 0 && <ChatMessages messages={parsedMessages} />}
         {metadata && Object.keys(metadata).length > 0 && (
