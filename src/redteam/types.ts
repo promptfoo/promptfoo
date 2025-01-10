@@ -116,3 +116,24 @@ export interface RedteamRunOptions {
   logCallback?: (message: string) => void;
   abortSignal?: AbortSignal;
 }
+
+export interface SavedRedteamConfig {
+  description: string;
+  prompts: string[];
+  target: ProviderOptions;
+  plugins: (RedteamPlugin | { id: string; config?: any })[];
+  strategies: RedteamStrategy[];
+  purpose?: string;
+  numTests?: number;
+  applicationDefinition: {
+    purpose?: string;
+    systemPrompt?: string;
+    redteamUser?: string;
+    accessToData?: string;
+    forbiddenData?: string;
+    accessToActions?: string;
+    forbiddenActions?: string;
+    connectedSystems?: string;
+  };
+  entities: string[];
+}
