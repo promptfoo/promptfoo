@@ -102,7 +102,7 @@ const AboutPageContent = () => {
                 bio: 'Vedant is a seasoned engineer with a strong background in software engineering, infrastrucure and security. He has broad experience leading teams and building products at companies like Pinterest, Microsoft, and Amazon.',
               },
             ].map((leader) => (
-              <Grid item xs={12} sm={6} md={3} key={leader.name}>
+              <Grid item xs={12} sm={6} md={4} key={leader.name}>
                 <Box textAlign="center">
                   <Avatar
                     alt={leader.name}
