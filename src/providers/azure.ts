@@ -1,15 +1,15 @@
 import type { TokenCredential } from '@azure/identity';
-import { ClientSecretCredential, AzureCliCredential } from '@azure/identity';
+import { AzureCliCredential, ClientSecretCredential } from '@azure/identity';
 import type {
-  AssistantsClient,
   AssistantCreationOptions,
+  AssistantsClient,
   FunctionDefinition,
-  RunStepToolCallDetails,
   RunStepMessageCreationDetails,
+  RunStepToolCallDetails,
 } from '@azure/openai-assistants';
 import dedent from 'dedent';
 import { fetchWithCache } from '../cache';
-import { getEnvString, getEnvFloat, getEnvInt } from '../envars';
+import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import type {
   ApiProvider,
@@ -22,7 +22,7 @@ import type { EnvOverrides } from '../types/env';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
 import invariant from '../util/invariant';
 import { sleep } from '../util/time';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase, calculateCost } from './shared';
+import { calculateCost, parseChatPrompt, REQUEST_TIMEOUT_MS, toTitleCase } from './shared';
 
 export const DEFAULT_AZURE_API_VERSION = '2024-12-01-preview';
 
@@ -704,6 +704,20 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
       );
 
+      // Extract filter flags from content and prompt filter results
+      const contentFilterResults = data.choices[0]?.content_filter_results;
+      const promptFilterResults = data.prompt_filter_results;
+
+      // Check if any content was filtered
+      const inputGuardTriggered =
+        promptFilterResults?.some((result: any) =>
+          Object.values(result.content_filter_results).some((filter: any) => filter.filtered),
+        ) ?? false;
+
+      const outputGuardTriggered = Object.values(contentFilterResults || {}).some(
+        (filter: any) => filter.filtered,
+      );
+
       return {
         output,
         tokenUsage: cached
@@ -721,6 +735,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           data.usage?.prompt_tokens,
           data.usage?.completion_tokens,
         ),
+        inputGuardTriggered,
+        outputGuardTriggered,
+        guardTriggered: inputGuardTriggered || outputGuardTriggered,
       };
     } catch (err) {
       return {
