@@ -29,10 +29,11 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import { strategyDisplayNames } from '@promptfoo/redteam/constants';
+import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
 import type { RedteamPlugin } from '@promptfoo/redteam/types';
 import type { Job } from '@promptfoo/types';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
-import { generateOrderedYaml, getUnifiedConfig } from '../utils/yamlHelpers';
+import { generateOrderedYaml } from '../utils/yamlHelpers';
 import { LogViewer } from './LogViewer';
 
 interface PolicyPlugin {
