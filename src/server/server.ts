@@ -190,7 +190,7 @@ export function createApp() {
   return app;
 }
 
-export function startServer(
+export async function startServer(
   port = DEFAULT_PORT,
   browserBehavior = BrowserBehavior.ASK,
   filterDescription?: string,
@@ -204,9 +204,7 @@ export function startServer(
     },
   });
 
-  runDbMigrations().then(() => {
-    logger.info('Migrated results from file system to database');
-  });
+  await runDbMigrations();
 
   const watchFilePath = getDbSignalPath();
   const watcher = debounce(async (curr: Stats, prev: Stats) => {
