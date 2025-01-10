@@ -22,7 +22,7 @@ async function fetchAndParseUrl(url: string): Promise<string[]> {
     const text = await response.text();
 
     // Split by headers (h1-h3) and filter out empty strings
-    const sections = text.split(/^#{1,3}\s+.*$/m).filter(Boolean);
+    const sections = text.split(/^#{1,4}\s+.*$/m).filter(Boolean);
 
     // Trim each section and filter out empty ones
     return sections.map((section) => section.trim()).filter(Boolean);
