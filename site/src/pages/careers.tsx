@@ -24,9 +24,11 @@ export default function Careers(): JSX.Element {
           We are executing on the above with a small team of extremely talented and motivated
           people.
         </p>
-        <p>We are currently hiring for:</p>
+        <p>We are currently hiring:</p>
         <ul>
-          <li>Engineering</li>
+          <li>Founding Account Executive</li>
+          <li>Founding Developer Relations</li>
+          <li>Senior Software Engineers</li>
         </ul>
         <p>
           If you're a self-driven generalist who can build and ship quickly, aggressively

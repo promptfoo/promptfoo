@@ -2,6 +2,7 @@ import type { Command } from 'commander';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import logger, { setLogLevel } from '../../logger';
+import { createShareableUrl } from '../../share';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
 import { getConfigFromCloud } from '../../util/cloud';
@@ -49,17 +50,22 @@ export function redteamRunCommand(program: Command) {
         setLogLevel('debug');
       }
 
+      let autoShare = false;
       if (opts.config && UUID_REGEX.test(opts.config)) {
         const config = await getConfigFromCloud(opts.config);
         opts.liveRedteamConfig = config;
         opts.config = undefined;
+        autoShare = true;
       }
 
       try {
         if (opts.remote) {
           cliState.remote = true;
         }
-        await doRedteamRun(opts);
+        const result = await doRedteamRun(opts);
+        if (result && autoShare) {
+          await createShareableUrl(result, false);
+        }
       } catch (error) {
         if (error instanceof z.ZodError) {
           logger.error('Invalid options:');

@@ -12,6 +12,8 @@ Let's face it - LLMs are gullible. With a few carefully chosen words, you can ma
 
 As LLMs become increasingly integrated into apps, understanding these vulnerabilities is essential for developers and security professionals. This post examines common techniques that malicious actors use to compromise LLM systems, and more importantly, how to protect against them.
 
+<!--truncate-->
+
 :::tip
 All of the techniques in this post are publicly known jailbreak methods. Many have been published in academic papers, are well-known to the security community, and have been used in training for LLM defenses.
 :::

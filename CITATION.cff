@@ -8,7 +8,7 @@ authors:
   - family-names: Klein
     given-names: Steven
 title: promptfoo
-version: 0.103.5
+version: 0.103.6
 date-released: '2025-01-09'
 url: https://promptfoo.dev
 repository-code: https://github.com/promptfoo/promptfoo
