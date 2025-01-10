@@ -7,7 +7,7 @@ import Container from '@mui/material/Container';
 import Divider from '@mui/material/Divider';
 import Grid from '@mui/material/Grid';
 import Typography from '@mui/material/Typography';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
 import Layout from '@theme/Layout';
 
 const AboutPageContent = () => {
@@ -100,6 +100,12 @@ const AboutPageContent = () => {
                 title: 'Staff Engineer',
                 image: '/img/team/vedant.jpeg',
                 bio: 'Vedant is a seasoned engineer with a strong background in software engineering, infrastrucure and security. He has broad experience leading teams and building products at companies like Pinterest, Microsoft, and Amazon.',
+              },
+              {
+                name: 'Guangshuo Zang',
+                title: 'Staff Engineer',
+                image: '/img/team/shuo.jpeg',
+                bio: 'Guangshuo brings technical expertise from Meta, ChipperCash, and Smile Identity. Specializes in GenAI systems, product engineering, and building scalable client solutions.',
               },
             ].map((leader) => (
               <Grid item xs={12} sm={6} md={4} key={leader.name}>
