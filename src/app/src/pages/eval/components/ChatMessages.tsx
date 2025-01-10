@@ -73,10 +73,11 @@ const ChatMessage = memo(({ message }: { message: Message | null }) => {
 });
 
 interface ChatMessagesProps {
+  title?: string;
   messages: Message[];
 }
 
-export default function ChatMessages({ messages }: ChatMessagesProps) {
+export default function ChatMessages({ title, messages }: ChatMessagesProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
@@ -92,7 +93,7 @@ export default function ChatMessages({ messages }: ChatMessagesProps) {
   return (
     <>
       <Typography variant="subtitle1" sx={{ mb: 2, mt: 2 }}>
-        Messages
+        {title || 'Messages'}
       </Typography>
       <Box
         mb={2}

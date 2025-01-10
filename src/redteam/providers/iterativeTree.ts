@@ -403,7 +403,7 @@ export async function runRedteamConversation({
       | 'NO_IMPROVEMENT'
       | 'GRADER_FAILED';
     attempts: number;
-    treeOutputs: string;
+    redteamTreeHistory: TreeSearchOutput[];
   };
   tokenUsage?: TokenUsage;
 }> {
@@ -620,7 +620,7 @@ export async function runRedteamConversation({
               redteamFinalPrompt: bestNode.prompt,
               stoppingReason,
               attempts,
-              treeOutputs: JSON.stringify(treeOutputs, null, 2),
+              redteamTreeHistory: treeOutputs,
             },
             tokenUsage: totalTokenUsage,
           };
@@ -648,7 +648,7 @@ export async function runRedteamConversation({
               redteamFinalPrompt: bestNode.prompt,
               stoppingReason,
               attempts,
-              treeOutputs: JSON.stringify(treeOutputs, null, 2),
+              redteamTreeHistory: treeOutputs,
             },
             tokenUsage: totalTokenUsage,
           };
@@ -677,7 +677,7 @@ export async function runRedteamConversation({
               redteamFinalPrompt: bestNode.prompt,
               stoppingReason,
               attempts,
-              treeOutputs: JSON.stringify(treeOutputs, null, 2),
+              redteamTreeHistory: treeOutputs,
             },
             tokenUsage: totalTokenUsage,
           };
@@ -766,7 +766,7 @@ export async function runRedteamConversation({
       redteamFinalPrompt: bestNode.prompt,
       stoppingReason,
       attempts,
-      treeOutputs: JSON.stringify(treeOutputs, null, 2),
+      redteamTreeHistory: treeOutputs,
     },
     tokenUsage: totalTokenUsage,
   };
