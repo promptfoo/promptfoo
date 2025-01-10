@@ -6,6 +6,8 @@ sidebar_position: 20
 
 The OWASP Top 10 for Large Language Model Applications educates developers about security risks in deploying and managing LLMs. It lists the top critical vulnerabilities in LLM applications based on impact, exploitability, and prevalence. OWASP [recently released](https://owasp.org/www-project-top-10-for-large-language-model-applications/) its updated version of the Top 10 for LLMs for 2025.
 
+![OWASP LLM Top 10](/img/docs/owasp-llm-top10.svg)
+
 The current top 10 are:
 
 1. [LLM01: Prompt Injection](#1-prompt-injection-llm01)
@@ -19,9 +21,15 @@ The current top 10 are:
 9. [LLM09: Misinformation](#9-misinformation-llm09)
 10. [LLM10: Unbounded Consumption](#10-unbounded-consumption-llm10)
 
-Promptfoo is an open-source tool that helps identify and remediate many of the vulnerabilities outlined in the OWASP LLM Top 10. OWASP has also [listed Promptfoo](https://genai.owasp.org/ai-security-solutions-landscape/) as a security solution for Generative AI.
+## Scanning for OWASP Top 10
 
 This guide will walk through how to use Promptfoo's features to test for and mitigate OWASP risks.
+
+Promptfoo is an open-source tool that helps identify and remediate many of the vulnerabilities outlined in the OWASP LLM Top 10. OWASP has also [listed Promptfoo](https://genai.owasp.org/ai-security-solutions-landscape/) as a security solution for Generative AI.
+
+The end result is a comprehensive report card that enumerates the OWASP Top 10 vulnerabilities and their severities:
+
+![Promptfoo OWASP LLM Top 10](/img/docs/compliance.png)
 
 ## 1. Prompt Injection (LLM01)
 
