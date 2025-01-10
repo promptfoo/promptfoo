@@ -133,7 +133,7 @@ export default function EvalOutputPromptDialog({
     const lastClick = expandedMetadata[key]?.lastClickTime || 0;
     const isDoubleClick = now - lastClick < 300; // 300ms threshold
 
-    setExpandedMetadata((prev) => ({
+    setExpandedMetadata((prev: ExpandedMetadataState) => ({
       ...prev,
       [key]: {
         expanded: isDoubleClick ? false : true,
@@ -233,6 +233,33 @@ export default function EvalOutputPromptDialog({
                 </TableBody>
               </Table>
             </TableContainer>
+          </Box>
+        )}
+        {(metadata?.redteamHistory || metadata?.redteamTreeHistory) && (
+          <Box mt={2} mb={3}>
+            <ChatMessages
+              title="Attempts"
+              messages={(metadata?.redteamHistory ?? metadata?.redteamTreeHistory ?? [])
+                .filter((entry: any) => entry?.prompt && entry?.output)
+                .flatMap(
+                  (entry: {
+                    prompt: string;
+                    output: string;
+                    score?: number;
+                    isOnTopic?: boolean;
+                    graderPassed?: boolean;
+                  }) => [
+                    {
+                      role: 'user' as const,
+                      content: entry.prompt,
+                    },
+                    {
+                      role: 'assistant' as const,
+                      content: entry.output,
+                    },
+                  ],
+                )}
+            />
           </Box>
         )}
       </DialogContent>

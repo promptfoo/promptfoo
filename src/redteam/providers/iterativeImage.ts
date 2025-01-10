@@ -541,7 +541,7 @@ async function runRedteamConversation({
     metadata: {
       finalIteration,
       highestScore,
-      previousOutputs: JSON.stringify(previousOutputs, null, 2),
+      redteamHistory,
       redteamFinalPrompt: targetPrompt || undefined,
       bestImageUrl: bestResponse?.imageUrl,
       bestImageDescription: bestResponse?.imageDescription,
