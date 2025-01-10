@@ -11,12 +11,12 @@ export const handleModeration = async ({
   providerResponse,
   prompt,
 }: AssertionParams): Promise<GradingResult> => {
-  if (providerResponse.guardTriggered) {
+  if (providerResponse.flagged) {
     logger.debug('Target built-in guardrail triggered');
     return {
       pass: false,
       score: 0,
-      reason: providerResponse.inputGuardTriggered
+      reason: providerResponse.flaggedInput
         ? 'Prompt guardrail triggered'
         : 'Output guardrail triggered',
       assertion,

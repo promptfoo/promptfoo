@@ -709,12 +709,12 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       const promptFilterResults = data.prompt_filter_results;
 
       // Check if any content was filtered
-      const inputGuardTriggered =
+      const flaggedInput =
         promptFilterResults?.some((result: any) =>
           Object.values(result.content_filter_results).some((filter: any) => filter.filtered),
         ) ?? false;
 
-      const outputGuardTriggered = Object.values(contentFilterResults || {}).some(
+      const flaggedOutput = Object.values(contentFilterResults || {}).some(
         (filter: any) => filter.filtered,
       );
 
@@ -735,9 +735,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           data.usage?.prompt_tokens,
           data.usage?.completion_tokens,
         ),
-        inputGuardTriggered,
-        outputGuardTriggered,
-        guardTriggered: inputGuardTriggered || outputGuardTriggered,
+        flaggedInput,
+        flaggedOutput,
+        flagged: flaggedInput || flaggedOutput,
       };
     } catch (err) {
       return {

@@ -102,9 +102,9 @@ export interface ProviderResponse {
   tokenUsage?: TokenUsage;
   isRefusal?: boolean;
   sessionId?: string;
-  inputGuardTriggered?: boolean;
-  outputGuardTriggered?: boolean;
-  guardTriggered?: boolean;
+  flaggedInput?: boolean;
+  flaggedOutput?: boolean;
+  flagged?: boolean;
 }
 
 export interface ProviderEmbeddingResponse {
