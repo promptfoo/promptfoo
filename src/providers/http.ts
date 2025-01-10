@@ -417,7 +417,9 @@ export class HttpProvider implements ApiProvider {
       url = `${url}?${queryString}`;
     }
 
-    logger.debug(`Calling HTTP provider: ${url} with config: ${safeJsonStringify(renderedConfig)}`);
+    logger.debug(
+      `[HTTP Provider]: Calling ${url} with config: ${safeJsonStringify(renderedConfig)}`,
+    );
     const response = await fetchWithCache(
       url,
       {
@@ -435,7 +437,7 @@ export class HttpProvider implements ApiProvider {
       this.config.maxRetries,
     );
 
-    logger.debug(`\tHTTP response: ${response.data}`);
+    logger.debug(`[HTTP Provider]: Response: ${response.data}`);
     if (response.status < 200 || response.status >= 300) {
       throw new Error(
         `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
@@ -488,8 +490,7 @@ export class HttpProvider implements ApiProvider {
       `${protocol}://${parsedRequest.headers['host']}`,
     ).toString();
 
-    logger.debug(`Calling HTTP provider with raw request: ${url}`);
-    logger.debug(`Calling HTTP provider with raw request: ${parsedRequest}`);
+    logger.debug(`[HTTP Provider]: Calling ${url} with raw request: ${parsedRequest}`);
     const response = await fetchWithCache(
       url,
       {
@@ -503,7 +504,7 @@ export class HttpProvider implements ApiProvider {
       this.config.maxRetries,
     );
 
-    logger.debug(`\tHTTP response: ${response.data}`);
+    logger.debug(`[HTTP Provider]: Response: ${response.data}`);
 
     if (response.status < 200 || response.status >= 300) {
       throw new Error(
