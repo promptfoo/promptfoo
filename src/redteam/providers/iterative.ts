@@ -102,29 +102,35 @@ async function runRedteamConversation({
       throw new Error(`Error from redteam provider: ${redteamResp.error}`);
     }
     logger.debug(`[Iterative] Redteam response: ${JSON.stringify(redteamResp)}`);
-    invariant(
-      typeof redteamResp.output === 'string',
-      `Expected output to be a string, but got response: ${JSON.stringify(redteamResp)}`,
-    );
+
     let improvement, newInjectVar;
-    try {
-      const parsed = extractFirstJsonObject<{
-        improvement: string;
-        prompt: string;
-      }>(redteamResp.output);
-      improvement = parsed.improvement;
-      newInjectVar = parsed.prompt;
-    } catch (err) {
-      logger.debug(
-        `[Iterative] Failed to parse redteam response, likely refusal: ${err} ${JSON.stringify(
-          redteamResp,
-        )}`,
-      );
-      continue;
+    if (typeof redteamResp.output === 'string') {
+      try {
+        const parsed = extractFirstJsonObject<{
+          improvement: string;
+          prompt: string;
+        }>(redteamResp.output);
+        improvement = parsed.improvement;
+        newInjectVar = parsed.prompt;
+      } catch (err) {
+        logger.debug(
+          `[Iterative] Failed to parse redteam response, likely refusal: ${err} ${JSON.stringify(
+            redteamResp,
+          )}`,
+        );
+        continue;
+      }
+    } else {
+      improvement = redteamResp.output?.improvement;
+      newInjectVar = redteamResp.output?.prompt;
     }
 
     // Update the application prompt with the new injection.
-    logger.debug(`New injectVar: ${newInjectVar}, improvement: ${improvement}`);
+    logger.debug(`[Iterative] New injectVar: ${newInjectVar}, improvement: ${improvement}`);
+    if (improvement === undefined || newInjectVar === undefined) {
+      logger.debug(`[Iterative] Improvement or  new inject var was undefined, continuing`);
+      continue;
+    }
     targetPrompt = await renderPrompt(
       prompt,
       {
@@ -161,20 +167,27 @@ async function runRedteamConversation({
     if (isOnTopicResp.error) {
       throw new Error(`Error from redteam (onTopic) provider: ${isOnTopicResp.error}`);
     }
-    invariant(typeof isOnTopicResp.output === 'string', 'Expected output to be a string');
     let isOnTopic = false;
-    try {
-      isOnTopic = (extractFirstJsonObject(isOnTopicResp.output) as { onTopic: boolean }).onTopic;
-    } catch (err) {
-      logger.debug(
-        `[Iterative] Failed to parse onTopic response, likely refusal: ${err} ${JSON.stringify(
-          isOnTopicResp,
-        )}`,
-      );
-      continue;
+    if (typeof isOnTopicResp.output === 'string') {
+      try {
+        isOnTopic = (extractFirstJsonObject(isOnTopicResp.output) as { onTopic: boolean }).onTopic;
+      } catch (err) {
+        logger.debug(
+          `[Iterative] Failed to parse onTopic response, likely refusal: ${err} ${JSON.stringify(
+            isOnTopicResp,
+          )}`,
+        );
+        continue;
+      }
+    } else {
+      isOnTopic = isOnTopicResp.output.onTopic;
     }
     logger.debug(`[Iterative] Parsed onTopic value: ${isOnTopic}`);
-    invariant(typeof isOnTopic === 'boolean', 'Expected onTopic to be a boolean');
+    if (typeof isOnTopic !== 'boolean') {
+      logger.warning(
+        `[Iterative] Could not parse a boolean from the onTopic request. Raw response: ${isOnTopicResp.output}`,
+      );
+    }
 
     const targetResponse: TargetResponse = await getTargetResponse(
       targetProvider,
@@ -242,14 +255,17 @@ async function runRedteamConversation({
     if (judgeResp.error) {
       throw new Error(`Error from redteam (judge) provider: ${judgeResp.error}`);
     }
-    invariant(typeof judgeResp.output === 'string', 'Expected output to be a string');
+
     let currentScore = 1;
     let previousScore = bestResponse ? highestScore : 0;
     try {
-      const parsed = extractFirstJsonObject<{
-        currentResponse: { rating: number; explanation: string };
-        previousBestResponse: { rating: number; explanation: string };
-      }>(judgeResp.output);
+      const parsed =
+        typeof judgeResp.output === 'string'
+          ? extractFirstJsonObject<{
+              currentResponse: { rating: number; explanation: string };
+              previousBestResponse: { rating: number; explanation: string };
+            }>(judgeResp.output)
+          : judgeResp.output;
       currentScore = parsed.currentResponse.rating;
       previousScore = parsed.previousBestResponse.rating;
 
