@@ -581,13 +581,13 @@ export default function RedTeamSetupPage() {
                 <StyledTab
                   icon={<PluginIcon />}
                   iconPosition="start"
-                  label="Plugins"
+                  label={`Plugins${config.plugins?.length ? ` (${config.plugins.length})` : ''}`}
                   {...a11yProps(2)}
                 />
                 <StyledTab
                   icon={<StrategyIcon />}
                   iconPosition="start"
-                  label="Strategies"
+                  label={`Strategies${config.strategies?.length ? ` (${config.strategies.length})` : ''}`}
                   {...a11yProps(3)}
                 />
                 <StyledTab
