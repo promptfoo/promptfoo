@@ -123,12 +123,14 @@ export async function evaluateResponse(
   if (judgeResp.error) {
     throw new Error(`Error from redteam (judge) provider: ${judgeResp.error}`);
   }
-  invariant(typeof judgeResp.output === 'string', 'Expected output to be a string');
 
-  const parsed = extractFirstJsonObject<{
-    currentResponse: { rating: number; explanation: string };
-    previousBestResponse: { rating: number; explanation: string };
-  }>(judgeResp.output);
+  const parsed =
+    typeof judgeResp.output === 'string'
+      ? extractFirstJsonObject<{
+          currentResponse: { rating: number; explanation: string };
+          previousBestResponse: { rating: number; explanation: string };
+        }>(judgeResp.output)
+      : judgeResp.output;
 
   let currentScore = parsed.currentResponse.rating;
 
@@ -169,12 +171,12 @@ export async function getNewPrompt(
   if (redteamResp.error) {
     throw new Error(`Error from redteam provider: ${redteamResp.error}`);
   }
-  invariant(
-    typeof redteamResp.output === 'string',
-    `Expected output to be a string, but got response: ${JSON.stringify(redteamResp)}`,
-  );
+  const retObj =
+    typeof redteamResp.output === 'string'
+      ? extractFirstJsonObject<{ improvement: string; prompt: string }>(redteamResp.output)
+      : redteamResp.output;
   return {
-    ...extractFirstJsonObject<{ improvement: string; prompt: string }>(redteamResp.output),
+    ...retObj,
     tokenUsage: redteamResp.tokenUsage,
   };
 }
@@ -216,8 +218,11 @@ export async function checkIfOnTopic(
   if (isOnTopicResp.error) {
     throw new Error(`Error from redteam (onTopic) provider: ${isOnTopicResp.error}`);
   }
-  invariant(typeof isOnTopicResp.output === 'string', 'Expected output to be a string');
-  const { onTopic } = extractFirstJsonObject<{ onTopic: boolean }>(isOnTopicResp.output);
+
+  const { onTopic } =
+    typeof isOnTopicResp.output === 'string'
+      ? extractFirstJsonObject<{ onTopic: boolean }>(isOnTopicResp.output)
+      : isOnTopicResp.output;
   logger.debug(`[IterativeTree] Parsed onTopic value: ${JSON.stringify(onTopic)}`);
   invariant(typeof onTopic === 'boolean', 'Expected onTopic to be a boolean');
   return {

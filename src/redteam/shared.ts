@@ -6,6 +6,7 @@ import * as path from 'path';
 import { doEval } from '../commands/eval';
 import logger, { setLogCallback, setLogLevel } from '../logger';
 import type Eval from '../models/eval';
+import { createShareableUrl } from '../share';
 import { isRunningUnderNpx } from '../util';
 import { loadDefaultConfig } from '../util/config/default';
 import { doGenerateRedteam } from './commands/generate';
@@ -76,14 +77,21 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
 
   logger.info(chalk.green('\nRed team scan complete!'));
   const command = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
-  if (options.liveRedteamConfig) {
-    logger.info(
-      chalk.blue(
-        `To view the results, click the ${chalk.bold('View Report')} button or run ${chalk.bold(`${command} redteam report`)} on the command line.`,
-      ),
-    );
+  if (options.loadedFromCloud) {
+    const url = await createShareableUrl(evalResult, false);
+    logger.info(`View results: ${chalk.greenBright.bold(url)}`);
   } else {
-    logger.info(chalk.blue(`To view the results, run ${chalk.bold(`${command} redteam report`)}`));
+    if (options.liveRedteamConfig) {
+      logger.info(
+        chalk.blue(
+          `To view the results, click the ${chalk.bold('View Report')} button or run ${chalk.bold(`${command} redteam report`)} on the command line.`,
+        ),
+      );
+    } else {
+      logger.info(
+        chalk.blue(`To view the results, run ${chalk.bold(`${command} redteam report`)}`),
+      );
+    }
   }
 
   // Clear the callback when done

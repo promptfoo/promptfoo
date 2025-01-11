@@ -593,14 +593,17 @@ class CrescendoProvider implements ApiProvider {
     if (refusalResponse.error) {
       throw new Error(`Error from redteam (refusal) provider: ${refusalResponse.error}`);
     }
-    invariant(typeof refusalResponse.output === 'string', 'Expected output to be a string');
+
     logger.debug(`[Crescendo] Refusal score response: ${refusalResponse.output}`);
 
-    const parsed = extractFirstJsonObject<{
-      value: boolean;
-      metadata: number;
-      rationale: string;
-    }>(refusalResponse.output);
+    const parsed =
+      typeof refusalResponse.output === 'string'
+        ? extractFirstJsonObject<{
+            value: boolean;
+            metadata: number;
+            rationale: string;
+          }>(refusalResponse.output)
+        : refusalResponse.output;
 
     logger.debug(`[Crescendo] Refusal score parsed response: ${JSON.stringify(parsed)}`);
     invariant(typeof parsed.value === 'boolean', 'Expected refusal grader value to be a boolean');
@@ -645,19 +648,28 @@ class CrescendoProvider implements ApiProvider {
     if (evalResponse.error) {
       throw new Error(`Error from redteam (eval) provider: ${evalResponse.error}`);
     }
-    invariant(typeof evalResponse.output === 'string', 'Expected output to be a string');
+
     logger.debug(`[Crescendo] Eval score response: ${evalResponse.output}`);
 
-    const parsed = extractFirstJsonObject<{
-      value: boolean;
-      description: string;
-      rationale: string;
-      metadata: number;
-    }>(evalResponse.output);
+    const parsed =
+      typeof evalResponse.output === 'string'
+        ? extractFirstJsonObject<{
+            value: boolean;
+            description: string;
+            rationale: string;
+            metadata: number;
+          }>(evalResponse.output)
+        : evalResponse.output;
 
     logger.debug(`[Crescendo] Eval score parsed response: ${JSON.stringify(parsed)}`);
-    invariant(typeof parsed.value === 'boolean', 'Expected eval grader value to be a boolean');
-    invariant(typeof parsed.metadata === 'number', 'Expected eval grader metadata to be a number');
+    invariant(
+      typeof parsed.value === 'boolean',
+      `Expected eval grader value to be a boolean: ${parsed}`,
+    );
+    invariant(
+      typeof parsed.metadata === 'number',
+      `Expected eval grader metadata to be a number: ${parsed}`,
+    );
 
     return [parsed, evalResponse.tokenUsage];
   }

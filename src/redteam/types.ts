@@ -115,6 +115,8 @@ export interface RedteamRunOptions {
   liveRedteamConfig?: any;
   logCallback?: (message: string) => void;
   abortSignal?: AbortSignal;
+
+  loadedFromCloud?: boolean;
 }
 
 export interface SavedRedteamConfig {
