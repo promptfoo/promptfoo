@@ -11,6 +11,22 @@ Currently, this supports [OpenAI's moderation model](https://platform.openai.com
 
 In general, we encourage the use of Meta's LlamaGuard as it substantially outperforms OpenAI's moderation API as well as GPT-4. [See benchmarks](https://github.com/meta-llama/PurpleLlama/blob/main/Llama-Guard2/MODEL_CARD.md#model-performance).
 
+## Azure OpenAI content filters
+
+When using Azure AI model deployments, the moderation assertion utilizes Azure's built-in content filtering system, powered by Azure AI Content Safety. These content filters are configured during model deployment in Azure, allowing you to set appropriate severity thresholds for different categories of harmful content. This configuration ensures that the content filtering system enforces your specified moderation policies during model inference.
+
+For Azure deployments, simply use:
+
+```yaml
+tests:
+  - vars:
+      foo: bar
+    assert:
+      - type: moderation
+```
+
+Note that with Azure deployments, you cannot configure specific categories in the assertion as these are managed through your Azure content filter settings.
+
 ## OpenAI moderation
 
 By default, the `moderation` assertion uses OpenAI. Just make sure that the `OPENAI_API_KEY` environment variable is set:
