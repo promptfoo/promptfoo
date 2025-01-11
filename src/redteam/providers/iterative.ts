@@ -99,7 +99,10 @@ async function runRedteamConversation({
       await sleep(redteamProvider.delay);
     }
     if (redteamResp.error) {
-      throw new Error(`Error from redteam provider: ${redteamResp.error}`);
+      logger.info(
+        `[Iterative] Skipping iteration, error from redteam provider: ${redteamResp.error}`,
+      );
+      continue;
     }
     logger.debug(`[Iterative] Redteam response: ${JSON.stringify(redteamResp)}`);
 
@@ -113,7 +116,7 @@ async function runRedteamConversation({
         improvement = parsed.improvement;
         newInjectVar = parsed.prompt;
       } catch (err) {
-        logger.debug(
+        logger.info(
           `[Iterative] Failed to parse redteam response, likely refusal: ${err} ${JSON.stringify(
             redteamResp,
           )}`,
@@ -128,7 +131,9 @@ async function runRedteamConversation({
     // Update the application prompt with the new injection.
     logger.debug(`[Iterative] New injectVar: ${newInjectVar}, improvement: ${improvement}`);
     if (improvement === undefined || newInjectVar === undefined) {
-      logger.debug(`[Iterative] Improvement or  new inject var was undefined, continuing`);
+      logger.info(
+        `[Iterative] Skipping iteration, improvement or  new inject var was undefined, continuing`,
+      );
       continue;
     }
     targetPrompt = await renderPrompt(
@@ -165,14 +170,14 @@ async function runRedteamConversation({
     }
     logger.debug(`[Iterative] On-topic response: ${JSON.stringify(isOnTopicResp)}`);
     if (isOnTopicResp.error) {
-      throw new Error(`Error from redteam (onTopic) provider: ${isOnTopicResp.error}`);
+      logger.info(`Error from redteam (onTopic) provider: ${isOnTopicResp.error}`);
     }
     let isOnTopic = false;
     if (typeof isOnTopicResp.output === 'string') {
       try {
         isOnTopic = (extractFirstJsonObject(isOnTopicResp.output) as { onTopic: boolean }).onTopic;
       } catch (err) {
-        logger.debug(
+        logger.info(
           `[Iterative] Failed to parse onTopic response, likely refusal: ${err} ${JSON.stringify(
             isOnTopicResp,
           )}`,
@@ -184,8 +189,8 @@ async function runRedteamConversation({
     }
     logger.debug(`[Iterative] Parsed onTopic value: ${isOnTopic}`);
     if (typeof isOnTopic !== 'boolean') {
-      logger.warning(
-        `[Iterative] Could not parse a boolean from the onTopic request. Raw response: ${isOnTopicResp.output}`,
+      logger.info(
+        `[Iterative] Could not parse a boolean from the onTopic request. Raw response: ${JSON.stringify(isOnTopicResp)}`,
       );
     }
 
@@ -196,9 +201,17 @@ async function runRedteamConversation({
       options,
     );
     if (targetResponse.error) {
-      throw new Error(`[Iterative] Target returned an error: ${targetResponse.error}`);
+      logger.info(
+        `[Iterative] Skipping iteration, target returned an error: ${targetResponse.error}`,
+      );
+      continue;
     }
-    invariant(targetResponse.output, '[Iterative] Target did not return an output');
+    if (!targetResponse.output) {
+      logger.info(
+        `Iterative] Skipping iteration, target did not return an output: ${JSON.stringify(targetResponse)}`,
+      );
+      continue;
+    }
 
     const assertToUse = test?.assert?.find((a: { type: string }) => a.type);
     const { getGraderById } = await import('../graders');
@@ -253,7 +266,10 @@ async function runRedteamConversation({
       await sleep(redteamProvider.delay);
     }
     if (judgeResp.error) {
-      throw new Error(`Error from redteam (judge) provider: ${judgeResp.error}`);
+      logger.info(
+        `[Iterative] Skipping iteration, error from redteam (judge) provider: ${judgeResp.error}`,
+      );
+      continue;
     }
 
     let currentScore = 1;
@@ -266,8 +282,14 @@ async function runRedteamConversation({
               previousBestResponse: { rating: number; explanation: string };
             }>(judgeResp.output)
           : judgeResp.output;
-      currentScore = parsed.currentResponse.rating;
-      previousScore = parsed.previousBestResponse.rating;
+      currentScore = parsed?.currentResponse?.rating;
+      previousScore = parsed?.previousBestResponse?.rating;
+
+      if (!currentScore || !previousScore) {
+        logger.info(
+          `[Iterative] Skipping iteration, did not get a score from the judge response: ${JSON.stringify(judgeResp)}`,
+        );
+      }
 
       const containsPenalizedPhrase = checkPenalizedPhrases(targetResponse.output);
       // Apply penalty if the phrase is present
@@ -297,7 +319,7 @@ async function runRedteamConversation({
         `,
       });
     } catch (err) {
-      logger.debug(
+      logger.info(
         `[Iterative] Failed to parse judge response, likely refusal: ${err} ${JSON.stringify(
           judgeResp,
         )}`,
