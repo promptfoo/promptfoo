@@ -107,7 +107,7 @@ export default class GoatProvider implements ApiProvider {
         });
         const data = await response.json();
         if (typeof data?.message !== 'object' || !data.message?.content || !data.message?.role) {
-          logger.debug(`[GOAT] Invalid message from GOAT, skipping turn: ${JSON.stringify(data)}`);
+          logger.info(`[GOAT] Invalid message from GOAT, skipping turn: ${JSON.stringify(data)}`);
           continue;
         }
         const attackerMessage = data.message;
