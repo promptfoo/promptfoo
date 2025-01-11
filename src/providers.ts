@@ -198,6 +198,16 @@ export async function loadApiProvider(
         ...providerOptions.config,
         apiBaseUrl: 'https://openrouter.ai/api/v1',
         apiKeyEnvar: 'OPENROUTER_API_KEY',
+        passthrough: {
+          // Pass through OpenRouter-specific options
+          // https://openrouter.ai/docs/requests
+          ...(providerOptions.config.transforms && {
+            transforms: providerOptions.config.transforms,
+          }),
+          ...(providerOptions.config.models && { models: providerOptions.config.models }),
+          ...(providerOptions.config.route && { route: providerOptions.config.route }),
+          ...(providerOptions.config.provider && { provider: providerOptions.config.provider }),
+        },
       },
     });
   } else if (providerPath.startsWith('github:')) {

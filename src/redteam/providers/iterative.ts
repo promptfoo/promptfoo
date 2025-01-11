@@ -352,7 +352,7 @@ async function runRedteamConversation({
     metadata: {
       finalIteration,
       highestScore,
-      previousOutputs: JSON.stringify(previousOutputs, null, 2),
+      redteamHistory: previousOutputs,
       redteamFinalPrompt: bestInjectVar,
     },
     tokenUsage: totalTokenUsage,
