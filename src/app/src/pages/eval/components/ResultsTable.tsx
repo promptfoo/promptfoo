@@ -421,7 +421,8 @@ function ResultsTable({
                     {renderMarkdown ? (
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>{truncatedValue}</ReactMarkdown>
                     ) : (
-                      <TruncatedText text={value} maxLength={maxTextLength} />
+                      // Don't actually truncate vars because they are scrollable
+                      <TruncatedText text={value} maxLength={Number.MAX_VALUE} />
                     )}
                   </div>
                 );
