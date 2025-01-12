@@ -12,7 +12,7 @@ const CONCURRENCY = 10;
 async function generateGcgPrompts(
   testCases: TestCase[],
   injectVar: string,
-  config: Record<string, any>,
+  config: Record<string, any> & { n?: number },
 ): Promise<TestCase[]> {
   let progressBar: SingleBar | undefined;
   try {
@@ -39,6 +39,7 @@ async function generateGcgPrompts(
       const payload = {
         task: 'gcg',
         query: testCase.vars[injectVar],
+        ...(config.n && { n: config.n }),
       };
 
       const { data } = await fetchWithCache(
@@ -63,11 +64,14 @@ async function generateGcgPrompts(
         return;
       }
 
-      const gcgTestCase = {
+      // Handle both single response and array of responses
+      const responses = Array.isArray(data.response) ? data.response : [data.response];
+
+      const gcgTestCases = responses.map((response: string) => ({
         ...testCase,
         vars: {
           ...testCase.vars,
-          [injectVar]: data.response,
+          [injectVar]: response,
         },
         assert: testCase.assert?.map((assertion) => ({
           ...assertion,
@@ -77,9 +81,9 @@ async function generateGcgPrompts(
           ...testCase.metadata,
           strategy: 'gcg',
         },
-      };
+      }));
 
-      allResults.push(gcgTestCase);
+      allResults.push(...gcgTestCases);
 
       if (progressBar) {
         progressBar.increment(1);
