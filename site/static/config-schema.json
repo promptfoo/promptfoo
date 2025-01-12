@@ -1189,18 +1189,20 @@
                           "default",
                           "jailbreak",
                           "jailbreak:composite",
+                          "jailbreak:likert",
                           "prompt-injection",
                           "base64",
                           "citation",
                           "crescendo",
+                          "gcg",
                           "goat",
                           "jailbreak:tree",
+                          "jailbreak:likert",
                           "leetspeak",
                           "math-prompt",
                           "multilingual",
                           "rot13",
-                          "best-of-n",
-                          "jailbreak:likert"
+                          "best-of-n"
                         ]
                       },
                       {
@@ -1228,7 +1230,7 @@
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to jailbreak, jailbreak:composite\nSupports basic, default, jailbreak, jailbreak:composite, prompt-injection, base64, citation, crescendo, goat, jailbreak:tree, leetspeak, math-prompt, multilingual, rot13, best-of-n, jailbreak:likert",
+              "description": "Strategies to use for redteam generation.\n\nDefaults to jailbreak, jailbreak:composite, jailbreak:likert\nSupports basic, default, jailbreak, jailbreak:composite, jailbreak:likert, prompt-injection, base64, citation, crescendo, gcg, goat, jailbreak:tree, jailbreak:likert, leetspeak, math-prompt, multilingual, rot13, best-of-n",
               "default": [
                 "default"
               ]

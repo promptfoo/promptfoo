@@ -1,8 +1,9 @@
-import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import RedteamGoatProvider from '../../../src/redteam/providers/goat';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import type {
   ApiProvider,
+  AtomicTestCase,
   CallApiContextParams,
   Prompt,
   ProviderResponse,
@@ -68,7 +69,8 @@ describe('RedteamGoatProvider', () => {
       prompt,
     };
 
-    await provider.callApi('test prompt', context);
+    const result = await provider.callApi('test prompt', context);
+    expect(result.metadata?.stopReason).toBe('Max turns reached');
 
     expect(mockFetch).toHaveBeenCalledWith(
       getRemoteGenerationUrl(),
@@ -80,6 +82,52 @@ describe('RedteamGoatProvider', () => {
         body: expect.any(String),
       }),
     );
+  });
+
+  it('should handle grader integration and stop early on failure', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 3,
+    });
+
+    const targetProvider: ApiProvider = {
+      id: () => 'test-provider',
+      callApi: async () =>
+        Promise.resolve({
+          output: 'target response',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }) as ProviderResponse,
+    };
+
+    const context: CallApiContextParams = {
+      originalProvider: targetProvider,
+      vars: { goal: 'test goal' },
+      prompt: { raw: 'test prompt', label: 'test' },
+      test: {
+        vars: {},
+        assert: [
+          {
+            type: 'contains',
+            value: 'expected content',
+          },
+        ],
+      } as AtomicTestCase,
+    };
+
+    jest.mock('../../../src/redteam/graders', () => ({
+      getGraderById: () => ({
+        getResult: async () => ({
+          grade: {
+            pass: false,
+            tokensUsed: { total: 5, prompt: 2, completion: 3 },
+          },
+        }),
+      }),
+    }));
+
+    const result = await provider.callApi('test prompt', context);
+    expect(result.metadata?.stopReason).toBe('Grader failed');
+    expect(result.tokenUsage?.total).toBeGreaterThan(0);
   });
 
   it('should stringify non-string target provider responses', async () => {
