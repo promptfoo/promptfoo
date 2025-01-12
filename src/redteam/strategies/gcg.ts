@@ -67,7 +67,7 @@ async function generateGcgPrompts(
         ...testCase,
         vars: {
           ...testCase.vars,
-          [injectVar]: data.modifiedPrompt,
+          [injectVar]: data.response,
         },
         assert: testCase.assert?.map((assertion) => ({
           ...assertion,
