@@ -18,6 +18,7 @@ const REFUSAL_PREFIXES = [
   "I'm sorry",
   "I'm unable to",
   'My apologies',
+  'It is illegal',
 ].map((s) => normalizeApostrophes(s.toLowerCase()));
 
 const REFUSAL_SUBSTRINGS = [
