@@ -498,13 +498,13 @@ export const FRAMEWORK_COMPLIANCE_IDS = [
 ] as const;
 export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
 
-export const DEFAULT_STRATEGIES = ['jailbreak', 'jailbreak:composite', 'jailbreak:likert'] as const;
+export const DEFAULT_STRATEGIES = ['basic', 'jailbreak', 'jailbreak:composite'] as const;
 export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 
 export const MULTI_TURN_STRATEGIES = ['crescendo', 'goat'] as const;
 export type MultiTurnStrategy = (typeof MULTI_TURN_STRATEGIES)[number];
 
-export const AGENTIC_STRATEGIES = ['jailbreak', 'jailbreak:tree', 'crescendo', 'goat'] as const;
+export const AGENTIC_STRATEGIES = ['crescendo', 'goat', 'jailbreak', 'jailbreak:tree'] as const;
 export type AgenticStrategy = (typeof AGENTIC_STRATEGIES)[number];
 
 export const ADDITIONAL_STRATEGIES = [
@@ -524,19 +524,14 @@ export const ADDITIONAL_STRATEGIES = [
 ] as const;
 export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
 
-export const ALL_STRATEGIES = [
-  'basic',
-  'default',
-  ...DEFAULT_STRATEGIES,
-  ...ADDITIONAL_STRATEGIES,
-] as const;
+export const ALL_STRATEGIES = ['default', ...DEFAULT_STRATEGIES, ...ADDITIONAL_STRATEGIES] as const;
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   default: 'Standard security testing plugins',
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
   base64: 'Tests handling of Base64-encoded malicious payloads',
-  basic: 'Single-shot baseline security tests without optimization',
+  basic: 'Original plugin tests without any additional strategies or optimizations',
   beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
   'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
   bfla: 'Tests for broken function-level authorization vulnerabilities (OWASP API 5)',
@@ -1013,7 +1008,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
 
 export const strategyDescriptions: Record<Strategy, string> = {
   base64: 'Tests detection and handling of Base64-encoded malicious payloads',
-  basic: 'Establishes baseline security posture through fundamental test cases',
+  basic: 'Equivalent to no strategy. Always included. Can be disabled in configuration.',
   'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
   citation: 'Exploits academic authority bias to circumvent content filtering mechanisms',
   crescendo: 'Executes progressive multi-turn attacks with escalating malicious intent',

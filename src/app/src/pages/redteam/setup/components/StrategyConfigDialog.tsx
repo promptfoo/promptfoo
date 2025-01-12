@@ -6,6 +6,8 @@ import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 
@@ -35,6 +37,9 @@ export default function StrategyConfigDialog({
   );
   const [languages, setLanguages] = React.useState<string[]>(
     config.languages || Object.keys(DEFAULT_LANGUAGES),
+  );
+  const [enabled, setEnabled] = React.useState<boolean>(
+    config.enabled === undefined ? true : config.enabled,
   );
   const [newLanguage, setNewLanguage] = React.useState<string>('');
   const [error, setError] = React.useState<string>('');
@@ -68,7 +73,12 @@ export default function StrategyConfigDialog({
       return;
     }
 
-    if (strategy === 'jailbreak') {
+    if (strategy === 'basic') {
+      onSave(strategy, {
+        ...config,
+        enabled,
+      });
+    } else if (strategy === 'jailbreak') {
       const num = Number.parseInt(numIterations, 10);
       if (num >= 1) {
         onSave(strategy, {
@@ -93,6 +103,32 @@ export default function StrategyConfigDialog({
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>Configure {strategy}</DialogTitle>
       <DialogContent>
+        {strategy === 'basic' && (
+          <>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              The basic strategy determines whether to include the original plugin-generated test
+              cases in your evaluation. These are the default test cases created by each plugin
+              before any strategies are applied.
+            </Typography>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={enabled}
+                  onChange={(e) => setEnabled(e.target.checked)}
+                  color="primary"
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant="body1">Include plugin-generated test cases</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Turn off to run only strategy-modified tests
+                  </Typography>
+                </Box>
+              }
+            />
+          </>
+        )}
         {strategy === 'jailbreak' && (
           <>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
