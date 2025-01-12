@@ -2,7 +2,7 @@
  * Normalizes different types of apostrophes to a standard single quote
  */
 function normalizeApostrophes(str: string): string {
-  return str.replace(/['′']/g, "'");
+  return str.replace(/['′’']/g, "'");
 }
 
 const REFUSAL_PREFIXES = [
