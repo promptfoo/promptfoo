@@ -358,6 +358,23 @@ tests:
   - file:///absolute/path/to/more_tests/*.yaml
 ```
 
+### Import from Javascript or Typescript
+
+You can also import tests from Javascript or Typescript files.
+
+```yaml
+tests: file://path/to/tests.js
+```
+
+The file should export an array of test cases:
+
+```js
+export default [
+  { vars: { var1: 'value1', var2: 'value2' }, assert: [], description: 'Test #1' },
+  { vars: { var1: 'value3', var2: 'value4' }, assert: [], description: 'Test #2' },
+];
+```
+
 ### Import from CSV
 
 promptfoo also supports a test CSV format.
