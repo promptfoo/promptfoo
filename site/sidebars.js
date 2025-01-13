@@ -230,6 +230,7 @@ const sidebars = {
           collapsed: true,
           items: [
             'red-team/strategies/base64',
+            'red-team/strategies/basic',
             'red-team/strategies/best-of-n',
             'red-team/strategies/citation',
             'red-team/strategies/gcg',
@@ -256,6 +257,12 @@ const sidebars = {
             'red-team/strategies/tree',
             'red-team/strategies/composite-jailbreaks',
           ],
+        },
+        {
+          type: 'category',
+          label: 'Custom',
+          collapsed: true,
+          items: ['red-team/strategies/custom'],
         },
       ],
     },
