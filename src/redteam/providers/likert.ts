@@ -1,5 +1,6 @@
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams } from '../../types';
+import type { AssertionValue } from '../../types';
 import type { ApiProvider, ProviderResponse } from '../../types/providers';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import { isBasicRefusal } from '../util';
@@ -115,21 +116,30 @@ export default class LikertProvider implements ApiProvider {
             (a) => a.type,
           );
           if (assertToUse) {
-            const grader = await import(`../plugins/${assertToUse.type}`);
+            const { getGraderById } = await import('../graders');
+            const grader = getGraderById(assertToUse.type);
             if (grader) {
-              const result = await grader.default.grade(modifiedPrompt);
+              const result = await grader.getResult(
+                prompt,
+                data.response || '',
+                context.test,
+                this.redteamProvider,
+                assertToUse && 'value' in assertToUse
+                  ? (assertToUse.value as AssertionValue)
+                  : undefined,
+              );
 
               // Add token usage from grader
-              if (result.tokenUsage) {
-                totalTokenUsage.total += result.tokenUsage.total || 0;
-                totalTokenUsage.prompt += result.tokenUsage.prompt || 0;
-                totalTokenUsage.completion += result.tokenUsage.completion || 0;
-                totalTokenUsage.cached += result.tokenUsage.cached || 0;
+              if (result.grade.tokensUsed) {
+                totalTokenUsage.total += result.grade.tokensUsed.total || 0;
+                totalTokenUsage.prompt += result.grade.tokensUsed.prompt || 0;
+                totalTokenUsage.completion += result.grade.tokensUsed.completion || 0;
+                totalTokenUsage.cached += result.grade.tokensUsed.cached || 0;
               }
 
-              graderPassed = result.pass;
+              graderPassed = result.grade.pass;
               // If this attempt passed, use it
-              if (result.pass) {
+              if (result.grade.pass) {
                 bestPrompt = modifiedPrompt;
                 bestResponse = data.response || '';
                 bestPassed = true;
@@ -145,7 +155,7 @@ export default class LikertProvider implements ApiProvider {
           wasRefusal: false,
           graderPassed,
         });
-      } catch (error) {
+      } catch (error: unknown) {
         logger.error(`Error in iteration ${i}: ${error}`);
         continue;
       }
