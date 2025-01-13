@@ -483,20 +483,20 @@ export async function loadApiProvider(
     ret = new BrowserProvider(providerPath, providerOptions);
   } else if (providerPath === 'promptfoo:manual-input') {
     ret = new ManualInputProvider(providerOptions);
+  } else if (providerPath === 'promptfoo:redteam:best-of-n') {
+    ret = new RedteamBestOfNProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:redteam:crescendo') {
     ret = new RedteamCrescendoProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:redteam:goat') {
     ret = new RedteamGoatProvider(providerOptions.config);
-  } else if (providerPath === 'promptfoo:redteam:likert') {
-    ret = new LikertProvider(providerOptions.config);
-  } else if (providerPath === 'promptfoo:redteam:best-of-n') {
-    ret = new RedteamBestOfNProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:redteam:iterative') {
     ret = new RedteamIterativeProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:redteam:iterative:image') {
     ret = new RedteamImageIterativeProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:redteam:iterative:tree') {
     ret = new RedteamIterativeTreeProvider(providerOptions.config);
+  } else if (providerPath === 'promptfoo:redteam:likert') {
+    ret = new LikertProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:simulated-user') {
     ret = new SimulatedUser(providerOptions);
   } else if (providerPath === 'sequence') {
