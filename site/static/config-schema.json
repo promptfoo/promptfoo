@@ -1409,6 +1409,9 @@
         },
         "targets": {
           "$ref": "#/definitions/PromptfooConfigSchema/properties/providers"
+        },
+        "stateless": {
+          "type": "boolean"
         }
       },
       "required": [
