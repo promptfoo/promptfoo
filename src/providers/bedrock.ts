@@ -8,10 +8,10 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
 import type {
-  ApiProvider,
   ApiEmbeddingProvider,
-  ProviderResponse,
+  ApiProvider,
   ProviderEmbeddingResponse,
+  ProviderResponse,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
 import { maybeLoadFromExternalFile } from '../util';
@@ -986,12 +986,16 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
     }
     try {
       const output = JSON.parse(new TextDecoder().decode(response.body));
+
       return {
         output: model.output(output),
         tokenUsage: {
           total: output.total_tokens ?? output.prompt_token_count + output.generation_token_count,
           prompt: output.prompt_tokens ?? output.prompt_token_count,
           completion: output.completion_tokens ?? output.generation_token_count,
+        },
+        guardrails: {
+          flagged: output['amazon-bedrock-guardrailAction'] === 'INTERVENED',
         },
       };
     } catch (err) {
