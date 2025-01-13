@@ -8,6 +8,7 @@ export interface Config {
   strategies: RedteamStrategy[];
   purpose?: string;
   numTests?: number;
+  stateless?: boolean;
   applicationDefinition: {
     purpose?: string;
     systemPrompt?: string;

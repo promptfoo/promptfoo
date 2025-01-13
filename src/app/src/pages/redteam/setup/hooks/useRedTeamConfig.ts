@@ -64,6 +64,7 @@ const defaultConfig: Config = {
   purpose: '',
   entities: [],
   numTests: 10,
+  stateless: true,
   applicationDefinition: {
     purpose: '',
     redteamUser: '',
@@ -151,6 +152,7 @@ export const EXAMPLE_CONFIG: Config = {
   purpose: applicationDefinitionToPurpose(EXAMPLE_APPLICATION_DEFINITION),
   entities: [],
   numTests: 10,
+  stateless: true,
   applicationDefinition: EXAMPLE_APPLICATION_DEFINITION,
 };
 
