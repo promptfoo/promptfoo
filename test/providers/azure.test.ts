@@ -1,3 +1,4 @@
+import dedent from 'dedent';
 import { fetchWithCache } from '../../src/cache';
 import { AzureCompletionProvider } from '../../src/providers/azure';
 import { AzureGenericProvider } from '../../src/providers/azure';
@@ -7,6 +8,26 @@ import { HuggingfaceTextGenerationProvider } from '../../src/providers/huggingfa
 import { OpenAiCompletionProvider } from '../../src/providers/openai';
 import type { TestSuite, TestCase } from '../../src/types';
 
+// Mock modules before any imports
+const mockAzureIdentity = {
+  AzureCliCredential: jest.fn().mockImplementation(() => ({
+    getToken: jest.fn().mockResolvedValue({ token: 'test-token' }),
+  })),
+  ClientSecretCredential: jest.fn().mockImplementation(() => ({
+    getToken: jest.fn().mockResolvedValue({ token: 'test-token' }),
+  })),
+};
+
+// Mock @azure/identity module
+jest.mock('@azure/identity', () => mockAzureIdentity);
+
+// Mock dynamic import for @azure/identity
+jest.mock('@azure/identity', () => ({
+  __esModule: true,
+  ...mockAzureIdentity,
+}));
+
+// Mock other dependencies
 jest.mock('../../src/logger');
 jest.mock('../../src/cache', () => ({
   fetchWithCache: jest.fn(),
@@ -105,11 +126,26 @@ describe('maybeEmitAzureOpenAiWarning', () => {
 });
 
 describe('AzureOpenAiGenericProvider', () => {
-  describe('getApiBaseUrl', () => {
-    beforeEach(() => {
-      delete process.env.AZURE_OPENAI_API_HOST;
-    });
+  beforeEach(() => {
+    // Reset all mocks
+    jest.clearAllMocks();
 
+    // Clear all environment variables that might affect tests
+    delete process.env.AZURE_API_KEY;
+    delete process.env.AZURE_OPENAI_API_KEY;
+    delete process.env.AZURE_CLIENT_ID;
+    delete process.env.AZURE_CLIENT_SECRET;
+    delete process.env.AZURE_TENANT_ID;
+    delete process.env.AZURE_AUTHORITY_HOST;
+    delete process.env.AZURE_TOKEN_SCOPE;
+    delete process.env.AZURE_API_HOST;
+    delete process.env.AZURE_OPENAI_API_HOST;
+    delete process.env.AZURE_API_BASE_URL;
+    delete process.env.AZURE_OPENAI_API_BASE_URL;
+    delete process.env.AZURE_OPENAI_BASE_URL;
+  });
+
+  describe('getApiBaseUrl', () => {
     it('should return apiBaseUrl if set', () => {
       const provider = new AzureGenericProvider('test-deployment', {
         config: { apiBaseUrl: 'https://custom.azure.com' },
@@ -146,8 +182,136 @@ describe('AzureOpenAiGenericProvider', () => {
     });
 
     it('should return undefined if neither apiBaseUrl nor apiHost is set', () => {
-      const provider = new AzureGenericProvider('test-deployment', {});
+      const provider = new AzureGenericProvider('test-deployment', {
+        config: {},
+        env: {},
+      });
       expect(provider.getApiBaseUrl()).toBeUndefined();
+    });
+  });
+
+  describe('authentication', () => {
+    let provider: AzureGenericProvider;
+
+    beforeEach(() => {
+      provider = new AzureGenericProvider('test-deployment', {
+        config: { apiHost: 'test.azure.com' },
+      });
+      // Prevent initialization
+      provider.initializationPromise = Promise.resolve();
+    });
+
+    it('should use API key authentication when key is provided', async () => {
+      provider.config.apiKey = 'test-key';
+      const headers = await provider.getAuthHeaders();
+      expect(headers).toEqual({ 'api-key': 'test-key' });
+    });
+
+    it('should throw authentication error with options when credentials are invalid', async () => {
+      // Ensure no API key is set
+      provider.config.apiKey = undefined;
+
+      // Mock getAzureTokenCredential to throw a non-dependency error
+      mockAzureIdentity.AzureCliCredential.mockImplementationOnce(() => {
+        throw new Error('Invalid credentials');
+      });
+
+      await expect(provider.getAuthHeaders()).rejects.toThrow(dedent`
+        Azure Authentication failed. 
+        Please choose one of the following options:
+          1. Set an API key via the AZURE_API_KEY environment variable.
+          2. Provide client credentials (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID).
+          3. Authenticate with Azure CLI using az login.
+      `);
+    });
+
+    it('should attempt token authentication when no API key is provided', async () => {
+      // Ensure no API key is set
+      provider.config.apiKey = undefined;
+
+      // Mock successful token retrieval with specific arguments
+      mockAzureIdentity.AzureCliCredential.mockImplementationOnce(() => ({
+        getToken: jest.fn().mockResolvedValue({ token: 'test-token' }),
+      }));
+
+      const headers = await provider.getAuthHeaders();
+      expect(headers).toEqual({ Authorization: 'Bearer test-token' });
+      expect(mockAzureIdentity.AzureCliCredential).toHaveBeenCalledWith();
+    });
+  });
+
+  describe('getAzureTokenCredential', () => {
+    let provider: AzureGenericProvider;
+
+    beforeEach(() => {
+      provider = new AzureGenericProvider('test-deployment');
+      // Prevent initialization
+      provider.initializationPromise = Promise.resolve();
+
+      // Reset mock implementations
+      mockAzureIdentity.AzureCliCredential.mockClear();
+      mockAzureIdentity.ClientSecretCredential.mockClear();
+    });
+
+    it('should use client credentials when all required fields are provided', async () => {
+      provider.config = {
+        azureClientId: 'test-client-id',
+        azureClientSecret: 'test-client-secret',
+        azureTenantId: 'test-tenant-id',
+        azureAuthorityHost: 'test-authority-host',
+      };
+
+      await provider.getAzureTokenCredential();
+
+      expect(mockAzureIdentity.ClientSecretCredential).toHaveBeenCalledWith(
+        'test-tenant-id',
+        'test-client-id',
+        'test-client-secret',
+        {
+          authorityHost: 'test-authority-host',
+        },
+      );
+    });
+
+    it('should use default authority host when not provided', async () => {
+      provider.config = {
+        azureClientId: 'test-client-id',
+        azureClientSecret: 'test-client-secret',
+        azureTenantId: 'test-tenant-id',
+      };
+
+      await provider.getAzureTokenCredential();
+
+      expect(mockAzureIdentity.ClientSecretCredential).toHaveBeenCalledWith(
+        'test-tenant-id',
+        'test-client-id',
+        'test-client-secret',
+        {
+          authorityHost: 'https://login.microsoftonline.com',
+        },
+      );
+    });
+
+    it('should fallback to Azure CLI when client credentials are not provided', async () => {
+      await provider.getAzureTokenCredential();
+      expect(mockAzureIdentity.AzureCliCredential).toHaveBeenCalledWith();
+    });
+
+    it('should use environment variables for client credentials when available', async () => {
+      process.env.AZURE_CLIENT_ID = 'env-client-id';
+      process.env.AZURE_CLIENT_SECRET = 'env-client-secret';
+      process.env.AZURE_TENANT_ID = 'env-tenant-id';
+
+      await provider.getAzureTokenCredential();
+
+      expect(mockAzureIdentity.ClientSecretCredential).toHaveBeenCalledWith(
+        'env-tenant-id',
+        'env-client-id',
+        'env-client-secret',
+        {
+          authorityHost: 'https://login.microsoftonline.com',
+        },
+      );
     });
   });
 });

@@ -1,5 +1,4 @@
 import type { TokenCredential } from '@azure/identity';
-import { AzureCliCredential, ClientSecretCredential } from '@azure/identity';
 import type {
   AssistantCreationOptions,
   AssistantsClient,
@@ -296,7 +295,23 @@ export class AzureGenericProvider implements ApiProvider {
     return apiKey;
   }
 
-  getAzureTokenCredential(): TokenCredential {
+  async getAzureTokenCredential(): Promise<TokenCredential> {
+    let AzureCliCredentialClass, ClientSecretCredentialClass;
+    try {
+      const azureIdentity = await import('@azure/identity');
+      AzureCliCredentialClass = azureIdentity.AzureCliCredential;
+      ClientSecretCredentialClass = azureIdentity.ClientSecretCredential;
+    } catch {
+      throwConfigurationError(dedent`
+        The @azure/identity package is required as a peer dependency. Please install it:
+
+        npm install @azure/identity
+
+        If you are not using Azure authentication in your configuration, you can safely ignore this error.
+        To use Azure authentication, see https://www.promptfoo.dev/docs/providers/azure/#using-client-credentials
+      `);
+    }
+
     const clientSecret =
       this.config?.azureClientSecret ||
       this.env?.AZURE_CLIENT_SECRET ||
@@ -311,19 +326,19 @@ export class AzureGenericProvider implements ApiProvider {
       getEnvString('AZURE_AUTHORITY_HOST');
 
     if (clientSecret && clientId && tenantId) {
-      const credential = new ClientSecretCredential(tenantId, clientId, clientSecret, {
+      const credential = new ClientSecretCredentialClass(tenantId, clientId, clientSecret, {
         authorityHost: authorityHost || 'https://login.microsoftonline.com',
       });
       return credential;
     }
 
     //fallback to Azure CLI
-    const credential = new AzureCliCredential();
+    const credential = new AzureCliCredentialClass();
     return credential;
   }
 
   async getAccessToken() {
-    const credential = this.getAzureTokenCredential();
+    const credential = await this.getAzureTokenCredential();
     const tokenScope =
       this.config?.azureTokenScope ||
       this.env?.AZURE_TOKEN_SCOPE ||
@@ -346,13 +361,18 @@ export class AzureGenericProvider implements ApiProvider {
         const token = await this.getAccessToken();
         return { Authorization: 'Bearer ' + token };
       } catch (err) {
+        if (err instanceof Error && err.message.includes('@azure/identity')) {
+          // This is a dependency error, rethrow it as is
+          throw err;
+        }
         logger.info('Azure Authentication failed. Please check your credentials.', err);
-        throw new Error(`Azure Authentication failed. 
-Please choose one of the following options:
-  1. Set an API key via the AZURE_API_KEY environment variable.
-  2. Provide client credentials (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID).
-  3. Authenticate with Azure CLI using az login.
-    `);
+        throw new Error(dedent`
+          Azure Authentication failed. 
+          Please choose one of the following options:
+            1. Set an API key via the AZURE_API_KEY environment variable.
+            2. Provide client credentials (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID).
+            3. Authenticate with Azure CLI using az login.
+        `);
       }
     }
   }
