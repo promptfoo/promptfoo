@@ -65,7 +65,7 @@ async function generateGcgPrompts(
       }
 
       // Handle both single response and array of responses
-      const responses = Array.isArray(data.response) ? data.response : [data.response];
+      const responses = data.responses as string[];
 
       const gcgTestCases = responses.map((response: string) => ({
         ...testCase,
