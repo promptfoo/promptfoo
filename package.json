@@ -186,7 +186,7 @@
     "fast-xml-parser": "^4.5.1",
     "fastest-levenshtein": "^1.0.16",
     "glob": "^10.4.3",
-    "groq-sdk": "^0.11.0",
+    "groq-sdk": "^0.12.0",
     "http-z": "^7.1.1",
     "inquirer": "^11.1.0",
     "js-rouge": "^3.0.0",

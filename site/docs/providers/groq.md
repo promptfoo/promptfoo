@@ -24,7 +24,7 @@ providers:
   - id: groq:llama3-groq-70b-8192-tool-use-preview
     config:
       temperature: 0.7
-      max_tokens: 100
+      max_completion_tokens: 100
       tools:
         - type: function
           function:
@@ -49,7 +49,7 @@ providers:
 Key configuration options:
 
 - `temperature`: Controls randomness in output (0.0 to 1.0)
-- `max_tokens`: Maximum number of tokens in the response
+- `max_completion_tokens`: Maximum number of tokens to generate in the response
 - `tools`: Defines functions the model can use (for tool use/function calling)
 - `tool_choice`: Specifies how the model should choose tools ('auto', 'none', or a specific tool)
 
