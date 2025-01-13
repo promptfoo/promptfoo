@@ -70,7 +70,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         typeof strategy === 'string' ? { id: strategy } : strategy,
       ) as RedteamStrategy[],
   );
-  const [isStateless, setIsStateless] = useState<boolean>(true);
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [selectedConfigStrategy, setSelectedConfigStrategy] = useState<string | null>(null);
   const [strategyConfig, setStrategyConfig] = useState<Record<string, any>>(() => {
@@ -90,21 +89,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   useEffect(() => {
     updateConfig('strategies', selectedStrategies);
   }, [selectedStrategies, updateConfig]);
-
-  useEffect(() => {
-    setSelectedStrategies((prev) =>
-      prev.map((strategy) => {
-        const strategyId = getStrategyId(strategy);
-        if (strategyId === 'goat' || strategyId === 'crescendo') {
-          return {
-            id: strategyId,
-            config: { stateless: isStateless },
-          };
-        }
-        return strategy;
-      }),
-    );
-  }, [isStateless]);
 
   const handleStrategyToggle = (strategyId: string) => {
     if (!selectedStrategies.find((strategy) => getStrategyId(strategy) === strategyId)) {
@@ -417,8 +401,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
               Is the target system stateless? (Does it maintain conversation history?)
             </Typography>
             <RadioGroup
-              value={isStateless}
-              onChange={(e) => setIsStateless(e.target.value === 'true')}
+              value={config.stateless}
+              onChange={(e) => updateConfig('stateless', e.target.value === 'true')}
             >
               <FormControlLabel
                 value={true}
@@ -432,7 +416,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
               />
             </RadioGroup>
 
-            {!config.target.config.sessionParser && !isStateless && (
+            {!config.target.config.sessionParser && !config.stateless && (
               <Alert severity="warning">
                 Your system is stateful but you don't have session handling setup. Please return to
                 your Target setup to configure it.
