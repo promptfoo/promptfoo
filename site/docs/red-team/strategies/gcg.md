@@ -22,7 +22,7 @@ Add it to your `promptfooconfig.yaml`:
 strategies:
   - id: gcg
     config:
-      n: 50 # number of adversarial suffixes to generate per prompt (optional, defaults to 1)
+      n: 20 # number of adversarial suffixes to generate per prompt (optional, defaults to 1)
 ```
 
 ## How It Works
