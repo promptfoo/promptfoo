@@ -42,12 +42,19 @@ const getStrategyId = (strategy: RedteamStrategy): string => {
 };
 
 // Add this constant at the top of the file to track which strategies have config options
-const CONFIGURABLE_STRATEGIES = ['jailbreak', 'multilingual'] as const;
+const CONFIGURABLE_STRATEGIES = ['basic', 'jailbreak', 'multilingual'] as const;
 
 // Split strategies into two groups
-const singleTurnStrategies = availableStrategies.filter(
-  (strategy) => !MULTI_TURN_STRATEGIES.includes(strategy.id as any),
-);
+const singleTurnStrategies = availableStrategies
+  .filter((strategy) => !MULTI_TURN_STRATEGIES.includes(strategy.id as any))
+  .sort((a, b) => {
+    const aIsRecommended = DEFAULT_STRATEGIES.includes(a.id as any);
+    const bIsRecommended = DEFAULT_STRATEGIES.includes(b.id as any);
+    if (aIsRecommended !== bIsRecommended) {
+      return aIsRecommended ? -1 : 1;
+    }
+    return a.name.localeCompare(b.name);
+  });
 const multiTurnStrategies = availableStrategies.filter((strategy) =>
   MULTI_TURN_STRATEGIES.includes(strategy.id as any),
 );
