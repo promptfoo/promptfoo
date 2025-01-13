@@ -3,10 +3,8 @@ import { strategies } from './data/strategies';
 
 type GroupedStrategies = Record<string, typeof strategies>;
 
-// Define the category order
 const categoryOrder = ['Static (Single-Turn)', 'Dynamic (Single-Turn)', 'Multi-turn', 'Custom'];
 
-// Group strategies by category
 const groupedStrategies = strategies.reduce((acc, strategy) => {
   if (!acc[strategy.category]) {
     acc[strategy.category] = [];
@@ -15,7 +13,6 @@ const groupedStrategies = strategies.reduce((acc, strategy) => {
   return acc;
 }, {} as GroupedStrategies);
 
-// Sort strategies within each category by displayName
 Object.values(groupedStrategies).forEach((categoryStrategies) => {
   categoryStrategies.sort((a, b) => a.displayName.localeCompare(b.displayName));
 });
