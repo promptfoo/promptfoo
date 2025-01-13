@@ -80,6 +80,7 @@ import RedteamGoatProvider from './redteam/providers/goat';
 import RedteamIterativeProvider from './redteam/providers/iterative';
 import RedteamImageIterativeProvider from './redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from './redteam/providers/iterativeTree';
+import LikertProvider from './redteam/providers/likert';
 import type { LoadApiProviderContext, TestSuiteConfig } from './types';
 import type { EnvOverrides } from './types/env';
 import type { ApiProvider, ProviderOptions, ProviderOptionsMap } from './types/providers';
@@ -486,6 +487,8 @@ export async function loadApiProvider(
     ret = new RedteamCrescendoProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:redteam:goat') {
     ret = new RedteamGoatProvider(providerOptions.config);
+  } else if (providerPath === 'promptfoo:redteam:likert') {
+    ret = new LikertProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:redteam:best-of-n') {
     ret = new RedteamBestOfNProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:redteam:iterative') {
