@@ -80,8 +80,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   );
   const discrepancyExists = statefulStrategyExists && statelessStrategyExists;
 
-  // Always take preference and set the value of this to false if any strategy exists
-  // where it is declared as stateful
+  // Always take preference and set the value of this to false if any configured
+  // strategy is marked as stateful
   const isStatelessValue = statefulStrategyExists ? false : true;
 
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
@@ -415,7 +415,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
               Is the target system stateless? (Does it maintain conversation history?)
             </Typography>
             <RadioGroup
-              value={isStatelessValue}
+              value={discrepancyExists ? undefined : isStatelessValue}
               onChange={(e) => {
                 const isStateless = e.target.value === 'true';
                 const updatedStrategies = config.strategies.map((strategy) => {
@@ -433,12 +433,12 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
               }}
             >
               <FormControlLabel
-                value={true}
+                value="true"
                 control={<Radio />}
                 label="Yes - System is stateless (no conversation history)"
               />
               <FormControlLabel
-                value={false}
+                value="false"
                 control={<Radio />}
                 label="No - System maintains conversation history"
               />
@@ -453,8 +453,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             {discrepancyExists && (
               <Alert severity="error">
                 Your configuration has a mix of stateless and stateful multi-turn strategies. All
-                multi-turn strategies must either be stateless or stateful. The value selected here
-                will be applied to all strategies.
+                multi-turn strategies must either be stateless or stateful. Please explicitly select
+                a new value here that will be applied to all strategies.
               </Alert>
             )}
           </FormControl>
