@@ -168,4 +168,38 @@ export const strategies: Strategy[] = [
     asrIncrease: 'None',
     link: '/docs/red-team/strategies/basic/',
   },
+  {
+    category: 'Dynamic (Single-Turn)',
+    strategy: 'gcg',
+    displayName: 'GCG',
+    description: 'Gradient-based optimization',
+    longDescription:
+      'Implements the Greedy Coordinate Gradient attack method for finding adversarial prompts using gradient-based search techniques',
+    cost: 'High',
+    asrIncrease: '0-10%',
+    link: '/docs/red-team/strategies/gcg/',
+  },
+  {
+    category: 'Basic',
+    strategy: 'custom',
+    displayName: 'Custom Strategies',
+    description: 'User-defined transformations',
+    longDescription:
+      'Allows creation of custom red team testing approaches by programmatically transforming test cases using JavaScript',
+    cost: 'Variable',
+    asrIncrease: 'Variable',
+    link: '/docs/red-team/strategies/custom/',
+  },
+  {
+    category: 'Dynamic (Single-Turn)',
+    strategy: 'jailbreak:likert',
+    displayName: 'Likert-based Jailbreaks',
+    description: 'Academic evaluation framework',
+    longDescription:
+      'Single-turn adaptation of the Bad Likert Judge technique that uses academic evaluation frameworks and Likert scales to test model behaviors',
+    cost: 'Medium',
+    asrIncrease: '40-60%',
+    link: '/docs/red-team/strategies/likert/',
+    recommended: true,
+  },
 ];
