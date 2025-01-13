@@ -1,7 +1,10 @@
 import logger from '../logger';
 import { matchesModeration } from '../matchers';
 import { parseChatPrompt } from '../providers/shared';
-import type { AssertionParams, GradingResult } from '../types';
+import type {
+  AssertionParams,
+  GradingResult,
+} from '../types';
 import invariant from '../util/invariant';
 
 export const handleModeration = async ({
@@ -11,7 +14,6 @@ export const handleModeration = async ({
   providerResponse,
   prompt,
 }: AssertionParams): Promise<GradingResult> => {
-  logger.warn(`providerResponse: ${JSON.stringify(providerResponse, null, 2)}`);
   if (providerResponse.guardrails?.flagged) {
     logger.debug('Target built-in guardrail triggered');
     let reason = 'Guardrail triggered';
