@@ -32,6 +32,7 @@ export function getUnifiedConfig(
     description: config.description,
     targets: [config.target],
     prompts: config.prompts,
+    stateless: config.stateless,
     redteam: {
       purpose: config.purpose,
       numTests: config.numTests,

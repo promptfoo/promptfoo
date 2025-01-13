@@ -459,6 +459,7 @@ export default function RedTeamSetupPage() {
         strategies: yamlConfig.redteam?.strategies || [],
         purpose: yamlConfig.redteam?.purpose || '',
         entities: yamlConfig.redteam?.entities || [],
+        stateless: yamlConfig.stateless === undefined ? true : yamlConfig.stateless,
         applicationDefinition: {
           purpose: yamlConfig.redteam?.purpose || '',
           // We could potentially parse these from redteam.purpose if it follows a specific format.

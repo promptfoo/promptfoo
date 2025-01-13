@@ -798,6 +798,7 @@ export const UnifiedConfigSchema = TestSuiteConfigSchema.extend({
   commandLineOptions: CommandLineOptionsSchema.partial().optional(),
   providers: ProvidersSchema.optional(),
   targets: ProvidersSchema.optional(),
+  stateless: z.boolean().optional(),
 })
   .refine(
     (data) => {
