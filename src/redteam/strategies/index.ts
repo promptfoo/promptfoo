@@ -10,9 +10,11 @@ import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
 import { addCitationTestCases } from './citation';
 import { addCrescendo } from './crescendo';
+import { addGcgTestCases } from './gcg';
 import { addGoatTestCases } from './goat';
 import { addIterativeJailbreaks } from './iterative';
 import { addLeetspeak } from './leetspeak';
+import { addLikertTestCases } from './likert';
 import { addMathPrompt } from './mathPrompt';
 import { addMultilingual } from './multilingual';
 import { addInjections } from './promptInjections';
@@ -151,6 +153,24 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding composite jailbreak test cases to ${testCases.length} test cases`);
       const newTestCases = await addCompositeTestCases(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} composite jailbreak test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'jailbreak:likert',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding Likert scale jailbreaks to ${testCases.length} test cases`);
+      const newTestCases = await addLikertTestCases(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} Likert scale jailbreak test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'gcg',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding GCG test cases to ${testCases.length} test cases`);
+      const newTestCases = await addGcgTestCases(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} GCG test cases`);
       return newTestCases;
     },
   },

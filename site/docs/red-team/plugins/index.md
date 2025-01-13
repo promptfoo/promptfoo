@@ -43,7 +43,7 @@ Promptfoo also supports various risk management frameworks based on common secur
 | [**MITRE ATLAS**](/docs/red-team/configuration/#mitre-atlas)                                                    | mitre:atlas     | mitre:atlas:reconnaissance |
 | **Promptfoo Recommended**                                                                                       | default         | default                    |
 
-## Plugin Table
+## Available Plugins
 
 Click on a plugin to see its documentation.
 
