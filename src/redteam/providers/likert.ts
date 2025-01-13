@@ -1,7 +1,7 @@
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams } from '../../types';
 import type { ApiProvider, ProviderResponse } from '../../types/providers';
-import { getRemoteGenerationUrl } from '../remoteGeneration';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import { isBasicRefusal } from '../util';
 
 interface LikertProviderOptions {
@@ -11,6 +11,13 @@ interface LikertProviderOptions {
   plugin?: string;
 }
 
+interface IterationOutput {
+  prompt: string;
+  output: string;
+  wasRefusal: boolean;
+  graderPassed: boolean | undefined;
+}
+
 export default class LikertProvider implements ApiProvider {
   private readonly redteamProvider: ApiProvider;
   private readonly numIterations: number;
@@ -18,6 +25,9 @@ export default class LikertProvider implements ApiProvider {
   private readonly plugin?: string;
 
   constructor(options: LikertProviderOptions) {
+    if (neverGenerateRemote()) {
+      throw new Error('Likert provider requires remote generation');
+    }
     this.redteamProvider = options.redteamProvider;
     this.numIterations = options.numIterations || 5;
     this.config = options.config || {};
@@ -43,6 +53,7 @@ export default class LikertProvider implements ApiProvider {
     let bestPrompt = prompt;
     let bestResponse = '';
     let bestPassed = false;
+    const iterationOutputs: IterationOutput[] = [];
 
     for (let i = 0; i < this.numIterations; i++) {
       try {
@@ -84,13 +95,21 @@ export default class LikertProvider implements ApiProvider {
         const modifiedPrompt = data.modifiedPrompts[0];
         logger.debug(`Using modified prompt: ${modifiedPrompt}`);
 
-        // Skip if this is a refusal
-        if (isBasicRefusal(modifiedPrompt)) {
+        // Check for refusal
+        const wasRefusal = isBasicRefusal(modifiedPrompt);
+        if (wasRefusal) {
           logger.debug('Skipping refusal response');
+          iterationOutputs.push({
+            prompt: modifiedPrompt,
+            output: data.response || '',
+            wasRefusal: true,
+            graderPassed: false,
+          });
           continue;
         }
 
         // Run grader if we have a test case
+        let graderPassed: boolean | undefined;
         if (context?.test) {
           const assertToUse = (context.test as { assert?: Array<{ type: string }> }).assert?.find(
             (a) => a.type,
@@ -108,6 +127,7 @@ export default class LikertProvider implements ApiProvider {
                 totalTokenUsage.cached += result.tokenUsage.cached || 0;
               }
 
+              graderPassed = result.pass;
               // If this attempt passed, use it
               if (result.pass) {
                 bestPrompt = modifiedPrompt;
@@ -118,6 +138,13 @@ export default class LikertProvider implements ApiProvider {
             }
           }
         }
+
+        iterationOutputs.push({
+          prompt: modifiedPrompt,
+          output: data.response || '',
+          wasRefusal: false,
+          graderPassed,
+        });
       } catch (error) {
         logger.error(`Error in iteration ${i}: ${error}`);
         continue;
@@ -130,6 +157,7 @@ export default class LikertProvider implements ApiProvider {
       metadata: {
         passed: bestPassed,
         response: bestResponse,
+        iterations: iterationOutputs,
       },
     };
   }
