@@ -1,10 +1,7 @@
 import logger from '../logger';
 import { matchesModeration } from '../matchers';
 import { parseChatPrompt } from '../providers/shared';
-import type {
-  AssertionParams,
-  GradingResult,
-} from '../types';
+import type { AssertionParams, GradingResult } from '../types';
 import invariant from '../util/invariant';
 
 export const handleModeration = async ({
