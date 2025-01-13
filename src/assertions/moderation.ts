@@ -11,7 +11,6 @@ export const handleModeration = async ({
   providerResponse,
   prompt,
 }: AssertionParams): Promise<GradingResult> => {
-  logger.warn(`providerResponse: ${JSON.stringify(providerResponse, null, 2)}`);
   if (providerResponse.guardrails?.flagged) {
     logger.debug('Target built-in guardrail triggered');
     let reason = 'Guardrail triggered';
