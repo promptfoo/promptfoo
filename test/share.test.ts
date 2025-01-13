@@ -1,4 +1,4 @@
-import EvalResult from 'src/models/evalResult';
+import type EvalResult from 'src/models/evalResult';
 import { getUserEmail } from '../src/globalConfig/accounts';
 import { cloudConfig } from '../src/globalConfig/cloud';
 import type Eval from '../src/models/eval';
