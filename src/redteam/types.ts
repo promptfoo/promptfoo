@@ -127,7 +127,6 @@ export interface SavedRedteamConfig {
   strategies: RedteamStrategy[];
   purpose?: string;
   numTests?: number;
-  stateless?: boolean;
   applicationDefinition: {
     purpose?: string;
     systemPrompt?: string;
