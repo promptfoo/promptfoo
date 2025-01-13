@@ -986,7 +986,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
     }
     try {
       const output = JSON.parse(new TextDecoder().decode(response.body));
-      logger.warn(`Amazon Bedrock API response:: ${JSON.stringify(output, null, 2)}`);
+
       return {
         output: model.output(output),
         tokenUsage: {
