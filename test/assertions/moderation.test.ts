@@ -39,7 +39,7 @@ describe('handleModeration', () => {
     test: mockTest,
     logProbs: undefined,
     provider: mockProvider,
-    providerResponse: { output: 'output', flagged: false },
+    providerResponse: { output: 'output', guardrails: { flagged: false } },
   };
 
   const baseParams: AssertionParams = {
@@ -51,7 +51,7 @@ describe('handleModeration', () => {
     context: mockContext,
     inverse: false,
     output: 'output',
-    providerResponse: { flagged: false, output: 'output' },
+    providerResponse: { guardrails: { flagged: false }, output: 'output' },
   };
 
   beforeEach(() => {
@@ -61,13 +61,13 @@ describe('handleModeration', () => {
   it('should fail when guard is triggered', async () => {
     const result = await handleModeration({
       ...baseParams,
-      providerResponse: { flagged: true, output: 'output' },
+      providerResponse: { guardrails: { flagged: true }, output: 'output' },
     });
 
     expect(result).toEqual({
       pass: false,
       score: 0,
-      reason: 'Output guardrail triggered',
+      reason: 'Guardrail triggered',
       assertion: mockAssertion,
     });
   });
@@ -103,7 +103,7 @@ describe('handleModeration', () => {
       ...baseParams,
       providerResponse: {
         output: 'output',
-        flagged: false,
+        guardrails: { flagged: false },
         metadata: { redteamFinalPrompt: 'modified prompt' },
       },
     });

@@ -735,9 +735,11 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           data.usage?.prompt_tokens,
           data.usage?.completion_tokens,
         ),
-        flaggedInput,
-        flaggedOutput,
-        flagged: flaggedInput || flaggedOutput,
+        guardrails: {
+          flaggedInput,
+          flaggedOutput,
+          flagged: flaggedInput || flaggedOutput,
+        },
       };
     } catch (err) {
       return {

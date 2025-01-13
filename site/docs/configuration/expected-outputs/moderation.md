@@ -11,11 +11,11 @@ Currently, this supports [OpenAI's moderation model](https://platform.openai.com
 
 In general, we encourage the use of Meta's LlamaGuard as it substantially outperforms OpenAI's moderation API as well as GPT-4. [See benchmarks](https://github.com/meta-llama/PurpleLlama/blob/main/Llama-Guard2/MODEL_CARD.md#model-performance).
 
-## Azure OpenAI content filters
+## Bedrock guardrails and Azure OpenAI content filters
 
-When using Azure AI model deployments, the moderation assertion utilizes Azure's built-in content filtering system, powered by Azure AI Content Safety. These content filters are configured during model deployment in Azure, allowing you to set appropriate severity thresholds for different categories of harmful content. This configuration ensures that the content filtering system enforces your specified moderation policies during model inference.
+If you are using an Azure deployments, or Bedrock guardrails, the moderation assertion uses the built-in "Azure AI Content Safety" or "Bedrock guardrails" system, instead of the OpenAI or LlamaGuard models.
 
-For Azure deployments, simply use:
+For Azure or Bedrock, simply use:
 
 ```yaml
 tests:
@@ -25,7 +25,7 @@ tests:
       - type: moderation
 ```
 
-Note that with Azure deployments, you cannot configure specific categories in the assertion as these are managed through your Azure content filter settings.
+Note that with Azure deployments or Bedrock guardrails, you cannot configure specific categories in the assertion as these are managed through your Azure content filter settings or Bedrock guardrails settings.
 
 ## OpenAI moderation
 
