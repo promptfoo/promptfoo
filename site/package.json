@@ -18,6 +18,7 @@
   "dependencies": {
     "@calcom/embed-react": "^1.5.1",
     "@docusaurus/core": "^3.6.3",
+    "@docusaurus/plugin-client-redirects": "^3.6.3",
     "@docusaurus/plugin-content-docs": "^3.6.3",
     "@docusaurus/plugin-google-gtag": "^3.6.3",
     "@docusaurus/preset-classic": "^3.6.3",

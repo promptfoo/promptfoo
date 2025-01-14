@@ -323,7 +323,20 @@ const config = {
         indexName: 'promptfoo',
       },
     }),
-  plugins: [require.resolve('docusaurus-plugin-image-zoom')],
+  plugins: [
+    require.resolve('docusaurus-plugin-image-zoom'),
+    [
+      '@docusaurus/plugin-client-redirects',
+      {
+        redirects: [
+          {
+            from: '/docs/category/troubleshooting',
+            to: '/docs/usage/troubleshooting',
+          },
+        ],
+      },
+    ],
+  ],
 
   // Mermaid diagram support
   markdown: {
