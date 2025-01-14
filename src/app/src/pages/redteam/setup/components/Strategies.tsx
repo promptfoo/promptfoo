@@ -80,6 +80,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   );
   const discrepancyExists = statefulStrategyExists && statelessStrategyExists;
 
+
   // Always take preference and set the value of this to false if any configured
   // strategy is marked as stateful
   const isStatelessValue = statefulStrategyExists ? false : true;
