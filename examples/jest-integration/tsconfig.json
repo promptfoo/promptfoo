@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "types": ["vitest/globals", "jest", "node"],
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "promptfoo/*": ["node_modules/promptfoo/dist/*"]
+    }
+  },
+  "include": ["./**/*.ts", "./**/*.js"],
+  "exclude": ["node_modules"]
+}

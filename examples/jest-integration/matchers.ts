@@ -1,5 +1,6 @@
-import matchers from '../../dist/src/assertions.js';
-import type { GradingConfig } from '../../dist/src/types.js';
+import { assertions, type GradingConfig } from 'promptfoo';
+
+const { matchesSimilarity, matchesLlmRubric } = assertions;
 
 declare global {
   namespace jest {
@@ -17,7 +18,7 @@ export function installJestMatchers() {
       expected: string,
       threshold: number = 0.8,
     ): Promise<jest.CustomMatcherResult> {
-      const result = await matchers.matchesSimilarity(received, expected, threshold);
+      const result = await matchesSimilarity(received, expected, threshold);
       const pass = received === expected || result.pass;
       if (pass) {
         return {
@@ -38,7 +39,7 @@ export function installJestMatchers() {
       expected: string,
       gradingConfig: GradingConfig,
     ): Promise<jest.CustomMatcherResult> {
-      const gradingResult = await matchers.matchesLlmRubric(expected, received, gradingConfig);
+      const gradingResult = await matchesLlmRubric(expected, received, gradingConfig);
       if (gradingResult.pass) {
         return {
           message: () => `expected ${received} not to pass LLM Rubric with ${expected}`,
