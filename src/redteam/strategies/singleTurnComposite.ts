@@ -1,6 +1,7 @@
 import async from 'async';
 import { SingleBar, Presets } from 'cli-progress';
 import { fetchWithCache } from '../../cache';
+import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { TestCase } from '../../types';
@@ -39,6 +40,7 @@ async function generateCompositePrompts(
       const payload = {
         task: 'jailbreak:composite',
         prompt: testCase.vars[injectVar],
+        email: getUserEmail(),
         ...(config.n && { n: config.n }),
         ...(config.modelFamily && { modelFamily: config.modelFamily }),
       };
