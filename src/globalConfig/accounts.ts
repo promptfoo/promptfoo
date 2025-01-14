@@ -58,6 +58,6 @@ export async function checkEmailStatusOrExit() {
       process.exit(1);
     }
   } catch (e) {
-    logger.debug('Failed to check user status', e);
+    logger.debug(`Failed to check user status: ${e}`);
   }
 }
