@@ -278,15 +278,8 @@ export async function createTransformRequest(
         return new Function('prompt', `${rendered}`)(prompt);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
-        // Extract just the error message from nunjucks error format
-        const cleanedMessage =
-          errorMessage
-            .split('\n')
-            .map((line) => line.trim())
-            .filter((line) => line.includes('Error:'))
-            .map((line) => line.replace(/^Error:\s*/, ''))[0] || errorMessage;
         const wrappedError = new Error(
-          `Error in request transform string template: ${cleanedMessage}`,
+          `Error in request transform string template: ${errorMessage}`,
         );
         logger.error(wrappedError.message);
         throw wrappedError;

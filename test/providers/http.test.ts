@@ -1190,7 +1190,9 @@ describe('createTransformRequest', () => {
     const transform = await createTransformRequest('{{ nonexistent | invalid }}');
     await expect(async () => {
       await transform('test');
-    }).rejects.toThrow('Error in request transform string template: filter not found: invalid');
+    }).rejects.toThrow(
+      'Error in request transform string template: (unknown path)\n  Error: filter not found: invalid',
+    );
   });
 });
 
