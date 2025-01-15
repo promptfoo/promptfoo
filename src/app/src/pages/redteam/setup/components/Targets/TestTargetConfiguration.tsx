@@ -110,7 +110,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 onValueChange={(code) => updateCustomTarget('transformResponse', code)}
                 highlight={(code) => highlight(code, languages.javascript)}
                 padding={10}
-                placeholder={dedent`Transform the API response before using it. Format as either:
+                placeholder={dedent`Optional: Transform the API response before using it. Format as either:
 
                   1. A JSON path expression: \`json.choices[0].message.content\`
                   2. A function that receives response data: \`(json, text) => json.choices[0].message.content\`
