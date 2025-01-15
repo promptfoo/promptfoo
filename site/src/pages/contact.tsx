@@ -103,7 +103,7 @@ function Contact(): JSX.Element {
           </Typography>
           <Typography variant="body1" gutterBottom>
             💬 Join our{' '}
-            <Link href="https://discord.gg/gHPS9jjfbs" target="_blank">
+            <Link href="https://discord.gg/promptfoo" target="_blank">
               Discord
             </Link>
           </Typography>
