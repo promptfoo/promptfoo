@@ -19,12 +19,7 @@ import Typography from '@mui/material/Typography';
 import ChatMessages, { type Message } from './ChatMessages';
 import type { GradingResult } from './types';
 
-function ellipsize(value: string, maxLength: number) {
-  if (value.length <= maxLength) {
-    return value;
-  }
-  return value.slice(0, maxLength) + '...';
-}
+import { ellipsize } from '../../../../../utils/text';
 
 function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[] }) {
   const [expandedValues, setExpandedValues] = useState<{ [key: number]: boolean }>({});
