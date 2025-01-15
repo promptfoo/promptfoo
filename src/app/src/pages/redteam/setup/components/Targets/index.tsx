@@ -338,19 +338,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         later.
       </Typography>
 
-      <Box sx={{ mt: 2, mb: 2 }}>
-        <FormControlLabel
-          control={
-            <Switch
-              checked={useGuardrail}
-              onChange={(e) => setUseGuardrail(e.target.checked)}
-              color="primary"
-            />
-          }
-          label="Use Guardrail"
-        />
-      </Box>
-
       <Typography variant="body1">
         For more information on available providers and how to configure them, please visit our{' '}
         <Link href="https://www.promptfoo.dev/docs/providers/" target="_blank" rel="noopener">
@@ -363,6 +350,18 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium', mb: 3 }}>
           Select a Target
         </Typography>
+        <Box sx={{ mt: 2, mb: 2 }}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={useGuardrail}
+                onChange={(e) => setUseGuardrail(e.target.checked)}
+                color="primary"
+              />
+            }
+            label="Use Guardrail"
+          />
+        </Box>
         <TextField
           fullWidth
           sx={{ mb: 2 }}
