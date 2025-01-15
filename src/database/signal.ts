@@ -1,22 +1,21 @@
 import debounce from 'debounce';
 import fs from 'fs';
 import logger from '../logger';
-import type { ResultsFile } from '../types';
 import { getDbSignalPath } from './index';
 
 /**
  * Updates the signal file with the current timestamp.
- * This is used to notify clients that there are new results available.
+ * This is used to notify clients that there are new data available.
  */
 export function updateSignalFile(): void {
   const filePath = getDbSignalPath();
   try {
     const now = new Date();
-    logger.info(`Writing to signal file ${filePath}`);
+    logger.debug(`Writing to signal file ${filePath}`);
     fs.writeFileSync(filePath, now.toISOString());
-    logger.info('Successfully wrote to signal file');
+    logger.debug('Successfully wrote to signal file');
   } catch (err) {
-    logger.error(`Failed to write signal file: ${err}`);
+    logger.warn(`Failed to write database signal file: ${err}`);
   }
 }
 
@@ -33,13 +32,10 @@ export function ensureSignalFile(): void {
 
 /**
  * Sets up a watcher on the signal file and calls the callback when it changes.
- * @param onUpdate - Callback function that receives the latest eval when the signal file changes
+ * @param onChange - Callback function that is called when the signal file changes
  * @returns The watcher instance
  */
-export function setupSignalWatcher(
-  onUpdate: (latestEval: ResultsFile | undefined) => void,
-  getLatestEval: () => Promise<ResultsFile | undefined>,
-): fs.FSWatcher {
+export function setupSignalWatcher(onChange: () => void): fs.FSWatcher {
   const filePath = getDbSignalPath();
   logger.debug(`Setting up file watcher on ${filePath}`);
 
@@ -47,24 +43,15 @@ export function setupSignalWatcher(
 
   try {
     const watcher = fs.watch(filePath);
-    watcher.on(
-      'change',
-      debounce(async () => {
-        const latestEval = await getLatestEval();
-        logger.info(
-          `Emitting update with eval ID: ${latestEval?.config?.description || 'unknown'}`,
-        );
-        onUpdate(latestEval);
-      }, 250),
-    );
+    watcher.on('change', debounce(onChange, 250));
 
     watcher.on('error', (error) => {
-      logger.error(`File watcher error: ${error}`);
+      logger.warn(`File watcher error: ${error}`);
     });
 
     return watcher;
   } catch (error) {
-    logger.error(`Failed to set up file watcher: ${error}`);
+    logger.warn(`Failed to set up file watcher: ${error}`);
     throw error;
   }
 }

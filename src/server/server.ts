@@ -203,13 +203,12 @@ export async function startServer(
 
   await runDbMigrations();
 
-  setupSignalWatcher(
-    (latestEval) => {
-      io.emit('update', latestEval);
-      allPrompts = null;
-    },
-    () => getLatestEval(filterDescription),
-  );
+  setupSignalWatcher(async () => {
+    const latestEval = await getLatestEval(filterDescription);
+    logger.info(`Emitting update with eval ID: ${latestEval?.config?.description || 'unknown'}`);
+    io.emit('update', latestEval);
+    allPrompts = null;
+  });
 
   io.on('connection', async (socket) => {
     socket.emit('init', await getLatestEval(filterDescription));
