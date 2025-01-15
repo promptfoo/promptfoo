@@ -367,4 +367,213 @@ describe('WatsonXProvider', () => {
       expect(logger.error).toHaveBeenCalledWith('Watsonx: API call error: Error: API error');
     });
   });
+
+  describe('calculateWatsonXCost', () => {
+    beforeEach(() => {
+      jest.spyOn(global, 'fetch').mockImplementation(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers(),
+          redirected: false,
+          type: 'basic' as ResponseType,
+          url: '',
+          json: () =>
+            Promise.resolve({
+              resources: [
+                {
+                  model_id: 'meta-llama/llama-3-2-1b-instruct',
+                  input_tier: 'class_c1',
+                  output_tier: 'class_c1',
+                  label: 'llama-3-2-1b-instruct',
+                  provider: 'Meta',
+                  source: 'Hugging Face',
+                  model_limits: {
+                    max_sequence_length: 131072,
+                    max_output_tokens: 8192,
+                  },
+                },
+              ],
+            }),
+        } as Response),
+      );
+    });
+
+    it('should calculate cost correctly when token counts are provided', async () => {
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: jest.fn().mockResolvedValue({
+          result: {
+            model_id: 'meta-llama/llama-3-2-1b-instruct',
+            model_version: '3.2.0',
+            created_at: '2024-03-25T00:00:00Z',
+            results: [
+              {
+                generated_text: 'Test response',
+                generated_token_count: 100,
+                input_token_count: 50,
+                stop_reason: 'max_tokens',
+              },
+            ],
+          },
+        }),
+      };
+      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+
+      const cache: Partial<any> = {
+        get: jest.fn().mockResolvedValue(null),
+        set: jest.fn(),
+      };
+
+      jest.mocked(getCache).mockReturnValue(cache as any);
+      jest.mocked(isCacheEnabled).mockReturnValue(true);
+
+      const provider = new WatsonXProvider('meta-llama/llama-3-2-1b-instruct', { config });
+      const response = await provider.callApi(prompt);
+
+      expect(response.cost).toBeDefined();
+      expect(typeof response.cost).toBe('number');
+      // For class_c1 tier ($0.0001 per 1M tokens)
+      // Input: 50 tokens * $0.0001/1M = 0.000005
+      // Output: 50 tokens * $0.0001/1M = 0.000005
+      // Total expected: 0.00001
+      expect(response.cost).toBeCloseTo(0.00001, 6);
+    });
+
+    it('should return undefined cost when token counts are not provided', async () => {
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: jest.fn().mockResolvedValue({
+          result: {
+            model_id: 'meta-llama/llama-3-2-1b-instruct',
+            model_version: '3.2.0',
+            created_at: '2024-03-25T00:00:00Z',
+            results: [
+              {
+                generated_text: 'Test response',
+                stop_reason: 'max_tokens',
+              },
+            ],
+          },
+        }),
+      };
+      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+
+      const cache: Partial<any> = {
+        get: jest.fn().mockResolvedValue(null),
+        set: jest.fn(),
+      };
+
+      jest.mocked(getCache).mockReturnValue(cache as any);
+      jest.mocked(isCacheEnabled).mockReturnValue(true);
+
+      const provider = new WatsonXProvider('meta-llama/llama-3-2-1b-instruct', { config });
+      const response = await provider.callApi(prompt);
+
+      expect(response.cost).toBeUndefined();
+    });
+
+    it('should calculate cost correctly for class_9 tier', async () => {
+      const modelId = 'meta-llama/llama-3-2-11b-vision-instruct';
+      jest.spyOn(global, 'fetch').mockImplementation(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers(),
+          redirected: false,
+          type: 'basic' as ResponseType,
+          url: '',
+          json: () =>
+            Promise.resolve({
+              resources: [
+                {
+                  model_id: modelId,
+                  label: 'llama-3-2-11b-vision-instruct',
+                  provider: 'Meta',
+                  source: 'Hugging Face',
+                  functions: [{ id: 'image_chat' }, { id: 'text_chat' }, { id: 'text_generation' }],
+                  input_tier: 'class_9',
+                  output_tier: 'class_9',
+                  number_params: '11b',
+                  model_limits: {
+                    max_sequence_length: 131072,
+                    max_output_tokens: 8192,
+                  },
+                },
+              ],
+            }),
+        } as Response),
+      );
+
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: jest.fn().mockResolvedValue({
+          result: {
+            model_id: modelId,
+            model_version: '3.2.0',
+            created_at: '2024-03-25T00:00:00Z',
+            results: [
+              {
+                generated_text: 'Test response',
+                generated_token_count: 100,
+                input_token_count: 50,
+                stop_reason: 'max_tokens',
+              },
+            ],
+          },
+        }),
+      };
+      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+
+      const cache: Partial<any> = {
+        get: jest.fn().mockResolvedValue(null),
+        set: jest.fn(),
+      };
+
+      jest.mocked(getCache).mockReturnValue(cache as any);
+      jest.mocked(isCacheEnabled).mockReturnValue(true);
+
+      const provider = new WatsonXProvider(modelId, { config });
+      const response = await provider.callApi(prompt);
+
+      expect(response.cost).toBeDefined();
+      expect(typeof response.cost).toBe('number');
+      // For class_9 tier ($0.00035 per 1M tokens)
+      // Input: 50 tokens * $0.00035/1M = 0.0000175
+      // Output: 50 tokens * $0.00035/1M = 0.0000175
+      // Total expected: 0.000035
+      expect(response.cost).toBeCloseTo(0.000035, 6);
+    });
+
+    it('should return undefined cost for class_9 tier when token counts are not provided', async () => {
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: jest.fn().mockResolvedValue({
+          result: {
+            model_id: 'meta-llama/llama-3-2-11b-vision-instruct',
+            model_version: '3.2.0',
+            created_at: '2024-03-25T00:00:00Z',
+            results: [
+              {
+                generated_text: 'Test response',
+                stop_reason: 'max_tokens',
+              },
+            ],
+          },
+        }),
+      };
+      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+
+      const cache: Partial<any> = {
+        get: jest.fn().mockResolvedValue(null),
+        set: jest.fn(),
+      };
+
+      jest.mocked(getCache).mockReturnValue(cache as any);
+      jest.mocked(isCacheEnabled).mockReturnValue(true);
+
+      const provider = new WatsonXProvider('meta-llama/llama-3-2-11b-vision-instruct', { config });
+      const response = await provider.callApi(prompt);
+
+      expect(response.cost).toBeUndefined();
+    });
+  });
 });
