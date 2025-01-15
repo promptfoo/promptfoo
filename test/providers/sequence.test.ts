@@ -1,41 +1,38 @@
-import type nunjucks from 'nunjucks';
+import logger from '../../src/logger';
 import { SequenceProvider } from '../../src/providers/sequence';
-import type { CallApiContextParams, Prompt } from '../../src/types';
-import { getNunjucksEngine } from '../../src/util/templates';
+import type { ApiProvider, CallApiContextParams, ProviderResponse, Prompt } from '../../src/types';
 
-jest.mock('../../src/util/templates');
+jest.mock('../../src/logger');
 
 describe('SequenceProvider', () => {
-  let mockOriginalProvider: any;
-  let mockNunjucksEnv: nunjucks.Environment;
+  let mockOriginalProvider: ApiProvider;
+  let mockLogger: typeof logger;
+  let testPrompt: Prompt;
 
   beforeEach(() => {
     mockOriginalProvider = {
+      id: () => 'mock-provider',
       callApi: jest.fn(),
     };
 
-    mockNunjucksEnv = {
-      renderString: jest.fn((str) => str),
-      options: {},
-      render: jest.fn(),
-      addFilter: jest.fn(),
-      getFilter: jest.fn(),
-      hasExtension: jest.fn(),
-      addExtension: jest.fn(),
-      removeExtension: jest.fn(),
-      getExtension: jest.fn(),
-      addGlobal: jest.fn(),
-      getGlobal: jest.fn(),
-      addTemplate: jest.fn(),
-      express: jest.fn(),
-      getTemplate: jest.fn(),
-    } as unknown as nunjucks.Environment;
+    mockLogger = {
+      debug: jest.fn(),
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+    } as any;
 
-    jest.mocked(getNunjucksEngine).mockReturnValue(mockNunjucksEnv);
+    (logger as any).debug = mockLogger.debug;
+
+    testPrompt = {
+      raw: 'test prompt',
+      display: 'test prompt',
+      label: 'test-prompt',
+    };
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
   });
 
   it('should initialize with required config', () => {
@@ -47,9 +44,10 @@ describe('SequenceProvider', () => {
     });
 
     expect(provider.id()).toBe('test-sequence');
+    expect(provider.toString()).toBe('[Sequence Provider]');
   });
 
-  it('should throw error if config is missing inputs', () => {
+  it('should throw error when inputs array is missing', () => {
     expect(() => {
       new SequenceProvider({
         id: 'test',
@@ -58,7 +56,7 @@ describe('SequenceProvider', () => {
     }).toThrow('Expected sequence provider config to contain an array of inputs');
   });
 
-  it('should call original provider for each input and join responses', async () => {
+  it('should call original provider for each input and combine responses', async () => {
     const provider = new SequenceProvider({
       id: 'test',
       config: {
@@ -67,23 +65,37 @@ describe('SequenceProvider', () => {
       },
     });
 
-    mockOriginalProvider.callApi
-      .mockResolvedValueOnce({ output: 'response1' })
-      .mockResolvedValueOnce({ output: 'response2' });
+    jest.mocked(mockOriginalProvider.callApi).mockResolvedValueOnce({
+      output: 'response1',
+      tokenUsage: { total: 10, prompt: 5, completion: 5, numRequests: 1 },
+    });
+
+    jest.mocked(mockOriginalProvider.callApi).mockResolvedValueOnce({
+      output: 'response2',
+      tokenUsage: { total: 20, prompt: 10, completion: 10, numRequests: 1 },
+    });
 
     const context: CallApiContextParams = {
       originalProvider: mockOriginalProvider,
       vars: { var1: 'value1' },
-      prompt: { raw: 'test prompt' } as Prompt,
+      prompt: testPrompt,
     };
 
     const result = await provider.callApi('test prompt', context);
 
-    expect(mockOriginalProvider.callApi).toHaveBeenCalledTimes(2);
-    expect(result.output).toBe('response1|response2');
+    expect(result).toEqual({
+      output: 'response1|response2',
+      tokenUsage: {
+        total: 30,
+        prompt: 15,
+        completion: 15,
+        numRequests: 2,
+        cached: 0,
+      },
+    });
   });
 
-  it('should accumulate token usage from responses', async () => {
+  it('should handle errors from original provider', async () => {
     const provider = new SequenceProvider({
       id: 'test',
       config: {
@@ -91,92 +103,25 @@ describe('SequenceProvider', () => {
       },
     });
 
-    mockOriginalProvider.callApi
-      .mockResolvedValueOnce({
-        output: 'response1',
-        tokenUsage: {
-          total: 10,
-          prompt: 5,
-          completion: 5,
-          numRequests: 1,
-          cached: 0,
-        },
-      })
-      .mockResolvedValueOnce({
-        output: 'response2',
-        tokenUsage: {
-          total: 20,
-          prompt: 10,
-          completion: 10,
-          numRequests: 1,
-          cached: 1,
-        },
-      });
+    const errorResponse: ProviderResponse = {
+      error: 'API Error',
+      output: '',
+    };
+
+    jest.mocked(mockOriginalProvider.callApi).mockResolvedValueOnce(errorResponse);
 
     const context: CallApiContextParams = {
       originalProvider: mockOriginalProvider,
       vars: {},
-      prompt: { raw: 'test' } as Prompt,
+      prompt: testPrompt,
     };
 
-    const result = await provider.callApi('test', context);
-
-    expect(result.tokenUsage).toEqual({
-      total: 30,
-      prompt: 15,
-      completion: 15,
-      numRequests: 2,
-      cached: 1,
-    });
-  });
-
-  it('should return error response if original provider fails', async () => {
-    const provider = new SequenceProvider({
-      id: 'test',
-      config: {
-        inputs: ['input1', 'input2'],
-      },
-    });
-
-    const errorResponse = { error: 'Provider error', output: '' };
-    mockOriginalProvider.callApi.mockResolvedValueOnce(errorResponse);
-
-    const context: CallApiContextParams = {
-      originalProvider: mockOriginalProvider,
-      vars: {},
-      prompt: { raw: 'test' } as Prompt,
-    };
-
-    const result = await provider.callApi('test', context);
+    const result = await provider.callApi('test prompt', context);
 
     expect(result).toEqual(errorResponse);
-    expect(mockOriginalProvider.callApi).toHaveBeenCalledTimes(1);
   });
 
-  it('should use default separator if none provided', async () => {
-    const provider = new SequenceProvider({
-      id: 'test',
-      config: {
-        inputs: ['input1', 'input2'],
-      },
-    });
-
-    mockOriginalProvider.callApi
-      .mockResolvedValueOnce({ output: 'response1' })
-      .mockResolvedValueOnce({ output: 'response2' });
-
-    const context: CallApiContextParams = {
-      originalProvider: mockOriginalProvider,
-      vars: {},
-      prompt: { raw: 'test' } as Prompt,
-    };
-
-    const result = await provider.callApi('test', context);
-
-    expect(result.output).toBe('response1\n---\nresponse2');
-  });
-
-  it('should return string representation', () => {
+  it('should handle missing token usage', async () => {
     const provider = new SequenceProvider({
       id: 'test',
       config: {
@@ -184,6 +129,63 @@ describe('SequenceProvider', () => {
       },
     });
 
-    expect(provider.toString()).toBe('[Sequence Provider]');
+    jest.mocked(mockOriginalProvider.callApi).mockResolvedValueOnce({
+      output: 'response1',
+    });
+
+    const context: CallApiContextParams = {
+      originalProvider: mockOriginalProvider,
+      vars: {},
+      prompt: testPrompt,
+    };
+
+    const result = await provider.callApi('test prompt', context);
+
+    expect(result.tokenUsage).toEqual({
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      numRequests: 1,
+      cached: 0,
+    });
+  });
+
+  it('should use default separator when not specified', async () => {
+    const provider = new SequenceProvider({
+      id: 'test',
+      config: {
+        inputs: ['input1', 'input2'],
+      },
+    });
+
+    jest.mocked(mockOriginalProvider.callApi).mockResolvedValueOnce({
+      output: 'response1',
+    });
+    jest.mocked(mockOriginalProvider.callApi).mockResolvedValueOnce({
+      output: 'response2',
+    });
+
+    const context: CallApiContextParams = {
+      originalProvider: mockOriginalProvider,
+      vars: {},
+      prompt: testPrompt,
+    };
+
+    const result = await provider.callApi('test prompt', context);
+
+    expect(result.output).toBe('response1\n---\nresponse2');
+  });
+
+  it('should throw error when originalProvider is not set', async () => {
+    const provider = new SequenceProvider({
+      id: 'test',
+      config: {
+        inputs: ['input1'],
+      },
+    });
+
+    await expect(provider.callApi('test prompt', { vars: {}, prompt: testPrompt })).rejects.toThrow(
+      'Expected originalProvider to be set',
+    );
   });
 });
