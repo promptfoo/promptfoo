@@ -3,6 +3,7 @@ import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../types';
+import { ellipsize } from '../utils/text';
 import type { EnvOverrides } from '../types/env';
 
 type FalProviderOptions = {
@@ -140,8 +141,7 @@ export class FalImageGenerationProvider extends FalProvider<FalImageGenerationIn
       .replace(/\r?\n|\r/g, ' ')
       .replace(/\[/g, '(')
       .replace(/\]/g, ')');
-    const ellipsizedPrompt =
-      sanitizedPrompt.length > 50 ? `${sanitizedPrompt.substring(0, 47)}...` : sanitizedPrompt;
+    const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
     return `![${ellipsizedPrompt}](${url})` as Result;
   }
 
