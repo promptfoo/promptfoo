@@ -98,9 +98,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: luizm/action-sh-checker@17bd25a6ee188d2b91f677060038f4ba37ba14b2
         env:
-          SHFMT_OPTS: "-i 2"  # 2 space indent
+          SHFMT_OPTS: '-i 2' # 2 space indent
         with:
-          sh_checker_shellcheck_disable: true  # we only want formatting checks
+          sh_checker_shellcheck_disable: true
 
   assets:
     name: Generate Assets
