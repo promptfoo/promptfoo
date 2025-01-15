@@ -1,44 +1,19 @@
-import { jest } from '@jest/globals';
-import { PromptfooSimulatedUserProvider } from '../../src/providers/promptfoo';
 import { SimulatedUser } from '../../src/providers/simulatedUser';
-import type { ApiProvider, CallApiContextParams, ProviderResponse, Prompt } from '../../src/types';
-import { getNunjucksEngine } from '../../src/util/templates';
-
-jest.mock('../../src/logger', () => ({
-  debug: jest.fn(),
-  error: jest.fn(),
-}));
-
-jest.mock('../../src/util/templates', () => ({
-  getNunjucksEngine: jest.fn(),
-}));
+import type { ApiProvider, ProviderResponse } from '../../src/types';
 
 describe('SimulatedUser', () => {
   let simulatedUser: SimulatedUser;
-  let mockOriginalProvider: ApiProvider;
-  let mockNunjucksEngine: any;
+  let originalProvider: ApiProvider;
 
   beforeEach(() => {
-    jest.clearAllMocks();
-
-    mockOriginalProvider = {
-      id: jest.fn(() => 'mockAgent'),
-      // @ts-ignore
-      callApi: jest.fn().mockResolvedValue({
+    originalProvider = {
+      id: () => 'test-agent',
+      callApi: jest.fn().mockImplementation(async () => ({
         output: 'agent response',
         tokenUsage: { numRequests: 1 },
-      } as ProviderResponse),
-      delay: 0,
-    } as ApiProvider;
-
-    mockNunjucksEngine = {
-      renderString: jest.fn(() => 'rendered instructions'),
+      })),
+      delay: 10,
     };
-    jest.mocked(getNunjucksEngine).mockReturnValue(mockNunjucksEngine);
-
-    jest.spyOn(PromptfooSimulatedUserProvider.prototype, 'callApi').mockResolvedValue({
-      output: 'user response',
-    } as ProviderResponse);
 
     simulatedUser = new SimulatedUser({
       id: 'test-agent',
@@ -50,82 +25,106 @@ describe('SimulatedUser', () => {
   });
 
   describe('id()', () => {
-    it.skip('should return the identifier', () => {
+    it('should return the identifier', () => {
       expect(simulatedUser.id()).toBe('test-agent');
     });
 
-    it.skip('should use label if id is not provided', () => {
-      const user = new SimulatedUser({
-        label: 'test-label',
+    it('should use label as fallback identifier', () => {
+      const userWithLabel = new SimulatedUser({
+        label: 'label-agent',
         config: {},
       });
-      expect(user.id()).toBe('test-label');
+      expect(userWithLabel.id()).toBe('label-agent');
     });
 
-    it.skip('should use default identifier when neither id nor label is provided', () => {
-      const user = new SimulatedUser({
-        config: {},
-      });
-      expect(user.id()).toBe('agent-provider');
+    it('should use default identifier if no id or label provided', () => {
+      const userWithoutId = new SimulatedUser({ config: {} });
+      expect(userWithoutId.id()).toBe('agent-provider');
     });
   });
 
   describe('callApi()', () => {
-    const defaultContext: CallApiContextParams = {
-      originalProvider: mockOriginalProvider,
-      vars: {},
-      prompt: { raw: 'test prompt', label: 'test-label' } as Prompt,
-    };
+    it('should simulate conversation between user and agent', async () => {
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
 
-    it.skip('should handle conversation flow between user and agent', async () => {
-      const result = await simulatedUser.callApi('initial prompt', defaultContext);
-
-      expect(result.output).toContain('User: user response');
-      expect(result.output).toContain('Assistant: agent response');
-      expect(result.tokenUsage).toEqual({ numRequests: 1 });
-      expect(mockOriginalProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('User:');
+      expect(result.output).toContain('Assistant:');
+      expect(result.tokenUsage?.numRequests).toBe(2);
+      expect(originalProvider.callApi).toHaveBeenCalledWith(expect.any(String));
     });
 
-    it.skip('should stop conversation when ###STOP### is received', async () => {
-      const mockStopResponse: ProviderResponse = {
-        output: '###STOP###',
-      };
-      jest.spyOn(mockOriginalProvider, 'callApi').mockResolvedValueOnce(mockStopResponse);
-
-      const result = await simulatedUser.callApi('initial prompt', defaultContext);
-
-      expect(result.output).toContain('###STOP###');
-      expect(mockOriginalProvider.callApi).toHaveBeenCalledTimes(1);
-    });
-
-    it.skip('should limit conversation to maxTurns', async () => {
-      const limitedUser = new SimulatedUser({
-        id: 'test-limited-agent',
+    it('should respect maxTurns configuration', async () => {
+      const userWithMaxTurns = new SimulatedUser({
         config: {
           instructions: 'test instructions',
           maxTurns: 1,
         },
       });
 
-      await limitedUser.callApi('initial prompt', defaultContext);
+      const result = await userWithMaxTurns.callApi('test prompt', {
+        originalProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
 
-      expect(mockOriginalProvider.callApi).toHaveBeenCalledTimes(1);
+      const messageCount = result.output?.split('---').length;
+      expect(messageCount).toBe(2);
+      expect(originalProvider.callApi).toHaveBeenCalledWith(expect.any(String));
     });
 
-    it.skip('should throw an error if originalProvider is not provided', async () => {
-      const invalidContext = {
-        vars: {},
-        prompt: { raw: 'test prompt', label: 'test-label' } as Prompt,
-      } as unknown as CallApiContextParams;
+    it('should stop conversation when ###STOP### is received', async () => {
+      const providerWithStop: ApiProvider = {
+        id: () => 'test-agent',
+        callApi: jest.fn().mockImplementation(
+          async (): Promise<ProviderResponse> => ({
+            output: 'stopping now ###STOP###',
+            tokenUsage: { numRequests: 1 },
+          }),
+        ),
+      };
 
-      await expect(simulatedUser.callApi('initial prompt', invalidContext)).rejects.toThrow(
-        'Expected originalProvider to be set',
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider: providerWithStop,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toContain('###STOP###');
+      expect(providerWithStop.callApi).toHaveBeenCalledWith(expect.any(String));
+    });
+
+    it('should throw error if originalProvider is not provided', async () => {
+      await expect(
+        simulatedUser.callApi('test', {
+          vars: {},
+          prompt: { raw: 'test', display: 'test', label: 'test' },
+        }),
+      ).rejects.toThrow('Expected originalProvider to be set');
+    });
+
+    it('should handle provider delay', async () => {
+      const result = await simulatedUser.callApi(
+        'test prompt',
+        {
+          originalProvider,
+          vars: { instructions: 'test instructions' },
+          prompt: { raw: 'test', display: 'test', label: 'test' },
+        },
+        { includeLogProbs: false },
       );
-    });
+
+      expect(result.output).toBeDefined();
+      expect(originalProvider.callApi).toHaveBeenCalledWith(expect.any(String));
+    }, 15000); // Increased timeout for test involving delays
   });
 
   describe('toString()', () => {
-    it.skip('should return provider name as AgentProvider', () => {
+    it('should return correct string representation', () => {
       expect(simulatedUser.toString()).toBe('AgentProvider');
     });
   });
