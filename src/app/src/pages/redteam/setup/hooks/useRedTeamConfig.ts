@@ -1,5 +1,5 @@
-import { DEFAULT_PLUGINS } from '@promptfoo/redteam/constants';
 import type { Plugin } from '@promptfoo/redteam/constants';
+import { DEFAULT_PLUGINS } from '@promptfoo/redteam/constants';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Config, ProviderOptions } from '../types';
@@ -74,6 +74,7 @@ const defaultConfig: Config = {
     forbiddenActions: '',
     connectedSystems: '',
   },
+  defaultTest: undefined,
 };
 
 const applicationDefinitionToPurpose = (applicationDefinition: Config['applicationDefinition']) => {

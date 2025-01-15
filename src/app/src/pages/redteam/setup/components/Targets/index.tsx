@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
@@ -7,12 +7,14 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import FormControl from '@mui/material/FormControl';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import InputLabel from '@mui/material/InputLabel';
 import Link from '@mui/material/Link';
 import MenuItem from '@mui/material/MenuItem';
-import Select from '@mui/material/Select';
 import type { SelectChangeEvent } from '@mui/material/Select';
+import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
+import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
@@ -79,6 +81,9 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   const [selectedTarget, setSelectedTarget] = useState<ProviderOptions>(
     config.target || DEFAULT_HTTP_TARGET,
   );
+  const [useGuardrail, setUseGuardrail] = useState(
+    config.defaultTest?.assert?.some((a) => a.type === 'guardrail') ?? false,
+  );
   const [testingTarget, setTestingTarget] = useState(false);
   const [testResult, setTestResult] = useState<{
     success?: boolean;
@@ -103,7 +108,27 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   }, []);
 
   useEffect(() => {
-    updateConfig('target', selectedTarget);
+    const updatedTarget = { ...selectedTarget };
+    console.log('useGuardrail changed:', useGuardrail);
+    if (useGuardrail) {
+      const defaultTestConfig = {
+        assert: [
+          {
+            type: 'guardrail',
+            config: {
+              purpose: 'redteam',
+            },
+          },
+        ],
+      };
+      console.log('Setting defaultTest to:', defaultTestConfig);
+      updateConfig('defaultTest', defaultTestConfig);
+    } else {
+      console.log('Clearing defaultTest');
+      updateConfig('defaultTest', undefined);
+    }
+
+    updateConfig('target', updatedTarget);
     const missingFields: string[] = [];
 
     if (selectedTarget.label) {
@@ -122,7 +147,11 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
 
     setMissingFields(missingFields);
     setPromptRequired(requiresPrompt(selectedTarget));
-  }, [selectedTarget, updateConfig]);
+  }, [selectedTarget, useGuardrail, updateConfig]);
+
+  useEffect(() => {
+    console.log('Config updated:', config);
+  }, [config]);
 
   const handleTargetChange = (event: SelectChangeEvent<string>) => {
     const value = event.target.value as string;
@@ -308,6 +337,20 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         In Promptfoo targets are also known as providers. You can configure additional targets
         later.
       </Typography>
+
+      <Box sx={{ mt: 2, mb: 2 }}>
+        <FormControlLabel
+          control={
+            <Switch
+              checked={useGuardrail}
+              onChange={(e) => setUseGuardrail(e.target.checked)}
+              color="primary"
+            />
+          }
+          label="Use Guardrail"
+        />
+      </Box>
+
       <Typography variant="body1">
         For more information on available providers and how to configure them, please visit our{' '}
         <Link href="https://www.promptfoo.dev/docs/providers/" target="_blank" rel="noopener">

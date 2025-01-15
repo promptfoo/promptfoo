@@ -1,5 +1,5 @@
 import type { ApiProvider, ProviderOptions } from '../types/providers';
-import type { Severity, Plugin } from './constants';
+import type { Plugin, Severity } from './constants';
 
 // Base types
 export type RedteamObjectConfig = Record<string, unknown>;
@@ -139,4 +139,35 @@ export interface SavedRedteamConfig {
     connectedSystems?: string;
   };
   entities: string[];
+  defaultTest?: {
+    options?: {
+      prefix?: string;
+      suffix?: string;
+      transform?: string;
+      postprocess?: string;
+      transformVars?: string;
+      storeOutputAs?: string;
+      provider?: any;
+    };
+    vars?: Record<string, any>;
+    assert: Array<{
+      type:
+        | `promptfoo:redteam:${string}`
+        | 'answer-relevance'
+        | 'bleu'
+        | 'classifier'
+        | 'contains-all'
+        | 'contains-any'
+        | 'contains-json'
+        | 'contains-sql'
+        | 'contains-xml'
+        | 'contains'
+        | 'context-faithfulness'
+        | 'guardrail'
+        | 'human';
+      config?: Record<string, any>;
+      purpose?: string;
+    }>;
+    metadata?: Record<string, any>;
+  };
 }
