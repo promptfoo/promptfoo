@@ -7,17 +7,17 @@ import { getEnvInt } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import {
-  matchesSimilarity,
-  matchesLlmRubric,
-  matchesFactuality,
-  matchesClosedQa,
-  matchesClassification,
   matchesAnswerRelevance,
+  matchesClassification,
+  matchesClosedQa,
+  matchesContextFaithfulness,
   matchesContextRecall,
   matchesContextRelevance,
-  matchesContextFaithfulness,
-  matchesSelectBest,
+  matchesFactuality,
+  matchesLlmRubric,
   matchesModeration,
+  matchesSelectBest,
+  matchesSimilarity,
 } from '../matchers';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
@@ -45,11 +45,11 @@ import { handleBleuScore } from './bleu';
 import { handleClassifier } from './classifier';
 import {
   handleContains,
-  handleIContains,
-  handleContainsAny,
-  handleIContainsAny,
   handleContainsAll,
+  handleContainsAny,
+  handleIContains,
   handleIContainsAll,
+  handleIContainsAny,
 } from './contains';
 import { handleContextFaithfulness } from './contextFaithfulness';
 import { handleContextRecall } from './contextRecall';
@@ -58,6 +58,7 @@ import { handleCost } from './cost';
 import { handleEquals } from './equals';
 import { handleFactuality } from './factuality';
 import { handleGEval } from './geval';
+import { handleGuardrail } from './guardrail';
 import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
 import { handleLatency } from './latency';
@@ -243,9 +244,6 @@ export async function runAssertion({
     (params: AssertionParams) => GradingResult | Promise<GradingResult>
   > = {
     'answer-relevance': handleAnswerRelevance,
-    bleu: handleBleuScore,
-    classifier: handleClassifier,
-    contains: handleContains,
     'contains-all': handleContainsAll,
     'contains-any': handleContainsAny,
     'contains-json': handleContainsJson,
@@ -254,11 +252,7 @@ export async function runAssertion({
     'context-faithfulness': handleContextFaithfulness,
     'context-recall': handleContextRecall,
     'context-relevance': handleContextRelevance,
-    cost: handleCost,
-    equals: handleEquals,
-    factuality: handleFactuality,
     'g-eval': handleGEval,
-    icontains: handleIContains,
     'icontains-all': handleIContainsAll,
     'icontains-any': handleIContainsAny,
     'is-json': handleIsJson,
@@ -267,20 +261,28 @@ export async function runAssertion({
     'is-valid-openai-function-call': handleIsValidOpenAiFunctionCall,
     'is-valid-openai-tools-call': handleIsValidOpenAiToolsCall,
     'is-xml': handleIsXml,
-    javascript: handleJavascript,
-    latency: handleLatency,
-    levenshtein: handleLevenshtein,
     'llm-rubric': handleLlmRubric,
     'model-graded-closedqa': handleModelGradedClosedQa,
     'model-graded-factuality': handleFactuality,
+    'perplexity-score': handlePerplexityScore,
+    'rouge-n': handleRougeScore,
+    'starts-with': handleStartsWith,
+    bleu: handleBleuScore,
+    classifier: handleClassifier,
+    contains: handleContains,
+    cost: handleCost,
+    equals: handleEquals,
+    factuality: handleFactuality,
+    guardrail: handleGuardrail,
+    icontains: handleIContains,
+    javascript: handleJavascript,
+    latency: handleLatency,
+    levenshtein: handleLevenshtein,
     moderation: handleModeration,
     perplexity: handlePerplexity,
-    'perplexity-score': handlePerplexityScore,
     python: handlePython,
     regex: handleRegex,
-    'rouge-n': handleRougeScore,
     similar: handleSimilar,
-    'starts-with': handleStartsWith,
     webhook: handleWebhook,
   };
 

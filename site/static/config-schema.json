@@ -436,6 +436,7 @@
                                               "equals",
                                               "factuality",
                                               "g-eval",
+                                              "guardrail",
                                               "icontains-all",
                                               "icontains-any",
                                               "icontains",
@@ -492,6 +493,9 @@
                                         "type": "string"
                                       },
                                       "transform": {
+                                        "type": "string"
+                                      },
+                                      "purpose": {
                                         "type": "string"
                                       }
                                     },
