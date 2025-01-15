@@ -1113,3 +1113,6 @@ export function isRunningUnderNpx(): boolean {
       process.env.npm_lifecycle_script?.includes('npx'),
   );
 }
+
+
+export { DEFAULT_QUERY_LIMIT, outputToSimpleString, resultsCache, standaloneEvalCache };
