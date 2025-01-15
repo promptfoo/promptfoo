@@ -7,17 +7,17 @@ import { getEnvInt } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import {
-  matchesSimilarity,
-  matchesLlmRubric,
-  matchesFactuality,
-  matchesClosedQa,
-  matchesClassification,
   matchesAnswerRelevance,
+  matchesClassification,
+  matchesClosedQa,
+  matchesContextFaithfulness,
   matchesContextRecall,
   matchesContextRelevance,
-  matchesContextFaithfulness,
-  matchesSelectBest,
+  matchesFactuality,
+  matchesLlmRubric,
   matchesModeration,
+  matchesSelectBest,
+  matchesSimilarity,
 } from '../matchers';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
@@ -45,11 +45,11 @@ import { handleBleuScore } from './bleu';
 import { handleClassifier } from './classifier';
 import {
   handleContains,
-  handleIContains,
-  handleContainsAny,
-  handleIContainsAny,
   handleContainsAll,
+  handleContainsAny,
+  handleIContains,
   handleIContainsAll,
+  handleIContainsAny,
 } from './contains';
 import { handleContextFaithfulness } from './contextFaithfulness';
 import { handleContextRecall } from './contextRecall';
@@ -58,6 +58,7 @@ import { handleCost } from './cost';
 import { handleEquals } from './equals';
 import { handleFactuality } from './factuality';
 import { handleGEval } from './geval';
+import { handleGuardrails } from './guardrails';
 import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
 import { handleLatency } from './latency';
@@ -281,6 +282,7 @@ export async function runAssertion({
     'rouge-n': handleRougeScore,
     similar: handleSimilar,
     'starts-with': handleStartsWith,
+    guardrails: handleGuardrails,
     webhook: handleWebhook,
   };
 
