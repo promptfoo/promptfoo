@@ -1,0 +1,21 @@
+prompts:
+  # Dummy prompt - the sequence provider will ignore this.
+  - '{{prompt}}'
+
+providers:
+  - id: sequence
+    config:
+      provider: openai:chat:gpt-4o-mini
+      inputs:
+        - 'What is {{topic}}?'
+        - 'What are the potential drawbacks of {{topic}}?'
+        - 'Can you summarize the pros and cons of {{topic}}?'
+
+tests:
+  - vars:
+      topic: artificial intelligence
+    assert:
+      - type: contains
+        value: drawbacks
+      - type: contains
+        value: pros and cons

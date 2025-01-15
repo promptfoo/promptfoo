@@ -14,32 +14,72 @@
           "type": "string"
         },
         "providers": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "allOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "label": {
-                      "type": "string"
-                    }
-                  }
-                }
-              ]
-            },
-            {
-              "type": "array",
-              "items": {
-                "anyOf": [
-                  {
-                    "type": "string"
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "const": "sequence"
                   },
-                  {
+                  "config": {
                     "type": "object",
-                    "additionalProperties": {
+                    "properties": {
+                      "provider": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {},
+                          {}
+                        ],
+                        "description": "The provider to use for sequence generation"
+                      },
+                      "inputs": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "strategy": {
+                        "type": "string",
+                        "enum": [
+                          "crescendo"
+                        ]
+                      },
+                      "maxTurns": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      },
+                      "systemPrompt": {
+                        "type": "string"
+                      },
+                      "separator": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "provider"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "config"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "anyOf": [
+                    {
                       "type": "object",
                       "properties": {
                         "id": {},
@@ -227,18 +267,31 @@
                         }
                       },
                       "additionalProperties": false
+                    },
+                    {
+                      "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/items/anyOf/1/properties/config"
                     }
-                  },
+                  ]
+                }
+              },
+              {
+                "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/items/anyOf/2/additionalProperties/anyOf/0"
+              },
+              {
+                "allOf": [
                   {
-                    "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/1/additionalProperties"
-                  },
-                  {
-                    "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/1"
+                    "type": "object",
+                    "properties": {
+                      "label": {
+                        "type": "string"
+                      }
+                    }
                   }
                 ]
               }
-            }
-          ]
+            ]
+          },
+          "minItems": 1
         },
         "prompts": {
           "anyOf": [
@@ -368,7 +421,7 @@
                             "type": "string"
                           },
                           {
-                            "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/1/additionalProperties"
+                            "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/items/anyOf/2/additionalProperties/anyOf/0"
                           },
                           {
                             "type": "object",
@@ -808,7 +861,7 @@
           }
         },
         "env": {
-          "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/1/additionalProperties/properties/env"
+          "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/items/anyOf/2/additionalProperties/anyOf/0/properties/env"
         },
         "derivedMetrics": {
           "type": "array",
@@ -859,7 +912,7 @@
                   "type": "string"
                 },
                 {
-                  "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/1/additionalProperties"
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/items/anyOf/2/additionalProperties/anyOf/0"
                 },
                 {
                   "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/provider/anyOf/2"

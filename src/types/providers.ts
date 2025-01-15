@@ -7,6 +7,7 @@ export type ProviderId = string;
 export type ProviderLabel = string;
 export type ProviderFunction = ApiProvider['callApi'];
 export type ProviderOptionsMap = Record<ProviderId, ProviderOptions>;
+export type ProviderDefinition = ApiProvider | ProviderOptions | string;
 
 export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation';
 
@@ -42,6 +43,7 @@ export interface ProviderOptions {
   transform?: string;
   delay?: number;
   env?: EnvOverrides;
+  provider?: ApiProvider; // Add provider property for provider chaining
 }
 
 export interface CallApiContextParams {
@@ -127,6 +129,15 @@ export interface ProviderClassificationResponse {
   classification?: Record<string, number>;
 }
 
+export interface SequenceProviderConfig {
+  inputs?: string[];
+  separator?: string;
+  provider: string | CallApiFunction | ApiProvider;
+  strategy?: 'crescendo';
+  maxTurns?: number; // Must be positive integer at runtime
+  systemPrompt?: string;
+}
+
 export type FilePath = string;
 
 export type CallApiFunction = {
@@ -147,7 +158,9 @@ export function isApiProvider(provider: any): provider is ApiProvider {
   );
 }
 
-export function isProviderOptions(provider: any): provider is ProviderOptions {
+export function isProviderOptions(provider: any): provider is ProviderOptions & {
+  id: string;
+} {
   return (
     typeof provider === 'object' &&
     provider != null &&
