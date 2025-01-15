@@ -111,51 +111,7 @@ describe('accounts', () => {
   describe('checkEmailStatusOrExit', () => {
     const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
 
-    beforeEach(() => {
-      jest.clearAllMocks();
-    });
-
-    it('should use CI email when in CI environment', async () => {
-      jest.mocked(isCI).mockReturnValue(true);
-
-      const mockResponse = new Response(JSON.stringify({ status: 'ok' }), {
-        status: 200,
-        statusText: 'OK',
-      });
-      jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
-
-      await checkEmailStatusOrExit();
-
-      expect(fetchWithTimeout).toHaveBeenCalledWith(
-        'https://api.promptfoo.app/api/users/status?email=ci-placeholder@promptfoo.dev',
-        undefined,
-        500,
-      );
-    });
-
-    it('should use user email when not in CI environment', async () => {
-      jest.mocked(isCI).mockReturnValue(false);
-      jest.mocked(readGlobalConfig).mockReturnValue({
-        account: { email: 'test@example.com' },
-      });
-
-      const mockResponse = new Response(JSON.stringify({ status: 'ok' }), {
-        status: 200,
-        statusText: 'OK',
-      });
-      jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
-
-      await checkEmailStatusOrExit();
-
-      expect(fetchWithTimeout).toHaveBeenCalledWith(
-        'https://api.promptfoo.app/api/users/status?email=test@example.com',
-        undefined,
-        500,
-      );
-    });
-
     it('should exit if limit exceeded', async () => {
-      jest.mocked(isCI).mockReturnValue(false);
       jest.mocked(readGlobalConfig).mockReturnValue({
         account: { email: 'test@example.com' },
       });
@@ -174,8 +130,23 @@ describe('accounts', () => {
       );
     });
 
+    it('should continue if status ok', async () => {
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        account: { email: 'test@example.com' },
+      });
+
+      const mockResponse = new Response(JSON.stringify({ status: 'ok' }), {
+        status: 200,
+        statusText: 'OK',
+      });
+      jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+
+      await checkEmailStatusOrExit();
+
+      expect(mockExit).not.toHaveBeenCalled();
+    });
+
     it('should handle fetch errors', async () => {
-      jest.mocked(isCI).mockReturnValue(false);
       jest.mocked(readGlobalConfig).mockReturnValue({
         account: { email: 'test@example.com' },
       });
