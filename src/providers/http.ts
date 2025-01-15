@@ -227,7 +227,14 @@ export async function createTransformRequest(
   }
 
   if (typeof transform === 'function') {
-    return (prompt) => transform(prompt);
+    return (prompt) => {
+      try {
+        return transform(prompt);
+      } catch (err) {
+        logger.error(`Error in request transform function: ${String(err)}`);
+        throw err;
+      }
+    };
   }
 
   if (typeof transform === 'string') {
@@ -245,7 +252,14 @@ export async function createTransformRequest(
         functionName,
       );
       if (typeof requiredModule === 'function') {
-        return requiredModule;
+        return (prompt) => {
+          try {
+            return requiredModule(prompt);
+          } catch (err) {
+            logger.error(`Error in request transform function from ${filename}: ${String(err)}`);
+            throw err;
+          }
+        };
       }
       throw new Error(
         `Request transform malformed: ${filename} must export a function or have a default export as a function`,
@@ -253,8 +267,13 @@ export async function createTransformRequest(
     }
     // Handle string template
     return (prompt) => {
-      const rendered = nunjucks.renderString(transform, { prompt });
-      return new Function('prompt', `${rendered}`)(prompt);
+      try {
+        const rendered = nunjucks.renderString(transform, { prompt });
+        return new Function('prompt', `${rendered}`)(prompt);
+      } catch (err) {
+        logger.error(`Error in request transform string template: ${String(err)}`);
+        throw err;
+      }
     };
   }
 
