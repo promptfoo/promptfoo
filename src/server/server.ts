@@ -206,16 +206,34 @@ export async function startServer(
   await runDbMigrations();
 
   const watchFilePath = getDbSignalPath();
-  fs.watch(
-    watchFilePath,
-    debounce(async (eventType, filename) => {
-      logger.info(`File changed: ${eventType} ${filename}`);
-      if (eventType === 'change') {
-        io.emit('update', await getLatestEval(filterDescription));
+  logger.debug(`Setting up file watcher on ${watchFilePath}`);
+
+  // Ensure the file exists before watching
+  if (!fs.existsSync(watchFilePath)) {
+    logger.debug(`Creating signal file at ${watchFilePath}`);
+    fs.writeFileSync(watchFilePath, new Date().toISOString());
+  }
+
+  try {
+    const watcher = fs.watch(watchFilePath);
+    watcher.on(
+      'change',
+      debounce(async () => {
+        const latestEval = await getLatestEval(filterDescription);
+        logger.info(
+          `Emitting update with eval ID: ${latestEval?.config?.description || 'unknown'}`,
+        );
+        io.emit('update', latestEval);
         allPrompts = null;
-      }
-    }, 250),
-  );
+      }, 250),
+    );
+
+    watcher.on('error', (error) => {
+      logger.error(`File watcher error: ${error}`);
+    });
+  } catch (error) {
+    logger.error(`Failed to set up file watcher: ${error}`);
+  }
 
   io.on('connection', async (socket) => {
     socket.emit('init', await getLatestEval(filterDescription));

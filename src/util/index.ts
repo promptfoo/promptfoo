@@ -12,7 +12,7 @@ import nunjucks from 'nunjucks';
 import * as path from 'path';
 import cliState from '../cliState';
 import { TERMINAL_MAX_WIDTH } from '../constants';
-import { getDbSignalPath, getDb } from '../database';
+import { getDb } from '../database';
 import {
   datasetsTable,
   evalsTable,
@@ -352,15 +352,6 @@ export async function writeResultsToDatabase(
 
   logger.debug(`Awaiting ${promises.length} promises to database...`);
   await Promise.all(promises);
-
-  // "touch" db signal path
-  const filePath = getDbSignalPath();
-  try {
-    const now = new Date();
-    fs.writeFileSync(filePath, now.toISOString());
-  } catch (err) {
-    logger.error(`Failed to write signal file: ${err}`);
-  }
 
   return evalId;
 }
