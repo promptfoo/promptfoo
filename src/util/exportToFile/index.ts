@@ -105,3 +105,6 @@ export function convertTestResultsToTableRow(
 
   return row;
 }
+
+
+export { convertEvalResultToTableCell };
