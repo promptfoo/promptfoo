@@ -51,15 +51,15 @@ function validateTransform(code: string, type: 'request' | 'response'): string |
     // Check if it's a function definition
     if (code.includes('=>') || code.startsWith('function')) {
       const funcStr = code.includes('=>') ? code : `(${code})`;
-      
+
       // Extract arguments
       const argsMatch = funcStr.match(/^\s*\(([^)]*)\)\s*=>|\bfunction\s*\w*\s*\(([^)]*)\)/);
       if (!argsMatch) {
         return null;
       }
-      
-      const args = (argsMatch[1] || argsMatch[2] || '').split(',').map(arg => arg.trim());
-      
+
+      const args = (argsMatch[1] || argsMatch[2] || '').split(',').map((arg) => arg.trim());
+
       if (type === 'request' && args.length !== 1) {
         return 'Request transform should take exactly one argument (prompt)';
       } else if (type === 'response' && args.length !== 2) {
@@ -83,31 +83,34 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
   const theme = useTheme();
   const darkMode = theme.palette.mode === 'dark';
 
-  const handleTransformChange = useCallback((type: 'request' | 'response', code: string) => {
-    const warning = validateTransform(code, type);
-    const field = type === 'request' ? 'transformRequest' : 'transformResponse';
-    updateCustomTarget(field, code);
-    
-    // Clear any existing warning
-    const warningEl = document.getElementById(`${type}-transform-warning`);
-    if (warningEl) {
-      warningEl.remove();
-    }
-    
-    // Show new warning if needed
-    if (warning) {
-      const editorEl = document.querySelector(`[data-transform="${type}"]`);
-      if (editorEl) {
-        const alertEl = document.createElement('div');
-        alertEl.id = `${type}-transform-warning`;
-        alertEl.style.color = theme.palette.warning.main;
-        alertEl.style.fontSize = '0.75rem';
-        alertEl.style.marginTop = '0.5rem';
-        alertEl.textContent = warning;
-        editorEl.parentElement?.appendChild(alertEl);
+  const handleTransformChange = useCallback(
+    (type: 'request' | 'response', code: string) => {
+      const warning = validateTransform(code, type);
+      const field = type === 'request' ? 'transformRequest' : 'transformResponse';
+      updateCustomTarget(field, code);
+
+      // Clear any existing warning
+      const warningEl = document.getElementById(`${type}-transform-warning`);
+      if (warningEl) {
+        warningEl.remove();
       }
-    }
-  }, [theme.palette.warning.main, updateCustomTarget]);
+
+      // Show new warning if needed
+      if (warning) {
+        const editorEl = document.querySelector(`[data-transform="${type}"]`);
+        if (editorEl) {
+          const alertEl = document.createElement('div');
+          alertEl.id = `${type}-transform-warning`;
+          alertEl.style.color = theme.palette.warning.main;
+          alertEl.style.fontSize = '0.75rem';
+          alertEl.style.marginTop = '0.5rem';
+          alertEl.textContent = warning;
+          editorEl.parentElement?.appendChild(alertEl);
+        }
+      }
+    },
+    [theme.palette.warning.main, updateCustomTarget],
+  );
 
   return (
     <Box mt={4}>
@@ -169,9 +172,11 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 onValueChange={(code) => handleTransformChange('response', code)}
                 highlight={(code) => highlight(code, languages.javascript)}
                 padding={10}
-                placeholder={dedent`Optional: A JavaScript expression to parse the response.
+                placeholder={dedent`Transform the API response before using it. Format as either:
 
-                  e.g. \`json.choices[0].message.content\``}
+                  1. A JSON path expression: \`json.choices[0].message.content\`
+                  2. A function that receives response data: \`(json, text) => json.choices[0].message.content\`
+                `}
                 style={{
                   fontFamily: '"Fira code", "Fira Mono", monospace',
                   fontSize: 14,
@@ -180,15 +185,16 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
               />
             </Box>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Optionally, configure a response transform to extract a specific part of the HTTP
-              response. See{' '}
+              Need to extract specific data from the response? Use a JSON path expression or a
+              function that receives both parsed JSON and raw text. Perfect for accessing nested
+              fields, handling custom formats, or parsing non-JSON responses. See{' '}
               <a
                 href="https://www.promptfoo.dev/docs/providers/http/#response-parser"
                 target="_blank"
               >
                 docs
               </a>{' '}
-              for more information.
+              for more examples.
             </Typography>
           </Box>
           <Box mt={4} mb={2}>
