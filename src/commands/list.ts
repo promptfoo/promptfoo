@@ -34,9 +34,10 @@ export function listCommand(program: Command) {
 
       const tableData = evals.map((evl) => {
         const prompts = evl.getPrompts();
+        const description = evl.config.description || '';
         return {
           'Eval ID': evl.id,
-          Description: evl.description || '',
+          Description: description.slice(0, 100) + (description.length > 100 ? '...' : ''),
           Prompts: prompts.map((p) => sha256(p.raw).slice(0, 6)).join(', ') || '',
           Vars: vars[evl.id]?.join(', ') || '',
         };

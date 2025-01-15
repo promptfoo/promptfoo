@@ -18,7 +18,7 @@ function HomepageHeader({ getStartedUrl }: { getStartedUrl: string }) {
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className="container">
         <h1>Test & secure your LLM apps</h1>
-        <p>Open-source LLM testing used by 40,000+ developers</p>
+        <p>Open-source LLM testing used by 51,000+ developers</p>
         <div className={styles.buttons}>
           <Link className="button button--primary button--lg" to={getStartedUrl}>
             Get Started
@@ -252,7 +252,8 @@ export default function Home(): JSX.Element {
   return (
     <Layout
       title="Secure & reliable LLMs"
-      description="Eliminate risk with AI red-teaming and evals used by 40,000 developers. Find and fix vulnerabilities, maximize output quality, catch regressions."
+      description="Eliminate risk with AI red-teaming and evals used by 51,000 developers. Find and fix vulnerabilities, maximize output quality, catch regressions."
+      wrapperClassName="homepage-wrapper"
     >
       <Head>
         <meta property="og:image" content="https://www.promptfoo.dev/img/meta/homepage.png" />
@@ -264,7 +265,7 @@ export default function Home(): JSX.Element {
         <section className={styles.logoSection}>
           <div className="container">
             <h2>Trusted by developers at</h2>
-            <LogoContainer />
+            <LogoContainer noBackground noBorder />
           </div>
         </section>
         <HomepageFeatures />

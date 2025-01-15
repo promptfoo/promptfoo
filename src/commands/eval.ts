@@ -10,7 +10,7 @@ import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { getEnvFloat, getEnvInt } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
-import { promptForEmailUnverified } from '../globalConfig/accounts';
+import { checkEmailStatusOrExit, promptForEmailUnverified } from '../globalConfig/accounts';
 import logger, { getLogLevel, setLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
@@ -63,7 +63,7 @@ export async function doEval(
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
   evaluateOptions: EvaluateOptions,
-) {
+): Promise<Eval> {
   setupEnv(cmdObj.envPath);
   if (cmdObj.verbose) {
     setLogLevel('debug');
@@ -134,9 +134,10 @@ export async function doEval(
     }
 
     testSuite.tests = await filterTests(testSuite, {
-      firstN: cmdObj.filterFirstN,
-      pattern: cmdObj.filterPattern,
       failing: cmdObj.filterFailing,
+      firstN: cmdObj.filterFirstN,
+      metadata: cmdObj.filterMetadata,
+      pattern: cmdObj.filterPattern,
       sample: cmdObj.filterSample,
     });
 
@@ -148,6 +149,7 @@ export async function doEval(
       testSuite.tests.length > 0
     ) {
       await promptForEmailUnverified();
+      await checkEmailStatusOrExit();
     }
 
     testSuite.providers = filterProviders(
@@ -203,9 +205,10 @@ export async function doEval(
       : new Eval(config);
 
     // Run the evaluation!!!!!!
-    await evaluate(testSuite, evalRecord, {
+    const ret = await evaluate(testSuite, evalRecord, {
       ...options,
       eventSource: 'cli',
+      abortSignal: evaluateOptions.abortSignal,
     });
 
     const shareableUrl =
@@ -326,7 +329,8 @@ export async function doEval(
         const configPaths = (cmdObj.config || [defaultConfigPath]).filter(Boolean) as string[];
         if (!configPaths.length) {
           logger.error('Could not locate config file(s) to watch');
-          process.exit(1);
+          process.exitCode = 1;
+          return ret;
         }
         const basePath = path.dirname(configPaths[0]);
         const promptPaths = Array.isArray(config.prompts)
@@ -400,7 +404,8 @@ export async function doEval(
           );
         }
         logger.info('Done.');
-        process.exit(Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100);
+        process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
+        return ret;
       } else {
         logger.info('Done.');
       }
@@ -408,9 +413,10 @@ export async function doEval(
     if (testSuite.redteam) {
       showRedteamProviderLabelMissingWarning(testSuite);
     }
+    return ret;
   };
 
-  await runEvaluation(true /* initialization */);
+  return await runEvaluation(true /* initialization */);
 }
 
 export function evalCommand(
@@ -512,6 +518,11 @@ export function evalCommand(
     )
     .option('--filter-sample <number>', 'Only run a random sample of N tests')
     .option('--filter-failing <path>', 'Path to json output file')
+    .option('--filter-errors-only <path>', 'Path to json output file with error tests')
+    .option(
+      '--filter-metadata <key=value>',
+      'Only run tests whose metadata matches the key=value pair (e.g. --filter-metadata pluginId=debug-access)',
+    )
 
     // Output configuration
     .option(
@@ -580,7 +591,8 @@ export function evalCommand(
           ${chalk.green(`${runCommand} -j 1`)}
         `),
         );
-        process.exit(2);
+        process.exitCode = 2;
+        return;
       }
 
       if (validatedOpts.remote) {

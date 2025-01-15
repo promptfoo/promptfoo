@@ -25,6 +25,12 @@ async function doDebug(options: DebugOptions): Promise<void> {
     },
     env: {
       NODE_ENV: process.env.NODE_ENV,
+      httpProxy: process.env.HTTP_PROXY || process.env.http_proxy,
+      httpsProxy: process.env.HTTPS_PROXY || process.env.https_proxy,
+      allProxy: process.env.ALL_PROXY || process.env.all_proxy,
+      noProxy: process.env.NO_PROXY || process.env.no_proxy,
+      nodeExtra: process.env.NODE_EXTRA_CA_CERTS,
+      nodeTls: process.env.NODE_TLS_REJECT_UNAUTHORIZED,
     },
     configInfo: {
       defaultConfigPath: options.defaultConfigPath,

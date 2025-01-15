@@ -1,0 +1,44 @@
+.badge {
+  background: #f0f0f0;
+  border-radius: 4px;
+  padding: 2px 4px;
+  font-size: 14px;
+  color: #333;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.badge:hover {
+  background: #e0e0e0;
+  text-decoration: none;
+}
+
+/* Dark mode styles */
+[data-theme='dark'] .badge {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e0e0e0;
+}
+
+[data-theme='dark'] .badge:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+}
+
+/* Image container styles */
+.imageContainer {
+  max-width: 460px;
+  margin: 2rem auto;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme='dark'] .imageContainer {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.imageContainer img {
+  width: 100%;
+  height: auto;
+  display: block;
+}

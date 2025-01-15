@@ -96,8 +96,8 @@ export class ScriptCompletionProvider implements ApiProvider {
       delete context?.logger;
       const scriptArgs = scriptParts.concat([
         prompt,
-        safeJsonStringify(this.options || {}),
-        safeJsonStringify(context || {}),
+        safeJsonStringify(this.options || {}) as string,
+        safeJsonStringify(context || {}) as string,
       ]);
       const options = this.options?.config.basePath ? { cwd: this.options.config.basePath } : {};
 

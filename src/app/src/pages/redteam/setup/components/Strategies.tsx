@@ -42,12 +42,19 @@ const getStrategyId = (strategy: RedteamStrategy): string => {
 };
 
 // Add this constant at the top of the file to track which strategies have config options
-const CONFIGURABLE_STRATEGIES = ['multilingual'] as const;
+const CONFIGURABLE_STRATEGIES = ['basic', 'jailbreak', 'multilingual'] as const;
 
 // Split strategies into two groups
-const singleTurnStrategies = availableStrategies.filter(
-  (strategy) => !MULTI_TURN_STRATEGIES.includes(strategy.id as any),
-);
+const singleTurnStrategies = availableStrategies
+  .filter((strategy) => !MULTI_TURN_STRATEGIES.includes(strategy.id as any))
+  .sort((a, b) => {
+    const aIsRecommended = DEFAULT_STRATEGIES.includes(a.id as any);
+    const bIsRecommended = DEFAULT_STRATEGIES.includes(b.id as any);
+    if (aIsRecommended !== bIsRecommended) {
+      return aIsRecommended ? -1 : 1;
+    }
+    return a.name.localeCompare(b.name);
+  });
 const multiTurnStrategies = availableStrategies.filter((strategy) =>
   MULTI_TURN_STRATEGIES.includes(strategy.id as any),
 );
@@ -63,7 +70,20 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         typeof strategy === 'string' ? { id: strategy } : strategy,
       ) as RedteamStrategy[],
   );
-  const [isStateless, setIsStateless] = useState<boolean>(true);
+  const statefulStrategyExists = config.strategies.some(
+    (strategy: RedteamStrategy) =>
+      typeof strategy !== 'string' && strategy.config?.stateless === false,
+  );
+  const statelessStrategyExists = config.strategies.some(
+    (strategy: RedteamStrategy) =>
+      typeof strategy !== 'string' && strategy.config?.stateless === true,
+  );
+  const discrepancyExists = statefulStrategyExists && statelessStrategyExists;
+
+  // Always take preference and set the value of this to false if any configured
+  // strategy is marked as stateful
+  const isStatelessValue = statefulStrategyExists ? false : true;
+
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [selectedConfigStrategy, setSelectedConfigStrategy] = useState<string | null>(null);
   const [strategyConfig, setStrategyConfig] = useState<Record<string, any>>(() => {
@@ -83,21 +103,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   useEffect(() => {
     updateConfig('strategies', selectedStrategies);
   }, [selectedStrategies, updateConfig]);
-
-  useEffect(() => {
-    setSelectedStrategies((prev) =>
-      prev.map((strategy) => {
-        const strategyId = getStrategyId(strategy);
-        if (strategyId === 'goat' || strategyId === 'crescendo') {
-          return {
-            id: strategyId,
-            config: { stateless: isStateless },
-          };
-        }
-        return strategy;
-      }),
-    );
-  }, [isStateless]);
 
   const handleStrategyToggle = (strategyId: string) => {
     if (!selectedStrategies.find((strategy) => getStrategyId(strategy) === strategyId)) {
@@ -139,7 +144,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         if (id === strategyId) {
           return {
             id: strategyId,
-            config: { ...newConfig }, // Make sure to spread the config to create a new object
+            config: { ...newConfig }, // spread the config to create a new object
           };
         }
         return strategy;
@@ -163,25 +168,27 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           your application's interaction model.
         </Typography>
         <Box sx={{ ml: 2, mb: 2 }}>
-          <Typography variant="body2" color="text.secondary" paragraph>
+          <Typography variant="body2" color="text.secondary">
             <strong>Single-turn strategies</strong> test individual prompts in isolation. These are
             ideal for:
-            <Box component="ul" sx={{ mt: 1, mb: 2 }}>
-              <li>Systems where each prompt is independent</li>
-              <li>API endpoints (e.g., text classification, content generation)</li>
-              <li>Completion tasks (e.g., code generation, text summarization)</li>
-            </Box>
           </Typography>
-          <Typography variant="body2" color="text.secondary" paragraph>
+          <Box component="ul" sx={{ mt: 1, mb: 2, typography: 'body2', color: 'text.secondary' }}>
+            <li>Systems where each prompt is independent</li>
+            <li>API endpoints (e.g., text classification, content generation)</li>
+            <li>Completion tasks (e.g., code generation, text summarization)</li>
+          </Box>
+
+          <Typography variant="body2" color="text.secondary">
             <strong>Multi-turn strategies</strong> simulate realistic back-and-forth conversations.
             These are ideal for:
-            <Box component="ul" sx={{ mt: 1, mb: 2 }}>
-              <li>Chatbots and conversational agents</li>
-              <li>Systems that maintain conversation history</li>
-              <li>Applications where context builds over time</li>
-            </Box>
           </Typography>
-          <Typography variant="body2" color="text.secondary" paragraph>
+          <Box component="ul" sx={{ mt: 1, mb: 2, typography: 'body2', color: 'text.secondary' }}>
+            <li>Chatbots and conversational agents</li>
+            <li>Systems that maintain conversation history</li>
+            <li>Applications where context builds over time</li>
+          </Box>
+
+          <Typography variant="body2" color="text.secondary">
             <strong>Agentic strategies</strong> have reasoning capabilities that are better at
             circumventing guardrails.
           </Typography>
@@ -194,78 +201,100 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       <Grid container spacing={2} sx={{ mb: 4 }}>
         {singleTurnStrategies.map((strategy) => (
           <Grid item xs={12} sm={6} md={4} key={strategy.id}>
-            <Paper elevation={1} sx={{ p: 2, height: '100%' }}>
-              <FormControlLabel
-                sx={{ width: '100%' }}
-                control={
-                  <Checkbox
-                    checked={selectedStrategies.some((s) => getStrategyId(s) === strategy.id)}
-                    onChange={() => handleStrategyToggle(strategy.id)}
-                    color="primary"
-                  />
-                }
-                label={
-                  <Box>
-                    <Box
+            <Paper
+              elevation={1}
+              sx={{
+                p: 2,
+                height: '100%',
+                borderRadius: 2,
+                border: (theme) =>
+                  selectedStrategies.some((s) => getStrategyId(s) === strategy.id)
+                    ? `1px solid ${theme.palette.primary.main}`
+                    : '1px solid transparent',
+                backgroundColor: (theme) =>
+                  selectedStrategies.some((s) => getStrategyId(s) === strategy.id)
+                    ? alpha(theme.palette.primary.main, 0.04)
+                    : 'background.paper',
+                transition: 'all 0.2s ease-in-out',
+                '&:hover': {
+                  backgroundColor: (theme) =>
+                    selectedStrategies.some((s) => getStrategyId(s) === strategy.id)
+                      ? alpha(theme.palette.primary.main, 0.08)
+                      : alpha(theme.palette.action.hover, 0.04),
+                },
+              }}
+            >
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  width: '100%',
+                }}
+              >
+                <FormControlLabel
+                  sx={{ flex: 1 }}
+                  control={
+                    <Checkbox
+                      checked={selectedStrategies.some((s) => getStrategyId(s) === strategy.id)}
+                      onChange={() => handleStrategyToggle(strategy.id)}
+                      color="primary"
+                    />
+                  }
+                  label={
+                    <Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="subtitle1">{strategy.name}</Typography>
+                        {DEFAULT_STRATEGIES.includes(
+                          strategy.id as (typeof DEFAULT_STRATEGIES)[number],
+                        ) && <Chip label="Recommended" size="small" color="default" />}
+                        {AGENTIC_STRATEGIES.includes(
+                          strategy.id as (typeof AGENTIC_STRATEGIES)[number],
+                        ) && (
+                          <Chip
+                            label="Agent"
+                            size="small"
+                            sx={{
+                              backgroundColor: (theme) =>
+                                theme.palette.mode === 'dark'
+                                  ? alpha(theme.palette.warning.main, 0.1)
+                                  : alpha(theme.palette.warning.main, 0.1),
+                              color: 'warning.main',
+                              borderColor: 'warning.main',
+                              border: 1,
+                            }}
+                          />
+                        )}
+                      </Box>
+                      <Typography variant="body2" color="text.secondary">
+                        {strategy.description}
+                      </Typography>
+                    </Box>
+                  }
+                />
+                {selectedStrategies.some((s) => getStrategyId(s) === strategy.id) &&
+                  CONFIGURABLE_STRATEGIES.includes(
+                    strategy.id as (typeof CONFIGURABLE_STRATEGIES)[number],
+                  ) && (
+                    <IconButton
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleConfigClick(strategy.id);
+                      }}
                       sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1,
-                        position: 'relative',
-                        pr: 4,
+                        ml: 1,
+                        opacity: 0.6,
+                        '&:hover': {
+                          opacity: 1,
+                          backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
+                        },
                       }}
                     >
-                      <Typography variant="subtitle1">{strategy.name}</Typography>
-                      {selectedStrategies.some((s) => getStrategyId(s) === strategy.id) &&
-                        CONFIGURABLE_STRATEGIES.includes(
-                          strategy.id as (typeof CONFIGURABLE_STRATEGIES)[number],
-                        ) && (
-                          <IconButton
-                            size="small"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleConfigClick(strategy.id);
-                            }}
-                            sx={{
-                              position: 'absolute',
-                              right: 0,
-                              opacity: 0.6,
-                              '&:hover': {
-                                opacity: 1,
-                                backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
-                              },
-                            }}
-                          >
-                            <SettingsOutlinedIcon fontSize="small" />
-                          </IconButton>
-                        )}
-                      {DEFAULT_STRATEGIES.includes(
-                        strategy.id as (typeof DEFAULT_STRATEGIES)[number],
-                      ) && <Chip label="Recommended" size="small" color="default" />}
-                      {AGENTIC_STRATEGIES.includes(
-                        strategy.id as (typeof AGENTIC_STRATEGIES)[number],
-                      ) && (
-                        <Chip
-                          label="Agent"
-                          size="small"
-                          sx={{
-                            backgroundColor: (theme) =>
-                              theme.palette.mode === 'dark'
-                                ? alpha(theme.palette.warning.main, 0.1)
-                                : alpha(theme.palette.warning.main, 0.1),
-                            color: 'warning.main',
-                            borderColor: 'warning.main',
-                            border: 1,
-                          }}
-                        />
-                      )}
-                    </Box>
-                    <Typography variant="body2" color="text.secondary">
-                      {strategy.description}
-                    </Typography>
-                  </Box>
-                }
-              />
+                      <SettingsOutlinedIcon fontSize="small" />
+                    </IconButton>
+                  )}
+              </Box>
             </Paper>
           </Grid>
         ))}
@@ -277,78 +306,100 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       <Grid container spacing={2} sx={{ mb: 3 }}>
         {multiTurnStrategies.map((strategy) => (
           <Grid item xs={12} sm={6} md={4} key={strategy.id}>
-            <Paper elevation={1} sx={{ p: 2, height: '100%' }}>
-              <FormControlLabel
-                sx={{ width: '100%' }}
-                control={
-                  <Checkbox
-                    checked={selectedStrategies.some((s) => getStrategyId(s) === strategy.id)}
-                    onChange={() => handleStrategyToggle(strategy.id)}
-                    color="primary"
-                  />
-                }
-                label={
-                  <Box>
-                    <Box
+            <Paper
+              elevation={1}
+              sx={{
+                p: 2,
+                height: '100%',
+                borderRadius: 2,
+                border: (theme) =>
+                  selectedStrategies.some((s) => getStrategyId(s) === strategy.id)
+                    ? `1px solid ${theme.palette.primary.main}`
+                    : '1px solid transparent',
+                backgroundColor: (theme) =>
+                  selectedStrategies.some((s) => getStrategyId(s) === strategy.id)
+                    ? alpha(theme.palette.primary.main, 0.04)
+                    : 'background.paper',
+                transition: 'all 0.2s ease-in-out',
+                '&:hover': {
+                  backgroundColor: (theme) =>
+                    selectedStrategies.some((s) => getStrategyId(s) === strategy.id)
+                      ? alpha(theme.palette.primary.main, 0.08)
+                      : alpha(theme.palette.action.hover, 0.04),
+                },
+              }}
+            >
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  width: '100%',
+                }}
+              >
+                <FormControlLabel
+                  sx={{ flex: 1 }}
+                  control={
+                    <Checkbox
+                      checked={selectedStrategies.some((s) => getStrategyId(s) === strategy.id)}
+                      onChange={() => handleStrategyToggle(strategy.id)}
+                      color="primary"
+                    />
+                  }
+                  label={
+                    <Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="subtitle1">{strategy.name}</Typography>
+                        {DEFAULT_STRATEGIES.includes(
+                          strategy.id as (typeof DEFAULT_STRATEGIES)[number],
+                        ) && <Chip label="Recommended" size="small" color="default" />}
+                        {AGENTIC_STRATEGIES.includes(
+                          strategy.id as (typeof AGENTIC_STRATEGIES)[number],
+                        ) && (
+                          <Chip
+                            label="Agent"
+                            size="small"
+                            sx={{
+                              backgroundColor: (theme) =>
+                                theme.palette.mode === 'dark'
+                                  ? alpha(theme.palette.warning.main, 0.1)
+                                  : alpha(theme.palette.warning.main, 0.1),
+                              color: 'warning.main',
+                              borderColor: 'warning.main',
+                              border: 1,
+                            }}
+                          />
+                        )}
+                      </Box>
+                      <Typography variant="body2" color="text.secondary">
+                        {strategy.description}
+                      </Typography>
+                    </Box>
+                  }
+                />
+                {selectedStrategies.some((s) => getStrategyId(s) === strategy.id) &&
+                  CONFIGURABLE_STRATEGIES.includes(
+                    strategy.id as (typeof CONFIGURABLE_STRATEGIES)[number],
+                  ) && (
+                    <IconButton
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleConfigClick(strategy.id);
+                      }}
                       sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1,
-                        position: 'relative',
-                        pr: 4,
+                        ml: 1,
+                        opacity: 0.6,
+                        '&:hover': {
+                          opacity: 1,
+                          backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
+                        },
                       }}
                     >
-                      <Typography variant="subtitle1">{strategy.name}</Typography>
-                      {selectedStrategies.some((s) => getStrategyId(s) === strategy.id) &&
-                        CONFIGURABLE_STRATEGIES.includes(
-                          strategy.id as (typeof CONFIGURABLE_STRATEGIES)[number],
-                        ) && (
-                          <IconButton
-                            size="small"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleConfigClick(strategy.id);
-                            }}
-                            sx={{
-                              position: 'absolute',
-                              right: 0,
-                              opacity: 0.6,
-                              '&:hover': {
-                                opacity: 1,
-                                backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
-                              },
-                            }}
-                          >
-                            <SettingsOutlinedIcon fontSize="small" />
-                          </IconButton>
-                        )}
-                      {DEFAULT_STRATEGIES.includes(
-                        strategy.id as (typeof DEFAULT_STRATEGIES)[number],
-                      ) && <Chip label="Recommended" size="small" color="default" />}
-                      {AGENTIC_STRATEGIES.includes(
-                        strategy.id as (typeof AGENTIC_STRATEGIES)[number],
-                      ) && (
-                        <Chip
-                          label="Agent"
-                          size="small"
-                          sx={{
-                            backgroundColor: (theme) =>
-                              theme.palette.mode === 'dark'
-                                ? alpha(theme.palette.warning.main, 0.1)
-                                : alpha(theme.palette.warning.main, 0.1),
-                            color: 'warning.main',
-                            borderColor: 'warning.main',
-                            border: 1,
-                          }}
-                        />
-                      )}
-                    </Box>
-                    <Typography variant="body2" color="text.secondary">
-                      {strategy.description}
-                    </Typography>
-                  </Box>
-                }
-              />
+                      <SettingsOutlinedIcon fontSize="small" />
+                    </IconButton>
+                  )}
+              </Box>
             </Paper>
           </Grid>
         ))}
@@ -364,25 +415,46 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
               Is the target system stateless? (Does it maintain conversation history?)
             </Typography>
             <RadioGroup
-              value={isStateless}
-              onChange={(e) => setIsStateless(e.target.value === 'true')}
+              value={discrepancyExists ? undefined : isStatelessValue}
+              onChange={(e) => {
+                const isStateless = e.target.value === 'true';
+                const updatedStrategies = config.strategies.map((strategy) => {
+                  if (typeof strategy === 'string') {
+                    return strategy;
+                  }
+
+                  if (MULTI_TURN_STRATEGIES.includes(strategy.id as any)) {
+                    strategy.config = strategy.config || {};
+                    strategy.config.stateless = isStateless;
+                  }
+                  return strategy;
+                });
+                updateConfig('strategies', updatedStrategies);
+              }}
             >
               <FormControlLabel
-                value={true}
+                value="true"
                 control={<Radio />}
                 label="Yes - System is stateless (no conversation history)"
               />
               <FormControlLabel
-                value={false}
+                value="false"
                 control={<Radio />}
                 label="No - System maintains conversation history"
               />
             </RadioGroup>
 
-            {!config.target.config.sessionParser && !isStateless && (
+            {!config.target.config.sessionParser && statefulStrategyExists && (
               <Alert severity="warning">
                 Your system is stateful but you don't have session handling setup. Please return to
                 your Target setup to configure it.
+              </Alert>
+            )}
+            {discrepancyExists && (
+              <Alert severity="error">
+                Your configuration has a mix of stateless and stateful multi-turn strategies. All
+                multi-turn strategies must either be stateless or stateful. Please explicitly select
+                a new value here that will be applied to all strategies.
               </Alert>
             )}
           </FormControl>

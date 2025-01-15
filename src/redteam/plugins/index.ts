@@ -1,6 +1,7 @@
 import { fetchWithCache } from '../../cache';
 import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';
+import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types';
@@ -14,9 +15,12 @@ import {
   getRemoteGenerationUrl,
 } from '../remoteGeneration';
 import { type RedteamPluginBase } from './base';
+import { BeavertailsPlugin } from './beavertails';
 import { ContractPlugin } from './contracts';
 import { CrossSessionLeakPlugin } from './crossSessionLeak';
+import { CyberSecEvalPlugin } from './cyberseceval';
 import { DebugAccessPlugin } from './debugAccess';
+import { DivergentRepetitionPlugin } from './divergentRepetition';
 import { ExcessiveAgencyPlugin } from './excessiveAgency';
 import { HallucinationPlugin } from './hallucination';
 import { AlignedHarmfulPlugin } from './harmful/aligned';
@@ -26,6 +30,7 @@ import { ImitationPlugin } from './imitation';
 import { IntentPlugin } from './intent';
 import { OverreliancePlugin } from './overreliance';
 import { getPiiLeakTestsForCategory } from './pii';
+import { PlinyPlugin } from './pliny';
 import { PolicyPlugin } from './policy';
 import { PoliticsPlugin } from './politics';
 import { PromptExtractionPlugin } from './promptExtraction';
@@ -65,6 +70,7 @@ async function fetchRemoteTestCases(
     purpose,
     task: key,
     version: VERSION,
+    email: getUserEmail(),
   });
   try {
     const { data } = await fetchWithCache(
@@ -113,9 +119,27 @@ const unalignedHarmCategories = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS) as 
 >;
 
 const pluginFactories: PluginFactory[] = [
+  createPluginFactory(BeavertailsPlugin, 'beavertails'),
   createPluginFactory(ContractPlugin, 'contracts'),
   createPluginFactory(CrossSessionLeakPlugin, 'cross-session-leak'),
+  createPluginFactory(CyberSecEvalPlugin, 'cyberseceval'),
   createPluginFactory(DebugAccessPlugin, 'debug-access'),
+  createPluginFactory(DivergentRepetitionPlugin, 'divergent-repetition'),
+  ...alignedHarmCategories.map((category) =>
+    createPluginFactory(
+      class extends AlignedHarmfulPlugin {
+        constructor(
+          provider: ApiProvider,
+          purpose: string,
+          injectVar: string,
+          config: PluginConfig,
+        ) {
+          super(provider, purpose, injectVar, category, config);
+        }
+      },
+      category,
+    ),
+  ),
   createPluginFactory(ExcessiveAgencyPlugin, 'excessive-agency'),
   createPluginFactory(HallucinationPlugin, 'hallucination'),
   createPluginFactory(ImitationPlugin, 'imitation'),
@@ -123,6 +147,7 @@ const pluginFactories: PluginFactory[] = [
     invariant(config.intent, 'Intent plugin requires `config.intent` to be set'),
   ),
   createPluginFactory(OverreliancePlugin, 'overreliance'),
+  createPluginFactory(PlinyPlugin, 'pliny'),
   createPluginFactory(PoliticsPlugin, 'politics'),
   createPluginFactory<{ policy: string }>(PolicyPlugin, 'policy', (config: { policy: string }) =>
     invariant(config.policy, 'Policy plugin requires `config.policy` to be set'),
@@ -139,21 +164,6 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(RbacPlugin, 'rbac'),
   createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
   createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
-  ...alignedHarmCategories.map((category) =>
-    createPluginFactory(
-      class extends AlignedHarmfulPlugin {
-        constructor(
-          provider: ApiProvider,
-          purpose: string,
-          injectVar: string,
-          config: PluginConfig,
-        ) {
-          super(provider, purpose, injectVar, category, config);
-        }
-      },
-      category,
-    ),
-  ),
   ...unalignedHarmCategories.map((category) => ({
     key: category,
     action: async (params: PluginActionParams) => {
@@ -208,6 +218,7 @@ const remotePlugins: PluginFactory[] = [
   'hijacking',
   'religion',
   'ssrf',
+  'system-prompt-override',
 ].map((key) => createRemotePlugin(key));
 
 remotePlugins.push(

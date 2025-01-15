@@ -2,8 +2,10 @@ import { randomUUID } from 'crypto';
 import { and, eq, gte, lt } from 'drizzle-orm';
 import { getDb } from '../database';
 import { evalResultsTable } from '../database/tables';
+import { getEnvBool } from '../envars';
 import { hashPrompt } from '../prompts/utils';
 import type {
+  ApiProvider,
   AtomicTestCase,
   GradingResult,
   Prompt,
@@ -12,6 +14,7 @@ import type {
   ResultFailureReason,
 } from '../types';
 import { type EvaluateResult } from '../types';
+import { safeJsonStringify } from '../util/json';
 import { getCurrentTimestamp } from '../util/time';
 
 export default class EvalResult {
@@ -38,7 +41,20 @@ export default class EvalResult {
     const args = {
       id: randomUUID(),
       evalId,
-      testCase,
+      // Maybe stringify provider to avoid circular references
+      testCase: {
+        ...testCase,
+        ...(testCase.provider && {
+          provider: (() => {
+            try {
+              if (typeof testCase.provider === 'object' && (testCase.provider as ApiProvider)?.id) {
+                return (testCase.provider as ApiProvider).id();
+              }
+            } catch {}
+            return JSON.parse(safeJsonStringify(testCase.provider) as string);
+          })(),
+        }),
+      },
       promptIdx: result.promptIdx,
       testIdx: result.testIdx,
       prompt,
@@ -213,25 +229,53 @@ export default class EvalResult {
   }
 
   toEvaluateResult(): EvaluateResult {
+    const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
+    const shouldStripResponseOutput = getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false);
+    const shouldStripTestVars = getEnvBool('PROMPTFOO_STRIP_TEST_VARS', false);
+    const shouldStripGradingResult = getEnvBool('PROMPTFOO_STRIP_GRADING_RESULT', false);
+    const shouldStripMetadata = getEnvBool('PROMPTFOO_STRIP_METADATA', false);
+
+    const response =
+      shouldStripResponseOutput && this.response
+        ? {
+            ...this.response,
+            output: '[output stripped]',
+          }
+        : this.response;
+
+    const prompt = shouldStripPromptText
+      ? {
+          ...this.prompt,
+          raw: '[prompt stripped]',
+        }
+      : this.prompt;
+
+    const testCase = shouldStripTestVars
+      ? {
+          ...this.testCase,
+          vars: undefined,
+        }
+      : this.testCase;
+
     return {
       cost: this.cost,
       description: this.description || undefined,
       error: this.error || undefined,
-      gradingResult: this.gradingResult,
+      gradingResult: shouldStripGradingResult ? null : this.gradingResult,
       id: this.id,
       latencyMs: this.latencyMs,
       namedScores: this.namedScores,
-      prompt: this.prompt,
+      prompt,
       promptId: this.promptId,
       promptIdx: this.promptIdx,
       provider: { id: this.provider.id, label: this.provider.label },
-      response: this.response || undefined,
+      response,
       score: this.score,
       success: this.success,
-      testCase: this.testCase,
+      testCase,
       testIdx: this.testIdx,
-      vars: this.testCase.vars || {},
-      metadata: this.metadata,
+      vars: shouldStripTestVars ? {} : this.testCase.vars || {},
+      metadata: shouldStripMetadata ? {} : this.metadata,
       failureReason: this.failureReason,
     };
   }

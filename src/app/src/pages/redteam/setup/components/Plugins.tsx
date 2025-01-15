@@ -34,8 +34,9 @@ import {
   riskCategories,
 } from '@promptfoo/redteam/constants';
 import { useDebounce } from 'use-debounce';
-import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import { useRedTeamConfig, useRecentlyUsedPlugins } from '../hooks/useRedTeamConfig';
 import type { LocalPluginConfig } from '../types';
+import CustomIntentSection from './CustomIntentPluginSection';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
 import { CustomPoliciesSection } from './Targets/CustomPoliciesSection';
@@ -52,14 +53,16 @@ const ErrorFallback = ({ error }: { error: Error }) => (
   </div>
 );
 
-const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'intent', 'prompt-extraction'];
+const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extraction'];
 
 const PLUGINS_SUPPORTING_CONFIG = ['bfla', 'bola', 'ssrf', ...PLUGINS_REQUIRING_CONFIG];
 
 export default function Plugins({ onNext, onBack }: PluginsProps) {
   const { config, updatePlugins } = useRedTeamConfig();
+  const { plugins: recentlyUsedPlugins, addPlugin } = useRecentlyUsedPlugins();
   const { recordEvent } = useTelemetry();
   const [isCustomMode, setIsCustomMode] = useState(true);
+  const [recentlyUsedSnapshot] = useState<Plugin[]>(() => [...recentlyUsedPlugins]);
   const [selectedPlugins, setSelectedPlugins] = useState<Set<Plugin>>(() => {
     return new Set(
       config.plugins.map((plugin) => (typeof plugin === 'string' ? plugin : plugin.id)) as Plugin[],
@@ -110,41 +113,45 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     }
   }, [debouncedPlugins, updatePlugins]);
 
-  const handlePluginToggle = useCallback((plugin: Plugin) => {
-    setSelectedPlugins((prev) => {
-      const newSet = new Set(prev);
+  const handlePluginToggle = useCallback(
+    (plugin: Plugin) => {
+      setSelectedPlugins((prev) => {
+        const newSet = new Set(prev);
 
-      if (plugin === 'policy') {
+        if (plugin === 'policy') {
+          if (newSet.has(plugin)) {
+            newSet.delete(plugin);
+            setPluginConfig((prevConfig) => {
+              const newConfig = { ...prevConfig };
+              delete newConfig[plugin];
+              return newConfig;
+            });
+          } else {
+            newSet.add(plugin);
+          }
+          return newSet;
+        }
+
         if (newSet.has(plugin)) {
           newSet.delete(plugin);
           setPluginConfig((prevConfig) => {
             const newConfig = { ...prevConfig };
-            delete newConfig[plugin];
+            delete newConfig[plugin as keyof LocalPluginConfig];
             return newConfig;
           });
         } else {
           newSet.add(plugin);
+          addPlugin(plugin);
+          if (PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
+            setSelectedConfigPlugin(plugin);
+            setConfigDialogOpen(true);
+          }
         }
         return newSet;
-      }
-
-      if (newSet.has(plugin)) {
-        newSet.delete(plugin);
-        setPluginConfig((prevConfig) => {
-          const newConfig = { ...prevConfig };
-          delete newConfig[plugin as keyof LocalPluginConfig];
-          return newConfig;
-        });
-      } else {
-        newSet.add(plugin);
-        if (PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
-          setSelectedConfigPlugin(plugin);
-          setConfigDialogOpen(true);
-        }
-      }
-      return newSet;
-    });
-  }, []);
+      });
+    },
+    [addPlugin],
+  );
 
   const handlePresetSelect = (preset: {
     name: string;
@@ -273,13 +280,22 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   };
 
   const renderPluginCategory = (category: string, plugins: readonly Plugin[]) => {
-    const pluginsToShow = plugins.filter((plugin) => filteredPlugins.includes(plugin));
+    const pluginsToShow = plugins
+      .filter((plugin) => plugin !== 'intent') // Skip intent because we have a dedicated section for it
+      .filter((plugin) => filteredPlugins.includes(plugin));
     if (pluginsToShow.length === 0) {
       return null;
     }
 
     const isExpanded = expandedCategories.has(category);
     const selectedCount = pluginsToShow.filter((plugin) => selectedPlugins.has(plugin)).length;
+
+    const getPluginCategory = (plugin: Plugin) => {
+      if (category !== 'Recently Used') {
+        return null;
+      }
+      return Object.entries(riskCategories).find(([_, plugins]) => plugins.includes(plugin))?.[0];
+    };
 
     return (
       <Accordion
@@ -364,9 +380,9 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                           PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
                           !isPluginConfigured(plugin)
                         ) {
-                          return `1px solid ${theme.palette.error.main}`; // Error state border
+                          return `1px solid ${theme.palette.error.main}`;
                         }
-                        return `1px solid ${theme.palette.primary.main}`; // Selected state border
+                        return `1px solid ${theme.palette.primary.main}`;
                       }
                       return '1px solid transparent';
                     },
@@ -402,6 +418,21 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                       }
                       label={
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                          {category === 'Recently Used' && getPluginCategory(plugin) && (
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                backgroundColor: 'action.hover',
+                                px: 1,
+                                py: 0.25,
+                                borderRadius: 1,
+                                color: 'text.secondary',
+                                alignSelf: 'flex-start',
+                              }}
+                            >
+                              {getPluginCategory(plugin)}
+                            </Typography>
+                          )}
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                             {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
                           </Box>
@@ -530,6 +561,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           }}
           sx={{ mb: 3 }}
         />
+
         <Box
           sx={{
             display: 'flex',
@@ -572,10 +604,42 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
             Select none
           </Box>
         </Box>
+
         <Box sx={{ mb: 3 }}>
+          {recentlyUsedSnapshot.length > 0 &&
+            renderPluginCategory('Recently Used', recentlyUsedSnapshot)}
           {Object.entries(riskCategories).map(([category, plugins]) =>
             renderPluginCategory(category, plugins),
           )}
+
+          <Accordion
+            expanded={expandedCategories.has('Custom Prompts')}
+            onChange={(event, expanded) => {
+              setExpandedCategories((prev) => {
+                const newSet = new Set(prev);
+                if (expanded) {
+                  newSet.add('Custom Prompts');
+                } else {
+                  newSet.delete('Custom Prompts');
+                }
+                return newSet;
+              });
+            }}
+          >
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
+                Custom Prompts (
+                {config.plugins.filter(
+                  (p): p is { id: string; config: any } =>
+                    typeof p === 'object' && 'id' in p && p.id === 'intent' && 'config' in p,
+                )[0]?.config?.intent?.length || 0}
+                )
+              </Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <CustomIntentSection />
+            </AccordionDetails>
+          </Accordion>
         </Box>
 
         {selectedPlugins.has('policy') && (

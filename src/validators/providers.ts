@@ -68,6 +68,9 @@ export const ProviderEnvOverridesSchema = z.object({
   WATSONX_AI_APIKEY: z.string().optional(),
   WATSONX_AI_PROJECT_ID: z.string().optional(),
   WATSONX_AI_BEARER_TOKEN: z.string().optional(),
+  WATSONX_AI_AUTH_TYPE: z.string().optional(),
+  PROMPTFOO_CA_CERT_PATH: z.string().optional(),
+  PROMPTFOO_INSECURE_SSL: z.string().optional(),
 });
 
 export const ProviderOptionsSchema = z

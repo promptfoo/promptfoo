@@ -58,9 +58,10 @@ export const CommandLineOptionsSchema = z.object({
   watch: z.boolean().optional(),
   filterFailing: z.string().optional(),
   filterFirstN: z.coerce.number().int().positive().optional(),
-  filterSample: z.coerce.number().int().positive().optional(),
+  filterMetadata: z.string().optional(),
   filterPattern: z.string().optional(),
   filterProviders: z.string().optional(),
+  filterSample: z.coerce.number().int().positive().optional(),
   filterTargets: z.string().optional(),
   var: z.record(z.string()).optional(),
 
@@ -154,7 +155,7 @@ const EvaluateOptionsSchema = z.object({
   repeat: z.number().optional(),
   showProgressBar: z.boolean().optional(),
 });
-export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema>;
+export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & { abortSignal?: AbortSignal };
 
 const PromptMetricsSchema = z.object({
   score: z.number(),
@@ -233,20 +234,21 @@ export interface EvaluateResult {
 }
 
 export interface EvaluateTableOutput {
-  id: string;
-  pass: boolean;
-  failureReason: ResultFailureReason;
-  score: number;
-  namedScores: Record<string, number>;
-  text: string;
-  prompt: string;
-  latencyMs: number;
-  provider?: string;
-  tokenUsage?: Partial<TokenUsage>;
-  gradingResult?: GradingResult | null;
   cost: number;
+  failureReason: ResultFailureReason;
+  gradingResult?: GradingResult | null;
+  id: string;
+  latencyMs: number;
   metadata?: Record<string, any>;
+  namedScores: Record<string, number>;
+  pass: boolean;
+  prompt: string;
+  provider?: string;
   response?: ProviderResponse;
+  score: number;
+  testCase: AtomicTestCase;
+  text: string;
+  tokenUsage?: Partial<TokenUsage>;
 }
 
 export interface EvaluateTableRow {
@@ -362,10 +364,12 @@ export const BaseAssertionTypesSchema = z.enum([
   'cost',
   'equals',
   'factuality',
+  'g-eval',
   'icontains-all',
   'icontains-any',
   'icontains',
   'is-json',
+  'is-refusal',
   'is-sql',
   'is-valid-openai-function-call',
   'is-valid-openai-tools-call',
@@ -421,6 +425,10 @@ const AssertionSetSchema = z.object({
   metric: z.string().optional(),
   // The required score for this assert set. If not provided, the test case is graded pass/fail.
   threshold: z.number().optional(),
+
+  // An external mapping of arbitrary strings to values that is defined
+  // for every assertion in the set and passed into each assert
+  config: z.record(z.string(), z.any()).optional(),
 });
 
 export type AssertionSet = z.infer<typeof AssertionSetSchema>;
@@ -434,7 +442,7 @@ export const AssertionSchema = z.object({
   value: z.custom<AssertionValue>().optional(),
 
   // An external mapping of arbitrary strings to values that is passed
-  // to the assertion for custom javascript asserts
+  // to the assertion for custom asserts
   config: z.record(z.string(), z.any()).optional(),
 
   // The threshold value, only applicable for similarity (cosine distance)
@@ -867,10 +875,12 @@ export interface OutputFile {
 
 // Live eval job state
 export interface Job {
-  status: 'in-progress' | 'complete';
+  evalId: string | null;
+  status: 'in-progress' | 'complete' | 'error';
   progress: number;
   total: number;
   result: EvaluateSummaryV3 | EvaluateSummaryV2 | null;
+  logs: string[];
 }
 
 // used for writing eval results

@@ -49,11 +49,13 @@ const StyledTabs = styled(Tabs)(({ theme }) => ({
     left: 0,
     right: 'auto',
   },
-  width: '280px',
-  minWidth: '280px',
+  width: '100%',
   backgroundColor: theme.palette.background.paper,
   '& .MuiTab-root': {
     minHeight: '48px',
+  },
+  '& .MuiTabs-scrollButtons': {
+    display: 'none',
   },
 }));
 
@@ -312,6 +314,7 @@ export default function RedTeamSetupPage() {
     setValue((prevValue) => {
       const newValue = prevValue + 1;
       updateHash(newValue);
+      window.scrollTo({ top: 0 });
       return newValue;
     });
   };
@@ -320,6 +323,7 @@ export default function RedTeamSetupPage() {
     setValue((prevValue) => {
       const newValue = prevValue - 1;
       updateHash(newValue);
+      window.scrollTo({ top: 0 });
       return newValue;
     });
   };
@@ -327,6 +331,7 @@ export default function RedTeamSetupPage() {
   const handleChange = (event: React.SyntheticEvent, newValue: number) => {
     updateHash(newValue);
     setValue(newValue);
+    window.scrollTo({ top: 0 });
   };
 
   const toggleYamlPreview = () => {
@@ -425,6 +430,7 @@ export default function RedTeamSetupPage() {
 
       toast.showToast('Configuration loaded successfully', 'success');
       setLoadDialogOpen(false);
+      window.location.reload();
     } catch (error) {
       console.error('Failed to load configuration', error);
       toast.showToast(
@@ -559,7 +565,6 @@ export default function RedTeamSetupPage() {
                 variant="scrollable"
                 value={value}
                 onChange={handleChange}
-                sx={{ width: 200 }}
               >
                 <StyledTab
                   icon={<AppIcon />}
@@ -576,13 +581,13 @@ export default function RedTeamSetupPage() {
                 <StyledTab
                   icon={<PluginIcon />}
                   iconPosition="start"
-                  label="Plugins"
+                  label={`Plugins${config.plugins?.length ? ` (${config.plugins.length})` : ''}`}
                   {...a11yProps(2)}
                 />
                 <StyledTab
                   icon={<StrategyIcon />}
                   iconPosition="start"
-                  label="Strategies"
+                  label={`Strategies${config.strategies?.length ? ` (${config.strategies.length})` : ''}`}
                   {...a11yProps(3)}
                 />
                 <StyledTab

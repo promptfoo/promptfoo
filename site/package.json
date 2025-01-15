@@ -4,7 +4,7 @@
   "license": "MIT",
   "scripts": {
     "docusaurus": "docusaurus",
-    "start": "docusaurus start",
+    "start": "NODE_ENV=development docusaurus start",
     "build": "docusaurus build",
     "swizzle": "docusaurus swizzle",
     "deploy": "docusaurus deploy",
@@ -18,6 +18,7 @@
   "dependencies": {
     "@calcom/embed-react": "^1.5.1",
     "@docusaurus/core": "^3.6.3",
+    "@docusaurus/plugin-client-redirects": "^3.6.3",
     "@docusaurus/plugin-content-docs": "^3.6.3",
     "@docusaurus/plugin-google-gtag": "^3.6.3",
     "@docusaurus/preset-classic": "^3.6.3",
@@ -40,7 +41,7 @@
   "devDependencies": {
     "@docusaurus/module-type-aliases": "^3.6.3",
     "@tsconfig/docusaurus": "^2.0.3",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.3"
   },
   "browserslist": {
     "production": [

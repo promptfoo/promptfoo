@@ -1,3 +1,4 @@
+import logger from '../logger';
 import { matchesModeration } from '../matchers';
 import { parseChatPrompt } from '../providers/shared';
 import type { AssertionParams, GradingResult } from '../types';
@@ -10,6 +11,21 @@ export const handleModeration = async ({
   providerResponse,
   prompt,
 }: AssertionParams): Promise<GradingResult> => {
+  if (providerResponse.guardrails?.flagged) {
+    logger.debug('Target built-in guardrail triggered');
+    let reason = 'Guardrail triggered';
+    if (providerResponse.guardrails?.flaggedInput) {
+      reason = 'Prompt guardrail triggered';
+    } else if (providerResponse.guardrails?.flaggedOutput) {
+      reason = 'Output guardrail triggered';
+    }
+    return {
+      pass: false,
+      score: 0,
+      reason,
+      assertion,
+    };
+  }
   // Some redteam techniques override the actual prompt that is used, so we need to assess that prompt for moderation.
   const promptToModerate = providerResponse.metadata?.redteamFinalPrompt || prompt;
   invariant(promptToModerate, 'moderation assertion type must have a prompt');

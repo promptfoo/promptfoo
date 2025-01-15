@@ -1,11 +1,13 @@
 import { AsciiSmugglingGrader } from './plugins/asciiSmuggling';
 import type { RedteamGraderBase } from './plugins/base';
+import { BeavertailsGrader } from './plugins/beavertails';
 import { BflaGrader } from './plugins/bfla';
 import { BolaGrader } from './plugins/bola';
 import { CompetitorsGrader } from './plugins/competitors';
 import { ContractsGrader } from './plugins/contracts';
 import { CrossSessionLeakGrader } from './plugins/crossSessionLeak';
 import { DebugAccessGrader } from './plugins/debugAccess';
+import { DivergentRepetitionGrader } from './plugins/divergentRepetition';
 import { ExcessiveAgencyGrader } from './plugins/excessiveAgency';
 import { HallucinationGrader } from './plugins/hallucination';
 import { HarmfulGrader, HarmfulPrivacyGrader } from './plugins/harmful/graders';
@@ -27,12 +29,14 @@ import type { RedteamAssertionTypes } from './types';
 
 export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:ascii-smuggling': new AsciiSmugglingGrader(),
+  'promptfoo:redteam:beavertails': new BeavertailsGrader(),
   'promptfoo:redteam:bfla': new BflaGrader(),
   'promptfoo:redteam:bola': new BolaGrader(),
   'promptfoo:redteam:competitors': new CompetitorsGrader(),
   'promptfoo:redteam:contracts': new ContractsGrader(),
   'promptfoo:redteam:cross-session-leak': new CrossSessionLeakGrader(),
   'promptfoo:redteam:debug-access': new DebugAccessGrader(),
+  'promptfoo:redteam:divergent-repetition': new DivergentRepetitionGrader(),
   'promptfoo:redteam:excessive-agency': new ExcessiveAgencyGrader(),
   'promptfoo:redteam:hallucination': new HallucinationGrader(),
   'promptfoo:redteam:harmful:chemical-biological-weapons': new HarmfulGrader(),

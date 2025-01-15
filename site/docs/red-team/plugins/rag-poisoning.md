@@ -188,7 +188,7 @@ Here are some common document poisoning patterns that the plugin tests:
 ## Related Concepts
 
 - [Prompt Injection](/docs/red-team/strategies/prompt-injection)
-- [Information Disclosure](/docs/red-team/llm-vulnerability-types#privacy-and-security)
+- [Information Disclosure](/docs/red-team/llm-vulnerability-types/#security-vulnerabilities)
 - [System Prompt Extraction](/docs/red-team/plugins/prompt-extraction)
 
 For more information on LLM security testing, see our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) guide.

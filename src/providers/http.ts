@@ -23,6 +23,7 @@ const nunjucks = getNunjucksEngine();
 export const HttpProviderConfigSchema = z.object({
   body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
   headers: z.record(z.string()).optional(),
+  maxRetries: z.number().min(0).optional(),
   method: z.string().optional(),
   queryParams: z.record(z.string()).optional(),
   request: z.string().optional(),
@@ -31,7 +32,7 @@ export const HttpProviderConfigSchema = z.object({
   transformResponse: z.union([z.string(), z.function()]).optional(),
   url: z.string().optional(),
   /**
-   * @deprecated
+   * @deprecated use transformResponse instead
    */
   responseParser: z.union([z.string(), z.function()]).optional(),
 });
@@ -77,7 +78,7 @@ export async function createSessionParser(
       return requiredModule;
     }
     throw new Error(
-      `Response parser malformed: ${filename} must export a function or have a default export as a function`,
+      `Response transform malformed: ${filename} must export a function or have a default export as a function`,
     );
   } else if (typeof parser === 'string') {
     return ({ headers }) => {
@@ -85,7 +86,7 @@ export async function createSessionParser(
     };
   }
   throw new Error(
-    `Unsupported response parser type: ${typeof parser}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
+    `Unsupported response transform type: ${typeof parser}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
   );
 }
 
@@ -101,7 +102,7 @@ export async function createTransformResponse(
         const result = parser(data, text);
         return { output: result };
       } catch (err) {
-        logger.error(`Error in response parser function: ${String(err)}`);
+        logger.error(`Error in response transform function: ${String(err)}`);
         throw err;
       }
     };
@@ -123,7 +124,7 @@ export async function createTransformResponse(
       return requiredModule;
     }
     throw new Error(
-      `Response parser malformed: ${filename} must export a function or have a default export as a function`,
+      `Response transform malformed: ${filename} must export a function or have a default export as a function`,
     );
   } else if (typeof parser === 'string') {
     return (data, text) => ({
@@ -131,7 +132,7 @@ export async function createTransformResponse(
     });
   }
   throw new Error(
-    `Unsupported response parser type: ${typeof parser}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
+    `Unsupported response transform type: ${typeof parser}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
   );
 }
 
@@ -416,30 +417,33 @@ export class HttpProvider implements ApiProvider {
       url = `${url}?${queryString}`;
     }
 
-    logger.debug(`Calling HTTP provider: ${url} with config: ${safeJsonStringify(renderedConfig)}`);
-    let response;
-    try {
-      response = await fetchWithCache(
-        url,
-        {
-          method: renderedConfig.method,
-          headers: renderedConfig.headers,
-          ...(method !== 'GET' && {
-            body: contentTypeIsJson(headers)
-              ? JSON.stringify(renderedConfig.body)
-              : String(renderedConfig.body)?.trim(),
-          }),
-        },
-        REQUEST_TIMEOUT_MS,
-        'text',
-        context?.debug,
+    logger.debug(
+      `[HTTP Provider]: Calling ${url} with config: ${safeJsonStringify(renderedConfig)}`,
+    );
+    const response = await fetchWithCache(
+      url,
+      {
+        method: renderedConfig.method,
+        headers: renderedConfig.headers,
+        ...(method !== 'GET' && {
+          body: contentTypeIsJson(headers)
+            ? JSON.stringify(renderedConfig.body)
+            : String(renderedConfig.body)?.trim(),
+        }),
+      },
+      REQUEST_TIMEOUT_MS,
+      'text',
+      context?.debug,
+      this.config.maxRetries,
+    );
+
+    logger.debug(`[HTTP Provider]: Response: ${response.data}`);
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(
+        `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
       );
-    } catch (err) {
-      return {
-        error: `HTTP call error: ${String(err)}`,
-      };
     }
-    logger.debug(`\tHTTP response: ${response.data}`);
+
     const ret: ProviderResponse = {};
     if (context?.debug) {
       ret.raw = response.data;
@@ -455,28 +459,24 @@ export class HttpProvider implements ApiProvider {
     } catch {
       parsedData = null;
     }
+
+    const parsedOutput = (await this.transformResponse)(parsedData, rawText);
+    ret.output = parsedOutput.output || parsedOutput;
     try {
-      const parsedOutput = (await this.transformResponse)(parsedData, rawText);
-      ret.output = parsedOutput.output || parsedOutput;
-      try {
-        const sessionId =
-          response.headers && this.sessionParser !== null
-            ? (await this.sessionParser)({ headers: response.headers })
-            : undefined;
-        if (sessionId) {
-          ret.sessionId = sessionId;
-        }
-      } catch (err) {
-        logger.error(
-          `Error parsing session ID: ${String(err)}. Got headers: ${safeJsonStringify(response.headers)}`,
-        );
+      const sessionId =
+        response.headers && this.sessionParser !== null
+          ? (await this.sessionParser)({ headers: response.headers })
+          : undefined;
+      if (sessionId) {
+        ret.sessionId = sessionId;
       }
-      return ret;
     } catch (err) {
-      logger.error(`Error parsing response: ${String(err)}. Got response: ${rawText}`);
-      ret.error = `Error parsing response: ${String(err)}. Got response: ${rawText}`;
-      return ret;
+      logger.error(
+        `Error parsing session ID: ${String(err)}. Got headers: ${safeJsonStringify(response.headers)}`,
+      );
+      throw err;
     }
+    return ret;
   }
 
   private async callApiWithRawRequest(vars: Record<string, any>): Promise<ProviderResponse> {
@@ -490,26 +490,27 @@ export class HttpProvider implements ApiProvider {
       `${protocol}://${parsedRequest.headers['host']}`,
     ).toString();
 
-    logger.debug(`Calling HTTP provider with raw request: ${url}`);
-    logger.debug(`Calling HTTP provider with raw request: ${parsedRequest}`);
-    let response;
-    try {
-      response = await fetchWithCache(
-        url,
-        {
-          method: parsedRequest.method,
-          headers: parsedRequest.headers,
-          ...(parsedRequest.body && { body: parsedRequest.body.text.trim() }),
-        },
-        REQUEST_TIMEOUT_MS,
-        'text',
+    logger.debug(`[HTTP Provider]: Calling ${url} with raw request: ${parsedRequest}`);
+    const response = await fetchWithCache(
+      url,
+      {
+        method: parsedRequest.method,
+        headers: parsedRequest.headers,
+        ...(parsedRequest.body && { body: parsedRequest.body.text.trim() }),
+      },
+      REQUEST_TIMEOUT_MS,
+      'text',
+      undefined,
+      this.config.maxRetries,
+    );
+
+    logger.debug(`[HTTP Provider]: Response: ${response.data}`);
+
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(
+        `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
       );
-    } catch (err) {
-      return {
-        error: `HTTP call error: ${String(err)}`,
-      };
     }
-    logger.debug(`\tHTTP response: ${response.data}`);
 
     const rawText = response.data as string;
     let parsedData;
@@ -519,16 +520,9 @@ export class HttpProvider implements ApiProvider {
       parsedData = null;
     }
 
-    try {
-      const parsedOutput = (await this.transformResponse)(parsedData, rawText);
-      return {
-        output: parsedOutput.output || parsedOutput,
-      };
-    } catch (err) {
-      logger.error(`Error parsing response: ${String(err)}. Got response: ${rawText}`);
-      return {
-        error: `Error parsing response: ${String(err)}. Got response: ${rawText}`,
-      };
-    }
+    const parsedOutput = (await this.transformResponse)(parsedData, rawText);
+    return {
+      output: parsedOutput.output || parsedOutput,
+    };
   }
 }

@@ -16,6 +16,7 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import type { ProviderResponse, ProviderTestResponse } from '@promptfoo/types';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import type { ProviderOptions } from '../../types';
 import Prompts from '../Prompts';
@@ -72,63 +73,27 @@ const requiresPrompt = (target: ProviderOptions) => {
   return target.id !== 'http' && target.id !== 'websocket' && target.id !== 'browser';
 };
 
-const EXAMPLE_TARGET: ProviderOptions = {
-  id: 'http',
-  label: 'Acme Chatbot',
-  config: {
-    url: 'https://acme-cx-chatbot.promptfoo.dev/chat',
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: {
-      messages: [
-        {
-          role: 'user',
-          content: '{{prompt}}',
-        },
-      ],
-    },
-    transformResponse: 'json.response',
-  },
-};
-
 export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps) {
   const { config, updateConfig } = useRedTeamConfig();
   const theme = useTheme();
-  const selectedTarget = config.target || DEFAULT_HTTP_TARGET;
-  const setSelectedTarget = (value: ProviderOptions) => {
-    updateConfig('target', value);
-  };
-  const [promptRequired, setPromptRequired] = useState(requiresPrompt(selectedTarget));
-  const [urlError, setUrlError] = useState<string | null>(null);
-  const [bodyError, setBodyError] = useState<string | null>(null);
+  const [selectedTarget, setSelectedTarget] = useState<ProviderOptions>(
+    config.target || DEFAULT_HTTP_TARGET,
+  );
   const [testingTarget, setTestingTarget] = useState(false);
   const [testResult, setTestResult] = useState<{
-    success: boolean;
-    message: string;
+    success?: boolean;
+    message?: string;
     suggestions?: string[];
-    providerResponse?: {
-      raw: string;
-      output: string;
-      sessionId?: string;
-      metadata?: {
-        headers?: Record<string, string>;
-      };
-    };
+    providerResponse?: ProviderResponse;
   } | null>(null);
-  const [testingEnabled, setTestingEnabled] = useState(selectedTarget.id === 'http');
-  const [isJsonContentType, setIsJsonContentType] = useState(
-    selectedTarget.config.headers &&
-      selectedTarget.config.headers['Content-Type'] === 'application/json',
-  );
-  const [requestBody, setRequestBody] = useState(selectedTarget.config.body);
-
-  const [missingFields, setMissingFields] = useState<string[]>([]);
   const [hasTestedTarget, setHasTestedTarget] = useState(false);
+  const [bodyError, setBodyError] = useState<string | null>(null);
+  const [urlError, setUrlError] = useState<string | null>(null);
+  const [missingFields, setMissingFields] = useState<string[]>([]);
+  const [promptRequired, setPromptRequired] = useState(requiresPrompt(selectedTarget));
+  const [testingEnabled, setTestingEnabled] = useState(selectedTarget.id === 'http');
 
   const { recordEvent } = useTelemetry();
-
   const [rawConfigJson, setRawConfigJson] = useState<string>(
     JSON.stringify(selectedTarget.config, null, 2),
   );
@@ -141,16 +106,18 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
     updateConfig('target', selectedTarget);
     const missingFields: string[] = [];
 
-    if (!selectedTarget.label) {
+    if (selectedTarget.label) {
+      // Label is valid
+    } else {
       missingFields.push('Target Name');
     }
 
-    // Make sure we have a url target is a valid HTTP or WebSocket endpoint
-    if (
-      (selectedTarget.id.startsWith('http') || selectedTarget.id.startsWith('websocket')) &&
-      (!selectedTarget.config.url || !validateUrl(selectedTarget.config.url))
-    ) {
-      missingFields.push('URL');
+    if (selectedTarget.id.startsWith('http')) {
+      if (selectedTarget.config.request) {
+        // Skip URL validation for raw request mode
+      } else if (!selectedTarget.config.url || !validateUrl(selectedTarget.config.url)) {
+        missingFields.push('URL');
+      }
     }
 
     setMissingFields(missingFields);
@@ -222,48 +189,44 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
 
   useEffect(() => {
     setTestingEnabled(selectedTarget.id === 'http');
-
-    const hasJsonContentType = Object.keys(selectedTarget.config.headers || {}).some(
-      (header) =>
-        header.toLowerCase() === 'content-type' &&
-        selectedTarget.config.headers?.[header].toLowerCase().includes('application/json'),
-    );
-
-    setIsJsonContentType(hasJsonContentType);
   }, [selectedTarget]);
 
   const updateCustomTarget = (field: string, value: any) => {
     if (typeof selectedTarget === 'object') {
       const updatedTarget = { ...selectedTarget } as ProviderOptions;
-      if (field === 'id') {
-        updatedTarget.id = value;
-        if (validateUrl(value, 'http')) {
+
+      if (field === 'url') {
+        updatedTarget.config.url = value;
+        if (validateUrl(value)) {
           setUrlError(null);
         } else {
-          setUrlError('Please enter a valid HTTP URL (http:// or https://)');
+          setUrlError('Invalid URL format');
         }
+      } else if (field === 'method') {
+        updatedTarget.config.method = value;
       } else if (field === 'body') {
         updatedTarget.config.body = value;
-        setBodyError(null);
-        if (isJsonContentType) {
-          try {
-            const parsedBody = JSON.parse(value.trim());
-            updatedTarget.config.body = parsedBody;
-            setBodyError(null);
-          } catch {
-            setBodyError('Invalid JSON');
-          }
-        }
-        if (!value.includes('{{prompt}}')) {
+        const bodyStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
+        if (bodyStr.includes('{{prompt}}')) {
+          setBodyError(null);
+        } else if (!updatedTarget.config.request) {
           setBodyError('Request body must contain {{prompt}}');
+        }
+      } else if (field === 'request') {
+        updatedTarget.config.request = value;
+        if (value && !value.includes('{{prompt}}')) {
+          setBodyError('Raw request must contain {{prompt}} template variable');
+        } else {
+          setBodyError(null);
         }
       } else if (field === 'label') {
         updatedTarget.label = value;
       } else {
-        (updatedTarget.config as any)[field] = value;
+        updatedTarget.config[field] = value;
       }
 
       setSelectedTarget(updatedTarget);
+      updateConfig('target', updatedTarget);
     }
   };
 
@@ -284,42 +247,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
     }
   };
 
-  const updateHeaderKey = (index: number, newKey: string) => {
-    if (typeof selectedTarget === 'object') {
-      const updatedHeaders = { ...selectedTarget.config.headers };
-      const oldKey = Object.keys(updatedHeaders)[index];
-      const value = updatedHeaders[oldKey];
-      delete updatedHeaders[oldKey];
-      updatedHeaders[newKey] = value;
-      updateCustomTarget('headers', updatedHeaders);
-    }
-  };
-
-  const updateHeaderValue = (index: number, newValue: string) => {
-    if (typeof selectedTarget === 'object') {
-      const updatedHeaders = { ...selectedTarget.config.headers };
-      const key = Object.keys(updatedHeaders)[index];
-      updatedHeaders[key] = newValue;
-      updateCustomTarget('headers', updatedHeaders);
-    }
-  };
-
-  const addHeader = () => {
-    if (typeof selectedTarget === 'object') {
-      const updatedHeaders = { ...selectedTarget.config.headers, '': '' };
-      updateCustomTarget('headers', updatedHeaders);
-    }
-  };
-
-  const removeHeader = (index: number) => {
-    if (typeof selectedTarget === 'object') {
-      const updatedHeaders = { ...selectedTarget.config.headers };
-      const key = Object.keys(updatedHeaders)[index];
-      delete updatedHeaders[key];
-      updateCustomTarget('headers', updatedHeaders);
-    }
-  };
-
   const handleTestTarget = async () => {
     setTestingTarget(true);
     setTestResult(null);
@@ -337,27 +264,25 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         throw new Error('Network response was not ok');
       }
 
-      const data = await response.json();
-      const result = data.test_result;
+      const data = (await response.json()) as ProviderTestResponse;
+      const result = data.testResult;
 
       if (result.error) {
         setTestResult({
-          success: false,
-          message: result.error,
-          providerResponse: data.provider_response,
+          providerResponse: data.providerResponse,
         });
       } else if (result.changes_needed) {
         setTestResult({
           success: false,
           message: result.changes_needed_reason,
           suggestions: result.changes_needed_suggestions,
-          providerResponse: data.provider_response,
+          providerResponse: data.providerResponse,
         });
       } else {
         setTestResult({
           success: true,
           message: 'Target configuration is valid!',
-          providerResponse: data.provider_response,
+          providerResponse: data.providerResponse,
         });
         setHasTestedTarget(true);
       }
@@ -370,13 +295,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
     } finally {
       setTestingTarget(false);
     }
-  };
-
-  const handleTryExample = () => {
-    setSelectedTarget(EXAMPLE_TARGET);
-    setRequestBody(EXAMPLE_TARGET.config.body);
-    setIsJsonContentType(true);
-    recordEvent('feature_used', { feature: 'redteam_config_try_example' });
   };
 
   return (
@@ -441,16 +359,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
                 ))}
               </Select>
             </Box>
-            <Button
-              variant="outlined"
-              onClick={handleTryExample}
-              sx={{
-                height: '56px',
-                mt: 0,
-              }}
-            >
-              Try Example
-            </Button>
           </Box>
         </FormControl>
         {(selectedTarget.id.startsWith('javascript') || selectedTarget.id.startsWith('python')) && (
@@ -506,15 +414,11 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
           <HttpEndpointConfiguration
             selectedTarget={selectedTarget}
             updateCustomTarget={updateCustomTarget}
-            updateHeaderKey={updateHeaderKey}
-            updateHeaderValue={updateHeaderValue}
-            addHeader={addHeader}
-            removeHeader={removeHeader}
-            requestBody={requestBody || ''}
-            setRequestBody={setRequestBody}
             bodyError={bodyError}
+            setBodyError={setBodyError}
             urlError={urlError}
-            isJsonContentType={isJsonContentType || false}
+            setUrlError={setUrlError}
+            updateFullTarget={setSelectedTarget}
           />
         )}
 

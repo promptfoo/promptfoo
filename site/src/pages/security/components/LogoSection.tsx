@@ -15,9 +15,9 @@ export default function LogoSection(): JSX.Element {
         <p className={styles.logoIntro}>
           Promptfoo has run{' '}
           <strong>
-            <u>16 million</u>
+            <u>16 million+</u>
           </strong>{' '}
-          probes this year at companies like
+          probes at companies like
         </p>
         <div className={styles.logoGrid}>
           {logos.map((logo, index) => (

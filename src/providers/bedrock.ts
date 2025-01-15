@@ -8,10 +8,10 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
 import type {
-  ApiProvider,
   ApiEmbeddingProvider,
-  ProviderResponse,
+  ApiProvider,
   ProviderEmbeddingResponse,
+  ProviderResponse,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
 import { maybeLoadFromExternalFile } from '../util';
@@ -442,16 +442,23 @@ export const BEDROCK_MODEL = {
               content: Array.isArray(msg.content) ? msg.content : [{ text: msg.content }],
             }))
             .filter((msg) => msg.role !== 'system');
-          systemPrompt = parsed.find((msg) => msg.role === 'system')?.content;
+          const systemMessage = parsed.find((msg) => msg.role === 'system');
+          if (systemMessage) {
+            systemPrompt = [{ text: systemMessage.content }];
+          }
         } else {
           const { system, extractedMessages } = novaParseMessages(prompt);
           messages = extractedMessages;
-          systemPrompt = system;
+          if (system) {
+            systemPrompt = [{ text: system }];
+          }
         }
       } catch {
         const { system, extractedMessages } = novaParseMessages(prompt);
         messages = extractedMessages;
-        systemPrompt = system;
+        if (system) {
+          systemPrompt = [{ text: system }];
+        }
       }
 
       const params: any = { messages };
@@ -513,15 +520,34 @@ export const BEDROCK_MODEL = {
       try {
         const parsed = JSON.parse(prompt);
         if (Array.isArray(parsed)) {
-          messages = parsed
-            .map((msg) => ({
+          const systemMessages = parsed.filter((msg) => msg.role === 'system');
+          const nonSystemMessages = parsed.filter((msg) => msg.role !== 'system');
+
+          // NOTE: Claude models handle system prompts differently than OpenAI models.
+          // For compatibility with prompts designed for OpenAI like the factuality
+          // llm-as-a-judge prompts, we convert lone system messages into user messages
+          // since Bedrock Claude doesn't support system-only prompts.
+          if (systemMessages.length === 1 && nonSystemMessages.length === 0) {
+            // If only system message, convert to user message
+            messages = [
+              {
+                role: 'user',
+                content: Array.isArray(systemMessages[0].content)
+                  ? systemMessages[0].content
+                  : [{ type: 'text', text: systemMessages[0].content }],
+              },
+            ];
+            systemPrompt = undefined;
+          } else {
+            // Normal case - keep system message as system prompt
+            messages = nonSystemMessages.map((msg) => ({
               role: msg.role,
               content: Array.isArray(msg.content)
                 ? msg.content
                 : [{ type: 'text', text: msg.content }],
-            }))
-            .filter((msg) => msg.role !== 'system');
-          systemPrompt = parsed.find((msg) => msg.role === 'system')?.content;
+            }));
+            systemPrompt = systemMessages[0]?.content;
+          }
         } else {
           const { system, extractedMessages } = parseMessages(prompt);
           messages = extractedMessages;
@@ -875,6 +901,8 @@ export abstract class AwsBedrockGenericProvider {
         const credentials = await this.getCredentials();
         const bedrock = new BedrockRuntime({
           region: this.getRegion(),
+          maxAttempts: Number(process.env.AWS_BEDROCK_MAX_RETRIES || '10'),
+          retryMode: 'adaptive',
           ...(credentials ? { credentials } : {}),
           ...(handler ? { requestHandler: handler } : {}),
         });
@@ -936,26 +964,19 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
     }
 
     const bedrockInstance = await this.getBedrockInstance();
-    let response;
-    try {
-      // https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_InvokeModel
-      response = await bedrockInstance.invokeModel({
-        modelId: this.modelName,
-        ...(this.config.guardrailIdentifier
-          ? { guardrailIdentifier: this.config.guardrailIdentifier }
-          : {}),
-        ...(this.config.guardrailVersion ? { guardrailVersion: this.config.guardrailVersion } : {}),
-        ...(this.config.trace ? { trace: this.config.trace } : {}),
-        accept: 'application/json',
-        contentType: 'application/json',
-        body: JSON.stringify(params),
-      });
-    } catch (err) {
-      return {
-        error: `API call error: ${String(err)}`,
-      };
-    }
-    logger.debug(`\tAmazon Bedrock API response: ${response.body.transformToString()}`);
+    const response = await bedrockInstance.invokeModel({
+      modelId: this.modelName,
+      ...(this.config.guardrailIdentifier
+        ? { guardrailIdentifier: this.config.guardrailIdentifier }
+        : {}),
+      ...(this.config.guardrailVersion ? { guardrailVersion: this.config.guardrailVersion } : {}),
+      ...(this.config.trace ? { trace: this.config.trace } : {}),
+      accept: 'application/json',
+      contentType: 'application/json',
+      body: JSON.stringify(params),
+    });
+
+    logger.debug(`Amazon Bedrock API response: ${response.body.transformToString()}`);
     if (isCacheEnabled()) {
       try {
         await cache.set(cacheKey, new TextDecoder().decode(response.body));
@@ -965,12 +986,16 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
     }
     try {
       const output = JSON.parse(new TextDecoder().decode(response.body));
+
       return {
         output: model.output(output),
         tokenUsage: {
           total: output.total_tokens ?? output.prompt_token_count + output.generation_token_count,
           prompt: output.prompt_tokens ?? output.prompt_token_count,
           completion: output.completion_tokens ?? output.generation_token_count,
+        },
+        guardrails: {
+          flagged: output['amazon-bedrock-guardrailAction'] === 'INTERVENED',
         },
       };
     } catch (err) {
@@ -1014,9 +1039,7 @@ export class AwsBedrockEmbeddingProvider
       };
     }
     logger.debug(
-      `\tAWS Bedrock API response (embeddings): ${JSON.stringify(
-        response.body.transformToString(),
-      )}`,
+      `AWS Bedrock API response (embeddings): ${JSON.stringify(response.body.transformToString())}`,
     );
 
     try {

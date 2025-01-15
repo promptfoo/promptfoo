@@ -1,0 +1,43 @@
+<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <style>
+            .layer { fill: #f8f9fa; stroke: #212529; stroke-width: 2; }
+            .layer-text { font-family: -apple-system, system-ui, sans-serif; font-size: 14px; fill: #212529; font-weight: bold; }
+            .detail-text { font-family: -apple-system, system-ui, sans-serif; font-size: 12px; fill: #495057; }
+            .title { font-family: -apple-system, system-ui, sans-serif; font-size: 24px; font-weight: bold; fill: #212529; }
+        </style>
+    </defs>
+    
+    <!-- Title -->
+    <text x="400" y="50" text-anchor="middle" class="title">LLM Defense in Depth</text>
+    
+    <!-- Incident Response -->
+    <path d="M100,100 L700,100 Q720,300 700,500 L100,500 Q80,300 100,100" class="layer"/>
+    <text x="400" y="130" text-anchor="middle" class="layer-text">Incident Response &amp; Monitoring</text>
+    <text x="400" y="155" text-anchor="middle" class="detail-text">Audit Logs, Escalation Procedures, Response Actions, Documentation</text>
+    
+    <!-- Proactive Testing -->
+    <path d="M150,170 L650,170 Q670,300 650,430 L150,430 Q130,300 150,170" class="layer"/>
+    <text x="400" y="200" text-anchor="middle" class="layer-text">Proactive Security Testing</text>
+    <text x="400" y="225" text-anchor="middle" class="detail-text">Red Team Exercises, Automated Testing</text>
+    
+    <!-- Response Filtering -->
+    <path d="M200,240 L600,240 Q620,300 600,360 L200,360 Q180,300 200,240" class="layer"/>
+    <text x="400" y="270" text-anchor="middle" class="layer-text">Response Filtering</text>
+    <text x="400" y="295" text-anchor="middle" class="detail-text">Content Safety, Policy Compliance</text>
+    
+    <!-- Behavioral Analysis -->
+    <path d="M250,310 L550,310 Q570,350 550,390 L250,390 Q230,350 250,310" class="layer"/>
+    <text x="400" y="340" text-anchor="middle" class="layer-text">Behavioral Analysis</text>
+    <text x="400" y="365" text-anchor="middle" class="detail-text">Pattern Detection, Rate Limiting</text>
+    
+    <!-- Conversation Monitoring -->
+    <path d="M300,380 L500,380 Q520,420 500,460 L300,460 Q280,420 300,380" class="layer"/>
+    <text x="400" y="410" text-anchor="middle" class="layer-text">Conversation Monitoring</text>
+    <text x="400" y="435" text-anchor="middle" class="detail-text">Context Tracking</text>
+    
+    <!-- Input Preprocessing -->
+    <path d="M350,450 L450,450 Q470,490 450,530 L350,530 Q330,490 350,450" class="layer"/>
+    <text x="400" y="482" text-anchor="middle" class="layer-text">Input</text>
+    <text x="400" y="502" text-anchor="middle" class="layer-text">Preprocessing</text>
+</svg>

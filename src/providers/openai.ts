@@ -24,7 +24,7 @@ import { calculateCost, REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from 
 
 // see https://platform.openai.com/docs/models
 const OPENAI_CHAT_MODELS = [
-  ...['o1-preview', 'o1-preview-2024-09-12'].map((model) => ({
+  ...['o1', 'o1-2024-12-17', 'o1-preview', 'o1-preview-2024-09-12'].map((model) => ({
     id: model,
     cost: {
       input: 15 / 1e6,
@@ -494,7 +494,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
     // NOTE: Special handling for o1 models which do not support max_tokens and temperature
-    const isO1Model = this.modelName.startsWith('o1-');
+    const isO1Model = this.modelName.startsWith('o1');
     const maxCompletionTokens = isO1Model
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
@@ -963,25 +963,19 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     }
 
     if (!response) {
-      try {
-        response = await openai.images.generate({
-          model: this.modelName,
-          prompt,
-          n: 1,
-          size:
-            ((this.config.size || process.env.OPENAI_IMAGE_SIZE) as
-              | '1024x1024'
-              | '256x256'
-              | '512x512'
-              | '1792x1024'
-              | '1024x1792'
-              | undefined) || '1024x1024',
-        });
-      } catch (error) {
-        return {
-          error: `OpenAI threw error: ${(error as Error).message}`,
-        };
-      }
+      response = await openai.images.generate({
+        model: this.modelName,
+        prompt,
+        n: 1,
+        size:
+          ((this.config.size || process.env.OPENAI_IMAGE_SIZE) as
+            | '1024x1024'
+            | '256x256'
+            | '512x512'
+            | '1792x1024'
+            | '1024x1792'
+            | undefined) || '1024x1024',
+      });
     }
     const url = response.data[0].url;
     if (!url) {

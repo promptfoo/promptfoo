@@ -59,6 +59,7 @@ describe('fetchRemoteGeneration', () => {
           task: 'purpose',
           prompts: ['prompt1', 'prompt2'],
           version: VERSION,
+          email: null,
         }),
       },
       REQUEST_TIMEOUT_MS,
@@ -90,6 +91,7 @@ describe('fetchRemoteGeneration', () => {
           task: 'entities',
           prompts: ['prompt1', 'prompt2'],
           version: VERSION,
+          email: null,
         }),
       },
       REQUEST_TIMEOUT_MS,
@@ -201,12 +203,14 @@ describe('Extraction Utils', () => {
   });
 
   describe('callExtraction', () => {
-    it('should call API and process output correctly', async () => {
+    it('should call API with formatted chat message and process output correctly', async () => {
       const result = await callExtraction(provider, 'test prompt', (output) =>
         output.toUpperCase(),
       );
       expect(result).toBe('TEST OUTPUT');
-      expect(provider.callApi).toHaveBeenCalledWith('test prompt');
+      expect(provider.callApi).toHaveBeenCalledWith(
+        JSON.stringify([{ role: 'user', content: 'test prompt' }]),
+      );
     });
 
     it('should throw an error if API call fails', async () => {

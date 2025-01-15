@@ -242,7 +242,8 @@ table.results-table,
   display: inline;
 }
 
-.results-table th .provider {
+.results-table th .provider,
+.results-table .status .provider {
   display: inline-block;
   padding: 0.25rem 0.5rem;
   background-color: var(--neutral-background-color);
@@ -286,21 +287,41 @@ table.results-table,
   margin-bottom: 0.5rem;
 }
 
-.results-table .status .pill {
-  display: inline-block;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  margin-right: 0.25rem;
-  align-self: flex-start; /* prevents it from stretching to fill width */
+.results-table .status .status-row {
+  display: flex;
+  flex-direction: row;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
-.results-table .pass .pill {
+.results-table .status .pill,
+.results-table .status .provider.pill {
+  display: inline-flex;
+  align-self: flex-start; /* prevents it from stretching to fill width */
+  align-items: center;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.9em;
+  height: 24px;
+  line-height: 1;
+}
+
+.results-table .status .provider.pill {
+  background-color: var(--neutral-background-color);
+  border: 1px solid var(--border-color);
+  color: inherit;
+  font-weight: bold;
+}
+
+.results-table .pass .pill:not(.provider) {
   background-color: var(--success-background-color);
   color: var(--pass-color);
   border: 1px solid var(--pass-color);
 }
 
-.results-table .fail .pill {
+.results-table .fail .pill:not(.provider) {
+  background-color: var(--fail-background-color);
   border: 1px solid var(--fail-color);
 }
 
@@ -364,6 +385,12 @@ table.results-table,
   max-width: 90%;
   max-height: 90%;
   cursor: zoom-out;
+  background: white;
+  border-radius: 4px;
+}
+
+[data-theme='dark'] .results-table tr .cell .lightbox img {
+  background: #333;
 }
 
 .resizer {
@@ -504,8 +531,28 @@ thead.collapsed .header-dismiss {
   max-width: 90%;
   max-height: 90%;
   object-fit: contain;
+  background: white;
+  border-radius: 4px;
+}
+
+[data-theme='dark'] .lightbox img {
+  background: #333;
 }
 
 .error-pill {
   cursor: pointer;
+}
+
+.results-table .provider.pill {
+  background-color: var(--neutral-background-color);
+  border: 1px solid var(--border-color);
+  color: inherit;
+  font-weight: bold;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.9em;
+  height: 24px;
+  line-height: 1;
 }

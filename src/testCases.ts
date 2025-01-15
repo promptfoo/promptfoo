@@ -9,7 +9,9 @@ import * as path from 'path';
 import { parse as parsePath } from 'path';
 import { testCaseFromCsvRow } from './csv';
 import { getEnvBool, getEnvString } from './envars';
+import { importModule } from './esm';
 import { fetchCsvFromGoogleSheet } from './googleSheets';
+import { fetchHuggingFaceDataset } from './integrations/huggingfaceDatasets';
 import logger from './logger';
 import { loadApiProvider } from './providers';
 import { getDefaultProviders } from './providers/defaults';
@@ -96,6 +98,11 @@ export async function readStandaloneTestsFile(
       feature: 'yaml tests file',
     });
     rows = yaml.load(fs.readFileSync(resolvedVarsPath, 'utf-8')) as unknown as any;
+  } else if (fileExtension === 'js' || fileExtension === 'ts' || fileExtension === 'mjs') {
+    telemetry.recordAndSendOnce('feature_used', {
+      feature: 'js tests file',
+    });
+    return await importModule(resolvedVarsPath);
   }
 
   return rows.map((row, idx) => {
@@ -175,6 +182,13 @@ export async function readTests(
   const ret: TestCase[] = [];
 
   const loadTestsFromGlob = async (loadTestsGlob: string) => {
+    if (loadTestsGlob.startsWith('huggingface://datasets/')) {
+      telemetry.recordAndSendOnce('feature_used', {
+        feature: 'huggingface dataset',
+      });
+      return await fetchHuggingFaceDataset(loadTestsGlob);
+    }
+
     if (loadTestsGlob.startsWith('file://')) {
       loadTestsGlob = loadTestsGlob.slice('file://'.length);
     }
@@ -231,7 +245,7 @@ export async function readTests(
       // Points to a tests file with multiple test cases
       return loadTestsFromGlob(tests);
     } else {
-      // Points to a tests.csv or Google Sheet
+      // Points to a tests.{csv,json,yaml,yml,js} or Google Sheet
       return readStandaloneTestsFile(tests, basePath);
     }
   } else if (Array.isArray(tests)) {

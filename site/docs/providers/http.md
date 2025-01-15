@@ -468,6 +468,24 @@ providers:
         user_message: '{{prompt}}'
 ```
 
+## Request Retries
+
+The HTTP provider automatically retries failed requests in the following scenarios:
+
+- Rate limiting (HTTP 429)
+- Server errors
+- Network failures
+
+By default, it will attempt up to 4 retries with exponential backoff. You can configure the maximum number of retries using the `maxRetries` option:
+
+```yaml
+providers:
+  - id: http
+    config:
+      url: https://api.example.com/v1/chat
+      maxRetries: 2 # Override default of 4 retries
+```
+
 ## Reference
 
 Supported config options:
@@ -476,13 +494,49 @@ Supported config options:
 | ----------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | url               | string                  | The URL to send the HTTP request to. If not provided, the `id` of the provider will be used as the URL.                                                                             |
 | request           | string                  | A raw HTTP request to send. This will override the `url`, `method`, `headers`, `body`, and `queryParams` options.                                                                   |
-| method            | string                  | The HTTP method to use for the request. Defaults to 'GET' if not specified.                                                                                                         |
+| method            | string                  | HTTP method (GET, POST, etc). Defaults to POST if body is provided, GET otherwise.                                                                                                  |
 | headers           | Record\<string, string> | Key-value pairs of HTTP headers to include in the request.                                                                                                                          |
-| body              | Record\<string, any>    | The request body. For POST requests, this will be sent as JSON.                                                                                                                     |
+| body              | object \| string        | The request body. For POST requests, objects are automatically stringified as JSON.                                                                                                 |
 | queryParams       | Record\<string, string> | Key-value pairs of query parameters to append to the URL.                                                                                                                           |
 | transformRequest  | string \| Function      | A function, string template, or file path to transform the prompt before sending it to the API.                                                                                     |
 | transformResponse | string \| Function      | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field. |
+| maxRetries        | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                |
 
 Note: All string values in the config (including those nested in `headers`, `body`, and `queryParams`) support Nunjucks templating. This means you can use the `{{prompt}}` variable or any other variables passed in the test context.
 
 In addition to a full URL, the provider `id` field accepts `http` or `https` as values.
+
+## Configuration Generator
+
+Use the generator below to create an HTTP provider configuration based on your endpoint:
+
+import { HttpConfigGenerator } from '@site/src/components/HttpConfigGenerator';
+
+<HttpConfigGenerator />
+
+## Error Handling
+
+The HTTP provider throws errors in the following scenarios:
+
+- Non-200 HTTP status codes (any response with status < 200 or >= 300)
+- Network errors or request failures
+- Invalid response parsing
+- Session parsing errors
+- Invalid request configurations
+
+These errors will propagate up to your application, allowing you to handle them appropriately. For example:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://example.com/api'
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/json'
+      body:
+        prompt: '{{prompt}}'
+      maxRetries: 3 # Will retry on network errors or rate limits
+```
+
+Note that while the provider will automatically retry on certain errors (like rate limits) based on the `maxRetries` configuration, other errors will be thrown immediately.

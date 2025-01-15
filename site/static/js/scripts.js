@@ -18,6 +18,14 @@
       'https://cdn.getkoala.com/v1/pk_27d6c47cb0df11c274749db81d01a49ddee8/sdk.js',
     ),
     (document.body || document.head).appendChild(n);
+
+  document.addEventListener('copy', function () {
+    const content = window.getSelection().toString();
+    ko.track('Content Copied', {
+      url: window.location.pathname,
+      content,
+    });
+  });
 })();
 
 !(function (e, r) {
@@ -98,3 +106,16 @@ posthog.init('phc_gOS5ctlYqd64vmJtYVpAU0W5iew7OopcETkyYNpkyYP', {
   api_host: 'https://us.i.posthog.com',
   person_profiles: 'identified_only', // or 'always' to create profiles for anonymous users as well
 });
+
+/* Reo */
+!(function () {
+  var e, t, n;
+  (e = '59f3ca4439de16d'),
+    (t = function () {
+      Reo.init({ clientID: '59f3ca4439de16d' });
+    }),
+    ((n = document.createElement('script')).src = 'https://static.reo.dev/' + e + '/reo.js'),
+    (n.defer = !0),
+    (n.onload = t),
+    document.head.appendChild(n);
+})();
