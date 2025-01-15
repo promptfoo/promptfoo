@@ -44,7 +44,7 @@ export function getHeaderForTable(eval_: Eval) {
   };
 }
 
-function convertEvalResultToTableCell(result: EvalResult): EvaluateTableOutput {
+export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableOutput {
   let resultText: string | undefined;
   const failReasons = (result.gradingResult?.componentResults || [])
     .filter((result) => (result ? !result.pass : false))
@@ -105,6 +105,3 @@ export function convertTestResultsToTableRow(
 
   return row;
 }
-
-
-export { convertEvalResultToTableCell };
