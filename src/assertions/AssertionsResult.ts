@@ -68,7 +68,7 @@ export class AssertionsResult {
     this.componentResults[index] = result;
 
     const isRedteamGuardrail =
-      result.assertion?.type === 'guardrail' && result.assertion?.purpose === 'redteam';
+      result.assertion?.type === 'guardrail' && result.assertion?.config?.purpose === 'redteam';
 
     if (isRedteamGuardrail && !result.pass) {
       this.failedContentSafetyChecks = true;
