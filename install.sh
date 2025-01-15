@@ -146,14 +146,14 @@
     OS=$(uname -s | tr '[:upper:]' '[:lower:]')
     ARCH=$(uname -m)
     case $ARCH in
-      x86_64) ARCH="x64" ;;
-      aarch64 | arm64) ARCH="arm64" ;;
-      *) handle_error "Unsupported architecture: $ARCH" ;;
+    x86_64) ARCH="x64" ;;
+    aarch64 | arm64) ARCH="arm64" ;;
+    *) handle_error "Unsupported architecture: $ARCH" ;;
     esac
     case $OS in
-      linux) ;;
-      darwin) OS="macos" ;;
-      *) handle_error "Unsupported operating system: $OS" ;;
+    linux) ;;
+    darwin) OS="macos" ;;
+    *) handle_error "Unsupported operating system: $OS" ;;
     esac
   }
 
