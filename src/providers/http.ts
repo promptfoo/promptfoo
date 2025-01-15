@@ -231,8 +231,10 @@ export async function createTransformRequest(
       try {
         return transform(prompt);
       } catch (err) {
-        logger.error(`Error in request transform function: ${String(err)}`);
-        throw err;
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        const wrappedError = new Error(`Error in request transform function: ${errorMessage}`);
+        logger.error(wrappedError.message);
+        throw wrappedError;
       }
     };
   }
@@ -256,8 +258,12 @@ export async function createTransformRequest(
           try {
             return requiredModule(prompt);
           } catch (err) {
-            logger.error(`Error in request transform function from ${filename}: ${String(err)}`);
-            throw err;
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            const wrappedError = new Error(
+              `Error in request transform function from ${filename}: ${errorMessage}`,
+            );
+            logger.error(wrappedError.message);
+            throw wrappedError;
           }
         };
       }
@@ -271,8 +277,19 @@ export async function createTransformRequest(
         const rendered = nunjucks.renderString(transform, { prompt });
         return new Function('prompt', `${rendered}`)(prompt);
       } catch (err) {
-        logger.error(`Error in request transform string template: ${String(err)}`);
-        throw err;
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        // Extract just the error message from nunjucks error format
+        const cleanedMessage =
+          errorMessage
+            .split('\n')
+            .map((line) => line.trim())
+            .filter((line) => line.includes('Error:'))
+            .map((line) => line.replace(/^Error:\s*/, ''))[0] || errorMessage;
+        const wrappedError = new Error(
+          `Error in request transform string template: ${cleanedMessage}`,
+        );
+        logger.error(wrappedError.message);
+        throw wrappedError;
       }
     };
   }

@@ -1120,7 +1120,9 @@ describe('createTransformRequest', () => {
     const transform = await createTransformRequest('file://error-transform.js');
     await expect(async () => {
       await transform('test');
-    }).rejects.toThrow('Error in request transform function from error-transform.js: File transform error');
+    }).rejects.toThrow(
+      'Error in request transform function from error-transform.js: File transform error',
+    );
   });
 
   it('should handle errors in string template transform', async () => {
