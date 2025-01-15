@@ -127,9 +127,22 @@ export async function createTransformResponse(
       `Response transform malformed: ${filename} must export a function or have a default export as a function`,
     );
   } else if (typeof parser === 'string') {
-    return (data, text) => ({
-      output: new Function('json', 'text', `return ${parser}`)(data, text),
-    });
+    return (data, text) => {
+      try {
+        const trimmedParser = parser.trim();
+        const transformFn = new Function(
+          'json',
+          'text',
+          `try { return (${trimmedParser}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
+        );
+        return {
+          output: transformFn(data || null, text),
+        };
+      } catch (err) {
+        logger.error(`Error in response transform: ${String(err)}`);
+        throw new Error(`Failed to transform response: ${String(err)}`);
+      }
+    };
   }
   throw new Error(
     `Unsupported response transform type: ${typeof parser}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
