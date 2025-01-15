@@ -1,7 +1,10 @@
 import input from '@inquirer/input';
 import type { GlobalConfig } from '../configTypes';
 import { getEnvString, isCI } from '../envars';
+import { fetchWithTimeout } from '../fetch';
+import logger from '../logger';
 import telemetry from '../telemetry';
+import invariant from '../util/invariant';
 import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
 export function getUserEmail(): string | null {
@@ -35,4 +38,28 @@ export async function promptForEmailUnverified() {
   await telemetry.saveConsent(email, {
     source: 'promptForEmailUnverified',
   });
+}
+
+export async function checkEmailStatusOrExit() {
+  const email = getUserEmail();
+  invariant(email, 'Email should be set before calling checkEmailStatusOrExit');
+  try {
+    const resp = await fetchWithTimeout(
+      `https://api.promptfoo.app/api/users/status?email=${email}`,
+      undefined,
+      500,
+    );
+    const data = (await resp.json()) as {
+      status: 'ok' | 'exceeded_limit';
+      error?: string;
+    };
+    if (data?.status === 'exceeded_limit') {
+      logger.error(
+        'You have exceeded the maximum cloud inference limit. Please contact inquiries@promptfoo.dev to upgrade your account.',
+      );
+      process.exit(1);
+    }
+  } catch (e) {
+    logger.debug(`Failed to check user status: ${e}`);
+  }
 }
