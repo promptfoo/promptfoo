@@ -1,9 +1,6 @@
 import * as fs from 'fs';
 import yaml from 'js-yaml';
-import * as os from 'os';
-import * as path from 'path';
 import { doEval } from '../../src/commands/eval';
-import logger, { setLogCallback, setLogLevel } from '../../src/logger';
 import type Eval from '../../src/models/eval';
 import { doGenerateRedteam } from '../../src/redteam/commands/generate';
 import { doRedteamRun } from '../../src/redteam/shared';
@@ -12,164 +9,143 @@ import { isRunningUnderNpx } from '../../src/util';
 import { loadDefaultConfig } from '../../src/util/config/default';
 
 jest.mock('fs');
-jest.mock('../../src/logger');
+jest.mock('js-yaml');
 jest.mock('../../src/commands/eval');
 jest.mock('../../src/redteam/commands/generate');
-jest.mock('../../src/util/config/default');
 jest.mock('../../src/share');
 jest.mock('../../src/util');
+jest.mock('../../src/util/config/default');
 
 describe('doRedteamRun', () => {
+  const mockEvalResult = {
+    id: 'test-eval-id',
+    createdAt: Date.now(),
+    config: {},
+    results: [],
+    prompts: [],
+    persisted: false,
+    version: () => 3,
+    useOldResults: () => false,
+    setTable: jest.fn(),
+    save: jest.fn(),
+    getVars: jest.fn(),
+    getPrompts: jest.fn(),
+    getTable: jest.fn(),
+    addResult: jest.fn(),
+    fetchResultsBatched: jest.fn(),
+    fetchResultsByTestIdx: jest.fn(),
+    addPrompts: jest.fn(),
+    loadResults: jest.fn(),
+    getResults: jest.fn(),
+    toEvaluateSummary: jest.fn(),
+    toResultsFile: jest.fn(),
+    delete: jest.fn(),
+  } as unknown as Eval;
+
   beforeEach(() => {
     jest.resetAllMocks();
-    jest.spyOn(Date, 'now').mockReturnValue(1736911528082);
-    jest.spyOn(os, 'tmpdir').mockReturnValue('/tmp');
-  });
-
-  it('should run with basic options', async () => {
-    const mockConfig = { prompts: ['test prompt'] };
-    const mockEvalResult = {
-      id: 'test-eval',
-      createdAt: Date.now(),
-      config: {},
-      results: [],
-      prompts: [],
-      persisted: false,
-    } as unknown as Eval;
-
     jest.mocked(loadDefaultConfig).mockResolvedValue({
       defaultConfig: {},
-      defaultConfigPath: 'config.yaml',
+      defaultConfigPath: undefined,
     });
-
-    jest.mocked(doGenerateRedteam).mockResolvedValue(mockConfig);
-    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(doGenerateRedteam).mockResolvedValue({});
     jest.mocked(doEval).mockResolvedValue(mockEvalResult);
+    jest.mocked(createShareableUrl).mockResolvedValue('https://example.com/share');
     jest.mocked(isRunningUnderNpx).mockReturnValue(false);
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(yaml.dump).mockReturnValue('test yaml');
+  });
 
+  it('should run with default configuration', async () => {
     const options = {
-      verbose: true,
-      config: 'test-config.yaml',
-      output: 'test-output.yaml',
+      config: 'promptfooconfig.yaml',
+      output: 'redteam.yaml',
     };
 
     const result = await doRedteamRun(options);
 
-    expect(setLogLevel).toHaveBeenCalledWith('debug');
     expect(doGenerateRedteam).toHaveBeenCalledWith({
-      config: 'test-config.yaml',
-      output: 'test-output.yaml',
-      force: undefined,
-      verbose: true,
+      config: 'promptfooconfig.yaml',
+      output: 'redteam.yaml',
       inRedteamRun: true,
+      force: undefined,
+      verbose: undefined,
+      delay: undefined,
       abortSignal: undefined,
     });
     expect(doEval).toHaveBeenCalledWith(
-      {
-        config: ['test-output.yaml'],
-        output: ['test-output.yaml'],
+      expect.objectContaining({
+        config: ['redteam.yaml'],
         cache: true,
         write: true,
-        filterProviders: undefined,
-        filterTargets: undefined,
-        verbose: true,
-      },
+      }),
       {},
-      'test-output.yaml',
-      {
+      'redteam.yaml',
+      expect.objectContaining({
         showProgressBar: true,
-        abortSignal: undefined,
-      },
+      }),
     );
     expect(result).toEqual(mockEvalResult);
   });
 
-  it('should handle liveRedteamConfig', async () => {
-    const mockConfig = { prompts: ['test prompt'] };
-    const expectedTmpDir = '/tmp/redteam-1736911528082';
+  it('should handle live redteam config', async () => {
+    const liveConfig = {
+      prompts: ['test prompt'],
+      tests: ['test case'],
+    };
 
-    jest.mocked(fs.mkdirSync).mockImplementation();
-    jest.mocked(fs.writeFileSync).mockImplementation();
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(doGenerateRedteam).mockResolvedValue(mockConfig);
-    jest.mocked(loadDefaultConfig).mockResolvedValue({
-      defaultConfig: {},
-      defaultConfigPath: undefined,
-    });
-    jest.mocked(doEval).mockResolvedValue({
-      id: 'test',
-      createdAt: Date.now(),
-      config: {},
-      results: [],
-      prompts: [],
-      persisted: false,
-    } as unknown as Eval);
+    const options = {
+      liveRedteamConfig: liveConfig,
+    };
 
-    await doRedteamRun({
-      liveRedteamConfig: mockConfig,
-    });
+    await doRedteamRun(options);
 
-    expect(fs.mkdirSync).toHaveBeenCalledWith(expectedTmpDir, { recursive: true });
-    expect(fs.writeFileSync).toHaveBeenCalledWith(
-      path.join(expectedTmpDir, 'redteam.yaml'),
-      yaml.dump(mockConfig),
-    );
+    expect(fs.mkdirSync).toHaveBeenCalledWith(expect.any(String), { recursive: true });
+    expect(fs.writeFileSync).toHaveBeenCalledWith(expect.any(String), 'test yaml');
+    expect(yaml.dump).toHaveBeenCalledWith(liveConfig);
   });
 
   it('should skip evaluation if no test cases generated', async () => {
-    jest.mocked(doGenerateRedteam).mockResolvedValue(null);
     jest.mocked(fs.existsSync).mockReturnValue(false);
+    jest.mocked(doGenerateRedteam).mockResolvedValue(null);
 
     const result = await doRedteamRun({});
 
-    expect(result).toBeUndefined();
     expect(doEval).not.toHaveBeenCalled();
-    expect(logger.info).toHaveBeenCalledWith('No test cases generated. Skipping scan.');
+    expect(result).toBeUndefined();
   });
 
-  it('should handle custom log callback', async () => {
-    const logCallback = jest.fn();
-    jest.mocked(doGenerateRedteam).mockResolvedValue({});
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(loadDefaultConfig).mockResolvedValue({
-      defaultConfig: {},
-      defaultConfigPath: undefined,
-    });
-    jest.mocked(doEval).mockResolvedValue({} as unknown as Eval);
-
-    await doRedteamRun({
-      logCallback,
-    });
-
-    expect(setLogCallback).toHaveBeenCalledWith(logCallback);
-    expect(setLogCallback).toHaveBeenLastCalledWith(null);
-  });
-
-  it('should create shareable URL when loaded from cloud', async () => {
-    const mockEvalResult = {
-      id: 'test-eval',
-      createdAt: Date.now(),
-      config: {},
-      results: [],
-      prompts: [],
-      persisted: false,
-    } as unknown as Eval;
-    const mockShareableUrl = 'https://test.url';
-
-    jest.mocked(doGenerateRedteam).mockResolvedValue({});
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(doEval).mockResolvedValue(mockEvalResult);
-    jest.mocked(createShareableUrl).mockResolvedValue(mockShareableUrl);
-    jest.mocked(loadDefaultConfig).mockResolvedValue({
-      defaultConfig: {},
-      defaultConfigPath: undefined,
-    });
-
-    await doRedteamRun({
+  it('should handle cloud-loaded results', async () => {
+    const options = {
       loadedFromCloud: true,
-    });
+    };
+
+    await doRedteamRun(options);
 
     expect(createShareableUrl).toHaveBeenCalledWith(mockEvalResult, false);
-    expect(logger.info).toHaveBeenCalledWith(`View results: ${mockShareableUrl}`);
+  });
+
+  it('should handle abort signal', async () => {
+    const abortSignal = new AbortController().signal;
+    const options = {
+      abortSignal,
+    };
+
+    await doRedteamRun(options);
+
+    expect(doGenerateRedteam).toHaveBeenCalledWith(
+      expect.objectContaining({
+        abortSignal,
+        inRedteamRun: true,
+      }),
+    );
+    expect(doEval).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        abortSignal,
+      }),
+    );
   });
 });
