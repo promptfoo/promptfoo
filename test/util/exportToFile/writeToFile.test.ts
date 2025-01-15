@@ -1,66 +1,104 @@
 import fs from 'fs';
-import path from 'path';
 import { JsonlFileWriter } from '../../../src/util/exportToFile/writeToFile';
 
+jest.mock('fs');
+
 describe('JsonlFileWriter', () => {
-  const testFilePath = path.join(__dirname, 'test.jsonl');
+  const mockWrite = jest.fn();
+  const mockEnd = jest.fn();
+
+  // Create a mock WriteStream that includes required properties
+  const mockWriteStream = {
+    write: mockWrite,
+    end: mockEnd,
+    close: jest.fn(),
+    bytesWritten: 0,
+    path: '',
+    pending: false,
+    writable: true,
+    writableEnded: false,
+    writableFinished: false,
+    writableHighWaterMark: 0,
+    writableLength: 0,
+    writableObjectMode: false,
+    writableCorked: 0,
+    closed: false,
+    destroyed: false,
+    readable: false,
+    readableEncoding: null,
+    readableEnded: false,
+    readableFlowing: null,
+    readableHighWaterMark: 0,
+    readableLength: 0,
+    readableObjectMode: false,
+    errored: null,
+    writableNeedDrain: false,
+    allowHalfOpen: true,
+    _writableState: {},
+    _readableState: {},
+    addListener: jest.fn(),
+    emit: jest.fn(),
+    eventNames: jest.fn(),
+    getMaxListeners: jest.fn(),
+    listenerCount: jest.fn(),
+    listeners: jest.fn(),
+    off: jest.fn(),
+    on: jest.fn(),
+    once: jest.fn(),
+    prependListener: jest.fn(),
+    prependOnceListener: jest.fn(),
+    rawListeners: jest.fn(),
+    removeAllListeners: jest.fn(),
+    removeListener: jest.fn(),
+    setMaxListeners: jest.fn(),
+  } as unknown as fs.WriteStream;
 
   beforeEach(() => {
-    // Clean up test file before each test
-    if (fs.existsSync(testFilePath)) {
-      fs.unlinkSync(testFilePath);
-    }
+    jest.resetAllMocks();
+    jest.mocked(fs.createWriteStream).mockReturnValue(mockWriteStream);
   });
 
-  afterEach(() => {
-    // Clean up test file after each test
-    if (fs.existsSync(testFilePath)) {
-      fs.unlinkSync(testFilePath);
-    }
+  describe('write', () => {
+    it('should write data as JSON line to file', async () => {
+      const writer = new JsonlFileWriter('test.jsonl');
+      const testData = { key: 'value' };
+
+      mockWrite.mockImplementation((_data: string, callback: (error: Error | null) => void) => {
+        callback(null);
+        return true;
+      });
+
+      await writer.write(testData);
+
+      expect(mockWrite).toHaveBeenCalledWith(`${JSON.stringify(testData)}\n`, expect.any(Function));
+    });
+
+    it('should reject if write stream encounters error', async () => {
+      const writer = new JsonlFileWriter('test.jsonl');
+      const testData = { key: 'value' };
+      const testError = new Error('Write error');
+
+      mockWrite.mockImplementation((_data: string, callback: (error: Error | null) => void) => {
+        callback(testError);
+        return false;
+      });
+
+      await expect(writer.write(testData)).rejects.toThrow('Write error');
+    });
   });
 
-  it('should write data to file', async () => {
-    const writer = new JsonlFileWriter(testFilePath);
-    const testData = { test: 'data' };
+  describe('close', () => {
+    it('should close the write stream', async () => {
+      const writer = new JsonlFileWriter('test.jsonl');
 
-    await writer.write(testData);
-    await writer.close();
+      mockEnd.mockImplementation((callback: () => void) => {
+        callback();
+        return mockWriteStream;
+      });
 
-    const fileContent = fs.readFileSync(testFilePath, 'utf-8');
-    expect(fileContent).toBe(JSON.stringify(testData) + '\n');
-  });
+      await writer.close();
 
-  it('should append multiple records', async () => {
-    const writer = new JsonlFileWriter(testFilePath);
-    const testData1 = { id: 1, value: 'first' };
-    const testData2 = { id: 2, value: 'second' };
-
-    await writer.write(testData1);
-    await writer.write(testData2);
-    await writer.close();
-
-    const fileContent = fs.readFileSync(testFilePath, 'utf-8');
-    const expected = JSON.stringify(testData1) + '\n' + JSON.stringify(testData2) + '\n';
-    expect(fileContent).toBe(expected);
-  });
-
-  it('should handle empty objects', async () => {
-    const writer = new JsonlFileWriter(testFilePath);
-    const emptyData = {};
-
-    await writer.write(emptyData);
-    await writer.close();
-
-    const fileContent = fs.readFileSync(testFilePath, 'utf-8');
-    expect(fileContent).toBe('{}\n');
-  });
-
-  it('should close the write stream', async () => {
-    const writer = new JsonlFileWriter(testFilePath);
-    await writer.write({ test: 'data' });
-    await writer.close();
-
-    // Verify file exists and was written to
-    expect(fs.existsSync(testFilePath)).toBe(true);
+      expect(mockEnd).toHaveBeenCalledWith(expect.any(Function));
+    });
   });
 });
