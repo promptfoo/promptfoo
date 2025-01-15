@@ -4,7 +4,6 @@ import debounce from 'debounce';
 import dedent from 'dedent';
 import type { Request, Response } from 'express';
 import express from 'express';
-import type { Stats } from 'fs';
 import fs from 'fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -207,13 +206,16 @@ export async function startServer(
   await runDbMigrations();
 
   const watchFilePath = getDbSignalPath();
-  const watcher = debounce(async (curr: Stats, prev: Stats) => {
-    if (curr.mtime !== prev.mtime) {
-      io.emit('update', await getLatestEval(filterDescription));
-      allPrompts = null;
-    }
-  }, 250);
-  fs.watchFile(watchFilePath, watcher);
+  fs.watch(
+    watchFilePath,
+    debounce(async (eventType, filename) => {
+      logger.info(`File changed: ${eventType} ${filename}`);
+      if (eventType === 'change') {
+        io.emit('update', await getLatestEval(filterDescription));
+        allPrompts = null;
+      }
+    }, 250),
+  );
 
   io.on('connection', async (socket) => {
     socket.emit('init', await getLatestEval(filterDescription));

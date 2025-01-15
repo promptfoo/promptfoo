@@ -357,9 +357,9 @@ export async function writeResultsToDatabase(
   const filePath = getDbSignalPath();
   try {
     const now = new Date();
-    fs.utimesSync(filePath, now, now);
-  } catch {
-    fs.closeSync(fs.openSync(filePath, 'w'));
+    fs.writeFileSync(filePath, now.toISOString());
+  } catch (err) {
+    logger.error(`Failed to write signal file: ${err}`);
   }
 
   return evalId;
