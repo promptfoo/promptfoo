@@ -525,7 +525,9 @@ The HTTP provider throws errors in the following scenarios:
 - Session parsing errors
 - Invalid request configurations
 
-By default, any response with status code outside the 200-299 range is considered an error. You can customize this behavior using the `validateStatus` option:
+By default, any response with status code outside the 200-299 range is considered an error. You can customize this behavior using the `validateStatus` option in three ways:
+
+### Function-based validation
 
 ```yaml
 providers:
@@ -533,6 +535,54 @@ providers:
     config:
       url: 'https://example.com/api'
       validateStatus: (status) => status < 500 # Accept any status code below 500
+```
+
+### String-based validation
+
+You can provide a JavaScript expression as a string:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://example.com/api'
+      validateStatus: 'status >= 200 && status <= 299' # Default behavior
+```
+
+### File-based validation
+
+You can load the validator from an external JavaScript file:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://example.com/api'
+      validateStatus: 'file://validators/status.js' # Load default export
+```
+
+Or specify a particular function from the file:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://example.com/api'
+      validateStatus: 'file://validators/status.js:validateStatus' # Load specific function
+```
+
+Example validator file (`validators/status.js`):
+
+```javascript
+// Using default export
+export default function (status) {
+  return status < 500;
+}
+
+// Or named export
+export function validateStatus(status) {
+  return status < 500;
+}
 ```
 
 The provider will automatically retry certain errors (like rate limits) based on the `maxRetries` configuration, while other errors will be thrown immediately.
