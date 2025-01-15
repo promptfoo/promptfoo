@@ -129,10 +129,14 @@ export async function createTransformResponse(
   } else if (typeof parser === 'string') {
     return (data, text) => {
       try {
-        const safeParser = parser.trim();
-        const transformFn = new Function('json', 'text', `try { return (${safeParser}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`);
+        const trimmedParser = parser.trim();
+        const transformFn = new Function(
+          'json',
+          'text',
+          `try { return (${trimmedParser}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
+        );
         return {
-          output: transformFn(data, text),
+          output: transformFn(data || null, text),
         };
       } catch (err) {
         logger.error(`Error in response transform: ${String(err)}`);
