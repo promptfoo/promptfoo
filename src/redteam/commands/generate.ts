@@ -100,7 +100,7 @@ export async function doGenerateRedteam(
     name: 'generate redteam - started',
     numPrompts: testSuite.prompts.length,
     numTestsExisting: (testSuite.tests || []).length,
-    plugins: redteamConfig?.plugins?.map((p) => p.id) || [],
+    plugins: redteamConfig?.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) || [],
     strategies: redteamConfig?.strategies?.map((s) => (typeof s === 'string' ? s : s.id)) || [],
   });
   await telemetry.send();
