@@ -6,13 +6,6 @@ import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
 import React from 'react';
-import PluginTable from '@site/docs/\_shared/PluginTable';
-import {
-PLUGINS,
-PLUGIN_CATEGORIES,
-humanReadableCategoryList,
-CATEGORY_DESCRIPTIONS,
-} from '@site/docs/\_shared/data/plugins';
 import VulnerabilityCategoriesTables from '@site/docs/\_shared/VulnerabilityCategoriesTables';
 
 # Harmful Content Plugin
