@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React from 'react';
 import Editor from 'react-simple-code-editor';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import InfoIcon from '@mui/icons-material/Info';
@@ -41,37 +41,6 @@ interface TestTargetConfigurationProps {
   hasTestedTarget: boolean;
 }
 
-function validateTransform(code: string, type: 'request' | 'response'): string | null {
-  try {
-    // Skip validation for empty code
-    if (!code.trim()) {
-      return null;
-    }
-
-    // Check if it's a function definition
-    if (code.includes('=>') || code.startsWith('function')) {
-      const funcStr = code.includes('=>') ? code : `(${code})`;
-
-      // Extract arguments
-      const argsMatch = funcStr.match(/^\s*\(([^)]*)\)\s*=>|\bfunction\s*\w*\s*\(([^)]*)\)/);
-      if (!argsMatch) {
-        return null;
-      }
-
-      const args = (argsMatch[1] || argsMatch[2] || '').split(',').map((arg) => arg.trim());
-
-      if (type === 'request' && args.length !== 1) {
-        return 'Request transform should take exactly one argument (prompt)';
-      } else if (type === 'response' && args.length !== 2) {
-        return 'Response transform should take two arguments (json, text)';
-      }
-    }
-    return null;
-  } catch {
-    return null; // Ignore parsing errors - let runtime catch them
-  }
-}
-
 const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
   testingTarget,
   handleTestTarget,
@@ -82,35 +51,6 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
 }) => {
   const theme = useTheme();
   const darkMode = theme.palette.mode === 'dark';
-
-  const handleTransformChange = useCallback(
-    (type: 'request' | 'response', code: string) => {
-      const warning = validateTransform(code, type);
-      const field = type === 'request' ? 'transformRequest' : 'transformResponse';
-      updateCustomTarget(field, code);
-
-      // Clear any existing warning
-      const warningEl = document.getElementById(`${type}-transform-warning`);
-      if (warningEl) {
-        warningEl.remove();
-      }
-
-      // Show new warning if needed
-      if (warning) {
-        const editorEl = document.querySelector(`[data-transform="${type}"]`);
-        if (editorEl) {
-          const alertEl = document.createElement('div');
-          alertEl.id = `${type}-transform-warning`;
-          alertEl.style.color = theme.palette.warning.main;
-          alertEl.style.fontSize = '0.75rem';
-          alertEl.style.marginTop = '0.5rem';
-          alertEl.textContent = warning;
-          editorEl.parentElement?.appendChild(alertEl);
-        }
-      }
-    },
-    [theme.palette.warning.main, updateCustomTarget],
-  );
 
   return (
     <Box mt={4}>
@@ -129,11 +69,10 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 position: 'relative',
                 backgroundColor: darkMode ? '#1e1e1e' : '#fff',
               }}
-              data-transform="request"
             >
               <Editor
                 value={selectedTarget.config.transformRequest || ''}
-                onValueChange={(code) => handleTransformChange('request', code)}
+                onValueChange={(code) => updateCustomTarget('transformRequest', code)}
                 highlight={(code) => highlight(code, languages.javascript)}
                 padding={10}
                 placeholder={dedent`Optional: A JavaScript expression to transform the prompt before sending. Format as either:
@@ -165,11 +104,10 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 position: 'relative',
                 backgroundColor: darkMode ? '#1e1e1e' : '#fff',
               }}
-              data-transform="response"
             >
               <Editor
                 value={selectedTarget.config.transformResponse || ''}
-                onValueChange={(code) => handleTransformChange('response', code)}
+                onValueChange={(code) => updateCustomTarget('transformResponse', code)}
                 highlight={(code) => highlight(code, languages.javascript)}
                 padding={10}
                 placeholder={dedent`Transform the API response before using it. Format as either:
