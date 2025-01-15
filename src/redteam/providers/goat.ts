@@ -80,6 +80,8 @@ export default class GoatProvider implements ApiProvider {
       cached: 0,
     };
 
+    let lastTargetResponse: ProviderResponse | undefined = undefined;
+
     let assertToUse: Assertion | AssertionSet | undefined;
     let graderPassed: boolean | undefined;
     const { getGraderById } = await import('../graders');
@@ -198,6 +200,8 @@ export default class GoatProvider implements ApiProvider {
           totalTokenUsage.numRequests += 1;
         }
 
+        lastTargetResponse = targetResponse;
+
         const grader = assertToUse ? getGraderById(assertToUse.type) : undefined;
         if (test && grader) {
           const { grade } = await grader.getResult(
@@ -235,6 +239,7 @@ export default class GoatProvider implements ApiProvider {
         stopReason: graderPassed === false ? 'Grader failed' : 'Max turns reached',
       },
       tokenUsage: totalTokenUsage,
+      guardrails: lastTargetResponse?.guardrails,
     };
   }
 }
