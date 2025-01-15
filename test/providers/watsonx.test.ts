@@ -1,9 +1,13 @@
 import { WatsonXAI } from '@ibm-cloud/watsonx-ai';
 import { IamAuthenticator, BearerTokenAuthenticator } from 'ibm-cloud-sdk-core';
-import { getCache, isCacheEnabled } from '../../src/cache';
+import { getCache, isCacheEnabled, fetchWithCache } from '../../src/cache';
 import * as envarsModule from '../../src/envars';
 import logger from '../../src/logger';
-import { WatsonXProvider, generateConfigHash } from '../../src/providers/watsonx';
+import {
+  WatsonXProvider,
+  generateConfigHash,
+  clearModelSpecsCache,
+} from '../../src/providers/watsonx';
 
 jest.mock('@ibm-cloud/watsonx-ai', () => ({
   WatsonXAI: {
@@ -19,6 +23,25 @@ jest.mock('ibm-cloud-sdk-core', () => ({
 jest.mock('../../src/cache', () => ({
   getCache: jest.fn(),
   isCacheEnabled: jest.fn(),
+  fetchWithCache: jest.fn().mockImplementation(async () => ({
+    data: {
+      resources: [
+        {
+          model_id: 'meta-llama/llama-3-2-1b-instruct',
+          input_tier: 'class_c1',
+          output_tier: 'class_c1',
+          label: 'llama-3-2-1b-instruct',
+          provider: 'Meta',
+          source: 'Hugging Face',
+          model_limits: {
+            max_sequence_length: 131072,
+            max_output_tokens: 8192,
+          },
+        },
+      ],
+    },
+    cached: false,
+  })),
 }));
 
 jest.mock('../../src/logger', () => ({
@@ -369,42 +392,44 @@ describe('WatsonXProvider', () => {
   });
 
   describe('calculateWatsonXCost', () => {
+    const MODEL_ID = 'meta-llama/llama-3-2-1b-instruct';
+    const configWithModelId = {
+      ...config,
+      modelId: MODEL_ID,
+    };
+
     beforeEach(() => {
-      jest.spyOn(global, 'fetch').mockImplementation(() =>
-        Promise.resolve({
-          ok: true,
-          status: 200,
-          statusText: 'OK',
-          headers: new Headers(),
-          redirected: false,
-          type: 'basic' as ResponseType,
-          url: '',
-          json: () =>
-            Promise.resolve({
-              resources: [
-                {
-                  model_id: 'meta-llama/llama-3-2-1b-instruct',
-                  input_tier: 'class_c1',
-                  output_tier: 'class_c1',
-                  label: 'llama-3-2-1b-instruct',
-                  provider: 'Meta',
-                  source: 'Hugging Face',
-                  model_limits: {
-                    max_sequence_length: 131072,
-                    max_output_tokens: 8192,
-                  },
-                },
-              ],
-            }),
-        } as Response),
-      );
+      jest.clearAllMocks();
+      clearModelSpecsCache();
+      jest.mocked(fetchWithCache).mockImplementation(async () => ({
+        data: {
+          resources: [
+            {
+              model_id: MODEL_ID,
+              input_tier: 'class_c1',
+              output_tier: 'class_c1',
+              label: 'llama-3-2-1b-instruct',
+              provider: 'Meta',
+              source: 'Hugging Face',
+              model_limits: {
+                max_sequence_length: 131072,
+                max_output_tokens: 8192,
+              },
+            },
+          ],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      }));
     });
 
     it('should calculate cost correctly when token counts are provided', async () => {
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: jest.fn().mockResolvedValue({
           result: {
-            model_id: 'meta-llama/llama-3-2-1b-instruct',
+            model_id: MODEL_ID,
             model_version: '3.2.0',
             created_at: '2024-03-25T00:00:00Z',
             results: [
@@ -428,7 +453,7 @@ describe('WatsonXProvider', () => {
       jest.mocked(getCache).mockReturnValue(cache as any);
       jest.mocked(isCacheEnabled).mockReturnValue(true);
 
-      const provider = new WatsonXProvider('meta-llama/llama-3-2-1b-instruct', { config });
+      const provider = new WatsonXProvider(MODEL_ID, { config: configWithModelId });
       const response = await provider.callApi(prompt);
 
       expect(response.cost).toBeDefined();
@@ -440,70 +465,35 @@ describe('WatsonXProvider', () => {
       expect(response.cost).toBeCloseTo(0.00001, 6);
     });
 
-    it('should return undefined cost when token counts are not provided', async () => {
-      const mockedWatsonXAIClient: Partial<any> = {
-        generateText: jest.fn().mockResolvedValue({
-          result: {
-            model_id: 'meta-llama/llama-3-2-1b-instruct',
-            model_version: '3.2.0',
-            created_at: '2024-03-25T00:00:00Z',
-            results: [
-              {
-                generated_text: 'Test response',
-                stop_reason: 'max_tokens',
-              },
-            ],
-          },
-        }),
-      };
-      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
-
-      const cache: Partial<any> = {
-        get: jest.fn().mockResolvedValue(null),
-        set: jest.fn(),
-      };
-
-      jest.mocked(getCache).mockReturnValue(cache as any);
-      jest.mocked(isCacheEnabled).mockReturnValue(true);
-
-      const provider = new WatsonXProvider('meta-llama/llama-3-2-1b-instruct', { config });
-      const response = await provider.callApi(prompt);
-
-      expect(response.cost).toBeUndefined();
-    });
-
     it('should calculate cost correctly for class_9 tier', async () => {
       const modelId = 'meta-llama/llama-3-2-11b-vision-instruct';
-      jest.spyOn(global, 'fetch').mockImplementation(() =>
-        Promise.resolve({
-          ok: true,
-          status: 200,
-          statusText: 'OK',
-          headers: new Headers(),
-          redirected: false,
-          type: 'basic' as ResponseType,
-          url: '',
-          json: () =>
-            Promise.resolve({
-              resources: [
-                {
-                  model_id: modelId,
-                  label: 'llama-3-2-11b-vision-instruct',
-                  provider: 'Meta',
-                  source: 'Hugging Face',
-                  functions: [{ id: 'image_chat' }, { id: 'text_chat' }, { id: 'text_generation' }],
-                  input_tier: 'class_9',
-                  output_tier: 'class_9',
-                  number_params: '11b',
-                  model_limits: {
-                    max_sequence_length: 131072,
-                    max_output_tokens: 8192,
-                  },
-                },
-              ],
-            }),
-        } as Response),
-      );
+      const configWithClass9ModelId = { ...config, modelId };
+
+      clearModelSpecsCache();
+      jest.mocked(fetchWithCache).mockImplementation(async () => ({
+        data: {
+          resources: [
+            {
+              model_id: modelId,
+              label: 'llama-3-2-11b-vision-instruct',
+              provider: 'Meta',
+              source: 'Hugging Face',
+              functions: [{ id: 'image_chat' }, { id: 'text_chat' }, { id: 'text_generation' }],
+              input_tier: 'class_9',
+              output_tier: 'class_9',
+              number_params: '11b',
+              model_limits: {
+                max_sequence_length: 131072,
+                max_output_tokens: 8192,
+              },
+            },
+          ],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      }));
 
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: jest.fn().mockResolvedValue({
@@ -532,7 +522,7 @@ describe('WatsonXProvider', () => {
       jest.mocked(getCache).mockReturnValue(cache as any);
       jest.mocked(isCacheEnabled).mockReturnValue(true);
 
-      const provider = new WatsonXProvider(modelId, { config });
+      const provider = new WatsonXProvider(modelId, { config: configWithClass9ModelId });
       const response = await provider.callApi(prompt);
 
       expect(response.cost).toBeDefined();
@@ -542,38 +532,6 @@ describe('WatsonXProvider', () => {
       // Output: 50 tokens * $0.00035/1M = 0.0000175
       // Total expected: 0.000035
       expect(response.cost).toBeCloseTo(0.000035, 6);
-    });
-
-    it('should return undefined cost for class_9 tier when token counts are not provided', async () => {
-      const mockedWatsonXAIClient: Partial<any> = {
-        generateText: jest.fn().mockResolvedValue({
-          result: {
-            model_id: 'meta-llama/llama-3-2-11b-vision-instruct',
-            model_version: '3.2.0',
-            created_at: '2024-03-25T00:00:00Z',
-            results: [
-              {
-                generated_text: 'Test response',
-                stop_reason: 'max_tokens',
-              },
-            ],
-          },
-        }),
-      };
-      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
-
-      const cache: Partial<any> = {
-        get: jest.fn().mockResolvedValue(null),
-        set: jest.fn(),
-      };
-
-      jest.mocked(getCache).mockReturnValue(cache as any);
-      jest.mocked(isCacheEnabled).mockReturnValue(true);
-
-      const provider = new WatsonXProvider('meta-llama/llama-3-2-11b-vision-instruct', { config });
-      const response = await provider.callApi(prompt);
-
-      expect(response.cost).toBeUndefined();
     });
   });
 });

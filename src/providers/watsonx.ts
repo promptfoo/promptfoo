@@ -2,14 +2,14 @@ import type { WatsonXAI as WatsonXAIClient } from '@ibm-cloud/watsonx-ai';
 import crypto from 'crypto';
 import type { IamAuthenticator, BearerTokenAuthenticator } from 'ibm-cloud-sdk-core';
 import { z } from 'zod';
-import { getCache, isCacheEnabled } from '../cache';
+import { getCache, isCacheEnabled, fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import type { ApiProvider, ProviderResponse, TokenUsage } from '../types';
 import type { EnvOverrides } from '../types/env';
 import type { ProviderOptions } from '../types/providers';
 import invariant from '../util/invariant';
-import { calculateCost } from './shared';
+import { calculateCost, REQUEST_TIMEOUT_MS } from './shared';
 
 interface TextGenRequestParametersModel {
   max_new_tokens: number;
@@ -129,11 +129,19 @@ interface WatsonXModel {
 
 async function fetchModelSpecs(): Promise<ModelSpec[]> {
   try {
-    const response = await fetch(
+    const { data } = await fetchWithCache(
       'https://us-south.ml.cloud.ibm.com/ml/v1/foundation_model_specs?version=2023-09-30',
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      },
+      REQUEST_TIMEOUT_MS,
     );
-    const data = await response.json();
-    return data.resources;
+
+    // Handle string response that needs to be parsed
+    const parsedData = typeof data === 'string' ? JSON.parse(data) : data;
+    return parsedData?.resources || [];
   } catch (error) {
     logger.error(`Failed to fetch model specs: ${error}`);
     return [];
@@ -142,21 +150,21 @@ async function fetchModelSpecs(): Promise<ModelSpec[]> {
 
 let modelSpecsCache: WatsonXModel[] | null = null;
 
+export function clearModelSpecsCache() {
+  modelSpecsCache = null;
+}
+
 async function getModelSpecs(): Promise<WatsonXModel[]> {
   if (!modelSpecsCache) {
     const specs = await fetchModelSpecs();
-    modelSpecsCache = specs.map((spec) => {
-      const model = {
-        id: spec.model_id,
-        cost: {
-          input:
-            TIER_PRICING[spec.input_tier.toLowerCase() as keyof typeof TIER_PRICING] / 1e6 || 0,
-          output:
-            TIER_PRICING[spec.output_tier.toLowerCase() as keyof typeof TIER_PRICING] / 1e6 || 0,
-        },
-      };
-      return model;
-    });
+    modelSpecsCache = specs.map((spec) => ({
+      id: spec.model_id,
+      cost: {
+        input: TIER_PRICING[spec.input_tier.toLowerCase() as keyof typeof TIER_PRICING] / 1e6 || 0,
+        output:
+          TIER_PRICING[spec.output_tier.toLowerCase() as keyof typeof TIER_PRICING] / 1e6 || 0,
+      },
+    }));
   }
   return modelSpecsCache;
 }
@@ -173,14 +181,11 @@ export async function calculateWatsonXCost(
 
   const models = await getModelSpecs();
   const model = models.find((m) => m.id === modelName);
-
   if (!model) {
     return undefined;
   }
 
   const cost = calculateCost(modelName, config, promptTokens, completionTokens, models);
-  logger.debug(`Calculated cost: ${cost}`);
-
   return cost;
 }
 
