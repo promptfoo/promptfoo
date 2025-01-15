@@ -134,6 +134,9 @@ async function runRedteamConversation({
       continue;
     }
 
+    // Update the application prompt with the new injection.
+    logger.debug(`[Iterative] New injectVar: ${newInjectVar}, improvement: ${improvement}`);
+
     targetPrompt = await renderPrompt(
       prompt,
       {
@@ -172,7 +175,6 @@ async function runRedteamConversation({
       logger.info(
         `[Iterative] ${i + 1}/${numIterations} - OnTopic error: ${isOnTopicResp.error}. Full response: ${JSON.stringify(isOnTopicResp)}`,
       );
-      continue;
     }
 
     let isOnTopic = false;
@@ -187,6 +189,12 @@ async function runRedteamConversation({
       }
     } else {
       isOnTopic = isOnTopicResp.output.onTopic;
+    }
+    logger.debug(`[Iterative] Parsed onTopic value: ${isOnTopic}`);
+    if (typeof isOnTopic !== 'boolean') {
+      logger.info(
+        `[Iterative] ${i + 1}/${numIterations} - Could not parse a boolean from the onTopic request. Raw response: ${JSON.stringify(isOnTopicResp)}`,
+      );
     }
 
     const targetResponse: TargetResponse = await getTargetResponse(
