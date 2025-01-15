@@ -4,7 +4,7 @@
 [![npm](https://img.shields.io/npm/dm/promptfoo)](https://npmjs.com/package/promptfoo)
 [![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/typpo/promptfoo/main.yml)](https://github.com/promptfoo/promptfoo/actions/workflows/main.yml)
 ![MIT license](https://img.shields.io/github/license/promptfoo/promptfoo)
-[![Discord](https://github.com/user-attachments/assets/2092591a-ccc5-42a7-aeb6-24a2808950fd)](https://discord.gg/gHPS9jjfbs)
+[![Discord](https://github.com/user-attachments/assets/2092591a-ccc5-42a7-aeb6-24a2808950fd)](https://discord.gg/promptfoo)
 
 `promptfoo` is a developer-friendly local tool for testing LLM applications. Stop the trial-and-error approach - start shipping secure, reliable AI apps.
 
@@ -62,4 +62,4 @@ It also can generate [security vulnerability reports](https://www.promptfoo.dev/
 
 We welcome contributions! Check out our [contributing guide](https://www.promptfoo.dev/docs/contributing/) to get started.
 
-Join our [Discord community](https://discord.gg/gHPS9jjfbs) for help and discussion.
+Join our [Discord community](https://discord.gg/promptfoo) for help and discussion.
