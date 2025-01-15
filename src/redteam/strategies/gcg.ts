@@ -124,3 +124,6 @@ export async function addGcgTestCases(
 
   return gcgTestCases;
 }
+
+
+export { CONCURRENCY };
