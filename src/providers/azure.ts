@@ -952,3 +952,6 @@ export class AzureAssistantProvider extends AzureGenericProvider {
     };
   }
 }
+
+
+export { AZURE_MODELS, throwConfigurationError };
