@@ -450,12 +450,7 @@ export class HttpProvider implements ApiProvider {
       this.config.maxRetries,
     );
 
-    logger.debug(`[HTTP Provider]: Response: ${response.data}`);
-    if (response.status < 200 || response.status >= 300) {
-      throw new Error(
-        `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
-      );
-    }
+    logger.debug(`[HTTP Provider]: Response (HTTP ${response.status}): ${response.data}`);
 
     const ret: ProviderResponse = {};
     if (context?.debug) {
