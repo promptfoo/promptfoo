@@ -1,7 +1,10 @@
 import logger from '../logger';
-import type { AssertionParams, GradingResult } from '../types';
+import type {
+  AssertionParams,
+  GradingResult,
+} from '../types';
 
-export const handleGuardrail = async ({
+export const handleGuardrails = async ({
   assertion,
   providerResponse,
 }: AssertionParams): Promise<GradingResult> => {

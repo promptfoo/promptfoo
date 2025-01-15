@@ -58,7 +58,7 @@ import { handleCost } from './cost';
 import { handleEquals } from './equals';
 import { handleFactuality } from './factuality';
 import { handleGEval } from './geval';
-import { handleGuardrail } from './guardrail';
+import { handleGuardrails } from './guardrails';
 import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
 import { handleLatency } from './latency';
@@ -283,7 +283,7 @@ export async function runAssertion({
     similar: handleSimilar,
     'starts-with': handleStartsWith,
     webhook: handleWebhook,
-    guardrail: handleGuardrail,
+    guardrails: handleGuardrails,
   };
 
   const handler = assertionHandlers[baseType as keyof typeof assertionHandlers];

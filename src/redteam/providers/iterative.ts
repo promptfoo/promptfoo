@@ -7,7 +7,7 @@ import {
   type AtomicTestCase,
   type CallApiContextParams,
   type CallApiOptionsParams,
-  type Guardrails,
+  type GuardrailResponse,
   type NunjucksFilterMap,
   type Prompt,
   type RedteamFileConfig,
@@ -82,7 +82,7 @@ async function runRedteamConversation({
     score: number;
     isOnTopic: boolean;
     graderPassed: boolean | undefined;
-    guardrails: Guardrails | undefined;
+    guardrails: GuardrailResponse | undefined;
   }[] = [];
 
   for (let i = 0; i < numIterations; i++) {

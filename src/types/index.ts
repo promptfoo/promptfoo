@@ -365,7 +365,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'equals',
   'factuality',
   'g-eval',
-  'guardrail',
+  'guardrails',
   'icontains-all',
   'icontains-any',
   'icontains',

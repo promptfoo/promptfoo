@@ -4,7 +4,7 @@ import {
   type ApiProvider,
   type CallApiContextParams,
   type CallApiOptionsParams,
-  type Guardrails,
+  type GuardrailResponse,
   isApiProvider,
   isProviderOptions,
   type RedteamFileConfig,
@@ -96,7 +96,7 @@ export type TargetResponse = {
   error?: string;
   sessionId?: string;
   tokenUsage?: TokenUsage;
-  guardrails?: Guardrails;
+  guardrails?: GuardrailResponse;
 };
 
 /**
