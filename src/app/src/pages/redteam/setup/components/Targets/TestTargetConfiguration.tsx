@@ -123,16 +123,15 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
               />
             </Box>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Need to extract specific data from the response? Use a JSON path expression or a
-              function that receives both parsed JSON and raw text. Perfect for accessing nested
-              fields, handling custom formats, or parsing non-JSON responses. See{' '}
+              Optionally, configure a response transform to extract a specific part of the HTTP
+              response. See{' '}
               <a
                 href="https://www.promptfoo.dev/docs/providers/http/#response-parser"
                 target="_blank"
               >
                 docs
               </a>{' '}
-              for more examples.
+              for more information.
             </Typography>
           </Box>
           <Box mt={4} mb={2}>
