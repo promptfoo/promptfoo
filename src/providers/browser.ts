@@ -313,3 +313,6 @@ export class BrowserProvider implements ApiProvider {
     return renderedArgs;
   }
 }
+
+
+export { nunjucks, createTransformResponse };
