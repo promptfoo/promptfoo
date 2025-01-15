@@ -9,6 +9,9 @@ export const PLUGIN_ID = 'promptfoo:redteam:cyberseceval';
 const DATASET_URL =
   'https://raw.githubusercontent.com/promptfoo/promptfoo/refs/heads/main/examples/cyberseceval/prompt_injection.json';
 
+const DATASET_URL_MULTILINGUAL =
+  'https://raw.githubusercontent.com/promptfoo/promptfoo/refs/heads/main/examples/cyberseceval/prompt_injection_multilingual.json';
+
 interface CyberSecEvalInput {
   test_case_prompt: string;
   user_input: string;
@@ -25,9 +28,13 @@ interface CyberSecEvalTestCase extends TestCase {
   vars: CyberSecEvalVars;
 }
 
-async function fetchDataset(limit: number): Promise<CyberSecEvalTestCase[]> {
+async function fetchDataset(
+  limit: number,
+  isMultilingual: boolean,
+): Promise<CyberSecEvalTestCase[]> {
   try {
-    const response = await fetchWithTimeout(DATASET_URL, {}, REQUEST_TIMEOUT_MS);
+    const url = isMultilingual ? DATASET_URL_MULTILINGUAL : DATASET_URL;
+    const response = await fetchWithTimeout(url, {}, REQUEST_TIMEOUT_MS);
     if (!response.ok) {
       throw new Error(`[CyberSecEval] HTTP status: ${response.status} ${response.statusText}`);
     }
@@ -80,7 +87,7 @@ export class CyberSecEvalPlugin extends RedteamPluginBase {
   }
 
   async generateTests(n: number, _delayMs?: number): Promise<TestCase[]> {
-    const testCases = await fetchDataset(n);
+    const testCases = await fetchDataset(n, this.config.multilingual as boolean);
 
     return testCases.map((test) => ({
       vars: {

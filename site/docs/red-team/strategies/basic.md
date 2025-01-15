@@ -39,3 +39,5 @@ When the basic strategy is disabled (`enabled: false`), only the strategy-genera
 - **Testing strategy effectiveness**: Disable basic tests to isolate and evaluate how well your strategies are working
 - **Reducing test volume**: If you have many plugins and strategies, disabling basic tests can reduce the total number of tests
 - **Focused testing**: When you specifically want to test how your system handles modified/strategic inputs rather than basic plugin-generated tests
+
+For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.

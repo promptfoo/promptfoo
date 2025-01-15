@@ -556,6 +556,30 @@ describe('runAssertion', () => {
     },
   };
 
+  const javascriptStringAssertion: Assertion = {
+    type: 'javascript',
+    value: 'output === "Expected output"',
+  };
+
+  const javascriptStringAssertionWithNumber: Assertion = {
+    type: 'javascript',
+    value: 'output.length * 10',
+  };
+
+  const javascriptBooleanAssertionWithConfig: Assertion = {
+    type: 'javascript',
+    value: 'output.length <= context.config.maximumOutputSize',
+    config: {
+      maximumOutputSize: 20,
+    },
+  };
+
+  const javascriptStringAssertionWithNumberAndThreshold: Assertion = {
+    type: 'javascript',
+    value: 'output.length * 10',
+    threshold: 0.5,
+  };
+
   it('should pass when the equality assertion passes', async () => {
     const output = 'Expected output';
 
@@ -1448,6 +1472,173 @@ describe('runAssertion', () => {
           'JSON does not conform to the provided schema. Errors: data/latitude must be number',
       }),
     );
+  });
+
+  it('should pass when the javascript assertion passes', async () => {
+    const output = 'Expected output';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: javascriptStringAssertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should pass a score through when the javascript returns a number', async () => {
+    const output = 'Expected output';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: javascriptStringAssertionWithNumber,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      score: output.length * 10,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should pass when javascript returns an output string that is smaller than the maximum size threshold', async () => {
+    const output = 'Expected output';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: javascriptBooleanAssertionWithConfig,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1.0,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should disregard invalid inputs for assert index', async () => {
+    const output = 'Expected output';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: javascriptBooleanAssertionWithConfig,
+      test: {
+        assert: [
+          {
+            type: 'javascript',
+            value: 'output.length <= context.config.maximumOutputSize',
+            config: {
+              maximumOutputSize: 1,
+            },
+          } as Assertion,
+        ],
+      } as AtomicTestCase,
+      providerResponse: { output },
+      assertIndex: 45,
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1.0,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should fail when javascript returns an output string that is larger than the maximum size threshold', async () => {
+    const output = 'Expected output with some extra characters';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: javascriptBooleanAssertionWithConfig,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: expect.stringContaining('Custom function returned false'),
+    });
+  });
+
+  it('should pass when javascript returns a number above threshold', async () => {
+    const output = 'Expected output';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: javascriptStringAssertionWithNumberAndThreshold,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      score: output.length * 10,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should fail when javascript returns a number below threshold', async () => {
+    const output = '';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: javascriptStringAssertionWithNumberAndThreshold,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      score: output.length * 10,
+      reason: expect.stringContaining('Custom function returned false'),
+    });
+  });
+
+  it('should set score when javascript returns false', async () => {
+    const output = 'Test output';
+
+    const assertion: Assertion = {
+      type: 'javascript',
+      value: 'output.length < 1',
+    };
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: expect.stringContaining('Custom function returned false'),
+    });
+  });
+
+  it('should fail when the javascript assertion fails', async () => {
+    const output = 'Different output';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: javascriptStringAssertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'Custom function returned false\noutput === "Expected output"',
+    });
   });
 
   it('should pass when assertion passes - with vars', async () => {

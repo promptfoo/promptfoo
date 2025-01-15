@@ -489,23 +489,33 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
   },
 };
 
-export const DEFAULT_STRATEGIES = ['jailbreak', 'jailbreak:composite'] as const;
+// These are exposed on the frontend under the framework compliance section
+export const FRAMEWORK_COMPLIANCE_IDS = [
+  'mitre:atlas',
+  'nist:ai:measure',
+  'owasp:api',
+  'owasp:llm',
+] as const;
+export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
+
+export const DEFAULT_STRATEGIES = ['basic', 'jailbreak', 'jailbreak:composite'] as const;
 export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 
 export const MULTI_TURN_STRATEGIES = ['crescendo', 'goat'] as const;
 export type MultiTurnStrategy = (typeof MULTI_TURN_STRATEGIES)[number];
 
-export const AGENTIC_STRATEGIES = ['jailbreak', 'jailbreak:tree', 'crescendo', 'goat'] as const;
+export const AGENTIC_STRATEGIES = ['crescendo', 'goat', 'jailbreak', 'jailbreak:tree'] as const;
 export type AgenticStrategy = (typeof AGENTIC_STRATEGIES)[number];
 
 export const ADDITIONAL_STRATEGIES = [
   'prompt-injection',
-  'ascii-smuggling',
   'base64',
   'citation',
   'crescendo',
+  'gcg',
   'goat',
   'jailbreak:tree',
+  'jailbreak:likert',
   'leetspeak',
   'math-prompt',
   'multilingual',
@@ -514,19 +524,14 @@ export const ADDITIONAL_STRATEGIES = [
 ] as const;
 export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
 
-export const ALL_STRATEGIES = [
-  'basic',
-  'default',
-  ...DEFAULT_STRATEGIES,
-  ...ADDITIONAL_STRATEGIES,
-] as const;
+export const ALL_STRATEGIES = ['default', ...DEFAULT_STRATEGIES, ...ADDITIONAL_STRATEGIES] as const;
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   default: 'Standard security testing plugins',
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
   base64: 'Tests handling of Base64-encoded malicious payloads',
-  basic: 'Single-shot baseline security tests without optimization',
+  basic: 'Original plugin tests without any additional strategies or optimizations',
   beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
   'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
   bfla: 'Tests for broken function-level authorization vulnerabilities (OWASP API 5)',
@@ -540,7 +545,9 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'debug-access': 'Tests for exposed debugging interfaces and commands',
   'divergent-repetition':
     'Tests for training data leaks through repetitive pattern exploitation that causes model divergence',
+  'jailbreak:likert': 'Uses Likert scale-based prompts to bypass content filters',
   'excessive-agency': 'Tests for unauthorized actions beyond defined system boundaries',
+  gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Dynamic multi-turn attack generation using adversarial techniques',
   hallucination: 'Tests for fabrication of false or misleading information',
   harmful: 'Tests handling of malicious content across multiple categories',
@@ -586,7 +593,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'pii:direct': 'Tests for direct PII exposure vulnerabilities',
   'pii:session': 'Tests for PII exposure in session data',
   'pii:social': 'Tests for PII exposure via social engineering',
-  pliny: 'Tests handling of common prompt injections',
+  pliny: 'Tests handling of Pliny prompt injections',
   policy: 'Tests compliance with custom security policies',
   politics: 'Tests handling of political content and bias',
   'prompt-extraction': 'Tests for system prompt disclosure vulnerabilities',
@@ -605,6 +612,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'ascii-smuggling': 'ASCII Smuggling',
   base64: 'Base64 Payload Encoding',
   basic: 'Baseline Testing',
+  'jailbreak:likert': 'Likert Scale Jailbreak',
   beavertails: 'BeaverTails Dataset',
   'best-of-n': 'Best-of-N',
   bfla: 'Function-Level Authorization Bypass',
@@ -619,6 +627,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   default: 'Standard Security Suite',
   'divergent-repetition': 'Divergent Repetition',
   'excessive-agency': 'Excessive Agency',
+  gcg: 'Greedy Coordinate Gradient',
   goat: 'Generative Offensive Agent Tester',
   hallucination: 'False Information (Hallucination)',
   harmful: 'Malicious Content Suite',
@@ -664,7 +673,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'pii:direct': 'PII via Direct Exposure',
   'pii:session': 'PII via Session Data',
   'pii:social': 'PII via Social Engineering',
-  pliny: 'Common Prompt Injections',
+  pliny: 'Pliny Prompt Injections',
   policy: 'Policy Compliance',
   politics: 'Political Bias',
   'prompt-extraction': 'System Prompt Disclosure',
@@ -958,7 +967,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'pii:direct': 'Evaluates direct PII exposure vulnerabilities',
   'pii:session': 'Tests for PII leakage in session data',
   'pii:social': 'Assesses PII exposure through social engineering vectors',
-  pliny: 'Tests handling of common prompt injections',
+  pliny: 'Tests handling of Pliny prompt injections',
   policy: 'Validates compliance with custom security policies and controls',
   politics: 'Tests handling of political content and bias mitigation',
   'prompt-extraction': 'Evaluates protection against system prompt disclosure attempts',
@@ -998,16 +1007,17 @@ export const pluginDescriptions: Record<Plugin, string> = {
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
-  'ascii-smuggling': 'Evaluates system resilience against Unicode tag-based instruction smuggling',
   base64: 'Tests detection and handling of Base64-encoded malicious payloads',
-  basic: 'Establishes baseline security posture through fundamental test cases',
+  basic: 'Equivalent to no strategy. Always included. Can be disabled in configuration.',
   'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
   citation: 'Exploits academic authority bias to circumvent content filtering mechanisms',
   crescendo: 'Executes progressive multi-turn attacks with escalating malicious intent',
   default: 'Applies standard security testing methodology',
+  gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Deploys dynamic attack generation using advanced adversarial techniques',
   jailbreak: 'Optimizes single-turn attacks to bypass security controls',
   'jailbreak:composite': 'Chains multiple attack vectors for enhanced effectiveness',
+  'jailbreak:likert': 'Uses Likert scale-based prompts to bypass content filters',
   'jailbreak:tree': 'Implements tree-based search for optimal attack paths',
   leetspeak: 'Assesses handling of leetspeak-encoded malicious content',
   'math-prompt': 'Tests resilience against mathematical notation-based attacks',
@@ -1017,15 +1027,16 @@ export const strategyDescriptions: Record<Strategy, string> = {
 };
 
 export const strategyDisplayNames: Record<Strategy, string> = {
-  'ascii-smuggling': 'ASCII Smuggling',
   base64: 'Base64 Encoding',
   basic: 'Basic',
   'best-of-n': 'Best-of-N',
   citation: 'Authority Bias',
   crescendo: 'Multi-turn Crescendo',
   default: 'Basic',
+  gcg: 'Greedy Coordinate Gradient',
   goat: 'Generative Offensive Agent Tester',
   'jailbreak:composite': 'Composite Jailbreaks',
+  'jailbreak:likert': 'Likert Scale Jailbreak',
   'jailbreak:tree': 'Tree-based Optimization',
   jailbreak: 'Single-shot Optimization',
   leetspeak: 'Leetspeak Encoding',

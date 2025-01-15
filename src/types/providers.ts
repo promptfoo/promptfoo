@@ -12,6 +12,17 @@ export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation
 
 export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
 
+// Local interface to avoid circular dependency with src/types/index.ts
+interface AtomicTestCase {
+  description?: string;
+  vars?: Record<string, string | object>;
+  providerResponse?: ProviderResponse;
+  tokenUsage?: TokenUsage;
+  success?: boolean;
+  score?: number;
+  failureReason?: string;
+}
+
 export interface ProviderModerationResponse {
   error?: string;
   flags?: ModerationFlag[];
@@ -42,6 +53,7 @@ export interface CallApiContextParams {
   prompt: Prompt;
   vars: Record<string, string | object>;
   debug?: boolean;
+  test?: AtomicTestCase;
 }
 
 export interface CallApiOptionsParams {
@@ -90,6 +102,11 @@ export interface ProviderResponse {
   tokenUsage?: TokenUsage;
   isRefusal?: boolean;
   sessionId?: string;
+  guardrails?: {
+    flaggedInput?: boolean;
+    flaggedOutput?: boolean;
+    flagged?: boolean;
+  };
 }
 
 export interface ProviderEmbeddingResponse {
@@ -137,4 +154,16 @@ export function isProviderOptions(provider: any): provider is ProviderOptions {
     'id' in provider &&
     typeof provider.id === 'string'
   );
+}
+
+export interface ProviderTestResponse {
+  testResult: {
+    error?: string;
+    changes_needed?: boolean;
+    changes_needed_reason?: string;
+    changes_needed_suggestions?: string[];
+  };
+  providerResponse: ProviderResponse;
+  unalignedProviderResult?: ProviderResponse;
+  redteamProviderResult?: ProviderResponse;
 }

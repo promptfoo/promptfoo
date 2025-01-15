@@ -36,6 +36,7 @@
     "leaderboard",
     "leetspeak",
     "Lightbox",
+    "likert",
     "Logform",
     "logprobs",
     "Mateo",
@@ -46,6 +47,7 @@
     "openai",
     "overreliance",
     "OWASP",
+    "pentests",
     "Probs",
     "promptfoo",
     "promptfooconfig",
@@ -60,6 +62,7 @@
     "transpiling",
     "unindented",
     "uuidv",
+    "watsonx",
     "webui"
   ],
   "jest.jestCommandLine": "npm run test --",

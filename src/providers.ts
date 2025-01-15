@@ -198,6 +198,16 @@ export async function loadApiProvider(
         ...providerOptions.config,
         apiBaseUrl: 'https://openrouter.ai/api/v1',
         apiKeyEnvar: 'OPENROUTER_API_KEY',
+        passthrough: {
+          // Pass through OpenRouter-specific options
+          // https://openrouter.ai/docs/requests
+          ...(providerOptions.config.transforms && {
+            transforms: providerOptions.config.transforms,
+          }),
+          ...(providerOptions.config.models && { models: providerOptions.config.models }),
+          ...(providerOptions.config.route && { route: providerOptions.config.route }),
+          ...(providerOptions.config.provider && { provider: providerOptions.config.provider }),
+        },
       },
     });
   } else if (providerPath.startsWith('github:')) {
@@ -209,6 +219,20 @@ export async function loadApiProvider(
         ...providerOptions.config,
         apiBaseUrl: 'https://models.inference.ai.azure.com',
         apiKeyEnvar: 'GITHUB_TOKEN',
+      },
+    });
+  } else if (providerPath.startsWith('f5')) {
+    const splits = providerPath.split(':');
+    let endpoint = splits.slice(1).join(':');
+    if (endpoint.startsWith('/')) {
+      endpoint = endpoint.slice(1);
+    }
+    ret = new OpenAiChatCompletionProvider(endpoint, {
+      ...providerOptions,
+      config: {
+        ...providerOptions.config,
+        apiBaseUrl: providerOptions.config?.apiBaseUrl + '/' + endpoint,
+        apiKeyEnvar: 'F5_API_KEY',
       },
     });
   } else if (providerPath.startsWith('togetherai:')) {

@@ -65,6 +65,46 @@ describe('Python file references', () => {
     });
   });
 
+  it('should correctly pass configuration to a python assert', async () => {
+    const assertion: Assertion = {
+      type: 'python',
+      value: 'file:///path/to/assert.py',
+      config: {
+        foo: 'bar',
+      },
+    };
+
+    const mockOutput = true;
+    jest.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
+    jest.mocked(path.extname).mockReturnValue('.py');
+    jest.mocked(runPython).mockResolvedValue(mockOutput);
+
+    const output = 'Expected output';
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+    const providerResponse = { output };
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse,
+    });
+
+    expect(runPython).toHaveBeenCalledWith('/path/to/assert.py', 'get_assert', [
+      output,
+      expect.objectContaining({
+        config: {
+          foo: 'bar',
+        },
+      }),
+    ]);
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
+  });
+
   it('should use default function name for Python when none specified', async () => {
     const assertion: Assertion = {
       type: 'python',

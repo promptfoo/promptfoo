@@ -130,7 +130,7 @@ export class BrowserProvider implements ApiProvider {
 
     logger.debug(`Browser results: ${safeJsonStringify(extracted)}`);
     const ret = this.transformResponse(extracted, finalHtml);
-    logger.debug(`Browser response parser output: ${ret}`);
+    logger.debug(`Browser response transform output: ${ret}`);
     return { output: ret };
   }
 

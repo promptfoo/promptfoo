@@ -26,6 +26,11 @@ describe('config', () => {
     jest.mocked(os.homedir).mockReturnValue(mockHomedir);
     jest.mocked(fs.existsSync).mockReturnValue(false);
     delete process.env.PROMPTFOO_CONFIG_DIR;
+    setConfigDirectoryPath(undefined);
+  });
+
+  afterEach(() => {
+    setConfigDirectoryPath(undefined);
   });
 
   describe('getConfigDirectoryPath', () => {

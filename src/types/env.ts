@@ -53,4 +53,6 @@ export type EnvOverrides = {
   WATSONX_AI_PROJECT_ID?: string;
   WATSONX_AI_BEARER_TOKEN?: string;
   WATSONX_AI_AUTH_TYPE?: string;
+  PROMPTFOO_CA_CERT_PATH?: string;
+  PROMPTFOO_INSECURE_SSL?: string;
 };

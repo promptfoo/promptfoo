@@ -8,10 +8,10 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
 import type {
-  ApiProvider,
   ApiEmbeddingProvider,
-  ProviderResponse,
+  ApiProvider,
   ProviderEmbeddingResponse,
+  ProviderResponse,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
 import { maybeLoadFromExternalFile } from '../util';
@@ -520,15 +520,34 @@ export const BEDROCK_MODEL = {
       try {
         const parsed = JSON.parse(prompt);
         if (Array.isArray(parsed)) {
-          messages = parsed
-            .map((msg) => ({
+          const systemMessages = parsed.filter((msg) => msg.role === 'system');
+          const nonSystemMessages = parsed.filter((msg) => msg.role !== 'system');
+
+          // NOTE: Claude models handle system prompts differently than OpenAI models.
+          // For compatibility with prompts designed for OpenAI like the factuality
+          // llm-as-a-judge prompts, we convert lone system messages into user messages
+          // since Bedrock Claude doesn't support system-only prompts.
+          if (systemMessages.length === 1 && nonSystemMessages.length === 0) {
+            // If only system message, convert to user message
+            messages = [
+              {
+                role: 'user',
+                content: Array.isArray(systemMessages[0].content)
+                  ? systemMessages[0].content
+                  : [{ type: 'text', text: systemMessages[0].content }],
+              },
+            ];
+            systemPrompt = undefined;
+          } else {
+            // Normal case - keep system message as system prompt
+            messages = nonSystemMessages.map((msg) => ({
               role: msg.role,
               content: Array.isArray(msg.content)
                 ? msg.content
                 : [{ type: 'text', text: msg.content }],
-            }))
-            .filter((msg) => msg.role !== 'system');
-          systemPrompt = parsed.find((msg) => msg.role === 'system')?.content;
+            }));
+            systemPrompt = systemMessages[0]?.content;
+          }
         } else {
           const { system, extractedMessages } = parseMessages(prompt);
           messages = extractedMessages;
@@ -967,12 +986,16 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
     }
     try {
       const output = JSON.parse(new TextDecoder().decode(response.body));
+
       return {
         output: model.output(output),
         tokenUsage: {
           total: output.total_tokens ?? output.prompt_token_count + output.generation_token_count,
           prompt: output.prompt_tokens ?? output.prompt_token_count,
           completion: output.completion_tokens ?? output.generation_token_count,
+        },
+        guardrails: {
+          flagged: output['amazon-bedrock-guardrailAction'] === 'INTERVENED',
         },
       };
     } catch (err) {

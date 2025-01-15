@@ -101,6 +101,7 @@ export async function runAssertion({
   test,
   latencyMs,
   providerResponse,
+  assertIndex,
 }: {
   prompt?: string;
   provider?: ApiProvider;
@@ -108,6 +109,7 @@ export async function runAssertion({
   test: AtomicTestCase;
   providerResponse: ProviderResponse;
   latencyMs?: number;
+  assertIndex?: number;
 }): Promise<GradingResult> {
   const { cost, logProbs, output: originalOutput } = providerResponse;
   let output = originalOutput;
@@ -137,7 +139,7 @@ export async function runAssertion({
     logProbs,
     provider,
     providerResponse,
-    ...(assertion.config ? { config: assertion.config } : {}),
+    ...(assertion.config ? { config: structuredClone(assertion.config) } : {}),
   };
 
   // Render assertion values
@@ -370,6 +372,7 @@ export async function runAssertions({
         assertion,
         test,
         latencyMs,
+        assertIndex: index,
       });
 
       assertResult.addResult({

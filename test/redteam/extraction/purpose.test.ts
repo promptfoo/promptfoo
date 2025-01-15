@@ -65,6 +65,7 @@ describe('System Purpose Extractor', () => {
           task: 'purpose',
           prompts: ['prompt1', 'prompt2'],
           version: VERSION,
+          email: null,
         }),
       }),
       expect.any(Number),

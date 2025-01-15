@@ -6,6 +6,7 @@ import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
 import { getConfigFromCloud } from '../../util/cloud';
 import { doRedteamRun } from '../shared';
+import { getUnifiedConfig } from '../sharedFrontend';
 import type { RedteamRunOptions } from '../types';
 import { poisonCommand } from './poison';
 
@@ -50,9 +51,11 @@ export function redteamRunCommand(program: Command) {
       }
 
       if (opts.config && UUID_REGEX.test(opts.config)) {
-        const config = await getConfigFromCloud(opts.config);
-        opts.liveRedteamConfig = config;
+        const configObj = await getConfigFromCloud(opts.config);
+        opts.liveRedteamConfig = getUnifiedConfig(configObj.config);
         opts.config = undefined;
+
+        opts.loadedFromCloud = true;
       }
 
       try {

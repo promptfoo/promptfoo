@@ -63,7 +63,7 @@ const defaultConfig: Config = {
   strategies: ['jailbreak', 'jailbreak:composite'],
   purpose: '',
   entities: [],
-  numTests: 5,
+  numTests: 10,
   applicationDefinition: {
     purpose: '',
     redteamUser: '',
@@ -150,7 +150,7 @@ export const EXAMPLE_CONFIG: Config = {
   strategies: ['jailbreak', 'jailbreak:composite'],
   purpose: applicationDefinitionToPurpose(EXAMPLE_APPLICATION_DEFINITION),
   entities: [],
-  numTests: 5,
+  numTests: 10,
   applicationDefinition: EXAMPLE_APPLICATION_DEFINITION,
 };
 

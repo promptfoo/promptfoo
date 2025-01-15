@@ -4,14 +4,14 @@ Promptfoo is a popular open source evaluation framework that includes LLM red te
 
 This guide shows you how to automatically generate adversarial tests specifically for your app. The red team covers a wide range of potential vulnerabilities and failure modes, including:
 
-Privacy and Security:
+**Privacy and Security:**
 
 - PII Leaks
 - Cybercrime and Hacking
 - BFLA, BOLA, and other access control vulnerabilities
 - SSRF (Server-Side Request Forgery)
 
-Technical Vulnerabilities:
+**Technical Vulnerabilities:**
 
 - Prompt Injection and Extraction
 - Jailbreaking
@@ -19,7 +19,7 @@ Technical Vulnerabilities:
 - SQL and Shell Injection
 - ASCII Smuggling (invisible characters)
 
-Criminal Activities and Harmful Content:
+**Criminal Activities and Harmful Content:**
 
 - Hate and Discrimination
 - Violent Crimes
@@ -28,7 +28,7 @@ Criminal Activities and Harmful Content:
 - Indiscriminate and Chemical/Biological Weapons
 - Self-Harm and Graphic Content
 
-Misinformation and Misuse:
+**Misinformation and Misuse:**
 
 - Misinformation and Disinformation
 - Copyright Violations

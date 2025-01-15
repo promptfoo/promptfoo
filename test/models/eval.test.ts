@@ -1,3 +1,4 @@
+import { getDb } from '../../src/database';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
 import Eval, { getSummaryOfLatestEvals } from '../../src/models/eval';
@@ -13,6 +14,19 @@ describe('evaluator', () => {
   beforeAll(async () => {
     await runDbMigrations();
   });
+
+  beforeEach(async () => {
+    // Clear all tables before each test
+    const db = getDb();
+    // Delete related tables first
+    await db.run('DELETE FROM eval_results');
+    await db.run('DELETE FROM evals_to_datasets');
+    await db.run('DELETE FROM evals_to_prompts');
+    await db.run('DELETE FROM evals_to_tags');
+    // Then delete from main table
+    await db.run('DELETE FROM evals');
+  });
+
   describe('summaryResults', () => {
     it('should return all evaluations', async () => {
       const eval1 = await EvalFactory.create();

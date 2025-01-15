@@ -212,6 +212,15 @@
                             },
                             "WATSONX_AI_BEARER_TOKEN": {
                               "type": "string"
+                            },
+                            "WATSONX_AI_AUTH_TYPE": {
+                              "type": "string"
+                            },
+                            "PROMPTFOO_CA_CERT_PATH": {
+                              "type": "string"
+                            },
+                            "PROMPTFOO_INSECURE_SSL": {
+                              "type": "string"
                             }
                           },
                           "additionalProperties": false
@@ -497,6 +506,10 @@
                                 },
                                 "threshold": {
                                   "type": "number"
+                                },
+                                "config": {
+                                  "type": "object",
+                                  "additionalProperties": {}
                                 }
                               },
                               "required": [
@@ -1172,17 +1185,18 @@
                       {
                         "type": "string",
                         "enum": [
-                          "basic",
                           "default",
+                          "basic",
                           "jailbreak",
                           "jailbreak:composite",
                           "prompt-injection",
-                          "ascii-smuggling",
                           "base64",
                           "citation",
                           "crescendo",
+                          "gcg",
                           "goat",
                           "jailbreak:tree",
+                          "jailbreak:likert",
                           "leetspeak",
                           "math-prompt",
                           "multilingual",
@@ -1215,7 +1229,7 @@
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to jailbreak, jailbreak:composite\nSupports basic, default, jailbreak, jailbreak:composite, prompt-injection, ascii-smuggling, base64, citation, crescendo, goat, jailbreak:tree, leetspeak, math-prompt, multilingual, rot13, best-of-n",
+              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports default, basic, jailbreak, jailbreak:composite, prompt-injection, base64, citation, crescendo, gcg, goat, jailbreak:tree, jailbreak:likert, leetspeak, math-prompt, multilingual, rot13, best-of-n",
               "default": [
                 "default"
               ]

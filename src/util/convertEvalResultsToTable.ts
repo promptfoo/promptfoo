@@ -1,8 +1,8 @@
 import {
-  ResultFailureReason,
   type CompletedPrompt,
   type EvaluateTable,
   type EvaluateTableRow,
+  ResultFailureReason,
   type ResultsFile,
   type TokenUsage,
 } from '../types';
@@ -75,6 +75,20 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
         : [],
       test: result.testCase,
     };
+
+    if (result.vars && result.metadata?.redteamFinalPrompt) {
+      const varKeys = Object.keys(result.vars);
+      if (varKeys.length === 1 && varKeys[0] !== 'harmCategory') {
+        result.vars[varKeys[0]] = result.metadata.redteamFinalPrompt;
+      } else if (varKeys.length > 1) {
+        // NOTE: This is a hack. We should use config.redteam.injectVar to determine which key to update but we don't have access to the config here
+        const targetKeys = ['prompt', 'query', 'question'];
+        const keyToUpdate = targetKeys.find((key) => result.vars[key]);
+        if (keyToUpdate) {
+          result.vars[keyToUpdate] = result.metadata.redteamFinalPrompt;
+        }
+      }
+    }
     varValuesForRow.set(result.testIdx, result.vars as Record<string, string>);
     rowMap[result.testIdx] = row;
 

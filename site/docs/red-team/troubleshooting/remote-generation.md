@@ -18,7 +18,7 @@ You should receive a response like:
 
 ```json
 {
-  "version": "0.100.5"
+  "version": "0.103.3"
 }
 ```
 
