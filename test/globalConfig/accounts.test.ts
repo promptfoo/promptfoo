@@ -154,7 +154,9 @@ describe('accounts', () => {
 
       await checkEmailStatusOrExit();
 
-      expect(logger.debug).toHaveBeenCalledWith('Failed to check user status', expect.any(Error));
+      expect(logger.debug).toHaveBeenCalledWith(
+        'Failed to check user status: Error: Network error',
+      );
       expect(mockExit).not.toHaveBeenCalled();
     });
   });
