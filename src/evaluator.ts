@@ -2,14 +2,13 @@ import async from 'async';
 import chalk from 'chalk';
 import type { MultiBar, SingleBar } from 'cli-progress';
 import { randomUUID } from 'crypto';
-import fs from 'fs';
 import { globSync } from 'glob';
 import * as path from 'path';
 import readline from 'readline';
 import { runAssertions, runCompareAssertion } from './assertions';
 import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';
-import { getDbSignalPath } from './database';
+import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, isCI } from './envars';
 import { renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
@@ -982,14 +981,8 @@ class Evaluator {
       // isRedteam: Boolean(testSuite.redteam),
     });
 
-    // Update signal file after all results are written
-    const filePath = getDbSignalPath();
-    try {
-      const now = new Date();
-      fs.writeFileSync(filePath, now.toISOString());
-    } catch (err) {
-      logger.debug(`[Evaluator] Failed to write signal file: ${err}`);
-    }
+    // Update database signal file after all results are written
+    updateSignalFile();
 
     return this.evalRecord;
   }

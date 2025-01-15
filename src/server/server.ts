@@ -1,17 +1,15 @@
 import compression from 'compression';
 import cors from 'cors';
-import debounce from 'debounce';
 import dedent from 'dedent';
 import type { Request, Response } from 'express';
 import express from 'express';
-import fs from 'fs';
 import http from 'node:http';
 import path from 'node:path';
 import { Server as SocketIOServer } from 'socket.io';
 import { fromError } from 'zod-validation-error';
 import { createPublicUrl } from '../commands/share';
 import { VERSION, DEFAULT_PORT } from '../constants';
-import { getDbSignalPath } from '../database';
+import { setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
 import logger from '../logger';
@@ -205,35 +203,13 @@ export async function startServer(
 
   await runDbMigrations();
 
-  const watchFilePath = getDbSignalPath();
-  logger.debug(`Setting up file watcher on ${watchFilePath}`);
-
-  // Ensure the file exists before watching
-  if (!fs.existsSync(watchFilePath)) {
-    logger.debug(`Creating signal file at ${watchFilePath}`);
-    fs.writeFileSync(watchFilePath, new Date().toISOString());
-  }
-
-  try {
-    const watcher = fs.watch(watchFilePath);
-    watcher.on(
-      'change',
-      debounce(async () => {
-        const latestEval = await getLatestEval(filterDescription);
-        logger.info(
-          `Emitting update with eval ID: ${latestEval?.config?.description || 'unknown'}`,
-        );
-        io.emit('update', latestEval);
-        allPrompts = null;
-      }, 250),
-    );
-
-    watcher.on('error', (error) => {
-      logger.error(`File watcher error: ${error}`);
-    });
-  } catch (error) {
-    logger.error(`Failed to set up file watcher: ${error}`);
-  }
+  setupSignalWatcher(
+    (latestEval) => {
+      io.emit('update', latestEval);
+      allPrompts = null;
+    },
+    () => getLatestEval(filterDescription),
+  );
 
   io.on('connection', async (socket) => {
     socket.emit('init', await getLatestEval(filterDescription));
