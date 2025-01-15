@@ -8,6 +8,8 @@ import {
   determineRequestBody,
   HttpProvider,
   processJsonBody,
+  createSessionParser,
+  createValidateStatus,
 } from '../../src/providers/http';
 import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared';
 import { maybeLoadFromExternalFile } from '../../src/util';
@@ -1498,8 +1500,7 @@ describe('session handling', () => {
 });
 
 describe('error handling', () => {
-  /* eslint-disable jest/no-disabled-tests */
-  it.skip('should throw error for non-200 responses', async () => {
+  it('should throw error for non-200 responses', async () => {
     const provider = new HttpProvider('http://test.com', {
       config: {
         method: 'POST',
@@ -1546,7 +1547,7 @@ describe('error handling', () => {
     await expect(provider.callApi('test')).rejects.toThrow('Session parsing failed');
   });
 
-  it.skip('should throw error for raw request with non-200 response', async () => {
+  it('should throw error for raw request with non-200 response', async () => {
     const provider = new HttpProvider('http://test.com', {
       config: {
         request: dedent`
@@ -1760,6 +1761,134 @@ describe('validateStatus', () => {
 
     await expect(provider.callApi('test')).rejects.toThrow(
       'Status validator malformed: invalid-validator.js - Module not found',
+    );
+  });
+});
+
+describe('session parser', () => {
+  it('should handle string-based session parser', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'GET',
+        sessionParser: 'x-session-id',
+      },
+    });
+
+    const mockResponse = {
+      data: 'response',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+      headers: { 'x-session-id': 'test-session' },
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.sessionId).toBe('test-session');
+  });
+
+  it('should throw error for unsupported session parser type', async () => {
+    await expect(createSessionParser(123 as any)).rejects.toThrow(
+      'Unsupported response transform type: number',
+    );
+  });
+});
+
+describe('transform response error handling', () => {
+  it('should handle errors in response transform function', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'GET',
+        transformResponse: () => {
+          throw new Error('Transform failed');
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: 'response',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await expect(provider.callApi('test')).rejects.toThrow('Transform failed');
+  });
+
+  it('should handle errors in string-based transform', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'GET',
+        transformResponse: 'invalid.syntax[',
+      },
+    });
+
+    const mockResponse = {
+      data: 'response',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await expect(provider.callApi('test')).rejects.toThrow('Failed to transform response');
+  });
+});
+
+describe('transform request error handling', () => {
+  it('should handle errors in string-based request transform', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        transformRequest: 'invalid.syntax[',
+      },
+    });
+
+    await expect(provider.callApi('test')).rejects.toThrow('Unexpected token');
+  });
+
+  it('should throw error for malformed file-based request transform', async () => {
+    jest.mocked(importModule).mockRejectedValueOnce(new Error('Module not found'));
+
+    await expect(createTransformRequest('file://invalid-transform.js')).rejects.toThrow(
+      'Module not found',
+    );
+  });
+});
+
+describe('status validator error handling', () => {
+  it('should throw error for invalid status validator expression', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'GET',
+        validateStatus: 'invalid syntax[',
+      },
+    });
+
+    const mockResponse = {
+      data: 'response',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await expect(provider.callApi('test')).rejects.toThrow('Invalid status validator expression');
+  });
+
+  it('should throw error for malformed file-based validator', async () => {
+    jest.mocked(importModule).mockRejectedValueOnce(new Error('Module not found'));
+
+    await expect(createValidateStatus('file://invalid-validator.js')).rejects.toThrow(
+      /Status validator malformed/,
+    );
+  });
+
+  it('should throw error for unsupported validator type', async () => {
+    await expect(createValidateStatus(123 as any)).rejects.toThrow(
+      'Unsupported status validator type: number',
     );
   });
 });
