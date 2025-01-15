@@ -19,6 +19,7 @@ import { renderVarsInObject } from '../util';
 import { maybeLoadFromExternalFile } from '../util';
 import { safeJsonStringify } from '../util/json';
 import { sleep } from '../util/time';
+import { ellipsize } from '../utils/text';
 import type { OpenAiFunction, OpenAiTool } from './openaiUtil';
 import { calculateCost, REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
 
@@ -996,8 +997,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       .replace(/\r?\n|\r/g, ' ')
       .replace(/\[/g, '(')
       .replace(/\]/g, ')');
-    const ellipsizedPrompt =
-      sanitizedPrompt.length > 50 ? `${sanitizedPrompt.substring(0, 47)}...` : sanitizedPrompt;
+    const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
     return {
       output: `![${ellipsizedPrompt}](${url})`,
       cached,
