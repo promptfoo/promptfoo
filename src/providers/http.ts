@@ -243,16 +243,7 @@ export async function createTransformRequest(
   }
 
   if (typeof transform === 'function') {
-    return async (prompt) => {
-      try {
-        return await transform(prompt);
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        const wrappedError = new Error(`Error in request transform function: ${errorMessage}`);
-        logger.error(wrappedError.message);
-        throw wrappedError;
-      }
-    };
+    return (prompt) => transform(prompt);
   }
 
   if (typeof transform === 'string') {
@@ -270,36 +261,16 @@ export async function createTransformRequest(
         functionName,
       );
       if (typeof requiredModule === 'function') {
-        return async (prompt) => {
-          try {
-            return await requiredModule(prompt);
-          } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : String(err);
-            const wrappedError = new Error(
-              `Error in request transform function from ${filename}: ${errorMessage}`,
-            );
-            logger.error(wrappedError.message);
-            throw wrappedError;
-          }
-        };
+        return requiredModule;
       }
       throw new Error(
         `Request transform malformed: ${filename} must export a function or have a default export as a function`,
       );
     }
     // Handle string template
-    return async (prompt) => {
-      try {
-        const rendered = nunjucks.renderString(transform, { prompt });
-        return await new Function('prompt', `${rendered}`)(prompt);
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        const wrappedError = new Error(
-          `Error in request transform string template: ${errorMessage}`,
-        );
-        logger.error(wrappedError.message);
-        throw wrappedError;
-      }
+    return (prompt) => {
+      const rendered = nunjucks.renderString(transform, { prompt });
+      return new Function('prompt', `${rendered}`)(prompt);
     };
   }
 
