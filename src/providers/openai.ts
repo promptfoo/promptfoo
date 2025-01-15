@@ -1109,3 +1109,11 @@ export const DefaultGradingJsonProvider = new OpenAiChatCompletionProvider('gpt-
 });
 export const DefaultSuggestionsProvider = new OpenAiChatCompletionProvider('gpt-4o-2024-05-13');
 export const DefaultModerationProvider = new OpenAiModerationProvider('omni-moderation-latest');
+
+export {
+  OPENAI_CHAT_MODELS,
+  OPENAI_COMPLETION_MODELS,
+  failApiCall,
+  getTokenUsage,
+  formatOpenAiError,
+};
