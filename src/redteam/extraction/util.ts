@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { fetchWithCache } from '../../cache';
 import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';
+import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider } from '../../types';
@@ -43,6 +44,7 @@ export async function fetchRemoteGeneration(
       task,
       prompts,
       version: VERSION,
+      email: getUserEmail(),
     };
 
     const response = await fetchWithCache(

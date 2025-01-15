@@ -84,6 +84,7 @@ async function runRedteamConversation({
   }[] = [];
 
   for (let i = 0; i < numIterations; i++) {
+    logger.debug(`[Iterative] Starting iteration ${i + 1}/${numIterations}`);
     const redteamBody = JSON.stringify(redteamHistory);
 
     // Get new prompt
@@ -98,13 +99,13 @@ async function runRedteamConversation({
       logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
       await sleep(redteamProvider.delay);
     }
+    logger.debug(`[Iterative] Raw redteam response: ${JSON.stringify(redteamResp)}`);
     if (redteamResp.error) {
       logger.info(
-        `[Iterative] Skipping iteration, error from redteam provider: ${redteamResp.error}`,
+        `[Iterative] ${i + 1}/${numIterations} - Error: ${redteamResp.error}. Full response: ${JSON.stringify(redteamResp)}`,
       );
       continue;
     }
-    logger.debug(`[Iterative] Redteam response: ${JSON.stringify(redteamResp)}`);
 
     let improvement, newInjectVar;
     if (typeof redteamResp.output === 'string') {
@@ -117,9 +118,7 @@ async function runRedteamConversation({
         newInjectVar = parsed.prompt;
       } catch (err) {
         logger.info(
-          `[Iterative] Failed to parse redteam response, likely refusal: ${err} ${JSON.stringify(
-            redteamResp,
-          )}`,
+          `[Iterative] ${i + 1}/${numIterations} - Failed to parse response: ${err}. Full response: ${JSON.stringify(redteamResp)}`,
         );
         continue;
       }
@@ -128,14 +127,16 @@ async function runRedteamConversation({
       newInjectVar = redteamResp.output?.prompt;
     }
 
-    // Update the application prompt with the new injection.
-    logger.debug(`[Iterative] New injectVar: ${newInjectVar}, improvement: ${improvement}`);
     if (improvement === undefined || newInjectVar === undefined) {
       logger.info(
-        `[Iterative] Skipping iteration, improvement or  new inject var was undefined, continuing`,
+        `[Iterative] ${i + 1}/${numIterations} - Missing improvement or injectVar. Full response: ${JSON.stringify(redteamResp)}`,
       );
       continue;
     }
+
+    // Update the application prompt with the new injection.
+    logger.debug(`[Iterative] New injectVar: ${newInjectVar}, improvement: ${improvement}`);
+
     targetPrompt = await renderPrompt(
       prompt,
       {
@@ -168,19 +169,21 @@ async function runRedteamConversation({
       logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
       await sleep(redteamProvider.delay);
     }
-    logger.debug(`[Iterative] On-topic response: ${JSON.stringify(isOnTopicResp)}`);
+    logger.debug(`[Iterative] Raw onTopic response: ${JSON.stringify(isOnTopicResp)}`);
+
     if (isOnTopicResp.error) {
-      logger.info(`Error from redteam (onTopic) provider: ${isOnTopicResp.error}`);
+      logger.info(
+        `[Iterative] ${i + 1}/${numIterations} - OnTopic error: ${isOnTopicResp.error}. Full response: ${JSON.stringify(isOnTopicResp)}`,
+      );
     }
+
     let isOnTopic = false;
     if (typeof isOnTopicResp.output === 'string') {
       try {
         isOnTopic = (extractFirstJsonObject(isOnTopicResp.output) as { onTopic: boolean }).onTopic;
       } catch (err) {
         logger.info(
-          `[Iterative] Failed to parse onTopic response, likely refusal: ${err} ${JSON.stringify(
-            isOnTopicResp,
-          )}`,
+          `[Iterative] ${i + 1}/${numIterations} - Failed to parse onTopic: ${err}. Full response: ${JSON.stringify(isOnTopicResp)}`,
         );
         continue;
       }
@@ -190,7 +193,7 @@ async function runRedteamConversation({
     logger.debug(`[Iterative] Parsed onTopic value: ${isOnTopic}`);
     if (typeof isOnTopic !== 'boolean') {
       logger.info(
-        `[Iterative] Could not parse a boolean from the onTopic request. Raw response: ${JSON.stringify(isOnTopicResp)}`,
+        `[Iterative] ${i + 1}/${numIterations} - Could not parse a boolean from the onTopic request. Raw response: ${JSON.stringify(isOnTopicResp)}`,
       );
     }
 
@@ -200,15 +203,16 @@ async function runRedteamConversation({
       context,
       options,
     );
+    logger.debug(`[Iterative] Raw target response: ${JSON.stringify(targetResponse)}`);
     if (targetResponse.error) {
       logger.info(
-        `[Iterative] Skipping iteration, target returned an error: ${targetResponse.error}`,
+        `[Iterative] ${i + 1}/${numIterations} - Target error: ${targetResponse.error}. Full response: ${JSON.stringify(targetResponse)}`,
       );
       continue;
     }
     if (!targetResponse.output) {
       logger.info(
-        `Iterative] Skipping iteration, target did not return an output: ${JSON.stringify(targetResponse)}`,
+        `[Iterative] ${i + 1}/${numIterations} - Empty target response. Full response: ${JSON.stringify(targetResponse)}`,
       );
       continue;
     }
@@ -265,9 +269,10 @@ async function runRedteamConversation({
       logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
       await sleep(redteamProvider.delay);
     }
+    logger.debug(`[Iterative] Raw judge response: ${JSON.stringify(judgeResp)}`);
     if (judgeResp.error) {
       logger.info(
-        `[Iterative] Skipping iteration, error from redteam (judge) provider: ${judgeResp.error}`,
+        `[Iterative] ${i + 1}/${numIterations} - Judge error: ${judgeResp.error}. Full response: ${JSON.stringify(judgeResp)}`,
       );
       continue;
     }
