@@ -243,9 +243,9 @@ export async function createTransformRequest(
   }
 
   if (typeof transform === 'function') {
-    return (prompt) => {
+    return async (prompt) => {
       try {
-        return transform(prompt);
+        return await transform(prompt);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         const wrappedError = new Error(`Error in request transform function: ${errorMessage}`);
@@ -270,9 +270,9 @@ export async function createTransformRequest(
         functionName,
       );
       if (typeof requiredModule === 'function') {
-        return (prompt) => {
+        return async (prompt) => {
           try {
-            return requiredModule(prompt);
+            return await requiredModule(prompt);
           } catch (err) {
             const errorMessage = err instanceof Error ? err.message : String(err);
             const wrappedError = new Error(
@@ -288,10 +288,10 @@ export async function createTransformRequest(
       );
     }
     // Handle string template
-    return (prompt) => {
+    return async (prompt) => {
       try {
         const rendered = nunjucks.renderString(transform, { prompt });
-        return new Function('prompt', `${rendered}`)(prompt);
+        return await new Function('prompt', `${rendered}`)(prompt);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         const wrappedError = new Error(
