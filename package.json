@@ -120,7 +120,7 @@
     "@types/supertest": "^6.0.2",
     "@types/uuid": "^10.0.0",
     "check-dependency-version-consistency": "^4.1.0",
-    "cloudflare": "3.4.0",
+    "cloudflare": "4.0.0",
     "concurrently": "^9.1.2",
     "drizzle-kit": "^0.26.2",
     "esbuild": "^0.24.2",
