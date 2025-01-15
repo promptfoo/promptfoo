@@ -6,7 +6,7 @@ import type {
   FunctionDefinition,
   RunStepMessageCreationDetails,
   RunStepToolCallDetails,
-} from '@azure/openai-assistants';
+} from '@azure/openai-assistants' with { 'resolution-mode': 'import' };
 import dedent from 'dedent';
 import { fetchWithCache } from '../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
