@@ -1,5 +1,13 @@
 import { SimulatedUser } from '../../src/providers/simulatedUser';
 import type { ApiProvider, ProviderResponse } from '../../src/types';
+import * as timeUtils from '../../src/util/time';
+
+jest.mock('../../src/util/time', () => ({
+  sleep: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('../../src/fetch');
+jest.mock('../../src/logger');
 
 describe('SimulatedUser', () => {
   let simulatedUser: SimulatedUser;
@@ -12,7 +20,6 @@ describe('SimulatedUser', () => {
         output: 'agent response',
         tokenUsage: { numRequests: 1 },
       })),
-      delay: 10,
     };
 
     simulatedUser = new SimulatedUser({
@@ -22,6 +29,8 @@ describe('SimulatedUser', () => {
         maxTurns: 2,
       },
     });
+
+    jest.clearAllMocks();
   });
 
   describe('id()', () => {
@@ -56,6 +65,7 @@ describe('SimulatedUser', () => {
       expect(result.output).toContain('Assistant:');
       expect(result.tokenUsage?.numRequests).toBe(2);
       expect(originalProvider.callApi).toHaveBeenCalledWith(expect.any(String));
+      expect(timeUtils.sleep).not.toHaveBeenCalled();
     });
 
     it('should respect maxTurns configuration', async () => {
@@ -75,6 +85,7 @@ describe('SimulatedUser', () => {
       const messageCount = result.output?.split('---').length;
       expect(messageCount).toBe(2);
       expect(originalProvider.callApi).toHaveBeenCalledWith(expect.any(String));
+      expect(timeUtils.sleep).not.toHaveBeenCalled();
     });
 
     it('should stop conversation when ###STOP### is received', async () => {
@@ -96,6 +107,7 @@ describe('SimulatedUser', () => {
 
       expect(result.output).toContain('###STOP###');
       expect(providerWithStop.callApi).toHaveBeenCalledWith(expect.any(String));
+      expect(timeUtils.sleep).not.toHaveBeenCalled();
     });
 
     it('should throw error if originalProvider is not provided', async () => {
@@ -108,10 +120,15 @@ describe('SimulatedUser', () => {
     });
 
     it('should handle provider delay', async () => {
+      const providerWithDelay = {
+        ...originalProvider,
+        delay: 100,
+      };
+
       const result = await simulatedUser.callApi(
         'test prompt',
         {
-          originalProvider,
+          originalProvider: providerWithDelay,
           vars: { instructions: 'test instructions' },
           prompt: { raw: 'test', display: 'test', label: 'test' },
         },
@@ -119,8 +136,9 @@ describe('SimulatedUser', () => {
       );
 
       expect(result.output).toBeDefined();
-      expect(originalProvider.callApi).toHaveBeenCalledWith(expect.any(String));
-    }, 15000); // Increased timeout for test involving delays
+      expect(providerWithDelay.callApi).toHaveBeenCalledWith(expect.any(String));
+      expect(timeUtils.sleep).toHaveBeenCalledWith(100);
+    });
   });
 
   describe('toString()', () => {
