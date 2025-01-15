@@ -17,7 +17,7 @@ export async function checkGoogleSheetAccess(url: string) {
 
 export async function fetchCsvFromGoogleSheetUnauthenticated(url: string): Promise<CsvRow[]> {
   const { parse: parseCsv } = await import('csv-parse/sync');
-  const { fetchWithProxy } = await import('./fetch');
+  const { fetchWithProxy } = await import('./fetch.js');
 
   const gid = new URL(url).searchParams.get('gid');
   const csvUrl = `${url.replace(/\/edit.*$/, '/export')}?format=csv${gid ? `&gid=${gid}` : ''}`;

@@ -29,14 +29,14 @@ async function loadRedteamProvider({
     ret = redteamProvider;
   } else if (typeof redteamProvider === 'string' || isProviderOptions(redteamProvider)) {
     logger.debug(`Loading redteam provider: ${JSON.stringify(redteamProvider)}`);
-    const loadApiProvidersModule = await import('../../providers');
+    const loadApiProvidersModule = await import('../../providers.js');
     // Async import to avoid circular dependency
     ret = (await loadApiProvidersModule.loadApiProviders([redteamProvider]))[0];
   } else {
     const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
     logger.debug(`Using default redteam provider: ${defaultModel}`);
     // Async import to avoid circular dependency
-    const OpenAiChatCompletionProviderModule = await import('../../providers/openai');
+    const OpenAiChatCompletionProviderModule = await import('../../providers/openai.js');
     ret = new OpenAiChatCompletionProviderModule.OpenAiChatCompletionProvider(defaultModel, {
       config: {
         temperature: TEMPERATURE,
