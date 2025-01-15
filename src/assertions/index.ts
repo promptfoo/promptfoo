@@ -282,8 +282,8 @@ export async function runAssertion({
     'rouge-n': handleRougeScore,
     similar: handleSimilar,
     'starts-with': handleStartsWith,
-    webhook: handleWebhook,
     guardrails: handleGuardrails,
+    webhook: handleWebhook,
   };
 
   const handler = assertionHandlers[baseType as keyof typeof assertionHandlers];
