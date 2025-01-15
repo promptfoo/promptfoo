@@ -1351,7 +1351,7 @@ describe('request transformation', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ key: 'value', transformed: 'test' }),
       },
-      expect.any(Number),
+      REQUEST_TIMEOUT_MS,
       'text',
       undefined,
       undefined,
@@ -1552,6 +1552,7 @@ describe('error handling', () => {
           GET /api/data HTTP/1.1
           Host: example.com
         `,
+        validateStatus: (status: number) => status < 500,
       },
     });
 
@@ -1566,5 +1567,94 @@ describe('error handling', () => {
     await expect(provider.callApi('test')).rejects.toThrow(
       'HTTP call failed with status 500 Internal Server Error: Error occurred',
     );
+  });
+});
+
+describe('validateStatus', () => {
+  it('should use default validation (200-299) when validateStatus is not provided', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+      },
+    });
+
+    const mockResponse = {
+      data: 'Error message',
+      status: 400,
+      statusText: 'Bad Request',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await expect(provider.callApi('test')).rejects.toThrow(
+      'HTTP call failed with status 400 Bad Request: Error message',
+    );
+  });
+
+  it('should use custom validateStatus function when provided', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        validateStatus: (status: number) => status < 500,
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 404,
+      statusText: 'Not Found',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.output).toEqual({ result: 'success' });
+  });
+
+  it('should throw error when custom validateStatus returns false', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        validateStatus: (status: number) => status === 200,
+      },
+    });
+
+    const mockResponse = {
+      data: 'Server Error',
+      status: 201,
+      statusText: 'Created',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await expect(provider.callApi('test')).rejects.toThrow(
+      'HTTP call failed with status 201 Created: Server Error',
+    );
+  });
+
+  it('should use validateStatus in raw request mode', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        request: dedent`
+          GET /api/data HTTP/1.1
+          Host: example.com
+        `,
+        validateStatus: (status: number) => status < 500,
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 404,
+      statusText: 'Not Found',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.output).toEqual({ result: 'success' });
   });
 });

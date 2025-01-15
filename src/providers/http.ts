@@ -31,6 +31,7 @@ export const HttpProviderConfigSchema = z.object({
   transformRequest: z.union([z.string(), z.function()]).optional(),
   transformResponse: z.union([z.string(), z.function()]).optional(),
   url: z.string().optional(),
+  validateStatus: z.function().returns(z.boolean()).args(z.number()).optional(),
   /**
    * @deprecated use transformResponse instead
    */
@@ -294,6 +295,7 @@ export class HttpProvider implements ApiProvider {
   private transformResponse: Promise<(data: any, text: string) => ProviderResponse>;
   private sessionParser: Promise<({ headers }: { headers: Record<string, string> }) => string>;
   private transformRequest: Promise<(prompt: string) => any>;
+  private validateStatus: (status: number) => boolean;
   constructor(url: string, options: ProviderOptions) {
     this.config = HttpProviderConfigSchema.parse(options.config);
     this.url = this.config.url || url;
@@ -302,7 +304,8 @@ export class HttpProvider implements ApiProvider {
     );
     this.sessionParser = createSessionParser(this.config.sessionParser);
     this.transformRequest = createTransformRequest(this.config.transformRequest);
-
+    this.validateStatus =
+      this.config.validateStatus ?? ((status: number) => status >= 200 && status < 300);
     if (this.config.request) {
       this.config.request = maybeLoadFromExternalFile(this.config.request) as string;
     } else {
@@ -420,6 +423,7 @@ export class HttpProvider implements ApiProvider {
     logger.debug(
       `[HTTP Provider]: Calling ${url} with config: ${safeJsonStringify(renderedConfig)}`,
     );
+
     const response = await fetchWithCache(
       url,
       {
@@ -438,7 +442,7 @@ export class HttpProvider implements ApiProvider {
     );
 
     logger.debug(`[HTTP Provider]: Response: ${response.data}`);
-    if (response.status < 200 || response.status >= 300) {
+    if (!this.validateStatus(response.status)) {
       throw new Error(
         `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
       );
@@ -506,7 +510,7 @@ export class HttpProvider implements ApiProvider {
 
     logger.debug(`[HTTP Provider]: Response: ${response.data}`);
 
-    if (response.status < 200 || response.status >= 300) {
+    if (!this.validateStatus(response.status)) {
       throw new Error(
         `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
       );
