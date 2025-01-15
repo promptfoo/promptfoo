@@ -41,7 +41,7 @@ export async function promptForEmailUnverified() {
 }
 
 export async function checkEmailStatusOrExit() {
-  const email = getUserEmail();
+  const email = isCI() ? 'ci-placeholder@promptfoo.dev' : getUserEmail();
   invariant(email, 'Email should be set before calling checkEmailStatusOrExit');
   try {
     const resp = await fetchWithTimeout(
