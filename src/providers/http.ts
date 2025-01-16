@@ -93,16 +93,20 @@ export async function createSessionParser(
   );
 }
 
+interface TransformResponseContext {
+  response: Response;
+}
+
 export async function createTransformResponse(
   parser: string | Function | undefined,
-): Promise<(data: any, text: string) => ProviderResponse> {
+): Promise<(data: any, text: string, context: TransformResponseContext) => ProviderResponse> {
   if (!parser) {
-    return (data, text) => ({ output: data || text });
+    return (data, text, context) => ({ output: data || text });
   }
   if (typeof parser === 'function') {
-    return (data, text) => {
+    return (data, text, context) => {
       try {
-        const result = parser(data, text);
+        const result = parser(data, text, context);
         return { output: result };
       } catch (err) {
         logger.error(`Error in response transform function: ${String(err)}`);
@@ -130,17 +134,21 @@ export async function createTransformResponse(
       `Response transform malformed: ${filename} must export a function or have a default export as a function`,
     );
   } else if (typeof parser === 'string') {
-    return (data, text) => {
+    return (data, text, context) => {
       try {
         const trimmedParser = parser.trim();
         const transformFn = new Function(
           'json',
           'text',
+          'context',
           `try { return (${trimmedParser}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
         );
-        return {
-          output: transformFn(data || null, text),
-        };
+        const resp: ProviderResponse | string = transformFn(data || null, text, context);
+
+        if (typeof resp === 'string') {
+          return { output: resp };
+        }
+        return resp;
       } catch (err) {
         logger.error(`Error in response transform: ${String(err)}`);
         throw new Error(`Failed to transform response: ${String(err)}`);
@@ -565,7 +573,9 @@ export class HttpProvider implements ApiProvider {
       parsedData = null;
     }
 
-    const parsedOutput = (await this.transformResponse)(parsedData, rawText);
+    const parsedOutput = (await this.transformResponse)(parsedData, rawText, {
+      response: response,
+    });
     ret.output = parsedOutput.output || parsedOutput;
     try {
       const sessionId =
