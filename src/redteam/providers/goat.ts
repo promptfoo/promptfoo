@@ -84,7 +84,7 @@ export default class GoatProvider implements ApiProvider {
 
     let assertToUse: Assertion | AssertionSet | undefined;
     let graderPassed: boolean | undefined;
-    const { getGraderById } = await import('../graders');
+    const { getGraderById } = await import('../graders.js');
     let test: AtomicTestCase | undefined;
 
     if (context?.test) {

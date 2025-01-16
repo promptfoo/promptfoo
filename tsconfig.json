@@ -1,19 +1,26 @@
 {
   "compilerOptions": {
-    "declaration": true,
-    "declarationMap": true,
-    "esModuleInterop": true,
-    "target": "es2020",
-    "module": "CommonJS",
-    "moduleResolution": "node",
-    "outDir": "dist",
-    "skipLibCheck": true,
-    "sourceMap": true,
-    "strict": true,
-    "resolveJsonModule": true,
-    "composite": true,
+    // Base configuration
+    "baseUrl": "./",
     "rootDir": ".",
-    "baseUrl": "./"
+    "outDir": "dist",
+
+    // Module settings
+    "module": "NodeNext",
+    "moduleResolution": "nodenext",
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+
+    // Compilation settings
+    "target": "es2022",
+    "composite": true,
+    "strict": true,
+    "skipLibCheck": true,
+
+    // Source maps and declarations
+    "sourceMap": true,
+    "declaration": true,
+    "declarationMap": true
   },
   "include": ["src/", "typings/**/*", "test/", "./package.json", "src/**/*.json", "test/**/*.json"],
   "exclude": ["node_modules", "dist", "src/workers/**/*", "src/app/**/*"]
