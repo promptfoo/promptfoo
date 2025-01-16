@@ -33,7 +33,7 @@ const links: { icon: React.ReactNode; text: string; href: string }[] = [
   {
     icon: <ForumIcon fontSize="small" />,
     text: 'Join Our Discord Community',
-    href: 'https://discord.gg/gHPS9jjfbs',
+    href: 'https://discord.gg/promptfoo',
   },
   {
     icon: <CalendarTodayIcon fontSize="small" />,

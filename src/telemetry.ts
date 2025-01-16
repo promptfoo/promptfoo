@@ -59,7 +59,9 @@ export class Telemetry {
       if (result.success) {
         this.events.push(result.data);
       } else {
-        logger.warn(`Invalid telemetry event: ${result.error}`);
+        logger.debug(
+          `Invalid telemetry event: got ${JSON.stringify(event)}, error: ${result.error}`,
+        );
       }
     }
   }
