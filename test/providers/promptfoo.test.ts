@@ -12,16 +12,7 @@ jest.mock('../../src/fetch');
 jest.mock('../../src/cache');
 jest.mock('../../src/globalConfig/accounts');
 jest.mock('../../src/envars');
-jest.mock('../../src/globalConfig/cloud', () => ({
-  CloudConfig: class {
-    isEnabled() {
-      return false;
-    }
-    getApiHost() {
-      return 'https://api.promptfoo.app';
-    }
-  },
-}));
+jest.mock('../../src/globalConfig/cloud');
 
 describe('PromptfooHarmfulCompletionProvider', () => {
   beforeEach(() => {

@@ -4,7 +4,7 @@ import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
 const API_HOST = process.env.API_HOST || 'https://api.promptfoo.app';
 
-interface CloudUser {
+export interface CloudUser {
   id: string;
   name: string;
   email: string;
@@ -12,14 +12,14 @@ interface CloudUser {
   updatedAt: Date;
 }
 
-interface CloudOrganization {
+export interface CloudOrganization {
   id: string;
   name: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
-interface CloudApp {
+export interface CloudApp {
   url: string;
 }
 

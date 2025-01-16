@@ -23,6 +23,8 @@ jest.mock('../../../src/envars', () => {
   };
 });
 
+jest.mock('../../../src/globalConfig/cloud');
+
 jest.mock('../../../src/redteam/remoteGeneration', () => ({
   ...jest.requireActual('../../../src/redteam/remoteGeneration'),
   getRemoteGenerationUrl: jest.fn().mockReturnValue('https://api.promptfoo.app/task'),

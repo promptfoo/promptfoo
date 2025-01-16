@@ -9,9 +9,7 @@ const mockCloudConfig = {
   getApiHost: jest.fn().mockReturnValue('https://custom.api.com'),
 };
 
-jest.mock('../../src/globalConfig/cloud', () => ({
-  CloudConfig: jest.fn().mockImplementation(() => mockCloudConfig),
-}));
+jest.mock('../../src/globalConfig/cloud');
 
 describe('API Health Utilities', () => {
   beforeEach(() => {

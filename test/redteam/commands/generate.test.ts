@@ -15,12 +15,7 @@ jest.mock('../../../src/util/config/load', () => ({
   resolveConfigs: jest.fn(),
 }));
 
-jest.mock('../../../src/globalConfig/cloud', () => ({
-  CloudConfig: jest.fn().mockImplementation(() => ({
-    isEnabled: jest.fn().mockReturnValue(false),
-    getApiHost: jest.fn().mockReturnValue('https://api.promptfoo.app'),
-  })),
-}));
+jest.mock('../../../src/globalConfig/cloud');
 
 jest.mock('../../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: jest.fn().mockReturnValue(false),

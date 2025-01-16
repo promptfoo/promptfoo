@@ -27,6 +27,9 @@ jest.mock('path', () => ({
   extname: jest.fn(jest.requireActual('path').extname),
 }));
 
+jest.mock('../../src/globalConfig/globalConfig');
+jest.mock('../../src/globalConfig/cloud');
+
 describe('Python file references', () => {
   beforeEach(() => {
     jest.clearAllMocks();
