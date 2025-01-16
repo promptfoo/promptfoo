@@ -8,6 +8,7 @@ import readline from 'readline';
 import { runAssertions, runCompareAssertion } from './assertions';
 import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';
+import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, isCI } from './envars';
 import { renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
@@ -979,6 +980,10 @@ class Evaluator {
       // FIXME(ian): Does this work?  I think redteam is only on the config, not testSuite.
       // isRedteam: Boolean(testSuite.redteam),
     });
+
+    // Update database signal file after all results are written
+    updateSignalFile();
+
     return this.evalRecord;
   }
 }

@@ -31,6 +31,9 @@ export const HttpProviderConfigSchema = z.object({
   transformRequest: z.union([z.string(), z.function()]).optional(),
   transformResponse: z.union([z.string(), z.function()]).optional(),
   url: z.string().optional(),
+  validateStatus: z
+    .union([z.string(), z.function().returns(z.boolean()).args(z.number())])
+    .optional(),
   /**
    * @deprecated use transformResponse instead
    */
@@ -240,7 +243,16 @@ export async function createTransformRequest(
   }
 
   if (typeof transform === 'function') {
-    return (prompt) => transform(prompt);
+    return async (prompt) => {
+      try {
+        return await transform(prompt);
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        const wrappedError = new Error(`Error in request transform function: ${errorMessage}`);
+        logger.error(wrappedError.message);
+        throw wrappedError;
+      }
+    };
   }
 
   if (typeof transform === 'string') {
@@ -258,16 +270,36 @@ export async function createTransformRequest(
         functionName,
       );
       if (typeof requiredModule === 'function') {
-        return requiredModule;
+        return async (prompt) => {
+          try {
+            return await requiredModule(prompt);
+          } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            const wrappedError = new Error(
+              `Error in request transform function from ${filename}: ${errorMessage}`,
+            );
+            logger.error(wrappedError.message);
+            throw wrappedError;
+          }
+        };
       }
       throw new Error(
         `Request transform malformed: ${filename} must export a function or have a default export as a function`,
       );
     }
     // Handle string template
-    return (prompt) => {
-      const rendered = nunjucks.renderString(transform, { prompt });
-      return new Function('prompt', `${rendered}`)(prompt);
+    return async (prompt) => {
+      try {
+        const rendered = nunjucks.renderString(transform, { prompt });
+        return await new Function('prompt', `${rendered}`)(prompt);
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        const wrappedError = new Error(
+          `Error in request transform string template: ${errorMessage}`,
+        );
+        logger.error(wrappedError.message);
+        throw wrappedError;
+      }
     };
   }
 
@@ -301,12 +333,67 @@ export function determineRequestBody(
   });
 }
 
+export async function createValidateStatus(
+  validator: string | ((status: number) => boolean) | undefined,
+): Promise<(status: number) => boolean> {
+  if (!validator) {
+    return (status: number) => true;
+  }
+
+  if (typeof validator === 'function') {
+    return validator;
+  }
+
+  if (typeof validator === 'string') {
+    if (validator.startsWith('file://')) {
+      let filename = validator.slice('file://'.length);
+      let functionName: string | undefined;
+      if (filename.includes(':')) {
+        const splits = filename.split(':');
+        if (splits[0] && isJavascriptFile(splits[0])) {
+          [filename, functionName] = splits;
+        }
+      }
+      try {
+        const requiredModule = await importModule(
+          path.resolve(cliState.basePath || '', filename),
+          functionName,
+        );
+        if (typeof requiredModule === 'function') {
+          return requiredModule;
+        }
+        throw new Error('Exported value must be a function');
+      } catch (err: any) {
+        throw new Error(`Status validator malformed: ${filename} - ${err?.message || String(err)}`);
+      }
+    }
+    // Handle string template - wrap in a function body
+    try {
+      const trimmedValidator = validator.trim();
+      // Check if it's an arrow function or regular function
+      if (trimmedValidator.includes('=>') || trimmedValidator.startsWith('function')) {
+        // For arrow functions and regular functions, evaluate the whole function
+        return new Function(`return ${trimmedValidator}`)() as (status: number) => boolean;
+      }
+      // For expressions, wrap in a function body
+      return new Function('status', `return ${trimmedValidator}`) as (status: number) => boolean;
+    } catch (err: any) {
+      throw new Error(`Invalid status validator expression: ${err?.message || String(err)}`);
+    }
+  }
+
+  throw new Error(
+    `Unsupported status validator type: ${typeof validator}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
+  );
+}
+
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
   private transformResponse: Promise<(data: any, text: string) => ProviderResponse>;
   private sessionParser: Promise<({ headers }: { headers: Record<string, string> }) => string>;
   private transformRequest: Promise<(prompt: string) => any>;
+  private validateStatus: Promise<(status: number) => boolean>;
   constructor(url: string, options: ProviderOptions) {
     this.config = HttpProviderConfigSchema.parse(options.config);
     this.url = this.config.url || url;
@@ -315,7 +402,7 @@ export class HttpProvider implements ApiProvider {
     );
     this.sessionParser = createSessionParser(this.config.sessionParser);
     this.transformRequest = createTransformRequest(this.config.transformRequest);
-
+    this.validateStatus = createValidateStatus(this.config.validateStatus);
     if (this.config.request) {
       this.config.request = maybeLoadFromExternalFile(this.config.request) as string;
     } else {
@@ -396,6 +483,9 @@ export class HttpProvider implements ApiProvider {
 
     // Transform prompt using request transform
     const transformedPrompt = await (await this.transformRequest)(prompt);
+    logger.debug(
+      `[HTTP Provider]: Transformed prompt: ${transformedPrompt}. Original prompt: ${prompt}`,
+    );
 
     const renderedConfig: Partial<HttpProviderConfig> = {
       url: this.url,
@@ -433,6 +523,7 @@ export class HttpProvider implements ApiProvider {
     logger.debug(
       `[HTTP Provider]: Calling ${url} with config: ${safeJsonStringify(renderedConfig)}`,
     );
+
     const response = await fetchWithCache(
       url,
       {
@@ -450,6 +541,12 @@ export class HttpProvider implements ApiProvider {
       this.config.maxRetries,
     );
 
+    logger.debug(`[HTTP Provider]: Response: ${response.data}`);
+    if (!(await this.validateStatus)(response.status)) {
+      throw new Error(
+        `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
+      );
+    }
     logger.debug(`[HTTP Provider]: Response (HTTP ${response.status}): ${response.data}`);
 
     const ret: ProviderResponse = {};
@@ -514,7 +611,7 @@ export class HttpProvider implements ApiProvider {
 
     logger.debug(`[HTTP Provider]: Response: ${response.data}`);
 
-    if (response.status < 200 || response.status >= 300) {
+    if (!(await this.validateStatus)(response.status)) {
       throw new Error(
         `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
       );
