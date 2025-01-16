@@ -1,4 +1,4 @@
-import { handleGuardrail } from '../../src/assertions/guardrail';
+import { handleGuardrails } from '../../src/assertions/guardrails';
 import type { AssertionParams, AtomicTestCase } from '../../src/types';
 
 describe('handleGuardrail', () => {
@@ -39,7 +39,7 @@ describe('handleGuardrail', () => {
       },
     };
 
-    const result = await handleGuardrail(params);
+    const result = await handleGuardrails(params);
     expect(result).toEqual({
       pass: true,
       score: 1,
@@ -59,7 +59,7 @@ describe('handleGuardrail', () => {
       },
     };
 
-    const result = await handleGuardrail(params);
+    const result = await handleGuardrails(params);
     expect(result).toEqual({
       pass: false,
       score: 0,
@@ -80,7 +80,7 @@ describe('handleGuardrail', () => {
       },
     };
 
-    const result = await handleGuardrail(params);
+    const result = await handleGuardrails(params);
     expect(result).toEqual({
       pass: false,
       score: 0,
@@ -101,7 +101,7 @@ describe('handleGuardrail', () => {
       },
     };
 
-    const result = await handleGuardrail(params);
+    const result = await handleGuardrails(params);
     expect(result).toEqual({
       pass: false,
       score: 0,
@@ -127,7 +127,7 @@ describe('handleGuardrail', () => {
       },
     };
 
-    const result = await handleGuardrail(params);
+    const result = await handleGuardrails(params);
     expect(result).toEqual({
       pass: false,
       score: 0,
@@ -144,7 +144,7 @@ describe('handleGuardrail', () => {
       },
     };
 
-    const result = await handleGuardrail(params);
+    const result = await handleGuardrails(params);
     expect(result).toEqual({
       pass: true,
       score: 0,
