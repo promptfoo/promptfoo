@@ -8,7 +8,7 @@ import type { TestCase } from '../../types';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
-const CONCURRENCY = 10;
+export const CONCURRENCY = 10;
 
 async function generateGcgPrompts(
   testCases: TestCase[],
@@ -124,6 +124,3 @@ export async function addGcgTestCases(
 
   return gcgTestCases;
 }
-
-
-export { CONCURRENCY };
