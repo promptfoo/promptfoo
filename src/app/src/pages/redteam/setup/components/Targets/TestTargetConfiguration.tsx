@@ -9,12 +9,14 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
+import Switch from '@mui/material/Switch';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -39,6 +41,8 @@ interface TestTargetConfigurationProps {
   requiresTransformResponse: (target: ProviderOptions) => boolean;
   updateCustomTarget: (field: string, value: any) => void;
   hasTestedTarget: boolean;
+  useGuardrail: boolean;
+  setUseGuardrail: (value: boolean) => void;
 }
 
 const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
@@ -48,6 +52,8 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
   testResult,
   requiresTransformResponse,
   updateCustomTarget,
+  useGuardrail,
+  setUseGuardrail,
 }) => {
   const theme = useTheme();
   const darkMode = theme.palette.mode === 'dark';
@@ -94,6 +100,29 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
             Configure Response Transform
           </Typography>
           <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={useGuardrail}
+                  onChange={(e) => setUseGuardrail(e.target.checked)}
+                  color="primary"
+                />
+              }
+              label="Use Guardrail"
+            />
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              Enable this if your target has guardrail configuration. Your response transform should
+              return both an output field and a{' '}
+              <a
+                href="https://www.promptfoo.dev/docs/configuration/reference#guardrails"
+                target="_blank"
+              >
+                guardrails
+              </a>{' '}
+              object to indicate if content was flagged as unsafe.
+            </Typography>
+          </Box>
+          <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
             <Box
               sx={{
                 border: 1,
@@ -109,9 +138,15 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 onValueChange={(code) => updateCustomTarget('transformResponse', code)}
                 highlight={(code) => highlight(code, languages.javascript)}
                 padding={10}
-                placeholder={dedent`Optional: A JavaScript expression to parse the response.
+                placeholder={
+                  useGuardrail
+                    ? dedent`A JavaScript Expression to parse the response and extract guardrail flags.
 
-                  e.g. \`json.choices[0].message.content\``}
+                    e.g. \`{ output: json.choices[0].message.content, guardrails: { flagged: context.response.status === 500 } }\``
+                    : dedent`Optional: A JavaScript expression to parse the response.
+
+                    e.g. \`json.choices[0].message.content\``
+                }
                 style={{
                   fontFamily: '"Fira code", "Fira Mono", monospace',
                   fontSize: 14,

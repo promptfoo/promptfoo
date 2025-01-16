@@ -7,14 +7,12 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import FormControl from '@mui/material/FormControl';
-import FormControlLabel from '@mui/material/FormControlLabel';
 import InputLabel from '@mui/material/InputLabel';
 import Link from '@mui/material/Link';
 import MenuItem from '@mui/material/MenuItem';
 import type { SelectChangeEvent } from '@mui/material/Select';
 import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
-import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
@@ -114,7 +112,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
       const defaultTestConfig = {
         assert: [
           {
-            type: 'guardrail',
+            type: 'guardrails',
             config: {
               purpose: 'redteam',
             },
@@ -351,17 +349,28 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
           Select a Target
         </Typography>
         <Box sx={{ mt: 2, mb: 2 }}>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={useGuardrail}
-                onChange={(e) => setUseGuardrail(e.target.checked)}
-                color="primary"
-              />
-            }
-            label="Use Guardrail"
-          />
+          <FormControl fullWidth>
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+              <Box sx={{ flex: 1 }}>
+                <InputLabel id="predefined-target-label">Target Type</InputLabel>
+                <Select
+                  labelId="predefined-target-label"
+                  value={selectedTarget.id}
+                  onChange={handleTargetChange}
+                  label="Target Type"
+                  fullWidth
+                >
+                  {selectOptions.map((target) => (
+                    <MenuItem key={target.value} value={target.value}>
+                      {target.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </Box>
+            </Box>
+          </FormControl>
         </Box>
+
         <TextField
           fullWidth
           sx={{ mb: 2 }}
@@ -383,26 +392,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
           'customer-service-agent', 'compliance-bot'
         </Typography>
 
-        <FormControl fullWidth>
-          <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
-            <Box sx={{ flex: 1 }}>
-              <InputLabel id="predefined-target-label">Target Type</InputLabel>
-              <Select
-                labelId="predefined-target-label"
-                value={selectedTarget.id}
-                onChange={handleTargetChange}
-                label="Target Type"
-                fullWidth
-              >
-                {selectOptions.map((target) => (
-                  <MenuItem key={target.value} value={target.value}>
-                    {target.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </Box>
-          </Box>
-        </FormControl>
         {(selectedTarget.id.startsWith('javascript') || selectedTarget.id.startsWith('python')) && (
           <TextField
             fullWidth
@@ -489,6 +478,8 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
           requiresTransformResponse={requiresTransformResponse}
           updateCustomTarget={updateCustomTarget}
           hasTestedTarget={hasTestedTarget}
+          useGuardrail={useGuardrail}
+          setUseGuardrail={setUseGuardrail}
         />
       )}
 
