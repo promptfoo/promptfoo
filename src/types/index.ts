@@ -463,9 +463,6 @@ export const AssertionSchema = z.object({
 
   // Process the output before running the assertion
   transform: z.string().optional(),
-
-  // Purpose of the assertion
-  purpose: z.string().optional(),
 });
 
 export type Assertion = z.infer<typeof AssertionSchema>;

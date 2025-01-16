@@ -494,9 +494,6 @@
                                       },
                                       "transform": {
                                         "type": "string"
-                                      },
-                                      "purpose": {
-                                        "type": "string"
                                       }
                                     },
                                     "additionalProperties": false
