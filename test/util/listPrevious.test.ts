@@ -2,6 +2,8 @@ import { runDbMigrations } from '../../src/migrate';
 import { listPreviousResults } from '../../src/util';
 import EvalFactory from '../factories/evalFactory';
 
+jest.mock('../../src/util/config/manage');
+
 describe('listPreviousResults', () => {
   beforeAll(async () => {
     await runDbMigrations();

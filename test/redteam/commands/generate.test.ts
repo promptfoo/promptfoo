@@ -16,13 +16,13 @@ jest.mock('../../../src/util/config/load', () => ({
 }));
 
 jest.mock('../../../src/globalConfig/cloud');
+jest.mock('../../../src/util/config/manage');
 
 jest.mock('../../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: jest.fn().mockReturnValue(false),
   neverGenerateRemote: jest.fn().mockReturnValue(false),
   getRemoteGenerationUrl: jest.fn().mockReturnValue('http://test-url'),
 }));
-jest.mock('../../../src/util/config/manage');
 
 describe('doGenerateRedteam', () => {
   beforeEach(() => {
