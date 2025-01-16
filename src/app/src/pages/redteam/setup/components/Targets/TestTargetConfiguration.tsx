@@ -2,6 +2,7 @@ import React from 'react';
 import Editor from 'react-simple-code-editor';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import InfoIcon from '@mui/icons-material/Info';
+import { FormControlLabel, Switch } from '@mui/material';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -30,7 +31,6 @@ import { highlight, languages } from 'prismjs/components/prism-core';
 import 'prismjs/components/prism-javascript';
 import type { ProviderOptions } from '../../types';
 import 'prismjs/themes/prism.css';
-import { FormControlLabel, Switch } from '@mui/material';
 
 interface TestTargetConfigurationProps {
   testingTarget: boolean;
@@ -76,10 +76,10 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 onValueChange={(code) => updateCustomTarget('transformRequest', code)}
                 highlight={(code) => highlight(code, languages.javascript)}
                 padding={10}
-                placeholder={dedent`Optional: A JavaScript expression to transform the prompt before sending. Format as either:
+                placeholder={dedent`Optional: A JavaScript expression to transform the prompt before calling the API. Format as:
 
-                  1. A JSON object with prompt variable: \`{ messages: [{ role: 'user', content: prompt }] }\`
-                  2. A function that receives the prompt: \`(prompt) => ({ messages: [{ role: 'user', content: prompt }], temperature: 0.7 })\``}
+                  A JSON object with prompt variable: \`{ messages: [{ role: 'user', content: prompt }] }\`
+                `}
                 style={{
                   fontFamily: '"Fira code", "Fira Mono", monospace',
                   fontSize: 14,
@@ -88,8 +88,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
               />
             </Box>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Optionally, configure a request transform to modify the prompt before sending. This
-              can be used to format the prompt into a specific structure required by your API.
+              Transform the prompt into a specific structure required by your API before sending.
             </Typography>
           </Box>
           <Typography variant="h6" gutterBottom mt={4}>
@@ -124,8 +123,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
               />
             </Box>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Optionally, configure a response transform to extract a specific part of the HTTP
-              response. See{' '}
+              Extract specific data from the HTTP response. See{' '}
               <a
                 href="https://www.promptfoo.dev/docs/providers/http/#response-parser"
                 target="_blank"
@@ -152,8 +150,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 }}
               />
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                Optionally, configure a session parser to extract the session ID from the HTTP
-                response headers. This is only needed for stateful systems. See{' '}
+                Extract session IDs from HTTP response headers for stateful systems. See{' '}
                 <a
                   href="https://www.promptfoo.dev/docs/providers/http/#session-management"
                   target="_blank"
@@ -174,10 +171,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                   <Switch
                     checked={selectedTarget.config.validateStatus !== undefined}
                     onChange={(e) => {
-                      updateCustomTarget(
-                        'validateStatus',
-                        e.target.checked ? '' : undefined
-                      );
+                      updateCustomTarget('validateStatus', e.target.checked ? '' : undefined);
                     }}
                   />
                 }
@@ -214,8 +208,8 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                   />
                 </Box>
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  Customize which HTTP status codes are treated as successful responses. By default accepts 200-299.
-                  See{' '}
+                  Customize which HTTP status codes are treated as successful responses. By default
+                  accepts 200-299. See{' '}
                   <a
                     href="https://www.promptfoo.dev/docs/providers/http/#error-handling"
                     target="_blank"

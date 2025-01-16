@@ -1103,6 +1103,37 @@ describe('createTransformRequest', () => {
     });
   });
 
+  it('should handle errors in function-based transform', async () => {
+    const errorFn = () => {
+      throw new Error('Transform function error');
+    };
+    const transform = await createTransformRequest(errorFn);
+    await expect(async () => {
+      await transform('test');
+    }).rejects.toThrow('Error in request transform function: Transform function error');
+  });
+
+  it('should handle errors in file-based transform', async () => {
+    const mockErrorFn = jest.fn(() => {
+      throw new Error('File transform error');
+    });
+    jest.mocked(importModule).mockResolvedValueOnce(mockErrorFn);
+
+    const transform = await createTransformRequest('file://error-transform.js');
+    await expect(async () => {
+      await transform('test');
+    }).rejects.toThrow(
+      'Error in request transform function from error-transform.js: File transform error',
+    );
+  });
+
+  it('should handle errors in string template transform', async () => {
+    const transform = await createTransformRequest('return badVariable.nonexistent');
+    await expect(async () => {
+      await transform('test');
+    }).rejects.toThrow('Error in request transform string template: badVariable is not defined');
+  });
+
   it('should handle function-based request transform', async () => {
     jest.clearAllMocks();
 
@@ -1142,6 +1173,27 @@ describe('createTransformRequest', () => {
   it('should throw error for unsupported transform type', async () => {
     await expect(createTransformRequest(123 as any)).rejects.toThrow(
       'Unsupported request transform type: number',
+    );
+  });
+
+  it('should include filename in error for file-based transform errors', async () => {
+    const mockErrorFn = jest.fn(() => {
+      throw new Error('File error');
+    });
+    jest.mocked(importModule).mockResolvedValueOnce(mockErrorFn);
+
+    const transform = await createTransformRequest('file://specific-file.js');
+    await expect(async () => {
+      await transform('test');
+    }).rejects.toThrow('Error in request transform function from specific-file.js: File error');
+  });
+
+  it('should handle errors in string template rendering', async () => {
+    const transform = await createTransformRequest('{{ nonexistent | invalid }}');
+    await expect(async () => {
+      await transform('test');
+    }).rejects.toThrow(
+      'Error in request transform string template: (unknown path)\n  Error: filter not found: invalid',
     );
   });
 });
