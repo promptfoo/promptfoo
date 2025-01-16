@@ -132,7 +132,7 @@ async function doPoisonDocuments(options: PoisonOptions) {
 
       logger.info(chalk.green(`✓ Successfully poisoned ${isFile ? docPath : 'document'}`));
     } catch (error) {
-      logger.error(`Failed to poison ${docPath}:`, error);
+      logger.error(`Failed to poison ${docPath}: ${error}`);
     }
   }
 

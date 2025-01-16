@@ -419,7 +419,7 @@ export function redteamGenerateCommand(
             logger.error(`  ${err.path.join('.')}: ${err.message}`);
           });
         } else {
-          logger.error('An unexpected error occurred:', error);
+          logger.error(`An unexpected error occurred: ${error}`);
         }
         process.exit(1);
       }

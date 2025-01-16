@@ -149,10 +149,10 @@ redteamRouter.post('/:task', async (req: Request, res: Response): Promise<void> 
     }
 
     const data = await response.json();
-    logger.debug(`Received response from cloud function:`, data);
+    logger.debug(`Received response from cloud function: ${JSON.stringify(data)}`);
     res.json(data);
   } catch (error) {
-    logger.error(`Error in ${task} task:`, error);
+    logger.error(`Error in ${task} task: ${error}`);
     res.status(500).json({ error: `Failed to process ${task} task` });
   }
 });
