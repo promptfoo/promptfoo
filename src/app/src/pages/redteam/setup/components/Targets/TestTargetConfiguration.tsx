@@ -112,8 +112,8 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 padding={10}
                 placeholder={dedent`Optional: Transform the API response before using it. Format as either:
 
-                  1. A JSON path expression: \`json.choices[0].message.content\`
-                  2. A function that receives response data: \`(json, text) => json.choices[0].message.content\`
+                  1. A JavaScript object path: \`json.choices[0].message.content\`
+                  2. A function that receives response data: \`(json, text) => json.choices[0].message.content || text\`
                 `}
                 style={{
                   fontFamily: '"Fira code", "Fira Mono", monospace',
