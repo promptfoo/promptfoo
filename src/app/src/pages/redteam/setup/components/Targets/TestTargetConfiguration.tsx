@@ -61,7 +61,12 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
           </Typography>
           <Accordion defaultExpanded={!!selectedTarget.config.transformRequest}>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="h6">Request Transform</Typography>
+              <Box>
+                <Typography variant="h6">Request Transform</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Modify the prompt structure before sending to the API
+                </Typography>
+              </Box>
             </AccordionSummary>
             <AccordionDetails>
               <Typography variant="body1" sx={{ mb: 2 }}>
@@ -105,7 +110,12 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
 
           <Accordion defaultExpanded={!!selectedTarget.config.transformResponse}>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="h6">Response Transform</Typography>
+              <Box>
+                <Typography variant="h6">Response Transform</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Extract the completion from the API response
+                </Typography>
+              </Box>
             </AccordionSummary>
             <AccordionDetails>
               <Typography variant="body1" sx={{ mb: 2 }}>
@@ -149,7 +159,12 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
 
           <Accordion defaultExpanded={!!selectedTarget.config.sessionParser}>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="h6">Session Header</Typography>
+              <Box>
+                <Typography variant="h6">Session Header</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Handle stateful API sessions
+                </Typography>
+              </Box>
             </AccordionSummary>
             <AccordionDetails>
               <Typography variant="body1" sx={{ mb: 2 }}>
@@ -178,7 +193,12 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
 
           <Accordion defaultExpanded={!!selectedTarget.config.validateStatus}>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="h6">HTTP Status Code</Typography>
+              <Box>
+                <Typography variant="h6">HTTP Status Code</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Configure which response codes are considered successful
+                </Typography>
+              </Box>
             </AccordionSummary>
             <AccordionDetails>
               <Typography variant="body1" sx={{ mb: 2 }}>
