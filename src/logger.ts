@@ -94,7 +94,7 @@ export function setLogLevel(level: LogLevel) {
   }
 }
 
-// Create a wrapper that enforces strict single-string argument logging
+// Wrapper enforces strict single-string argument logging
 const logger: StrictLogger = Object.assign({}, winstonLogger, {
   error: (message: string) => winstonLogger.error(message),
   warn: (message: string) => winstonLogger.warn(message),
