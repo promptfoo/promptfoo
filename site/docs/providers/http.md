@@ -501,7 +501,7 @@ Supported config options:
 | transformRequest  | string \| Function      | A function, string template, or file path to transform the prompt before sending it to the API.                                                                                     |
 | transformResponse | string \| Function      | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field. |
 | maxRetries        | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                |
-| validateStatus    | Function                | A function that takes a status code and returns a boolean indicating if the response should be treated as successful. By default, considers status codes 200-299 as successful.     |
+| validateStatus    | Function                | A function that takes a status code and returns a boolean indicating if the response should be treated as successful. By default, accepts all status codes.                         |
 
 Note: All string values in the config (including those nested in `headers`, `body`, and `queryParams`) support Nunjucks templating. This means you can use the `{{prompt}}` variable or any other variables passed in the test context.
 
@@ -519,13 +519,13 @@ import { HttpConfigGenerator } from '@site/src/components/HttpConfigGenerator';
 
 The HTTP provider throws errors for:
 
-- Invalid response status codes
 - Network errors or request failures
 - Invalid response parsing
 - Session parsing errors
 - Invalid request configurations
+- Status codes that fail the configured validation (if `validateStatus` is set)
 
-By default, responses with status codes outside 200-299 are treated as errors. You can customize this using the `validateStatus` option:
+By default, all response status codes are accepted. You can customize this using the `validateStatus` option:
 
 ```yaml
 providers:
@@ -535,7 +535,7 @@ providers:
       # Function-based validation
       validateStatus: (status) => status < 500  # Accept any status below 500
       # Or string-based expression
-      validateStatus: 'status >= 200 && status <= 299'  # Default behavior
+      validateStatus: 'status >= 200 && status <= 299'  # Accept only 2xx responses
       # Or load from file
       validateStatus: 'file://validators/status.js'  # Load default export
       validateStatus: 'file://validators/status.js:validateStatus'  # Load specific function
