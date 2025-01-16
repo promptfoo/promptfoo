@@ -1,5 +1,4 @@
 import type { TokenCredential } from '@azure/identity';
-import { AzureCliCredential, ClientSecretCredential } from '@azure/identity';
 import type {
   AssistantCreationOptions,
   AssistantsClient,
@@ -296,7 +295,7 @@ export class AzureGenericProvider implements ApiProvider {
     return apiKey;
   }
 
-  getAzureTokenCredential(): TokenCredential {
+  async getAzureTokenCredential(): Promise<TokenCredential> {
     const clientSecret =
       this.config?.azureClientSecret ||
       this.env?.AZURE_CLIENT_SECRET ||
@@ -309,6 +308,8 @@ export class AzureGenericProvider implements ApiProvider {
       this.config?.azureAuthorityHost ||
       this.env?.AZURE_AUTHORITY_HOST ||
       getEnvString('AZURE_AUTHORITY_HOST');
+
+    const { ClientSecretCredential, AzureCliCredential } = await import('@azure/identity');
 
     if (clientSecret && clientId && tenantId) {
       const credential = new ClientSecretCredential(tenantId, clientId, clientSecret, {
@@ -323,7 +324,7 @@ export class AzureGenericProvider implements ApiProvider {
   }
 
   async getAccessToken() {
-    const credential = this.getAzureTokenCredential();
+    const credential = await this.getAzureTokenCredential();
     const tokenScope =
       this.config?.azureTokenScope ||
       this.env?.AZURE_TOKEN_SCOPE ||
