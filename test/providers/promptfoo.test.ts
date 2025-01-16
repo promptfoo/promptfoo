@@ -124,7 +124,9 @@ describe('PromptfooChatCompletionProvider', () => {
 
   it('should handle missing result', async () => {
     const mockResponse = {
-      data: {},
+      data: {
+        result: null,
+      },
       status: 200,
       statusText: 'OK',
       cached: false,
