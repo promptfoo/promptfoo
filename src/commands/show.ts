@@ -176,7 +176,7 @@ export async function showCommand(program: Command) {
         if (latestEval) {
           return handleEval(latestEval.id);
         }
-        logger.error('No evals found');
+        logger.error('No eval found');
         process.exitCode = 1;
         return;
       }
@@ -208,7 +208,7 @@ export async function showCommand(program: Command) {
         if (latestEval) {
           return handleEval(latestEval.id);
         }
-        logger.error('No evals found');
+        logger.error('No eval found');
         process.exitCode = 1;
         return;
       }
