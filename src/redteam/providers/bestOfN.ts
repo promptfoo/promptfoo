@@ -3,6 +3,7 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
+import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import type {
   ApiProvider,
@@ -73,6 +74,7 @@ export default class BestOfNProvider implements ApiProvider {
           nSteps: this.nSteps,
           maxCandidatesPerStep: this.maxCandidatesPerStep,
           version: VERSION,
+          email: getUserEmail(),
         }),
       });
 

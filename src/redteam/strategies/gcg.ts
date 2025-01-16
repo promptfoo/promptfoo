@@ -1,6 +1,7 @@
 import async from 'async';
 import { SingleBar, Presets } from 'cli-progress';
 import { fetchWithCache } from '../../cache';
+import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { TestCase } from '../../types';
@@ -40,6 +41,7 @@ async function generateGcgPrompts(
         task: 'gcg',
         query: testCase.vars[injectVar],
         ...(config.n && { n: config.n }),
+        email: getUserEmail(),
       };
 
       const { data } = await fetchWithCache(

@@ -3,6 +3,7 @@ import type { Command } from 'commander';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import * as path from 'path';
+import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
@@ -48,6 +49,7 @@ async function generatePoisonedDocument(document: string, goal?: string): Promis
       task: 'poison-document',
       document,
       goal,
+      email: getUserEmail(),
     }),
   });
 

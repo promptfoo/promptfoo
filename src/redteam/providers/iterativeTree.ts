@@ -24,7 +24,7 @@ import type {
   AtomicTestCase,
   CallApiContextParams,
   CallApiOptionsParams,
-  Guardrails,
+  GuardrailResponse,
   NunjucksFilterMap,
   Prompt,
   TokenUsage,
@@ -370,7 +370,7 @@ export interface TreeSearchOutput {
   improvement?: string;
   wasSelected: boolean;
   graderPassed?: boolean;
-  guardrails?: Guardrails;
+  guardrails?: GuardrailResponse;
 }
 
 /**
@@ -413,7 +413,7 @@ export async function runRedteamConversation({
     redteamTreeHistory: TreeSearchOutput[];
   };
   tokenUsage?: TokenUsage;
-  guardrails?: Guardrails;
+  guardrails?: GuardrailResponse;
 }> {
   const nunjucks = getNunjucksEngine();
   const goal: string = vars[injectVar] as string;

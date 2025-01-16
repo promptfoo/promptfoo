@@ -501,6 +501,7 @@ Supported config options:
 | transformRequest  | string \| Function      | A function, string template, or file path to transform the prompt before sending it to the API.                                                                                     |
 | transformResponse | string \| Function      | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field. |
 | maxRetries        | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                |
+| validateStatus    | Function                | A function that takes a status code and returns a boolean indicating if the response should be treated as successful. By default, considers status codes 200-299 as successful.     |
 
 Note: All string values in the config (including those nested in `headers`, `body`, and `queryParams`) support Nunjucks templating. This means you can use the `{{prompt}}` variable or any other variables passed in the test context.
 
@@ -516,27 +517,38 @@ import { HttpConfigGenerator } from '@site/src/components/HttpConfigGenerator';
 
 ## Error Handling
 
-The HTTP provider throws errors in the following scenarios:
+The HTTP provider throws errors for:
 
-- Non-200 HTTP status codes (any response with status < 200 or >= 300)
+- Invalid response status codes
 - Network errors or request failures
 - Invalid response parsing
 - Session parsing errors
 - Invalid request configurations
 
-These errors will propagate up to your application, allowing you to handle them appropriately. For example:
+By default, responses with status codes outside 200-299 are treated as errors. You can customize this using the `validateStatus` option:
 
 ```yaml
 providers:
   - id: https
     config:
       url: 'https://example.com/api'
-      method: 'POST'
-      headers:
-        'Content-Type': 'application/json'
-      body:
-        prompt: '{{prompt}}'
-      maxRetries: 3 # Will retry on network errors or rate limits
+      # Function-based validation
+      validateStatus: (status) => status < 500  # Accept any status below 500
+      # Or string-based expression
+      validateStatus: 'status >= 200 && status <= 299'  # Default behavior
+      # Or load from file
+      validateStatus: 'file://validators/status.js'  # Load default export
+      validateStatus: 'file://validators/status.js:validateStatus'  # Load specific function
 ```
 
-Note that while the provider will automatically retry on certain errors (like rate limits) based on the `maxRetries` configuration, other errors will be thrown immediately.
+Example validator file (`validators/status.js`):
+
+```javascript
+export default (status) => status < 500;
+// Or named export
+export function validateStatus(status) {
+  return status < 500;
+}
+```
+
+The provider automatically retries certain errors (like rate limits) based on `maxRetries`, while other errors are thrown immediately.

@@ -67,7 +67,7 @@ describe('InfoModal', () => {
       { text: 'Documentation', href: 'https://www.promptfoo.dev/docs/intro' },
       { text: 'GitHub Repository', href: 'https://github.com/promptfoo/promptfoo' },
       { text: 'File an Issue', href: 'https://github.com/promptfoo/promptfoo/issues' },
-      { text: 'Join Our Discord Community', href: 'https://discord.gg/gHPS9jjfbs' },
+      { text: 'Join Our Discord Community', href: 'https://discord.gg/promptfoo' },
       { text: 'Book a Meeting', href: 'https://cal.com/team/promptfoo/intro2' },
     ];
 

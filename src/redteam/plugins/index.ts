@@ -1,6 +1,7 @@
 import { fetchWithCache } from '../../cache';
 import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';
+import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types';
@@ -69,6 +70,7 @@ async function fetchRemoteTestCases(
     purpose,
     task: key,
     version: VERSION,
+    email: getUserEmail(),
   });
   try {
     const { data } = await fetchWithCache(
