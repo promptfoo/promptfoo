@@ -1815,6 +1815,69 @@ describe('validateStatus', () => {
       'Status validator malformed: invalid-validator.js - Module not found',
     );
   });
+
+  it('should handle string-based arrow function validateStatus', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        validateStatus: '(s) => s < 500',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 404,
+      statusText: 'Not Found',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.output).toEqual({ result: 'success' });
+  });
+
+  it('should handle string-based regular function validateStatus', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        validateStatus: 'function(status) { return status < 500; }',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 404,
+      statusText: 'Not Found',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.output).toEqual({ result: 'success' });
+  });
+
+  it('should handle parameterless arrow function validateStatus', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        validateStatus: '() => true',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 404,
+      statusText: 'Not Found',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.output).toEqual({ result: 'success' });
+  });
 });
 
 describe('session parser', () => {

@@ -164,7 +164,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
           <Box mt={4} mb={2}>
             <Stack direction="row" alignItems="center" spacing={1}>
               <Typography variant="h6" sx={{ flexGrow: 1 }}>
-                Configure Success Conditions
+                Configure HTTP Status Code Validation
               </Typography>
               <FormControlLabel
                 control={
@@ -175,7 +175,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                     }}
                   />
                 }
-                label="Custom rules"
+                label="Custom"
               />
             </Stack>
             {selectedTarget.config.validateStatus !== undefined && (
@@ -197,9 +197,9 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                     padding={10}
                     placeholder={dedent`Customize HTTP status code validation. Examples:
 
-                      \`status >= 200 && status < 300\`  // Default: accept 2xx codes - javascript expression
-                      \`(status) => status < 500\`       // Accept anything but server errors - javascript function
-                      \`() => true\`                     // Accept all responses - javascript function`}
+                      status >= 200 && status < 300  // Default: accept 2xx codes - javascript expression
+                      (status) => status < 500       // Accept anything but server errors - javascript function
+                      () => true                     // Accept all responses - javascript function`}
                     style={{
                       fontFamily: '"Fira code", "Fira Mono", monospace',
                       fontSize: 14,
