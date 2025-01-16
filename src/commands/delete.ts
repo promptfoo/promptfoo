@@ -64,7 +64,8 @@ export function deleteCommand(program: Command) {
         if (latestResults) {
           await handleEvalDelete(latestResults.createdAt, cmdObj.envPath);
         } else {
-          logger.error('No evaluations found.');
+          logger.error('No eval found.');
+          process.exitCode = 1;
         }
       } else if (evalId === 'all') {
         await handleEvalDeleteAll();
