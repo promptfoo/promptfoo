@@ -19,7 +19,6 @@ export const LOG_LEVELS = {
 
 type LogLevel = keyof typeof LOG_LEVELS;
 
-// Create a type that enforces strict single-string argument logging
 type StrictLogMethod = (message: string) => winston.Logger;
 type StrictLogger = Omit<winston.Logger, keyof typeof LOG_LEVELS> & {
   [K in keyof typeof LOG_LEVELS]: StrictLogMethod;
