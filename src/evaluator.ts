@@ -5,6 +5,7 @@ import { randomUUID } from 'crypto';
 import { globSync } from 'glob';
 import * as path from 'path';
 import readline from 'readline';
+import type winston from 'winston';
 import { runAssertions, runCompareAssertion } from './assertions';
 import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';
@@ -224,7 +225,7 @@ class Evaluator {
             test,
 
             // All of these are removed in python and script providers, but every Javascript provider gets them
-            logger,
+            logger: logger as winston.Logger,
             fetchWithCache,
             getCache,
           },

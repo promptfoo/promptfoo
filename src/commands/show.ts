@@ -58,7 +58,7 @@ async function handlePrompt(id: string) {
             : ''),
     });
   }
-  logger.info(wrapTable(table));
+  logger.info(wrapTable(table) as string);
   printBorder();
   logger.info(
     `Run ${chalk.green('promptfoo show eval <id>')} to see details of a specific evaluation.`,
@@ -148,7 +148,7 @@ async function handleDataset(id: string) {
             : ''),
     });
   }
-  logger.info(wrapTable(table));
+  logger.info(wrapTable(table) as string);
   printBorder();
   logger.info(
     `Run ${chalk.green('promptfoo show prompt <id>')} to see details of a specific prompt.`,
@@ -160,16 +160,26 @@ async function handleDataset(id: string) {
 
 export async function showCommand(program: Command) {
   const showCommand = program
-    .command('show <id>')
-    .description('Show details of a specific resource')
+    .command('show [id]')
+    .description('Show details of a specific resource (defaults to most recent)')
     .option('--env-file, --env-path <path>', 'Path to .env file')
-    .action(async (id: string, cmdObj: { envPath?: string }) => {
+    .action(async (id: string | undefined, cmdObj: { envPath?: string }) => {
       setupEnv(cmdObj.envPath);
       telemetry.record('command_used', {
         name: 'show',
       });
 
       await telemetry.send();
+
+      if (!id) {
+        const latestEval = await Eval.latest();
+        if (latestEval) {
+          return handleEval(latestEval.id);
+        }
+        logger.error('No evaluations found');
+        return;
+      }
+
       const evl = await getEvalFromId(id);
       if (evl) {
         return handleEval(id);
@@ -189,9 +199,19 @@ export async function showCommand(program: Command) {
     });
 
   showCommand
-    .command('eval <id>')
-    .description('Show details of a specific evaluation')
-    .action(handleEval);
+    .command('eval [id]')
+    .description('Show details of a specific evaluation (defaults to most recent)')
+    .action(async (id?: string) => {
+      if (!id) {
+        const latestEval = await Eval.latest();
+        if (latestEval) {
+          return handleEval(latestEval.id);
+        }
+        logger.error('No evaluations found');
+        return;
+      }
+      return handleEval(id);
+    });
 
   showCommand
     .command('prompt <id>')

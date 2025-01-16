@@ -1,3 +1,4 @@
+import dedent from 'dedent';
 import { fetchWithProxy } from '../fetch';
 import logger from '../logger';
 import type { TestCase } from '../types';
@@ -89,8 +90,8 @@ export async function fetchHuggingFaceDataset(
       // Log schema information on first request
       logger.debug(`[Huggingface Dataset] Dataset features: ${JSON.stringify(data.features)}`);
       logger.debug(
-        '[Huggingface Dataset] Using query parameters:',
-        Object.fromEntries(queryParams),
+        dedent`[Huggingface Dataset] Using query parameters:
+        ${Object.fromEntries(queryParams)}`,
       );
     }
 
