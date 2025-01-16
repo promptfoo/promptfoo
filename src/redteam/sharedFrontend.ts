@@ -1,7 +1,17 @@
 // This file is imported by the frontend and shouldn't use native dependencies.
-import type { UnifiedConfig } from '../types';
-import { type Plugin, riskCategorySeverityMap, type Severity } from './constants';
-import type { RedteamPluginObject, SavedRedteamConfig } from './types';
+import type {
+  AtomicTestCase,
+  UnifiedConfig,
+} from '../types';
+import {
+  type Plugin,
+  riskCategorySeverityMap,
+  type Severity,
+} from './constants';
+import type {
+  RedteamPluginObject,
+  SavedRedteamConfig,
+} from './types';
 
 export function getRiskCategorySeverityMap(
   plugins?: RedteamPluginObject[],
@@ -30,7 +40,7 @@ export function getUnifiedConfig(
     description: config.description,
     targets: [config.target],
     prompts: config.prompts,
-    defaultTest: config.defaultTest,
+    defaultTest: config.defaultTest as AtomicTestCase,
     redteam: {
       purpose: config.purpose,
       numTests: config.numTests,
