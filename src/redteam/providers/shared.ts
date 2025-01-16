@@ -4,7 +4,7 @@ import {
   type ApiProvider,
   type CallApiContextParams,
   type CallApiOptionsParams,
-  type Guardrails,
+  type GuardrailResponse,
   isApiProvider,
   isProviderOptions,
   type RedteamFileConfig,
@@ -12,7 +12,11 @@ import {
 } from '../../types';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
-import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
+import {
+  ATTACKER_MODEL,
+  ATTACKER_MODEL_SMALL,
+  TEMPERATURE,
+} from './constants';
 
 async function loadRedteamProvider({
   provider,
@@ -96,7 +100,7 @@ export type TargetResponse = {
   error?: string;
   sessionId?: string;
   tokenUsage?: TokenUsage;
-  guardrails?: Guardrails;
+  guardrails?: GuardrailResponse;
 };
 
 /**

@@ -90,6 +90,18 @@ jobs:
           # shellcheck disable=SC2046
           npx madge $(git ls-files '*.ts') --circular
 
+  shell-format:
+    name: Shell Format Check
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: luizm/action-sh-checker@17bd25a6ee188d2b91f677060038f4ba37ba14b2
+        env:
+          SHFMT_OPTS: '-i 2' # 2 space indent
+        with:
+          sh_checker_shellcheck_disable: true
+
   assets:
     name: Generate Assets
     timeout-minutes: 5

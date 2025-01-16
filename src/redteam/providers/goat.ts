@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
+import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import type { Assertion, AssertionSet, AtomicTestCase } from '../../types';
@@ -101,6 +102,7 @@ export default class GoatProvider implements ApiProvider {
             prompt: context?.prompt?.raw,
             task: 'goat',
             version: VERSION,
+            email: getUserEmail(),
           }),
           headers: {
             'Content-Type': 'application/json',

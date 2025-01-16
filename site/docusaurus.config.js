@@ -175,7 +175,7 @@ const config = {
                 label: 'GitHub',
               },
               {
-                href: 'https://discord.gg/gHPS9jjfbs',
+                href: 'https://discord.gg/promptfoo',
                 label: 'Discord',
               },
             ],
@@ -188,7 +188,7 @@ const config = {
             'aria-label': 'GitHub repository',
           },
           {
-            href: 'https://discord.gg/gHPS9jjfbs',
+            href: 'https://discord.gg/promptfoo',
             position: 'right',
             className: 'header-discord-link',
             'aria-label': 'Discord community',
@@ -285,7 +285,7 @@ const config = {
               },
               {
                 label: 'Discord',
-                href: 'https://discord.gg/gHPS9jjfbs',
+                href: 'https://discord.gg/promptfoo',
               },
               {
                 label: 'LinkedIn',
@@ -323,7 +323,20 @@ const config = {
         indexName: 'promptfoo',
       },
     }),
-  plugins: [require.resolve('docusaurus-plugin-image-zoom')],
+  plugins: [
+    require.resolve('docusaurus-plugin-image-zoom'),
+    [
+      '@docusaurus/plugin-client-redirects',
+      {
+        redirects: [
+          {
+            from: '/docs/category/troubleshooting',
+            to: '/docs/usage/troubleshooting',
+          },
+        ],
+      },
+    ],
+  ],
 
   // Mermaid diagram support
   markdown: {

@@ -3,6 +3,7 @@ import { SingleBar, Presets } from 'cli-progress';
 import dedent from 'dedent';
 import yaml from 'js-yaml';
 import { fetchWithCache } from '../../cache';
+import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { TestCase } from '../../types';
@@ -47,6 +48,7 @@ export async function generateMultilingual(
         testCases: batch,
         injectVar,
         config,
+        email: getUserEmail(),
       };
 
       const { data } = await fetchWithCache(

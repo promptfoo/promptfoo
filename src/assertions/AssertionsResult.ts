@@ -1,5 +1,8 @@
 import { getEnvBool } from '../envars';
-import type { AssertionSet, GradingResult } from '../types';
+import type {
+  AssertionSet,
+  GradingResult,
+} from '../types';
 
 const DEFAULT_TOKENS_USED = {
   total: 0,
@@ -68,7 +71,7 @@ export class AssertionsResult {
     this.componentResults[index] = result;
 
     const isRedteamGuardrail =
-      result.assertion?.type === 'guardrail' && result.assertion?.config?.purpose === 'redteam';
+      result.assertion?.type === 'guardrails' && result.assertion?.config?.purpose === 'redteam';
 
     if (isRedteamGuardrail && !result.pass) {
       this.failedContentSafetyChecks = true;

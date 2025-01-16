@@ -2,6 +2,7 @@ import async from 'async';
 import fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
+
 import cliState from '../cliState';
 import { getEnvInt } from '../envars';
 import { importModule } from '../esm';
@@ -19,7 +20,10 @@ import {
   matchesSelectBest,
   matchesSimilarity,
 } from '../matchers';
-import { isPackagePath, loadFromPackage } from '../providers/packageParser';
+import {
+  isPackagePath,
+  loadFromPackage,
+} from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
 import type {
@@ -39,8 +43,8 @@ import { isJavascriptFile } from '../util/file';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { transform } from '../util/transform';
-import { AssertionsResult } from './AssertionsResult';
 import { handleAnswerRelevance } from './answerRelevance';
+import { AssertionsResult } from './AssertionsResult';
 import { handleBleuScore } from './bleu';
 import { handleClassifier } from './classifier';
 import {
@@ -58,25 +62,41 @@ import { handleCost } from './cost';
 import { handleEquals } from './equals';
 import { handleFactuality } from './factuality';
 import { handleGEval } from './geval';
-import { handleGuardrail } from './guardrail';
+import { handleGuardrails } from './guardrails';
 import { handleJavascript } from './javascript';
-import { handleContainsJson, handleIsJson } from './json';
+import {
+  handleContainsJson,
+  handleIsJson,
+} from './json';
 import { handleLatency } from './latency';
 import { handleLevenshtein } from './levenshtein';
 import { handleLlmRubric } from './llmRubric';
 import { handleModelGradedClosedQa } from './modelGradedClosedQa';
 import { handleModeration } from './moderation';
-import { handleIsValidOpenAiFunctionCall, handleIsValidOpenAiToolsCall } from './openai';
-import { handlePerplexity, handlePerplexityScore } from './perplexity';
+import {
+  handleIsValidOpenAiFunctionCall,
+  handleIsValidOpenAiToolsCall,
+} from './openai';
+import {
+  handlePerplexity,
+  handlePerplexityScore,
+} from './perplexity';
 import { handlePython } from './python';
 import { handleRedteam } from './redteam';
 import { handleIsRefusal } from './refusal';
 import { handleRegex } from './regex';
 import { handleRougeScore } from './rouge';
 import { handleSimilar } from './similar';
-import { handleContainsSql, handleIsSql } from './sql';
+import {
+  handleContainsSql,
+  handleIsSql,
+} from './sql';
 import { handleStartsWith } from './startsWith';
-import { coerceString, getFinalTest, processFileReference } from './utils';
+import {
+  coerceString,
+  getFinalTest,
+  processFileReference,
+} from './utils';
 import { handleWebhook } from './webhook';
 import { handleIsXml } from './xml';
 
@@ -282,8 +302,8 @@ export async function runAssertion({
     'rouge-n': handleRougeScore,
     similar: handleSimilar,
     'starts-with': handleStartsWith,
+    guardrails: handleGuardrails,
     webhook: handleWebhook,
-    guardrail: handleGuardrail,
   };
 
   const handler = assertionHandlers[baseType as keyof typeof assertionHandlers];
@@ -298,7 +318,7 @@ export async function runAssertion({
       };
     }
 
-    return result;
+      return result;
   }
 
   if (baseType.startsWith('promptfoo:redteam:')) {

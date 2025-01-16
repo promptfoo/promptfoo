@@ -183,10 +183,10 @@ interface ProviderOptions {
 
 ### Guardrails
 
-Guardrails is an object that represents the guardrails from a provider. It includes flags indicating if prompt or output failed guardrails.
+GuardrailResponse is an object that represents the GuardrailResponse from a provider. It includes flags indicating if prompt or output failed guardrails.
 
 ```typescript
-interface Guardrails {
+interface GuardrailResponse {
   flagged?: boolean;
   flaggedInput?: boolean;
   flaggedOutput?: boolean;
@@ -211,7 +211,7 @@ interface ProviderResponse {
   cost?: number; // required for cost assertion
   logProbs?: number[]; // required for perplexity assertion
   isRefusal?: boolean; // the provider has explicitly refused to generate a response
-  guardrails?: Guardrails;
+  guardrails?: GuardrailResponse;
 }
 ```
 

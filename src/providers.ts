@@ -186,7 +186,7 @@ export async function loadApiProvider(
       ret = new AzureCompletionProvider(deploymentName, providerOptions);
     } else {
       throw new Error(
-        `Unknown Azure OpenAI model type: ${modelType}. Use one of the following providers: azureopenai:chat:<model name>, azureopenai:assistant:<assistant id>, azureopenai:completion:<model name>`,
+        `Unknown Azure model type: ${modelType}. Use one of the following providers: azure:chat:<model name>, azure:assistant:<assistant id>, azure:completion:<model name>`,
       );
     }
   } else if (providerPath.startsWith('openrouter:')) {

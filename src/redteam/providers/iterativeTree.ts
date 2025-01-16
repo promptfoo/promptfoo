@@ -16,6 +16,7 @@
 import dedent from 'dedent';
 import type { Environment } from 'nunjucks';
 import { v4 as uuidv4 } from 'uuid';
+
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
@@ -24,19 +25,29 @@ import type {
   AtomicTestCase,
   CallApiContextParams,
   CallApiOptionsParams,
-  Guardrails,
+  GuardrailResponse,
   NunjucksFilterMap,
   Prompt,
   TokenUsage,
 } from '../../types';
 import invariant from '../../util/invariant';
-import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
+import {
+  extractFirstJsonObject,
+  safeJsonStringify,
+} from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { PENALIZED_PHRASES } from './constants';
-import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
-import { getTargetResponse, redteamProviderManager } from './shared';
+import {
+  ATTACKER_SYSTEM_PROMPT,
+  JUDGE_SYSTEM_PROMPT,
+  ON_TOPIC_SYSTEM_PROMPT,
+} from './prompts';
+import {
+  getTargetResponse,
+  redteamProviderManager,
+} from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -370,7 +381,7 @@ export interface TreeSearchOutput {
   improvement?: string;
   wasSelected: boolean;
   graderPassed?: boolean;
-  guardrails?: Guardrails;
+  guardrails?: GuardrailResponse;
 }
 
 /**
@@ -413,7 +424,7 @@ export async function runRedteamConversation({
     redteamTreeHistory: TreeSearchOutput[];
   };
   tokenUsage?: TokenUsage;
-  guardrails?: Guardrails;
+  guardrails?: GuardrailResponse;
 }> {
   const nunjucks = getNunjucksEngine();
   const goal: string = vars[injectVar] as string;

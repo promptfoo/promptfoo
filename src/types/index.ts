@@ -1,6 +1,7 @@
 // Note: This file is in the process of being deconstructed into `types/` and `validators/`
 // Right now Zod and pure types are mixed together!
 import { z } from 'zod';
+
 import type {
   PluginConfig,
   RedteamAssertionTypes,
@@ -8,7 +9,10 @@ import type {
   StrategyConfig,
 } from '../redteam/types';
 import { isJavascriptFile } from '../util/file';
-import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
+import {
+  PromptConfigSchema,
+  PromptSchema,
+} from '../validators/prompts';
 import {
   ApiProviderSchema,
   ProviderEnvOverridesSchema,
@@ -16,11 +20,24 @@ import {
   ProvidersSchema,
 } from '../validators/providers';
 import { RedteamConfigSchema } from '../validators/redteam';
-import { NunjucksFilterMapSchema, TokenUsageSchema } from '../validators/shared';
+import {
+  NunjucksFilterMapSchema,
+  TokenUsageSchema,
+} from '../validators/shared';
 import type { EnvOverrides } from './env';
-import type { Prompt, PromptFunction } from './prompts';
-import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
-import type { NunjucksFilterMap, TokenUsage } from './shared';
+import type {
+  Prompt,
+  PromptFunction,
+} from './prompts';
+import type {
+  ApiProvider,
+  ProviderOptions,
+  ProviderResponse,
+} from './providers';
+import type {
+  NunjucksFilterMap,
+  TokenUsage,
+} from './shared';
 
 export * from './prompts';
 export * from './providers';
@@ -365,7 +382,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'equals',
   'factuality',
   'g-eval',
-  'guardrail',
+  'guardrails',
   'icontains-all',
   'icontains-any',
   'icontains',

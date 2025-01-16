@@ -3,8 +3,6 @@ import type { UnifiedConfig } from '../types';
 import { type Plugin, riskCategorySeverityMap, type Severity } from './constants';
 import type { RedteamPluginObject, SavedRedteamConfig } from './types';
 
-const MULTI_TURN_STRATEGIES = ['goat', 'crescendo'];
-
 export function getRiskCategorySeverityMap(
   plugins?: RedteamPluginObject[],
 ): Record<Plugin, Severity> {
@@ -49,17 +47,11 @@ export function getUnifiedConfig(
         if (typeof strategy === 'string') {
           return { id: strategy };
         }
-        const strategyConfig = {
+        return {
           id: strategy.id,
-          config: {},
           ...(strategy.config &&
             Object.keys(strategy.config).length > 0 && { config: strategy.config }),
         };
-        // Don't bother setting the stateless config for single-turn strategies
-        if (MULTI_TURN_STRATEGIES.includes(strategy.id)) {
-          strategyConfig.config.stateless = config.stateless;
-        }
-        return strategyConfig;
       }),
     },
   };

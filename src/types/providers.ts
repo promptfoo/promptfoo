@@ -1,7 +1,11 @@
 import type winston from 'winston';
+
 import type { EnvOverrides } from './env';
 import type { Prompt } from './prompts';
-import type { NunjucksFilterMap, TokenUsage } from './shared';
+import type {
+  NunjucksFilterMap,
+  TokenUsage,
+} from './shared';
 
 export type ProviderId = string;
 export type ProviderLabel = string;
@@ -88,7 +92,7 @@ export interface ApiModerationProvider extends ApiProvider {
   callModerationApi: (prompt: string, response: string) => Promise<ProviderModerationResponse>;
 }
 
-export interface Guardrails {
+export interface GuardrailResponse {
   flaggedInput?: boolean;
   flaggedOutput?: boolean;
   flagged?: boolean;
@@ -108,7 +112,7 @@ export interface ProviderResponse {
   tokenUsage?: TokenUsage;
   isRefusal?: boolean;
   sessionId?: string;
-  guardrails?: Guardrails;
+  guardrails?: GuardrailResponse;
 }
 
 export interface ProviderEmbeddingResponse {
