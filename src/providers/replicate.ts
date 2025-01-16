@@ -14,6 +14,7 @@ import type {
 } from '../types';
 import type { EnvOverrides } from '../types/env';
 import { safeJsonStringify } from '../util/json';
+import { ellipsize } from '../utils/text';
 import { parseChatPrompt } from './shared';
 
 interface ReplicateCompletionOptions {
@@ -351,8 +352,7 @@ export class ReplicateImageProvider extends ReplicateProvider {
       .replace(/\r?\n|\r/g, ' ')
       .replace(/\[/g, '(')
       .replace(/\]/g, ')');
-    const ellipsizedPrompt =
-      sanitizedPrompt.length > 50 ? `${sanitizedPrompt.substring(0, 47)}...` : sanitizedPrompt;
+    const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
     return {
       output: `![${ellipsizedPrompt}](${url})`,
       cached,
