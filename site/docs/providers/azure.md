@@ -279,11 +279,12 @@ Azure-specific config
 
 OpenAI config:
 
-| Name              | Description                                                                                                                                                            |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| o1                | Set to `true` if your Azure deployment uses an o1 model. When true, `max_tokens` and `temperature` parameters will not be sent as they are not supported by o1 models. |
-| temperature       | Controls randomness of the output. Not supported for o1 models.                                                                                                        |
-| max_tokens        | Maximum number of tokens to generate. Not supported for o1 models.                                                                                                     |
+| Name                  | Description                                                                                                                                                            |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| o1                    | Set to `true` if your Azure deployment uses an o1 model. Since Azure allows custom model naming, this flag is required to properly handle o1 models which do not support certain parameters. |
+| max_completion_tokens | Maximum number of tokens to generate for o1 models. Only used when `o1` is set to `true`. This replaces `max_tokens` for o1 models.                                    |
+| temperature           | Controls randomness of the output. Not supported for o1 models and will be automatically excluded when `o1` is `true`.                                                |
+| max_tokens            | Maximum number of tokens to generate. Not supported for o1 models and will be automatically excluded when `o1` is `true`.                                             |
 | top_p             | Controls nucleus sampling.                                                                                                                                             |
 | frequency_penalty | Penalizes new tokens based on their frequency.                                                                                                                         |
 | presence_penalty  | Penalizes new tokens based on their presence.                                                                                                                          |
