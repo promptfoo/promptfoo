@@ -181,6 +181,18 @@ interface ProviderOptions {
 }
 ```
 
+### Guardrails
+
+GuardrailResponse is an object that represents the GuardrailResponse from a provider. It includes flags indicating if prompt or output failed guardrails.
+
+```typescript
+interface GuardrailResponse {
+  flagged?: boolean;
+  flaggedInput?: boolean;
+  flaggedOutput?: boolean;
+}
+```
+
 ### ProviderResponse
 
 ProviderResponse is an object that represents the response from a provider. It includes the output from the provider, any error that occurred, information about token usage, and a flag indicating whether the response was cached.
@@ -199,6 +211,7 @@ interface ProviderResponse {
   cost?: number; // required for cost assertion
   logProbs?: number[]; // required for perplexity assertion
   isRefusal?: boolean; // the provider has explicitly refused to generate a response
+  guardrails?: GuardrailResponse;
 }
 ```
 

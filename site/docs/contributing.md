@@ -3,7 +3,7 @@ title: Contributing to promptfoo
 sidebar_label: Contributing
 ---
 
-We welcome contributions from the community to help make promptfoo better. This guide will help you get started. If you have any questions, please reach out to us on [Discord](https://discord.gg/gHPS9jjfbs) or through a [GitHub issue](https://github.com/promptfoo/promptfoo/issues/new).
+We welcome contributions from the community to help make promptfoo better. This guide will help you get started. If you have any questions, please reach out to us on [Discord](https://discord.gg/promptfoo) or through a [GitHub issue](https://github.com/promptfoo/promptfoo/issues/new).
 
 ## Project Overview
 
@@ -15,7 +15,7 @@ There are several ways to contribute to promptfoo:
 
 1. **Submit Pull Requests**: Anyone can contribute by forking the repository and submitting pull requests. You don't need to be a collaborator to contribute code or documentation changes.
 
-2. **Report Issues**: Help us by reporting bugs or suggesting improvements through GitHub issues or [Discord](https://discord.gg/gHPS9jjfbs).
+2. **Report Issues**: Help us by reporting bugs or suggesting improvements through GitHub issues or [Discord](https://discord.gg/promptfoo).
 
 3. **Improve Documentation**: Documentation improvements are always welcome, including fixing typos, adding examples, or writing guides.
 
@@ -79,7 +79,7 @@ We particularly welcome contributions in the following areas:
 
    Note: The development experience is a little bit different than how it runs in production. In development, the web UI is served using a Vite server. In all other environments, the front end is built and served as a static site via the Express server.
 
-If you're not sure where to start, check out our [good first issues](https://github.com/promptfoo/promptfoo/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) or join our [Discord community](https://discord.gg/gHPS9jjfbs) for guidance.
+If you're not sure where to start, check out our [good first issues](https://github.com/promptfoo/promptfoo/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) or join our [Discord community](https://discord.gg/promptfoo) for guidance.
 
 ## Development Workflow
 
@@ -290,7 +290,7 @@ You can view the contents of each of these tables by running `npx drizzle-kit st
 
 ## Release Steps
 
-Note: releases are only issued by maintainers. If you need to to release a new version quickly please send a message on [Discord](https://discord.gg/gHPS9jjfbs).
+Note: releases are only issued by maintainers. If you need to to release a new version quickly please send a message on [Discord](https://discord.gg/promptfoo).
 
 As a maintainer, when you are ready to release a new version:
 
@@ -322,7 +322,7 @@ As a maintainer, when you are ready to release a new version:
 If you need help or have questions, you can:
 
 - Open an issue on GitHub.
-- Join our [Discord community](https://discord.gg/gHPS9jjfbs).
+- Join our [Discord community](https://discord.gg/promptfoo).
 
 ## Code of Conduct
 
