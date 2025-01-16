@@ -58,7 +58,7 @@ async function handlePrompt(id: string) {
             : ''),
     });
   }
-  logger.info(wrapTable(table));
+  logger.info(wrapTable(table) as string);
   printBorder();
   logger.info(
     `Run ${chalk.green('promptfoo show eval <id>')} to see details of a specific evaluation.`,
@@ -148,7 +148,7 @@ async function handleDataset(id: string) {
             : ''),
     });
   }
-  logger.info(wrapTable(table));
+  logger.info(wrapTable(table) as string);
   printBorder();
   logger.info(
     `Run ${chalk.green('promptfoo show prompt <id>')} to see details of a specific prompt.`,

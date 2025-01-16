@@ -14,7 +14,7 @@ export async function runDbMigrations() {
     await migrate(db, { migrationsFolder });
     logger.debug('[DB Migrate] Migrations completed');
   } catch (error) {
-    logger.error('Error running database migrations:', error);
+    logger.error(`Error running database migrations: ${error}`);
   }
 }
 

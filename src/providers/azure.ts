@@ -347,7 +347,7 @@ export class AzureGenericProvider implements ApiProvider {
         const token = await this.getAccessToken();
         return { Authorization: 'Bearer ' + token };
       } catch (err) {
-        logger.info('Azure Authentication failed. Please check your credentials.', err);
+        logger.info(`Azure Authentication failed. Please check your credentials: ${err}`);
         throw new Error(`Azure Authentication failed. 
 Please choose one of the following options:
   1. Set an API key via the AZURE_API_KEY environment variable.
