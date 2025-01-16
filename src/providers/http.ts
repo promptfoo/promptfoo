@@ -337,7 +337,7 @@ export async function createValidateStatus(
   validator: string | ((status: number) => boolean) | undefined,
 ): Promise<(status: number) => boolean> {
   if (!validator) {
-    return (status: number) => status >= 200 && status < 300;
+    return (status: number) => true;
   }
 
   if (typeof validator === 'function') {

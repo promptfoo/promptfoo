@@ -1552,12 +1552,13 @@ describe('session handling', () => {
 });
 
 describe('error handling', () => {
-  it('should throw error for non-200 responses', async () => {
+  it('should throw error for responses that fail validateStatus check', async () => {
     const provider = new HttpProvider('http://test.com', {
       config: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: { key: '{{ prompt }}' },
+        validateStatus: 'status >= 200 && status < 300', // Only accept 2xx responses
       },
     });
 
@@ -1626,7 +1627,7 @@ describe('error handling', () => {
 
 describe('validateStatus', () => {
   describe('default behavior', () => {
-    it('should use default validation (200-299) when validateStatus is not provided', async () => {
+    it('should accept all status codes when validateStatus is not provided', async () => {
       const provider = new HttpProvider('http://test.com', {
         config: {
           method: 'POST',
@@ -1634,17 +1635,25 @@ describe('validateStatus', () => {
         },
       });
 
-      const mockResponse = {
-        data: 'Error message',
-        status: 400,
-        statusText: 'Bad Request',
-        cached: false,
-      };
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      // Test various status codes
+      const testCases = [
+        { status: 200, statusText: 'OK' },
+        { status: 400, statusText: 'Bad Request' },
+        { status: 500, statusText: 'Server Error' },
+      ];
 
-      await expect(provider.callApi('test')).rejects.toThrow(
-        'HTTP call failed with status 400 Bad Request: Error message',
-      );
+      for (const { status, statusText } of testCases) {
+        const mockResponse = {
+          data: JSON.stringify({ result: 'success' }),
+          status,
+          statusText,
+          cached: false,
+        };
+        jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+        const result = await provider.callApi('test');
+        expect(result.output).toEqual({ result: 'success' });
+      }
     });
   });
 
