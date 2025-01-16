@@ -4,14 +4,14 @@ Promptfoo is a popular open source evaluation framework that includes LLM red te
 
 This guide shows you how to automatically generate adversarial tests specifically for your app. The red team covers a wide range of potential vulnerabilities and failure modes, including:
 
-Privacy and Security:
+**Privacy and Security:**
 
 - PII Leaks
 - Cybercrime and Hacking
 - BFLA, BOLA, and other access control vulnerabilities
 - SSRF (Server-Side Request Forgery)
 
-Technical Vulnerabilities:
+**Technical Vulnerabilities:**
 
 - Prompt Injection and Extraction
 - Jailbreaking
@@ -19,7 +19,7 @@ Technical Vulnerabilities:
 - SQL and Shell Injection
 - ASCII Smuggling (invisible characters)
 
-Criminal Activities and Harmful Content:
+**Criminal Activities and Harmful Content:**
 
 - Hate and Discrimination
 - Violent Crimes
@@ -28,7 +28,7 @@ Criminal Activities and Harmful Content:
 - Indiscriminate and Chemical/Biological Weapons
 - Self-Harm and Graphic Content
 
-Misinformation and Misuse:
+**Misinformation and Misuse:**
 
 - Misinformation and Disinformation
 - Copyright Violations
@@ -200,12 +200,12 @@ targets:
         'Content-Type': 'application/json'
       body:
         my_prompt: '{{prompt}}'
-      responseParser: 'json.path[0].to.output'
+      transformResponse: 'json.path[0].to.output'
 ```
 
 Customize the HTTP request using a placeholder variable `{{prompt}}` that will be replaced by the final prompt during the pentest.
 
-If your API responds with a JSON object and you want to pick out a specific value, use the `responseParser` key to set a Javascript snippet that manipulates the provided `json` object.
+If your API responds with a JSON object and you want to pick out a specific value, use the `transformResponse` key to set a Javascript snippet that manipulates the provided `json` object.
 
 For example, `json.nested.output` will reference the output in the following API response:
 

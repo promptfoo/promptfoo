@@ -1,8 +1,11 @@
+import fs from 'fs';
+import path from 'path';
 import { ProxyAgent } from 'proxy-agent';
-import invariant from 'tiny-invariant';
+import cliState from './cliState';
 import { VERSION } from './constants';
-import { getEnvInt, getEnvBool } from './envars';
+import { getEnvInt, getEnvBool, getEnvString } from './envars';
 import logger from './logger';
+import invariant from './util/invariant';
 import { sleep } from './util/time';
 
 export async function fetchWithProxy(
@@ -46,9 +49,24 @@ export async function fetchWithProxy(
     }
   }
 
-  const agent = new ProxyAgent({
-    rejectUnauthorized: false,
-  });
+  const agentOptions: Record<string, any> = {
+    rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', false),
+  };
+
+  // Support custom CA certificates
+  const caCertPath = getEnvString('PROMPTFOO_CA_CERT_PATH');
+  if (caCertPath) {
+    try {
+      const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
+      const ca = fs.readFileSync(resolvedPath);
+      agentOptions.ca = ca;
+      logger.debug(`Using custom CA certificate from ${resolvedPath}`);
+    } catch (e) {
+      logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
+    }
+  }
+
+  const agent = new ProxyAgent(agentOptions);
 
   return fetch(finalUrl, { ...finalOptions, agent } as RequestInit);
 }
@@ -126,10 +144,12 @@ export async function fetchWithRetries(
   timeout: number,
   retries: number = 4,
 ): Promise<Response> {
+  const maxRetries = Math.max(0, retries);
+
   let lastError;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
 
-  for (let i = 0; i < retries; i++) {
+  for (let i = 0; i <= maxRetries; i++) {
     let response;
     try {
       response = await fetchWithTimeout(url, options, timeout);
@@ -140,7 +160,7 @@ export async function fetchWithRetries(
 
       if (response && isRateLimited(response)) {
         logger.debug(
-          `Rate limited on URL ${url}: ${response.status} ${response.statusText}, waiting before retry ${i + 1}/${retries}`,
+          `Rate limited on URL ${url}: ${response.status} ${response.statusText}, waiting before retry ${i + 1}/${maxRetries}`,
         );
         await handleRateLimit(response);
         continue;
@@ -148,10 +168,28 @@ export async function fetchWithRetries(
 
       return response;
     } catch (error) {
+      let errorMessage;
+      if (error instanceof Error) {
+        // Extract as much detail as possible from the error
+        errorMessage = `${error.name}: ${error.message}`;
+        if ('cause' in error) {
+          errorMessage += ` (Cause: ${error.cause})`;
+        }
+        if ('code' in error) {
+          // Node.js system errors often have error codes
+          errorMessage += ` (Code: ${error.code})`;
+        }
+      } else {
+        errorMessage = String(error);
+      }
+
+      logger.debug(`Request to ${url} failed (attempt #${i + 1}), retrying: ${errorMessage}`);
+      if (i < maxRetries) {
+        const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
+        await sleep(waitTime);
+      }
       lastError = error;
-      const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
-      await sleep(waitTime);
     }
   }
-  throw new Error(`Request failed after ${retries} retries: ${(lastError as Error).message}`);
+  throw new Error(`Request failed after ${maxRetries} retries: ${(lastError as Error).message}`);
 }

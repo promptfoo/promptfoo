@@ -1,8 +1,9 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Adaline Gateway Anthropic Base64 Image'
 prompts:
   - file://prompt.json
 providers:
   - id: adaline:anthropic:chat:claude-3-opus-20240229
-
 tests:
   - vars:
       question: 'What do you see?'

@@ -1,16 +1,14 @@
 import type { TokenCredential } from '@azure/identity';
-import { ClientSecretCredential, AzureCliCredential } from '@azure/identity';
 import type {
-  AssistantsClient,
   AssistantCreationOptions,
+  AssistantsClient,
   FunctionDefinition,
-  RunStepToolCallDetails,
   RunStepMessageCreationDetails,
+  RunStepToolCallDetails,
 } from '@azure/openai-assistants';
 import dedent from 'dedent';
-import invariant from 'tiny-invariant';
 import { fetchWithCache } from '../cache';
-import { getEnvString, getEnvFloat, getEnvInt } from '../envars';
+import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import type {
   ApiProvider,
@@ -21,8 +19,11 @@ import type {
 } from '../types';
 import type { EnvOverrides } from '../types/env';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
+import invariant from '../util/invariant';
 import { sleep } from '../util/time';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase, calculateCost } from './shared';
+import { calculateCost, parseChatPrompt, REQUEST_TIMEOUT_MS, toTitleCase } from './shared';
+
+export const DEFAULT_AZURE_API_VERSION = '2024-12-01-preview';
 
 interface AzureCompletionOptions {
   // Azure identity params
@@ -65,7 +66,22 @@ interface AzureCompletionOptions {
     };
   }[];
   tool_choice?: 'none' | 'auto' | { type: 'function'; function?: { name: string } };
-  response_format?: { type: 'json_object' };
+  response_format?:
+    | { type: 'json_object' }
+    | {
+        type: 'json_schema';
+        json_schema: {
+          name: string;
+          strict: boolean;
+          schema: {
+            type: 'object';
+            properties: Record<string, any>;
+            required?: string[];
+            additionalProperties: false;
+            $defs?: Record<string, any>;
+          };
+        };
+      };
   stop?: string[];
   seed?: number;
 
@@ -279,7 +295,7 @@ export class AzureGenericProvider implements ApiProvider {
     return apiKey;
   }
 
-  getAzureTokenCredential(): TokenCredential {
+  async getAzureTokenCredential(): Promise<TokenCredential> {
     const clientSecret =
       this.config?.azureClientSecret ||
       this.env?.AZURE_CLIENT_SECRET ||
@@ -292,6 +308,8 @@ export class AzureGenericProvider implements ApiProvider {
       this.config?.azureAuthorityHost ||
       this.env?.AZURE_AUTHORITY_HOST ||
       getEnvString('AZURE_AUTHORITY_HOST');
+
+    const { ClientSecretCredential, AzureCliCredential } = await import('@azure/identity');
 
     if (clientSecret && clientId && tenantId) {
       const credential = new ClientSecretCredential(tenantId, clientId, clientSecret, {
@@ -306,7 +324,7 @@ export class AzureGenericProvider implements ApiProvider {
   }
 
   async getAccessToken() {
-    const credential = this.getAzureTokenCredential();
+    const credential = await this.getAzureTokenCredential();
     const tokenScope =
       this.config?.azureTokenScope ||
       this.env?.AZURE_TOKEN_SCOPE ||
@@ -386,7 +404,7 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
     try {
       ({ data, cached } = (await fetchWithCache(
         `${this.getApiBaseUrl()}/openai/deployments/${this.deploymentName}/embeddings?api-version=${
-          this.config.apiVersion || '2023-12-01-preview'
+          this.config.apiVersion || DEFAULT_AZURE_API_VERSION
         }`,
         {
           method: 'POST',
@@ -490,7 +508,7 @@ export class AzureCompletionProvider extends AzureGenericProvider {
       ({ data, cached } = (await fetchWithCache(
         `${this.getApiBaseUrl()}/openai/deployments/${
           this.deploymentName
-        }/completions?api-version=${this.config.apiVersion || '2023-12-01-preview'}`,
+        }/completions?api-version=${this.config.apiVersion || DEFAULT_AZURE_API_VERSION}`,
         {
           method: 'POST',
           headers: {
@@ -506,7 +524,7 @@ export class AzureCompletionProvider extends AzureGenericProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tAzure API response: ${JSON.stringify(data)}`);
+    logger.debug(`Azure API response: ${JSON.stringify(data)}`);
     try {
       return {
         output: data.choices[0].text,
@@ -538,22 +556,22 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Record<string, any> {
-    // Merge configs from the provider and the prompt
     const config = {
       ...this.config,
       ...context?.prompt?.config,
     };
 
+    // Fix: Match OpenAI's message handling exactly
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
-    let stop: string;
-    try {
-      stop = getEnvString('OPENAI_STOP')
-        ? JSON.parse(getEnvString('OPENAI_STOP') || '')
-        : config?.stop;
-    } catch (err) {
-      throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);
-    }
+    // Fix: Match OpenAI's response format handling with variable rendering
+    const responseFormat = config.response_format
+      ? {
+          response_format: maybeLoadFromExternalFile(
+            renderVarsInObject(config.response_format, context?.vars),
+          ),
+        }
+      : {};
 
     const body = {
       model: this.deploymentName,
@@ -573,24 +591,21 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       ...(config.function_call ? { function_call: config.function_call } : {}),
       ...(config.seed === undefined ? {} : { seed: config.seed }),
       ...(config.tools
-        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)) }
+        ? {
+            tools: maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)),
+          }
         : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.deployment_id ? { deployment_id: config.deployment_id } : {}),
       ...(config.dataSources ? { dataSources: config.dataSources } : {}),
-      ...(config.response_format
-        ? {
-            response_format: maybeLoadFromExternalFile(
-              renderVarsInObject(config.response_format, context?.vars),
-            ),
-          }
-        : {}),
+      ...responseFormat,
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
-      ...(stop ? { stop } : {}),
+      ...(config.stop ? { stop: config.stop } : {}),
       ...(config.passthrough || {}),
     };
 
-    return body;
+    logger.debug(`Azure API request body: ${JSON.stringify(body)}`);
+    return { body, config };
   }
 
   async callApi(
@@ -605,22 +620,24 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       throwConfigurationError('Azure API host must be set.');
     }
 
-    const body = this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
 
     let data;
     let cached = false;
     try {
-      const url = this.config.dataSources
+      const url = config.dataSources
         ? `${this.getApiBaseUrl()}/openai/deployments/${
             this.deploymentName
-          }/extensions/chat/completions?api-version=${
-            this.config.apiVersion || '2023-12-01-preview'
-          }`
+          }/extensions/chat/completions?api-version=${config.apiVersion || DEFAULT_AZURE_API_VERSION}`
         : `${this.getApiBaseUrl()}/openai/deployments/${
             this.deploymentName
-          }/chat/completions?api-version=${this.config.apiVersion || '2023-12-01-preview'}`;
+          }/chat/completions?api-version=${config.apiVersion || DEFAULT_AZURE_API_VERSION}`;
 
-      ({ data, cached } = (await fetchWithCache(
+      const {
+        data: responseData,
+        cached: isCached,
+        status,
+      } = await fetchWithCache(
         url,
         {
           method: 'POST',
@@ -631,36 +648,80 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
-      )) as unknown as any);
+      );
+
+      cached = isCached;
+
+      // Handle the response data
+      if (typeof responseData === 'string') {
+        try {
+          data = JSON.parse(responseData);
+        } catch {
+          return {
+            error: `API returned invalid JSON response (status ${status}): ${responseData}\n\nRequest body: ${JSON.stringify(body, null, 2)}`,
+          };
+        }
+      } else {
+        data = responseData;
+      }
     } catch (err) {
       return {
-        error: `API call error: ${String(err)}`,
+        error: `API call error: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
 
-    logger.debug(`\tAzure API response: ${JSON.stringify(data)}`);
+    logger.debug(`Azure API response: ${JSON.stringify(data)}`);
     try {
       if (data.error) {
         return {
           error: `API response error: ${data.error.code} ${data.error.message}`,
         };
       }
-      const hasDataSources = !!this.config.dataSources;
+      const hasDataSources = !!config.dataSources;
       const message = hasDataSources
         ? data.choices.find(
             (choice: { message: { role: string; content: string } }) =>
               choice.message.role === 'assistant',
           )?.message
         : data.choices[0].message;
-      const output =
-        message.content == null
-          ? message.tool_calls == null
-            ? message.function_call
-            : message.tool_calls
-          : message.content;
+
+      // Handle structured output
+      let output = message.content;
+      if (output == null) {
+        // Restore tool_calls and function_call handling
+        output = message.tool_calls ?? message.function_call;
+      } else if (
+        config.response_format?.type === 'json_schema' ||
+        config.response_format?.type === 'json_object'
+      ) {
+        try {
+          output = JSON.parse(output);
+        } catch (err) {
+          logger.error(`Failed to parse JSON output: ${err}. Output was: ${output}`);
+        }
+      }
+
       const logProbs = data.choices[0].logprobs?.content?.map(
         (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
       );
+
+      const contentFilterResults = data.choices[0]?.content_filter_results;
+      const promptFilterResults = data.prompt_filter_results;
+
+      const guardrailsTriggered = !!(
+        (contentFilterResults && Object.keys(contentFilterResults).length > 0) ||
+        (promptFilterResults && promptFilterResults.length > 0)
+      );
+
+      const flaggedInput =
+        promptFilterResults?.some((result: any) =>
+          Object.values(result.content_filter_results).some((filter: any) => filter.filtered),
+        ) ?? false;
+
+      const flaggedOutput = Object.values(contentFilterResults || {}).some(
+        (filter: any) => filter.filtered,
+      );
+
       return {
         output,
         tokenUsage: cached
@@ -674,10 +735,19 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         logProbs,
         cost: calculateAzureCost(
           this.deploymentName,
-          this.config,
+          config,
           data.usage?.prompt_tokens,
           data.usage?.completion_tokens,
         ),
+        ...(guardrailsTriggered
+          ? {
+              guardrails: {
+                flaggedInput,
+                flaggedOutput,
+                flagged: flaggedInput || flaggedOutput,
+              },
+            }
+          : {}),
       };
     } catch (err) {
       return {

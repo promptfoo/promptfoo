@@ -11,7 +11,7 @@ providers:
   - id: 'wss://example.com/ws'
     config:
       messageTemplate: '{"prompt": "{{prompt}}", "model": "{{model}}"}'
-      responseParser: 'data.output'
+      transformResponse: 'data.output'
       timeoutMs: 10000
 ```
 
@@ -19,7 +19,7 @@ providers:
 
 - `url` (required): The WebSocket URL to connect to.
 - `messageTemplate` (required): A template for the message to be sent over the WebSocket connection. You can use placeholders like `{{prompt}}` which will be replaced with the actual prompt.
-- `responseParser` (optional): A JavaScript snippet or function to extract the desired output from the WebSocket response given the `data` parameter. If not provided, the entire response will be used as the output. If the response is valid JSON, the object will be returned.
+- `transformResponse` (optional): A JavaScript snippet or function to extract the desired output from the WebSocket response given the `data` parameter. If not provided, the entire response will be used as the output. If the response is valid JSON, the object will be returned.
 - `timeoutMs` (optional): The timeout in milliseconds for the WebSocket connection. Default is 10000 (10 seconds).
 
 ## Using Variables
@@ -31,7 +31,7 @@ providers:
   - id: 'wss://example.com/ws'
     config:
       messageTemplate: '{"prompt": "{{prompt}}", "model": "{{model}}", "language": "{{language}}"}'
-      responseParser: 'data.translation'
+      transformResponse: 'data.translation'
 
 tests:
   - vars:
@@ -41,14 +41,14 @@ tests:
 
 ## Parsing the Response
 
-Use the `responseParser` property to extract specific values from the WebSocket response. For example:
+Use the `transformResponse` property to extract specific values from the WebSocket response. For example:
 
 ```yaml
 providers:
   - id: 'wss://example.com/ws'
     config:
       messageTemplate: '{"prompt": "{{prompt}}"}'
-      responseParser: 'data.choices[0].message.content'
+      transformResponse: 'data.choices[0].message.content'
 ```
 
 This configuration extracts the message content from a response structure similar to:
@@ -76,7 +76,7 @@ If you are using promptfoo as a node library, you can provide the equivalent pro
     id: 'wss://example.com/ws',
     config: {
       messageTemplate: '{"prompt": "{{prompt}}"}',
-      responseParser: (data) => data.foobar,
+      transformResponse: (data) => data.foobar,
       timeoutMs: 15000,
     }
   }],
@@ -89,12 +89,12 @@ Note that when using the WebSocket provider, the connection will be opened for e
 
 Supported config options:
 
-| Option          | Type               | Description                                                                                                                                   |
-| --------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| url             | string             | The WebSocket URL to connect to. If not provided, the `id` of the provider will be used as the URL.                                           |
-| messageTemplate | string             | A template string for the message to be sent over the WebSocket connection. Supports Nunjucks templating.                                     |
-| responseParser  | string \| Function | A function or string representation of a function to parse the response. If not provided, the entire response will be returned as the output. |
-| timeoutMs       | number             | The timeout in milliseconds for the WebSocket connection. Defaults to 10000 (10 seconds) if not specified.                                    |
+| Option            | Type               | Description                                                                                                                                   |
+| ----------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| url               | string             | The WebSocket URL to connect to. If not provided, the `id` of the provider will be used as the URL.                                           |
+| messageTemplate   | string             | A template string for the message to be sent over the WebSocket connection. Supports Nunjucks templating.                                     |
+| transformResponse | string \| Function | A function or string representation of a function to parse the response. If not provided, the entire response will be returned as the output. |
+| timeoutMs         | number             | The timeout in milliseconds for the WebSocket connection. Defaults to 10000 (10 seconds) if not specified.                                    |
 
 Note: The `messageTemplate` supports Nunjucks templating, allowing you to use the `{{prompt}}` variable or any other variables passed in the test context.
 

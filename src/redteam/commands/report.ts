@@ -4,6 +4,7 @@ import { startServer } from '../../server/server';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
 import { setConfigDirectoryPath } from '../../util/config/manage';
+import { checkServerRunning, openBrowser } from '../../util/server';
 import { BrowserBehavior } from '../../util/server';
 
 export function redteamReportCommand(program: Command) {
@@ -33,7 +34,12 @@ export function redteamReportCommand(program: Command) {
           setConfigDirectoryPath(directory);
         }
 
-        await startServer(cmdObj.port, BrowserBehavior.OPEN_TO_REPORT, cmdObj.filterDescription);
+        const isRunning = await checkServerRunning();
+        if (isRunning) {
+          await openBrowser(BrowserBehavior.OPEN_TO_REPORT);
+        } else {
+          await startServer(cmdObj.port, BrowserBehavior.OPEN_TO_REPORT, cmdObj.filterDescription);
+        }
       },
     );
 }

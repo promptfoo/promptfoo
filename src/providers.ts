@@ -3,7 +3,6 @@ import dedent from 'dedent';
 import fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
-import invariant from 'tiny-invariant';
 import cliState from './cliState';
 import { importModule } from './esm';
 import logger from './logger';
@@ -75,25 +74,23 @@ import { WatsonXProvider } from './providers/watsonx';
 import { WebhookProvider } from './providers/webhook';
 import { WebSocketProvider } from './providers/websocket';
 import { createXAIProvider } from './providers/xai';
+import RedteamBestOfNProvider from './redteam/providers/bestOfN';
 import RedteamCrescendoProvider from './redteam/providers/crescendo';
 import RedteamGoatProvider from './redteam/providers/goat';
 import RedteamIterativeProvider from './redteam/providers/iterative';
 import RedteamImageIterativeProvider from './redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from './redteam/providers/iterativeTree';
-import type { TestSuiteConfig } from './types';
+import type { LoadApiProviderContext, TestSuiteConfig } from './types';
 import type { EnvOverrides } from './types/env';
 import type { ApiProvider, ProviderOptions, ProviderOptionsMap } from './types/providers';
 import { isJavascriptFile } from './util/file';
+import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
 
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
 export async function loadApiProvider(
   providerPath: string,
-  context: {
-    options?: ProviderOptions;
-    basePath?: string;
-    env?: EnvOverrides;
-  } = {},
+  context: LoadApiProviderContext = {},
 ): Promise<ApiProvider> {
   const { options = {}, basePath, env } = context;
   const providerOptions: ProviderOptions = {
@@ -189,7 +186,7 @@ export async function loadApiProvider(
       ret = new AzureCompletionProvider(deploymentName, providerOptions);
     } else {
       throw new Error(
-        `Unknown Azure OpenAI model type: ${modelType}. Use one of the following providers: azureopenai:chat:<model name>, azureopenai:assistant:<assistant id>, azureopenai:completion:<model name>`,
+        `Unknown Azure model type: ${modelType}. Use one of the following providers: azure:chat:<model name>, azure:assistant:<assistant id>, azure:completion:<model name>`,
       );
     }
   } else if (providerPath.startsWith('openrouter:')) {
@@ -201,6 +198,16 @@ export async function loadApiProvider(
         ...providerOptions.config,
         apiBaseUrl: 'https://openrouter.ai/api/v1',
         apiKeyEnvar: 'OPENROUTER_API_KEY',
+        passthrough: {
+          // Pass through OpenRouter-specific options
+          // https://openrouter.ai/docs/requests
+          ...(providerOptions.config.transforms && {
+            transforms: providerOptions.config.transforms,
+          }),
+          ...(providerOptions.config.models && { models: providerOptions.config.models }),
+          ...(providerOptions.config.route && { route: providerOptions.config.route }),
+          ...(providerOptions.config.provider && { provider: providerOptions.config.provider }),
+        },
       },
     });
   } else if (providerPath.startsWith('github:')) {
@@ -212,6 +219,20 @@ export async function loadApiProvider(
         ...providerOptions.config,
         apiBaseUrl: 'https://models.inference.ai.azure.com',
         apiKeyEnvar: 'GITHUB_TOKEN',
+      },
+    });
+  } else if (providerPath.startsWith('f5')) {
+    const splits = providerPath.split(':');
+    let endpoint = splits.slice(1).join(':');
+    if (endpoint.startsWith('/')) {
+      endpoint = endpoint.slice(1);
+    }
+    ret = new OpenAiChatCompletionProvider(endpoint, {
+      ...providerOptions,
+      config: {
+        ...providerOptions.config,
+        apiBaseUrl: providerOptions.config?.apiBaseUrl + '/' + endpoint,
+        apiKeyEnvar: 'F5_API_KEY',
       },
     });
   } else if (providerPath.startsWith('togetherai:')) {
@@ -465,6 +486,8 @@ export async function loadApiProvider(
     ret = new RedteamCrescendoProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:redteam:goat') {
     ret = new RedteamGoatProvider(providerOptions.config);
+  } else if (providerPath === 'promptfoo:redteam:best-of-n') {
+    ret = new RedteamBestOfNProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:redteam:iterative') {
     ret = new RedteamIterativeProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:redteam:iterative:image') {

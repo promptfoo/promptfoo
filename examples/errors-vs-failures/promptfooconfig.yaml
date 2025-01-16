@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: 'Errors vs Failures'
+
+prompts:
+  - 'Tell me about {{topic}}'
+
+providers:
+  - id: file://customProvider.js
+    label: 'My custom provider'
+
+tests:
+  - vars:
+      topic: 'black holes'
+    assert:
+      # This should succeed
+      - type: not-equals
+        value: this should always pass
+  - vars:
+      # Force an error
+      topic: '!ERROR! banana slugs'
+  - vars:
+      topic: 'blue herons'
+    assert:
+      # Force a failure
+      - type: equals
+        value: this should always fail

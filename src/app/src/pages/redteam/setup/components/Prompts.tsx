@@ -55,8 +55,23 @@ export default function Prompts() {
       <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium' }}>
         Prompts
       </Typography>
-      <Typography variant="body1" paragraph>
-        {`Enter your prompts below. Use {{ prompt }} as a placeholder for user input.`}
+      <Typography
+        variant="body1"
+        paragraph
+        color="text.secondary"
+        sx={{
+          mb: 2,
+          '& code': {
+            px: 0.5,
+            py: 0.25,
+            backgroundColor: 'action.hover',
+            borderRadius: 0.5,
+            fontFamily: 'monospace',
+          },
+        }}
+      >
+        Enter your prompts below. Use <code>{'{{ prompt }}'}</code> as a placeholder where you want
+        the user's input to appear in your prompt template.
       </Typography>
       {config.prompts.map((prompt, index) => (
         <Box key={index} display="flex" alignItems="center" mb={2}>

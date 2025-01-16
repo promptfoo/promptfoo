@@ -46,18 +46,22 @@ describe('index.ts exports', () => {
 
   const expectedSchemaExports = [
     'AssertionSchema',
+    'AssertionTypeSchema',
     'AtomicTestCaseSchema',
     'BaseAssertionTypesSchema',
     'CommandLineOptionsSchema',
     'CompletedPromptSchema',
     'DerivedMetricSchema',
+    'NotPrefixedAssertionTypesSchema',
     'OutputConfigSchema',
     'OutputFileExtension',
+    'ResultFailureReason',
     'ScenarioSchema',
+    'SpecialAssertionTypesSchema',
     'TestCaseSchema',
-    'TestCaseWithVarsFileSchema',
     'TestCasesWithMetadataPromptSchema',
     'TestCasesWithMetadataSchema',
+    'TestCaseWithVarsFileSchema',
     'TestSuiteConfigSchema',
     'TestSuiteSchema',
     'UnifiedConfigSchema',
@@ -198,6 +202,110 @@ describe('evaluate function', () => {
             options: expect.objectContaining({
               provider: expect.anything(),
             }),
+          }),
+        ]),
+      }),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('should resolve provider configuration in defaultTest', async () => {
+    const testSuite = {
+      prompts: ['test prompt'],
+      providers: [],
+      defaultTest: {
+        options: {
+          provider: {
+            id: 'azure:chat:test',
+            config: {
+              apiHost: 'test-host',
+              apiKey: 'test-key',
+            },
+          },
+        },
+      },
+    };
+    await evaluate(testSuite);
+    expect(doEvaluate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultTest: expect.objectContaining({
+          options: expect.objectContaining({
+            provider: expect.anything(),
+          }),
+        }),
+      }),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('should resolve provider configuration in individual tests', async () => {
+    const testSuite = {
+      prompts: ['test prompt'],
+      providers: [],
+      tests: [
+        {
+          options: {
+            provider: {
+              id: 'azure:chat:test',
+              config: {
+                apiHost: 'test-host',
+                apiKey: 'test-key',
+              },
+            },
+          },
+        },
+      ],
+    };
+    await evaluate(testSuite);
+    expect(doEvaluate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tests: expect.arrayContaining([
+          expect.objectContaining({
+            options: expect.objectContaining({
+              provider: expect.anything(),
+            }),
+          }),
+        ]),
+      }),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('should resolve provider configuration in assertions', async () => {
+    const testSuite = {
+      prompts: ['test prompt'],
+      providers: [],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals' as const,
+              value: 'expected value',
+              provider: {
+                id: 'azure:chat:test',
+                config: {
+                  apiHost: 'test-host',
+                  apiKey: 'test-key',
+                },
+              },
+            },
+          ],
+        },
+      ],
+    };
+    await evaluate(testSuite);
+    expect(doEvaluate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tests: expect.arrayContaining([
+          expect.objectContaining({
+            assert: expect.arrayContaining([
+              expect.objectContaining({
+                provider: expect.anything(),
+              }),
+            ]),
           }),
         ]),
       }),

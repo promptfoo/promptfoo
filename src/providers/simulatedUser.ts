@@ -1,4 +1,3 @@
-import invariant from 'tiny-invariant';
 import logger from '../logger';
 import type {
   ApiProvider,
@@ -7,7 +6,9 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types';
+import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
+import { sleep } from '../util/time';
 import { PromptfooSimulatedUserProvider } from './promptfoo';
 
 export type AgentSubproviderConfig = {
@@ -63,6 +64,10 @@ export class SimulatedUser implements ApiProvider {
     targetProvider: ApiProvider,
   ): Promise<Message[]> {
     const response = await targetProvider.callApi(JSON.stringify(messages));
+    if (targetProvider.delay) {
+      logger.debug(`[SimulatedUser] Sleeping for ${targetProvider.delay}ms`);
+      await sleep(targetProvider.delay);
+    }
     logger.debug(`Agent: ${response.output}`);
     return [...messages, { role: 'assistant', content: response.output }];
   }
@@ -102,6 +107,9 @@ export class SimulatedUser implements ApiProvider {
         .join('\n---\n'),
       tokenUsage: {
         numRequests,
+      },
+      metadata: {
+        messages,
       },
     };
   }

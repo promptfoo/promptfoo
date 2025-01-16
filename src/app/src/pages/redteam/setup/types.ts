@@ -1,5 +1,4 @@
 import type { RedteamPlugin, RedteamStrategy } from '@promptfoo/redteam/types';
-import type { RedteamFileConfig } from '@promptfoo/redteam/types';
 
 export interface Config {
   description: string;
@@ -8,6 +7,7 @@ export interface Config {
   plugins: (RedteamPlugin | { id: string; config?: any })[];
   strategies: RedteamStrategy[];
   purpose?: string;
+  numTests?: number;
   applicationDefinition: {
     purpose?: string;
     systemPrompt?: string;
@@ -25,18 +25,21 @@ export interface ProviderOptions {
   id: string;
   label?: string;
   config: {
+    // Custom provider config can have anything
+    [key: string]: any;
+
     type?: 'http' | 'websocket' | 'browser';
     // HTTP/WebSocket specific options
     url?: string;
     method?: string;
     headers?: Record<string, string>;
-    body?: string;
+    body?: string | object;
     messageTemplate?: string;
     // Browser specific options
     steps?: BrowserStep[];
     headless?: boolean;
     timeoutMs?: number;
-    responseParser?: string;
+    transformResponse?: string;
     sessionParser?: string;
     cookies?:
       | Array<{
@@ -83,13 +86,6 @@ export interface ComponentProps {
 
 export interface YamlPreviewProps {
   config: Config;
-}
-
-export interface YamlConfig {
-  description: string;
-  targets: ProviderOptions[];
-  prompts: string[];
-  redteam: RedteamFileConfig;
 }
 
 export interface LocalPluginConfig {

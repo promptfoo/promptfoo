@@ -28,7 +28,9 @@ providers:
 | [Azure OpenAI](./azure.md)                          | Azure-hosted OpenAI models                 | `azureopenai:gpt-4o-custom-deployment-name`     |
 | [Cloudflare AI](./cloudflare-ai.md)                 | Cloudflare's AI platform                   | `cloudflare-ai:@cf/meta/llama-3-8b-instruct`    |
 | [Cohere](./cohere.md)                               | Cohere's language models                   | `cohere:command`                                |
+| [F5](./f5.md)                                       | OpenAI-compatible AI Gateway interface     | `f5:path-name`                                  |
 | [fal.ai](./fal.md)                                  | Image Generation Provider                  | `fal:image:fal-ai/fast-sdxl`                    |
+| [GitHub](./github.md)                               | GitHub AI Gateway                          | `github:gpt-4o-mini`                            |
 | [Google AI Studio (PaLM)](./palm.md)                | Gemini and PaLM models                     | `google:gemini-pro`                             |
 | [Google Vertex AI](./vertex.md)                     | Google Cloud's AI platform                 | `vertex:gemini-pro`                             |
 | [Groq](./groq.md)                                   | High-performance inference API             | `groq:llama3-70b-8192-tool-use-preview`         |
@@ -45,15 +47,20 @@ providers:
 | [vLLM](./vllm.md)                                   | Local                                      | Compatible with OpenAI syntax                   |
 | [Ollama](./ollama.md)                               | Local                                      | `ollama:llama3.2:latest`                        |
 | [LocalAI](./localai.md)                             | Local                                      | `localai:gpt4all-j`                             |
+| [Llamafile](./llamafile.md)                         | OpenAI-compatible llamafile server         | Uses OpenAI provider with custom endpoint       |
 | [llama.cpp](./llama.cpp.md)                         | Local                                      | `llama:7b`                                      |
+| [Text Generation WebUI](./text-generation-webui.md) | Gradio WebUI                               | Compatible with OpenAI syntax                   |
 | [WebSocket](./websocket.md)                         | WebSocket-based providers                  | `ws://example.com/ws`                           |
+| [Webhook](./webhook.md)                             | Custom - Webhook integration               | `webhook:http://example.com/webhook`            |
 | [Echo](./echo.md)                                   | Custom - For testing purposes              | `echo`                                          |
 | [Manual Input](./manual-input.md)                   | Custom - CLI manual entry                  | `promptfoo:manual-input`                        |
 | [Go](./go.md)                                       | Custom - Go file                           | `file://path/to/your/script.go`                 |
 | [Web Browser](./browser.md)                         | Custom - Automate web browser interactions | `browser`                                       |
-| [Text Generation WebUI](./text-generation-webui.md) | Gradio WebUI                               | Compatible with OpenAI syntax                   |
+| [Sequence](./sequence.md)                           | Custom - Multi-prompt sequencing           | `sequence` with config.inputs array             |
+| [Simulated User](./simulated-user.md)               | Custom - Conversation simulator            | `promptfoo:simulated-user`                      |
 | [WatsonX](./watsonx.md)                             | IBM's WatsonX                              | `watsonx:ibm/granite-13b-chat-v2`               |
 | [X.AI](./xai.md)                                    | X.AI's models                              | `xai:grok-2`                                    |
+| [Adaline Gateway](./adaline.md)                     | Unified interface for multiple providers   | Compatible with OpenAI syntax                   |
 
 ## Provider Syntax
 

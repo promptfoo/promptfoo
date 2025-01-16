@@ -170,6 +170,77 @@ describe('WatsonXProvider', () => {
         authenticator: expect.any(IamAuthenticator),
       });
     });
+
+    it('should use IAM Authentication when WATSONX_AI_AUTH_TYPE is set to iam', async () => {
+      const dualAuthConfig = { ...config, apiBearerToken: 'test-bearer-token' };
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: jest.fn(),
+      };
+      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+
+      const provider = new WatsonXProvider(modelName, {
+        config: dualAuthConfig,
+        env: { WATSONX_AI_AUTH_TYPE: 'iam' },
+      });
+      await provider.getClient();
+
+      expect(logger.info).toHaveBeenCalledWith(
+        'Using IAM Authentication based on WATSONX_AI_AUTH_TYPE.',
+      );
+      expect(WatsonXAI.newInstance).toHaveBeenCalledWith({
+        version: '2023-05-29',
+        serviceUrl: 'https://us-south.ml.cloud.ibm.com',
+        authenticator: expect.any(IamAuthenticator),
+      });
+    });
+
+    it('should use Bearer Token Authentication when WATSONX_AI_AUTH_TYPE is set to bearertoken', async () => {
+      const dualAuthConfig = {
+        ...config,
+        apiKey: 'test-api-key',
+        apiBearerToken: 'test-bearer-token',
+      };
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: jest.fn(),
+      };
+      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+
+      const provider = new WatsonXProvider(modelName, {
+        config: dualAuthConfig,
+        env: { WATSONX_AI_AUTH_TYPE: 'bearertoken' },
+      });
+      await provider.getClient();
+
+      expect(logger.info).toHaveBeenCalledWith(
+        'Using Bearer Token Authentication based on WATSONX_AI_AUTH_TYPE.',
+      );
+      expect(WatsonXAI.newInstance).toHaveBeenCalledWith({
+        version: '2023-05-29',
+        serviceUrl: 'https://us-south.ml.cloud.ibm.com',
+        authenticator: expect.any(BearerTokenAuthenticator),
+      });
+    });
+
+    it('should fallback to default behavior when WATSONX_AI_AUTH_TYPE is invalid', async () => {
+      const dualAuthConfig = { ...config, apiBearerToken: 'test-bearer-token' };
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: jest.fn(),
+      };
+      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+
+      const provider = new WatsonXProvider(modelName, {
+        config: dualAuthConfig,
+        env: { WATSONX_AI_AUTH_TYPE: 'invalid' },
+      });
+      await provider.getClient();
+
+      expect(logger.info).toHaveBeenCalledWith('Using IAM Authentication.');
+      expect(WatsonXAI.newInstance).toHaveBeenCalledWith({
+        version: '2023-05-29',
+        serviceUrl: 'https://us-south.ml.cloud.ibm.com',
+        authenticator: expect.any(IamAuthenticator),
+      });
+    });
   });
 
   describe('callApi', () => {

@@ -7,7 +7,7 @@ import Container from '@mui/material/Container';
 import Divider from '@mui/material/Divider';
 import Grid from '@mui/material/Grid';
 import Typography from '@mui/material/Typography';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
 import Layout from '@theme/Layout';
 
 const AboutPageContent = () => {
@@ -95,8 +95,20 @@ const AboutPageContent = () => {
                 image: '/img/team/vanessa.jpeg',
                 bio: 'Vanessa led hundreds of security and privacy reviews for customers at Gong. She has also pentested dozens of enterprises and launched hundreds of bug bounty programs for a leading crowdsourced security company and is published in Forbes, Lawfare, and Dark Reading.',
               },
+              {
+                name: 'Vedant Radhakrishnan',
+                title: 'Staff Engineer',
+                image: '/img/team/vedant.jpeg',
+                bio: 'Vedant is a seasoned engineer with a strong background in software engineering, infrastrucure and security. He has broad experience leading teams and building products at companies like Pinterest, Microsoft, and Amazon.',
+              },
+              {
+                name: 'Guangshuo Zang',
+                title: 'Staff Engineer',
+                image: '/img/team/shuo.jpeg',
+                bio: 'Guangshuo brings technical expertise from Meta, ChipperCash, and Smile Identity. Specializes in GenAI systems, product engineering, and building scalable client solutions.',
+              },
             ].map((leader) => (
-              <Grid item xs={12} sm={6} md={3} key={leader.name}>
+              <Grid item xs={12} sm={6} md={4} key={leader.name}>
                 <Box textAlign="center">
                   <Avatar
                     alt={leader.name}

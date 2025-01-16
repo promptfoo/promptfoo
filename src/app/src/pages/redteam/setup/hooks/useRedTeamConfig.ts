@@ -1,6 +1,32 @@
+import { DEFAULT_PLUGINS } from '@promptfoo/redteam/constants';
+import type { Plugin } from '@promptfoo/redteam/constants';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Config, ProviderOptions } from '../types';
+
+interface RecentlyUsedPlugins {
+  plugins: Plugin[];
+  addPlugin: (plugin: Plugin) => void;
+}
+
+const NUM_RECENT_PLUGINS = 6;
+export const useRecentlyUsedPlugins = create<RecentlyUsedPlugins>()(
+  persist(
+    (set) => ({
+      plugins: [],
+      addPlugin: (plugin) =>
+        set((state) => ({
+          plugins: [plugin, ...state.plugins.filter((p) => p !== plugin)].slice(
+            0,
+            NUM_RECENT_PLUGINS,
+          ),
+        })),
+    }),
+    {
+      name: 'recentlyUsedPlugins',
+    },
+  ),
+);
 
 interface RedTeamConfigState {
   config: Config;
@@ -20,26 +46,24 @@ export const DEFAULT_HTTP_TARGET: ProviderOptions = {
     url: '',
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    // @ts-ignore
-    body: {
+    body: JSON.stringify({
       message: '{{prompt}}',
-    },
+    }),
   },
 };
 
 export const PROMPT_EXAMPLE =
   'You are a travel agent specialized in budget trips to Europe\n\nUser query: {{prompt}}';
 
-export const DEFAULT_PURPOSE = 'Assist users with planning affordable trips to Europe';
-
 const defaultConfig: Config = {
   description: 'My Red Team Configuration',
   prompts: ['{{prompt}}'],
   target: DEFAULT_HTTP_TARGET,
-  plugins: ['default'],
-  strategies: ['jailbreak', 'prompt-injection'],
+  plugins: [...DEFAULT_PLUGINS],
+  strategies: ['jailbreak', 'jailbreak:composite'],
   purpose: '',
   entities: [],
+  numTests: 10,
   applicationDefinition: {
     purpose: '',
     redteamUser: '',
@@ -52,7 +76,82 @@ const defaultConfig: Config = {
 };
 
 const applicationDefinitionToPurpose = (applicationDefinition: Config['applicationDefinition']) => {
-  return `The purpose of the redteam application is to ${applicationDefinition.purpose} \n\n You are ${applicationDefinition.redteamUser}. \n\n You have access to: ${applicationDefinition.accessToData}\n\n You do not have access to: ${applicationDefinition.forbiddenData} \n\n You can take the following actions: ${applicationDefinition.accessToActions}\n\n You should not take the following actions: ${applicationDefinition.forbiddenActions} \n\n The LLM agent has access to these systems: ${applicationDefinition.connectedSystems} \n\n `;
+  const sections = [];
+
+  if (applicationDefinition.purpose) {
+    sections.push(`The objective of the application is: ${applicationDefinition.purpose}`);
+  }
+
+  if (applicationDefinition.redteamUser) {
+    sections.push(`You are: ${applicationDefinition.redteamUser}`);
+  }
+
+  if (applicationDefinition.accessToData) {
+    sections.push(`You have access to: ${applicationDefinition.accessToData}`);
+  }
+
+  if (applicationDefinition.forbiddenData) {
+    sections.push(`You do not have access to: ${applicationDefinition.forbiddenData}`);
+  }
+
+  if (applicationDefinition.accessToActions) {
+    sections.push(`You can take the following actions: ${applicationDefinition.accessToActions}`);
+  }
+
+  if (applicationDefinition.forbiddenActions) {
+    sections.push(
+      `You should not take the following actions: ${applicationDefinition.forbiddenActions}`,
+    );
+  }
+
+  if (applicationDefinition.connectedSystems) {
+    sections.push(
+      `The LLM agent has access to these systems: ${applicationDefinition.connectedSystems}`,
+    );
+  }
+
+  return sections.join('\n\n');
+};
+
+const EXAMPLE_APPLICATION_DEFINITION = {
+  purpose:
+    'Help employees at Red Panda Bamboo company find information faster from their internal documentation.',
+  redteamUser: 'An employee in the engineering department',
+  accessToData: 'General company information like policies and engineering documents',
+  forbiddenData:
+    'Anything owned by other departments. Things like future strategy, financial documents, sales documentation and planning, confidential HR information.',
+  accessToActions: 'Search the documents',
+  forbiddenActions: '',
+  connectedSystems: 'Internal company knowledge base',
+};
+
+export const EXAMPLE_CONFIG: Config = {
+  description: 'Red Panda Bamboo Company RAG Example',
+  prompts: ['{{prompt}}'],
+  target: {
+    id: 'http',
+    label: 'promptfoo-redpanda-rag-example',
+    config: {
+      url: 'https://redpanda-internal-rag-example.promptfoo.app/chat',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-session-id': '{{sessionId}}',
+      },
+      body: {
+        input: '{{prompt}}',
+        role: 'engineering',
+      },
+      transformResponse: 'json.response',
+      sessionParser: 'x-session-id',
+    },
+  },
+  plugins: ['harmful:hate', 'harmful:self-harm', 'rbac'],
+  strategies: ['jailbreak', 'jailbreak:composite'],
+  purpose: applicationDefinitionToPurpose(EXAMPLE_APPLICATION_DEFINITION),
+  entities: [],
+  numTests: 10,
+  applicationDefinition: EXAMPLE_APPLICATION_DEFINITION,
 };
 
 export const useRedTeamConfig = create<RedTeamConfigState>()(
@@ -106,25 +205,32 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
           };
         }),
       setFullConfig: (config) => set({ config }),
-      resetConfig: () => set({ config: defaultConfig }),
+      resetConfig: () => {
+        set({ config: defaultConfig });
+        // There's a bunch of state that's not persisted that we want to reset
+        window.location.reload();
+      },
       updateApplicationDefinition: (
         section: keyof Config['applicationDefinition'],
         value: string,
       ) =>
-        set((state) => ({
-          config: {
-            ...state.config,
-            applicationDefinition: {
-              ...state.config.applicationDefinition,
-              [section]: value,
+        set((state) => {
+          const newApplicationDefinition = {
+            ...state.config.applicationDefinition,
+            [section]: value,
+          };
+          const newPurpose = applicationDefinitionToPurpose(newApplicationDefinition);
+          return {
+            config: {
+              ...state.config,
+              applicationDefinition: newApplicationDefinition,
+              purpose: newPurpose,
             },
-            purpose: applicationDefinitionToPurpose(state.config.applicationDefinition),
-          },
-        })),
+          };
+        }),
     }),
     {
       name: 'redTeamConfig',
-      skipHydration: true,
     },
   ),
 );

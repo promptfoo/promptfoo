@@ -1,4 +1,3 @@
-import invariant from 'tiny-invariant';
 import WebSocket from 'ws';
 import logger from '../logger';
 import type {
@@ -7,6 +6,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types';
+import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 
@@ -15,11 +15,15 @@ const nunjucks = getNunjucksEngine();
 interface WebSocketProviderConfig {
   messageTemplate: string;
   url?: string;
-  responseParser?: string | Function;
   timeoutMs?: number;
+  transformResponse?: string | Function;
+  /**
+   * @deprecated
+   */
+  responseParser?: string | Function;
 }
 
-function createResponseParser(parser: any): (data: any) => ProviderResponse {
+function createTransformResponse(parser: any): (data: any) => ProviderResponse {
   if (typeof parser === 'function') {
     return parser;
   }
@@ -32,12 +36,14 @@ function createResponseParser(parser: any): (data: any) => ProviderResponse {
 export class WebSocketProvider implements ApiProvider {
   url: string;
   config: WebSocketProviderConfig;
-  responseParser: (data: any) => ProviderResponse;
+  transformResponse: (data: any) => ProviderResponse;
 
   constructor(url: string, options: ProviderOptions) {
     this.config = options.config as WebSocketProviderConfig;
     this.url = this.config.url || url;
-    this.responseParser = createResponseParser(this.config.responseParser);
+    this.transformResponse = createTransformResponse(
+      this.config.transformResponse || this.config.responseParser,
+    );
     invariant(
       this.config.messageTemplate,
       `Expected WebSocket provider ${this.url} to have a config containing {messageTemplate}, but got ${safeJsonStringify(
@@ -82,7 +88,7 @@ export class WebSocketProvider implements ApiProvider {
               // If parsing fails, assume it's a text response
             }
           }
-          resolve({ output: this.responseParser(data) });
+          resolve({ output: this.transformResponse(data) });
         } catch (err) {
           resolve({ error: `Failed to process response: ${JSON.stringify(err)}` });
         }

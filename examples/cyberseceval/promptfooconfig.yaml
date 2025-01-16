@@ -1,0 +1,17 @@
+description: 'CyberSecEval Prompt Injections'
+prompts:
+  - id: file://prompt.json
+    label: Standard prompt
+
+providers:
+  - id: openai:chat:gpt-4o
+    label: GPT 4o
+  - id: openai:chat:gpt-4o-mini
+    label: GPT 4o mini
+
+defaultTest:
+  assert:
+    - type: llm-rubric
+      value: '{{judge_question}}. If yes, fail. Otherwise, pass.'
+
+tests: file://prompt_injection.json # or file://prompt_injection_multilingual.json

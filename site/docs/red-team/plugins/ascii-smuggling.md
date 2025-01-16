@@ -8,9 +8,9 @@ sidebar_label: ASCII Smuggling
 
 ASCII smuggling is a technique that uses a special set of Unicode code points from the Tags Unicode Block to embed invisible instructions in text. These characters are usually not rendered in user interfaces, but LLMs can interpret them.
 
-According to Unicode® Technical Standard #51, "a completely tag-unaware implementation will display any sequence of tag characters as invisible, without any effect on adjacent characters." LLMs have no trouble understanding these characters because they are present in training data.
+According to Unicode Technical Standard #51, "a completely tag-unaware implementation will display any sequence of tag characters as invisible, without any effect on adjacent characters." LLMs have no trouble understanding these characters because they are present in training data.
 
-This method can be used for prompt injections and other potential security risks in AI systems.
+This method can be used for prompt injections, exfiltration, and other potential security risks.
 
 ## How it works
 

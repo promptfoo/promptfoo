@@ -82,6 +82,16 @@ assert:
       outputLengthLimit: 10
 ```
 
+You can specify a particular function to use by appending it after a colon:
+
+```yaml
+assert:
+  - type: python
+    value: file://relative/path/to/script.py:custom_assert
+```
+
+If no function is specified, it defaults to `get_assert`.
+
 This file will be called with an `output` string and an `AssertContext` object (see above).
 It expects that either a `bool` (pass/fail), `float` (score), or `GradingResult` will be returned.
 
@@ -90,6 +100,7 @@ Here's an example `assert.py`:
 ```py
 from typing import Dict, TypedDict, Union
 
+# Default function name
 def get_assert(output: str, context) -> Union[bool, float, Dict[str, Any]]:
     print('Prompt:', context['prompt'])
     print('Vars', context['vars']['topic'])
@@ -100,6 +111,10 @@ def get_assert(output: str, context) -> Union[bool, float, Dict[str, Any]]:
       'score': 0.6,
       'reason': 'Looks good to me',
     }
+
+# Custom function name
+def custom_assert(output: str, context) -> Union[bool, float, Dict[str, Any]]:
+    return len(output) > 10
 ```
 
 This is an example of an assertion that uses data from a configuration defined in the assertion's YML file:

@@ -8,8 +8,10 @@ import { extractEntities } from '../../src/redteam/extraction/entities';
 import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
 import { synthesize, resolvePluginConfig } from '../../src/redteam/index';
 import { Plugins } from '../../src/redteam/plugins';
+import { shouldGenerateRemote, getRemoteHealthUrl } from '../../src/redteam/remoteGeneration';
 import { Strategies } from '../../src/redteam/strategies';
 import { validateStrategies } from '../../src/redteam/strategies';
+import { checkRemoteHealth } from '../../src/util/apiHealth';
 
 jest.mock('cli-progress');
 jest.mock('../../src/logger');
@@ -37,6 +39,9 @@ jest.mock('../../src/redteam/strategies', () => ({
     }
   }),
 }));
+
+jest.mock('../../src/util/apiHealth');
+jest.mock('../../src/redteam/remoteGeneration');
 
 describe('synthesize', () => {
   const mockProvider = {
@@ -252,6 +257,125 @@ describe('synthesize', () => {
 
       process.env.LOG_LEVEL = originalLogLevel;
     });
+  });
+
+  describe('API Health Check', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+      jest.mocked(shouldGenerateRemote).mockReturnValue(true);
+      jest.mocked(getRemoteHealthUrl).mockReturnValue('https://api.test/health');
+      jest.mocked(checkRemoteHealth).mockResolvedValue({
+        status: 'OK',
+        message: 'Cloud API is healthy',
+      });
+    });
+
+    it('should check API health when remote generation is enabled', async () => {
+      await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [],
+      });
+
+      expect(shouldGenerateRemote).toHaveBeenCalledWith();
+      expect(getRemoteHealthUrl).toHaveBeenCalledWith();
+      expect(checkRemoteHealth).toHaveBeenCalledWith('https://api.test/health');
+    });
+
+    it('should skip health check when remote generation is disabled', async () => {
+      jest.mocked(shouldGenerateRemote).mockReturnValue(false);
+
+      await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [],
+      });
+
+      expect(shouldGenerateRemote).toHaveBeenCalledWith();
+      expect(getRemoteHealthUrl).not.toHaveBeenCalled();
+      expect(checkRemoteHealth).not.toHaveBeenCalled();
+    });
+
+    it('should throw error when health check fails', async () => {
+      jest.mocked(checkRemoteHealth).mockResolvedValue({
+        status: 'ERROR',
+        message: 'API is not accessible',
+      });
+
+      await expect(
+        synthesize({
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          strategies: [],
+        }),
+      ).rejects.toThrow('Unable to proceed with test generation: API is not accessible');
+    });
+
+    it('should skip health check when URL is null', async () => {
+      jest.mocked(getRemoteHealthUrl).mockReturnValue(null);
+
+      await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [],
+      });
+
+      expect(shouldGenerateRemote).toHaveBeenCalledWith();
+      expect(getRemoteHealthUrl).toHaveBeenCalledWith();
+      expect(checkRemoteHealth).not.toHaveBeenCalled();
+    });
+  });
+
+  it('should handle basic strategy configuration', async () => {
+    jest.mocked(loadApiProvider).mockResolvedValue({
+      id: () => 'test',
+      callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
+    });
+
+    // Mock plugin to generate a test case
+    const mockPlugin = {
+      id: 'test-plugin',
+      numTests: 1,
+    };
+
+    const mockProvider = {
+      id: () => 'test',
+      callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
+    };
+
+    // Test with basic strategy enabled
+    const resultEnabled = await synthesize({
+      plugins: [mockPlugin],
+      strategies: [{ id: 'basic', config: { enabled: true } }],
+      prompts: ['test prompt'],
+      injectVar: 'input',
+      provider: mockProvider,
+      language: 'en',
+      numTests: 1,
+    });
+
+    expect(resultEnabled.testCases.length).toBeGreaterThan(0);
+
+    // Test with basic strategy disabled
+    const resultDisabled = await synthesize({
+      plugins: [mockPlugin],
+      strategies: [{ id: 'basic', config: { enabled: false } }],
+      prompts: ['test prompt'],
+      injectVar: 'input',
+      provider: mockProvider,
+      language: 'en',
+      numTests: 1,
+    });
+
+    expect(resultDisabled.testCases).toHaveLength(0);
   });
 });
 

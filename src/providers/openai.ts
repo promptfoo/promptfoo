@@ -19,6 +19,7 @@ import { renderVarsInObject } from '../util';
 import { maybeLoadFromExternalFile } from '../util';
 import { safeJsonStringify } from '../util/json';
 import { sleep } from '../util/time';
+import { ellipsize } from '../utils/text';
 import type { OpenAiFunction, OpenAiTool } from './openaiUtil';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
 
@@ -56,7 +57,7 @@ const OPENAI_CHAT_MODELS: ProviderModel[] = [
       },
     },
   })),
-  ...['o1-preview', 'o1-preview-2024-09-12'].map((model) => ({
+  ...['o1', 'o1-2024-12-17', 'o1-preview', 'o1-preview-2024-09-12'].map((model) => ({
     id: model,
     cost: {
       input: 15 / 1e6,
@@ -600,8 +601,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 ],
               },
             ],
-            ...(config.modalities ? { modalities: config.modalities } : {}),
-            ...(config.audio ? { audio: config.audio } : {}),
+            ...(config.modalities && { modalities: config.modalities }),
+            ...(config.audio && { audio: config.audio }),
           },
           config,
         };
@@ -609,6 +610,18 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     } catch {
       // Not JSON or not audio content, continue with normal processing
     }
+
+    // NOTE: Special handling for o1 models which do not support max_tokens and temperature
+    const isO1Model = this.modelName.startsWith('o1');
+    const maxCompletionTokens = isO1Model
+      ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
+      : undefined;
+    const maxTokens = isO1Model
+      ? undefined
+      : (config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024));
+    const temperature = isO1Model
+      ? undefined
+      : (config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0));
 
     let messages = parseChatPrompt<ChatMessage[]>(prompt, [{ role: 'user', content: prompt }]);
 
@@ -620,8 +633,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       body: {
         model: this.modelName,
         messages,
-        ...(config.modalities ? { modalities: config.modalities } : {}),
-        ...(config.audio ? { audio: config.audio } : {}),
+        ...(config.modalities && { modalities: config.modalities }),
+        ...(config.audio && { audio: config.audio }),
+        ...(maxCompletionTokens && { max_completion_tokens: maxCompletionTokens }),
+        ...(maxTokens && { max_tokens: maxTokens }),
+        ...(temperature && { temperature }),
       },
       config,
     };
@@ -1066,25 +1082,19 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     }
 
     if (!response) {
-      try {
-        response = await openai.images.generate({
-          model: this.modelName,
-          prompt,
-          n: 1,
-          size:
-            ((this.config.size || process.env.OPENAI_IMAGE_SIZE) as
-              | '1024x1024'
-              | '256x256'
-              | '512x512'
-              | '1792x1024'
-              | '1024x1792'
-              | undefined) || '1024x1024',
-        });
-      } catch (error) {
-        return {
-          error: `OpenAI threw error: ${(error as Error).message}`,
-        };
-      }
+      response = await openai.images.generate({
+        model: this.modelName,
+        prompt,
+        n: 1,
+        size:
+          ((this.config.size || process.env.OPENAI_IMAGE_SIZE) as
+            | '1024x1024'
+            | '256x256'
+            | '512x512'
+            | '1792x1024'
+            | '1024x1792'
+            | undefined) || '1024x1024',
+      });
     }
     const url = response.data[0].url;
     if (!url) {
@@ -1105,8 +1115,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       .replace(/\r?\n|\r/g, ' ')
       .replace(/\[/g, '(')
       .replace(/\]/g, ')');
-    const ellipsizedPrompt =
-      sanitizedPrompt.length > 50 ? `${sanitizedPrompt.substring(0, 47)}...` : sanitizedPrompt;
+    const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
     return {
       output: `![${ellipsizedPrompt}](${url})`,
       cached,

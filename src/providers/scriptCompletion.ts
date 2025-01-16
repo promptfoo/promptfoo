@@ -1,7 +1,6 @@
 import { execFile } from 'child_process';
 import crypto from 'crypto';
 import fs from 'fs';
-import invariant from 'tiny-invariant';
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
 import type {
@@ -10,6 +9,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types';
+import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 
 const ANSI_ESCAPE = /\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
@@ -96,8 +96,8 @@ export class ScriptCompletionProvider implements ApiProvider {
       delete context?.logger;
       const scriptArgs = scriptParts.concat([
         prompt,
-        safeJsonStringify(this.options || {}),
-        safeJsonStringify(context || {}),
+        safeJsonStringify(this.options || {}) as string,
+        safeJsonStringify(context || {}) as string,
       ]);
       const options = this.options?.config.basePath ? { cwd: this.options.config.basePath } : {};
 

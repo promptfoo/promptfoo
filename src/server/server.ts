@@ -1,24 +1,21 @@
 import compression from 'compression';
 import cors from 'cors';
-import debounce from 'debounce';
 import dedent from 'dedent';
 import type { Request, Response } from 'express';
 import express from 'express';
-import type { Stats } from 'fs';
-import fs from 'fs';
 import http from 'node:http';
 import path from 'node:path';
 import { Server as SocketIOServer } from 'socket.io';
-import invariant from 'tiny-invariant';
 import { fromError } from 'zod-validation-error';
 import { createPublicUrl } from '../commands/share';
 import { VERSION, DEFAULT_PORT } from '../constants';
-import { getDbSignalPath } from '../database';
+import { setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
+import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
 import telemetry from '../telemetry';
 import { TelemetryEventSchema } from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCases';
@@ -31,6 +28,8 @@ import {
   getLatestEval,
   getStandaloneEvals,
 } from '../util';
+import { checkRemoteHealth } from '../util/apiHealth';
+import invariant from '../util/invariant';
 import { BrowserBehavior } from '../util/server';
 import { openBrowser } from '../util/server';
 import { configsRouter } from './routes/configs';
@@ -53,6 +52,21 @@ export function createApp() {
   app.use(express.urlencoded({ limit: '100mb', extended: true }));
   app.get('/health', (req, res) => {
     res.status(200).json({ status: 'OK', version: VERSION });
+  });
+
+  app.get('/api/remote-health', async (req: Request, res: Response): Promise<void> => {
+    const apiUrl = getRemoteHealthUrl();
+
+    if (apiUrl === null) {
+      res.json({
+        status: 'DISABLED',
+        message: 'remote generation and grading are disabled',
+      });
+      return;
+    }
+
+    const result = await checkRemoteHealth(apiUrl);
+    res.json(result);
   });
 
   app.get('/api/results', async (req: Request, res: Response): Promise<void> => {
@@ -173,7 +187,7 @@ export function createApp() {
   return app;
 }
 
-export function startServer(
+export async function startServer(
   port = DEFAULT_PORT,
   browserBehavior = BrowserBehavior.ASK,
   filterDescription?: string,
@@ -187,18 +201,14 @@ export function startServer(
     },
   });
 
-  runDbMigrations().then(() => {
-    logger.info('Migrated results from file system to database');
-  });
+  await runDbMigrations();
 
-  const watchFilePath = getDbSignalPath();
-  const watcher = debounce(async (curr: Stats, prev: Stats) => {
-    if (curr.mtime !== prev.mtime) {
-      io.emit('update', await getLatestEval(filterDescription));
-      allPrompts = null;
-    }
-  }, 250);
-  fs.watchFile(watchFilePath, watcher);
+  setupSignalWatcher(async () => {
+    const latestEval = await getLatestEval(filterDescription);
+    logger.info(`Emitting update with eval ID: ${latestEval?.config?.description || 'unknown'}`);
+    io.emit('update', latestEval);
+    allPrompts = null;
+  });
 
   io.on('connection', async (socket) => {
     socket.emit('init', await getLatestEval(filterDescription));

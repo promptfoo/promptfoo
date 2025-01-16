@@ -1,6 +1,5 @@
 import { randomUUID } from 'crypto';
 import { and, desc, eq, like, sql } from 'drizzle-orm';
-import invariant from 'tiny-invariant';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { getDb } from '../database';
 import {
@@ -13,6 +12,7 @@ import {
   evalsToTagsTable,
   evalResultsTable,
 } from '../database/tables';
+import { getEnvBool } from '../envars';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
@@ -30,6 +30,7 @@ import type {
 } from '../types';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
+import invariant from '../util/invariant';
 import { getCurrentTimestamp } from '../util/time';
 import EvalResult from './evalResult';
 
@@ -404,6 +405,7 @@ export default class Eval {
     const stats: EvaluateStats = {
       successes: 0,
       failures: 0,
+      errors: 0,
       tokenUsage: {
         cached: 0,
         completion: 0,
@@ -416,6 +418,7 @@ export default class Eval {
     for (const prompt of this.prompts) {
       stats.successes += prompt.metrics?.testPassCount || 0;
       stats.failures += prompt.metrics?.testFailCount || 0;
+      stats.errors += prompt.metrics?.testErrorCount || 0;
       stats.tokenUsage.prompt += prompt.metrics?.tokenUsage.prompt || 0;
       stats.tokenUsage.cached += prompt.metrics?.tokenUsage.cached || 0;
       stats.tokenUsage.completion += prompt.metrics?.tokenUsage.completion || 0;
@@ -423,10 +426,19 @@ export default class Eval {
       stats.tokenUsage.numRequests += prompt.metrics?.tokenUsage.numRequests || 0;
     }
 
+    const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
+
+    const prompts = shouldStripPromptText
+      ? this.prompts.map((p) => ({
+          ...p,
+          raw: '[prompt stripped]',
+        }))
+      : this.prompts;
+
     return {
       version: 3,
       timestamp: new Date(this.createdAt).toISOString(),
-      prompts: this.prompts,
+      prompts,
       results: this.results.map((r) => r.toEvaluateResult()),
       stats,
     };

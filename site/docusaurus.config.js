@@ -89,10 +89,13 @@ const config = {
         theme: {
           customCss: require.resolve('./src/css/custom.css'),
         },
-        gtag: {
-          trackingID: 'G-3TS8QLZQ93',
-          anonymizeIP: true,
-        },
+        gtag:
+          process.env.NODE_ENV === 'development'
+            ? undefined
+            : {
+                trackingID: 'G-3TS8QLZQ93',
+                anonymizeIP: true,
+              },
       }),
     ],
   ],
@@ -172,12 +175,24 @@ const config = {
                 label: 'GitHub',
               },
               {
-                href: 'https://discord.gg/gHPS9jjfbs',
+                href: 'https://discord.gg/promptfoo',
                 label: 'Discord',
               },
             ],
           },
           { to: '/pricing/', label: 'Enterprise', position: 'left' },
+          {
+            href: 'https://github.com/promptfoo/promptfoo',
+            position: 'right',
+            className: 'header-github-link',
+            'aria-label': 'GitHub repository',
+          },
+          {
+            href: 'https://discord.gg/promptfoo',
+            position: 'right',
+            className: 'header-discord-link',
+            'aria-label': 'Discord community',
+          },
         ],
       },
       footer: {
@@ -270,7 +285,7 @@ const config = {
               },
               {
                 label: 'Discord',
-                href: 'https://discord.gg/gHPS9jjfbs',
+                href: 'https://discord.gg/promptfoo',
               },
               {
                 label: 'LinkedIn',
@@ -308,7 +323,26 @@ const config = {
         indexName: 'promptfoo',
       },
     }),
-  plugins: [require.resolve('docusaurus-plugin-image-zoom')],
+  plugins: [
+    require.resolve('docusaurus-plugin-image-zoom'),
+    [
+      '@docusaurus/plugin-client-redirects',
+      {
+        redirects: [
+          {
+            from: '/docs/category/troubleshooting',
+            to: '/docs/usage/troubleshooting',
+          },
+        ],
+      },
+    ],
+  ],
+
+  // Mermaid diagram support
+  markdown: {
+    mermaid: true,
+  },
+  themes: ['@docusaurus/theme-mermaid'],
 };
 
 module.exports = config;

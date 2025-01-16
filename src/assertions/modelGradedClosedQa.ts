@@ -1,6 +1,6 @@
-import invariant from 'tiny-invariant';
 import { matchesClosedQa } from '../matchers';
 import type { AssertionParams, GradingResult } from '../types';
+import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 
 export const handleModelGradedClosedQa = async ({

@@ -1,6 +1,6 @@
 import dedent from 'dedent';
-import invariant from 'tiny-invariant';
 import type { ApiProvider, Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
+import invariant from '../../util/invariant';
 import { isBasicRefusal } from '../util';
 import { RedteamPluginBase, RedteamGraderBase } from './base';
 

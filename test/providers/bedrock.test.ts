@@ -66,6 +66,7 @@ class TestBedrockProvider extends AwsBedrockGenericProvider {
 describe('AwsBedrockGenericProvider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    delete process.env.AWS_BEDROCK_MAX_RETRIES;
   });
 
   afterEach(() => {
@@ -82,6 +83,8 @@ describe('AwsBedrockGenericProvider', () => {
 
     expect(BedrockRuntime).toHaveBeenCalledWith({
       region: 'us-east-1',
+      retryMode: 'adaptive',
+      maxAttempts: 10,
     });
   });
 
@@ -101,6 +104,8 @@ describe('AwsBedrockGenericProvider', () => {
 
     expect(BedrockRuntime).toHaveBeenCalledWith({
       region: 'us-east-1',
+      retryMode: 'adaptive',
+      maxAttempts: 10,
       credentials: {
         accessKeyId: 'test-access-key',
         secretAccessKey: 'test-secret-key',
@@ -118,10 +123,28 @@ describe('AwsBedrockGenericProvider', () => {
 
     expect(BedrockRuntime).toHaveBeenCalledWith({
       region: 'us-east-1',
+      retryMode: 'adaptive',
+      maxAttempts: 10,
     });
     expect(BedrockRuntime).not.toHaveBeenCalledWith(
       expect.objectContaining({ credentials: expect.anything() }),
     );
+  });
+
+  it('should respect AWS_BEDROCK_MAX_RETRIES environment variable', async () => {
+    process.env.AWS_BEDROCK_MAX_RETRIES = '10';
+    const provider = new (class extends AwsBedrockGenericProvider {
+      constructor() {
+        super('test-model', { config: { region: 'us-east-1' } });
+      }
+    })();
+    await provider.getBedrockInstance();
+
+    expect(BedrockRuntime).toHaveBeenCalledWith({
+      region: 'us-east-1',
+      retryMode: 'adaptive',
+      maxAttempts: 10,
+    });
   });
 
   describe('BEDROCK_MODEL CLAUDE_MESSAGES', () => {
@@ -282,6 +305,47 @@ describe('AwsBedrockGenericProvider', () => {
         },
       ]);
       expect(params.system).toBe('You are a helpful assistant.');
+    });
+
+    it('should convert lone system message to user message', () => {
+      const config: BedrockClaudeMessagesCompletionOptions = {
+        region: 'us-east-1',
+      };
+
+      // Test with string content
+      const promptWithStringContent = JSON.stringify([
+        { role: 'system', content: 'You are a helpful assistant.' },
+      ]);
+      const paramsWithString = modelHandler.params(config, promptWithStringContent);
+      expect(paramsWithString.messages).toEqual([
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'You are a helpful assistant.' }],
+        },
+      ]);
+      expect(paramsWithString.system).toBeUndefined();
+
+      // Test with array content
+      const promptWithArrayContent = JSON.stringify([
+        {
+          role: 'system',
+          content: [
+            { type: 'text', text: 'You are a helpful assistant.' },
+            { type: 'text', text: 'Additional context.' },
+          ],
+        },
+      ]);
+      const paramsWithArray = modelHandler.params(config, promptWithArrayContent);
+      expect(paramsWithArray.messages).toEqual([
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'You are a helpful assistant.' },
+            { type: 'text', text: 'Additional context.' },
+          ],
+        },
+      ]);
+      expect(paramsWithArray.system).toBeUndefined();
     });
   });
 
@@ -813,6 +877,129 @@ describe('llama', () => {
 
         Hello<|eot_id|><|start_header_id|>assistant<|end_header_id|>`;
       expect(formatPromptLlama3Instruct(messages)).toBe(expected);
+    });
+  });
+});
+
+describe('BEDROCK_MODEL AMAZON_NOVA', () => {
+  const modelHandler = BEDROCK_MODEL.AMAZON_NOVA;
+
+  it('should format system message correctly when using JSON array input', () => {
+    const config = {};
+    const prompt = JSON.stringify([
+      { role: 'system', content: 'You are a helpful assistant.' },
+      { role: 'user', content: 'Hello!' },
+    ]);
+
+    const params = modelHandler.params(config, prompt);
+
+    expect(params).toEqual({
+      messages: [
+        {
+          role: 'user',
+          content: [{ text: 'Hello!' }],
+        },
+      ],
+      system: [{ text: 'You are a helpful assistant.' }],
+      inferenceConfig: {
+        max_new_tokens: 1024,
+        temperature: 0,
+      },
+    });
+  });
+
+  it('should handle messages without system prompt', () => {
+    const config = {};
+    const prompt = JSON.stringify([
+      { role: 'user', content: 'Hello!' },
+      { role: 'assistant', content: 'Hi there!' },
+    ]);
+
+    const params = modelHandler.params(config, prompt);
+
+    expect(params).toEqual({
+      messages: [
+        {
+          role: 'user',
+          content: [{ text: 'Hello!' }],
+        },
+        {
+          role: 'assistant',
+          content: [{ text: 'Hi there!' }],
+        },
+      ],
+      inferenceConfig: {
+        max_new_tokens: 1024,
+        temperature: 0,
+      },
+    });
+    expect(params.system).toBeUndefined();
+  });
+
+  it('should handle complex message content arrays', () => {
+    const config = {};
+    const prompt = JSON.stringify([
+      { role: 'system', content: 'You are a helpful assistant.' },
+      {
+        role: 'user',
+        content: [
+          { text: 'What is this image?' },
+          {
+            image: {
+              format: 'jpeg',
+              source: {
+                bytes: 'base64_encoded_image',
+              },
+            },
+          },
+        ],
+      },
+    ]);
+
+    const params = modelHandler.params(config, prompt);
+
+    expect(params).toEqual({
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { text: 'What is this image?' },
+            {
+              image: {
+                format: 'jpeg',
+                source: {
+                  bytes: 'base64_encoded_image',
+                },
+              },
+            },
+          ],
+        },
+      ],
+      system: [{ text: 'You are a helpful assistant.' }],
+      inferenceConfig: {
+        max_new_tokens: 1024,
+        temperature: 0,
+      },
+    });
+  });
+
+  it('should handle invalid JSON gracefully', () => {
+    const config = {};
+    const prompt = 'Invalid JSON';
+
+    const params = modelHandler.params(config, prompt);
+
+    expect(params).toEqual({
+      messages: [
+        {
+          role: 'user',
+          content: [{ text: 'Invalid JSON' }],
+        },
+      ],
+      inferenceConfig: {
+        max_new_tokens: 1024,
+        temperature: 0,
+      },
     });
   });
 });

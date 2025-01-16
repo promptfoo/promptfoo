@@ -17,7 +17,6 @@ import EvalPage from './pages/eval/page';
 import LoginPage from './pages/login';
 import ProgressPage from './pages/progress/page';
 import PromptsPage from './pages/prompts/page';
-import RedteamDashboardPage from './pages/redteam/dashboard/page';
 import ReportPage from './pages/redteam/report/page';
 import RedteamSetupPage from './pages/redteam/setup/page';
 
@@ -48,9 +47,6 @@ const router = createBrowserRouter(
         <Route path="/redteam/setup" element={<RedteamSetupPage />} />
         <Route path="/report" element={<ReportPage />} />
         <Route path="/setup" element={<EvalCreatorPage />} />
-        {import.meta.env.VITE_PROMPTFOO_EXPERIMENTAL && (
-          <Route path="/dashboard" element={<RedteamDashboardPage />} />
-        )}
         <Route path="/login" element={<LoginPage />} />
       </Route>
     </Route>,

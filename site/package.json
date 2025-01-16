@@ -4,7 +4,7 @@
   "license": "MIT",
   "scripts": {
     "docusaurus": "docusaurus",
-    "start": "docusaurus start",
+    "start": "NODE_ENV=development docusaurus start",
     "build": "docusaurus build",
     "swizzle": "docusaurus swizzle",
     "deploy": "docusaurus deploy",
@@ -17,29 +17,31 @@
   },
   "dependencies": {
     "@calcom/embed-react": "^1.5.1",
-    "@docusaurus/core": "^3.6.0",
-    "@docusaurus/plugin-content-docs": "^3.6.0",
-    "@docusaurus/plugin-google-gtag": "^3.6.0",
-    "@docusaurus/preset-classic": "^3.6.0",
-    "@docusaurus/theme-search-algolia": "^3.6.0",
+    "@docusaurus/core": "^3.6.3",
+    "@docusaurus/plugin-client-redirects": "^3.6.3",
+    "@docusaurus/plugin-content-docs": "^3.6.3",
+    "@docusaurus/plugin-google-gtag": "^3.6.3",
+    "@docusaurus/preset-classic": "^3.6.3",
+    "@docusaurus/theme-mermaid": "^3.6.3",
+    "@docusaurus/theme-search-algolia": "^3.6.3",
     "@mdx-js/react": "^3.1.0",
     "@monaco-editor/react": "^4.6.0",
-    "@mui/icons-material": "^6.1.8",
-    "@segment/ajv-human-errors": "^2.14.0",
+    "@mui/icons-material": "^6.1.10",
+    "@segment/ajv-human-errors": "^2.14.1",
     "canvas-confetti": "^1.9.3",
     "clsx": "^2.1.1",
     "dedent": "^1.5.3",
     "docusaurus-plugin-image-zoom": "^2.0.0",
-    "framer-motion": "^11.11.10",
-    "lucide-react": "^0.454.0",
+    "framer-motion": "^11.13.3",
+    "lucide-react": "^0.468.0",
     "prism-react-renderer": "^2.4.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@docusaurus/module-type-aliases": "^3.6.0",
+    "@docusaurus/module-type-aliases": "^3.6.3",
     "@tsconfig/docusaurus": "^2.0.3",
-    "typescript": "^5.6.3"
+    "typescript": "^5.7.3"
   },
   "browserslist": {
     "production": [

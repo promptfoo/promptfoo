@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import invariant from 'tiny-invariant';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 import { fromZodError } from 'zod-validation-error';
@@ -17,17 +16,25 @@ import logger from '../../logger';
 import Eval from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { updateResult, deleteEval, writeResultsToDatabase } from '../../util';
+import invariant from '../../util/invariant';
 import { ApiSchemas } from '../apiSchemas';
 
 export const evalRouter = Router();
 
 // Running jobs
-const evalJobs = new Map<string, Job>();
+export const evalJobs = new Map<string, Job>();
 
 evalRouter.post('/job', (req: Request, res: Response): void => {
   const { evaluateOptions, ...testSuite } = req.body as EvaluateTestSuiteWithEvaluateOptions;
   const id = uuidv4();
-  evalJobs.set(id, { status: 'in-progress', progress: 0, total: 0, result: null });
+  evalJobs.set(id, {
+    evalId: null,
+    status: 'in-progress',
+    progress: 0,
+    total: 0,
+    result: null,
+    logs: [],
+  });
 
   promptfoo
     .evaluate(
@@ -51,6 +58,7 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
       invariant(job, 'Job not found');
       job.status = 'complete';
       job.result = await result.toEvaluateSummary();
+      job.evalId = result.id;
       console.log(`[${id}] Complete`);
     });
 
@@ -65,9 +73,19 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
     return;
   }
   if (job.status === 'complete') {
-    res.json({ status: 'complete', result: job.result });
+    res.json({
+      status: 'complete',
+      result: job.result,
+      evalId: job.evalId,
+      logs: job.logs,
+    });
   } else {
-    res.json({ status: 'in-progress', progress: job.progress, total: job.total });
+    res.json({
+      status: 'in-progress',
+      progress: job.progress,
+      total: job.total,
+      logs: job.logs,
+    });
   }
 });
 
@@ -214,6 +232,9 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
         createdAt: new Date(incEval.createdAt),
         results: incEval.results,
       });
+      if (incEval.prompts) {
+        eval_.addPrompts(incEval.prompts);
+      }
       logger.debug(`[POST /api/eval] Eval created with ID: ${eval_.id}`);
 
       logger.debug(`[POST /api/eval] Saved ${incEval.results.length} results to eval ${eval_.id}`);

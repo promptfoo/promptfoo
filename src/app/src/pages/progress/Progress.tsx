@@ -17,6 +17,7 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TableSortLabel from '@mui/material/TableSortLabel';
 import TextField from '@mui/material/TextField';
+import type { PromptMetrics } from '@promptfoo/types';
 import type { StandaloneEval } from '@promptfoo/util';
 
 export default function Cols() {
@@ -91,6 +92,7 @@ export default function Cols() {
       calculatePassRate(col.metrics),
       col.metrics?.testPassCount == null ? '-' : `${col.metrics.testPassCount}`,
       col.metrics?.testFailCount == null ? '-' : `${col.metrics.testFailCount}`,
+      col.metrics?.testErrorCount == null ? '-' : `${col.metrics.testErrorCount}`,
       col.metrics?.score == null ? '-' : col.metrics.score?.toFixed(2),
     ]);
     return [headers]
@@ -108,6 +110,17 @@ export default function Cols() {
     link.click();
     URL.revokeObjectURL(link.href);
     setAnchorEl(null);
+  };
+
+  const getSortedValues = (sortOrder: string, a: number, b: number): number => {
+    return sortOrder === 'asc' ? a - b : b - a;
+  };
+
+  const getValue = (metrics: PromptMetrics | undefined, sortField: string): number => {
+    if (metrics) {
+      return metrics[sortField as keyof PromptMetrics] as number;
+    }
+    return 0;
   };
 
   const filteredCols = React.useMemo(() => {
@@ -128,8 +141,8 @@ export default function Cols() {
       if (sortField === 'passRate') {
         const aValue = Number.parseFloat(calculatePassRate(a.metrics));
         const bValue = Number.parseFloat(calculatePassRate(b.metrics));
-        return sortOrder === 'asc' ? aValue - bValue : bValue - aValue;
-      } else {
+        return getSortedValues(sortOrder, aValue, bValue);
+      } else if (sortField === 'evalId') {
         // Ensure sortField is a key of StandaloneEval
         if (sortField in a && sortField in b) {
           const aValue = a[sortField as keyof StandaloneEval] || '';
@@ -139,6 +152,10 @@ export default function Cols() {
             : bValue.toString().localeCompare(aValue.toString());
         }
         return 0;
+      } else {
+        const aValue = getValue(a.metrics, sortField);
+        const bValue = getValue(b.metrics, sortField);
+        return getSortedValues(sortOrder, aValue, bValue);
       }
     });
   }, [filteredCols, sortField, sortOrder]);
@@ -163,7 +180,7 @@ export default function Cols() {
   return (
     <Box paddingX={2}>
       <Box display="flex" justifyContent="space-between" alignItems="center">
-        <h2>Progress summary</h2>
+        <h2>Eval History</h2>
         <div>
           <Button
             id="export-button"
@@ -327,7 +344,13 @@ export default function Cols() {
                   {col.metrics?.testPassCount == null ? '-' : `${col.metrics.testPassCount}`}
                 </TableCell>
                 <TableCell>
-                  {col.metrics?.testFailCount == null ? '-' : `${col.metrics.testFailCount}`}
+                  {col.metrics?.testFailCount == null
+                    ? '- ' +
+                      (col.metrics?.testErrorCount && col.metrics.testErrorCount > 0
+                        ? `+ ${col.metrics.testErrorCount} errors`
+                        : '')
+                    : `${col.metrics.testFailCount} ` +
+                      (col.metrics?.testErrorCount ? `+ ${col.metrics.testErrorCount} errors` : '')}
                 </TableCell>
                 <TableCell>
                   {col.metrics?.score == null ? '-' : col.metrics.score?.toFixed(2)}

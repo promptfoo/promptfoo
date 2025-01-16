@@ -1,3 +1,25 @@
+/* Add page-level gradient */
+:global(.homepage-wrapper) {
+  background: linear-gradient(
+    160deg,
+    rgba(59, 130, 246, 0.12) -5%,
+    rgba(59, 130, 246, 0.04) 15%,
+    rgba(59, 130, 246, 0.005) 25%,
+    transparent 35%
+  );
+  min-height: 100vh;
+}
+
+[data-theme='dark'] :global(.homepage-wrapper) {
+  background: linear-gradient(
+    160deg,
+    rgba(29, 78, 216, 0.1) -5%,
+    rgba(29, 78, 216, 0.03) 15%,
+    rgba(29, 78, 216, 0.005) 25%,
+    transparent 35%
+  );
+}
+
 .heroBanner {
   padding: 4rem 0;
   text-align: center;

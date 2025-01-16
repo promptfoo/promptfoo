@@ -97,6 +97,12 @@ jest.mock('../../src/logger', () => ({
   warn: jest.fn(),
 }));
 
+jest.mock('../../src/redteam/remoteGeneration', () => ({
+  shouldGenerateRemote: jest.fn().mockReturnValue(false),
+  neverGenerateRemote: jest.fn().mockReturnValue(false),
+  getRemoteGenerationUrl: jest.fn().mockReturnValue('http://test-url'),
+}));
+
 const mockFetch = jest.mocked(jest.fn());
 global.fetch = mockFetch;
 
@@ -1224,17 +1230,21 @@ describe('call provider apis', () => {
 });
 
 describe('loadApiProvider', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('loadApiProvider with yaml filepath', async () => {
     const mockYamlContent = dedent`
     id: 'openai:gpt-4'
     config:
       key: 'value'`;
-    jest.mocked(fs.readFileSync).mockReturnValueOnce(mockYamlContent);
+    const mockReadFileSync = jest.mocked(fs.readFileSync);
+    mockReadFileSync.mockReturnValue(mockYamlContent);
 
     const provider = await loadApiProvider('file://path/to/mock-provider-file.yaml');
     expect(provider.id()).toBe('openai:gpt-4');
-    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-    expect(fs.readFileSync).toHaveBeenCalledWith(
+    expect(mockReadFileSync).toHaveBeenCalledWith(
       expect.stringMatching(/path[\\\/]to[\\\/]mock-provider-file\.yaml/),
       'utf8',
     );

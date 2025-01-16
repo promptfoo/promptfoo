@@ -1,3 +1,4 @@
+import { parse as csvParse } from 'csv-parse/sync';
 import { stringify } from 'csv-stringify/sync';
 import dedent from 'dedent';
 import dotenv from 'dotenv';
@@ -9,10 +10,9 @@ import yaml from 'js-yaml';
 import NodeCache from 'node-cache';
 import nunjucks from 'nunjucks';
 import * as path from 'path';
-import invariant from 'tiny-invariant';
 import cliState from '../cliState';
 import { TERMINAL_MAX_WIDTH } from '../constants';
-import { getDbSignalPath, getDb } from '../database';
+import { getDb } from '../database';
 import {
   datasetsTable,
   evalsTable,
@@ -51,7 +51,9 @@ import {
   isProviderOptions,
   OutputFileExtension,
   type EvaluateSummaryV2,
+  ResultFailureReason,
 } from '../types';
+import invariant from '../util/invariant';
 import { getConfigDirectoryPath } from './config/manage';
 import { sha256 } from './createHash';
 import { convertTestResultsToTableRow, getHeaderForTable } from './exportToFile';
@@ -61,7 +63,11 @@ import { getNunjucksEngine } from './templates';
 const DEFAULT_QUERY_LIMIT = 100;
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
-  const passFailText = output.pass ? '[PASS]' : '[FAIL]';
+  const passFailText = output.pass
+    ? '[PASS]'
+    : output.failureReason === ResultFailureReason.ASSERT
+      ? '[FAIL]'
+      : '[ERROR]';
   const namedScoresText = Object.entries(output.namedScores)
     .map(([name, value]) => `${name}: ${value?.toFixed(2)}`)
     .join(', ');
@@ -346,15 +352,6 @@ export async function writeResultsToDatabase(
 
   logger.debug(`Awaiting ${promises.length} promises to database...`);
   await Promise.all(promises);
-
-  // "touch" db signal path
-  const filePath = getDbSignalPath();
-  try {
-    const now = new Date();
-    fs.utimesSync(filePath, now, now);
-  } catch {
-    fs.closeSync(fs.openSync(filePath, 'w'));
-  }
 
   return evalId;
 }
@@ -1098,5 +1095,21 @@ export function maybeLoadFromExternalFile(filePath: string | object | Function |
   if (finalPath.endsWith('.yaml') || finalPath.endsWith('.yml')) {
     return yaml.load(contents);
   }
+  if (finalPath.endsWith('.csv')) {
+    const records = csvParse(contents, { columns: true });
+    // If single column, return array of values
+    if (records.length > 0 && Object.keys(records[0]).length === 1) {
+      return records.map((record: Record<string, string>) => Object.values(record)[0]);
+    }
+    return records;
+  }
   return contents;
+}
+
+export function isRunningUnderNpx(): boolean {
+  return Boolean(
+    process.env.npm_execpath?.includes('npx') ||
+      process.execPath.includes('npx') ||
+      process.env.npm_lifecycle_script?.includes('npx'),
+  );
 }
