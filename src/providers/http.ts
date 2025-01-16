@@ -2,6 +2,7 @@ import httpZ from 'http-z';
 import path from 'path';
 import { z } from 'zod';
 import { fetchWithCache } from '../cache';
+import type { FetchWithCacheResult } from '../cache';
 import cliState from '../cliState';
 import { importModule } from '../esm';
 import logger from '../logger';
@@ -94,20 +95,23 @@ export async function createSessionParser(
 }
 
 interface TransformResponseContext {
-  response: Response;
+  response: FetchWithCacheResult<any>;
 }
 
 export async function createTransformResponse(
   parser: string | Function | undefined,
 ): Promise<(data: any, text: string, context: TransformResponseContext) => ProviderResponse> {
   if (!parser) {
-    return (data, text, context) => ({ output: data || text });
+    return (data, text) => ({ output: data || text });
   }
   if (typeof parser === 'function') {
     return (data, text, context) => {
       try {
-        const result = parser(data, text, context);
-        return { output: result };
+        const result: ProviderResponse | string = parser(data, text, context);
+        if (typeof result === 'string') {
+          return { output: result };
+        }
+        return result;
       } catch (err) {
         logger.error(`Error in response transform function: ${String(err)}`);
         throw err;
@@ -398,7 +402,9 @@ export async function createValidateStatus(
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
-  private transformResponse: Promise<(data: any, text: string) => ProviderResponse>;
+  private transformResponse: Promise<
+    (data: any, text: string, context: TransformResponseContext) => ProviderResponse
+  >;
   private sessionParser: Promise<({ headers }: { headers: Record<string, string> }) => string>;
   private transformRequest: Promise<(prompt: string) => any>;
   private validateStatus: Promise<(status: number) => boolean>;
@@ -572,11 +578,6 @@ export class HttpProvider implements ApiProvider {
     } catch {
       parsedData = null;
     }
-
-    const parsedOutput = (await this.transformResponse)(parsedData, rawText, {
-      response: response,
-    });
-    ret.output = parsedOutput.output || parsedOutput;
     try {
       const sessionId =
         response.headers && this.sessionParser !== null
@@ -591,7 +592,18 @@ export class HttpProvider implements ApiProvider {
       );
       throw err;
     }
-    return ret;
+
+    const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
+    if (parsedOutput.output) {
+      return {
+        ...ret,
+        ...parsedOutput,
+      };
+    }
+    return {
+      ...ret,
+      output: parsedOutput,
+    };
   }
 
   private async callApiWithRawRequest(vars: Record<string, any>): Promise<ProviderResponse> {
@@ -635,9 +647,12 @@ export class HttpProvider implements ApiProvider {
       parsedData = null;
     }
 
-    const parsedOutput = (await this.transformResponse)(parsedData, rawText);
+    const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
+    if (parsedOutput.output) {
+      return parsedOutput;
+    }
     return {
-      output: parsedOutput.output || parsedOutput,
+      output: parsedOutput,
     };
   }
 }
