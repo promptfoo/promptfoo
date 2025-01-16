@@ -1,16 +1,5 @@
-import 'prismjs/components/prism-clike';
-import 'prismjs/components/prism-javascript';
-import 'prismjs/themes/prism.css';
-
 import React from 'react';
-
-import dedent from 'dedent';
-import {
-  highlight,
-  languages,
-} from 'prismjs/components/prism-core';
 import Editor from 'react-simple-code-editor';
-
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
@@ -20,10 +9,16 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import FormControlLabel from '@mui/material/FormControlLabel';
-import { useTheme } from '@mui/material/styles';
 import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import { useTheme } from '@mui/material/styles';
+import dedent from 'dedent';
+import 'prismjs/components/prism-clike';
+// @ts-expect-error: No types available
+import { highlight, languages } from 'prismjs/components/prism-core';
+import 'prismjs/components/prism-javascript';
+import 'prismjs/themes/prism.css';
 
 interface TestTargetConfigurationProps {
   testingTarget: boolean;
