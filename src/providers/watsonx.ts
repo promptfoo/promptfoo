@@ -2,14 +2,14 @@ import type { WatsonXAI as WatsonXAIClient } from '@ibm-cloud/watsonx-ai';
 import crypto from 'crypto';
 import type { IamAuthenticator, BearerTokenAuthenticator } from 'ibm-cloud-sdk-core';
 import { z } from 'zod';
-import { getCache, isCacheEnabled } from '../cache';
+import { getCache, isCacheEnabled, fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import type { ApiProvider, ProviderResponse, TokenUsage } from '../types';
 import type { EnvOverrides } from '../types/env';
 import type { ProviderOptions } from '../types/providers';
 import invariant from '../util/invariant';
-import { calculateCost } from './shared';
+import { calculateCost, REQUEST_TIMEOUT_MS } from './shared';
 
 interface TextGenRequestParametersModel {
   max_new_tokens: number;
@@ -48,225 +48,19 @@ const TextGenResponseSchema = z.object({
   ),
 });
 
-const WATSONX_MODELS = [
-  {
-    id: 'ibm/granite-20b-multilingual',
-    cost: {
-      input: 0.6 / 1e6,
-      output: 0.6 / 1e6,
-    },
-  },
-  {
-    id: 'ibm/granite-13b-chat',
-    cost: {
-      input: 0.6 / 1e6,
-      output: 0.6 / 1e6,
-    },
-  },
-  {
-    id: 'ibm/granite-13b-instruct',
-    cost: {
-      input: 0.6 / 1e6,
-      output: 0.6 / 1e6,
-    },
-  },
-  {
-    id: 'ibm/granite-34b-code-instruct',
-    cost: {
-      input: 0.6 / 1e6,
-      output: 0.6 / 1e6,
-    },
-  },
-  {
-    id: 'ibm/granite-20b-code-instruct',
-    cost: {
-      input: 0.6 / 1e6,
-      output: 0.6 / 1e6,
-    },
-  },
-  {
-    id: 'ibm/granite-8b-code-instruct',
-    cost: {
-      input: 0.6 / 1e6,
-      output: 0.6 / 1e6,
-    },
-  },
-  {
-    id: 'ibm/granite-3b-code-instruct',
-    cost: {
-      input: 0.6 / 1e6,
-      output: 0.6 / 1e6,
-    },
-  },
-  {
-    id: 'ibm/granite-8b-japanese',
-    cost: {
-      input: 0.6 / 1e6,
-      output: 0.6 / 1e6,
-    },
-  },
-  {
-    id: 'ibm/granite-7b-lab',
-    cost: {
-      input: 0.6 / 1e6,
-      output: 0.6 / 1e6,
-    },
-  },
-  {
-    id: 'meta-llama/llama-3-2-11b-vision-instruct',
-    cost: {
-      input: 0.35 / 1e6,
-      output: 0.35 / 1e6,
-    },
-  },
-  {
-    id: 'meta-llama/llama-3-2-90b-vision-instruct',
-    cost: {
-      input: 2.0 / 1e6,
-      output: 2.0 / 1e6,
-    },
-  },
-  {
-    id: 'meta-llama/llama-3-2-11b-vision-instruct',
-    cost: {
-      input: 0.35 / 1e6,
-      output: 0.35 / 1e6,
-    },
-  },
-  {
-    id: 'meta-llama/llama-guard-3-11b-vision',
-    cost: {
-      input: 0.35 / 1e6,
-      output: 0.35 / 1e6,
-    },
-  },
-  {
-    id: 'meta-llama/llama-3-2-1b-instruct',
-    cost: {
-      input: 0.1 / 1e6,
-      output: 0.1 / 1e6,
-    },
-  },
-  {
-    id: 'meta-llama/llama-3-2-3b-instruct',
-    cost: {
-      input: 0.15 / 1e6,
-      output: 0.15 / 1e6,
-    },
-  },
-  {
-    id: 'meta-llama/llama-3-1-70b-instruct',
-    cost: {
-      input: 1.8 / 1e6,
-      output: 1.8 / 1e6,
-    },
-  },
-  {
-    id: 'meta-llama/llama-3-1-8b-instruct',
-    cost: {
-      input: 0.6 / 1e6,
-      output: 0.6 / 1e6,
-    },
-  },
-  {
-    id: 'meta-llama/llama-3-405b-instruct',
-    cost: {
-      input: 5.0 / 1e6,
-      output: 16.0 / 1e6,
-    },
-  },
-  {
-    id: 'meta-llama/llama-3-8b-instruct',
-    cost: {
-      input: 0.6 / 1e6,
-      output: 0.6 / 1e6,
-    },
-  },
-  {
-    id: 'meta-llama/llama-3-70b-instruct',
-    cost: {
-      input: 1.8 / 1e6,
-      output: 1.8 / 1e6,
-    },
-  },
-  {
-    id: 'mindsandcompany/llama2-13b-dpo-v7-korean',
-    cost: {
-      input: 1.8 / 1e6,
-      output: 1.8 / 1e6,
-    },
-  },
-  {
-    id: 'sdaia/allam-1-13b-instruct',
-    cost: {
-      input: 1.8 / 1e6,
-      output: 1.8 / 1e6,
-    },
-  },
-  {
-    id: 'meta/codellama-34b-instruct',
-    cost: {
-      input: 1.8 / 1e6,
-      output: 1.8 / 1e6,
-    },
-  },
-  {
-    id: 'mistral/mistral-large-2',
-    cost: {
-      input: 10.0 / 1e6,
-      output: 10.0 / 1e6,
-    },
-  },
-  {
-    id: 'mistral/mixtal-8x7b-instruct',
-    cost: {
-      input: 0.6 / 1e6,
-      output: 0.6 / 1e6,
-    },
-  },
-  {
-    id: 'core42/jais-13b-chat-arabic',
-    cost: {
-      input: 1.8 / 1e6,
-      output: 1.8 / 1e6,
-    },
-  },
-  {
-    id: 'google/flan-t5-xl-3b',
-    cost: {
-      input: 0.6 / 1e6,
-      output: 0.6 / 1e6,
-    },
-  },
-  {
-    id: 'google/flan-t5-xxl-11b',
-    cost: {
-      input: 1.8 / 1e6,
-      output: 1.8 / 1e6,
-    },
-  },
-  {
-    id: 'google/flan-ul2-20b',
-    cost: {
-      input: 5.0 / 1e6,
-      output: 5.0 / 1e6,
-    },
-  },
-  {
-    id: 'elyza/elyza-japanese-llama-2-7b-instruct',
-    cost: {
-      input: 1.8 / 1e6,
-      output: 1.8 / 1e6,
-    },
-  },
-  {
-    id: 'bigscience/mt0-xxl-13b',
-    cost: {
-      input: 1.8 / 1e6,
-      output: 1.8 / 1e6,
-    },
-  },
-];
+const TIER_PRICING = {
+  class_1: 0.6,
+  class_2: 1.8,
+  class_3: 5.0,
+  class_c1: 0.1,
+  class_5: 0.25,
+  class_7: 16.0,
+  class_8: 0.15,
+  class_9: 0.35,
+  class_10: 2.0,
+  class_11: 0.005,
+  class_12: 0.2,
+};
 
 function convertResponse(response: z.infer<typeof TextGenResponseSchema>): ProviderResponse {
   const firstResult = response.results && response.results[0];
@@ -319,13 +113,80 @@ export function generateConfigHash(config: any): string {
   return crypto.createHash('md5').update(JSON.stringify(sortedConfig)).digest('hex');
 }
 
-export function calculateWatsonXCost(
+interface ModelSpec {
+  model_id: string;
+  input_tier: string;
+  output_tier: string;
+}
+
+interface WatsonXModel {
+  id: string;
+  cost: {
+    input: number;
+    output: number;
+  };
+}
+
+async function fetchModelSpecs(): Promise<ModelSpec[]> {
+  try {
+    const { data } = await fetchWithCache(
+      'https://us-south.ml.cloud.ibm.com/ml/v1/foundation_model_specs?version=2023-09-30',
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      },
+      REQUEST_TIMEOUT_MS,
+    );
+
+    // Handle string response that needs to be parsed
+    const parsedData = typeof data === 'string' ? JSON.parse(data) : data;
+    return parsedData?.resources || [];
+  } catch (error) {
+    logger.error(`Failed to fetch model specs: ${error}`);
+    return [];
+  }
+}
+
+let modelSpecsCache: WatsonXModel[] | null = null;
+
+export function clearModelSpecsCache() {
+  modelSpecsCache = null;
+}
+
+async function getModelSpecs(): Promise<WatsonXModel[]> {
+  if (!modelSpecsCache) {
+    const specs = await fetchModelSpecs();
+    modelSpecsCache = specs.map((spec) => ({
+      id: spec.model_id,
+      cost: {
+        input: TIER_PRICING[spec.input_tier.toLowerCase() as keyof typeof TIER_PRICING] / 1e6 || 0,
+        output:
+          TIER_PRICING[spec.output_tier.toLowerCase() as keyof typeof TIER_PRICING] / 1e6 || 0,
+      },
+    }));
+  }
+  return modelSpecsCache;
+}
+
+export async function calculateWatsonXCost(
   modelName: string,
   config: any,
   promptTokens?: number,
   completionTokens?: number,
-): number | undefined {
-  return calculateCost(modelName, config, promptTokens, completionTokens, WATSONX_MODELS);
+): Promise<number | undefined> {
+  if (!promptTokens || !completionTokens) {
+    return undefined;
+  }
+
+  const models = await getModelSpecs();
+  const model = models.find((m) => m.id === modelName);
+  if (!model) {
+    return undefined;
+  }
+
+  const cost = calculateCost(modelName, config, promptTokens, completionTokens, models);
+  return cost;
 }
 
 export class WatsonXProvider implements ApiProvider {
@@ -497,7 +358,7 @@ export class WatsonXProvider implements ApiProvider {
       const textGenResponse = parsedResponse.data;
       const providerResponse = convertResponse(textGenResponse);
 
-      providerResponse.cost = calculateWatsonXCost(
+      providerResponse.cost = await calculateWatsonXCost(
         this.modelName,
         this.options.config,
         providerResponse.tokenUsage?.prompt,
