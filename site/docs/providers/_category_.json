@@ -1,10 +1,5 @@
 {
   "position": 45,
   "label": "LLM Providers",
-  "collapsed": true,
-  "link": {
-    "slug": "/providers",
-    "type": "generated-index",
-    "title": "Providers"
-  }
+  "collapsed": true
 }
