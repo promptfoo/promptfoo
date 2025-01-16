@@ -252,7 +252,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
     setTestResult(null);
     recordEvent('feature_used', { feature: 'redteam_config_target_test' });
     try {
-      console.log('selectedTarget', selectedTarget);
       const response = await callApi('/providers/test', {
         method: 'POST',
         headers: {
@@ -260,8 +259,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         },
         body: JSON.stringify(selectedTarget),
       });
-
-      console.log('response', response);
 
       if (!response.ok) {
         throw new Error('Network response was not ok');
@@ -293,9 +290,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
       console.error('Error testing target:', error);
       setTestResult({
         success: false,
-        message: `An error occurred while testing the target: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        message: 'An error occurred while testing the target.',
       });
     } finally {
       setTestingTarget(false);
