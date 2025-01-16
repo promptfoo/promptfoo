@@ -181,8 +181,8 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
           // Split by commas, but respect escaped commas (\,)
           const values = value
             .split(/(?<!\\),/)
-            .map(v => v.trim())
-            .map(v => v.replace('\\,', ','));
+            .map((v) => v.trim())
+            .map((v) => v.replace('\\,', ','));
           metadata[arrayKey] = values;
         }
       } else {

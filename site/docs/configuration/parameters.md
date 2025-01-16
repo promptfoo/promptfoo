@@ -402,8 +402,9 @@ The tests file optionally supports several special columns:
 - `__threshold`: The threshold assigned to the test case
 - `__metadata:*`: Add metadata to the test case that can be filtered using `--filter-metadata`. Replace `*` with your metadata key (e.g., `__metadata:topic`).
   - For array values, use `__metadata:*[]` format (e.g., `__metadata:topic[]`). Array values are comma-separated and support escaping commas with `\,`.
-  
+
 Example CSV with metadata columns:
+
 ```csv
 input,__metadata:topic,__metadata:categories[]
 "Hello world","greeting","basic,introduction"
@@ -411,6 +412,7 @@ input,__metadata:topic,__metadata:categories[]
 ```
 
 You can filter tests by metadata using the `--filter-metadata` option:
+
 ```bash
 # Filter by single value metadata
 promptfoo eval --filter-metadata topic=greeting

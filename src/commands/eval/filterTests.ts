@@ -43,7 +43,7 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
 
       if (Array.isArray(testValue)) {
         // For array metadata, check if any value includes the search term
-        matches = testValue.some(v => v.toString().includes(value));
+        matches = testValue.some((v) => v.toString().includes(value));
       } else if (testValue !== undefined) {
         // For single value metadata, check if it includes the search term
         matches = testValue.toString().includes(value);

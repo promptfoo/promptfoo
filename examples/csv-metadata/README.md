@@ -10,22 +10,26 @@ This example demonstrates how to use metadata columns in CSV test files to organ
 ### Metadata Columns
 
 The CSV file includes two types of metadata columns:
+
 1. `__metadata:category` - Single value metadata for broad categorization
 2. `__metadata:tags[]` - Array metadata for multiple tags, with comma separation and escape support
 
 ### Running the Example
 
 Basic evaluation:
+
 ```bash
 promptfoo eval
 ```
 
 Filter by category:
+
 ```bash
 promptfoo eval --filter-metadata category=technology
 ```
 
 Filter by tags:
+
 ```bash
 promptfoo eval --filter-metadata tags=ai
 ```

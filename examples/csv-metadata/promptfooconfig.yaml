@@ -1,5 +1,5 @@
 prompts:
-  - "Tell me about {{topic}}"
+  - 'Tell me about {{topic}}'
 
 providers:
   - id: openai:gpt-4
