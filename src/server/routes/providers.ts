@@ -1,3 +1,4 @@
+import dedent from 'dedent';
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import type { ZodError } from 'zod-validation-error';
@@ -39,10 +40,17 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
       vars: {},
     });
     logger.debug(
-      `[POST /providers/test] result from API provider ${JSON.stringify({ result, providerOptions })}`,
+      `[POST /providers/test] result from API provider ${JSON.stringify({
+        result,
+        providerOptions,
+      })}`,
     );
   } catch (error) {
-    logger.error('[POST /providers/test] Error calling provider API', { error, providerOptions });
+    logger.error(
+      dedent`[POST /providers/test] Error calling provider API
+        error: ${error instanceof Error ? error.message : String(error)}
+        providerOptions: ${JSON.stringify(providerOptions)}`,
+    );
     res.status(500).json({ error: 'Failed to call provider API' });
     return;
   }
@@ -83,7 +91,12 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
       } as ProviderTestResponse)
       .status(200);
   } catch (e) {
-    logger.error('[POST /providers/test] Error calling agent helper', e);
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    logger.error(
+      dedent`[POST /providers/test] Error calling agent helper
+        error: ${errorMessage}
+        providerOptions: ${JSON.stringify(providerOptions)}`,
+    );
     res.status(200).json({
       test_result: {
         error:
