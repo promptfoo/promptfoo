@@ -994,9 +994,13 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
           prompt: output.prompt_tokens ?? output.prompt_token_count,
           completion: output.completion_tokens ?? output.generation_token_count,
         },
-        guardrails: {
-          flagged: output['amazon-bedrock-guardrailAction'] === 'INTERVENED',
-        },
+        ...(output['amazon-bedrock-guardrailAction']
+          ? {
+              guardrails: {
+                flagged: output['amazon-bedrock-guardrailAction'] === 'INTERVENED',
+              },
+            }
+          : {}),
       };
     } catch (err) {
       return {
