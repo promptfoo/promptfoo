@@ -12,11 +12,7 @@ import {
 } from '../../types';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
-import {
-  ATTACKER_MODEL,
-  ATTACKER_MODEL_SMALL,
-  TEMPERATURE,
-} from './constants';
+import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 async function loadRedteamProvider({
   provider,

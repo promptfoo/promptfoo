@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
@@ -14,24 +13,13 @@ import {
   type RedteamFileConfig,
 } from '../../types';
 import invariant from '../../util/invariant';
-import {
-  extractFirstJsonObject,
-  safeJsonStringify,
-} from '../../util/json';
+import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { shouldGenerateRemote } from '../remoteGeneration';
-import {
-  ATTACKER_SYSTEM_PROMPT,
-  JUDGE_SYSTEM_PROMPT,
-  ON_TOPIC_SYSTEM_PROMPT,
-} from './prompts';
+import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
 import type { TargetResponse } from './shared';
-import {
-  checkPenalizedPhrases,
-  getTargetResponse,
-  redteamProviderManager,
-} from './shared';
+import { checkPenalizedPhrases, getTargetResponse, redteamProviderManager } from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
