@@ -502,6 +502,7 @@ export class HttpProvider implements ApiProvider {
       this.config.maxRetries,
     );
 
+    logger.warn(`[HTTP Provider]: Response: ${JSON.stringify(response)}`);
     logger.debug(`[HTTP Provider]: Response: ${response.data}`);
     if (!(await this.validateStatus)(response.status)) {
       throw new Error(
