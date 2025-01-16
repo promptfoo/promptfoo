@@ -33,7 +33,7 @@ interface AzureCompletionOptions {
   azureTenantId?: string;
   azureAuthorityHost?: string;
   azureTokenScope?: string;
-  o1?: boolean; // Flag to indicate if the model should be treated as an o1 model
+  o1?: boolean; // Indicates if the model should be treated as an o1 model
   max_completion_tokens?: number; // Maximum number of tokens to generate for o1 models
 
   // Azure cognitive services params
@@ -319,7 +319,7 @@ export class AzureGenericProvider implements ApiProvider {
       return credential;
     }
 
-    //fallback to Azure CLI
+    // Fallback to Azure CLI
     const credential = new AzureCliCredential();
     return credential;
   }
@@ -574,7 +574,6 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         }
       : {};
 
-    // Prepare body object with conditional parameters based on o1 flag
     const body = {
       model: this.deploymentName,
       messages,
