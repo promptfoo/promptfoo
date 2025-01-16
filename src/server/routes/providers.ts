@@ -31,14 +31,21 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
   invariant(config.url, 'url is required');
   const loadedProvider = new HttpProvider(config.url, providerOptions);
   // Call the provider with the test prompt
-  const result = await loadedProvider.callApi('Hello, world!', {
-    debug: true,
-    prompt: { raw: 'Hello, world!', label: 'Hello, world!' },
-    vars: {},
-  });
-  logger.debug(
-    `[POST /providers/test] result from API provider ${JSON.stringify({ result, providerOptions })}`,
-  );
+  let result;
+  try {
+    result = await loadedProvider.callApi('Hello, world!', {
+      debug: true,
+      prompt: { raw: 'Hello, world!', label: 'Hello, world!' },
+      vars: {},
+    });
+    logger.debug(
+      `[POST /providers/test] result from API provider ${JSON.stringify({ result, providerOptions })}`,
+    );
+  } catch (error) {
+    logger.error('[POST /providers/test] Error calling provider API', { error, providerOptions });
+    res.status(500).json({ error: 'Failed to call provider API' });
+    return;
+  }
 
   const HOST = process.env.PROMPTFOO_CLOUD_API_URL || 'https://api.promptfoo.app';
   try {

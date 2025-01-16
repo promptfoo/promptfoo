@@ -476,6 +476,9 @@ export class HttpProvider implements ApiProvider {
 
     // Transform prompt using request transform
     const transformedPrompt = await (await this.transformRequest)(prompt);
+    logger.debug(
+      `[HTTP Provider]: Transformed prompt: ${transformedPrompt}. Original prompt: ${prompt}`,
+    );
 
     const renderedConfig: Partial<HttpProviderConfig> = {
       url: this.url,
