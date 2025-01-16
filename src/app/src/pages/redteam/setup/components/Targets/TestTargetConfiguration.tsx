@@ -2,7 +2,6 @@ import React from 'react';
 import Editor from 'react-simple-code-editor';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import InfoIcon from '@mui/icons-material/Info';
-import { FormControlLabel, Switch } from '@mui/material';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -56,88 +55,128 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
   return (
     <Box mt={4}>
       {requiresTransformResponse(selectedTarget) && (
-        <Box>
+        <Box mb={4}>
           <Typography variant="h6" gutterBottom>
-            Configure Request Transform
+            Advanced Configuration
           </Typography>
-          <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
-            <Box
-              sx={{
-                border: 1,
-                borderColor: 'grey.300',
-                borderRadius: 1,
-                mt: 1,
-                position: 'relative',
-                backgroundColor: darkMode ? '#1e1e1e' : '#fff',
-              }}
-            >
-              <Editor
-                value={selectedTarget.config.transformRequest || ''}
-                onValueChange={(code) => updateCustomTarget('transformRequest', code)}
-                highlight={(code) => highlight(code, languages.javascript)}
-                padding={10}
-                placeholder={dedent`Optional: A JavaScript expression to transform the prompt before calling the API. Format as:
-
-                  A JSON object with prompt variable: \`{ messages: [{ role: 'user', content: prompt }] }\`
-                `}
-                style={{
-                  fontFamily: '"Fira code", "Fira Mono", monospace',
-                  fontSize: 14,
-                  minHeight: '100px',
+          <Accordion defaultExpanded={!!selectedTarget.config.transformRequest}>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Box>
+                <Typography variant="h6">Request Transform</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Modify the prompt structure before sending to the API
+                </Typography>
+              </Box>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                Transform the prompt into a specific structure required by your API before sending.
+                See{' '}
+                <a
+                  href="https://www.promptfoo.dev/docs/providers/http/#request-transform"
+                  target="_blank"
+                >
+                  docs
+                </a>{' '}
+                for more information.
+              </Typography>
+              <Box
+                sx={{
+                  border: 1,
+                  borderColor: 'grey.300',
+                  borderRadius: 1,
+                  position: 'relative',
+                  backgroundColor: darkMode ? '#1e1e1e' : '#fff',
                 }}
-              />
-            </Box>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Transform the prompt into a specific structure required by your API before sending.
-            </Typography>
-          </Box>
-          <Typography variant="h6" gutterBottom mt={4}>
-            Configure Response Transform
-          </Typography>
-          <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
-            <Box
-              sx={{
-                border: 1,
-                borderColor: 'grey.300',
-                borderRadius: 1,
-                mt: 1,
-                position: 'relative',
-                backgroundColor: darkMode ? '#1e1e1e' : '#fff',
-              }}
-            >
-              <Editor
-                value={selectedTarget.config.transformResponse || ''}
-                onValueChange={(code) => updateCustomTarget('transformResponse', code)}
-                highlight={(code) => highlight(code, languages.javascript)}
-                padding={10}
-                placeholder={dedent`Optional: Transform the API response before using it. Format as either:
-
-                  1. A JavaScript object path: \`json.choices[0].message.content\`
-                  2. A function that receives response data: \`(json, text) => json.choices[0].message.content || text\`
-                `}
-                style={{
-                  fontFamily: '"Fira code", "Fira Mono", monospace',
-                  fontSize: 14,
-                  minHeight: '100px',
-                }}
-              />
-            </Box>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Extract specific data from the HTTP response. See{' '}
-              <a
-                href="https://www.promptfoo.dev/docs/providers/http/#response-parser"
-                target="_blank"
               >
-                docs
-              </a>{' '}
-              for more information.
-            </Typography>
-          </Box>
-          <Box mt={4} mb={2}>
-            <Typography variant="h6" gutterBottom>
-              Configure Session Header
-            </Typography>
-            <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
+                <Editor
+                  value={selectedTarget.config.transformRequest || ''}
+                  onValueChange={(code) => updateCustomTarget('transformRequest', code)}
+                  highlight={(code) => highlight(code, languages.javascript)}
+                  padding={10}
+                  placeholder={dedent`Optional: A JavaScript expression to transform the prompt before calling the API. Format as:
+
+                      A JSON object with prompt variable: \`{ messages: [{ role: 'user', content: prompt }] }\`
+                    `}
+                  style={{
+                    fontFamily: '"Fira code", "Fira Mono", monospace',
+                    fontSize: 14,
+                    minHeight: '100px',
+                  }}
+                />
+              </Box>
+            </AccordionDetails>
+          </Accordion>
+
+          <Accordion defaultExpanded={!!selectedTarget.config.transformResponse}>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Box>
+                <Typography variant="h6">Response Transform</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Extract the completion from the API response
+                </Typography>
+              </Box>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                Extract specific data from the HTTP response. See{' '}
+                <a
+                  href="https://www.promptfoo.dev/docs/providers/http/#response-transform"
+                  target="_blank"
+                >
+                  docs
+                </a>{' '}
+                for more information.
+              </Typography>
+              <Box
+                sx={{
+                  border: 1,
+                  borderColor: 'grey.300',
+                  borderRadius: 1,
+                  position: 'relative',
+                  backgroundColor: darkMode ? '#1e1e1e' : '#fff',
+                }}
+              >
+                <Editor
+                  value={selectedTarget.config.transformResponse || ''}
+                  onValueChange={(code) => updateCustomTarget('transformResponse', code)}
+                  highlight={(code) => highlight(code, languages.javascript)}
+                  padding={10}
+                  placeholder={dedent`Optional: Transform the API response before using it. Format as either:
+
+                      1. A JavaScript object path: \`json.choices[0].message.content\`
+                      2. A function that receives response data: \`(json, text) => json.choices[0].message.content || text\`
+                    `}
+                  style={{
+                    fontFamily: '"Fira code", "Fira Mono", monospace',
+                    fontSize: 14,
+                    minHeight: '100px',
+                  }}
+                />
+              </Box>
+            </AccordionDetails>
+          </Accordion>
+
+          <Accordion defaultExpanded={!!selectedTarget.config.sessionParser}>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Box>
+                <Typography variant="h6">Session Header</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Handle stateful API sessions
+                </Typography>
+              </Box>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                Extract session IDs from HTTP response headers for stateful systems. See{' '}
+                <a
+                  href="https://www.promptfoo.dev/docs/providers/http/#session-management"
+                  target="_blank"
+                >
+                  docs
+                </a>{' '}
+                for more information.
+              </Typography>
               <TextField
                 fullWidth
                 label="Session Header"
@@ -149,80 +188,61 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                   shrink: true,
                 }}
               />
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                Extract session IDs from HTTP response headers for stateful systems. See{' '}
+            </AccordionDetails>
+          </Accordion>
+
+          <Accordion defaultExpanded={!!selectedTarget.config.validateStatus}>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Box>
+                <Typography variant="h6">HTTP Status Code</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Configure which response codes are considered successful
+                </Typography>
+              </Box>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                Customize which HTTP status codes are treated as successful responses. By default
+                accepts 200-299. See{' '}
                 <a
-                  href="https://www.promptfoo.dev/docs/providers/http/#session-management"
+                  href="https://www.promptfoo.dev/docs/providers/http/#error-handling"
                   target="_blank"
                 >
                   docs
                 </a>{' '}
-                for more information.
+                for more details.
               </Typography>
-            </Box>
-          </Box>
-          <Box mt={4} mb={2}>
-            <Stack direction="row" alignItems="center" spacing={1}>
-              <Typography variant="h6" sx={{ flexGrow: 1 }}>
-                Configure HTTP Status Code Validation
-              </Typography>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={selectedTarget.config.validateStatus !== undefined}
-                    onChange={(e) => {
-                      updateCustomTarget('validateStatus', e.target.checked ? '' : undefined);
-                    }}
-                  />
-                }
-                label="Custom"
-              />
-            </Stack>
-            {selectedTarget.config.validateStatus !== undefined && (
-              <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
-                <Box
-                  sx={{
-                    border: 1,
-                    borderColor: 'grey.300',
-                    borderRadius: 1,
-                    mt: 1,
-                    position: 'relative',
-                    backgroundColor: darkMode ? '#1e1e1e' : '#fff',
-                  }}
-                >
-                  <Editor
-                    value={selectedTarget.config.validateStatus}
-                    onValueChange={(code) => updateCustomTarget('validateStatus', code)}
-                    highlight={(code) => highlight(code, languages.javascript)}
-                    padding={10}
-                    placeholder={dedent`Customize HTTP status code validation. Examples:
+              <Box
+                sx={{
+                  border: 1,
+                  borderColor: 'grey.300',
+                  borderRadius: 1,
+                  position: 'relative',
+                  backgroundColor: darkMode ? '#1e1e1e' : '#fff',
+                }}
+              >
+                <Editor
+                  value={selectedTarget.config.validateStatus || ''}
+                  onValueChange={(code) => updateCustomTarget('validateStatus', code)}
+                  highlight={(code) => highlight(code, languages.javascript)}
+                  padding={10}
+                  placeholder={dedent`Customize HTTP status code validation. Examples:
 
                       status >= 200 && status < 300  // Default: accept 2xx codes - javascript expression
                       (status) => status < 500       // Accept anything but server errors - javascript function
                       () => true                     // Accept all responses - javascript function`}
-                    style={{
-                      fontFamily: '"Fira code", "Fira Mono", monospace',
-                      fontSize: 14,
-                      minHeight: '106px',
-                    }}
-                  />
-                </Box>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  Customize which HTTP status codes are treated as successful responses. By default
-                  accepts 200-299. See{' '}
-                  <a
-                    href="https://www.promptfoo.dev/docs/providers/http/#error-handling"
-                    target="_blank"
-                  >
-                    docs
-                  </a>{' '}
-                  for more details.
-                </Typography>
+                  style={{
+                    fontFamily: '"Fira code", "Fira Mono", monospace',
+                    fontSize: 14,
+                    minHeight: '106px',
+                  }}
+                />
               </Box>
-            )}
-          </Box>
+            </AccordionDetails>
+          </Accordion>
         </Box>
       )}
+
       <Stack direction="row" alignItems="center" spacing={2} mb={2}>
         <Typography variant="h6" sx={{ flexGrow: 1 }}>
           Test Target Configuration
