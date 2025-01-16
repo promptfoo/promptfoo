@@ -22,6 +22,7 @@ import 'prismjs/themes/prism.css';
 
 interface TestTargetConfigurationProps {
   testingTarget: boolean;
+  hasTestedTarget: boolean;
   handleTestTarget: () => void;
   selectedTarget: any;
   testResult: any;
@@ -34,6 +35,7 @@ interface TestTargetConfigurationProps {
 const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
   testingTarget,
   handleTestTarget,
+  hasTestedTarget,
   selectedTarget,
   testResult,
   requiresTransformResponse,
