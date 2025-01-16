@@ -24,6 +24,7 @@ import type {
   AtomicTestCase,
   CallApiContextParams,
   CallApiOptionsParams,
+  GuardrailResponse,
   NunjucksFilterMap,
   Prompt,
   TokenUsage,
@@ -369,6 +370,7 @@ export interface TreeSearchOutput {
   improvement?: string;
   wasSelected: boolean;
   graderPassed?: boolean;
+  guardrails?: GuardrailResponse;
 }
 
 /**
@@ -411,6 +413,7 @@ export async function runRedteamConversation({
     redteamTreeHistory: TreeSearchOutput[];
   };
   tokenUsage?: TokenUsage;
+  guardrails?: GuardrailResponse;
 }> {
   const nunjucks = getNunjucksEngine();
   const goal: string = vars[injectVar] as string;
@@ -617,6 +620,7 @@ export async function runRedteamConversation({
             prompt: targetPrompt,
             score,
             wasSelected: false,
+            guardrails: targetResponse.guardrails,
           });
           return {
             output: targetResponse.output,
@@ -628,6 +632,7 @@ export async function runRedteamConversation({
               redteamTreeHistory: treeOutputs,
             },
             tokenUsage: totalTokenUsage,
+            guardrails: targetResponse.guardrails,
           };
         }
 
@@ -645,6 +650,7 @@ export async function runRedteamConversation({
             depth,
             parentId: node.id,
             wasSelected: false,
+            guardrails: targetResponse.guardrails,
           });
           return {
             output: bestResponse,
@@ -656,6 +662,7 @@ export async function runRedteamConversation({
               redteamTreeHistory: treeOutputs,
             },
             tokenUsage: totalTokenUsage,
+            guardrails: targetResponse.guardrails,
           };
         }
 
@@ -674,6 +681,7 @@ export async function runRedteamConversation({
             prompt: targetPrompt,
             score,
             wasSelected: false,
+            guardrails: targetResponse.guardrails,
           });
           return {
             output: bestResponse,
@@ -685,6 +693,7 @@ export async function runRedteamConversation({
               redteamTreeHistory: treeOutputs,
             },
             tokenUsage: totalTokenUsage,
+            guardrails: targetResponse.guardrails,
           };
         }
 
@@ -710,6 +719,7 @@ export async function runRedteamConversation({
           prompt: targetPrompt,
           score,
           wasSelected: true,
+          guardrails: targetResponse.guardrails,
         });
       }
     }
@@ -763,6 +773,7 @@ export async function runRedteamConversation({
     depth: MAX_DEPTH - 1,
     parentId: bestNode.id,
     wasSelected: false,
+    guardrails: finalTargetResponse.guardrails,
   });
   return {
     output: bestResponse,
@@ -774,6 +785,7 @@ export async function runRedteamConversation({
       redteamTreeHistory: treeOutputs,
     },
     tokenUsage: totalTokenUsage,
+    guardrails: finalTargetResponse.guardrails,
   };
 }
 

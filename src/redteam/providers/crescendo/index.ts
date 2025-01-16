@@ -392,6 +392,7 @@ class CrescendoProvider implements ApiProvider {
         stopReason: graderPassed === false ? 'Grader failed' : 'Max backtracks reached',
       },
       tokenUsage: totalTokenUsage,
+      guardrails: lastResponse.guardrails,
     };
   }
 

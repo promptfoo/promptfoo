@@ -491,7 +491,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
-      <Box sx={{ p: 3 }}>
+      <Box>
         <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
           Plugin Configuration
         </Typography>
@@ -649,7 +649,15 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         )}
 
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
-          <Button variant="outlined" onClick={onBack} startIcon={<KeyboardArrowLeftIcon />}>
+          <Button
+            variant="outlined"
+            onClick={onBack}
+            startIcon={<KeyboardArrowLeftIcon />}
+            sx={{
+              px: 4,
+              py: 1,
+            }}
+          >
             Back
           </Button>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -663,6 +671,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
               onClick={onNext}
               endIcon={<KeyboardArrowRightIcon />}
               disabled={!isConfigValid() || selectedPlugins.size === 0}
+              sx={{
+                px: 4,
+                py: 1,
+              }}
             >
               Next
             </Button>

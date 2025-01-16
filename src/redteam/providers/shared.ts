@@ -1,13 +1,14 @@
 import cliState from '../../cliState';
 import logger from '../../logger';
 import {
-  isProviderOptions,
-  isApiProvider,
-  type RedteamFileConfig,
   type ApiProvider,
-  type CallApiOptionsParams,
-  type TokenUsage,
   type CallApiContextParams,
+  type CallApiOptionsParams,
+  type GuardrailResponse,
+  isApiProvider,
+  isProviderOptions,
+  type RedteamFileConfig,
+  type TokenUsage,
 } from '../../types';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
@@ -95,6 +96,7 @@ export type TargetResponse = {
   error?: string;
   sessionId?: string;
   tokenUsage?: TokenUsage;
+  guardrails?: GuardrailResponse;
 };
 
 /**
@@ -130,6 +132,7 @@ export async function getTargetResponse(
       output,
       sessionId: targetRespRaw.sessionId,
       tokenUsage: targetRespRaw.tokenUsage || { numRequests: 1 },
+      guardrails: targetRespRaw.guardrails,
     };
   }
 
@@ -139,6 +142,7 @@ export async function getTargetResponse(
       error: targetRespRaw.error,
       sessionId: targetRespRaw.sessionId,
       tokenUsage: { numRequests: 1 },
+      guardrails: targetRespRaw.guardrails,
     };
   }
 
