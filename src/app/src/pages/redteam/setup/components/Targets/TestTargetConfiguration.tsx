@@ -75,10 +75,10 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 onValueChange={(code) => updateCustomTarget('transformRequest', code)}
                 highlight={(code) => highlight(code, languages.javascript)}
                 padding={10}
-                placeholder={dedent`Optional: A JavaScript expression to transform the prompt before sending. Format as either:
+                placeholder={dedent`Optional: A JavaScript expression to transform the prompt before calling the API. Format as:
 
-                  1. A JSON object with prompt variable: \`{ messages: [{ role: 'user', content: prompt }] }\`
-                  2. A function that receives the prompt: \`(prompt) => ({ messages: [{ role: 'user', content: prompt }], temperature: 0.7 })\``}
+                  A JSON object with prompt variable: \`{ messages: [{ role: 'user', content: prompt }] }\`
+                `}
                 style={{
                   fontFamily: '"Fira code", "Fira Mono", monospace',
                   fontSize: 14,
@@ -87,8 +87,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
               />
             </Box>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Optionally, configure a request transform to modify the prompt before sending. This
-              can be used to format the prompt into a specific structure required by your API.
+              Transform the prompt into a specific structure required by your API before sending.
             </Typography>
           </Box>
           <Typography variant="h6" gutterBottom mt={4}>
@@ -123,8 +122,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
               />
             </Box>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Optionally, configure a response transform to extract a specific part of the HTTP
-              response. See{' '}
+              Extract specific data from the HTTP response. See{' '}
               <a
                 href="https://www.promptfoo.dev/docs/providers/http/#response-parser"
                 target="_blank"
@@ -151,8 +149,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 }}
               />
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                Optionally, configure a session parser to extract the session ID from the HTTP
-                response headers. This is only needed for stateful systems. See{' '}
+                Extract session IDs from HTTP response headers for stateful systems. See{' '}
                 <a
                   href="https://www.promptfoo.dev/docs/providers/http/#session-management"
                   target="_blank"
