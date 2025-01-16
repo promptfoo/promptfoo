@@ -197,9 +197,9 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                     padding={10}
                     placeholder={dedent`Customize HTTP status code validation. Examples:
 
-                      status >= 200 && status < 300  // Default: accept 2xx codes - javascript expression
-                      (status) => status < 500       // Accept anything but server errors - javascript function
-                      () => true                     // Accept all responses - javascript function`}
+                      () => true                     // Default: accept all responses - javascript function
+                      status >= 200 && status < 300  // Accept 2xx codes - javascript expression
+                      (status) => status < 500       // Accept anything but server errors - javascript function`}
                     style={{
                       fontFamily: '"Fira code", "Fira Mono", monospace',
                       fontSize: 14,
