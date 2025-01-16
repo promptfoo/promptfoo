@@ -279,18 +279,20 @@ Azure-specific config
 
 OpenAI config:
 
-| Name              | Description                                                            |
-| ----------------- | ---------------------------------------------------------------------- |
-| temperature       | Controls randomness of the output.                                     |
-| top_p             | Controls nucleus sampling.                                             |
-| frequency_penalty | Penalizes new tokens based on their frequency.                         |
-| presence_penalty  | Penalizes new tokens based on their presence.                          |
-| best_of           | Generates multiple outputs and chooses the best.                       |
-| functions         | Specifies functions available for use.                                 |
-| function_call     | Controls automatic function calling.                                   |
-| response_format   | Specifies the format of the response.                                  |
-| stop              | Specifies stop sequences for the generation.                           |
-| passthrough       | Anything under `passthrough` will be sent as a top-level request param |
+| Name              | Description                                                                                                                                                            |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| o1                | Set to `true` if your Azure deployment uses an o1 model. When true, `max_tokens` and `temperature` parameters will not be sent as they are not supported by o1 models. |
+| temperature       | Controls randomness of the output. Not supported for o1 models.                                                                                                        |
+| max_tokens        | Maximum number of tokens to generate. Not supported for o1 models.                                                                                                     |
+| top_p             | Controls nucleus sampling.                                                                                                                                             |
+| frequency_penalty | Penalizes new tokens based on their frequency.                                                                                                                         |
+| presence_penalty  | Penalizes new tokens based on their presence.                                                                                                                          |
+| best_of           | Generates multiple outputs and chooses the best.                                                                                                                       |
+| functions         | Specifies functions available for use.                                                                                                                                 |
+| function_call     | Controls automatic function calling.                                                                                                                                   |
+| response_format   | Specifies the format of the response.                                                                                                                                  |
+| stop              | Specifies stop sequences for the generation.                                                                                                                           |
+| passthrough       | Anything under `passthrough` will be sent as a top-level request param                                                                                                 |
 
 ## Assistants
 

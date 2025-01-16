@@ -141,6 +141,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   temperature?: number;
   max_completion_tokens?: number;
   max_tokens?: number;
+  o1?: boolean; // Flag to indicate if the model should be treated as an o1 model (especially for Azure)
   top_p?: number;
   frequency_penalty?: number;
   presence_penalty?: number;
@@ -495,7 +496,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
     // NOTE: Special handling for o1 models which do not support max_tokens and temperature
-    const isO1Model = this.modelName.startsWith('o1');
+    // For Azure, we need an explicit config.o1 flag since model names can be anything
+    const isO1Model = this.modelName.startsWith('o1') || config.o1 === true;
     const maxCompletionTokens = isO1Model
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
