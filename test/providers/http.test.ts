@@ -1812,6 +1812,163 @@ describe('validateStatus', () => {
       'Status validator malformed: invalid-validator.js - Module not found',
     );
   });
+
+  describe('string-based validators', () => {
+    it('should handle expression format', async () => {
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          method: 'POST',
+          body: { key: 'value' },
+          validateStatus: 'status >= 200 && status < 300',
+        },
+      });
+
+      // Test successful case
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 201,
+        statusText: 'Created',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test');
+      expect(result.output).toEqual({ result: 'success' });
+
+      // Test failure case
+      const errorResponse = {
+        data: 'Error message',
+        status: 400,
+        statusText: 'Bad Request',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
+
+      await expect(provider.callApi('test')).rejects.toThrow(
+        'HTTP call failed with status 400 Bad Request: Error message',
+      );
+    });
+
+    it('should handle arrow function format with parameter', async () => {
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          method: 'POST',
+          body: { key: 'value' },
+          validateStatus: '(s) => s < 500',
+        },
+      });
+
+      // Test accepting 4xx status
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 404,
+        statusText: 'Not Found',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test');
+      expect(result.output).toEqual({ result: 'success' });
+
+      // Test rejecting 5xx status
+      const errorResponse = {
+        data: 'Error message',
+        status: 500,
+        statusText: 'Server Error',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
+
+      await expect(provider.callApi('test')).rejects.toThrow(
+        'HTTP call failed with status 500 Server Error: Error message',
+      );
+    });
+
+    it('should handle arrow function format without parameter', async () => {
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          method: 'POST',
+          body: { key: 'value' },
+          validateStatus: '() => true',
+        },
+      });
+
+      // Test accepting all status codes
+      const responses = [
+        { status: 200, statusText: 'OK' },
+        { status: 404, statusText: 'Not Found' },
+        { status: 500, statusText: 'Server Error' },
+      ];
+
+      for (const { status, statusText } of responses) {
+        const mockResponse = {
+          data: JSON.stringify({ result: 'success' }),
+          status,
+          statusText,
+          cached: false,
+        };
+        jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+        const result = await provider.callApi('test');
+        expect(result.output).toEqual({ result: 'success' });
+      }
+    });
+
+    it('should handle regular function format', async () => {
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          method: 'POST',
+          body: { key: 'value' },
+          validateStatus: 'function(status) { return status < 500; }',
+        },
+      });
+
+      // Test accepting 4xx status
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 404,
+        statusText: 'Not Found',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test');
+      expect(result.output).toEqual({ result: 'success' });
+
+      // Test rejecting 5xx status
+      const errorResponse = {
+        data: 'Error message',
+        status: 500,
+        statusText: 'Server Error',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
+
+      await expect(provider.callApi('test')).rejects.toThrow(
+        'HTTP call failed with status 500 Server Error: Error message',
+      );
+    });
+
+    it('should handle malformed string expressions', async () => {
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          method: 'POST',
+          body: { key: 'value' },
+          validateStatus: 'invalid[syntax',
+        },
+      });
+
+      const mockResponse = {
+        data: 'response',
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      await expect(provider.callApi('test')).rejects.toThrow('Invalid status validator expression');
+    });
+  });
 });
 
 describe('session parser', () => {
