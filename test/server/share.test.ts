@@ -16,7 +16,6 @@ describe('share', () => {
   });
 
   beforeEach(async () => {
-    // Create fresh app instance and clean database for each test
     app = createApp();
     await deleteAllEvals();
   });
