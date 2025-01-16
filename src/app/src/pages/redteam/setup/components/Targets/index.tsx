@@ -501,8 +501,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
             '&:disabled': { backgroundColor: theme.palette.action.disabledBackground },
             px: 4,
             py: 1,
-            minWidth: '150px',
-            ml: 2,
           }}
         >
           Next
