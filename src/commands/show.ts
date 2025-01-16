@@ -160,16 +160,27 @@ async function handleDataset(id: string) {
 
 export async function showCommand(program: Command) {
   const showCommand = program
-    .command('show <id>')
-    .description('Show details of a specific resource')
+    .command('show [id]')
+    .description('Show details of a specific resource (defaults to most recent)')
     .option('--env-file, --env-path <path>', 'Path to .env file')
-    .action(async (id: string, cmdObj: { envPath?: string }) => {
+    .action(async (id: string | undefined, cmdObj: { envPath?: string }) => {
       setupEnv(cmdObj.envPath);
       telemetry.record('command_used', {
         name: 'show',
       });
 
       await telemetry.send();
+
+      if (!id) {
+        const latestEval = await Eval.latest();
+        if (latestEval) {
+          return handleEval(latestEval.id);
+        }
+        logger.error('No eval found');
+        process.exitCode = 1;
+        return;
+      }
+
       const evl = await getEvalFromId(id);
       if (evl) {
         return handleEval(id);
@@ -189,9 +200,20 @@ export async function showCommand(program: Command) {
     });
 
   showCommand
-    .command('eval <id>')
-    .description('Show details of a specific evaluation')
-    .action(handleEval);
+    .command('eval [id]')
+    .description('Show details of a specific evaluation (defaults to most recent)')
+    .action(async (id?: string) => {
+      if (!id) {
+        const latestEval = await Eval.latest();
+        if (latestEval) {
+          return handleEval(latestEval.id);
+        }
+        logger.error('No eval found');
+        process.exitCode = 1;
+        return;
+      }
+      return handleEval(id);
+    });
 
   showCommand
     .command('prompt <id>')
