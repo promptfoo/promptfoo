@@ -40,10 +40,9 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
       vars: {},
     });
     logger.debug(
-      `[POST /providers/test] result from API provider ${JSON.stringify({
-        result,
-        providerOptions,
-      })}`,
+      dedent`[POST /providers/test] result from API provider
+        result: ${JSON.stringify(result)}
+        providerOptions: ${JSON.stringify(providerOptions)}`,
     );
   } catch (error) {
     logger.error(
