@@ -2,6 +2,7 @@ import React from 'react';
 import Editor from 'react-simple-code-editor';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import InfoIcon from '@mui/icons-material/Info';
+import { FormControlLabel, Switch } from '@mui/material';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -159,6 +160,66 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 for more information.
               </Typography>
             </Box>
+          </Box>
+          <Box mt={4} mb={2}>
+            <Stack direction="row" alignItems="center" spacing={1}>
+              <Typography variant="h6" sx={{ flexGrow: 1 }}>
+                Configure HTTP Status Code Validation
+              </Typography>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={selectedTarget.config.validateStatus !== undefined}
+                    onChange={(e) => {
+                      updateCustomTarget('validateStatus', e.target.checked ? '' : undefined);
+                    }}
+                  />
+                }
+                label="Custom"
+              />
+            </Stack>
+            {selectedTarget.config.validateStatus !== undefined && (
+              <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
+                <Box
+                  sx={{
+                    border: 1,
+                    borderColor: 'grey.300',
+                    borderRadius: 1,
+                    mt: 1,
+                    position: 'relative',
+                    backgroundColor: darkMode ? '#1e1e1e' : '#fff',
+                  }}
+                >
+                  <Editor
+                    value={selectedTarget.config.validateStatus}
+                    onValueChange={(code) => updateCustomTarget('validateStatus', code)}
+                    highlight={(code) => highlight(code, languages.javascript)}
+                    padding={10}
+                    placeholder={dedent`Customize HTTP status code validation. Examples:
+
+                      status >= 200 && status < 300  // Default: accept 2xx codes - javascript expression
+                      (status) => status < 500       // Accept anything but server errors - javascript function
+                      () => true                     // Accept all responses - javascript function`}
+                    style={{
+                      fontFamily: '"Fira code", "Fira Mono", monospace',
+                      fontSize: 14,
+                      minHeight: '106px',
+                    }}
+                  />
+                </Box>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  Customize which HTTP status codes are treated as successful responses. By default
+                  accepts 200-299. See{' '}
+                  <a
+                    href="https://www.promptfoo.dev/docs/providers/http/#error-handling"
+                    target="_blank"
+                  >
+                    docs
+                  </a>{' '}
+                  for more details.
+                </Typography>
+              </Box>
+            )}
           </Box>
         </Box>
       )}
