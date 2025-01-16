@@ -491,7 +491,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
-      <Box sx={{ p: 3 }}>
+      <Box>
         <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
           Plugin Configuration
         </Typography>

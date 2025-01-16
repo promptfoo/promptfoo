@@ -189,7 +189,73 @@ If you are using promptfoo as a [node library](/docs/usage/node-package/), you c
 }
 ```
 
-## Response parser
+## Request Transform
+
+Request transform modifies your prompt after it is rendered but before it is sent to a provider API. This allows you to:
+
+- Format prompts into specific message structures
+- Add metadata or context
+- Handle nuanced message formats for multi-turn conversations
+
+### Basic Usage
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/chat'
+      transformRequest: '{"message": "{{prompt}}"}'
+      body:
+        user_message: '{{prompt}}'
+```
+
+### Transform Types
+
+#### String Template
+
+Use Nunjucks templates to transform the prompt:
+
+```yaml
+transformRequest: '{"text": "{{prompt}}"}'
+```
+
+#### JavaScript Function
+
+Define a function that transforms the prompt:
+
+```javascript
+transformRequest: (prompt) => JSON.stringify({ text: prompt, timestamp: Date.now() });
+```
+
+#### File-based Transform
+
+Load a transform from an external file:
+
+```yaml
+transformRequest: 'file://transforms/request.js'
+```
+
+Example transform file (transforms/request.js):
+
+```javascript
+module.exports = (prompt) => {
+  return {
+    text: prompt,
+    metadata: {
+      timestamp: Date.now(),
+      version: '1.0',
+    },
+  };
+};
+```
+
+You can also specify a specific function to use:
+
+```yaml
+transformRequest: 'file://transforms/request.js:transformRequest'
+```
+
+## Response Transform
 
 The `transformResponse` option allows you to extract and transform the API response. If no `transformResponse` is specified, the provider will attempt to parse the response as JSON. If JSON parsing fails, it will return the raw text response.
 
@@ -341,72 +407,6 @@ providers:
 ```
 
 This will import the function `parseResponse` from the file `path/to/parser.js`.
-
-## Request Transform
-
-Request transform modifies your prompt after it is rendered but before it is sent to a provider API. This allows you to:
-
-- Format prompts into specific message structures
-- Add metadata or context
-- Handle nuanced message formats for multi-turn conversations
-
-### Basic Usage
-
-```yaml
-providers:
-  - id: https
-    config:
-      url: 'https://api.example.com/chat'
-      transformRequest: '{"message": "{{prompt}}"}'
-      body:
-        user_message: '{{prompt}}'
-```
-
-### Transform Types
-
-#### String Template
-
-Use Nunjucks templates to transform the prompt:
-
-```yaml
-transformRequest: '{"text": "{{prompt}}"}'
-```
-
-#### JavaScript Function
-
-Define a function that transforms the prompt:
-
-```javascript
-transformRequest: (prompt) => JSON.stringify({ text: prompt, timestamp: Date.now() });
-```
-
-#### File-based Transform
-
-Load a transform from an external file:
-
-```yaml
-transformRequest: 'file://transforms/request.js'
-```
-
-Example transform file (transforms/request.js):
-
-```javascript
-module.exports = (prompt) => {
-  return {
-    text: prompt,
-    metadata: {
-      timestamp: Date.now(),
-      version: '1.0',
-    },
-  };
-};
-```
-
-You can also specify a specific function to use:
-
-```yaml
-transformRequest: 'file://transforms/request.js:transformRequest'
-```
 
 ## Session management
 
