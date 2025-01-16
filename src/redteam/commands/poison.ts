@@ -167,7 +167,7 @@ export function poisonCommand(program: Command) {
           ...opts,
         });
       } catch (error) {
-        logger.error('An unexpected error occurred:', error);
+        logger.error(`An unexpected error occurred: ${error}`);
         process.exit(1);
       }
     });
