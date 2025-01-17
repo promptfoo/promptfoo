@@ -1,13 +1,4 @@
-This project is licensed under multiple licenses:
-
-1. The main codebase is licensed under the MIT License (see below)
-2. The `/src/redteam/` directory is proprietary and licensed under the Promptfoo Enterprise License
-3. Some third-party components have their own licenses as indicated by LICENSE files in their respective directories
-
--------------------------------------------------------------------------------
-MIT License
-
-Copyright (c) 2025 Promptfoo
+Copyright (c) Promptfoo 2025
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
