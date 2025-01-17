@@ -135,7 +135,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 label="I have a guardrail on this endpoint"
               />
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 2 }}>
-                Enable this if your target has guardrail configuration. Your response transform
+                Check this if your target has guardrail configuration. Your response transform
                 should return both an output field and a{' '}
                 <a
                   href="https://www.promptfoo.dev/docs/configuration/reference#guardrails"
