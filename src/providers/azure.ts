@@ -1,5 +1,4 @@
 import type { TokenCredential } from '@azure/identity';
-import { AzureCliCredential, ClientSecretCredential } from '@azure/identity';
 import type {
   AssistantCreationOptions,
   AssistantsClient,
@@ -296,7 +295,7 @@ export class AzureGenericProvider implements ApiProvider {
     return apiKey;
   }
 
-  getAzureTokenCredential(): TokenCredential {
+  async getAzureTokenCredential(): Promise<TokenCredential> {
     const clientSecret =
       this.config?.azureClientSecret ||
       this.env?.AZURE_CLIENT_SECRET ||
@@ -309,6 +308,8 @@ export class AzureGenericProvider implements ApiProvider {
       this.config?.azureAuthorityHost ||
       this.env?.AZURE_AUTHORITY_HOST ||
       getEnvString('AZURE_AUTHORITY_HOST');
+
+    const { ClientSecretCredential, AzureCliCredential } = await import('@azure/identity');
 
     if (clientSecret && clientId && tenantId) {
       const credential = new ClientSecretCredential(tenantId, clientId, clientSecret, {
@@ -323,7 +324,7 @@ export class AzureGenericProvider implements ApiProvider {
   }
 
   async getAccessToken() {
-    const credential = this.getAzureTokenCredential();
+    const credential = await this.getAzureTokenCredential();
     const tokenScope =
       this.config?.azureTokenScope ||
       this.env?.AZURE_TOKEN_SCOPE ||
@@ -346,7 +347,7 @@ export class AzureGenericProvider implements ApiProvider {
         const token = await this.getAccessToken();
         return { Authorization: 'Bearer ' + token };
       } catch (err) {
-        logger.info('Azure Authentication failed. Please check your credentials.', err);
+        logger.info(`Azure Authentication failed. Please check your credentials: ${err}`);
         throw new Error(`Azure Authentication failed. 
 Please choose one of the following options:
   1. Set an API key via the AZURE_API_KEY environment variable.
@@ -704,11 +705,14 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
       );
 
-      // Extract filter flags from content and prompt filter results
       const contentFilterResults = data.choices[0]?.content_filter_results;
       const promptFilterResults = data.prompt_filter_results;
 
-      // Check if any content was filtered
+      const guardrailsTriggered = !!(
+        (contentFilterResults && Object.keys(contentFilterResults).length > 0) ||
+        (promptFilterResults && promptFilterResults.length > 0)
+      );
+
       const flaggedInput =
         promptFilterResults?.some((result: any) =>
           Object.values(result.content_filter_results).some((filter: any) => filter.filtered),
@@ -735,11 +739,15 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           data.usage?.prompt_tokens,
           data.usage?.completion_tokens,
         ),
-        guardrails: {
-          flaggedInput,
-          flaggedOutput,
-          flagged: flaggedInput || flaggedOutput,
-        },
+        ...(guardrailsTriggered
+          ? {
+              guardrails: {
+                flaggedInput,
+                flaggedOutput,
+                flagged: flaggedInput || flaggedOutput,
+              },
+            }
+          : {}),
       };
     } catch (err) {
       return {

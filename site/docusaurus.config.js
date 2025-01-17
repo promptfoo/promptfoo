@@ -175,7 +175,7 @@ const config = {
                 label: 'GitHub',
               },
               {
-                href: 'https://discord.gg/gHPS9jjfbs',
+                href: 'https://discord.gg/promptfoo',
                 label: 'Discord',
               },
             ],
@@ -188,7 +188,7 @@ const config = {
             'aria-label': 'GitHub repository',
           },
           {
-            href: 'https://discord.gg/gHPS9jjfbs',
+            href: 'https://discord.gg/promptfoo',
             position: 'right',
             className: 'header-discord-link',
             'aria-label': 'Discord community',
@@ -285,7 +285,7 @@ const config = {
               },
               {
                 label: 'Discord',
-                href: 'https://discord.gg/gHPS9jjfbs',
+                href: 'https://discord.gg/promptfoo',
               },
               {
                 label: 'LinkedIn',
