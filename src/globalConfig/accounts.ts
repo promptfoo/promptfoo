@@ -8,7 +8,7 @@ import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
 export function getUserEmail(): string | null {
   const globalConfig = readGlobalConfig();
-  return globalConfig.account?.email || null;
+  return globalConfig?.account?.email || null;
 }
 
 export function setUserEmail(email: string) {
@@ -17,7 +17,11 @@ export function setUserEmail(email: string) {
 }
 
 export function getAuthor(): string | null {
-  return getEnvString('PROMPTFOO_AUTHOR') || getUserEmail() || null;
+  const envAuthor = getEnvString('PROMPTFOO_AUTHOR');
+  if (envAuthor) {
+    return envAuthor;
+  }
+  return getUserEmail() || null;
 }
 
 export async function promptForEmailUnverified() {

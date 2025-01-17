@@ -1,25 +1,19 @@
+import { cloudConfig } from '../../src/globalConfig/cloud';
 import { getRemoteHealthUrl } from '../../src/redteam/remoteGeneration';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 
 const mockedFetch = jest.mocked(jest.fn());
 global.fetch = mockedFetch;
 
-const mockCloudConfig = {
-  isEnabled: jest.fn().mockReturnValue(false),
-  getApiHost: jest.fn().mockReturnValue('https://custom.api.com'),
-};
-
-jest.mock('../../src/globalConfig/cloud', () => ({
-  CloudConfig: jest.fn().mockImplementation(() => mockCloudConfig),
-}));
+jest.mock('../../src/globalConfig/cloud');
 
 describe('API Health Utilities', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     delete process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION;
     delete process.env.PROMPTFOO_REMOTE_GENERATION_URL;
-    mockCloudConfig.isEnabled.mockReturnValue(false);
-    mockCloudConfig.getApiHost.mockReturnValue('https://custom.api.com');
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://custom.api.com');
   });
 
   describe('getRemoteHealthUrl', () => {
@@ -34,20 +28,20 @@ describe('API Health Utilities', () => {
     });
 
     it('should use cloud config when enabled', () => {
-      mockCloudConfig.isEnabled.mockReturnValue(true);
-      mockCloudConfig.getApiHost.mockReturnValue('https://cloud.example.com');
+      jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://cloud.example.com');
       expect(getRemoteHealthUrl()).toBe('https://cloud.example.com/health');
     });
 
     it('should use default URL when no configuration is provided', () => {
-      mockCloudConfig.isEnabled.mockReturnValue(false);
+      jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       expect(getRemoteHealthUrl()).toBe('https://api.promptfoo.app/health');
     });
   });
 
   describe('checkRemoteHealth', () => {
     it('should return OK status when API is healthy', async () => {
-      mockCloudConfig.isEnabled.mockReturnValue(false);
+      jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       mockedFetch.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({ status: 'OK' }),
@@ -59,7 +53,7 @@ describe('API Health Utilities', () => {
     });
 
     it('should include custom endpoint message when cloud config is enabled', async () => {
-      mockCloudConfig.isEnabled.mockReturnValue(true);
+      jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       mockedFetch.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({ status: 'OK' }),

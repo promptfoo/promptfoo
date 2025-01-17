@@ -44,7 +44,7 @@ export async function fetchRemoteGeneration(
       task,
       prompts,
       version: VERSION,
-      email: getUserEmail(),
+      email: getUserEmail() || null,
     };
 
     const response = await fetchWithCache(

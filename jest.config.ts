@@ -19,6 +19,14 @@ const config: Config = {
   transform: {
     '^.+\\.m?[tj]sx?$': '@swc/jest',
   },
+  // Ensure Jest can resolve our mock modules
+  moduleDirectories: ['node_modules', 'src'],
+  // Explicitly tell Jest to use manual mocks
+  automock: false,
+  // Mock modules that are causing issues
+  moduleNameMapper: {
+    '^src/globalConfig/(.*)$': '<rootDir>/src/__mocks__/globalConfig/$1',
+  },
 };
 
 export default config;

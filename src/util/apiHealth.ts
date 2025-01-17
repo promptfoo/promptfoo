@@ -1,5 +1,5 @@
 import { fetchWithTimeout } from '../fetch';
-import { CloudConfig } from '../globalConfig/cloud';
+import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 
 export interface HealthResponse {
@@ -29,7 +29,7 @@ export async function checkRemoteHealth(url: string): Promise<HealthResponse> {
   );
 
   try {
-    const cloudConfig = new CloudConfig();
+    // Use the singleton instance instead of creating a new one
     const requestOptions = {
       headers: {
         'Content-Type': 'application/json',

@@ -10,7 +10,8 @@ export function getRemoteGenerationUrl(): string {
   }
   // If logged into cloud use that url + /task
   const cloudConfig = new CloudConfig();
-  if (cloudConfig.isEnabled()) {
+  const enabled = cloudConfig.isEnabled();
+  if (enabled) {
     return cloudConfig.getApiHost() + '/task';
   }
   // otherwise use the default
