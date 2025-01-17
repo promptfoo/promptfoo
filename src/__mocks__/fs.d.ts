@@ -17,6 +17,9 @@ declare const mockFs: {
   unlinkSync: jest.Mock<void, [PathLike]>;
   readdirSync: jest.Mock<string[], [PathLike]>;
   statSync: jest.Mock<Partial<Stats>, [PathLike]>;
+  stat: jest.Mock<void, [PathLike, (err: NodeJS.ErrnoException | null, stats: Partial<Stats>) => void]>;
+  createWriteStream: jest.Mock<any, [PathLike]>;
+  mkdir: jest.Mock<void, [PathLike, any?, ((err: NodeJS.ErrnoException | null) => void)?]>;
   __setMockFileContent: (path: string, content: string) => void;
   __clearMockFiles: () => void;
   __getMockFiles: () => { [key: string]: string };

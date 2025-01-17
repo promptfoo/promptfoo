@@ -40,6 +40,7 @@ jest.mock('better-sqlite3', () => {
 jest.mock('./src/globalConfig/globalConfig');
 jest.mock('./src/globalConfig/cloud');
 jest.mock('./src/globalConfig/accounts');
+jest.mock('./src/telemetry');
 
 // Reset all mocks before each test
 beforeEach(() => {

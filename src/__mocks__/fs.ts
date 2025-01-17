@@ -31,6 +31,43 @@ const mockFs = {
   lstatSync: Object.assign(jest.fn(), { native: true }),
   readdir: Object.assign(jest.fn(), { native: true }),
   readlinkSync: Object.assign(jest.fn(), { native: true }),
+  createWriteStream: Object.assign(jest.fn().mockImplementation((path: PathLike) => ({
+    write: jest.fn(),
+    end: jest.fn(),
+    on: jest.fn(),
+    once: jest.fn(),
+    emit: jest.fn(),
+    close: jest.fn(),
+  })), { native: true }),
+  mkdir: Object.assign(jest.fn().mockImplementation((path: PathLike, options: any, callback?: (err: NodeJS.ErrnoException | null) => void) => {
+    if (typeof options === 'function') {
+      callback = options;
+      options = {};
+    }
+    const pathStr = path.toString();
+    mockFiles[pathStr] = '';
+    callback?.(null);
+  }), { native: true }),
+  stat: Object.assign(jest.fn().mockImplementation((path: PathLike, callback: (err: NodeJS.ErrnoException | null, stats: any) => void) => {
+    const pathStr = path.toString();
+    if (!(pathStr in mockFiles)) {
+      callback(new Error(`ENOENT: no such file or directory, stat '${path}'`), null);
+      return;
+    }
+    callback(null, {
+      isFile: () => true,
+      isDirectory: () => false,
+      isBlockDevice: () => false,
+      size: mockFiles[pathStr].length || 0,
+      mode: 0o666,
+      uid: 0,
+      gid: 0,
+      atime: new Date(),
+      mtime: new Date(),
+      ctime: new Date(),
+      birthtime: new Date(),
+    });
+  }), { native: true }),
   existsSync: Object.assign(jest.fn().mockImplementation((path: PathLike) => {
     return path.toString() in mockFiles;
   }), { native: true }),
