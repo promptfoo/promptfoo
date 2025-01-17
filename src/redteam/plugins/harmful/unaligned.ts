@@ -1,3 +1,4 @@
+import { getEnvInt } from '../../../envars';
 import { PromptfooHarmfulCompletionProvider } from '../../../providers/promptfoo';
 import type { PluginActionParams, TestCase } from '../../../types';
 import { retryWithDeduplication, sampleArray } from '../../../util/generation';
@@ -11,9 +12,10 @@ export async function getHarmfulTests(
   { purpose, injectVar, n, delayMs = 0 }: PluginActionParams,
   plugin: keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS,
 ): Promise<TestCase[]> {
+  const maxHarmfulTests = getEnvInt('PROMPTFOO_MAX_HARMFUL_TESTS_PER_REQUEST', 5);
   const unalignedProvider = new PromptfooHarmfulCompletionProvider({
     purpose,
-    n: Math.min(n, 5),
+    n: Math.min(n, maxHarmfulTests),
     harmCategory: plugin,
   });
 

@@ -436,6 +436,7 @@
                                               "equals",
                                               "factuality",
                                               "g-eval",
+                                              "guardrails",
                                               "icontains-all",
                                               "icontains-any",
                                               "icontains",

@@ -93,7 +93,9 @@ describe('Google Sheets Integration', () => {
 
       const result = await checkGoogleSheetAccess(TEST_SHEET_URL);
       expect(result).toEqual({ public: false });
-      expect(logger.error).toHaveBeenCalledWith('Error checking sheet access:', expect.any(Error));
+      expect(logger.error).toHaveBeenCalledWith(
+        `Error checking sheet access: ${new Error('Network error')}`,
+      );
     });
   });
 
