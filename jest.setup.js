@@ -15,6 +15,23 @@ nock.emitter.on('no match', (req) => {
 
 // Ensure mocks are loaded before tests
 jest.mock('fs');
+jest.mock('better-sqlite3', () => ({
+  Database: jest.fn().mockImplementation(() => ({
+    prepare: jest.fn().mockReturnValue({
+      run: jest.fn(),
+      get: jest.fn(),
+      all: jest.fn(),
+      finalize: jest.fn(),
+    }),
+    transaction: jest.fn((fn) => fn()),
+    exec: jest.fn(),
+    close: jest.fn(),
+    backup: jest.fn().mockReturnValue({
+      step: jest.fn().mockResolvedValue(true),
+      finish: jest.fn(),
+    }),
+  })),
+}));
 jest.mock('./src/globalConfig/globalConfig');
 jest.mock('./src/globalConfig/cloud');
 jest.mock('./src/globalConfig/accounts');

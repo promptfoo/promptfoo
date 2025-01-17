@@ -2,8 +2,17 @@ import type { PathLike } from 'fs';
 
 const mockFiles: { [key: string]: string } = {};
 
+// Mock fs module
 const mockFs = {
+  // Required for native module loading
   native: true,
+  constants: {
+    F_OK: 0,
+    R_OK: 4,
+    W_OK: 2,
+    X_OK: 1,
+  },
+  promises: {},
   existsSync: jest.fn().mockImplementation((path: PathLike) => {
     return path.toString() in mockFiles;
   }),
