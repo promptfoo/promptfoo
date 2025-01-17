@@ -1,5 +1,7 @@
 /* eslint-disable jest/require-top-level-describe */
 import { rm } from 'fs/promises';
+import fs from 'fs';
+import yaml from 'js-yaml';
 import nock from 'nock';
 import { TEST_CONFIG_DIR } from './.jest/setEnvVars';
 
@@ -46,7 +48,7 @@ jest.mock('./src/telemetry');
 beforeEach(() => {
   jest.clearAllMocks();
   // Reset fs mock state
-  const mockFs = require('fs');
+  const mockFs = fs;
   mockFs.__clearMockFiles();
   // Initialize with default config
   const configPath = '/mock/config/dir/promptfoo.yaml';
@@ -58,7 +60,6 @@ beforeEach(() => {
       apiKey: 'mock-key',
     },
   };
-  const yaml = require('js-yaml');
   mockFs.__setMockFileContent(configPath, yaml.dump(defaultConfig));
 });
 
