@@ -264,7 +264,7 @@ export class AdalineGatewayEmbeddingProvider extends AdalineGatewayGenericProvid
         },
       };
     } catch (error) {
-      logger.error('Error calling embedding API on Adaline Gateway:', error);
+      logger.error(`Error calling embedding API on Adaline Gateway: ${error}`);
       throw error;
     }
   }

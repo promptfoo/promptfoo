@@ -16,15 +16,9 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TextareaAutosize from '@mui/material/TextareaAutosize';
 import Typography from '@mui/material/Typography';
+import { ellipsize } from '../../../../../utils/text';
 import ChatMessages, { type Message } from './ChatMessages';
 import type { GradingResult } from './types';
-
-function ellipsize(value: string, maxLength: number) {
-  if (value.length <= maxLength) {
-    return value;
-  }
-  return value.slice(0, maxLength) + '...';
-}
 
 function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[] }) {
   const [expandedValues, setExpandedValues] = useState<{ [key: number]: boolean }>({});
