@@ -13,45 +13,9 @@ const mockFs = {
     X_OK: 1,
   },
   promises: {},
-  // Required for path-scurry
-  realpathSync: {
-    native: true,
-  },
-  existsSync: jest.fn().mockImplementation((path: PathLike) => {
-    return path.toString() in mockFiles;
-  }),
-  readFileSync: jest.fn().mockImplementation((path: PathLike, options?: { encoding?: string; flag?: string } | string) => {
-    const content = mockFiles[path.toString()];
-    if (content === undefined) {
-      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
-    }
-    return content;
-  }),
-  mkdirSync: jest.fn().mockImplementation((path: PathLike, options?: { recursive?: boolean }) => {
-    const pathStr = path.toString();
-    if (!pathStr.endsWith('/')) {
-      mockFiles[pathStr] = '';
-    }
-    return undefined;
-  }),
-  writeFileSync: jest.fn().mockImplementation((path: PathLike, content: string | Buffer) => {
-    mockFiles[path.toString()] = content.toString();
-  }),
-  unlinkSync: jest.fn().mockImplementation((path: PathLike) => {
-    const pathStr = path.toString();
-    if (!(pathStr in mockFiles)) {
-      throw new Error(`ENOENT: no such file or directory, unlink '${path}'`);
-    }
-    delete mockFiles[pathStr];
-  }),
-  readdirSync: jest.fn().mockImplementation((path: PathLike) => {
-    const pathStr = path.toString();
-    const files = Object.keys(mockFiles)
-      .filter(file => file.startsWith(pathStr))
-      .map(file => file.slice(pathStr.endsWith('/') ? pathStr.length : pathStr.length + 1));
-    return files;
-  }),
-  statSync: jest.fn().mockImplementation((path: PathLike) => ({
+  // Mock implementations with native property
+  realpathSync: Object.assign(jest.fn(), { native: true }),
+  statSync: Object.assign(jest.fn().mockImplementation((path: PathLike) => ({
     isFile: () => path.toString() in mockFiles,
     isDirectory: () => false,
     isBlockDevice: () => false,
@@ -63,7 +27,44 @@ const mockFs = {
     mtime: new Date(),
     ctime: new Date(),
     birthtime: new Date(),
-  })),
+  })), { native: true }),
+  lstatSync: Object.assign(jest.fn(), { native: true }),
+  readdir: Object.assign(jest.fn(), { native: true }),
+  readlinkSync: Object.assign(jest.fn(), { native: true }),
+  existsSync: Object.assign(jest.fn().mockImplementation((path: PathLike) => {
+    return path.toString() in mockFiles;
+  }), { native: true }),
+  readFileSync: Object.assign(jest.fn().mockImplementation((path: PathLike, options?: { encoding?: string; flag?: string } | string) => {
+    const content = mockFiles[path.toString()];
+    if (content === undefined) {
+      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+    }
+    return content;
+  }), { native: true }),
+  mkdirSync: Object.assign(jest.fn().mockImplementation((path: PathLike, options?: { recursive?: boolean }) => {
+    const pathStr = path.toString();
+    if (!pathStr.endsWith('/')) {
+      mockFiles[pathStr] = '';
+    }
+    return undefined;
+  }), { native: true }),
+  writeFileSync: Object.assign(jest.fn().mockImplementation((path: PathLike, content: string | Buffer) => {
+    mockFiles[path.toString()] = content.toString();
+  }), { native: true }),
+  unlinkSync: Object.assign(jest.fn().mockImplementation((path: PathLike) => {
+    const pathStr = path.toString();
+    if (!(pathStr in mockFiles)) {
+      throw new Error(`ENOENT: no such file or directory, unlink '${path}'`);
+    }
+    delete mockFiles[pathStr];
+  }), { native: true }),
+  readdirSync: Object.assign(jest.fn().mockImplementation((path: PathLike) => {
+    const pathStr = path.toString();
+    const files = Object.keys(mockFiles)
+      .filter(file => file.startsWith(pathStr))
+      .map(file => file.slice(pathStr.endsWith('/') ? pathStr.length : pathStr.length + 1));
+    return files;
+  }), { native: true }),
   __setMockFileContent: (path: string, content: string) => {
     mockFiles[path] = content;
   },
@@ -72,8 +73,5 @@ const mockFs = {
   },
   __getMockFiles: () => ({ ...mockFiles }),
 };
-
-// Add properties needed by other modules
-mockFs.native = true;
 
 module.exports = mockFs;
