@@ -22,10 +22,11 @@ export function assertionFromString(expected: string): Assertion {
   if (
     expected.startsWith('javascript:') ||
     expected.startsWith('fn:') ||
-    expected.startsWith('eval:')
+    expected.startsWith('eval:') ||
+    (expected.startsWith('file://') && isJavascriptFile(expected.slice('file://'.length)))
   ) {
     // TODO(1.0): delete eval: legacy option
-    let sliceLength;
+    let sliceLength = 0;
     if (expected.startsWith('javascript:')) {
       sliceLength = 'javascript:'.length;
     }
@@ -58,23 +59,6 @@ export function assertionFromString(expected: string): Assertion {
       type: 'python',
       value: functionBody,
     };
-  }
-  if (expected.startsWith('file://')) {
-    const fileRef = expected.slice('file://'.length);
-    let filePath = fileRef;
-
-    if (fileRef.includes(':')) {
-      const [pathPart] = fileRef.split(':');
-      filePath = pathPart;
-    }
-
-    if (isJavascriptFile(filePath)) {
-      const functionBody = expected.slice('file://'.length).trim();
-      return {
-        type: 'javascript',
-        value: functionBody,
-      };
-    }
   }
 
   const regexMatch = expected.match(getAssertionRegex());
