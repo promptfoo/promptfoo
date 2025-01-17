@@ -24,7 +24,7 @@ import type { OpenAiFunction, OpenAiTool } from './openaiUtil';
 import { calculateCost, REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
 
 // see https://platform.openai.com/docs/models
-const OPENAI_CHAT_MODELS = [
+export const OPENAI_CHAT_MODELS = [
   ...['o1', 'o1-2024-12-17', 'o1-preview', 'o1-preview-2024-09-12'].map((model) => ({
     id: model,
     cost: {
@@ -111,7 +111,7 @@ const OPENAI_CHAT_MODELS = [
 ];
 
 // See https://platform.openai.com/docs/models/model-endpoint-compatibility
-const OPENAI_COMPLETION_MODELS = [
+export const OPENAI_COMPLETION_MODELS = [
   {
     id: 'gpt-3.5-turbo-instruct',
     cost: {
@@ -180,7 +180,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   >;
 };
 
-function failApiCall(err: any) {
+export function failApiCall(err: any) {
   if (err instanceof OpenAI.APIError) {
     return {
       error: `API error: ${err.type} ${err.message}`,
@@ -191,7 +191,7 @@ function failApiCall(err: any) {
   };
 }
 
-function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
+export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   if (data.usage) {
     if (cached) {
       return { cached: data.usage.total_tokens, total: data.usage.total_tokens };
@@ -332,7 +332,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
   }
 }
 
-function formatOpenAiError(data: {
+export function formatOpenAiError(data: {
   error: { message: string; type?: string; code?: string };
 }): string {
   let errorMessage = `API error: ${data.error.message}`;

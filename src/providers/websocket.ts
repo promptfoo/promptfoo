@@ -23,7 +23,7 @@ interface WebSocketProviderConfig {
   responseParser?: string | Function;
 }
 
-function createTransformResponse(parser: any): (data: any) => ProviderResponse {
+export function createTransformResponse(parser: any): (data: any) => ProviderResponse {
   if (typeof parser === 'function') {
     return parser;
   }

@@ -32,6 +32,8 @@ interface AzureCompletionOptions {
   azureTenantId?: string;
   azureAuthorityHost?: string;
   azureTokenScope?: string;
+  o1?: boolean; // Indicates if the model should be treated as an o1 model
+  max_completion_tokens?: number; // Maximum number of tokens to generate for o1 models
 
   // Azure cognitive services params
   deployment_id?: string;
@@ -318,7 +320,7 @@ export class AzureGenericProvider implements ApiProvider {
       return credential;
     }
 
-    //fallback to Azure CLI
+    // Fallback to Azure CLI
     const credential = new AzureCliCredential();
     return credential;
   }
@@ -347,7 +349,7 @@ export class AzureGenericProvider implements ApiProvider {
         const token = await this.getAccessToken();
         return { Authorization: 'Bearer ' + token };
       } catch (err) {
-        logger.info('Azure Authentication failed. Please check your credentials.', err);
+        logger.info(`Azure Authentication failed. Please check your credentials: ${err}`);
         throw new Error(`Azure Authentication failed. 
 Please choose one of the following options:
   1. Set an API key via the AZURE_API_KEY environment variable.
@@ -576,11 +578,15 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     const body = {
       model: this.deploymentName,
       messages,
-      max_tokens: config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024),
-      temperature: config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
       top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1),
       presence_penalty: config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0),
       frequency_penalty: config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0),
+      ...(config.o1
+        ? { max_completion_tokens: config.max_completion_tokens }
+        : {
+            max_tokens: config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024),
+            temperature: config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
+          }),
       ...(config.functions
         ? {
             functions: maybeLoadFromExternalFile(

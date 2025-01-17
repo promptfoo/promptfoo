@@ -15,6 +15,13 @@ export const LOG_LEVELS = {
   warn: 1,
   info: 2,
   debug: 3,
+} as const;
+
+type LogLevel = keyof typeof LOG_LEVELS;
+
+type StrictLogMethod = (message: string) => winston.Logger;
+type StrictLogger = Omit<winston.Logger, keyof typeof LOG_LEVELS> & {
+  [K in keyof typeof LOG_LEVELS]: StrictLogMethod;
 };
 
 const consoleFormatter = winston.format.printf(
@@ -45,7 +52,7 @@ const fileFormatter = winston.format.printf((info: winston.Logform.Transformable
   return `${timestamp} [${info.level.toUpperCase()}]${location}: ${info.message}`;
 });
 
-const logger = winston.createLogger({
+const winstonLogger = winston.createLogger({
   levels: LOG_LEVELS,
   transports: [
     new winston.transports.Console({
@@ -56,10 +63,10 @@ const logger = winston.createLogger({
 });
 
 if (!getEnvString('PROMPTFOO_DISABLE_ERROR_LOG', '')) {
-  logger.on('data', (chunk) => {
+  winstonLogger.on('data', (chunk) => {
     if (
       chunk.level === 'error' &&
-      !logger.transports.some((t) => t instanceof winston.transports.File)
+      !winstonLogger.transports.some((t) => t instanceof winston.transports.File)
     ) {
       // Only create the errors file if there are any errors
       const fileTransport = new winston.transports.File({
@@ -67,7 +74,7 @@ if (!getEnvString('PROMPTFOO_DISABLE_ERROR_LOG', '')) {
         level: 'error',
         format: winston.format.combine(winston.format.simple(), fileFormatter),
       });
-      logger.add(fileTransport);
+      winstonLogger.add(fileTransport);
 
       // Re-log the error that triggered this so it's written to the file
       fileTransport.write(chunk);
@@ -75,16 +82,31 @@ if (!getEnvString('PROMPTFOO_DISABLE_ERROR_LOG', '')) {
   });
 }
 
-export function getLogLevel() {
-  return logger.transports[0].level;
+export function getLogLevel(): LogLevel {
+  return winstonLogger.transports[0].level as LogLevel;
 }
 
-export function setLogLevel(level: keyof typeof LOG_LEVELS) {
+export function setLogLevel(level: LogLevel) {
   if (level in LOG_LEVELS) {
-    logger.transports[0].level = level;
+    winstonLogger.transports[0].level = level;
   } else {
     throw new Error(`Invalid log level: ${level}`);
   }
 }
+
+// Wrapper enforces strict single-string argument logging
+const logger: StrictLogger = Object.assign({}, winstonLogger, {
+  error: (message: string) => winstonLogger.error(message),
+  warn: (message: string) => winstonLogger.warn(message),
+  info: (message: string) => winstonLogger.info(message),
+  debug: (message: string) => winstonLogger.debug(message),
+  add: winstonLogger.add.bind(winstonLogger),
+  remove: winstonLogger.remove.bind(winstonLogger),
+  transports: winstonLogger.transports,
+}) as StrictLogger & {
+  add: typeof winstonLogger.add;
+  remove: typeof winstonLogger.remove;
+  transports: typeof winstonLogger.transports;
+};
 
 export default logger;
