@@ -58,7 +58,13 @@ export function assertionFromString(expected: string): Assertion {
       value: functionBody,
     };
   }
-  if (expected.startsWith('file://') && (expected.endsWith('.js') || expected.endsWith('.ts') || expected.includes('.js:') || expected.includes('.ts:'))) {
+  if (
+    expected.startsWith('file://') &&
+    (expected.endsWith('.js') ||
+      expected.endsWith('.ts') ||
+      expected.includes('.js:') ||
+      expected.includes('.ts:'))
+  ) {
     const functionBody = expected.slice('file://'.length).trim();
     return {
       type: 'javascript',
@@ -195,3 +201,10 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     ...(threshold ? { threshold } : {}),
   };
 }
+
+export {
+  DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD,
+  _assertionRegex,
+  getAssertionRegex,
+  uniqueErrorMessages,
+};
