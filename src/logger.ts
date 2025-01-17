@@ -110,3 +110,5 @@ const logger: StrictLogger = Object.assign({}, winstonLogger, {
 };
 
 export default logger;
+
+export { globalLogCallback, consoleFormatter, fileFormatter, winstonLogger, logger };
