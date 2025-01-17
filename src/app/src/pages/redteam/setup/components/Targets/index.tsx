@@ -246,6 +246,29 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         } else {
           setBodyError(null);
         }
+      } else if (field === 'transformResponse') {
+        updatedTarget.config.transformResponse = value;
+        // Check if the transform response includes guardrails
+        const hasGuardrails =
+          value.includes('guardrails:') ||
+          value.includes('"guardrails"') ||
+          value.includes("'guardrails'");
+        setUseGuardrail(hasGuardrails);
+        if (hasGuardrails) {
+          const defaultTestConfig = {
+            assert: [
+              {
+                type: 'guardrails',
+                config: {
+                  purpose: 'redteam',
+                },
+              },
+            ],
+          };
+          updateConfig('defaultTest', defaultTestConfig);
+        } else {
+          updateConfig('defaultTest', undefined);
+        }
       } else if (field === 'label') {
         updatedTarget.label = value;
       } else {

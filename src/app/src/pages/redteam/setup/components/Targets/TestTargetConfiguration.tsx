@@ -7,9 +7,7 @@ import AccordionSummary from '@mui/material/AccordionSummary';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Checkbox from '@mui/material/Checkbox';
 import CircularProgress from '@mui/material/CircularProgress';
-import FormControlLabel from '@mui/material/FormControlLabel';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
@@ -124,28 +122,6 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 </a>{' '}
                 for more information.
               </Typography>
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={useGuardrail}
-                    onChange={(e) => setUseGuardrail(e.target.checked)}
-                    color="primary"
-                  />
-                }
-                label="I have a guardrail on this endpoint"
-              />
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 2 }}>
-                Check this if your target has guardrail configuration. Your response transform
-                should return both an output field and a{' '}
-                <a
-                  href="https://www.promptfoo.dev/docs/configuration/reference#guardrails"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  guardrails
-                </a>{' '}
-                object to indicate if content was flagged as unsafe.
-              </Typography>
               <Box
                 sx={{
                   border: 1,
@@ -160,15 +136,11 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                   onValueChange={(code) => updateCustomTarget('transformResponse', code)}
                   highlight={(code) => highlight(code, languages.javascript)}
                   padding={10}
-                  placeholder={
-                    useGuardrail
-                      ? dedent`A JavaScript Expression to parse the response and extract guardrail flags.
+                  placeholder={dedent`Optional: A JavaScript expression to parse the response.
 
-                    e.g. \`return { output: json.choices[0].message.content, guardrails: { flagged: context.response.status === 500 } }\``
-                      : dedent`Optional: A JavaScript expression to parse the response.
-
-                    e.g. \`json.choices[0].message.content\``
-                  }
+                    Simple transform: json.choices[0].message.content
+                    
+                    With guardrails: { output: json.choices[0].message.content, guardrails: { flagged: context.response.status === 500 } }`}
                   style={{
                     fontFamily: '"Fira code", "Fira Mono", monospace',
                     fontSize: 14,

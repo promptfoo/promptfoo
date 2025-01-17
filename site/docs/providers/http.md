@@ -348,7 +348,7 @@ This expression will be evaluated with three variables available:
 
 - `json`: The parsed JSON response (if the response is valid JSON)
 - `text`: The raw text response
-- `context`: Context.response has the full response object
+- `context`: context.response has the full response object
 
 #### Function parser
 
@@ -381,7 +381,7 @@ providers:
       transformResponse: 'file://path/to/parser.js'
 ```
 
-The parser file should export a function that takes two arguments (`json` and `text`) and returns the parsed output, with an optional third argument `context` that provides access to the full response object via `context.response`. Here's a simple example:
+The parser file should export a function that takes two required arguments (`json`, `text`) and an optional `context` argument.
 
 ```javascript
 module.exports = (json, text) => {
@@ -389,7 +389,7 @@ module.exports = (json, text) => {
 };
 ```
 
-You can alsouse the `context` parameter to access response metadata and implement custom logic. For example, implementing guardrails checking:
+You can use the `context` parameter to access response metadata and implement custom logic. For example, implementing guardrails checking:
 
 ```javascript
 module.exports = (json, text, context) => {
@@ -405,11 +405,8 @@ This allows you to access additional response metadata and implement custom logi
 You can also use a default export:
 
 ```javascript
-export default (json, text, context) => {
-  return {
-    output: json.choices[0].message.content,
-    guardrails: { flagged: context.response.status === 500 },
-  };
+export default (json, text) => {
+  return json.choices[0].message.content;
 };
 ```
 
@@ -424,6 +421,22 @@ providers:
 ```
 
 This will import the function `parseResponse` from the file `path/to/parser.js`.
+
+### Guardrails Support
+
+If your HTTP target has guardrails set up, you need to return an object with both `output` and `guardrails` fields from your transform. The `guardrails` field should be a top-level field in your returned object and must conform to the [GuardrailResponse interface](/docs/configuration/reference#guardrails). For example:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://example.com/api'
+      transformResponse: |
+        {
+          output: json.choices[0].message.content,
+          guardrails: { flagged: context.response.status === 500 }
+        }
+```
 
 ## Session management
 
