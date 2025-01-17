@@ -7,9 +7,9 @@ import AccordionSummary from '@mui/material/AccordionSummary';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Checkbox from '@mui/material/Checkbox';
 import CircularProgress from '@mui/material/CircularProgress';
 import FormControlLabel from '@mui/material/FormControlLabel';
-import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
@@ -126,13 +126,13 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
               </Typography>
               <FormControlLabel
                 control={
-                  <Switch
+                  <Checkbox
                     checked={useGuardrail}
                     onChange={(e) => setUseGuardrail(e.target.checked)}
                     color="primary"
                   />
                 }
-                label="Use Guardrail"
+                label="I have a guardrail on this endpoint"
               />
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 2 }}>
                 Enable this if your target has guardrail configuration. Your response transform

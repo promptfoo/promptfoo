@@ -599,7 +599,7 @@ export class HttpProvider implements ApiProvider {
       throw err;
     }
     const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
-    if (parsedOutput.output) {
+    if (parsedOutput?.output) {
       return {
         ...ret,
         ...parsedOutput,
@@ -653,7 +653,7 @@ export class HttpProvider implements ApiProvider {
     }
 
     const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
-    if (parsedOutput.output) {
+    if (parsedOutput?.output) {
       return parsedOutput;
     }
     return {
