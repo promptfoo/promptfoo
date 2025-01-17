@@ -1,8 +1,13 @@
 import useApiConfig from '@app/stores/apiConfig';
 
-export async function callApi(path: string, options: RequestInit = {}): Promise<Response> {
+export async function callApi(
+  path: string,
+  options: RequestInit = {},
+  baseUrlOverride?: string,
+): Promise<Response> {
   const { apiBaseUrl } = useApiConfig.getState();
-  return fetch(`${apiBaseUrl}/api${path}`, options);
+  const effectiveBaseUrl = baseUrlOverride || apiBaseUrl;
+  return fetch(`${effectiveBaseUrl}/api${path}`, options);
 }
 
 export async function fetchUserEmail(): Promise<string | null> {
