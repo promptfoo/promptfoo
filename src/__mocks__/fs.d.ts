@@ -20,6 +20,6 @@ declare const mockFs: {
   __setMockFileContent: (path: string, content: string) => void;
   __clearMockFiles: () => void;
   __getMockFiles: () => { [key: string]: string };
-};
+} & { native: boolean };
 
 export = mockFs;
