@@ -424,7 +424,7 @@ This will import the function `parseResponse` from the file `path/to/parser.js`.
 
 ### Guardrails Support
 
-If your HTTP target has guardrails set up, you need to return an object with both `output` and `guardrails` fields from your transform. The `guardrails` field should be a top-level field in your returned object and must conform to the [GuardrailResponse interface](/docs/configuration/reference#guardrails). For example:
+If your HTTP target has guardrails set up, you need to return an object with both `output` and `guardrails` fields from your transform. The `guardrails` field should be a top-level field in your returned object and must conform to the [GuardrailResponse](/docs/configuration/reference#guardrails) interface. For example:
 
 ```yaml
 providers:
