@@ -90,6 +90,12 @@ export interface ApiModerationProvider extends ApiProvider {
   callModerationApi: (prompt: string, response: string) => Promise<ProviderModerationResponse>;
 }
 
+export interface GuardrailResponse {
+  flaggedInput?: boolean;
+  flaggedOutput?: boolean;
+  flagged?: boolean;
+}
+
 export interface ProviderResponse {
   cached?: boolean;
   cost?: number;
@@ -104,11 +110,7 @@ export interface ProviderResponse {
   tokenUsage?: TokenUsage;
   isRefusal?: boolean;
   sessionId?: string;
-  guardrails?: {
-    flaggedInput?: boolean;
-    flaggedOutput?: boolean;
-    flagged?: boolean;
-  };
+  guardrails?: GuardrailResponse;
 }
 
 export interface ProviderEmbeddingResponse {
