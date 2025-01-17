@@ -50,6 +50,13 @@ beforeEach(() => {
   // Reset fs mock state
   const mockFs = fs;
   mockFs.__clearMockFiles();
+
+  // Create necessary directories and files for tests
+  mockFs.mkdirSync('/tmp', { recursive: true });
+  mockFs.mkdirSync('/mock/config/dir', { recursive: true });
+  mockFs.writeFileSync('promptfoo-errors.log', '');
+  mockFs.writeFileSync('promptfoo-debug.log', '');
+
   // Initialize with default config
   const configPath = '/mock/config/dir/promptfoo.yaml';
   const defaultConfig = {

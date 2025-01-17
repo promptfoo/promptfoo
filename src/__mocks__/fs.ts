@@ -10,24 +10,28 @@ const mockFs = {
     F_OK: 0,
     R_OK: 4,
     W_OK: 2,
-    X_OK: 1,
+    X_OK: 1
   },
   promises: {},
   // Mock implementations with native property
   realpathSync: Object.assign(jest.fn(), { native: true }),
-  statSync: Object.assign(jest.fn().mockImplementation((path: PathLike) => ({
-    isFile: () => path.toString() in mockFiles,
-    isDirectory: () => false,
-    isBlockDevice: () => false,
-    size: mockFiles[path.toString()]?.length || 0,
-    mode: 0o666,
-    uid: 0,
-    gid: 0,
-    atime: new Date(),
-    mtime: new Date(),
-    ctime: new Date(),
-    birthtime: new Date(),
-  })), { native: true }),
+  statSync: Object.assign(jest.fn().mockImplementation((path: PathLike) => {
+    const pathStr = path.toString();
+    const isDir = pathStr.endsWith('/') || Object.keys(mockFiles).some(file => file.startsWith(pathStr + '/'));
+    return {
+      isFile: () => !isDir && pathStr in mockFiles,
+      isDirectory: () => isDir || pathStr === '/tmp' || pathStr === '/mock' || pathStr === '/mock/config' || pathStr === '/mock/config/dir',
+      isBlockDevice: () => false,
+      size: mockFiles[pathStr]?.length || 0,
+      mode: 0o666,
+      uid: 0,
+      gid: 0,
+      atime: new Date(),
+      mtime: new Date(),
+      ctime: new Date(),
+      birthtime: new Date()
+    };
+  }), { native: true }),
   lstatSync: Object.assign(jest.fn(), { native: true }),
   readdir: Object.assign(jest.fn(), { native: true }),
   readlinkSync: Object.assign(jest.fn(), { native: true }),
@@ -37,7 +41,7 @@ const mockFs = {
     on: jest.fn(),
     once: jest.fn(),
     emit: jest.fn(),
-    close: jest.fn(),
+    close: jest.fn()
   })), { native: true }),
   mkdir: Object.assign(jest.fn().mockImplementation((path: PathLike, options: any, callback?: (err: NodeJS.ErrnoException | null) => void) => {
     if (typeof options === 'function') {
@@ -50,9 +54,10 @@ const mockFs = {
   }), { native: true }),
   stat: Object.assign(jest.fn().mockImplementation((path: PathLike, callback?: (err: NodeJS.ErrnoException | null, stats: any) => void) => {
     const pathStr = path.toString();
+    const isDir = pathStr.endsWith('/') || Object.keys(mockFiles).some(file => file.startsWith(pathStr + '/'));
     const stats = {
-      isFile: () => pathStr in mockFiles,
-      isDirectory: () => false,
+      isFile: () => !isDir && pathStr in mockFiles,
+      isDirectory: () => isDir || pathStr === '/tmp' || pathStr === '/mock' || pathStr === '/mock/config' || pathStr === '/mock/config/dir',
       isBlockDevice: () => false,
       size: mockFiles[pathStr]?.length || 0,
       mode: 0o666,
@@ -61,11 +66,11 @@ const mockFs = {
       atime: new Date(),
       mtime: new Date(),
       ctime: new Date(),
-      birthtime: new Date(),
+      birthtime: new Date()
     };
 
     if (callback) {
-      if (!(pathStr in mockFiles)) {
+      if (!stats.isDirectory() && !(pathStr in mockFiles)) {
         callback(new Error(`ENOENT: no such file or directory, stat '${path}'`), null);
         return;
       }
@@ -73,13 +78,14 @@ const mockFs = {
       return;
     }
 
-    if (!(pathStr in mockFiles)) {
+    if (!stats.isDirectory() && !(pathStr in mockFiles)) {
       throw new Error(`ENOENT: no such file or directory, stat '${path}'`);
     }
     return stats;
   }), { native: true }),
   existsSync: Object.assign(jest.fn().mockImplementation((path: PathLike) => {
-    return path.toString() in mockFiles;
+    const pathStr = path.toString();
+    return pathStr in mockFiles || pathStr === '/tmp' || pathStr === '/mock' || pathStr === '/mock/config' || pathStr === '/mock/config/dir';
   }), { native: true }),
   readFileSync: Object.assign(jest.fn().mockImplementation((path: PathLike, options?: { encoding?: string; flag?: string } | string) => {
     const content = mockFiles[path.toString()];

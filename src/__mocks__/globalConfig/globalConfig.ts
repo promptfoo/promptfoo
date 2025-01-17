@@ -2,6 +2,9 @@ import yaml from 'js-yaml';
 import type { GlobalConfig } from '../../../src/configTypes';
 import fs from 'fs';
 
+// Cast fs to include mock helper methods
+const mockFs = fs as any;
+
 export function getConfigDirectoryPath(): string {
   return '/mock/config/dir';
 }
@@ -21,10 +24,10 @@ const defaultConfig: GlobalConfig = {
 };
 
 // Initialize mock state
-fs.__setMockFileContent(configPath, yaml.dump(defaultConfig));
+mockFs.__setMockFileContent(configPath, yaml.dump(defaultConfig));
 
 export function __setMockConfig(config: GlobalConfig): void {
-  fs.__setMockFileContent(configPath, yaml.dump(config));
+  mockFs.__setMockFileContent(configPath, yaml.dump(config));
 }
 
 export function readGlobalConfig(): GlobalConfig {
