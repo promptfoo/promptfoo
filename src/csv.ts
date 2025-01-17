@@ -2,6 +2,7 @@
 import logger from './logger';
 import type { Assertion, AssertionType, CsvRow, TestCase, BaseAssertionTypes } from './types';
 import { BaseAssertionTypesSchema } from './types';
+import { isJavascriptFile } from './util/file';
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 
@@ -58,18 +59,22 @@ export function assertionFromString(expected: string): Assertion {
       value: functionBody,
     };
   }
-  if (
-    expected.startsWith('file://') &&
-    (expected.endsWith('.js') ||
-      expected.endsWith('.ts') ||
-      expected.includes('.js:') ||
-      expected.includes('.ts:'))
-  ) {
-    const functionBody = expected.slice('file://'.length).trim();
-    return {
-      type: 'javascript',
-      value: functionBody,
-    };
+  if (expected.startsWith('file://')) {
+    const fileRef = expected.slice('file://'.length);
+    let filePath = fileRef;
+
+    if (fileRef.includes(':')) {
+      const [pathPart] = fileRef.split(':');
+      filePath = pathPart;
+    }
+
+    if (isJavascriptFile(filePath)) {
+      const functionBody = expected.slice('file://'.length).trim();
+      return {
+        type: 'javascript',
+        value: functionBody,
+      };
+    }
   }
 
   const regexMatch = expected.match(getAssertionRegex());
