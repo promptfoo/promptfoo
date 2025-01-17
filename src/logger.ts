@@ -100,6 +100,14 @@ const logger: StrictLogger = Object.assign({}, winstonLogger, {
   warn: (message: string) => winstonLogger.warn(message),
   info: (message: string) => winstonLogger.info(message),
   debug: (message: string) => winstonLogger.debug(message),
-}) as StrictLogger;
+  // Expose Winston logger methods
+  add: winstonLogger.add.bind(winstonLogger),
+  remove: winstonLogger.remove.bind(winstonLogger),
+  transports: winstonLogger.transports,
+}) as StrictLogger & {
+  add: typeof winstonLogger.add;
+  remove: typeof winstonLogger.remove;
+  transports: typeof winstonLogger.transports;
+};
 
 export default logger;
