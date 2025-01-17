@@ -8,7 +8,7 @@ export function generateTable(
   evaluateTable: EvaluateTable,
   tableCellMaxLength = 250,
   maxRows = 25,
-) {
+): string {
   const head = evaluateTable.head;
   const headLength = head.prompts.length + head.vars.length;
   const table = new Table({
@@ -45,7 +45,7 @@ export function generateTable(
       }),
     ]);
   }
-  return table;
+  return table.toString();
 }
 
 export function wrapTable(rows: Record<string, string | number>[]) {

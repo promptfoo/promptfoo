@@ -492,6 +492,7 @@ export async function synthesize({
   const pluginResults: Record<string, { requested: number; generated: number }> = {};
   const testCases: TestCaseWithPlugin[] = [];
   await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
+    // Check for abort signal before generating tests
     checkAbort();
 
     if (showProgressBar) {
@@ -514,6 +515,7 @@ export async function synthesize({
           ...resolvePluginConfig(plugin.config),
         },
       });
+
       if (!Array.isArray(pluginTests) || pluginTests.length === 0) {
         logger.warn(`Failed to generate tests for ${plugin.id}`);
         pluginTests = [];
@@ -571,7 +573,8 @@ export async function synthesize({
   // After generating plugin test cases but before applying strategies:
   const pluginTestCases = testCases;
 
-  // Apply non-basic, non-multilingual strategies
+  // Check for abort signal or apply non-basic, non-multilingual strategies
+  checkAbort();
   const { testCases: strategyTestCases, strategyResults } = await applyStrategies(
     pluginTestCases,
     strategies.filter((s) => s.id !== 'basic' && s.id !== 'multilingual'),
@@ -581,7 +584,8 @@ export async function synthesize({
   // Combine test cases based on basic strategy setting
   const finalTestCases = [...(includeBasicTests ? pluginTestCases : []), ...strategyTestCases];
 
-  // Then apply multilingual strategy to all test cases
+  // Check for abort signal or apply multilingual strategy to all test cases
+  checkAbort();
   if (multilingualStrategy) {
     const { testCases: multiLingualTestCases, strategyResults: multiLingualResults } =
       await applyStrategies(finalTestCases, [multilingualStrategy], injectVar);
