@@ -58,7 +58,7 @@ const mockCloudConfig = {
         updatedAt: new Date(),
       },
       app: {
-        url: 'http://mock-app.test.local',
+        url: 'http://test-mock-app.example',
       },
     };
 

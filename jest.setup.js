@@ -28,14 +28,15 @@ beforeEach(() => {
   // Initialize with default config
   const configPath = '/mock/config/dir/promptfoo.yaml';
   const defaultConfig = {
-    account: { email: 'test-mock-user@test.example' },
+    account: { email: 'mock-user@example.com' },
     cloud: {
-      appUrl: 'http://test-mock-app.example',
-      apiHost: 'http://test-mock-api.example',
-      apiKey: 'test-mock-key-123',
+      appUrl: 'https://mock.example.com',
+      apiHost: 'https://mock-api.example.com',
+      apiKey: 'mock-key',
     },
   };
-  mockFs.__setMockFileContent(configPath, require('js-yaml').dump(defaultConfig));
+  const yaml = require('js-yaml');
+  mockFs.__setMockFileContent(configPath, yaml.dump(defaultConfig));
 });
 
 afterAll(async () => {

@@ -11,12 +11,12 @@ const configPath = getConfigDirectoryPath() + '/promptfoo.yaml';
 // Initialize with default config
 const defaultConfig: GlobalConfig = {
   account: {
-    email: 'test@example.com',
+    email: 'test-mock-user@test.example',
   },
   cloud: {
-    appUrl: 'https://www.promptfoo.app',
-    apiHost: 'https://cloud.api.com',
-    apiKey: 'test-api-key',
+    appUrl: 'https://mock.example.com',
+    apiHost: 'https://mock-api.example.com',
+    apiKey: 'mock-key',
   },
 };
 

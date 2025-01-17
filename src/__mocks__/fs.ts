@@ -3,19 +3,26 @@ import type { PathLike } from 'fs';
 const mockFiles: { [key: string]: string } = {};
 
 const mockFs = {
+  native: true,
   existsSync: jest.fn().mockImplementation((path: PathLike) => {
     return path.toString() in mockFiles;
   }),
-  readFileSync: jest.fn().mockImplementation((path: PathLike) => {
+  readFileSync: jest.fn().mockImplementation((path: PathLike, options?: { encoding?: string; flag?: string } | string) => {
     const content = mockFiles[path.toString()];
     if (content === undefined) {
       throw new Error(`ENOENT: no such file or directory, open '${path}'`);
     }
     return content;
   }),
-  mkdirSync: jest.fn().mockImplementation(() => undefined),
-  writeFileSync: jest.fn().mockImplementation((path: PathLike, content: string) => {
-    mockFiles[path.toString()] = content;
+  mkdirSync: jest.fn().mockImplementation((path: PathLike, options?: { recursive?: boolean }) => {
+    const pathStr = path.toString();
+    if (!pathStr.endsWith('/')) {
+      mockFiles[pathStr] = '';
+    }
+    return undefined;
+  }),
+  writeFileSync: jest.fn().mockImplementation((path: PathLike, content: string | Buffer) => {
+    mockFiles[path.toString()] = content.toString();
   }),
   unlinkSync: jest.fn().mockImplementation((path: PathLike) => {
     const pathStr = path.toString();
@@ -35,7 +42,7 @@ const mockFs = {
     isFile: () => path.toString() in mockFiles,
     isDirectory: () => false,
     isBlockDevice: () => false,
-    size: 0,
+    size: mockFiles[path.toString()]?.length || 0,
     mode: 0o666,
     uid: 0,
     gid: 0,
@@ -49,7 +56,11 @@ const mockFs = {
   },
   __clearMockFiles: () => {
     Object.keys(mockFiles).forEach(key => delete mockFiles[key]);
-  }
+  },
+  __getMockFiles: () => ({ ...mockFiles }),
 };
+
+// Add properties needed by other modules
+mockFs.native = true;
 
 module.exports = mockFs;
