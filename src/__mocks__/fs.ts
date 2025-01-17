@@ -13,6 +13,10 @@ const mockFs = {
     X_OK: 1,
   },
   promises: {},
+  // Required for path-scurry
+  realpathSync: {
+    native: true,
+  },
   existsSync: jest.fn().mockImplementation((path: PathLike) => {
     return path.toString() in mockFiles;
   }),
