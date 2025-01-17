@@ -48,17 +48,13 @@ const mockFs = {
     mockFiles[pathStr] = '';
     callback?.(null);
   }), { native: true }),
-  stat: Object.assign(jest.fn().mockImplementation((path: PathLike, callback: (err: NodeJS.ErrnoException | null, stats: any) => void) => {
+  stat: Object.assign(jest.fn().mockImplementation((path: PathLike, callback?: (err: NodeJS.ErrnoException | null, stats: any) => void) => {
     const pathStr = path.toString();
-    if (!(pathStr in mockFiles)) {
-      callback(new Error(`ENOENT: no such file or directory, stat '${path}'`), null);
-      return;
-    }
-    callback(null, {
-      isFile: () => true,
+    const stats = {
+      isFile: () => pathStr in mockFiles,
       isDirectory: () => false,
       isBlockDevice: () => false,
-      size: mockFiles[pathStr].length || 0,
+      size: mockFiles[pathStr]?.length || 0,
       mode: 0o666,
       uid: 0,
       gid: 0,
@@ -66,7 +62,21 @@ const mockFs = {
       mtime: new Date(),
       ctime: new Date(),
       birthtime: new Date(),
-    });
+    };
+
+    if (callback) {
+      if (!(pathStr in mockFiles)) {
+        callback(new Error(`ENOENT: no such file or directory, stat '${path}'`), null);
+        return;
+      }
+      callback(null, stats);
+      return;
+    }
+
+    if (!(pathStr in mockFiles)) {
+      throw new Error(`ENOENT: no such file or directory, stat '${path}'`);
+    }
+    return stats;
   }), { native: true }),
   existsSync: Object.assign(jest.fn().mockImplementation((path: PathLike) => {
     return path.toString() in mockFiles;
