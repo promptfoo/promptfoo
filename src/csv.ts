@@ -58,6 +58,13 @@ export function assertionFromString(expected: string): Assertion {
       value: functionBody,
     };
   }
+  if (expected.startsWith('file://') && (expected.endsWith('.js') || expected.endsWith('.ts') || expected.includes('.js:') || expected.includes('.ts:'))) {
+    const functionBody = expected.slice('file://'.length).trim();
+    return {
+      type: 'javascript',
+      value: functionBody,
+    };
+  }
 
   const regexMatch = expected.match(getAssertionRegex());
 
