@@ -43,7 +43,7 @@ export function listCommand(program: Command) {
         };
       });
 
-      logger.info(wrapTable(tableData));
+      logger.info(wrapTable(tableData) as string);
       printBorder();
 
       logger.info(
@@ -83,7 +83,7 @@ export function listCommand(program: Command) {
         'Most recent eval': prompt.recentEvalId.slice(0, 6),
       }));
 
-      logger.info(wrapTable(tableData));
+      logger.info(wrapTable(tableData) as string);
       printBorder();
       logger.info(
         `Run ${chalk.green('promptfoo show prompt <id>')} to see details of a specific prompt.`,
@@ -125,7 +125,7 @@ export function listCommand(program: Command) {
         'Most recent eval': dataset.recentEvalId.slice(0, 6),
       }));
 
-      logger.info(wrapTable(tableData));
+      logger.info(wrapTable(tableData) as string);
       printBorder();
       logger.info(
         `Run ${chalk.green('promptfoo show dataset <id>')} to see details of a specific dataset.`,

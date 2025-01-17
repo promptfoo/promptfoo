@@ -1,18 +1,15 @@
 import compression from 'compression';
 import cors from 'cors';
-import debounce from 'debounce';
 import dedent from 'dedent';
 import type { Request, Response } from 'express';
 import express from 'express';
-import type { Stats } from 'fs';
-import fs from 'fs';
 import http from 'node:http';
 import path from 'node:path';
 import { Server as SocketIOServer } from 'socket.io';
 import { fromError } from 'zod-validation-error';
 import { createPublicUrl } from '../commands/share';
 import { VERSION, DEFAULT_PORT } from '../constants';
-import { getDbSignalPath } from '../database';
+import { setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
 import logger from '../logger';
@@ -206,14 +203,12 @@ export async function startServer(
 
   await runDbMigrations();
 
-  const watchFilePath = getDbSignalPath();
-  const watcher = debounce(async (curr: Stats, prev: Stats) => {
-    if (curr.mtime !== prev.mtime) {
-      io.emit('update', await getLatestEval(filterDescription));
-      allPrompts = null;
-    }
-  }, 250);
-  fs.watchFile(watchFilePath, watcher);
+  setupSignalWatcher(async () => {
+    const latestEval = await getLatestEval(filterDescription);
+    logger.info(`Emitting update with eval ID: ${latestEval?.config?.description || 'unknown'}`);
+    io.emit('update', latestEval);
+    allPrompts = null;
+  });
 
   io.on('connection', async (socket) => {
     socket.emit('init', await getLatestEval(filterDescription));

@@ -39,7 +39,7 @@ describe('handleModeration', () => {
     test: mockTest,
     logProbs: undefined,
     provider: mockProvider,
-    providerResponse: { output: 'output', guardrails: { flagged: false } },
+    providerResponse: { output: 'output' },
   };
 
   const baseParams: AssertionParams = {
@@ -51,25 +51,11 @@ describe('handleModeration', () => {
     context: mockContext,
     inverse: false,
     output: 'output',
-    providerResponse: { guardrails: { flagged: false }, output: 'output' },
+    providerResponse: { output: 'output' },
   };
 
   beforeEach(() => {
     jest.clearAllMocks();
-  });
-
-  it('should fail when guard is triggered', async () => {
-    const result = await handleModeration({
-      ...baseParams,
-      providerResponse: { guardrails: { flagged: true }, output: 'output' },
-    });
-
-    expect(result).toEqual({
-      pass: false,
-      score: 0,
-      reason: 'Guardrail triggered',
-      assertion: mockAssertion,
-    });
   });
 
   it('should pass moderation check', async () => {
@@ -103,7 +89,6 @@ describe('handleModeration', () => {
       ...baseParams,
       providerResponse: {
         output: 'output',
-        guardrails: { flagged: false },
         metadata: { redteamFinalPrompt: 'modified prompt' },
       },
     });

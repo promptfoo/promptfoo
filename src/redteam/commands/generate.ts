@@ -100,7 +100,7 @@ export async function doGenerateRedteam(
     name: 'generate redteam - started',
     numPrompts: testSuite.prompts.length,
     numTestsExisting: (testSuite.tests || []).length,
-    plugins: redteamConfig?.plugins?.map((p) => p.id) || [],
+    plugins: redteamConfig?.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) || [],
     strategies: redteamConfig?.strategies?.map((s) => (typeof s === 'string' ? s : s.id)) || [],
   });
   await telemetry.send();
@@ -164,7 +164,7 @@ export async function doGenerateRedteam(
     logger.debug(`strategies: ${strategyObjs.map((s) => s.id ?? s).join(', ')}`);
   } catch (error) {
     logger.error('Error logging plugins and strategies. One did not have a valid id.');
-    logger.error(error);
+    logger.error(`Error details: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   const config = {
@@ -419,7 +419,9 @@ export function redteamGenerateCommand(
             logger.error(`  ${err.path.join('.')}: ${err.message}`);
           });
         } else {
-          logger.error('An unexpected error occurred:', error);
+          logger.error(
+            `An unexpected error occurred: ${error instanceof Error ? error.message : String(error)}`,
+          );
         }
         process.exit(1);
       }
