@@ -13,18 +13,20 @@ export interface HealthResponse {
  * @returns A promise that resolves to the health check response.
  */
 export async function checkRemoteHealth(url: string): Promise<HealthResponse> {
-  logger.debug('[CheckRemoteHealth] Checking API health', {
-    url,
-    // Log environment variables that might affect network requests
-    env: {
-      httpProxy: process.env.HTTP_PROXY || process.env.http_proxy,
-      httpsProxy: process.env.HTTPS_PROXY || process.env.https_proxy,
-      allProxy: process.env.ALL_PROXY || process.env.all_proxy,
-      noProxy: process.env.NO_PROXY || process.env.no_proxy,
-      nodeExtra: process.env.NODE_EXTRA_CA_CERTS,
-      nodeTls: process.env.NODE_TLS_REJECT_UNAUTHORIZED,
-    },
-  });
+  logger.debug(
+    `[CheckRemoteHealth] Checking API health: ${JSON.stringify({
+      url,
+      // Log environment variables that might affect network requests
+      env: {
+        httpProxy: process.env.HTTP_PROXY || process.env.http_proxy,
+        httpsProxy: process.env.HTTPS_PROXY || process.env.https_proxy,
+        allProxy: process.env.ALL_PROXY || process.env.all_proxy,
+        noProxy: process.env.NO_PROXY || process.env.no_proxy,
+        nodeExtra: process.env.NODE_EXTRA_CA_CERTS,
+        nodeTls: process.env.NODE_TLS_REJECT_UNAUTHORIZED,
+      },
+    })}`,
+  );
 
   try {
     const cloudConfig = new CloudConfig();
@@ -34,19 +36,25 @@ export async function checkRemoteHealth(url: string): Promise<HealthResponse> {
       },
     };
 
-    logger.debug('[CheckRemoteHealth] Making fetch request', {
-      requestOptions,
-      timeout: 5000,
-      nodeVersion: process.version,
-    });
+    logger.debug(
+      `[CheckRemoteHealth] Making fetch request: ${JSON.stringify({
+        url,
+        options: requestOptions,
+        timeout: 5000,
+        nodeVersion: process.version,
+      })}`,
+    );
 
     const response = await fetchWithTimeout(url, requestOptions, 5000);
 
     if (!response.ok) {
-      logger.debug('[CheckRemoteHealth] API health check failed with non-OK response', {
-        status: response.status,
-        statusText: response.statusText,
-      });
+      logger.debug(
+        `[CheckRemoteHealth] API health check failed with non-OK response: ${JSON.stringify({
+          status: response.status,
+          statusText: response.statusText,
+          url,
+        })}`,
+      );
       return {
         status: 'ERROR',
         message: `Failed to connect: ${response.status} ${response.statusText}`,
@@ -54,7 +62,7 @@ export async function checkRemoteHealth(url: string): Promise<HealthResponse> {
     }
 
     const data = await response.json();
-    logger.debug('[CheckRemoteHealth] API health check response', { data });
+    logger.debug(`[CheckRemoteHealth] API health check response: ${JSON.stringify({ data })}`);
 
     if (data.status === 'OK') {
       return {
@@ -77,8 +85,11 @@ export async function checkRemoteHealth(url: string): Promise<HealthResponse> {
       message: data.message || 'Unknown error',
     };
   } catch (err) {
+    // Type guard for Error objects
+    const error = err instanceof Error ? err : new Error(String(err));
+
     // If it's a timeout error, return a softer message
-    if (err instanceof Error && err.name === 'TimeoutError') {
+    if (error.name === 'TimeoutError') {
       return {
         status: 'OK',
         message: 'API health check timed out, proceeding anyway',
@@ -86,29 +97,27 @@ export async function checkRemoteHealth(url: string): Promise<HealthResponse> {
     }
 
     // Handle certificate errors specifically
-    if (err instanceof Error && err.message.includes('certificate')) {
+    if (error.message.includes('certificate')) {
       return {
         status: 'ERROR',
-        message: `Network error: SSL/Certificate issue detected - ${err.message}`,
+        message: `Network error: SSL/Certificate issue detected - ${error.message}`,
       };
     }
 
     // For other network errors, include more details including the cause if available
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    const cause = err instanceof Error && 'cause' in err ? ` (Cause: ${err.cause})` : '';
-    const code = err instanceof Error && 'code' in err ? ` [${err['code']}]` : '';
+    const cause = 'cause' in error ? ` (Cause: ${error.cause})` : '';
+    const code = 'code' in error ? ` [${error['code']}]` : '';
 
-    logger.debug('[CheckRemoteHealth] API health check failed', {
-      error: err,
-      url,
-      errorMessage,
-      cause: err instanceof Error && 'cause' in err ? err.cause : undefined,
-      code: err instanceof Error && 'code' in err ? err['code'] : undefined,
-    });
+    logger.debug(
+      `[CheckRemoteHealth] API health check failed: ${JSON.stringify({
+        error: error.message,
+        url,
+      })}`,
+    );
 
     return {
       status: 'ERROR',
-      message: `Network error${code}: ${errorMessage}${cause}\nURL: ${url}`,
+      message: `Network error${code}: ${error.message}${cause}\nURL: ${url}`,
     };
   }
 }

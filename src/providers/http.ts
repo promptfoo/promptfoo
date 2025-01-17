@@ -337,7 +337,7 @@ export async function createValidateStatus(
   validator: string | ((status: number) => boolean) | undefined,
 ): Promise<(status: number) => boolean> {
   if (!validator) {
-    return (status: number) => status >= 200 && status < 300;
+    return (status: number) => true;
   }
 
   if (typeof validator === 'function') {
@@ -369,7 +369,14 @@ export async function createValidateStatus(
     }
     // Handle string template - wrap in a function body
     try {
-      return new Function('status', `return ${validator}`) as (status: number) => boolean;
+      const trimmedValidator = validator.trim();
+      // Check if it's an arrow function or regular function
+      if (trimmedValidator.includes('=>') || trimmedValidator.startsWith('function')) {
+        // For arrow functions and regular functions, evaluate the whole function
+        return new Function(`return ${trimmedValidator}`)() as (status: number) => boolean;
+      }
+      // For expressions, wrap in a function body
+      return new Function('status', `return ${trimmedValidator}`) as (status: number) => boolean;
     } catch (err: any) {
       throw new Error(`Invalid status validator expression: ${err?.message || String(err)}`);
     }
