@@ -33,7 +33,7 @@ providers:
 | [GitHub](./github.md)                               | GitHub AI Gateway                          | `github:gpt-4o-mini`                            |
 | [Google AI Studio (PaLM)](./palm.md)                | Gemini and PaLM models                     | `google:gemini-pro`                             |
 | [Google Vertex AI](./vertex.md)                     | Google Cloud's AI platform                 | `vertex:gemini-pro`                             |
-| [Groq](./groq.md)                                   | High-performance inference API             | `groq:llama3-70b-8192-tool-use-preview`         |
+| [Groq](./groq.md)                                   | High-performance inference API             | `groq:llama-3.3-70b-versatile`                  |
 | [Hugging Face](./huggingface.md)                    | Access thousands of models                 | `huggingface:text-generation:gpt2`              |
 | [IBM BAM](./ibm-bam.md)                             | IBM's foundation models                    | `bam:chat:ibm/granite-13b-chat-v2`              |
 | [LiteLLM](./litellm.md)                             | Unified interface for multiple providers   | Compatible with OpenAI syntax                   |

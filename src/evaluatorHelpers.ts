@@ -168,11 +168,11 @@ export async function renderPrompt(
 
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
-    const { getPrompt } = await import('./integrations/portkey');
+    const { getPrompt } = await import('./integrations/portkey.js');
     const portKeyResult = await getPrompt(prompt.raw.slice('portkey://'.length), vars);
     return JSON.stringify(portKeyResult.messages);
   } else if (prompt.raw.startsWith('langfuse://')) {
-    const { getPrompt } = await import('./integrations/langfuse');
+    const { getPrompt } = await import('./integrations/langfuse.js');
     const langfusePrompt = prompt.raw.slice('langfuse://'.length);
 
     // we default to "text" type.
@@ -189,7 +189,7 @@ export async function renderPrompt(
     );
     return langfuseResult;
   } else if (prompt.raw.startsWith('helicone://')) {
-    const { getPrompt } = await import('./integrations/helicone');
+    const { getPrompt } = await import('./integrations/helicone.js');
     const heliconePrompt = prompt.raw.slice('helicone://'.length);
     const [id, version] = heliconePrompt.split(':');
     const [majorVersion, minorVersion] = version ? version.split('.') : [undefined, undefined];
