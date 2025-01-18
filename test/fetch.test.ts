@@ -394,6 +394,18 @@ describe('fetchWithProxy', () => {
       http_proxy: 'http://http-proxy-lower.example.com',
     } as const;
 
+    const allProxyVars = [
+      'HTTPS_PROXY',
+      'https_proxy',
+      'HTTP_PROXY',
+      'http_proxy',
+      // Add any other variations that might exist for ci
+      'https_proxy_proxy',
+      'http_proxy_proxy',
+      'HTTPS_PROXY_PROXY',
+      'HTTP_PROXY_PROXY',
+    ];
+
     const testCases = [
       {
         env: { https_proxy: mockProxyUrls.https_proxy, HTTPS_PROXY: mockProxyUrls.HTTPS_PROXY },
@@ -416,6 +428,18 @@ describe('fetchWithProxy', () => {
     for (const testCase of testCases) {
       jest.clearAllMocks();
 
+      // Clean up ALL possible proxy environment variables first
+      allProxyVars.forEach((key) => {
+        delete process.env[key];
+      });
+
+      // Double check that the environment is clean
+      const existingProxyVars = allProxyVars.filter((key) => process.env[key]);
+      if (existingProxyVars.length > 0) {
+        console.warn('Found unexpected proxy variables:', existingProxyVars);
+      }
+
+      // Set only the environment variables for this test case
       Object.entries(testCase.env).forEach(([key, value]) => {
         process.env[key] = value;
       });
@@ -433,7 +457,7 @@ describe('fetchWithProxy', () => {
         `Using proxy from ${testCase.expected.var}: ${testCase.expected.url}`,
       );
 
-      Object.keys(testCase.env).forEach((key) => {
+      allProxyVars.forEach((key) => {
         delete process.env[key];
       });
     }
