@@ -1,5 +1,6 @@
 import cliState from '../../cliState';
 import logger from '../../logger';
+import { OpenAiChatCompletionProvider } from '../../providers/openai';
 import {
   type ApiProvider,
   type CallApiContextParams,
@@ -37,8 +38,7 @@ async function loadRedteamProvider({
     const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
     logger.debug(`Using default redteam provider: ${defaultModel}`);
     // Async import to avoid circular dependency
-    const OpenAiChatCompletionProviderModule = await import('../../providers/openai.js');
-    ret = new OpenAiChatCompletionProviderModule.OpenAiChatCompletionProvider(defaultModel, {
+    ret = new OpenAiChatCompletionProvider(defaultModel, {
       config: {
         temperature: TEMPERATURE,
         response_format: jsonOnly ? { type: 'json_object' } : undefined,
