@@ -22,8 +22,8 @@ export async function importModule(modulePath: string, functionName?: string) {
   );
 
   try {
-    if (modulePath.endsWith('.ts') || modulePath.endsWith('.mjs')) {
-      logger.debug('TypeScript/ESM module detected, importing tsx/cjs');
+    if (modulePath.endsWith('.ts')) {
+      logger.debug('TypeScript detected, importing tsx/cjs');
       // @ts-ignore: It actually works
       await import('tsx/cjs');
     }

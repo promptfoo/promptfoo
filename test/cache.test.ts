@@ -104,14 +104,14 @@ describe('cache configuration', () => {
 
   it('should use memory cache in test environment', async () => {
     process.env.NODE_ENV = 'test';
-    const cacheModule = await import('../src/cache');
+    const cacheModule = await import('../src/cache.js');
     const cache = cacheModule.getCache();
     expect(cache.store).toHaveProperty('name', 'memory');
   });
 
   it('should use disk cache in non-test environment', async () => {
     process.env.NODE_ENV = 'production';
-    const cacheModule = await import('../src/cache');
+    const cacheModule = await import('../src/cache.js');
     const cache = cacheModule.getCache();
     expect(cache.store).toHaveProperty('name', 'fs-hash');
   });
@@ -119,7 +119,7 @@ describe('cache configuration', () => {
   it('should respect custom cache path', async () => {
     process.env.PROMPTFOO_CACHE_PATH = '/custom/cache/path';
     process.env.NODE_ENV = 'production';
-    const cacheModule = await import('../src/cache');
+    const cacheModule = await import('../src/cache.js');
     cacheModule.getCache();
     expect(fs.mkdirSync).toHaveBeenCalledWith('/custom/cache/path', { recursive: true });
   });
@@ -130,7 +130,7 @@ describe('cache configuration', () => {
     process.env.PROMPTFOO_CACHE_MAX_SIZE = '1000000';
     process.env.NODE_ENV = 'production';
 
-    const cacheModule = await import('../src/cache');
+    const cacheModule = await import('../src/cache.js');
     const cache = cacheModule.getCache();
     expect(cache.store).toHaveProperty('name', 'fs-hash');
   });
@@ -139,7 +139,7 @@ describe('cache configuration', () => {
     existsSyncMock.mockReturnValue(true);
     process.env.NODE_ENV = 'production';
 
-    const cacheModule = await import('../src/cache');
+    const cacheModule = await import('../src/cache.js');
     cacheModule.getCache();
     expect(mkdirSyncMock).not.toHaveBeenCalled();
   });
