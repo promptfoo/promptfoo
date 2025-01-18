@@ -124,13 +124,15 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
       pass: result.success,
       failureReason: result.failureReason,
       cost: result.cost || 0,
-      audio: result.response?.audio ? {
-        id: result.response.audio.id,
-        expires_at: result.response.audio.expires_at,
-        data: result.response.audio.data,
-        transcript: result.response.audio.transcript,
-        format: result.response.audio.format,
-      } : undefined,
+      audio: result.response?.audio
+        ? {
+            id: result.response.audio.id,
+            expires_at: result.response.audio.expires_at,
+            data: result.response.audio.data,
+            transcript: result.response.audio.transcript,
+            format: result.response.audio.format,
+          }
+        : undefined,
     };
     invariant(result.promptId, 'Prompt ID is required');
     if (!completedPrompts[result.promptIdx]) {

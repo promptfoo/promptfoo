@@ -7,7 +7,11 @@ interface AudioPlayerProps {
   transcript?: string;
 }
 
-export default function AudioPlayer({ audioData, format = 'wav', transcript }: AudioPlayerProps): JSX.Element {
+export default function AudioPlayer({
+  audioData,
+  format = 'wav',
+  transcript,
+}: AudioPlayerProps): JSX.Element {
   const audioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
@@ -33,4 +37,4 @@ export default function AudioPlayer({ audioData, format = 'wav', transcript }: A
       )}
     </div>
   );
-} 
+}

@@ -201,7 +201,10 @@ function EvalOutputCell({
     node = (
       <div className="audio-output">
         <audio controls style={{ width: '100%' }}>
-          <source src={`data:audio/${output.audio.format || 'wav'};base64,${output.audio.data}`} type={`audio/${output.audio.format || 'wav'}`} />
+          <source
+            src={`data:audio/${output.audio.format || 'wav'};base64,${output.audio.data}`}
+            type={`audio/${output.audio.format || 'wav'}`}
+          />
           Your browser does not support the audio element.
         </audio>
         {output.audio.transcript && (

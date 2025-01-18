@@ -228,14 +228,14 @@ describe('EvalOutputCell', () => {
     };
 
     renderWithProviders(<EvalOutputCell {...propsWithAudio} />);
-    
+
     const audioElement = screen.getByRole('audio');
     expect(audioElement).toBeInTheDocument();
-    
+
     const sourceElement = screen.getByRole('audio').querySelector('source');
     expect(sourceElement).toHaveAttribute('src', 'data:audio/wav;base64,base64audiodata');
     expect(sourceElement).toHaveAttribute('type', 'audio/wav');
-    
+
     expect(screen.getByText('Test audio transcript')).toBeInTheDocument();
   });
 
@@ -252,10 +252,10 @@ describe('EvalOutputCell', () => {
     };
 
     renderWithProviders(<EvalOutputCell {...propsWithAudioNoTranscript} />);
-    
+
     const audioElement = screen.getByRole('audio');
     expect(audioElement).toBeInTheDocument();
-    
+
     expect(screen.queryByText(/transcript/i)).not.toBeInTheDocument();
   });
 
@@ -271,7 +271,7 @@ describe('EvalOutputCell', () => {
     };
 
     renderWithProviders(<EvalOutputCell {...propsWithAudioNoFormat} />);
-    
+
     const sourceElement = screen.getByRole('audio').querySelector('source');
     expect(sourceElement).toHaveAttribute('src', 'data:audio/wav;base64,base64audiodata');
     expect(sourceElement).toHaveAttribute('type', 'audio/wav');
