@@ -30,6 +30,7 @@ import {
   ResultFailureReason,
   type RunEvalOptions,
   type TestSuite,
+  Vars,
 } from './types';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import invariant from './util/invariant';
@@ -521,12 +522,12 @@ class Evaluator {
 
     // Prepare vars
     const varNames: Set<string> = new Set();
-    const varsWithSpecialColsRemoved: Record<string, string | string[] | object>[] = [];
+    const varsWithSpecialColsRemoved: Vars[] = [];
     const inputTransformDefault = testSuite?.defaultTest?.options?.transformVars;
     for (const testCase of tests) {
       testCase.vars = { ...testSuite.defaultTest?.vars, ...testCase?.vars };
       if (testCase.vars) {
-        const varWithSpecialColsRemoved: Record<string, string | string[] | object> = {};
+        const varWithSpecialColsRemoved: Vars = {};
         const inputTransformForIndividualTest = testCase.options?.transformVars;
         const inputTransform = inputTransformForIndividualTest || inputTransformDefault;
         if (inputTransform) {
@@ -534,7 +535,7 @@ class Evaluator {
             prompt: {},
             uuid: randomUUID(),
           };
-          const transformedVars = await transform(
+          const transformedVars: Vars = await transform(
             inputTransform,
             testCase.vars,
             transformContext,

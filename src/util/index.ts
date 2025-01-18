@@ -52,6 +52,7 @@ import {
   OutputFileExtension,
   type EvaluateSummaryV2,
   ResultFailureReason,
+  Vars,
 } from '../types';
 import invariant from '../util/invariant';
 import { getConfigDirectoryPath } from './config/manage';
@@ -960,10 +961,7 @@ export function providerToIdentifier(provider: TestCase['provider']): string | u
   return undefined;
 }
 
-export function varsMatch(
-  vars1: Record<string, string | string[] | object> | undefined,
-  vars2: Record<string, string | string[] | object> | undefined,
-) {
+export function varsMatch(vars1: Vars | undefined, vars2: Vars | undefined) {
   return deepEqual(vars1, vars2);
 }
 
