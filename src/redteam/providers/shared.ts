@@ -37,7 +37,6 @@ async function loadRedteamProvider({
   } else {
     const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
     logger.debug(`Using default redteam provider: ${defaultModel}`);
-    // Async import to avoid circular dependency
     ret = new OpenAiChatCompletionProvider(defaultModel, {
       config: {
         temperature: TEMPERATURE,
