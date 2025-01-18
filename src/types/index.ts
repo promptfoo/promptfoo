@@ -527,7 +527,7 @@ export const VarsSchema = z.record(
     z.number().transform(String),
     z.boolean().transform(String),
     z.array(z.union([z.string(), z.number().transform(String), z.boolean().transform(String)])),
-    z.object({}),
+    z.record(z.string(), z.any()),
     z.array(z.any()),
   ]),
 );

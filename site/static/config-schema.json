@@ -353,8 +353,7 @@
                             },
                             {
                               "type": "object",
-                              "properties": {},
-                              "additionalProperties": false
+                              "additionalProperties": {}
                             },
                             {
                               "type": "array"
