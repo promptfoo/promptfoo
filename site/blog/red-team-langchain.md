@@ -137,7 +137,7 @@ For example:
 
 - **Static Strategies**: Like `prompt-injection` or `base64`, which use predefined patterns to bypass security
 - **Dynamic Strategies**: Like [`jailbreak`](/docs/red-team/strategies/iterative/) and [`jailbreak:composite`](/docs/red-team/strategies/composite-jailbreaks/), which use an attacker model to iteratively refine attacks
-- **Multi-turn Strategies**: Like [`goat`](/docs/red-team/strategies/goat/) or [`crescendo`](/docs/red-team/strategies/crescendo/), which attempt to manipulate stateful applications over multiple interactions
+- **Multi-turn Strategies**: Like [`goat`](/docs/red-team/strategies/goat/) or [`crescendo`](/docs/red-team/strategies/multi-turn/), which attempt to manipulate stateful applications over multiple interactions
 
 For a complete list of vulnerabilities that can be tested, see our [LLM vulnerability types guide](/docs/red-team/llm-vulnerability-types/).
 
