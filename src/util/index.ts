@@ -31,6 +31,7 @@ import logger from '../logger';
 import Eval, { createEvalId, getSummaryOfLatestEvals } from '../models/eval';
 import type EvalResult from '../models/evalResult';
 import { generateIdFromPrompt } from '../models/prompt';
+import type { Vars } from '../types';
 import {
   type EvalWithMetadata,
   type EvaluateResult,
@@ -52,7 +53,6 @@ import {
   OutputFileExtension,
   type EvaluateSummaryV2,
   ResultFailureReason,
-  Vars,
 } from '../types';
 import invariant from '../util/invariant';
 import { getConfigDirectoryPath } from './config/manage';

@@ -18,6 +18,7 @@ import { generateIdFromPrompt } from './models/prompt';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureUtil';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
+import type { Vars } from './types';
 import {
   type ApiProvider,
   type Assertion,
@@ -30,7 +31,6 @@ import {
   ResultFailureReason,
   type RunEvalOptions,
   type TestSuite,
-  Vars,
 } from './types';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import invariant from './util/invariant';
