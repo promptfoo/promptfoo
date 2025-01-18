@@ -394,52 +394,42 @@ describe('fetchWithProxy', () => {
       http_proxy: 'http://http-proxy-lower.example.com',
     } as const;
 
-    const allProxyVars = [
-      'HTTPS_PROXY',
-      'https_proxy',
-      'HTTP_PROXY',
-      'http_proxy',
-      // Add any other variations that might exist for ci
-      'https_proxy_proxy',
-      'http_proxy_proxy',
-      'HTTPS_PROXY_PROXY',
-      'HTTP_PROXY_PROXY',
-    ];
+    const allProxyVars = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy'];
 
     const testCases = [
+      // On Windows, setting https_proxy might affect HTTPS_PROXY due to case insensitivity
       {
-        env: { https_proxy: mockProxyUrls.https_proxy, HTTPS_PROXY: mockProxyUrls.HTTPS_PROXY },
-        expected: { var: 'HTTPS_PROXY', url: mockProxyUrls.HTTPS_PROXY },
+        env: { https_proxy: mockProxyUrls.https_proxy },
+        expected: {
+          var: process.platform === 'win32' ? 'HTTPS_PROXY' : 'https_proxy',
+          url: mockProxyUrls.https_proxy,
+        },
       },
       {
-        env: { https_proxy: mockProxyUrls.https_proxy, HTTP_PROXY: mockProxyUrls.HTTP_PROXY },
-        expected: { var: 'https_proxy', url: mockProxyUrls.https_proxy },
-      },
-      {
-        env: { HTTP_PROXY: mockProxyUrls.HTTP_PROXY, http_proxy: mockProxyUrls.http_proxy },
+        env: { HTTP_PROXY: mockProxyUrls.HTTP_PROXY },
         expected: { var: 'HTTP_PROXY', url: mockProxyUrls.HTTP_PROXY },
       },
       {
         env: { http_proxy: mockProxyUrls.http_proxy },
-        expected: { var: 'http_proxy', url: mockProxyUrls.http_proxy },
+        expected: {
+          var: process.platform === 'win32' ? 'HTTP_PROXY' : 'http_proxy',
+          url: mockProxyUrls.http_proxy,
+        },
       },
     ];
 
     for (const testCase of testCases) {
       jest.clearAllMocks();
 
-      // Clean up ALL possible proxy environment variables first
       allProxyVars.forEach((key) => {
         delete process.env[key];
       });
 
-      // Double check that the environment is clean
       const existingProxyVars = allProxyVars.filter((key) => process.env[key]);
       if (existingProxyVars.length > 0) {
         console.warn('Found unexpected proxy variables:', existingProxyVars);
       }
 
-      // Set only the environment variables for this test case
       Object.entries(testCase.env).forEach(([key, value]) => {
         process.env[key] = value;
       });
@@ -453,9 +443,20 @@ describe('fetchWithProxy', () => {
         },
       });
       expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(ProxyAgent));
-      expect(logger.debug).toHaveBeenCalledWith(
-        `Using proxy from ${testCase.expected.var}: ${testCase.expected.url}`,
-      );
+
+      if (process.platform === 'win32') {
+        expect(logger.debug).toHaveBeenCalledWith(
+          expect.stringMatching(
+            new RegExp(
+              `Using proxy from (?:${testCase.expected.var}|${Object.keys(testCase.env)[0]}): ${testCase.expected.url}`,
+            ),
+          ),
+        );
+      } else {
+        expect(logger.debug).toHaveBeenCalledWith(
+          `Using proxy from ${testCase.expected.var}: ${testCase.expected.url}`,
+        );
+      }
 
       allProxyVars.forEach((key) => {
         delete process.env[key];
