@@ -31,6 +31,7 @@ import logger from '../logger';
 import Eval, { createEvalId, getSummaryOfLatestEvals } from '../models/eval';
 import type EvalResult from '../models/evalResult';
 import { generateIdFromPrompt } from '../models/prompt';
+import type { Vars } from '../types';
 import {
   type EvalWithMetadata,
   type EvaluateResult,
@@ -960,10 +961,7 @@ export function providerToIdentifier(provider: TestCase['provider']): string | u
   return undefined;
 }
 
-export function varsMatch(
-  vars1: Record<string, string | string[] | object> | undefined,
-  vars2: Record<string, string | string[] | object> | undefined,
-) {
+export function varsMatch(vars1: Vars | undefined, vars2: Vars | undefined) {
   return deepEqual(vars1, vars2);
 }
 
