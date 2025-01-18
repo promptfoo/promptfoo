@@ -1,12 +1,28 @@
 import fs from 'fs';
 import path from 'path';
-import { ProxyAgent } from 'proxy-agent';
+import type { ConnectionOptions } from 'tls';
+import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import cliState from './cliState';
 import { VERSION } from './constants';
-import { getEnvInt, getEnvBool, getEnvString } from './envars';
+import { getEnvBool, getEnvInt, getEnvString } from './envars';
 import logger from './logger';
 import invariant from './util/invariant';
 import { sleep } from './util/time';
+
+function getProxyUrl(): string | undefined {
+  const proxyEnvVars = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy'];
+
+  for (const envVar of proxyEnvVars) {
+    const proxyUrl = process.env[envVar];
+    if (proxyUrl) {
+      logger.debug(`Using proxy from ${envVar}: ${proxyUrl}`);
+      return proxyUrl;
+    }
+  }
+
+  logger.debug('No proxy configuration found in environment variables');
+  return undefined;
+}
 
 export async function fetchWithProxy(
   url: RequestInfo,
@@ -49,7 +65,9 @@ export async function fetchWithProxy(
     }
   }
 
-  const agentOptions: Record<string, any> = {
+  const proxyUrl = getProxyUrl();
+
+  const tlsOptions: ConnectionOptions = {
     rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', false),
   };
 
@@ -59,16 +77,22 @@ export async function fetchWithProxy(
     try {
       const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
       const ca = fs.readFileSync(resolvedPath);
-      agentOptions.ca = ca;
+      tlsOptions.ca = [ca];
       logger.debug(`Using custom CA certificate from ${resolvedPath}`);
     } catch (e) {
       logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
     }
   }
 
-  const agent = new ProxyAgent(agentOptions);
+  if (proxyUrl) {
+    const agent = new ProxyAgent({
+      uri: proxyUrl,
+      proxyTls: tlsOptions,
+    });
+    setGlobalDispatcher(agent);
+  }
 
-  return fetch(finalUrl, { ...finalOptions, agent } as RequestInit);
+  return fetch(finalUrl, finalOptions);
 }
 
 export function fetchWithTimeout(
