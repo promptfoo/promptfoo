@@ -4,7 +4,7 @@ import winston from 'winston';
 import { getEnvString } from './envars';
 
 type LogCallback = (message: string) => void;
-let globalLogCallback: LogCallback | null = null;
+export let globalLogCallback: LogCallback | null = null;
 
 export function setLogCallback(callback: LogCallback | null) {
   globalLogCallback = callback;
@@ -24,7 +24,7 @@ type StrictLogger = Omit<winston.Logger, keyof typeof LOG_LEVELS> & {
   [K in keyof typeof LOG_LEVELS]: StrictLogMethod;
 };
 
-const consoleFormatter = winston.format.printf(
+export const consoleFormatter = winston.format.printf(
   (info: winston.Logform.TransformableInfo): string => {
     const message = info.message as string;
 
@@ -46,13 +46,15 @@ const consoleFormatter = winston.format.printf(
   },
 );
 
-const fileFormatter = winston.format.printf((info: winston.Logform.TransformableInfo): string => {
-  const timestamp = new Date().toISOString();
-  const location = info.location ? ` ${info.location}` : '';
-  return `${timestamp} [${info.level.toUpperCase()}]${location}: ${info.message}`;
-});
+export const fileFormatter = winston.format.printf(
+  (info: winston.Logform.TransformableInfo): string => {
+    const timestamp = new Date().toISOString();
+    const location = info.location ? ` ${info.location}` : '';
+    return `${timestamp} [${info.level.toUpperCase()}]${location}: ${info.message}`;
+  },
+);
 
-const winstonLogger = winston.createLogger({
+export const winstonLogger = winston.createLogger({
   levels: LOG_LEVELS,
   transports: [
     new winston.transports.Console({
@@ -95,11 +97,18 @@ export function setLogLevel(level: LogLevel) {
 }
 
 // Wrapper enforces strict single-string argument logging
-const logger: StrictLogger = Object.assign({}, winstonLogger, {
+export const logger: StrictLogger = Object.assign({}, winstonLogger, {
   error: (message: string) => winstonLogger.error(message),
   warn: (message: string) => winstonLogger.warn(message),
   info: (message: string) => winstonLogger.info(message),
   debug: (message: string) => winstonLogger.debug(message),
-}) as StrictLogger;
+  add: winstonLogger.add.bind(winstonLogger),
+  remove: winstonLogger.remove.bind(winstonLogger),
+  transports: winstonLogger.transports,
+}) as StrictLogger & {
+  add: typeof winstonLogger.add;
+  remove: typeof winstonLogger.remove;
+  transports: typeof winstonLogger.transports;
+};
 
 export default logger;
