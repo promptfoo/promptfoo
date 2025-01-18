@@ -394,26 +394,48 @@ describe('fetchWithProxy', () => {
       http_proxy: 'http://http-proxy-lower.example.com',
     } as const;
 
-    const envVars = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy'] as const;
-    for (let i = 0; i < envVars.length; i++) {
+    const testCases = [
+      {
+        env: { https_proxy: mockProxyUrls.https_proxy, HTTPS_PROXY: mockProxyUrls.HTTPS_PROXY },
+        expected: { var: 'HTTPS_PROXY', url: mockProxyUrls.HTTPS_PROXY },
+      },
+      {
+        env: { https_proxy: mockProxyUrls.https_proxy, HTTP_PROXY: mockProxyUrls.HTTP_PROXY },
+        expected: { var: 'https_proxy', url: mockProxyUrls.https_proxy },
+      },
+      {
+        env: { HTTP_PROXY: mockProxyUrls.HTTP_PROXY, http_proxy: mockProxyUrls.http_proxy },
+        expected: { var: 'HTTP_PROXY', url: mockProxyUrls.HTTP_PROXY },
+      },
+      {
+        env: { http_proxy: mockProxyUrls.http_proxy },
+        expected: { var: 'http_proxy', url: mockProxyUrls.http_proxy },
+      },
+    ];
+
+    for (const testCase of testCases) {
       jest.clearAllMocks();
-      const currentVar = envVars[i];
-      process.env[currentVar] = mockProxyUrls[currentVar];
+
+      Object.entries(testCase.env).forEach(([key, value]) => {
+        process.env[key] = value;
+      });
 
       await fetchWithProxy('https://example.com');
 
       expect(ProxyAgent).toHaveBeenCalledWith({
-        uri: mockProxyUrls[currentVar],
+        uri: testCase.expected.url,
         proxyTls: {
           rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', false),
         },
       });
       expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(ProxyAgent));
       expect(logger.debug).toHaveBeenCalledWith(
-        `Using proxy from ${currentVar}: ${mockProxyUrls[currentVar]}`,
+        `Using proxy from ${testCase.expected.var}: ${testCase.expected.url}`,
       );
 
-      delete process.env[currentVar];
+      Object.keys(testCase.env).forEach((key) => {
+        delete process.env[key];
+      });
     }
   });
 });
