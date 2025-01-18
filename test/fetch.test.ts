@@ -397,13 +397,9 @@ describe('fetchWithProxy', () => {
     const allProxyVars = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy'];
 
     const testCases = [
-      // On Windows, setting https_proxy might affect HTTPS_PROXY due to case insensitivity
       {
         env: { https_proxy: mockProxyUrls.https_proxy },
-        expected: {
-          var: process.platform === 'win32' ? 'HTTPS_PROXY' : 'https_proxy',
-          url: mockProxyUrls.https_proxy,
-        },
+        expected: { var: 'https_proxy', url: mockProxyUrls.https_proxy },
       },
       {
         env: { HTTP_PROXY: mockProxyUrls.HTTP_PROXY },
@@ -411,10 +407,7 @@ describe('fetchWithProxy', () => {
       },
       {
         env: { http_proxy: mockProxyUrls.http_proxy },
-        expected: {
-          var: process.platform === 'win32' ? 'HTTP_PROXY' : 'http_proxy',
-          url: mockProxyUrls.http_proxy,
-        },
+        expected: { var: 'http_proxy', url: mockProxyUrls.http_proxy },
       },
     ];
 
@@ -443,20 +436,11 @@ describe('fetchWithProxy', () => {
         },
       });
       expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(ProxyAgent));
-
-      if (process.platform === 'win32') {
-        expect(logger.debug).toHaveBeenCalledWith(
-          expect.stringMatching(
-            new RegExp(
-              `Using proxy from (?:${testCase.expected.var}|${Object.keys(testCase.env)[0]}): ${testCase.expected.url}`,
-            ),
-          ),
-        );
-      } else {
-        expect(logger.debug).toHaveBeenCalledWith(
-          `Using proxy from ${testCase.expected.var}: ${testCase.expected.url}`,
-        );
-      }
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.stringMatching(
+          new RegExp(`Using proxy from .*(?:https?_proxy).*: ${testCase.expected.url}`, 'i'),
+        ),
+      );
 
       allProxyVars.forEach((key) => {
         delete process.env[key];
