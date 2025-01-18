@@ -17,11 +17,11 @@ You'll learn how to use adversarial LLM models to test your LangChain applicatio
 
 1. [Prerequisites](#prerequisites)
 2. [Setting Up the Environment](#setting-up-the-environment)
-3. [Creating the LangChain Provider](#creating-the-langchain-provider)
+3. [Creating the LangChain Provider](#create-the-langchain-provider)
 4. [Understanding Plugins and Strategies](#understanding-plugins-and-strategies)
-5. [Defining the Red Teaming Configuration](#defining-the-red-teaming-configuration)
-6. [Running the Red Team Evaluation](#running-the-red-team-evaluation)
-7. [Analyzing the Results](#analyzing-the-results)
+5. [Defining the Red Teaming Configuration](#define-the-red-teaming-configuration)
+6. [Running the Red Team Evaluation](#run-the-red-team-evaluation)
+7. [Analyzing the Results](#analyze-the-results)
 
 ## Prerequisites
 
@@ -182,7 +182,7 @@ npx promptfoo@latest redteam run
 
 This can take a few minutes to complete, depending on how many plugins and strategies you have configured.
 
-## Analyzing the Results
+## Analyze the Results
 
 Generate a comprehensive report:
 
