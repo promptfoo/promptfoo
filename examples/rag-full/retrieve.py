@@ -55,11 +55,11 @@ def call_api(
     """
     try:
         k: int = options.get("config", {}).get("topK", 5)
-        docs_chroma: List[
-            Tuple[Document, float]
-        ] = db_chroma.similarity_search_with_score(
-            prompt,
-            k=k,
+        docs_chroma: List[Tuple[Document, float]] = (
+            db_chroma.similarity_search_with_score(
+                prompt,
+                k=k,
+            )
         )
         context_text: str = "\n\n".join(
             [doc.page_content for doc, _score in docs_chroma]
