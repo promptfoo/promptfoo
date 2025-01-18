@@ -338,16 +338,10 @@
                             {
                               "type": "array",
                               "items": {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "boolean"
-                                  }
+                                "type": [
+                                  "string",
+                                  "number",
+                                  "boolean"
                                 ]
                               }
                             },
