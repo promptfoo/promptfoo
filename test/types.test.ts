@@ -97,7 +97,7 @@ describe('AssertionSchema', () => {
 
 describe('VarsSchema', () => {
   it('should validate and transform various types of values', () => {
-    expect.assertions(8);
+    expect.assertions(9);
     const testCases = [
       { input: { key: 'string value' }, expected: { key: 'string value' } },
       { input: { key: 42 }, expected: { key: '42' } },
@@ -107,6 +107,10 @@ describe('VarsSchema', () => {
       { input: { key: [1, 2, 3] }, expected: { key: ['1', '2', '3'] } },
       { input: { key: [true, false] }, expected: { key: ['true', 'false'] } },
       { input: { key: [{ nested: 'object' }] }, expected: { key: [{ nested: 'object' }] } },
+      {
+        input: { key: { arbitrary: 'value', nested: { object: true } } },
+        expected: { key: { arbitrary: 'value', nested: { object: true } } },
+      },
     ];
 
     testCases.forEach(({ input, expected }) => {
