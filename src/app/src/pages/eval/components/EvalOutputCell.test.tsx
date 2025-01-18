@@ -213,6 +213,69 @@ describe('EvalOutputCell', () => {
     const dialogContent = screen.getByTestId('context-text');
     expect(dialogContent).toHaveTextContent('Test output text');
   });
+
+  it('renders audio player when audio data is present', () => {
+    const propsWithAudio: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        audio: {
+          data: 'base64audiodata',
+          format: 'wav',
+          transcript: 'Test audio transcript',
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithAudio} />);
+    
+    const audioElement = screen.getByRole('audio');
+    expect(audioElement).toBeInTheDocument();
+    
+    const sourceElement = screen.getByRole('audio').querySelector('source');
+    expect(sourceElement).toHaveAttribute('src', 'data:audio/wav;base64,base64audiodata');
+    expect(sourceElement).toHaveAttribute('type', 'audio/wav');
+    
+    expect(screen.getByText('Test audio transcript')).toBeInTheDocument();
+  });
+
+  it('handles audio without transcript', () => {
+    const propsWithAudioNoTranscript: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        audio: {
+          data: 'base64audiodata',
+          format: 'wav',
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithAudioNoTranscript} />);
+    
+    const audioElement = screen.getByRole('audio');
+    expect(audioElement).toBeInTheDocument();
+    
+    expect(screen.queryByText(/transcript/i)).not.toBeInTheDocument();
+  });
+
+  it('uses default wav format when format is not specified', () => {
+    const propsWithAudioNoFormat: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        audio: {
+          data: 'base64audiodata',
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithAudioNoFormat} />);
+    
+    const sourceElement = screen.getByRole('audio').querySelector('source');
+    expect(sourceElement).toHaveAttribute('src', 'data:audio/wav;base64,base64audiodata');
+    expect(sourceElement).toHaveAttribute('type', 'audio/wav');
+  });
 });
 
 describe('EvalOutputCell provider override', () => {

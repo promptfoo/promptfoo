@@ -249,6 +249,13 @@ export interface EvaluateTableOutput {
   testCase: AtomicTestCase;
   text: string;
   tokenUsage?: Partial<TokenUsage>;
+  audio?: {
+    id?: string;
+    expires_at?: number;
+    data?: string; // base64 encoded audio data
+    transcript?: string;
+    format?: string;
+  };
 }
 
 export interface EvaluateTableRow {
@@ -529,6 +536,13 @@ export const VarsSchema = z.record(
     z.array(z.union([z.string(), z.number().transform(String), z.boolean().transform(String)])),
     z.object({}),
     z.array(z.any()),
+    // Support file:// URLs that point to audio files
+    z.string().refine(
+      (value) => value.startsWith('file://') && /\.(wav|mp3|ogg|m4a)$/i.test(value),
+      {
+        message: 'Audio file must start with file:// and have a valid audio extension (.wav, .mp3, .ogg, .m4a)',
+      },
+    ),
   ]),
 );
 

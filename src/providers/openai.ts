@@ -39,6 +39,13 @@ export const OPENAI_CHAT_MODELS = [
       output: 12 / 1e6,
     },
   })),
+  ...['gpt-4o-audio-preview'].map((model) => ({
+    id: model,
+    cost: {
+      input: 15 / 1e6,
+      output: 60 / 1e6,
+    },
+  })),
   ...['gpt-4o', 'gpt-4o-2024-11-20', 'gpt-4o-2024-08-06'].map((model) => ({
     id: model,
     cost: {
@@ -540,6 +547,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(config.stop ? { stop: config.stop } : {}),
       ...(config.passthrough || {}),
+      ...(this.modelName === 'gpt-4o-audio-preview'
+        ? {
+            modalities: config.modalities || ['text', 'audio'],
+            audio: config.audio || { voice: 'alloy', format: 'wav' },
+          }
+        : {}),
     };
 
     return { body, config };
@@ -659,6 +672,29 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             ),
           };
         }
+      }
+
+      // Handle audio output
+      if (message.audio) {
+        return {
+          output: message.audio.transcript || '',
+          audio: {
+            id: message.audio.id,
+            expires_at: message.audio.expires_at,
+            data: message.audio.data,
+            transcript: message.audio.transcript,
+            format: message.audio.format || 'wav',
+          },
+          tokenUsage: getTokenUsage(data, cached),
+          cached,
+          logProbs,
+          cost: calculateOpenAICost(
+            this.modelName,
+            config,
+            data.usage?.prompt_tokens,
+            data.usage?.completion_tokens,
+          ),
+        };
       }
 
       return {
