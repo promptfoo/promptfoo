@@ -2,6 +2,8 @@ import type { OpenAiChatCompletionProvider } from '../providers/openai';
 import { validateFunctionCall } from '../providers/openaiUtil';
 import type { AssertionParams } from '../types';
 import type { GradingResult } from '../types';
+import { renderVarsInObject, maybeLoadFromExternalFile } from '../util';
+import invariant from '../util/invariant';
 
 export const handleIsValidOpenAiFunctionCall = ({
   assertion,
@@ -72,14 +74,24 @@ export const handleIsValidOpenAiToolsCall = ({
     };
   }
 
+  let tools = (provider as OpenAiChatCompletionProvider).config.tools;
+  if (tools) {
+    tools = maybeLoadFromExternalFile(renderVarsInObject(tools, test.vars));
+  }
+  invariant(
+    tools,
+    `Tools are expected to be an array of objects with a function property. Got: ${JSON.stringify(
+      tools,
+    )}`,
+  );
   try {
-    toolsOutput.forEach((toolOutput) =>
+    toolsOutput.forEach((toolOutput) => {
       validateFunctionCall(
         toolOutput.function,
-        (provider as OpenAiChatCompletionProvider).config.tools?.map((tool) => tool.function),
+        tools.map((tool) => tool.function),
         test.vars,
-      ),
-    );
+      );
+    });
     return {
       pass: true,
       score: 1,
