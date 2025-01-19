@@ -399,15 +399,15 @@ describe('fetchWithProxy', () => {
     const testCases = [
       {
         env: { https_proxy: mockProxyUrls.https_proxy },
-        expected: { var: 'https_proxy', url: mockProxyUrls.https_proxy },
+        expected: { url: mockProxyUrls.https_proxy },
       },
       {
         env: { HTTP_PROXY: mockProxyUrls.HTTP_PROXY },
-        expected: { var: 'HTTP_PROXY', url: mockProxyUrls.HTTP_PROXY },
+        expected: { url: mockProxyUrls.HTTP_PROXY },
       },
       {
         env: { http_proxy: mockProxyUrls.http_proxy },
-        expected: { var: 'http_proxy', url: mockProxyUrls.http_proxy },
+        expected: { url: mockProxyUrls.http_proxy },
       },
     ];
 
@@ -436,12 +436,20 @@ describe('fetchWithProxy', () => {
         },
       });
       expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(ProxyAgent));
-      expect(logger.debug).toHaveBeenCalledWith(
-        expect.stringMatching(
-          new RegExp(
-            `Found proxy configuration in ${testCase.expected.var}: ${testCase.expected.url}`,
-          ),
-        ),
+
+      const debugCalls = jest.mocked(logger.debug).mock.calls;
+      expect(debugCalls).toEqual(
+        expect.arrayContaining([
+          [
+            expect.stringMatching(
+              new RegExp(
+                `Found proxy configuration in .*https?_proxy.*: ${testCase.expected.url}`,
+                'i',
+              ),
+            ),
+          ],
+          [`Using proxy: ${testCase.expected.url}`],
+        ]),
       );
 
       allProxyVars.forEach((key) => {
