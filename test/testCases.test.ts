@@ -6,7 +6,7 @@ import { testCaseFromCsvRow } from '../src/csv';
 import { getEnvString } from '../src/envars';
 import { fetchCsvFromGoogleSheet } from '../src/googleSheets';
 import logger from '../src/logger';
-import { loadApiProvider } from '../src/providers';
+import { loadApiProvider } from '../src/providerLoader';
 import {
   generatePersonasPrompt,
   readStandaloneTestsFile,

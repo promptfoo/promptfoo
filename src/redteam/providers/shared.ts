@@ -1,5 +1,6 @@
 import cliState from '../../cliState';
 import logger from '../../logger';
+import { loadApiProviders } from '../../providerLoader';
 import { OpenAiChatCompletionProvider } from '../../providers/openai';
 import {
   type ApiProvider,
@@ -31,9 +32,7 @@ async function loadRedteamProvider({
     ret = redteamProvider;
   } else if (typeof redteamProvider === 'string' || isProviderOptions(redteamProvider)) {
     logger.debug(`Loading redteam provider: ${JSON.stringify(redteamProvider)}`);
-    const loadApiProvidersModule = await import('../../providers.js');
-    // Async import to avoid circular dependency
-    ret = (await loadApiProvidersModule.loadApiProviders([redteamProvider]))[0];
+    ret = (await loadApiProviders([redteamProvider]))[0];
   } else {
     const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
     logger.debug(`Using default redteam provider: ${defaultModel}`);

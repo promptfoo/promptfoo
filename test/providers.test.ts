@@ -1,7 +1,7 @@
 import fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
-import { loadApiProvider, loadApiProviders } from '../src/providers';
+import { loadApiProvider, loadApiProviders } from '../src/providerLoader';
 import { HttpProvider } from '../src/providers/http';
 import { OpenAiChatCompletionProvider } from '../src/providers/openai';
 import { PythonProvider } from '../src/providers/pythonCompletion';

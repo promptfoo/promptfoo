@@ -2,7 +2,7 @@ import cliProgress from 'cli-progress';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import logger from '../../src/logger';
-import { loadApiProvider } from '../../src/providers';
+import { loadApiProvider } from '../../src/providerLoader';
 import { HARM_PLUGINS, PII_PLUGINS } from '../../src/redteam/constants';
 import { extractEntities } from '../../src/redteam/extraction/entities';
 import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';

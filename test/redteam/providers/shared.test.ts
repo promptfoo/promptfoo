@@ -1,5 +1,5 @@
 import cliState from '../../../src/cliState';
-import { loadApiProviders } from '../../../src/providers';
+import { loadApiProviders } from '../../../src/providerLoader';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai';
 import {
   ATTACKER_MODEL,

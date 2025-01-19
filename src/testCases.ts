@@ -13,7 +13,7 @@ import { importModule } from './esm';
 import { fetchCsvFromGoogleSheet } from './googleSheets';
 import { fetchHuggingFaceDataset } from './integrations/huggingfaceDatasets';
 import logger from './logger';
-import { loadApiProvider } from './providers';
+import { loadApiProvider } from './providerLoader';
 import { getDefaultProviders } from './providers/defaults';
 import telemetry from './telemetry';
 import type {

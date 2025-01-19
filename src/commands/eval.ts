@@ -14,7 +14,7 @@ import { checkEmailStatusOrExit, promptForEmailUnverified } from '../globalConfi
 import logger, { getLogLevel, setLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
-import { loadApiProvider } from '../providers';
+import { loadApiProvider } from '../providerLoader';
 import { createShareableUrl } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';

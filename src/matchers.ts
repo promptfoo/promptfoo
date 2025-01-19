@@ -15,7 +15,7 @@ import {
   OPENAI_CLOSED_QA_PROMPT,
   OPENAI_FACTUALITY_PROMPT,
 } from './prompts';
-import { loadApiProvider } from './providers';
+import { loadApiProvider } from './providerLoader';
 import { getDefaultProviders } from './providers/defaults';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
 import { shouldGenerateRemote } from './redteam/remoteGeneration';

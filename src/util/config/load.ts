@@ -12,7 +12,7 @@ import { getEnvBool } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import { readPrompts, readProviderPromptMap } from '../../prompts';
-import { loadApiProviders } from '../../providers';
+import { loadApiProviders } from '../../providerLoader';
 import telemetry from '../../telemetry';
 import { readTest, readTests } from '../../testCases';
 import {

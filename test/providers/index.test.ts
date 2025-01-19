@@ -7,7 +7,7 @@ import Stream from 'stream';
 import { clearCache, disableCache, enableCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
-import { loadApiProvider, loadApiProviders } from '../../src/providers';
+import { loadApiProvider, loadApiProviders } from '../../src/providerLoader';
 import { AnthropicCompletionProvider } from '../../src/providers/anthropic';
 import { AzureChatCompletionProvider, AzureCompletionProvider } from '../../src/providers/azure';
 import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock';
