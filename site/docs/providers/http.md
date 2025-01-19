@@ -381,7 +381,7 @@ providers:
       transformResponse: 'file://path/to/parser.js'
 ```
 
-The parser file should export a function that takes two required arguments (`json`, `text`) and an optional `context` argument.
+The parser file should export a function that takes three arguments (`json`, `text`, `context`) and return the parsed output. Note that text and context are optional.
 
 ```javascript
 module.exports = (json, text) => {
