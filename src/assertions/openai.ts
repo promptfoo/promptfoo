@@ -11,6 +11,9 @@ export const handleIsValidOpenAiFunctionCall = ({
   provider,
   test,
 }: AssertionParams): GradingResult => {
+  if (typeof output === 'object' && 'function_call' in output) {
+    output = (output as { function_call: any }).function_call;
+  }
   const functionOutput = output as { arguments: string; name: string };
   if (
     typeof functionOutput !== 'object' ||
@@ -54,6 +57,9 @@ export const handleIsValidOpenAiToolsCall = ({
   provider,
   test,
 }: AssertionParams): GradingResult => {
+  if (typeof output === 'object' && 'tool_calls' in output) {
+    output = (output as { tool_calls: any }).tool_calls;
+  }
   const toolsOutput = output as {
     type: 'function';
     function: { arguments: string; name: string };

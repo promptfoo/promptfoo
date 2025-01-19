@@ -118,6 +118,45 @@ describe('OpenAI assertions', () => {
       });
     });
 
+    it('should pass for a nested function_call output', async () => {
+      const output = {
+        function_call: { arguments: '{"x": 10, "y": 20}', name: 'add' },
+      };
+
+      const provider = new OpenAiChatCompletionProvider('foo', {
+        config: {
+          functions: [
+            {
+              name: 'add',
+              parameters: {
+                type: 'object',
+                properties: {
+                  x: { type: 'number' },
+                  y: { type: 'number' },
+                },
+                required: ['x', 'y'],
+              },
+            },
+          ],
+        },
+      });
+      const providerResponse = { output };
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'is-valid-openai-function-call',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
     it('should fail for an invalid function call with incorrect arguments', async () => {
       const output = { arguments: '{"x": "10", "y": 20}', name: 'add' };
 
@@ -383,6 +422,127 @@ describe('OpenAI assertions', () => {
                       y: { type: 'number' },
                     },
                     required: ['x', 'y'],
+                  },
+                },
+              },
+            ],
+          },
+        }),
+        assertion: {
+          type: 'is-valid-openai-tools-call',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should pass for a nested tool_calls output', async () => {
+      const output = {
+        content: 'Let me check the weather...',
+        tool_calls: [
+          {
+            id: 'call_123',
+            type: 'function',
+            function: {
+              name: 'getCurrentTemperature',
+              arguments: '{"location": "San Francisco", "unit": "Fahrenheit"}',
+            },
+          },
+        ],
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('foo', {
+          config: {
+            tools: [
+              {
+                type: 'function',
+                function: {
+                  name: 'getCurrentTemperature',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      location: { type: 'string' },
+                      unit: { type: 'string', enum: ['Celsius', 'Fahrenheit'] },
+                    },
+                    required: ['location', 'unit'],
+                  },
+                },
+              },
+            ],
+          },
+        }),
+        assertion: {
+          type: 'is-valid-openai-tools-call',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should pass for multiple tool calls in parallel', async () => {
+      const output = {
+        content: 'Checking weather data...',
+        tool_calls: [
+          {
+            id: 'call_123',
+            type: 'function',
+            function: {
+              name: 'getCurrentTemperature',
+              arguments: '{"location": "London", "unit": "Celsius"}',
+            },
+          },
+          {
+            id: 'call_456',
+            type: 'function',
+            function: {
+              name: 'getRainProbability',
+              arguments: '{"location": "London"}',
+            },
+          },
+        ],
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('foo', {
+          config: {
+            tools: [
+              {
+                type: 'function',
+                function: {
+                  name: 'getCurrentTemperature',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      location: { type: 'string' },
+                      unit: { type: 'string', enum: ['Celsius', 'Fahrenheit'] },
+                    },
+                    required: ['location', 'unit'],
+                  },
+                },
+              },
+              {
+                type: 'function',
+                function: {
+                  name: 'getRainProbability',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      location: { type: 'string' },
+                    },
+                    required: ['location'],
                   },
                 },
               },
