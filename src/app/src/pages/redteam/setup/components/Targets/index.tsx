@@ -80,7 +80,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
     config.target || DEFAULT_HTTP_TARGET,
   );
   const [useGuardrail, setUseGuardrail] = useState(
-    config.defaultTest?.assert?.some((a) => a.type === 'guardrail') ?? false,
+    config.defaultTest?.assert?.some((a) => a.type === 'guardrails') ?? false,
   );
   const [testingTarget, setTestingTarget] = useState(false);
   const [testResult, setTestResult] = useState<{
