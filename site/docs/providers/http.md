@@ -348,7 +348,12 @@ This expression will be evaluated with three variables available:
 
 - `json`: The parsed JSON response (if the response is valid JSON)
 - `text`: The raw text response
-- `context`: context.response has the full response object
+- `context`: `context.response` is of type `FetchWithCacheResult` which includes:
+  - `data`: The response data (parsed as JSON if possible)
+  - `cached`: Boolean indicating if response was from cache
+  - `status`: HTTP status code
+  - `statusText`: HTTP status text
+  - `headers`: Response headers (if present)
 
 #### Function parser
 
@@ -395,7 +400,7 @@ You can use the `context` parameter to access response metadata and implement cu
 module.exports = (json, text, context) => {
   return {
     output: json.choices[0].message.content,
-    guardrails: { flagged: context.response.status === 500 },
+    guardrails: { flagged: context.response.headers['x-content-filtered'] === 'true' },
   };
 };
 ```
@@ -434,7 +439,7 @@ providers:
       transformResponse: |
         {
           output: json.choices[0].message.content,
-          guardrails: { flagged: context.response.status === 500 }
+          guardrails: { flagged: context.response.headers['x-content-filtered'] === 'true' }
         }
 ```
 

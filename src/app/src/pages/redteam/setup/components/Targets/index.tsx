@@ -107,7 +107,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
 
   useEffect(() => {
     const updatedTarget = { ...selectedTarget };
-    console.log('useGuardrail changed:', useGuardrail);
+
     if (useGuardrail) {
       const defaultTestConfig = {
         assert: [
@@ -119,10 +119,8 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
           },
         ],
       };
-      console.log('Setting defaultTest to:', defaultTestConfig);
       updateConfig('defaultTest', defaultTestConfig);
     } else {
-      console.log('Clearing defaultTest');
       updateConfig('defaultTest', undefined);
     }
 
@@ -146,10 +144,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
     setMissingFields(missingFields);
     setPromptRequired(requiresPrompt(selectedTarget));
   }, [selectedTarget, useGuardrail, updateConfig]);
-
-  useEffect(() => {
-    console.log('Config updated:', config);
-  }, [config]);
 
   const handleTargetChange = (event: SelectChangeEvent<string>) => {
     const value = event.target.value as string;
@@ -501,8 +495,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
           requiresTransformResponse={requiresTransformResponse}
           updateCustomTarget={updateCustomTarget}
           hasTestedTarget={hasTestedTarget}
-          useGuardrail={useGuardrail}
-          setUseGuardrail={setUseGuardrail}
         />
       )}
 
