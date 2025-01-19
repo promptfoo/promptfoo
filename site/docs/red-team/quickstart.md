@@ -72,6 +72,10 @@ Start by providing some details about the target application. The more details w
 
 At a minimum, be sure to fill out the **Purpose** field with a description of your application.
 
+:::tip
+If you just want to try out a quick example, click "Load Example" at the top of the Application Details page.
+:::
+
 ![llm red team setup](/img/docs/setup/application-details.png)
 
 ---

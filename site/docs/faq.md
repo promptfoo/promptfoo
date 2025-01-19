@@ -60,7 +60,7 @@ No, we do not collect any personally identifiable information (PII).
 
 ### How do I use a proxy with Promptfoo?
 
-Promptfoo uses [proxy-agent](https://www.npmjs.com/package/proxy-agent) to handle proxy configuration across all supported providers. The proxy settings are configured through environment variables:
+Promptfoo proxy settings are configured through environment variables:
 
 1. `HTTP_PROXY`: For HTTP requests
 2. `HTTPS_PROXY`: For HTTPS requests
