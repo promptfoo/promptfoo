@@ -80,6 +80,369 @@ describe('OpenAI assertions', () => {
     mockedFs.existsSync.mockReturnValue(true);
   });
 
+  describe('is-valid-openai-function-call assertion', () => {
+    it('should pass for a valid function call with correct arguments', async () => {
+      const output = { arguments: '{"x": 10, "y": 20}', name: 'add' };
+
+      const provider = new OpenAiChatCompletionProvider('foo', {
+        config: {
+          functions: [
+            {
+              name: 'add',
+              parameters: {
+                type: 'object',
+                properties: {
+                  x: { type: 'number' },
+                  y: { type: 'number' },
+                },
+                required: ['x', 'y'],
+              },
+            },
+          ],
+        },
+      });
+      const providerResponse = { output };
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'is-valid-openai-function-call',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should fail for an invalid function call with incorrect arguments', async () => {
+      const output = { arguments: '{"x": "10", "y": 20}', name: 'add' };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('foo', {
+          config: {
+            functions: [
+              {
+                name: 'add',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    x: { type: 'number' },
+                    y: { type: 'number' },
+                  },
+                  required: ['x', 'y'],
+                },
+              },
+            ],
+          },
+        }),
+        assertion: {
+          type: 'is-valid-openai-function-call',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('Call to "add" does not match schema'),
+      });
+    });
+  });
+
+  describe('handleIsValidOpenAiFunctionCall', () => {
+    it('should pass when function call matches schema', () => {
+      const functionOutput = {
+        name: 'getCurrentTemperature',
+        arguments: '{"location": "San Francisco, CA", "unit": "Fahrenheit"}',
+      };
+
+      const result = handleIsValidOpenAiFunctionCall({
+        assertion: functionAssertion,
+        output: functionOutput,
+        provider: mockProvider,
+        test: { vars: {} },
+        baseType: functionAssertion.type,
+        context: mockContext,
+        inverse: false,
+        outputString: JSON.stringify(functionOutput),
+        providerResponse: { output: functionOutput },
+      });
+
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion: functionAssertion,
+      });
+    });
+
+    it('should load functions from external file', () => {
+      const functionOutput = {
+        name: 'getCurrentTemperature',
+        arguments: '{"location": "San Francisco, CA", "unit": "Fahrenheit"}',
+      };
+
+      const mockYamlContent = `
+- name: getCurrentTemperature
+  parameters:
+    type: object
+    properties:
+      location:
+        type: string
+      unit:
+        type: string
+        enum: [Celsius, Fahrenheit]
+    required: [location, unit]
+`;
+
+      mockedFs.readFileSync.mockReturnValue(mockYamlContent);
+
+      const fileProvider = {
+        ...mockProvider,
+        config: {
+          functions: 'file://./test/fixtures/weather_functions.yaml',
+        },
+      };
+
+      const result = handleIsValidOpenAiFunctionCall({
+        assertion: functionAssertion,
+        output: functionOutput,
+        provider: fileProvider,
+        test: { vars: {} },
+        baseType: functionAssertion.type,
+        context: mockContext,
+        inverse: false,
+        outputString: JSON.stringify(functionOutput),
+        providerResponse: { output: functionOutput },
+      });
+
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion: functionAssertion,
+      });
+
+      expect(mockedFs.existsSync).toHaveBeenCalledWith('./test/fixtures/weather_functions.yaml');
+      expect(mockedFs.readFileSync).toHaveBeenCalledWith(
+        './test/fixtures/weather_functions.yaml',
+        'utf8',
+      );
+    });
+
+    it('should render variables in function definitions', () => {
+      const functionOutput = {
+        name: 'getCurrentTemperature',
+        arguments: '{"location": "San Francisco, CA", "unit": "custom_unit"}',
+      };
+
+      const varProvider = {
+        ...mockProvider,
+        config: {
+          functions: [
+            {
+              name: 'getCurrentTemperature',
+              parameters: {
+                type: 'object',
+                properties: {
+                  location: { type: 'string' },
+                  unit: { type: 'string', enum: ['{{unit}}'] },
+                },
+                required: ['location', 'unit'],
+              },
+            },
+          ],
+        },
+      };
+
+      const result = handleIsValidOpenAiFunctionCall({
+        assertion: functionAssertion,
+        output: functionOutput,
+        provider: varProvider,
+        test: { vars: { unit: 'custom_unit' } },
+        baseType: functionAssertion.type,
+        context: mockContext,
+        inverse: false,
+        outputString: JSON.stringify(functionOutput),
+        providerResponse: { output: functionOutput },
+      });
+
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion: functionAssertion,
+      });
+    });
+
+    it('should fail when functions are not defined', () => {
+      const functionOutput = {
+        name: 'getCurrentTemperature',
+        arguments: '{"location": "San Francisco, CA"}',
+      };
+
+      const emptyProvider = {
+        ...mockProvider,
+        config: {},
+      };
+
+      const result = handleIsValidOpenAiFunctionCall({
+        assertion: functionAssertion,
+        output: functionOutput,
+        provider: emptyProvider,
+        test: { vars: {} },
+        baseType: functionAssertion.type,
+        context: mockContext,
+        inverse: false,
+        outputString: JSON.stringify(functionOutput),
+        providerResponse: { output: functionOutput },
+      });
+
+      expect(result).toEqual({
+        pass: false,
+        score: 0,
+        reason: 'Called "getCurrentTemperature", but there is no function with that name',
+        assertion: functionAssertion,
+      });
+    });
+
+    it('should fail when function output is not an object', () => {
+      const functionOutput = 'not an object';
+
+      const result = handleIsValidOpenAiFunctionCall({
+        assertion: functionAssertion,
+        output: functionOutput,
+        provider: mockProvider,
+        test: { vars: {} },
+        baseType: functionAssertion.type,
+        context: mockContext,
+        inverse: false,
+        outputString: JSON.stringify(functionOutput),
+        providerResponse: { output: functionOutput },
+      });
+
+      expect(result).toEqual({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('OpenAI did not return a valid-looking function call'),
+        assertion: functionAssertion,
+      });
+    });
+
+    it('should fail when function call does not match schema', () => {
+      const functionOutput = {
+        name: 'getCurrentTemperature',
+        arguments: '{"location": "San Francisco, CA"}', // missing required 'unit'
+      };
+
+      const result = handleIsValidOpenAiFunctionCall({
+        assertion: functionAssertion,
+        output: functionOutput,
+        provider: mockProvider,
+        test: { vars: {} },
+        baseType: functionAssertion.type,
+        context: mockContext,
+        inverse: false,
+        outputString: JSON.stringify(functionOutput),
+        providerResponse: { output: functionOutput },
+      });
+
+      expect(result).toEqual({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('must have required property'),
+        assertion: functionAssertion,
+      });
+    });
+  });
+
+  describe('is-valid-openai-tools-call assertion', () => {
+    it('should pass for a valid tools call with correct arguments', async () => {
+      const output = [
+        { type: 'function', function: { arguments: '{"x": 10, "y": 20}', name: 'add' } },
+      ];
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('foo', {
+          config: {
+            tools: [
+              {
+                type: 'function',
+                function: {
+                  name: 'add',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      x: { type: 'number' },
+                      y: { type: 'number' },
+                    },
+                    required: ['x', 'y'],
+                  },
+                },
+              },
+            ],
+          },
+        }),
+        assertion: {
+          type: 'is-valid-openai-tools-call',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should fail for an invalid tools call with incorrect arguments', async () => {
+      const output = [
+        { type: 'function', function: { arguments: '{"x": "foobar", "y": 20}', name: 'add' } },
+      ];
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('foo', {
+          config: {
+            tools: [
+              {
+                type: 'function',
+                function: {
+                  name: 'add',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      x: { type: 'number' },
+                      y: { type: 'number' },
+                    },
+                    required: ['x', 'y'],
+                  },
+                },
+              },
+            ],
+          },
+        }),
+        assertion: {
+          type: 'is-valid-openai-tools-call',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('Call to "add" does not match schema'),
+      });
+    });
+  });
+
   describe('handleIsValidOpenAiToolsCall', () => {
     // Basic validation tests
     it('should pass when tool calls match schema', () => {
@@ -332,369 +695,6 @@ describe('OpenAI assertions', () => {
         reason: expect.stringContaining('must have required property'),
         assertion: toolsAssertion,
       });
-    });
-  });
-
-  describe('handleIsValidOpenAiFunctionCall', () => {
-    it('should pass when function call matches schema', () => {
-      const functionOutput = {
-        name: 'getCurrentTemperature',
-        arguments: '{"location": "San Francisco, CA", "unit": "Fahrenheit"}',
-      };
-
-      const result = handleIsValidOpenAiFunctionCall({
-        assertion: functionAssertion,
-        output: functionOutput,
-        provider: mockProvider,
-        test: { vars: {} },
-        baseType: functionAssertion.type,
-        context: mockContext,
-        inverse: false,
-        outputString: JSON.stringify(functionOutput),
-        providerResponse: { output: functionOutput },
-      });
-
-      expect(result).toEqual({
-        pass: true,
-        score: 1,
-        reason: 'Assertion passed',
-        assertion: functionAssertion,
-      });
-    });
-
-    it('should load functions from external file', () => {
-      const functionOutput = {
-        name: 'getCurrentTemperature',
-        arguments: '{"location": "San Francisco, CA", "unit": "Fahrenheit"}',
-      };
-
-      const mockYamlContent = `
-- name: getCurrentTemperature
-  parameters:
-    type: object
-    properties:
-      location:
-        type: string
-      unit:
-        type: string
-        enum: [Celsius, Fahrenheit]
-    required: [location, unit]
-`;
-
-      mockedFs.readFileSync.mockReturnValue(mockYamlContent);
-
-      const fileProvider = {
-        ...mockProvider,
-        config: {
-          functions: 'file://./test/fixtures/weather_functions.yaml',
-        },
-      };
-
-      const result = handleIsValidOpenAiFunctionCall({
-        assertion: functionAssertion,
-        output: functionOutput,
-        provider: fileProvider,
-        test: { vars: {} },
-        baseType: functionAssertion.type,
-        context: mockContext,
-        inverse: false,
-        outputString: JSON.stringify(functionOutput),
-        providerResponse: { output: functionOutput },
-      });
-
-      expect(result).toEqual({
-        pass: true,
-        score: 1,
-        reason: 'Assertion passed',
-        assertion: functionAssertion,
-      });
-
-      expect(mockedFs.existsSync).toHaveBeenCalledWith('./test/fixtures/weather_functions.yaml');
-      expect(mockedFs.readFileSync).toHaveBeenCalledWith(
-        './test/fixtures/weather_functions.yaml',
-        'utf8',
-      );
-    });
-
-    it('should render variables in function definitions', () => {
-      const functionOutput = {
-        name: 'getCurrentTemperature',
-        arguments: '{"location": "San Francisco, CA", "unit": "custom_unit"}',
-      };
-
-      const varProvider = {
-        ...mockProvider,
-        config: {
-          functions: [
-            {
-              name: 'getCurrentTemperature',
-              parameters: {
-                type: 'object',
-                properties: {
-                  location: { type: 'string' },
-                  unit: { type: 'string', enum: ['{{unit}}'] },
-                },
-                required: ['location', 'unit'],
-              },
-            },
-          ],
-        },
-      };
-
-      const result = handleIsValidOpenAiFunctionCall({
-        assertion: functionAssertion,
-        output: functionOutput,
-        provider: varProvider,
-        test: { vars: { unit: 'custom_unit' } },
-        baseType: functionAssertion.type,
-        context: mockContext,
-        inverse: false,
-        outputString: JSON.stringify(functionOutput),
-        providerResponse: { output: functionOutput },
-      });
-
-      expect(result).toEqual({
-        pass: true,
-        score: 1,
-        reason: 'Assertion passed',
-        assertion: functionAssertion,
-      });
-    });
-
-    it('should fail when functions are not defined', () => {
-      const functionOutput = {
-        name: 'getCurrentTemperature',
-        arguments: '{"location": "San Francisco, CA"}',
-      };
-
-      const emptyProvider = {
-        ...mockProvider,
-        config: {},
-      };
-
-      const result = handleIsValidOpenAiFunctionCall({
-        assertion: functionAssertion,
-        output: functionOutput,
-        provider: emptyProvider,
-        test: { vars: {} },
-        baseType: functionAssertion.type,
-        context: mockContext,
-        inverse: false,
-        outputString: JSON.stringify(functionOutput),
-        providerResponse: { output: functionOutput },
-      });
-
-      expect(result).toEqual({
-        pass: false,
-        score: 0,
-        reason: 'Called "getCurrentTemperature", but there is no function with that name',
-        assertion: functionAssertion,
-      });
-    });
-
-    it('should fail when function output is not an object', () => {
-      const functionOutput = 'not an object';
-
-      const result = handleIsValidOpenAiFunctionCall({
-        assertion: functionAssertion,
-        output: functionOutput,
-        provider: mockProvider,
-        test: { vars: {} },
-        baseType: functionAssertion.type,
-        context: mockContext,
-        inverse: false,
-        outputString: JSON.stringify(functionOutput),
-        providerResponse: { output: functionOutput },
-      });
-
-      expect(result).toEqual({
-        pass: false,
-        score: 0,
-        reason: expect.stringContaining('OpenAI did not return a valid-looking function call'),
-        assertion: functionAssertion,
-      });
-    });
-
-    it('should fail when function call does not match schema', () => {
-      const functionOutput = {
-        name: 'getCurrentTemperature',
-        arguments: '{"location": "San Francisco, CA"}', // missing required 'unit'
-      };
-
-      const result = handleIsValidOpenAiFunctionCall({
-        assertion: functionAssertion,
-        output: functionOutput,
-        provider: mockProvider,
-        test: { vars: {} },
-        baseType: functionAssertion.type,
-        context: mockContext,
-        inverse: false,
-        outputString: JSON.stringify(functionOutput),
-        providerResponse: { output: functionOutput },
-      });
-
-      expect(result).toEqual({
-        pass: false,
-        score: 0,
-        reason: expect.stringContaining('must have required property'),
-        assertion: functionAssertion,
-      });
-    });
-  });
-});
-
-describe('is-valid-openai-function-call assertion', () => {
-  it('should pass for a valid function call with correct arguments', async () => {
-    const output = { arguments: '{"x": 10, "y": 20}', name: 'add' };
-
-    const provider = new OpenAiChatCompletionProvider('foo', {
-      config: {
-        functions: [
-          {
-            name: 'add',
-            parameters: {
-              type: 'object',
-              properties: {
-                x: { type: 'number' },
-                y: { type: 'number' },
-              },
-              required: ['x', 'y'],
-            },
-          },
-        ],
-      },
-    });
-    const providerResponse = { output };
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider,
-      assertion: {
-        type: 'is-valid-openai-function-call',
-      },
-      test: {} as AtomicTestCase,
-      providerResponse,
-    });
-
-    expect(result).toMatchObject({
-      pass: true,
-      reason: 'Assertion passed',
-    });
-  });
-
-  it('should fail for an invalid function call with incorrect arguments', async () => {
-    const output = { arguments: '{"x": "10", "y": 20}', name: 'add' };
-
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('foo', {
-        config: {
-          functions: [
-            {
-              name: 'add',
-              parameters: {
-                type: 'object',
-                properties: {
-                  x: { type: 'number' },
-                  y: { type: 'number' },
-                },
-                required: ['x', 'y'],
-              },
-            },
-          ],
-        },
-      }),
-      assertion: {
-        type: 'is-valid-openai-function-call',
-      },
-      test: {} as AtomicTestCase,
-      providerResponse: { output },
-    });
-
-    expect(result).toMatchObject({
-      pass: false,
-      reason: expect.stringContaining('Call to "add" does not match schema'),
-    });
-  });
-});
-
-describe('is-valid-openai-tools-call assertion', () => {
-  it('should pass for a valid tools call with correct arguments', async () => {
-    const output = [
-      { type: 'function', function: { arguments: '{"x": 10, "y": 20}', name: 'add' } },
-    ];
-
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('foo', {
-        config: {
-          tools: [
-            {
-              type: 'function',
-              function: {
-                name: 'add',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    x: { type: 'number' },
-                    y: { type: 'number' },
-                  },
-                  required: ['x', 'y'],
-                },
-              },
-            },
-          ],
-        },
-      }),
-      assertion: {
-        type: 'is-valid-openai-tools-call',
-      },
-      test: {} as AtomicTestCase,
-      providerResponse: { output },
-    });
-
-    expect(result).toMatchObject({
-      pass: true,
-      reason: 'Assertion passed',
-    });
-  });
-
-  it('should fail for an invalid tools call with incorrect arguments', async () => {
-    const output = [
-      { type: 'function', function: { arguments: '{"x": "foobar", "y": 20}', name: 'add' } },
-    ];
-
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('foo', {
-        config: {
-          tools: [
-            {
-              type: 'function',
-              function: {
-                name: 'add',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    x: { type: 'number' },
-                    y: { type: 'number' },
-                  },
-                  required: ['x', 'y'],
-                },
-              },
-            },
-          ],
-        },
-      }),
-      assertion: {
-        type: 'is-valid-openai-tools-call',
-      },
-      test: {} as AtomicTestCase,
-      providerResponse: { output },
-    });
-
-    expect(result).toMatchObject({
-      pass: false,
-      reason: expect.stringContaining('Call to "add" does not match schema'),
     });
   });
 });
