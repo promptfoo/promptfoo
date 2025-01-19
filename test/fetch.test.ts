@@ -438,7 +438,9 @@ describe('fetchWithProxy', () => {
       expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(ProxyAgent));
       expect(logger.debug).toHaveBeenCalledWith(
         expect.stringMatching(
-          new RegExp(`Using proxy from .*(?:https?_proxy).*: ${testCase.expected.url}`, 'i'),
+          new RegExp(
+            `Found proxy configuration in ${testCase.expected.var}: ${testCase.expected.url}`,
+          ),
         ),
       );
 

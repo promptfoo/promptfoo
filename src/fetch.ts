@@ -15,7 +15,7 @@ function getProxyUrl(): string | undefined {
   for (const envVar of proxyEnvVars) {
     const proxyUrl = process.env[envVar];
     if (proxyUrl) {
-      logger.debug(`Using proxy from ${envVar}: ${proxyUrl}`);
+      logger.debug(`Found proxy configuration in ${envVar}: ${proxyUrl}`);
       return proxyUrl;
     }
   }
@@ -85,6 +85,7 @@ export async function fetchWithProxy(
   }
 
   if (proxyUrl) {
+    logger.debug(`Using proxy: ${proxyUrl}`);
     const agent = new ProxyAgent({
       uri: proxyUrl,
       proxyTls: tlsOptions,
