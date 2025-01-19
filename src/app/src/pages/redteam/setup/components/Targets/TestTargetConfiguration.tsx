@@ -33,7 +33,6 @@ import 'prismjs/themes/prism.css';
 
 interface TestTargetConfigurationProps {
   testingTarget: boolean;
-  hasTestedTarget: boolean;
   handleTestTarget: () => void;
   selectedTarget: ProviderOptions;
   testResult: any;
