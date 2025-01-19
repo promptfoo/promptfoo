@@ -344,10 +344,11 @@ providers:
       transformResponse: 'json.choices[0].message.content'
 ```
 
-This expression will be evaluated with two variables available:
+This expression will be evaluated with three variables available:
 
 - `json`: The parsed JSON response (if the response is valid JSON)
 - `text`: The raw text response
+- `context`: context.response has the full response object
 
 #### Function parser
 
@@ -380,13 +381,26 @@ providers:
       transformResponse: 'file://path/to/parser.js'
 ```
 
-The parser file should export a function that takes two arguments (`json` and `text`) and returns the parsed output. For example:
+The parser file should export a function that takes two required arguments (`json`, `text`) and an optional `context` argument.
 
 ```javascript
 module.exports = (json, text) => {
   return json.choices[0].message.content;
 };
 ```
+
+You can use the `context` parameter to access response metadata and implement custom logic. For example, implementing guardrails checking:
+
+```javascript
+module.exports = (json, text, context) => {
+  return {
+    output: json.choices[0].message.content,
+    guardrails: { flagged: context.response.status === 500 },
+  };
+};
+```
+
+This allows you to access additional response metadata and implement custom logic based on response status codes, headers, or other properties.
 
 You can also use a default export:
 
@@ -407,6 +421,22 @@ providers:
 ```
 
 This will import the function `parseResponse` from the file `path/to/parser.js`.
+
+### Guardrails Support
+
+If your HTTP target has guardrails set up, you need to return an object with both `output` and `guardrails` fields from your transform. The `guardrails` field should be a top-level field in your returned object and must conform to the [GuardrailResponse](/docs/configuration/reference#guardrails) interface. For example:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://example.com/api'
+      transformResponse: |
+        {
+          output: json.choices[0].message.content,
+          guardrails: { flagged: context.response.status === 500 }
+        }
+```
 
 ## Session management
 
