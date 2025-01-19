@@ -176,6 +176,7 @@ function fail(reason: string, tokensUsed?: Partial<TokenUsage>): Omit<GradingRes
       prompt: tokensUsed?.prompt || 0,
       completion: tokensUsed?.completion || 0,
       cached: tokensUsed?.cached || 0,
+      completionDetails: tokensUsed?.completionDetails,
     },
   };
 }
@@ -214,6 +215,11 @@ export async function matchesSimilarity(
     prompt: 0,
     completion: 0,
     cached: 0,
+    completionDetails: {
+      reasoning: 0,
+      acceptedPrediction: 0,
+      rejectedPrediction: 0,
+    },
   };
 
   if ('callSimilarityApi' in finalProvider) {
@@ -242,6 +248,17 @@ export async function matchesSimilarity(
         (outputEmbedding.tokenUsage?.completion || 0),
       cached:
         (expectedEmbedding.tokenUsage?.cached || 0) + (outputEmbedding.tokenUsage?.cached || 0),
+      completionDetails: {
+        reasoning:
+          (expectedEmbedding.tokenUsage?.completionDetails?.reasoning || 0) +
+          (outputEmbedding.tokenUsage?.completionDetails?.reasoning || 0),
+        acceptedPrediction:
+          (expectedEmbedding.tokenUsage?.completionDetails?.acceptedPrediction || 0) +
+          (outputEmbedding.tokenUsage?.completionDetails?.acceptedPrediction || 0),
+        rejectedPrediction:
+          (expectedEmbedding.tokenUsage?.completionDetails?.rejectedPrediction || 0) +
+          (outputEmbedding.tokenUsage?.completionDetails?.rejectedPrediction || 0),
+      },
     };
 
     if (expectedEmbedding.error || outputEmbedding.error) {
@@ -406,6 +423,11 @@ export async function matchesLlmRubric(
         prompt: resp.tokenUsage?.prompt || 0,
         completion: resp.tokenUsage?.completion || 0,
         cached: resp.tokenUsage?.cached || 0,
+        completionDetails: parsed.tokensUsed?.completionDetails || {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     };
   } catch (err) {
@@ -505,6 +527,11 @@ export async function matchesFactuality(
         prompt: resp.tokenUsage?.prompt || 0,
         completion: resp.tokenUsage?.completion || 0,
         cached: resp.tokenUsage?.cached || 0,
+        completionDetails: resp.tokenUsage?.completionDetails || {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     };
   } catch (err) {
@@ -565,6 +592,11 @@ export async function matchesClosedQa(
         prompt: resp.tokenUsage?.prompt || 0,
         completion: resp.tokenUsage?.completion || 0,
         cached: resp.tokenUsage?.cached || 0,
+        completionDetails: resp.tokenUsage?.completionDetails || {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     };
   } catch (err) {
@@ -687,6 +719,11 @@ export async function matchesAnswerRelevance(
     prompt: 0,
     completion: 0,
     cached: 0,
+    completionDetails: {
+      reasoning: 0,
+      acceptedPrediction: 0,
+      rejectedPrediction: 0,
+    },
   };
 
   const candidateQuestions: string[] = [];
@@ -703,6 +740,17 @@ export async function matchesAnswerRelevance(
       tokensUsed.prompt += resp.tokenUsage?.prompt || 0;
       tokensUsed.completion += resp.tokenUsage?.completion || 0;
       tokensUsed.cached += resp.tokenUsage?.cached || 0;
+      tokensUsed.completionDetails = {
+        reasoning:
+          (tokensUsed.completionDetails?.reasoning || 0) +
+          (resp.tokenUsage?.completionDetails?.reasoning || 0),
+        acceptedPrediction:
+          (tokensUsed.completionDetails?.acceptedPrediction || 0) +
+          (resp.tokenUsage?.completionDetails?.acceptedPrediction || 0),
+        rejectedPrediction:
+          (tokensUsed.completionDetails?.rejectedPrediction || 0) +
+          (resp.tokenUsage?.completionDetails?.rejectedPrediction || 0),
+      };
       return fail(resp.error || 'No output', tokensUsed);
     }
 
@@ -724,6 +772,17 @@ export async function matchesAnswerRelevance(
     tokensUsed.prompt += inputEmbeddingResp.tokenUsage?.prompt || 0;
     tokensUsed.completion += inputEmbeddingResp.tokenUsage?.completion || 0;
     tokensUsed.cached += inputEmbeddingResp.tokenUsage?.cached || 0;
+    tokensUsed.completionDetails = {
+      reasoning:
+        (tokensUsed.completionDetails?.reasoning || 0) +
+        (inputEmbeddingResp.tokenUsage?.completionDetails?.reasoning || 0),
+      acceptedPrediction:
+        (tokensUsed.completionDetails?.acceptedPrediction || 0) +
+        (inputEmbeddingResp.tokenUsage?.completionDetails?.acceptedPrediction || 0),
+      rejectedPrediction:
+        (tokensUsed.completionDetails?.rejectedPrediction || 0) +
+        (inputEmbeddingResp.tokenUsage?.completionDetails?.rejectedPrediction || 0),
+    };
     return fail(inputEmbeddingResp.error || 'No embedding', tokensUsed);
   }
   const inputEmbedding = inputEmbeddingResp.embedding;
@@ -735,6 +794,17 @@ export async function matchesAnswerRelevance(
     tokensUsed.prompt += resp.tokenUsage?.prompt || 0;
     tokensUsed.completion += resp.tokenUsage?.completion || 0;
     tokensUsed.cached += resp.tokenUsage?.cached || 0;
+    tokensUsed.completionDetails = {
+      reasoning:
+        (tokensUsed.completionDetails?.reasoning || 0) +
+        (resp.tokenUsage?.completionDetails?.reasoning || 0),
+      acceptedPrediction:
+        (tokensUsed.completionDetails?.acceptedPrediction || 0) +
+        (resp.tokenUsage?.completionDetails?.acceptedPrediction || 0),
+      rejectedPrediction:
+        (tokensUsed.completionDetails?.rejectedPrediction || 0) +
+        (resp.tokenUsage?.completionDetails?.rejectedPrediction || 0),
+    };
     if (resp.error || !resp.embedding) {
       return fail(resp.error || 'No embedding', tokensUsed);
     }
@@ -809,6 +879,11 @@ export async function matchesContextRecall(
       prompt: resp.tokenUsage?.prompt || 0,
       completion: resp.tokenUsage?.completion || 0,
       cached: resp.tokenUsage?.cached || 0,
+      completionDetails: resp.tokenUsage?.completionDetails || {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
     },
   };
 }
@@ -857,6 +932,11 @@ export async function matchesContextRelevance(
       prompt: resp.tokenUsage?.prompt || 0,
       completion: resp.tokenUsage?.completion || 0,
       cached: resp.tokenUsage?.cached || 0,
+      completionDetails: resp.tokenUsage?.completionDetails || {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
     },
   };
 }
@@ -940,6 +1020,11 @@ export async function matchesContextFaithfulness(
       prompt: resp.tokenUsage?.prompt || 0,
       completion: resp.tokenUsage?.completion || 0,
       cached: resp.tokenUsage?.cached || 0,
+      completionDetails: resp.tokenUsage?.completionDetails || {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
     },
   };
 }
@@ -988,6 +1073,11 @@ export async function matchesSelectBest(
     prompt: resp.tokenUsage?.prompt || 0,
     completion: resp.tokenUsage?.completion || 0,
     cached: resp.tokenUsage?.cached || 0,
+    completionDetails: resp.tokenUsage?.completionDetails || {
+      reasoning: 0,
+      acceptedPrediction: 0,
+      rejectedPrediction: 0,
+    },
   };
   return outputs.map((output, index) => {
     if (index === verdict) {
