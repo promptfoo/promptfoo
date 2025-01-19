@@ -28,22 +28,22 @@ import 'prismjs/components/prism-clike';
 // @ts-expect-error: No types available
 import { highlight, languages } from 'prismjs/components/prism-core';
 import 'prismjs/components/prism-javascript';
+import type { ProviderOptions } from '../../types';
 import 'prismjs/themes/prism.css';
 
 interface TestTargetConfigurationProps {
   testingTarget: boolean;
   hasTestedTarget: boolean;
   handleTestTarget: () => void;
-  selectedTarget: any;
+  selectedTarget: ProviderOptions;
   testResult: any;
-  requiresTransformResponse: (target: any) => boolean;
+  requiresTransformResponse: (target: ProviderOptions) => boolean;
   updateCustomTarget: (field: string, value: any) => void;
 }
 
 const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
   testingTarget,
   handleTestTarget,
-  hasTestedTarget,
   selectedTarget,
   testResult,
   requiresTransformResponse,
