@@ -274,9 +274,14 @@ class Evaluator {
       if (response.error) {
         ret.error = response.error;
       } else if (response.output === null || response.output === undefined) {
-        ret.success = false;
-        ret.score = 0;
-        ret.error = 'No output';
+        // NOTE: empty output often indicative of guardrails. Pass in redteam context. 
+        if (this.testSuite.redteam) {
+          ret.success = true;
+        } else {
+          ret.success = false;
+          ret.score = 0;
+          ret.error = 'No output';
+        }
       } else {
         // Create a copy of response so we can potentially mutate it.
         const processedResponse = { ...response };
