@@ -3,7 +3,6 @@ import { and, eq, gte, lt } from 'drizzle-orm';
 import { getDb } from '../database';
 import { evalResultsTable } from '../database/tables';
 import { getEnvBool } from '../envars';
-import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import type {
   ApiProvider,
@@ -16,6 +15,7 @@ import type {
 } from '../types';
 import { type EvaluateResult } from '../types';
 import { safeJsonStringify } from '../util/json';
+import { getCurrentTimestamp } from '../util/time';
 
 export default class EvalResult {
   static async createFromEvaluateResult(
@@ -71,18 +71,11 @@ export default class EvalResult {
       metadata,
       failureReason,
     };
-
     if (persist) {
       const db = getDb();
-      try {
-        const dbResult = await db.insert(evalResultsTable).values(args).returning();
-        return new EvalResult({ ...dbResult[0], persisted: true });
-      } catch (err) {
-        logger.error('Failed to create evaluation result record in database');
-        throw new Error(
-          `Database error while creating evaluation result: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
+
+      const dbResult = await db.insert(evalResultsTable).values(args).returning();
+      return new EvalResult({ ...dbResult[0], persisted: true });
     }
     return new EvalResult(args);
   }
@@ -94,11 +87,7 @@ export default class EvalResult {
       for (const result of results) {
         const dbResult = await tx
           .insert(evalResultsTable)
-          .values({
-            ...result,
-            evalId,
-            id: randomUUID(),
-          })
+          .values({ ...result, evalId, id: randomUUID() })
           .returning();
         returnResults.push(new EvalResult({ ...dbResult[0], persisted: true }));
       }
@@ -227,19 +216,15 @@ export default class EvalResult {
   async save() {
     const db = getDb();
     //check if this exists in the db
-    try {
-      if (this.persisted) {
-        await db.update(evalResultsTable).set(this).where(eq(evalResultsTable.id, this.id));
-      } else {
-        const result = await db.insert(evalResultsTable).values(this).returning();
-        this.id = result[0].id;
-        this.persisted = true;
-      }
-    } catch (err) {
-      logger.error('Failed to save evaluation result record to database');
-      throw new Error(
-        `Database error while saving evaluation result: ${err instanceof Error ? err.message : String(err)}`,
-      );
+    if (this.persisted) {
+      await db
+        .update(evalResultsTable)
+        .set({ ...this, updatedAt: getCurrentTimestamp() })
+        .where(eq(evalResultsTable.id, this.id));
+    } else {
+      const result = await db.insert(evalResultsTable).values(this).returning();
+      this.id = result[0].id;
+      this.persisted = true;
     }
   }
 

@@ -3,13 +3,11 @@ import yaml from 'js-yaml';
 import path from 'path';
 import Clone from 'rfdc';
 import cliState from '../cliState';
-import logger from '../logger';
 import { type Assertion, type TestCase } from '../types';
 
 const clone = Clone();
 
 export function getFinalTest(test: TestCase, assertion: Assertion) {
-  logger.warn(`test: ${JSON.stringify(test)}`);
   // Deep copy
   const ret = clone({
     ...test,
@@ -33,7 +31,7 @@ export function getFinalTest(test: TestCase, assertion: Assertion) {
   }
   ret.options.provider = assertion.provider || test?.options?.provider;
   ret.options.rubricPrompt = assertion.rubricPrompt || ret.options.rubricPrompt;
-  return ret;
+  return Object.freeze(ret);
 }
 
 export function processFileReference(fileRef: string): object | string {

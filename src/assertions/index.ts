@@ -143,8 +143,6 @@ export async function runAssertion({
     ...(assertion.config ? { config: structuredClone(assertion.config) } : {}),
   };
 
-  logger.error(`context: ${JSON.stringify(context)}`);
-
   // Render assertion values
   let renderedValue = assertion.value;
   let valueFromScript: string | boolean | number | GradingResult | object | undefined;
@@ -223,8 +221,6 @@ export async function runAssertion({
     });
   }
 
-  logger.warn(`after context`);
-
   const assertionParams: AssertionParams = {
     assertion,
     baseType,
@@ -242,8 +238,6 @@ export async function runAssertion({
     test: getFinalTest(test, assertion),
     valueFromScript,
   };
-
-  logger.warn(`after assertionParams`);
 
   const assertionHandlers: Record<
     BaseAssertionTypes,
@@ -294,7 +288,6 @@ export async function runAssertion({
 
   const handler = assertionHandlers[baseType as keyof typeof assertionHandlers];
   if (handler) {
-    logger.warn(`Selected handler: ${handler} in runAssertion`);
     const result = await handler(assertionParams);
 
     // If weight is 0, treat this as a metric-only assertion that can't fail
@@ -373,11 +366,7 @@ export async function runAssertions({
         // Select-type assertions are handled separately because they depend on multiple outputs.
         return;
       }
-
-      logger.warn(`Got this far in runAssertions`);
-      const testProviderResponse = await provider!.callApi('what is 2+2');
-      logger.warn(`testProviderResponse: ${JSON.stringify(testProviderResponse)}`);
-
+  
       const result = await runAssertion({
         prompt,
         provider,
@@ -387,8 +376,6 @@ export async function runAssertions({
         latencyMs,
         assertIndex: index,
       });
-
-      logger.warn(`after runAssertion result: ${JSON.stringify(result)}`);
 
       assertResult.addResult({
         index,

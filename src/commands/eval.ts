@@ -204,8 +204,6 @@ export async function doEval(
       ? await Eval.create(config, testSuite.prompts)
       : new Eval(config);
 
-    console.warn(`Got this far`);
-
     // Run the evaluation!!!!!!
     const ret = await evaluate(testSuite, evalRecord, {
       ...options,
