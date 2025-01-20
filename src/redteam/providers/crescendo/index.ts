@@ -706,3 +706,5 @@ class CrescendoProvider implements ApiProvider {
 }
 
 export default CrescendoProvider;
+
+export { DEFAULT_MAX_ROUNDS, DEFAULT_MAX_BACKTRACKS, CrescendoProvider };
