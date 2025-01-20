@@ -1,3 +1,5 @@
+import crypto from 'crypto';
+import fs from 'fs';
 import httpZ from 'http-z';
 import path from 'path';
 import { z } from 'zod';
@@ -20,6 +22,45 @@ import { REQUEST_TIMEOUT_MS } from './shared';
 
 const nunjucks = getNunjucksEngine();
 
+// Helper function to generate RSA signature
+export async function generateRsaSignature(
+  privateKeyPath: string,
+  clientId: string,
+  timestamp: number,
+  keyVersion: string,
+  signatureDataTemplate: string,
+  signatureAlgorithm: string = 'SHA256',
+): Promise<string> {
+  try {
+    const privateKey = fs.readFileSync(privateKeyPath, 'utf8');
+    const data = nunjucks.renderString(signatureDataTemplate, {
+      clientId,
+      timestamp,
+      keyVersion,
+    });
+    const sign = crypto.createSign(signatureAlgorithm);
+    sign.update(data);
+    sign.end();
+    const signature = sign.sign(privateKey);
+    return signature.toString('base64');
+  } catch (err) {
+    logger.error(`Error generating RSA signature: ${String(err)}`);
+    throw new Error(`Failed to generate RSA signature: ${String(err)}`);
+  }
+}
+
+// Helper function to check if signature needs refresh
+export function needsSignatureRefresh(
+  timestamp: number,
+  validityMs: number,
+  bufferMs?: number,
+): boolean {
+  const now = Date.now();
+  const timeElapsed = now - timestamp;
+  const effectiveBufferMs = bufferMs ?? Math.floor(validityMs * 0.1); // Default to 10% of validity time
+  return timeElapsed + effectiveBufferMs >= validityMs;
+}
+
 export const HttpProviderConfigSchema = z.object({
   body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
   headers: z.record(z.string()).optional(),
@@ -38,6 +79,25 @@ export const HttpProviderConfigSchema = z.object({
    * @deprecated use transformResponse instead
    */
   responseParser: z.union([z.string(), z.function()]).optional(),
+  // Digital Signature Authentication
+  signatureAuth: z
+    .object({
+      privateKeyPath: z.string(),
+      keyVersion: z.string(),
+      clientId: z.string(),
+      signatureHeader: z.string().default('signature'),
+      timestampHeader: z.string().default('timestamp'),
+      clientIdHeader: z.string().default('client-id'),
+      keyVersionHeader: z.string().default('key-version'),
+      signatureValidityMs: z.number().default(300000), // 5 minutes
+      // Template for generating the data to sign
+      signatureDataTemplate: z.string().default('{{clientId}}{{timestamp}}{{keyVersion}}'),
+      // Signature algorithm to use (defaults to SHA256)
+      signatureAlgorithm: z.string().default('SHA256'),
+      // Buffer time in ms before signature expiry to refresh (defaults to 10% of validity time)
+      signatureRefreshBufferMs: z.number().optional(),
+    })
+    .optional(),
 });
 
 export type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
@@ -413,6 +473,9 @@ export class HttpProvider implements ApiProvider {
   private sessionParser: Promise<({ headers }: { headers: Record<string, string> }) => string>;
   private transformRequest: Promise<(prompt: string) => any>;
   private validateStatus: Promise<(status: number) => boolean>;
+  private lastSignatureTimestamp?: number;
+  private lastSignature?: string;
+
   constructor(url: string, options: ProviderOptions) {
     this.config = HttpProviderConfigSchema.parse(options.config);
     this.url = this.config.url || url;
@@ -442,6 +505,57 @@ export class HttpProvider implements ApiProvider {
     return `[HTTP Provider ${this.url}]`;
   }
 
+  async getAuthHeaders(): Promise<Record<string, string>> {
+    if (!this.config.signatureAuth) {
+      return {};
+    }
+
+    const {
+      privateKeyPath,
+      keyVersion,
+      clientId,
+      signatureHeader,
+      timestampHeader,
+      clientIdHeader,
+      keyVersionHeader,
+      signatureValidityMs,
+      signatureDataTemplate,
+      signatureAlgorithm,
+      signatureRefreshBufferMs,
+    } = this.config.signatureAuth;
+
+    // Check if we need to generate a new signature
+    if (
+      !this.lastSignatureTimestamp ||
+      !this.lastSignature ||
+      needsSignatureRefresh(
+        this.lastSignatureTimestamp,
+        signatureValidityMs,
+        signatureRefreshBufferMs,
+      )
+    ) {
+      this.lastSignatureTimestamp = Date.now();
+      this.lastSignature = await generateRsaSignature(
+        privateKeyPath,
+        clientId,
+        this.lastSignatureTimestamp,
+        keyVersion,
+        signatureDataTemplate,
+        signatureAlgorithm,
+      );
+    }
+
+    invariant(this.lastSignature, 'Signature should be defined at this point');
+    invariant(this.lastSignatureTimestamp, 'Timestamp should be defined at this point');
+
+    return {
+      [signatureHeader]: this.lastSignature,
+      [timestampHeader]: String(this.lastSignatureTimestamp),
+      [clientIdHeader]: clientId,
+      [keyVersionHeader]: keyVersion,
+    };
+  }
+
   private getDefaultHeaders(body: any): Record<string, string> {
     if (this.config.method === 'GET') {
       return {};
@@ -469,17 +583,21 @@ export class HttpProvider implements ApiProvider {
     }
   }
 
-  private getHeaders(
+  private async getHeaders(
     defaultHeaders: Record<string, string>,
     vars: Record<string, any>,
-  ): Record<string, string> {
+  ): Promise<Record<string, string>> {
     const configHeaders = this.config.headers || {};
     // Convert all keys in configHeaders to lowercase
     const headers = Object.fromEntries(
       Object.entries(configHeaders).map(([key, value]) => [key.toLowerCase(), value]),
     );
+
+    // Get auth headers if RSA auth is configured
+    const authHeaders = await this.getAuthHeaders();
+
     return Object.fromEntries(
-      Object.entries({ ...defaultHeaders, ...headers }).map(([key, value]) => [
+      Object.entries({ ...defaultHeaders, ...headers, ...authHeaders }).map(([key, value]) => [
         key,
         nunjucks.renderString(value, vars),
       ]),
@@ -497,7 +615,7 @@ export class HttpProvider implements ApiProvider {
     }
 
     const defaultHeaders = this.getDefaultHeaders(this.config.body);
-    const headers = this.getHeaders(defaultHeaders, vars);
+    const headers = await this.getHeaders(defaultHeaders, vars);
     this.validateContentTypeAndBody(headers, this.config.body);
 
     // Transform prompt using request transform
