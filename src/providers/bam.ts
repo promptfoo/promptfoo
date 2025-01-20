@@ -2,7 +2,7 @@ import type {
   Client as GenAIClient,
   TextGenerationCreateInput,
   TextGenerationCreateOutput,
-} from '@ibm-generative-ai/node-sdk' with { 'resolution-mode': 'import' };
+} from '@ibm-generative-ai/node-sdk';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';

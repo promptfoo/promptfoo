@@ -220,7 +220,7 @@ async function runRedteamConversation({
     }
 
     const assertToUse = test?.assert?.find((a: { type: string }) => a.type);
-    const { getGraderById } = await import('../graders.js');
+    const { getGraderById } = await import('../graders');
     let graderPassed: boolean | undefined;
     if (test && assertToUse) {
       const grader = getGraderById(assertToUse.type);

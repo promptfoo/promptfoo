@@ -578,7 +578,7 @@ export async function runRedteamConversation({
           }
         }
 
-        const { getGraderById } = await import('../graders.js');
+        const { getGraderById } = await import('../graders');
         let graderPassed: boolean | undefined;
         const assertToUse = test?.assert?.find((a: { type: string }) => a.type);
 
