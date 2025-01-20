@@ -38,6 +38,8 @@ import CustomMetrics from './CustomMetrics';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import GenerateTestCases from './GenerateTestCases';
+import MarkdownErrorBoundary from './MarkdownErrorBoundary';
+import ResultsTableErrorBoundary from './ResultsTableErrorBoundary';
 import type { TruncatedTextProps } from './TruncatedText';
 import TruncatedText from './TruncatedText';
 import { useStore as useMainStore } from './store';
@@ -425,7 +427,9 @@ function ResultsTable({
                 return (
                   <div className="cell">
                     {renderMarkdown ? (
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{truncatedValue}</ReactMarkdown>
+                      <MarkdownErrorBoundary fallback={<>{value}</>}>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{truncatedValue}</ReactMarkdown>
+                      </MarkdownErrorBoundary>
                     ) : (
                       <>{value}</>
                     )}
@@ -908,4 +912,12 @@ function ResultsTable({
   );
 }
 
-export default React.memo(ResultsTable);
+function ResultsTableWithErrorBoundary(props: ResultsTableProps) {
+  return (
+    <ResultsTableErrorBoundary>
+      <ResultsTable {...props} />
+    </ResultsTableErrorBoundary>
+  );
+}
+
+export default React.memo(ResultsTableWithErrorBoundary);
