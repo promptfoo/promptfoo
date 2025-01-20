@@ -366,7 +366,7 @@ export async function runAssertions({
         // Select-type assertions are handled separately because they depend on multiple outputs.
         return;
       }
-  
+
       const result = await runAssertion({
         prompt,
         provider,
