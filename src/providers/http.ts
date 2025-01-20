@@ -583,7 +583,7 @@ export class HttpProvider implements ApiProvider {
     }
   }
 
-  private async getHeaders(
+  async getHeaders(
     defaultHeaders: Record<string, string>,
     vars: Record<string, any>,
   ): Promise<Record<string, string>> {

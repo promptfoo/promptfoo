@@ -633,14 +633,14 @@ describe('HttpProvider', () => {
   });
 
   describe('getHeaders', () => {
-    it('should combine default headers with config headers', () => {
+    it('should combine default headers with config headers', async () => {
       const provider = new HttpProvider(mockUrl, {
         config: {
           headers: { 'X-Custom': '{{ prompt }}' },
           body: 'test',
         },
       });
-      const result = provider['getHeaders'](
+      const result = await provider.getHeaders(
         { 'content-type': 'application/json' },
         { prompt: 'test' },
       );
@@ -650,14 +650,14 @@ describe('HttpProvider', () => {
       });
     });
 
-    it('should render template strings in headers', () => {
+    it('should render template strings in headers', async () => {
       const provider = new HttpProvider(mockUrl, {
         config: {
           headers: { 'X-Custom': '{{ prompt | upper }}' },
           body: 'test',
         },
       });
-      const result = provider['getHeaders']({}, { prompt: 'test' });
+      const result = await provider.getHeaders({}, { prompt: 'test' });
       expect(result).toEqual({
         'x-custom': 'TEST',
       });
