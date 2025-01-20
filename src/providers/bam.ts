@@ -193,3 +193,5 @@ export class BAMChatProvider implements ApiProvider {
 }
 
 export class BAMEmbeddingProvider extends BAMChatProvider {}
+
+export { convertResponse };
