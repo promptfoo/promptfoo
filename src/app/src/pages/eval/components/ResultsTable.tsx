@@ -39,7 +39,6 @@ import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import GenerateTestCases from './GenerateTestCases';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
-import ResultsTableErrorBoundary from './ResultsTableErrorBoundary';
 import type { TruncatedTextProps } from './TruncatedText';
 import TruncatedText from './TruncatedText';
 import { useStore as useMainStore } from './store';
@@ -912,12 +911,4 @@ function ResultsTable({
   );
 }
 
-function ResultsTableWithErrorBoundary(props: ResultsTableProps) {
-  return (
-    <ResultsTableErrorBoundary>
-      <ResultsTable {...props} />
-    </ResultsTableErrorBoundary>
-  );
-}
-
-export default React.memo(ResultsTableWithErrorBoundary);
+export default React.memo(ResultsTable);
