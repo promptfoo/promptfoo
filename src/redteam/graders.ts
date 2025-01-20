@@ -10,7 +10,7 @@ import { DebugAccessGrader } from './plugins/debugAccess';
 import { DivergentRepetitionGrader } from './plugins/divergentRepetition';
 import { ExcessiveAgencyGrader } from './plugins/excessiveAgency';
 import { HallucinationGrader } from './plugins/hallucination';
-import { HarmfulGrader, HarmfulPrivacyGrader } from './plugins/harmful/graders';
+import { HarmfulGrader, HarmfulPrivacyGrader, SelfHarmGrader } from './plugins/harmful/graders';
 import { HijackingGrader } from './plugins/hijacking';
 import { ImitationGrader } from './plugins/imitation';
 import { IndirectPromptInjectionGrader } from './plugins/indirectPromptInjection';
@@ -56,7 +56,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:harmful:privacy': new HarmfulPrivacyGrader(),
   'promptfoo:redteam:harmful:profanity': new HarmfulGrader(),
   'promptfoo:redteam:harmful:radicalization': new HarmfulGrader(),
-  'promptfoo:redteam:harmful:self-harm': new HarmfulGrader(),
+  'promptfoo:redteam:harmful:self-harm': new SelfHarmGrader(),
   'promptfoo:redteam:harmful:sex-crime': new HarmfulGrader(),
   'promptfoo:redteam:harmful:sexual-content': new HarmfulGrader(),
   'promptfoo:redteam:harmful:specialized-advice': new HarmfulGrader(),
