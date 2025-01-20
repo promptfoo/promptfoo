@@ -70,6 +70,7 @@ export interface ApiProvider {
   getSessionId?: () => string;
   label?: ProviderLabel;
   transform?: string;
+  toJSON?: () => any;
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {

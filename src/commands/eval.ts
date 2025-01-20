@@ -32,7 +32,6 @@ import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import invariant from '../util/invariant';
-import { safeJsonStringify } from '../util/json';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
 
@@ -201,12 +200,11 @@ export async function doEval(
       );
     }
 
-    console.warn(`config: ${safeJsonStringify(config)}`);
-    console.warn(`json config: ${JSON.stringify(config)}`);
-
     const evalRecord = cmdObj.write
       ? await Eval.create(config, testSuite.prompts)
       : new Eval(config);
+
+    console.warn(`Got this far`);
 
     // Run the evaluation!!!!!!
     const ret = await evaluate(testSuite, evalRecord, {

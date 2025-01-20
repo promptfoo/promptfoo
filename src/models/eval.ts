@@ -163,8 +163,6 @@ export default class Eval {
     const db = getDb();
     try {
       await db.transaction(async (tx) => {
-        console.warn(`evalsTable: ${JSON.stringify(evalsTable)}`);
-
         await tx
           .insert(evalsTable)
           .values({
@@ -172,7 +170,7 @@ export default class Eval {
             createdAt: createdAt.getTime(),
             author,
             description: config.description,
-            config,
+            config, // JSON.parse(safeJsonStringify(config) as string),
             results: {},
           })
           .run();

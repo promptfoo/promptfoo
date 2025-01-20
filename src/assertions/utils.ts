@@ -3,20 +3,37 @@ import yaml from 'js-yaml';
 import path from 'path';
 import Clone from 'rfdc';
 import cliState from '../cliState';
+import logger from '../logger';
 import { type Assertion, type TestCase } from '../types';
 
 const clone = Clone();
 
 export function getFinalTest(test: TestCase, assertion: Assertion) {
+  logger.warn(`test: ${JSON.stringify(test)}`);
   // Deep copy
-  const ret = clone(test);
+  const ret = clone({
+    ...test,
+    ...(test.options &&
+      test.options.provider && {
+        options: {
+          ...test.options,
+          provider: undefined,
+        },
+      }),
+    ...(test.provider && {
+      provider: undefined,
+    }),
+  });
 
   // Assertion provider overrides test provider
   ret.options = ret.options || {};
   // NOTE: Clone does not copy functions so we set the provider again
+  if (test.provider) {
+    ret.provider = test.provider;
+  }
   ret.options.provider = assertion.provider || test?.options?.provider;
   ret.options.rubricPrompt = assertion.rubricPrompt || ret.options.rubricPrompt;
-  return Object.freeze(ret);
+  return ret;
 }
 
 export function processFileReference(fileRef: string): object | string {

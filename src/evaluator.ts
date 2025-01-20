@@ -213,6 +213,8 @@ class Evaluator {
       if (test.providerOutput) {
         response.output = test.providerOutput;
       } else {
+        logger.warn(`test.provider: ${JSON.stringify(test.provider)}`);
+
         response = await ((test.provider as ApiProvider) || provider).callApi(
           renderedPrompt,
           {
@@ -234,6 +236,8 @@ class Evaluator {
             includeLogProbs: test.assert?.some((a) => a.type === 'perplexity'),
           },
         );
+
+        logger.warn(`response: ${JSON.stringify(response)}`);
       }
       const endTime = Date.now();
       latencyMs = endTime - startTime;
@@ -300,6 +304,7 @@ class Evaluator {
         }
 
         invariant(processedResponse.output != null, 'Response output should not be null');
+        logger.warn(`just before runAssertions`);
         const checkResult = await runAssertions({
           prompt: renderedPrompt,
           provider,
@@ -307,6 +312,7 @@ class Evaluator {
           test,
           latencyMs: response.cached ? undefined : latencyMs,
         });
+        logger.warn(`checkResult: ${JSON.stringify(checkResult)}`);
         if (!checkResult.pass) {
           ret.error = checkResult.reason;
           ret.failureReason = ResultFailureReason.ASSERT;
@@ -581,6 +587,8 @@ class Evaluator {
       testCase.metadata = { ...testSuite.defaultTest?.metadata, ...testCase.metadata };
       testCase.provider = testCase.provider || testSuite.defaultTest?.provider;
 
+      console.warn(`testCase.provider: ${JSON.stringify(testCase.provider)}`);
+
       const prependToPrompt =
         testCase.options?.prefix || testSuite.defaultTest?.options?.prefix || '';
       const appendToPrompt =
@@ -651,6 +659,9 @@ class Evaluator {
       await runExtensionHook(testSuite.extensions, 'beforeEach', {
         test: evalStep.test,
       });
+
+      console.warn(`Got this far`);
+      console.warn(`evalStep: ${JSON.stringify(evalStep)}`);
 
       const row = await this.runEval(evalStep);
 
