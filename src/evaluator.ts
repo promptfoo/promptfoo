@@ -274,7 +274,7 @@ class Evaluator {
       if (response.error) {
         ret.error = response.error;
       } else if (response.output === null || response.output === undefined) {
-        // NOTE: empty output often indicative of guardrails. Pass in redteam context. 
+        // NOTE: empty output often indicative of guardrails, so behavior differs for red teams.
         if (this.testSuite.redteam) {
           ret.success = true;
         } else {
