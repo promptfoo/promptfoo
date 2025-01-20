@@ -324,7 +324,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                     strategyStats[selectedStrategy].total - strategyStats[selectedStrategy].pass}
                 </Typography>
                 <Typography variant="body2" align="center" color="text.secondary">
-                  Successful Attacks
+                  Flagged Attempts
                 </Typography>
               </Grid>
               <Grid item xs={4}>
@@ -354,7 +354,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                   <TableRow>
                     <TableCell>Plugin</TableCell>
                     <TableCell align="right">Attack Success Rate</TableCell>
-                    <TableCell align="right"># Successful Attacks</TableCell>
+                    <TableCell align="right"># Flagged Attempts</TableCell>
                     <TableCell align="right"># Attempts</TableCell>
                   </TableRow>
                 </TableHead>
@@ -382,7 +382,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
             sx={{ mt: 3, mb: 2 }}
           >
             <Tab
-              label={`Successful Attacks (${strategyStats[selectedStrategy].total - strategyStats[selectedStrategy].pass})`}
+              label={`Flagged Attempts (${strategyStats[selectedStrategy].total - strategyStats[selectedStrategy].pass})`}
             />
             <Tab label={`Failed Attempts (${strategyStats[selectedStrategy].pass})`} />
           </Tabs>
