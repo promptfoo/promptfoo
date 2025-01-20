@@ -161,101 +161,112 @@ export default class Eval {
     const evalId = opts?.id || createEvalId(createdAt);
     const author = opts?.author || getUserEmail();
     const db = getDb();
-    await db.transaction(async (tx) => {
-      await tx
-        .insert(evalsTable)
-        .values({
-          id: evalId,
-          createdAt: createdAt.getTime(),
-          author,
-          description: config.description,
-          config,
-          results: {},
-        })
-        .run();
-
-      for (const prompt of renderedPrompts) {
-        const label = prompt.label || prompt.display || prompt.raw;
-        const promptId = hashPrompt(prompt);
+    try {
+      await db.transaction(async (tx) => {
+        console.warn(`evalsTable: ${JSON.stringify(evalsTable)}`);
 
         await tx
-          .insert(promptsTable)
+          .insert(evalsTable)
           .values({
-            id: promptId,
-            prompt: label,
+            id: evalId,
+            createdAt: createdAt.getTime(),
+            author,
+            description: config.description,
+            config,
+            results: {},
           })
-          .onConflictDoNothing()
           .run();
 
-        await tx
-          .insert(evalsToPromptsTable)
-          .values({
-            evalId,
-            promptId,
-          })
-          .onConflictDoNothing()
-          .run();
-
-        logger.debug(`Inserting prompt ${promptId}`);
-      }
-      if (opts?.results) {
-        const res = await tx
-          .insert(evalResultsTable)
-          .values(opts.results?.map((r) => ({ ...r, evalId, id: randomUUID() })))
-          .run();
-        logger.debug(`Inserted ${res.changes} eval results`);
-      }
-
-      // Record dataset relation
-      const datasetId = sha256(JSON.stringify(config.tests || []));
-      await tx
-        .insert(datasetsTable)
-        .values({
-          id: datasetId,
-          tests: config.tests,
-        })
-        .onConflictDoNothing()
-        .run();
-
-      await tx
-        .insert(evalsToDatasetsTable)
-        .values({
-          evalId,
-          datasetId,
-        })
-        .onConflictDoNothing()
-        .run();
-
-      logger.debug(`Inserting dataset ${datasetId}`);
-
-      // Record tags
-      if (config.tags) {
-        for (const [tagKey, tagValue] of Object.entries(config.tags)) {
-          const tagId = sha256(`${tagKey}:${tagValue}`);
+        for (const prompt of renderedPrompts) {
+          const label = prompt.label || prompt.display || prompt.raw;
+          const promptId = hashPrompt(prompt);
 
           await tx
-            .insert(tagsTable)
+            .insert(promptsTable)
             .values({
-              id: tagId,
-              name: tagKey,
-              value: tagValue,
+              id: promptId,
+              prompt: label,
             })
             .onConflictDoNothing()
             .run();
 
           await tx
-            .insert(evalsToTagsTable)
+            .insert(evalsToPromptsTable)
             .values({
               evalId,
-              tagId,
+              promptId,
             })
             .onConflictDoNothing()
             .run();
 
-          logger.debug(`Inserting tag ${tagId}`);
+          logger.debug(`Inserting prompt ${promptId}`);
         }
-      }
-    });
+        if (opts?.results) {
+          const res = await tx
+            .insert(evalResultsTable)
+            .values(opts.results?.map((r) => ({ ...r, evalId, id: randomUUID() })))
+            .run();
+          logger.debug(`Inserted ${res.changes} eval results`);
+        }
+
+        // Record dataset relation
+        const datasetId = sha256(JSON.stringify(config.tests || []));
+        await tx
+          .insert(datasetsTable)
+          .values({
+            id: datasetId,
+            tests: config.tests,
+          })
+          .onConflictDoNothing()
+          .run();
+
+        await tx
+          .insert(evalsToDatasetsTable)
+          .values({
+            evalId,
+            datasetId,
+          })
+          .onConflictDoNothing()
+          .run();
+
+        logger.debug(`Inserting dataset ${datasetId}`);
+
+        // Record tags
+        if (config.tags) {
+          for (const [tagKey, tagValue] of Object.entries(config.tags)) {
+            const tagId = sha256(`${tagKey}:${tagValue}`);
+
+            await tx
+              .insert(tagsTable)
+              .values({
+                id: tagId,
+                name: tagKey,
+                value: tagValue,
+              })
+              .onConflictDoNothing()
+              .run();
+
+            await tx
+              .insert(evalsToTagsTable)
+              .values({
+                evalId,
+                tagId,
+              })
+              .onConflictDoNothing()
+              .run();
+
+            logger.debug(`Inserting tag ${tagId}`);
+          }
+        }
+      });
+    } catch (err) {
+      logger.error(
+        `Failed to create evaluation record in database: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      throw new Error(
+        `Database error while creating evaluation: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
     return new Eval(config, { id: evalId, author: opts?.author, createdAt, persisted: true });
   }
 
@@ -314,8 +325,15 @@ export default class Eval {
       invariant(this.oldResults, 'Old results not found');
       updateObj.results = this.oldResults;
     }
-    await db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
-    this.persisted = true;
+    try {
+      await db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
+      this.persisted = true;
+    } catch (err) {
+      logger.error('Failed to save evaluation record to database');
+      throw new Error(
+        `Database error while saving evaluation: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   async getVars() {
@@ -372,7 +390,14 @@ export default class Eval {
     this.prompts = prompts;
     if (this.persisted) {
       const db = getDb();
-      await db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
+      try {
+        await db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
+      } catch (err) {
+        logger.error('Failed to add prompts to evaluation record in database');
+        throw new Error(
+          `Database error while adding prompts to evaluation: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
     }
   }
 
@@ -460,14 +485,21 @@ export default class Eval {
 
   async delete() {
     const db = getDb();
-    await db.transaction(() => {
-      db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, this.id)).run();
-      db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, this.id)).run();
-      db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, this.id)).run();
+    try {
+      await db.transaction(() => {
+        db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, this.id)).run();
+        db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, this.id)).run();
+        db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, this.id)).run();
 
-      db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
-      db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
-    });
+        db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
+        db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
+      });
+    } catch (err) {
+      logger.error('Failed to delete evaluation record from database');
+      throw new Error(
+        `Database error while deleting evaluation: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 }
 

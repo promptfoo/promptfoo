@@ -32,6 +32,7 @@ import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import invariant from '../util/invariant';
+import { safeJsonStringify } from '../util/json';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
 
@@ -199,6 +200,9 @@ export async function doEval(
       Please review your promptfooconfig.yaml configuration.`),
       );
     }
+
+    console.warn(`config: ${safeJsonStringify(config)}`);
+    console.warn(`json config: ${JSON.stringify(config)}`);
 
     const evalRecord = cmdObj.write
       ? await Eval.create(config, testSuite.prompts)
