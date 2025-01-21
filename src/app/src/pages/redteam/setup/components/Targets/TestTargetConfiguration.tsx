@@ -317,21 +317,6 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                       />
                       <TextField
                         fullWidth
-                        label="Client ID Header"
-                        value={selectedTarget.config.signatureAuth?.clientIdHeader}
-                        onChange={(e) =>
-                          updateCustomTarget('signatureAuth', {
-                            ...selectedTarget.config.signatureAuth,
-                            clientIdHeader: e.target.value,
-                          })
-                        }
-                        placeholder="Header name for the client ID"
-                        InputLabelProps={{
-                          shrink: true,
-                        }}
-                      />
-                      <TextField
-                        fullWidth
                         label="Signature Data Template"
                         value={
                           selectedTarget.config.signatureAuth?.signatureDataTemplate ||
