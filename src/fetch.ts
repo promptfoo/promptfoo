@@ -98,7 +98,6 @@ export async function fetchWithProxy(
   }
 
   if (proxyUrl) {
-    logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
     const agent = new ProxyAgent({
       uri: proxyUrl,
       proxyTls: tlsOptions,
