@@ -24,8 +24,7 @@ const nunjucks = getNunjucksEngine();
 
 export async function generateSignature(
   privateKeyPathOrKey: string,
-  clientId: string,
-  timestamp: number,
+  signatureTimestamp: number,
   signatureDataTemplate: string,
   signatureAlgorithm: string = 'SHA256',
   isPath: boolean = true,
@@ -34,8 +33,7 @@ export async function generateSignature(
     const privateKey = isPath ? fs.readFileSync(privateKeyPathOrKey, 'utf8') : privateKeyPathOrKey;
     const data = nunjucks
       .renderString(signatureDataTemplate, {
-        clientId,
-        timestamp,
+        signatureTimestamp,
       })
       .replace(/\\n/g, '\n');
     const sign = crypto.createSign(signatureAlgorithm);
@@ -83,12 +81,9 @@ export const HttpProviderConfigSchema = z.object({
     .object({
       privateKeyPath: z.string().optional(),
       privateKey: z.string().optional(),
-      clientId: z.string(),
-      signatureHeader: z.string().default('signature'),
-      timestampHeader: z.string().default('timestamp'),
       signatureValidityMs: z.number().default(300000), // 5 minutes
       // Template for generating the data to sign
-      signatureDataTemplate: z.string().default('{{clientId}}{{timestamp}}'),
+      signatureDataTemplate: z.string().default('{{timestamp}}'),
       // Signature algorithm to use (defaults to SHA256)
       signatureAlgorithm: z.string().default('SHA256'),
       // Buffer time in ms before expiry to refresh (defaults to 10% of validity time)
@@ -505,18 +500,15 @@ export class HttpProvider implements ApiProvider {
     return `[HTTP Provider ${this.url}]`;
   }
 
-  async getAuthHeaders(): Promise<Record<string, string>> {
+  private async refreshSignatureIfNeeded(): Promise<void> {
     if (!this.config.signatureAuth) {
-      logger.debug('[HTTP Provider Auth]: No signature auth configured, returning empty headers');
-      return {};
+      logger.debug('[HTTP Provider Auth]: No signature auth configured');
+      return;
     }
 
     const {
       privateKeyPath,
       privateKey,
-      clientId,
-      signatureHeader,
-      timestampHeader,
       signatureValidityMs,
       signatureDataTemplate,
       signatureAlgorithm,
@@ -536,7 +528,6 @@ export class HttpProvider implements ApiProvider {
       this.lastSignatureTimestamp = Date.now();
       this.lastSignature = await generateSignature(
         privateKeyPath || privateKey!,
-        clientId,
         this.lastSignatureTimestamp,
         signatureDataTemplate,
         signatureAlgorithm,
@@ -549,16 +540,6 @@ export class HttpProvider implements ApiProvider {
 
     invariant(this.lastSignature, 'Signature should be defined at this point');
     invariant(this.lastSignatureTimestamp, 'Timestamp should be defined at this point');
-
-    const headers = {
-      [signatureHeader]: this.lastSignature,
-      [timestampHeader]: String(this.lastSignatureTimestamp),
-    };
-
-    logger.debug(
-      `[HTTP Provider Auth]: Returning auth headers: ${safeJsonStringify(headers, true /* prettyPrint */)}`,
-    );
-    return headers;
   }
 
   private getDefaultHeaders(body: any): Record<string, string> {
@@ -598,11 +579,8 @@ export class HttpProvider implements ApiProvider {
       Object.entries(configHeaders).map(([key, value]) => [key.toLowerCase(), value]),
     );
 
-    // Get auth headers if RSA auth is configured
-    const authHeaders = await this.getAuthHeaders();
-
     return Object.fromEntries(
-      Object.entries({ ...defaultHeaders, ...headers, ...authHeaders }).map(([key, value]) => [
+      Object.entries({ ...defaultHeaders, ...headers }).map(([key, value]) => [
         key,
         nunjucks.renderString(value, vars),
       ]),
@@ -613,7 +591,28 @@ export class HttpProvider implements ApiProvider {
     const vars = {
       ...(context?.vars || {}),
       prompt,
-    };
+    } as Record<string, any>;
+
+    // Add signature values to vars if signature auth is enabled
+    if (this.config.signatureAuth) {
+      await this.refreshSignatureIfNeeded();
+      invariant(this.lastSignature, 'Signature should be defined at this point');
+      invariant(this.lastSignatureTimestamp, 'Timestamp should be defined at this point');
+
+      if (vars.signature) {
+        logger.warn(
+          '[HTTP Provider Auth]: `signature` is already defined in vars and will be overwritten',
+        );
+      }
+      if (vars.signatureTimestamp) {
+        logger.warn(
+          '[HTTP Provider Auth]: `signatureTimestamp` is already defined in vars and will be overwritten',
+        );
+      }
+
+      vars.signature = this.lastSignature;
+      vars.signatureTimestamp = this.lastSignatureTimestamp;
+    }
 
     if (this.config.request) {
       return this.callApiWithRawRequest(vars);

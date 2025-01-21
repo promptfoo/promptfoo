@@ -234,6 +234,11 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 {selectedTarget.config.signatureAuth && (
                   <>
                     <Stack spacing={2}>
+                      <Typography variant="body2" color="text.secondary">
+                        Configure signature authentication. Use <code>{'{{signature}}'}</code> and{' '}
+                        <code>{'{{signatureTimestamp}}'}</code> in your headers to include the
+                        generated values.
+                      </Typography>
                       <TextField
                         fullWidth
                         label="Private Key"
@@ -242,13 +247,33 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                           updateCustomTarget('signatureAuth', {
                             ...selectedTarget.config.signatureAuth,
                             privateKey: e.target.value || undefined,
-                            // Unset private key path if set
                             privateKeyPath: undefined,
                           })
                         }
                         placeholder="Paste signature private key here"
                         multiline
                         rows={4}
+                        InputLabelProps={{
+                          shrink: true,
+                        }}
+                      />
+
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                        - OR -
+                      </Typography>
+
+                      <TextField
+                        fullWidth
+                        label="Private Key Path"
+                        value={selectedTarget.config.signatureAuth?.privateKeyPath || ''}
+                        onChange={(e) =>
+                          updateCustomTarget('signatureAuth', {
+                            ...selectedTarget.config.signatureAuth,
+                            privateKeyPath: e.target.value || undefined,
+                            privateKey: undefined,
+                          })
+                        }
+                        placeholder="Path to your private key file"
                         InputLabelProps={{
                           shrink: true,
                         }}
@@ -287,36 +312,6 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                       />
                       <TextField
                         fullWidth
-                        label="Signature Header"
-                        value={selectedTarget.config.signatureAuth?.signatureHeader}
-                        onChange={(e) =>
-                          updateCustomTarget('signatureAuth', {
-                            ...selectedTarget.config.signatureAuth,
-                            signatureHeader: e.target.value,
-                          })
-                        }
-                        placeholder="Header name for the signature"
-                        InputLabelProps={{
-                          shrink: true,
-                        }}
-                      />
-                      <TextField
-                        fullWidth
-                        label="Timestamp Header"
-                        value={selectedTarget.config.signatureAuth?.timestampHeader}
-                        onChange={(e) =>
-                          updateCustomTarget('signatureAuth', {
-                            ...selectedTarget.config.signatureAuth,
-                            timestampHeader: e.target.value,
-                          })
-                        }
-                        placeholder="Header name for the timestamp"
-                        InputLabelProps={{
-                          shrink: true,
-                        }}
-                      />
-                      <TextField
-                        fullWidth
                         label="Signature Data Template"
                         value={
                           selectedTarget.config.signatureAuth?.signatureDataTemplate ||
@@ -329,6 +324,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                           })
                         }
                         placeholder="Template for generating signature data"
+                        helperText="Use \n for newlines"
                         InputLabelProps={{
                           shrink: true,
                         }}

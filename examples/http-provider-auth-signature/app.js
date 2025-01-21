@@ -13,7 +13,7 @@ const SIGNATURE_CONFIG = {
   timestampHeader: 'timestamp',
   clientIdHeader: 'client-id',
   signatureValidityMs: 300000, // 5 minutes
-  signatureDataTemplate: '{{clientId}}{{timestamp}}',
+  signatureDataTemplate: 'promptfoo-app{{timestamp}}',
   signatureAlgorithm: 'SHA256',
 };
 
@@ -40,9 +40,10 @@ function validateSignature(req, res, next) {
     }
 
     // Generate signature data using the template
-    const signatureData = SIGNATURE_CONFIG.signatureDataTemplate
-      .replace('{{clientId}}', clientId)
-      .replace('{{timestamp}}', timestamp);
+    const signatureData = SIGNATURE_CONFIG.signatureDataTemplate.replace(
+      '{{timestamp}}',
+      timestamp,
+    );
 
     // Verify signature
     const publicKey = fs.readFileSync(SIGNATURE_CONFIG.publicKeyPath, 'utf8');
