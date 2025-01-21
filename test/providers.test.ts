@@ -11,11 +11,16 @@ import type { ProviderOptions } from '../src/types';
 
 jest.mock('fs');
 jest.mock('js-yaml');
-jest.mock('../src/providers/openai');
+jest.mock('../src/fetch');
+jest.mock('../src/globalConfig/accounts');
+jest.mock('../src/globalConfig/cloud');
+jest.mock('../src/globalConfig/globalConfig');
 jest.mock('../src/providers/http');
-jest.mock('../src/providers/websocket');
-jest.mock('../src/providers/scriptCompletion');
+jest.mock('../src/providers/openai');
 jest.mock('../src/providers/pythonCompletion');
+jest.mock('../src/providers/scriptCompletion');
+jest.mock('../src/providers/websocket');
+jest.mock('../src/logger');
 
 describe('loadApiProvider', () => {
   beforeEach(() => {
