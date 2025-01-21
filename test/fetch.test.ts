@@ -443,12 +443,12 @@ describe('fetchWithProxy', () => {
           [
             expect.stringMatching(
               new RegExp(
-                `Found proxy configuration in .*https?_proxy.*: ${testCase.expected.url}`,
+                `Found proxy configuration in .*https?_proxy.*: ${testCase.expected.url}/`,
                 'i',
               ),
             ),
           ],
-          [`Using proxy: ${testCase.expected.url}`],
+          [`Using proxy: ${testCase.expected.url}/`],
         ]),
       );
 
