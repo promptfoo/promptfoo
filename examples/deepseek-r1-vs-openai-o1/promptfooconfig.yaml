@@ -12,7 +12,7 @@ prompts:
     C) {{choices[2]}}
     D) {{choices[3]}}
 
-    Think through this step by step, then provide your final answer in the format "Therefore, the answer is [A/B/C/D]."
+    Think through this step by step, then provide your final answer in the format "Therefore, the answer is A/B/C/D."
 
 providers:
   - openai:o1
@@ -31,9 +31,10 @@ defaultTest:
       value: "Therefore, the answer is [ABCD]\\."
 
 tests:
-  # Load MMLU test sets for reasoning-heavy subjects (10 questions each)
+  # Load MMLU test sets for reasoning-heavy subjects
   - huggingface://datasets/cais/mmlu?split=test&subset=abstract_algebra&config=abstract_algebra&limit=10
+  # Optionally load other subjects
   # - huggingface://datasets/cais/mmlu?split=test&subset=formal_logic&config=formal_logic&limit=10
   # - huggingface://datasets/cais/mmlu?split=test&subset=high_school_mathematics&config=high_school_mathematics&limit=10
   # - huggingface://datasets/cais/mmlu?split=test&subset=college_mathematics&config=college_mathematics&limit=10
-  #- huggingface://datasets/cais/mmlu?split=test&subset=logical_fallacies&config=logical_fallacies&limit=10
+  # - huggingface://datasets/cais/mmlu?split=test&subset=logical_fallacies&config=logical_fallacies&limit=10
