@@ -16,21 +16,32 @@ To access the MMLU dataset, you'll need to authenticate with Hugging Face:
 1. Create a Hugging Face account at [huggingface.co](https://huggingface.co) if you don't have one
 2. Generate an access token at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
 3. Set your token as an environment variable:
+
    ```sh
    export HUGGING_FACE_HUB_TOKEN=your_token_here
    ```
+
    Or add it to your `.env` file:
+
    ```
    HUGGING_FACE_HUB_TOKEN=your_token_here
    ```
 
-## Running the Comparison
+## Running the Eval
 
-1. Navigate to this directory:
+1. Get a local copy of the promptfooconfig.
 
-   ```sh
-   cd examples/deepseek-r1-vs-openai-o1
-   ```
+You can clone this repository and from the root directory run:
+
+```sh
+cd examples/deepseek-r1-vs-openai-o1
+```
+
+or you can get the example with:
+
+```sh
+promptfoo init --example deepseek-r1-vs-openai-o1
+```
 
 2. Run the evaluation:
 
@@ -39,6 +50,7 @@ To access the MMLU dataset, you'll need to authenticate with Hugging Face:
    ```
 
 3. View the results in a web interface:
+
    ```sh
    promptfoo view
    ```
@@ -53,7 +65,7 @@ This comparison evaluates both models on reasoning tasks from the MMLU benchmark
 4. **College Mathematics**: Advanced mathematical concepts
 5. **Logical Fallacies**: Flaw identification in reasoning
 
-Each subject uses 10 questions to keep the test manageable while providing meaningful insights.
+Each subject uses 10 questions to keep the test manageable. You can edit this in `promptfooconfig.yaml`.
 
 ## Test Structure
 
@@ -81,14 +93,16 @@ You can modify the test by editing `promptfooconfig.yaml`:
      - huggingface://datasets/cais/mmlu?split=test&subset=physics
    ```
 
-2. Change the number of questions:
+2. Customize the prompt template or compare prompts side by side.
+3. Change the number of questions:
 
    ```yaml
    tests:
-     - limit: 20 # Test 20 questions per subject
+     - huggingface://datasets/cais/mmlu?split=test&subset=physics&limit=20 # Test 20 questions per subject
    ```
 
-3. Adjust quality requirements:
+4. Adjust quality requirements:
+
    ```yaml
    defaultTest:
      assert:
@@ -96,15 +110,7 @@ You can modify the test by editing `promptfooconfig.yaml`:
          threshold: 30000 # Stricter 30-second timeout
    ```
 
-## Cost Considerations
-
-- The example uses 50 questions total (10 per subject × 5 subjects)
-- Both models are priced per token
-- Actual costs will vary based on response lengths
-- Consider running a smaller subset initially to estimate costs
-
 ## Additional Resources
 
-- [Full comparison guide](/docs/guides/deepseek-vs-o1)
 - [DeepSeek provider documentation](/docs/providers/deepseek)
 - [MMLU benchmark](https://huggingface.co/datasets/cais/mmlu)
