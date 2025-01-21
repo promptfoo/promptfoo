@@ -58,7 +58,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:harmful:illegal-drugs': new HarmfulGrader(),
   'promptfoo:redteam:harmful:indiscriminate-weapons': new HarmfulGrader(),
   'promptfoo:redteam:harmful:insults': new HarmfulGrader(),
-  'promptfoo:redteam:harmful:intellectual-property': new HarmfulGrader(),
+  'promptfoo:redteam:harmful:intellectual-property': new CopyrightViolationGrader(),
   'promptfoo:redteam:harmful:misinformation-disinformation': new HarmfulGrader(),
   'promptfoo:redteam:harmful:non-violent-crime': new HarmfulGrader(),
   'promptfoo:redteam:harmful:privacy': new HarmfulPrivacyGrader(),
