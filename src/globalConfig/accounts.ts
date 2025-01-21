@@ -8,7 +8,7 @@ import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
 export function getUserEmail(): string | null {
   const globalConfig = readGlobalConfig();
-  return globalConfig.account?.email || null;
+  return globalConfig?.account?.email || null;
 }
 
 export function setUserEmail(email: string) {

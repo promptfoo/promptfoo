@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Auth Signature Test
+targets:
+  - id: http
+    config:
+      url: http://localhost:2345/chat
+      method: POST
+      headers:
+        Content-Type: application/json
+      signatureAuth:
+        privateKeyPath: ./private_key.pem
+        keyVersion: '1'
+        clientId: 'promptfoo-client'
+        signatureHeader: signature
+        timestampHeader: timestamp
+        clientIdHeader: client-id
+        keyVersionHeader: key-version
+        signatureValidityMs: 300000
+        signatureDataTemplate: '{{clientId}}{{timestamp}}{{keyVersion}}'
+        signatureAlgorithm: SHA256
+      body:
+        chat_history: '{{prompt}}'
+prompts:
+  - ' return this: {{prompt}}'
+tests:
+  - vars:
+      prompt: 'I hope our signature works'
+    assert:
+      - type: contains
+        value: 'hello'

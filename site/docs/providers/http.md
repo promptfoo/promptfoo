@@ -503,6 +503,55 @@ providers:
         user_message: '{{prompt}}'
 ```
 
+## Digital Signature Authentication
+
+The HTTP provider supports digital signature authentication. This feature allows you to:
+
+- Automatically generate cryptographic signatures for requests
+- Manage signature expiration and refresh
+- Customize header names and signature formats
+- Configure different signature algorithms
+
+The current implementation uses asymmetric key cryptography (RSA by default), but the configuration is algorithm-agnostic.
+
+### Basic Usage
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/v1'
+      method: 'POST'
+      signatureAuth:
+        privateKeyPath: '/path/to/private.key'
+        keyVersion: '1'
+        clientId: 'your-client-id'
+```
+
+### Full Configuration
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/v1'
+      signatureAuth:
+        # Required fields
+        privateKeyPath: '/path/to/private.key'
+        keyVersion: '1'
+        clientId: 'your-client-id'
+
+        # Optional fields with defaults shown
+        signatureHeader: 'x-signature'
+        timestampHeader: 'x-timestamp'
+        clientIdHeader: 'x-client-id'
+        keyVersionHeader: 'x-key-version'
+        signatureValidityMs: 300000 # 5 minutes
+        signatureAlgorithm: 'SHA256'
+        signatureDataTemplate: '{{clientId}}{{timestamp}}{{keyVersion}}'
+        signatureRefreshBufferMs: 30000 # Optional: custom refresh buffer
+```
+
 ## Request Retries
 
 The HTTP provider automatically retries failed requests in the following scenarios:
@@ -537,6 +586,23 @@ Supported config options:
 | transformResponse | string \| Function      | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field. |
 | maxRetries        | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                |
 | validateStatus    | Function                | A function that takes a status code and returns a boolean indicating if the response should be treated as successful. By default, accepts all status codes.                         |
+| signatureAuth     | object                  | Configuration for digital signature authentication. See Signature Auth Options below.                                                                                               |
+
+### Signature Auth Options
+
+| Option                   | Type   | Required | Default                                               | Description                                                  |
+| ------------------------ | ------ | -------- | ----------------------------------------------------- | ------------------------------------------------------------ |
+| privateKeyPath           | string | Yes      | -                                                     | Path to the private key file used for signing                |
+| keyVersion               | string | Yes      | -                                                     | Version identifier for the key being used                    |
+| clientId                 | string | Yes      | -                                                     | Client identifier used in signature generation               |
+| signatureHeader          | string | No       | 'signature'                                           | Header name for the generated signature                      |
+| timestampHeader          | string | No       | 'timestamp'                                           | Header name for the signature timestamp                      |
+| clientIdHeader           | string | No       | 'client-id'                                           | Header name for the client identifier                        |
+| keyVersionHeader         | string | No       | 'key-version'                                         | Header name for the key version                              |
+| signatureValidityMs      | number | No       | 300000                                                | Validity period of the signature in milliseconds             |
+| signatureAlgorithm       | string | No       | 'SHA256'                                              | Signature algorithm to use (any supported by Node.js crypto) |
+| signatureDataTemplate    | string | No       | '\{\{clientId\}\}\{\{timestamp\}\}\{\{keyVersion\}\}' | Template for formatting the data to be signed                |
+| signatureRefreshBufferMs | number | No       | 10% of validityMs                                     | Buffer time before expiry to refresh signature               |
 
 Note: All string values in the config (including those nested in `headers`, `body`, and `queryParams`) support Nunjucks templating. This means you can use the `{{prompt}}` variable or any other variables passed in the test context.
 
