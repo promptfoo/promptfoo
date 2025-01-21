@@ -22,8 +22,7 @@ import { REQUEST_TIMEOUT_MS } from './shared';
 
 const nunjucks = getNunjucksEngine();
 
-// Helper function to generate RSA signature
-export async function generateRsaSignature(
+export async function generateSignature(
   privateKeyPath: string,
   clientId: string,
   timestamp: number,
@@ -44,12 +43,11 @@ export async function generateRsaSignature(
     const signature = sign.sign(privateKey);
     return signature.toString('base64');
   } catch (err) {
-    logger.error(`Error generating RSA signature: ${String(err)}`);
-    throw new Error(`Failed to generate RSA signature: ${String(err)}`);
+    logger.error(`Error generating signature: ${String(err)}`);
+    throw new Error(`Failed to generate signature: ${String(err)}`);
   }
 }
 
-// Helper function to check if signature needs refresh
 export function needsSignatureRefresh(
   timestamp: number,
   validityMs: number,
@@ -507,6 +505,7 @@ export class HttpProvider implements ApiProvider {
 
   async getAuthHeaders(): Promise<Record<string, string>> {
     if (!this.config.signatureAuth) {
+      logger.debug('[HTTP Provider Auth]: No signature auth configured, returning empty headers');
       return {};
     }
 
@@ -524,7 +523,6 @@ export class HttpProvider implements ApiProvider {
       signatureRefreshBufferMs,
     } = this.config.signatureAuth;
 
-    // Check if we need to generate a new signature
     if (
       !this.lastSignatureTimestamp ||
       !this.lastSignature ||
@@ -534,8 +532,9 @@ export class HttpProvider implements ApiProvider {
         signatureRefreshBufferMs,
       )
     ) {
+      logger.debug('[HTTP Provider Auth]: Generating new signature');
       this.lastSignatureTimestamp = Date.now();
-      this.lastSignature = await generateRsaSignature(
+      this.lastSignature = await generateSignature(
         privateKeyPath,
         clientId,
         this.lastSignatureTimestamp,
@@ -543,17 +542,25 @@ export class HttpProvider implements ApiProvider {
         signatureDataTemplate,
         signatureAlgorithm,
       );
+      logger.debug('[HTTP Provider Auth]: Generated new signature successfully');
+    } else {
+      logger.debug('[HTTP Provider Auth]: Using cached signature');
     }
 
     invariant(this.lastSignature, 'Signature should be defined at this point');
     invariant(this.lastSignatureTimestamp, 'Timestamp should be defined at this point');
 
-    return {
+    const headers = {
       [signatureHeader]: this.lastSignature,
       [timestampHeader]: String(this.lastSignatureTimestamp),
       [clientIdHeader]: clientId,
       [keyVersionHeader]: keyVersion,
     };
+
+    logger.debug(
+      `[HTTP Provider Auth]: Returning auth headers: ${safeJsonStringify(headers, true /* prettyPrint */)}`,
+    );
+    return headers;
   }
 
   private getDefaultHeaders(body: any): Record<string, string> {
