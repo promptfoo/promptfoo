@@ -29,3 +29,5 @@ promptfoo eval --no-cache
 # View results
 promptfoo view
 ```
+
+IMPORTANT: be sure to run with --no-cache when testing! Otherwise it may cache responses from good signatures.

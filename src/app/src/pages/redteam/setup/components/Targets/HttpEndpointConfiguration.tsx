@@ -150,22 +150,23 @@ Content-Type: application/json
       setHeaders((prev) => {
         const newHeaders = [...prev];
         newHeaders.splice(index, 1);
+
+        // Update target configuration inside setState callback
+        const headerObj = newHeaders.reduce(
+          (acc, { key, value }) => {
+            if (key) {
+              acc[key] = value;
+            }
+            return acc;
+          },
+          {} as Record<string, string>,
+        );
+        updateCustomTarget('headers', headerObj);
+
         return newHeaders;
       });
-
-      // Update target configuration
-      const headerObj = headers.reduce(
-        (acc, { key, value }) => {
-          if (key) {
-            acc[key] = value;
-          }
-          return acc;
-        },
-        {} as Record<string, string>,
-      );
-      updateCustomTarget('headers', headerObj);
     },
-    [headers, updateCustomTarget],
+    [updateCustomTarget],
   );
 
   const updateHeaderKey = useCallback(
@@ -173,22 +174,23 @@ Content-Type: application/json
       setHeaders((prev) => {
         const newHeaders = [...prev];
         newHeaders[index] = { ...newHeaders[index], key: newKey };
+
+        // Update target configuration inside setState callback
+        const headerObj = newHeaders.reduce(
+          (acc, { key, value }) => {
+            if (key) {
+              acc[key] = value;
+            }
+            return acc;
+          },
+          {} as Record<string, string>,
+        );
+        updateCustomTarget('headers', headerObj);
+
         return newHeaders;
       });
-
-      // Update target configuration
-      const headerObj = headers.reduce(
-        (acc, { key, value }) => {
-          if (key) {
-            acc[key] = value;
-          }
-          return acc;
-        },
-        {} as Record<string, string>,
-      );
-      updateCustomTarget('headers', headerObj);
     },
-    [headers, updateCustomTarget],
+    [updateCustomTarget],
   );
 
   const updateHeaderValue = useCallback(
@@ -196,22 +198,23 @@ Content-Type: application/json
       setHeaders((prev) => {
         const newHeaders = [...prev];
         newHeaders[index] = { ...newHeaders[index], value: newValue };
+
+        // Update target configuration inside setState callback
+        const headerObj = newHeaders.reduce(
+          (acc, { key, value }) => {
+            if (key) {
+              acc[key] = value;
+            }
+            return acc;
+          },
+          {} as Record<string, string>,
+        );
+        updateCustomTarget('headers', headerObj);
+
         return newHeaders;
       });
-
-      // Update target configuration
-      const headerObj = headers.reduce(
-        (acc, { key, value }) => {
-          if (key) {
-            acc[key] = value;
-          }
-          return acc;
-        },
-        {} as Record<string, string>,
-      );
-      updateCustomTarget('headers', headerObj);
     },
-    [headers, updateCustomTarget],
+    [updateCustomTarget],
   );
 
   const handleRequestBodyChange = (content: string) => {
