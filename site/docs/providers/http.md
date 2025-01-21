@@ -344,10 +344,16 @@ providers:
       transformResponse: 'json.choices[0].message.content'
 ```
 
-This expression will be evaluated with two variables available:
+This expression will be evaluated with three variables available:
 
 - `json`: The parsed JSON response (if the response is valid JSON)
 - `text`: The raw text response
+- `context`: `context.response` is of type `FetchWithCacheResult` which includes:
+  - `data`: The response data (parsed as JSON if possible)
+  - `cached`: Boolean indicating if response was from cache
+  - `status`: HTTP status code
+  - `statusText`: HTTP status text
+  - `headers`: Response headers (if present)
 
 #### Function parser
 
@@ -380,13 +386,26 @@ providers:
       transformResponse: 'file://path/to/parser.js'
 ```
 
-The parser file should export a function that takes two arguments (`json` and `text`) and returns the parsed output. For example:
+The parser file should export a function that takes three arguments (`json`, `text`, `context`) and return the parsed output. Note that text and context are optional.
 
 ```javascript
 module.exports = (json, text) => {
   return json.choices[0].message.content;
 };
 ```
+
+You can use the `context` parameter to access response metadata and implement custom logic. For example, implementing guardrails checking:
+
+```javascript
+module.exports = (json, text, context) => {
+  return {
+    output: json.choices[0].message.content,
+    guardrails: { flagged: context.response.headers['x-content-filtered'] === 'true' },
+  };
+};
+```
+
+This allows you to access additional response metadata and implement custom logic based on response status codes, headers, or other properties.
 
 You can also use a default export:
 
@@ -407,6 +426,22 @@ providers:
 ```
 
 This will import the function `parseResponse` from the file `path/to/parser.js`.
+
+### Guardrails Support
+
+If your HTTP target has guardrails set up, you need to return an object with both `output` and `guardrails` fields from your transform. The `guardrails` field should be a top-level field in your returned object and must conform to the [GuardrailResponse](/docs/configuration/reference#guardrails) interface. For example:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://example.com/api'
+      transformResponse: |
+        {
+          output: json.choices[0].message.content,
+          guardrails: { flagged: context.response.headers['x-content-filtered'] === 'true' }
+        }
+```
 
 ## Session management
 
@@ -468,6 +503,76 @@ providers:
         user_message: '{{prompt}}'
 ```
 
+## Digital Signature Authentication
+
+The HTTP provider supports digital signature authentication. This feature allows you to:
+
+- Automatically generate cryptographic signatures for requests
+- Manage signature expiration and refresh
+- Customize header names and signature formats
+- Configure different signature algorithms
+
+The current implementation uses asymmetric key cryptography (RSA by default), but the configuration is algorithm-agnostic.
+
+### Basic Usage
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/v1'
+      method: 'POST'
+      headers:
+        'x-signature': '{{signature}}'
+        'x-timestamp': '{{signatureTimestamp}}'
+      signatureAuth:
+        privateKeyPath: '/path/to/private.key'
+        clientId: 'your-client-id'
+```
+
+### Full Configuration
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/v1'
+      headers:
+        'x-signature': '{{signature}}'
+        'x-timestamp': '{{signatureTimestamp}}'
+        'x-client-id': 'your-client-id'
+      signatureAuth:
+        # Required fields - provide either privateKeyPath or privateKey
+        privateKeyPath: '/path/to/private.key' # Path to key file
+        # privateKey: '-----BEGIN PRIVATE KEY-----\n...'  # Or direct key string
+        clientId: 'your-client-id'
+
+        # Optional fields with defaults shown
+        signatureValidityMs: 300000 # 5 minutes
+        signatureAlgorithm: 'SHA256'
+        signatureDataTemplate: '{{clientId}}{{timestamp}}\n' # \n is interpreted as a newline
+        signatureRefreshBufferMs: 30000 # Optional: custom refresh buffer
+```
+
+When signature authentication is enabled, the following variables are available for use in headers or other templated fields:
+
+- `signature`: The generated signature string (base64 encoded)
+- `signatureTimestamp`: The Unix timestamp when the signature was generated
+
+### Signature Auth Options
+
+| Option                   | Type   | Required | Default                             | Description                                                                                                           |
+| ------------------------ | ------ | -------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| privateKeyPath           | string | No\*     | -                                   | Path to the private key file used for signing                                                                         |
+| privateKey               | string | No\*     | -                                   | Private key string (if not using privateKeyPath)                                                                      |
+| clientId                 | string | Yes      | -                                   | Client identifier used in signature generation                                                                        |
+| signatureValidityMs      | number | No       | 300000                              | Validity period of the signature in milliseconds                                                                      |
+| signatureAlgorithm       | string | No       | 'SHA256'                            | Signature algorithm to use (any supported by Node.js crypto)                                                          |
+| signatureDataTemplate    | string | No       | '\{\{clientId\}\}\{\{timestamp\}\}' | Template for formatting the data to be signed. Note: `\n` in the template will be interpreted as a newline character. |
+| signatureRefreshBufferMs | number | No       | 10% of validityMs                   | Buffer time before expiry to refresh signature                                                                        |
+
+\* Either `privateKeyPath` or `privateKey` must be provided
+
 ## Request Retries
 
 The HTTP provider automatically retries failed requests in the following scenarios:
@@ -502,8 +607,21 @@ Supported config options:
 | transformResponse | string \| Function      | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field. |
 | maxRetries        | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                |
 | validateStatus    | Function                | A function that takes a status code and returns a boolean indicating if the response should be treated as successful. By default, accepts all status codes.                         |
+| signatureAuth     | object                  | Configuration for digital signature authentication. See Signature Auth Options below.                                                                                               |
 
-Note: All string values in the config (including those nested in `headers`, `body`, and `queryParams`) support Nunjucks templating. This means you can use the `{{prompt}}` variable or any other variables passed in the test context.
+### Signature Auth Options
+
+| Option                   | Type   | Required | Default                             | Description                                                                                                           |
+| ------------------------ | ------ | -------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| privateKeyPath           | string | No\*     | -                                   | Path to the private key file used for signing                                                                         |
+| privateKey               | string | No\*     | -                                   | Private key string (if not using privateKeyPath)                                                                      |
+| clientId                 | string | Yes      | -                                   | Client identifier used in signature generation                                                                        |
+| signatureValidityMs      | number | No       | 300000                              | Validity period of the signature in milliseconds                                                                      |
+| signatureAlgorithm       | string | No       | 'SHA256'                            | Signature algorithm to use (any supported by Node.js crypto)                                                          |
+| signatureDataTemplate    | string | No       | '\{\{clientId\}\}\{\{timestamp\}\}' | Template for formatting the data to be signed. Note: `\n` in the template will be interpreted as a newline character. |
+| signatureRefreshBufferMs | number | No       | 10% of validityMs                   | Buffer time before expiry to refresh signature                                                                        |
+
+\* Either `privateKeyPath` or `privateKey` must be provided
 
 In addition to a full URL, the provider `id` field accepts `http` or `https` as values.
 

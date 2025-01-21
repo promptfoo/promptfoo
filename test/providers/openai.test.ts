@@ -9,6 +9,8 @@ import {
 } from '../../src/providers/openai';
 
 jest.mock('../../src/cache');
+jest.mock('../../src/globalConfig/globalConfig');
+jest.mock('../../src/logger');
 
 describe('OpenAI Provider', () => {
   beforeEach(() => {

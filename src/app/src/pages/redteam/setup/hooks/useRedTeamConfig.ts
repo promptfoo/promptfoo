@@ -1,5 +1,5 @@
-import { DEFAULT_PLUGINS } from '@promptfoo/redteam/constants';
 import type { Plugin } from '@promptfoo/redteam/constants';
+import { DEFAULT_PLUGINS } from '@promptfoo/redteam/constants';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Config, ProviderOptions } from '../types';
@@ -73,6 +73,7 @@ const defaultConfig: Config = {
     forbiddenActions: '',
     connectedSystems: '',
   },
+  defaultTest: undefined,
 };
 
 const applicationDefinitionToPurpose = (applicationDefinition: Config['applicationDefinition']) => {
@@ -115,7 +116,7 @@ const applicationDefinitionToPurpose = (applicationDefinition: Config['applicati
 
 const EXAMPLE_APPLICATION_DEFINITION = {
   purpose:
-    'Help employees at Red Panda Bamboo company find information faster from their internal documentation.',
+    'Help employees at Travel R Us, a hotel search company, find information faster in their internal documentation.',
   redteamUser: 'An employee in the engineering department',
   accessToData: 'General company information like policies and engineering documents',
   forbiddenData:
@@ -126,11 +127,11 @@ const EXAMPLE_APPLICATION_DEFINITION = {
 };
 
 export const EXAMPLE_CONFIG: Config = {
-  description: 'Red Panda Bamboo Company RAG Example',
+  description: 'Internal Company RAG Example',
   prompts: ['{{prompt}}'],
   target: {
     id: 'http',
-    label: 'promptfoo-redpanda-rag-example',
+    label: 'internal-rag-example',
     config: {
       url: 'https://redpanda-internal-rag-example.promptfoo.app/chat',
       method: 'POST',

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Tabs, Tab, List, ListItem } from '@mui/material';
+import { Tabs, Tab, List, ListItem, Chip } from '@mui/material';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
@@ -19,18 +19,28 @@ import { useTheme } from '@mui/material/styles';
 import { alpha } from '@mui/material/styles';
 import { styled } from '@mui/material/styles';
 import { displayNameOverrides, subCategoryDescriptions } from '@promptfoo/redteam/constants';
-import type { GradingResult } from '@promptfoo/types';
-import { getStrategyIdFromGradingResult } from './shared';
+import type { GradingResult, EvaluateResult } from '@promptfoo/types';
+import { getStrategyIdFromGradingResult, getPluginIdFromResult } from './shared';
 
 interface StrategyStatsProps {
   strategyStats: Record<string, { pass: number; total: number }>;
   failuresByPlugin?: Record<
     string,
-    { prompt: string; output: string; gradingResult?: GradingResult }[]
+    {
+      prompt: string;
+      output: string;
+      gradingResult?: GradingResult;
+      result?: EvaluateResult;
+    }[]
   >;
   passesByPlugin?: Record<
     string,
-    { prompt: string; output: string; gradingResult?: GradingResult }[]
+    {
+      prompt: string;
+      output: string;
+      gradingResult?: GradingResult;
+      result?: EvaluateResult;
+    }[]
   >;
 }
 
@@ -40,11 +50,21 @@ interface DrawerContentProps {
   onTabChange: (value: number) => void;
   failuresByPlugin: Record<
     string,
-    { prompt: string; output: string; gradingResult?: GradingResult }[]
+    {
+      prompt: string;
+      output: string;
+      gradingResult?: GradingResult;
+      result?: EvaluateResult;
+    }[]
   >;
   passesByPlugin: Record<
     string,
-    { prompt: string; output: string; gradingResult?: GradingResult }[]
+    {
+      prompt: string;
+      output: string;
+      gradingResult?: GradingResult;
+      result?: EvaluateResult;
+    }[]
   >;
   strategyStats: Record<string, { pass: number; total: number }>;
 }
@@ -324,7 +344,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                     strategyStats[selectedStrategy].total - strategyStats[selectedStrategy].pass}
                 </Typography>
                 <Typography variant="body2" align="center" color="text.secondary">
-                  Successful Attacks
+                  Flagged Attempts
                 </Typography>
               </Grid>
               <Grid item xs={4}>
@@ -354,7 +374,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                   <TableRow>
                     <TableCell>Plugin</TableCell>
                     <TableCell align="right">Attack Success Rate</TableCell>
-                    <TableCell align="right"># Successful Attacks</TableCell>
+                    <TableCell align="right"># Flagged Attempts</TableCell>
                     <TableCell align="right"># Attempts</TableCell>
                   </TableRow>
                 </TableHead>
@@ -382,7 +402,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
             sx={{ mt: 3, mb: 2 }}
           >
             <Tab
-              label={`Successful Attacks (${strategyStats[selectedStrategy].total - strategyStats[selectedStrategy].pass})`}
+              label={`Flagged Attempts (${strategyStats[selectedStrategy].total - strategyStats[selectedStrategy].pass})`}
             />
             <Tab label={`Failed Attempts (${strategyStats[selectedStrategy].pass})`} />
           </Tabs>
@@ -413,14 +433,36 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                       }}
                     >
                       <Box sx={{ width: '100%' }}>
-                        <Typography
-                          variant="subtitle2"
-                          color="text.secondary"
-                          gutterBottom
-                          sx={{ fontWeight: 'bold' }}
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            mb: 1,
+                          }}
                         >
-                          Prompt:
-                        </Typography>
+                          <Typography
+                            variant="subtitle2"
+                            color="text.secondary"
+                            gutterBottom
+                            sx={{ fontWeight: 'bold' }}
+                          >
+                            Prompt:
+                          </Typography>
+                          {failure.result && (
+                            <Chip
+                              size="small"
+                              label={
+                                displayNameOverrides[
+                                  getPluginIdFromResult(
+                                    failure.result,
+                                  ) as keyof typeof displayNameOverrides
+                                ] || 'Unknown Plugin'
+                              }
+                              sx={{ ml: 1 }}
+                            />
+                          )}
+                        </Box>
                         <Typography
                           variant="body2"
                           sx={{
@@ -439,9 +481,18 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                         >
                           {getPromptDisplayString(failure.prompt)}
                         </Typography>
-                        <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                          Response:
-                        </Typography>
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            mb: 1,
+                          }}
+                        >
+                          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                            Response:
+                          </Typography>
+                        </Box>
                         <Typography
                           variant="body2"
                           sx={{
@@ -491,9 +542,31 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                       }}
                     >
                       <Box sx={{ width: '100%' }}>
-                        <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                          Prompt:
-                        </Typography>
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            mb: 1,
+                          }}
+                        >
+                          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                            Prompt:
+                          </Typography>
+                          {pass.result && (
+                            <Chip
+                              size="small"
+                              label={
+                                displayNameOverrides[
+                                  getPluginIdFromResult(
+                                    pass.result,
+                                  ) as keyof typeof displayNameOverrides
+                                ] || 'Unknown Plugin'
+                              }
+                              sx={{ ml: 1 }}
+                            />
+                          )}
+                        </Box>
                         <Typography
                           variant="body2"
                           sx={{
@@ -512,14 +585,23 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                         >
                           {getPromptDisplayString(pass.prompt)}
                         </Typography>
-                        <Typography
-                          variant="subtitle2"
-                          color="text.secondary"
-                          gutterBottom
-                          sx={{ fontWeight: 'bold' }}
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            mb: 1,
+                          }}
                         >
-                          Response:
-                        </Typography>
+                          <Typography
+                            variant="subtitle2"
+                            color="text.secondary"
+                            gutterBottom
+                            sx={{ fontWeight: 'bold' }}
+                          >
+                            Response:
+                          </Typography>
+                        </Box>
                         <Typography
                           variant="body2"
                           sx={{

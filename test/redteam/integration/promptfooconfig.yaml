@@ -12,7 +12,7 @@ targets:
         messages:
           - role: user
             content: '{{prompt}}'
-      transformResponse: json.response
+      transformResponse: json.choices[0].message.content
 prompts:
   - '{{prompt}}'
 redteam:

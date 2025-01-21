@@ -1,7 +1,9 @@
+import crypto from 'crypto';
+import fs from 'fs';
 import httpZ from 'http-z';
 import path from 'path';
 import { z } from 'zod';
-import { fetchWithCache } from '../cache';
+import { fetchWithCache, type FetchWithCacheResult } from '../cache';
 import cliState from '../cliState';
 import { importModule } from '../esm';
 import logger from '../logger';
@@ -19,6 +21,42 @@ import { getNunjucksEngine } from '../util/templates';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 const nunjucks = getNunjucksEngine();
+
+export async function generateSignature(
+  privateKeyPathOrKey: string,
+  signatureTimestamp: number,
+  signatureDataTemplate: string,
+  signatureAlgorithm: string = 'SHA256',
+  isPath: boolean = true,
+): Promise<string> {
+  try {
+    const privateKey = isPath ? fs.readFileSync(privateKeyPathOrKey, 'utf8') : privateKeyPathOrKey;
+    const data = nunjucks
+      .renderString(signatureDataTemplate, {
+        signatureTimestamp,
+      })
+      .replace(/\\n/g, '\n');
+    const sign = crypto.createSign(signatureAlgorithm);
+    sign.update(data);
+    sign.end();
+    const signature = sign.sign(privateKey);
+    return signature.toString('base64');
+  } catch (err) {
+    logger.error(`Error generating signature: ${String(err)}`);
+    throw new Error(`Failed to generate signature: ${String(err)}`);
+  }
+}
+
+export function needsSignatureRefresh(
+  timestamp: number,
+  validityMs: number,
+  bufferMs?: number,
+): boolean {
+  const now = Date.now();
+  const timeElapsed = now - timestamp;
+  const effectiveBufferMs = bufferMs ?? Math.floor(validityMs * 0.1); // Default to 10% of validity time
+  return timeElapsed + effectiveBufferMs >= validityMs;
+}
 
 export const HttpProviderConfigSchema = z.object({
   body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
@@ -38,6 +76,23 @@ export const HttpProviderConfigSchema = z.object({
    * @deprecated use transformResponse instead
    */
   responseParser: z.union([z.string(), z.function()]).optional(),
+  // Digital Signature Authentication
+  signatureAuth: z
+    .object({
+      privateKeyPath: z.string().optional(),
+      privateKey: z.string().optional(),
+      signatureValidityMs: z.number().default(300000), // 5 minutes
+      // Template for generating the data to sign
+      signatureDataTemplate: z.string().default('{{timestamp}}'),
+      // Signature algorithm to use (defaults to SHA256)
+      signatureAlgorithm: z.string().default('SHA256'),
+      // Buffer time in ms before expiry to refresh (defaults to 10% of validity time)
+      signatureRefreshBufferMs: z.number().optional(),
+    })
+    .refine((data) => data.privateKeyPath !== undefined || data.privateKey !== undefined, {
+      message: 'Either privateKeyPath or privateKey must be provided',
+    })
+    .optional(),
 });
 
 export type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
@@ -93,16 +148,24 @@ export async function createSessionParser(
   );
 }
 
+interface TransformResponseContext {
+  response: FetchWithCacheResult<any>;
+}
+
 export async function createTransformResponse(
   parser: string | Function | undefined,
-): Promise<(data: any, text: string) => ProviderResponse> {
+): Promise<(data: any, text: string, context?: TransformResponseContext) => ProviderResponse> {
   if (!parser) {
     return (data, text) => ({ output: data || text });
   }
+
   if (typeof parser === 'function') {
-    return (data, text) => {
+    return (data, text, context) => {
       try {
-        const result = parser(data, text);
+        const result = parser(data, text, context);
+        if (typeof result === 'string') {
+          return { output: result };
+        }
         return { output: result };
       } catch (err) {
         logger.error(`Error in response transform function: ${String(err)}`);
@@ -130,17 +193,26 @@ export async function createTransformResponse(
       `Response transform malformed: ${filename} must export a function or have a default export as a function`,
     );
   } else if (typeof parser === 'string') {
-    return (data, text) => {
+    return (data, text, context) => {
       try {
         const trimmedParser = parser.trim();
         const transformFn = new Function(
           'json',
           'text',
+          'context',
           `try { return (${trimmedParser}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
         );
-        return {
-          output: transformFn(data || null, text),
-        };
+        let resp: ProviderResponse | string;
+        if (context) {
+          resp = transformFn(data || null, text, context);
+        } else {
+          resp = transformFn(data || null, text);
+        }
+
+        if (typeof resp === 'string') {
+          return { output: resp };
+        }
+        return resp;
       } catch (err) {
         logger.error(`Error in response transform: ${String(err)}`);
         throw new Error(`Failed to transform response: ${String(err)}`);
@@ -390,10 +462,15 @@ export async function createValidateStatus(
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
-  private transformResponse: Promise<(data: any, text: string) => ProviderResponse>;
+  private transformResponse: Promise<
+    (data: any, text: string, context?: TransformResponseContext) => ProviderResponse
+  >;
   private sessionParser: Promise<({ headers }: { headers: Record<string, string> }) => string>;
   private transformRequest: Promise<(prompt: string) => any>;
   private validateStatus: Promise<(status: number) => boolean>;
+  private lastSignatureTimestamp?: number;
+  private lastSignature?: string;
+
   constructor(url: string, options: ProviderOptions) {
     this.config = HttpProviderConfigSchema.parse(options.config);
     this.url = this.config.url || url;
@@ -423,6 +500,48 @@ export class HttpProvider implements ApiProvider {
     return `[HTTP Provider ${this.url}]`;
   }
 
+  private async refreshSignatureIfNeeded(): Promise<void> {
+    if (!this.config.signatureAuth) {
+      logger.debug('[HTTP Provider Auth]: No signature auth configured');
+      return;
+    }
+
+    const {
+      privateKeyPath,
+      privateKey,
+      signatureValidityMs,
+      signatureDataTemplate,
+      signatureAlgorithm,
+      signatureRefreshBufferMs,
+    } = this.config.signatureAuth;
+
+    if (
+      !this.lastSignatureTimestamp ||
+      !this.lastSignature ||
+      needsSignatureRefresh(
+        this.lastSignatureTimestamp,
+        signatureValidityMs,
+        signatureRefreshBufferMs,
+      )
+    ) {
+      logger.debug('[HTTP Provider Auth]: Generating new signature');
+      this.lastSignatureTimestamp = Date.now();
+      this.lastSignature = await generateSignature(
+        privateKeyPath || privateKey!,
+        this.lastSignatureTimestamp,
+        signatureDataTemplate,
+        signatureAlgorithm,
+        privateKeyPath !== undefined,
+      );
+      logger.debug('[HTTP Provider Auth]: Generated new signature successfully');
+    } else {
+      logger.debug('[HTTP Provider Auth]: Using cached signature');
+    }
+
+    invariant(this.lastSignature, 'Signature should be defined at this point');
+    invariant(this.lastSignatureTimestamp, 'Timestamp should be defined at this point');
+  }
+
   private getDefaultHeaders(body: any): Record<string, string> {
     if (this.config.method === 'GET') {
       return {};
@@ -450,15 +569,16 @@ export class HttpProvider implements ApiProvider {
     }
   }
 
-  private getHeaders(
+  async getHeaders(
     defaultHeaders: Record<string, string>,
     vars: Record<string, any>,
-  ): Record<string, string> {
+  ): Promise<Record<string, string>> {
     const configHeaders = this.config.headers || {};
     // Convert all keys in configHeaders to lowercase
     const headers = Object.fromEntries(
       Object.entries(configHeaders).map(([key, value]) => [key.toLowerCase(), value]),
     );
+
     return Object.fromEntries(
       Object.entries({ ...defaultHeaders, ...headers }).map(([key, value]) => [
         key,
@@ -471,14 +591,35 @@ export class HttpProvider implements ApiProvider {
     const vars = {
       ...(context?.vars || {}),
       prompt,
-    };
+    } as Record<string, any>;
+
+    // Add signature values to vars if signature auth is enabled
+    if (this.config.signatureAuth) {
+      await this.refreshSignatureIfNeeded();
+      invariant(this.lastSignature, 'Signature should be defined at this point');
+      invariant(this.lastSignatureTimestamp, 'Timestamp should be defined at this point');
+
+      if (vars.signature) {
+        logger.warn(
+          '[HTTP Provider Auth]: `signature` is already defined in vars and will be overwritten',
+        );
+      }
+      if (vars.signatureTimestamp) {
+        logger.warn(
+          '[HTTP Provider Auth]: `signatureTimestamp` is already defined in vars and will be overwritten',
+        );
+      }
+
+      vars.signature = this.lastSignature;
+      vars.signatureTimestamp = this.lastSignatureTimestamp;
+    }
 
     if (this.config.request) {
       return this.callApiWithRawRequest(vars);
     }
 
     const defaultHeaders = this.getDefaultHeaders(this.config.body);
-    const headers = this.getHeaders(defaultHeaders, vars);
+    const headers = await this.getHeaders(defaultHeaders, vars);
     this.validateContentTypeAndBody(headers, this.config.body);
 
     // Transform prompt using request transform
@@ -565,8 +706,6 @@ export class HttpProvider implements ApiProvider {
       parsedData = null;
     }
 
-    const parsedOutput = (await this.transformResponse)(parsedData, rawText);
-    ret.output = parsedOutput.output || parsedOutput;
     try {
       const sessionId =
         response.headers && this.sessionParser !== null
@@ -581,7 +720,17 @@ export class HttpProvider implements ApiProvider {
       );
       throw err;
     }
-    return ret;
+    const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
+    if (parsedOutput?.output) {
+      return {
+        ...ret,
+        ...parsedOutput,
+      };
+    }
+    return {
+      ...ret,
+      output: parsedOutput,
+    };
   }
 
   private async callApiWithRawRequest(vars: Record<string, any>): Promise<ProviderResponse> {
@@ -625,9 +774,12 @@ export class HttpProvider implements ApiProvider {
       parsedData = null;
     }
 
-    const parsedOutput = (await this.transformResponse)(parsedData, rawText);
+    const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
+    if (parsedOutput?.output) {
+      return parsedOutput;
+    }
     return {
-      output: parsedOutput.output || parsedOutput,
+      output: parsedOutput,
     };
   }
 }

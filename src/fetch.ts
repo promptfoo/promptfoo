@@ -9,13 +9,26 @@ import logger from './logger';
 import invariant from './util/invariant';
 import { sleep } from './util/time';
 
+function sanitizeUrl(url: string): string {
+  try {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.username || parsedUrl.password) {
+      parsedUrl.username = '***';
+      parsedUrl.password = '***';
+    }
+    return parsedUrl.toString();
+  } catch {
+    return url;
+  }
+}
+
 function getProxyUrl(): string | undefined {
   const proxyEnvVars = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy'];
 
   for (const envVar of proxyEnvVars) {
     const proxyUrl = process.env[envVar];
     if (proxyUrl) {
-      logger.debug(`Found proxy configuration in ${envVar}: ${proxyUrl}`);
+      logger.debug(`Found proxy configuration in ${envVar}: ${sanitizeUrl(proxyUrl)}`);
       return proxyUrl;
     }
   }
@@ -76,8 +89,8 @@ export async function fetchWithProxy(
   if (caCertPath) {
     try {
       const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
-      const ca = fs.readFileSync(resolvedPath);
-      tlsOptions.ca = [ca];
+      const ca = fs.readFileSync(resolvedPath, 'utf8');
+      tlsOptions.ca = ca;
       logger.debug(`Using custom CA certificate from ${resolvedPath}`);
     } catch (e) {
       logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
@@ -85,10 +98,11 @@ export async function fetchWithProxy(
   }
 
   if (proxyUrl) {
-    logger.debug(`Using proxy: ${proxyUrl}`);
+    logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
     const agent = new ProxyAgent({
       uri: proxyUrl,
       proxyTls: tlsOptions,
+      requestTls: tlsOptions,
     });
     setGlobalDispatcher(agent);
   }

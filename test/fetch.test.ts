@@ -250,13 +250,19 @@ describe('fetchWithProxy', () => {
     await fetchWithProxy('https://example.com');
 
     const actualPath = jest.mocked(fs.readFileSync).mock.calls[0][0] as string;
+    const actualEncoding = jest.mocked(fs.readFileSync).mock.calls[0][1];
     const normalizedActual = path.normalize(actualPath).replace(/^\w:/, '');
     const normalizedExpected = path.normalize(mockCertPath).replace(/^\w:/, '');
     expect(normalizedActual).toBe(normalizedExpected);
+    expect(actualEncoding).toBe('utf8');
     expect(ProxyAgent).toHaveBeenCalledWith({
       uri: mockProxyUrl,
       proxyTls: {
-        ca: [mockCertContent],
+        ca: mockCertContent,
+        rejectUnauthorized: true,
+      },
+      requestTls: {
+        ca: mockCertContent,
         rejectUnauthorized: true,
       },
     });
@@ -293,6 +299,9 @@ describe('fetchWithProxy', () => {
       proxyTls: {
         rejectUnauthorized: true,
       },
+      requestTls: {
+        rejectUnauthorized: true,
+      },
     });
     expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(ProxyAgent));
   });
@@ -319,6 +328,9 @@ describe('fetchWithProxy', () => {
     expect(ProxyAgent).toHaveBeenCalledWith({
       uri: mockProxyUrl,
       proxyTls: {
+        rejectUnauthorized: false,
+      },
+      requestTls: {
         rejectUnauthorized: false,
       },
     });
@@ -357,6 +369,7 @@ describe('fetchWithProxy', () => {
 
     const expectedPath = path.normalize(path.join(mockBasePath, mockCertPath));
     const actualPath = jest.mocked(fs.readFileSync).mock.calls[0][0] as string;
+    const actualEncoding = jest.mocked(fs.readFileSync).mock.calls[0][1];
 
     const normalizedActual = path.normalize(actualPath).replace(/^\w:/, '');
     const normalizedExpected = path.normalize(expectedPath).replace(/^\w:/, '');
@@ -364,12 +377,17 @@ describe('fetchWithProxy', () => {
     const normalizedCertPath = path.normalize(mockCertPath);
 
     expect(normalizedActual).toBe(normalizedExpected);
+    expect(actualEncoding).toBe('utf8');
     expect(normalizedActual).toContain(normalizedBasePath);
     expect(normalizedActual).toContain(normalizedCertPath);
     expect(ProxyAgent).toHaveBeenCalledWith({
       uri: mockProxyUrl,
       proxyTls: {
-        ca: [mockCertContent],
+        ca: mockCertContent,
+        rejectUnauthorized: true,
+      },
+      requestTls: {
+        ca: mockCertContent,
         rejectUnauthorized: true,
       },
     });
@@ -434,6 +452,9 @@ describe('fetchWithProxy', () => {
         proxyTls: {
           rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', false),
         },
+        requestTls: {
+          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', false),
+        },
       });
       expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(ProxyAgent));
 
@@ -443,12 +464,12 @@ describe('fetchWithProxy', () => {
           [
             expect.stringMatching(
               new RegExp(
-                `Found proxy configuration in .*https?_proxy.*: ${testCase.expected.url}`,
+                `Found proxy configuration in .*https?_proxy.*: ${testCase.expected.url}/`,
                 'i',
               ),
             ),
           ],
-          [`Using proxy: ${testCase.expected.url}`],
+          [`Using proxy: ${testCase.expected.url}/`],
         ]),
       );
 

@@ -11,11 +11,16 @@ import type { ProviderOptions } from '../src/types';
 
 jest.mock('fs');
 jest.mock('js-yaml');
-jest.mock('../src/providers/openai');
+jest.mock('../src/fetch');
+jest.mock('../src/globalConfig/accounts');
+jest.mock('../src/globalConfig/cloud');
+jest.mock('../src/globalConfig/globalConfig');
 jest.mock('../src/providers/http');
-jest.mock('../src/providers/websocket');
-jest.mock('../src/providers/scriptCompletion');
+jest.mock('../src/providers/openai');
 jest.mock('../src/providers/pythonCompletion');
+jest.mock('../src/providers/scriptCompletion');
+jest.mock('../src/providers/websocket');
+jest.mock('../src/logger');
 
 describe('loadApiProvider', () => {
   beforeEach(() => {
@@ -53,6 +58,28 @@ describe('loadApiProvider', () => {
   it('should load OpenAI chat provider', async () => {
     const provider = await loadApiProvider('openai:chat:gpt-4');
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', expect.any(Object));
+    expect(provider).toBeDefined();
+  });
+
+  it('should load DeepSeek provider with default model', async () => {
+    const provider = await loadApiProvider('deepseek:');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('deepseek-chat', {
+      config: expect.objectContaining({
+        apiBaseUrl: 'https://api.deepseek.com/v1',
+        apiKeyEnvar: 'DEEPSEEK_API_KEY',
+      }),
+    });
+    expect(provider).toBeDefined();
+  });
+
+  it('should load DeepSeek provider with specific model', async () => {
+    const provider = await loadApiProvider('deepseek:deepseek-coder');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('deepseek-coder', {
+      config: expect.objectContaining({
+        apiBaseUrl: 'https://api.deepseek.com/v1',
+        apiKeyEnvar: 'DEEPSEEK_API_KEY',
+      }),
+    });
     expect(provider).toBeDefined();
   });
 
