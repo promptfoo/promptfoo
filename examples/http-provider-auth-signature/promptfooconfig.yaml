@@ -7,16 +7,15 @@ targets:
       method: POST
       headers:
         Content-Type: application/json
+        'client-id': 'promptfoo-client'
       signatureAuth:
-        privateKeyPath: ./private_key.pem
-        keyVersion: '1'
         clientId: 'promptfoo-client'
+        privateKeyPath: ./private_key.pem
         signatureHeader: signature
         timestampHeader: timestamp
-        clientIdHeader: client-id
-        keyVersionHeader: key-version
-        signatureValidityMs: 300000
-        signatureDataTemplate: '{{clientId}}{{timestamp}}{{keyVersion}}'
+        signatureValidityMs:
+          300000
+        signatureDataTemplate: '{{clientId}}{{timestamp}}'
         signatureAlgorithm: SHA256
       body:
         chat_history: '{{prompt}}'

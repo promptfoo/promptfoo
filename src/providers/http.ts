@@ -86,8 +86,6 @@ export const HttpProviderConfigSchema = z.object({
       clientId: z.string(),
       signatureHeader: z.string().default('signature'),
       timestampHeader: z.string().default('timestamp'),
-      clientIdHeader: z.string().default('client-id'),
-      keyVersionHeader: z.string().default('key-version'),
       signatureValidityMs: z.number().default(300000), // 5 minutes
       // Template for generating the data to sign
       signatureDataTemplate: z.string().default('{{clientId}}{{timestamp}}'),
@@ -519,7 +517,6 @@ export class HttpProvider implements ApiProvider {
       clientId,
       signatureHeader,
       timestampHeader,
-      clientIdHeader,
       signatureValidityMs,
       signatureDataTemplate,
       signatureAlgorithm,
@@ -556,7 +553,6 @@ export class HttpProvider implements ApiProvider {
     const headers = {
       [signatureHeader]: this.lastSignature,
       [timestampHeader]: String(this.lastSignatureTimestamp),
-      [clientIdHeader]: clientId,
     };
 
     logger.debug(
