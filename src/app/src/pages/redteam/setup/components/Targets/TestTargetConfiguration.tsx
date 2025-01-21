@@ -220,7 +220,6 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                       if (e.target.checked) {
                         updateCustomTarget('signatureAuth', {
                           privateKeyPath: '',
-                          clientId: '',
                           signatureValidityMs: 300000,
                         });
                       } else {
@@ -233,12 +232,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
 
                 {selectedTarget.config.signatureAuth && (
                   <>
-                    <Stack spacing={2}>
-                      <Typography variant="body2" color="text.secondary">
-                        Configure signature authentication. Use <code>{'{{signature}}'}</code> and{' '}
-                        <code>{'{{signatureTimestamp}}'}</code> in your headers to include the
-                        generated values.
-                      </Typography>
+                    <Stack spacing={4}>
                       <TextField
                         fullWidth
                         label="Private Key"
@@ -247,6 +241,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                           updateCustomTarget('signatureAuth', {
                             ...selectedTarget.config.signatureAuth,
                             privateKey: e.target.value || undefined,
+                            // Remove privateKeyPath if privateKey is provided
                             privateKeyPath: undefined,
                           })
                         }
@@ -257,39 +252,21 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                           shrink: true,
                         }}
                       />
-
-                      <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-                        - OR -
-                      </Typography>
-
                       <TextField
                         fullWidth
-                        label="Private Key Path"
-                        value={selectedTarget.config.signatureAuth?.privateKeyPath || ''}
+                        label="Signature Data Template"
+                        value={
+                          selectedTarget.config.signatureAuth?.signatureDataTemplate ||
+                          '{{timestamp}}'
+                        }
                         onChange={(e) =>
                           updateCustomTarget('signatureAuth', {
                             ...selectedTarget.config.signatureAuth,
-                            privateKeyPath: e.target.value || undefined,
-                            privateKey: undefined,
+                            signatureDataTemplate: e.target.value,
                           })
                         }
-                        placeholder="Path to your private key file"
-                        InputLabelProps={{
-                          shrink: true,
-                        }}
-                      />
-
-                      <TextField
-                        fullWidth
-                        label="Client ID"
-                        value={selectedTarget.config.signatureAuth?.clientId || ''}
-                        onChange={(e) =>
-                          updateCustomTarget('signatureAuth', {
-                            ...selectedTarget.config.signatureAuth,
-                            clientId: e.target.value,
-                          })
-                        }
-                        placeholder="Your client identifier"
+                        placeholder="Template for generating signature data"
+                        helperText="Supported variables: {{signatureTimestamp}}. Use \n for newlines"
                         InputLabelProps={{
                           shrink: true,
                         }}
@@ -312,19 +289,16 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                       />
                       <TextField
                         fullWidth
-                        label="Signature Data Template"
-                        value={
-                          selectedTarget.config.signatureAuth?.signatureDataTemplate ||
-                          '{{clientId}}{{timestamp}}'
-                        }
+                        label="Signature Refresh Buffer (ms)"
+                        type="number"
+                        value={selectedTarget.config.signatureAuth?.signatureRefreshBufferMs}
                         onChange={(e) =>
                           updateCustomTarget('signatureAuth', {
                             ...selectedTarget.config.signatureAuth,
-                            signatureDataTemplate: e.target.value,
+                            signatureRefreshBufferMs: Number.parseInt(e.target.value),
                           })
                         }
-                        placeholder="Template for generating signature data"
-                        helperText="Use \n for newlines"
+                        placeholder="Buffer time before signature expiry to refresh - defaults to 10% of signature validity"
                         InputLabelProps={{
                           shrink: true,
                         }}
@@ -340,22 +314,6 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                           })
                         }
                         placeholder="Signature algorithm (default: SHA256)"
-                        InputLabelProps={{
-                          shrink: true,
-                        }}
-                      />
-                      <TextField
-                        fullWidth
-                        label="Signature Refresh Buffer (ms)"
-                        type="number"
-                        value={selectedTarget.config.signatureAuth?.signatureRefreshBufferMs}
-                        onChange={(e) =>
-                          updateCustomTarget('signatureAuth', {
-                            ...selectedTarget.config.signatureAuth,
-                            signatureRefreshBufferMs: Number.parseInt(e.target.value),
-                          })
-                        }
-                        placeholder="Buffer time before signature expiry to refresh - defaults to 10% of signature validity"
                         InputLabelProps={{
                           shrink: true,
                         }}
