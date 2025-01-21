@@ -4,18 +4,16 @@
 
 ## Setup
 
-To use DeepSeek, you'll need an API key:
-
-1. Get your key from the [DeepSeek Platform](https://platform.deepseek.com/)
-2. Set `DEEPSEEK_API_KEY` or specify `apiKey` in your config
+1. Get an API key from the [DeepSeek Platform](https://platform.deepseek.com/)
+2. Set `DEEPSEEK_API_KEY` environment variable or specify `apiKey` in your config
 
 ## Configuration
 
-Here's a simple example configuration:
+Basic configuration example:
 
 ```yaml
 providers:
-  - id: deepseek:deepseek-chat # DeepSeek-V3 model
+  - id: deepseek:deepseek-chat
     config:
       temperature: 0.7
       max_tokens: 4000
@@ -23,73 +21,58 @@ providers:
 
   - id: deepseek:deepseek-reasoner # DeepSeek-R1 model
     config:
-      temperature: 0.0 # Best for precise reasoning
-      max_tokens: 8000 # For complex tasks
+      temperature: 0.0
+      max_tokens: 8000
 ```
 
-Key configuration options:
+### Configuration Options
 
-- `temperature`: 0.0-1.5 (default: 1.0)
-- `max_tokens`: Max 8000 (default: 4000)
-- `top_p`, `presence_penalty`, `frequency_penalty`: Same as OpenAI
-- `stream`: Enable streaming (default: false)
+- `temperature`
+- `max_tokens`
+- `top_p`, `presence_penalty`, `frequency_penalty`
+- `stream`
 
 ## Available Models
 
-### DeepSeek-V3 (deepseek-chat)
+### deepseek-chat (DeepSeek-V3)
 
-- Versatile model for conversations, content creation, and translation
+- General purpose model for conversations and content
 - 64K context window, 8K output tokens
-- Pricing (until 2025-02-08):
-  - Input: $0.014/1M (cache hit), $0.14/1M (miss)
-  - Output: $0.28/1M
+- Input: $0.014/1M (cache), $0.14/1M (no cache)
+- Output: $0.28/1M
 
-### DeepSeek-R1 (deepseek-reasoner)
+### deepseek-reasoner (DeepSeek-R1)
 
-- Advanced reasoning model with step-by-step problem solving
-- Excels at math, coding, and logical reasoning tasks
-- Shows its work through Chain-of-Thought (CoT) reasoning
-- 64K context, 32K CoT tokens, 8K output tokens
-- MIT licensed - free for commercial use
-- Pricing:
-  - Input: $0.14/1M (cache hit), $0.55/1M (miss)
-  - Output: $2.19/1M (includes reasoning steps)
+- Specialized for reasoning and problem-solving
+- 64K context, 32K reasoning tokens, 8K output tokens
+- Input: $0.14/1M (cache), $0.55/1M (no cache)
+- Output: $2.19/1M
 
-## Temperature Guide
+## Example Usage
 
-DeepSeek models respond differently to temperature settings. Here's what works best:
+Here's an example comparing DeepSeek with OpenAI on reasoning tasks:
 
-| Use Case         | Temperature | Purpose           |
-| ---------------- | ----------- | ----------------- |
-| Code/Math        | 0.0         | Precise outputs   |
-| Data/Analysis    | 1.0         | Balanced          |
-| Chat/Translation | 1.3         | Natural variation |
-| Creative         | 1.5         | Maximum variation |
+```yaml
+providers:
+  - id: deepseek:deepseek-reasoner
+    config:
+      temperature: 0.0
+  - id: openai:o-1
+    config:
+      temperature: 0.0
 
-## Context Caching
+prompts:
+  - 'Solve this step by step: {{math_problem}}'
 
-DeepSeek automatically caches your inputs for 24 hours to help reduce costs:
-
-- Identical or similar queries get discounted rates (see pricing above)
-- No configuration needed - it just works
-- Great for repeated queries or batch processing
-
-## Example: Reasoning Benchmark
-
-Want to see DeepSeek-R1's reasoning capabilities in action? We provide a [complete example](https://github.com/promptfoo/promptfoo/tree/main/examples/deepseek-r1-vs-openai-o1) that benchmarks it against OpenAI's o1 model on the MMLU reasoning tasks:
-
-```sh
-promptfoo init --example deepseek-r1-vs-openai-o1
-# Set OPENAI_API_KEY, DEEPSEEK_API_KEY, and HUGGING_FACE_HUB_TOKEN
-promptfoo eval
+tests:
+  - vars:
+      math_problem: 'What is the derivative of x^3 + 2x with respect to x?'
 ```
 
-This example tests both models on complex subjects like abstract algebra and formal logic, demonstrating DeepSeek-R1's step-by-step reasoning capabilities.
+See our [complete example](https://github.com/promptfoo/promptfoo/tree/main/examples/deepseek-r1-vs-openai-o1) that benchmarks it against OpenAI's o1 model on the MMLU reasoning tasks.
 
 ## API Details
 
 - Base URL: `https://api.deepseek.com/v1`
-- OpenAI-compatible format and SDKs
-- Supports streaming responses
-
-For complete API documentation, see the [DeepSeek docs](https://platform.deepseek.com/docs).
+- OpenAI-compatible API format
+- Full [API documentation](https://platform.deepseek.com/docs)
