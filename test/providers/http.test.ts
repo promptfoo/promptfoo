@@ -1,4 +1,6 @@
+import crypto from 'crypto';
 import dedent from 'dedent';
+import fs from 'fs';
 import path from 'path';
 import { fetchWithCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
@@ -2173,5 +2175,220 @@ describe('string-based validators', () => {
     jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await expect(provider.callApi('test')).rejects.toThrow('Invalid status validator expression');
+  });
+});
+
+describe('RSA signature authentication', () => {
+  let mockPrivateKey: string;
+  let mockSign: jest.SpyInstance;
+  let mockUpdate: jest.SpyInstance;
+  let mockEnd: jest.SpyInstance;
+
+  beforeEach(() => {
+    mockPrivateKey = '-----BEGIN PRIVATE KEY-----\nMOCK_KEY\n-----END PRIVATE KEY-----';
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(mockPrivateKey);
+
+    mockUpdate = jest.fn();
+    mockEnd = jest.fn();
+    mockSign = jest.fn().mockReturnValue(Buffer.from('mocksignature'));
+
+    const mockSignObject = {
+      update: mockUpdate,
+      end: mockEnd,
+      sign: mockSign,
+    };
+
+    jest.spyOn(crypto, 'createSign').mockReturnValue(mockSignObject as any);
+    jest.spyOn(Date, 'now').mockReturnValue(1000); // Mock timestamp
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('should generate and include signature headers in request', async () => {
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        signatureAuth: {
+          privateKeyPath: '/path/to/key.pem',
+          keyVersion: 'v1',
+          clientId: 'test-client',
+          signatureValidityMs: 300000, // 5 minutes
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test');
+
+    // Verify signature generation
+    expect(fs.readFileSync).toHaveBeenCalledWith('/path/to/key.pem', 'utf8');
+    expect(crypto.createSign).toHaveBeenCalledWith('SHA256');
+    expect(mockUpdate).toHaveBeenCalledWith('test-client1000v1');
+    expect(mockSign).toHaveBeenCalledWith(mockPrivateKey);
+
+    // Verify headers in request
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      'http://example.com',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          signature: 'bW9ja3NpZ25hdHVyZQ==', // Base64 encoded 'mocksignature'
+          timestamp: '1000',
+          'client-id': 'test-client',
+          'key-version': 'v1',
+        }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should reuse cached signature when within validity period', async () => {
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        signatureAuth: {
+          privateKeyPath: '/path/to/key.pem',
+          keyVersion: 'v1',
+          clientId: 'test-client',
+          signatureValidityMs: 300000,
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    // First call should generate signature
+    await provider.callApi('test');
+    expect(crypto.createSign).toHaveBeenCalledTimes(1);
+
+    // Second call within validity period should reuse signature
+    jest.spyOn(Date, 'now').mockReturnValue(2000); // Still within validity period
+    await provider.callApi('test');
+    expect(crypto.createSign).toHaveBeenCalledTimes(1); // Should not be called again
+  });
+
+  it('should regenerate signature when expired', async () => {
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        signatureAuth: {
+          privateKeyPath: '/path/to/key.pem',
+          keyVersion: 'v1',
+          clientId: 'test-client',
+          signatureValidityMs: 300000,
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    // First call should generate signature
+    await provider.callApi('test');
+    expect(crypto.createSign).toHaveBeenCalledTimes(1);
+
+    // Second call after validity period should regenerate signature
+    jest.spyOn(Date, 'now').mockReturnValue(301000); // After validity period
+    await provider.callApi('test');
+    expect(crypto.createSign).toHaveBeenCalledTimes(2); // Should be called again
+  });
+
+  it('should use custom signature data template', async () => {
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        signatureAuth: {
+          privateKeyPath: '/path/to/key.pem',
+          keyVersion: 'v1',
+          clientId: 'test-client',
+          signatureValidityMs: 300000,
+          signatureDataTemplate: '{{clientId}}-{{timestamp}}-{{keyVersion}}',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test');
+
+    // Verify custom template was used
+    expect(mockUpdate).toHaveBeenCalledWith('test-client-1000-v1');
+  });
+
+  it('should use custom header names', async () => {
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        signatureAuth: {
+          privateKeyPath: '/path/to/key.pem',
+          keyVersion: 'v1',
+          clientId: 'test-client',
+          signatureValidityMs: 300000,
+          signatureHeader: 'x-signature',
+          timestampHeader: 'x-timestamp',
+          clientIdHeader: 'x-client-id',
+          keyVersionHeader: 'x-key-version',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      'http://example.com',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'x-signature': 'bW9ja3NpZ25hdHVyZQ==',
+          'x-timestamp': '1000',
+          'x-client-id': 'test-client',
+          'x-key-version': 'v1',
+        }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
   });
 });
