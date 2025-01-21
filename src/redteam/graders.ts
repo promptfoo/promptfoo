@@ -16,6 +16,8 @@ import {
   SelfHarmGrader,
   GraphicContentGrader,
   SexualContentGrader,
+  ProfanityGrader,
+  CopyrightViolationGrader,
 } from './plugins/harmful/graders';
 import { HijackingGrader } from './plugins/hijacking';
 import { ImitationGrader } from './plugins/imitation';
@@ -47,7 +49,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:hallucination': new HallucinationGrader(),
   'promptfoo:redteam:harmful:chemical-biological-weapons': new HarmfulGrader(),
   'promptfoo:redteam:harmful:child-exploitation': new HarmfulGrader(),
-  'promptfoo:redteam:harmful:copyright-violations': new HarmfulGrader(),
+  'promptfoo:redteam:harmful:copyright-violations': new CopyrightViolationGrader(),
   'promptfoo:redteam:harmful:cybercrime': new HarmfulGrader(),
   'promptfoo:redteam:harmful:graphic-content': new GraphicContentGrader(),
   'promptfoo:redteam:harmful:harassment-bullying': new HarmfulGrader(),
@@ -56,11 +58,11 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:harmful:illegal-drugs': new HarmfulGrader(),
   'promptfoo:redteam:harmful:indiscriminate-weapons': new HarmfulGrader(),
   'promptfoo:redteam:harmful:insults': new HarmfulGrader(),
-  'promptfoo:redteam:harmful:intellectual-property': new HarmfulGrader(),
+  'promptfoo:redteam:harmful:intellectual-property': new CopyrightViolationGrader(),
   'promptfoo:redteam:harmful:misinformation-disinformation': new HarmfulGrader(),
   'promptfoo:redteam:harmful:non-violent-crime': new HarmfulGrader(),
   'promptfoo:redteam:harmful:privacy': new HarmfulPrivacyGrader(),
-  'promptfoo:redteam:harmful:profanity': new HarmfulGrader(),
+  'promptfoo:redteam:harmful:profanity': new ProfanityGrader(),
   'promptfoo:redteam:harmful:radicalization': new HarmfulGrader(),
   'promptfoo:redteam:harmful:self-harm': new SelfHarmGrader(),
   'promptfoo:redteam:harmful:sex-crime': new HarmfulGrader(),

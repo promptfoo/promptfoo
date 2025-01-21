@@ -1,76 +1,115 @@
+import type { ProviderOptions } from '../../src/types/providers';
 import { isApiProvider, isProviderOptions } from '../../src/types/providers';
 
 describe('isApiProvider', () => {
-  it('should return true for valid ApiProvider object', () => {
-    const validProvider = {
-      id: () => 'test-provider',
-      callApi: async () => ({ output: 'test' }),
-      label: 'Test Provider',
-    };
+  it('should correctly identify valid ApiProvider objects', () => {
+    const validProviders = [
+      {
+        id: () => 'test-provider',
+        callApi: async () => ({ output: 'test' }),
+      },
+      {
+        id: () => 'full-provider',
+        callApi: async () => ({ output: 'test' }),
+        callEmbeddingApi: async () => ({ embedding: [1, 2, 3] }),
+        callClassificationApi: async () => ({ classification: { class1: 0.8 } }),
+        config: { temperature: 0.7 },
+        delay: 1000,
+        getSessionId: () => 'session-123',
+        label: 'Test Provider',
+        transform: 'toLowerCase()',
+      },
+      {
+        id: () => 'minimal-provider',
+        callApi: jest.fn(),
+      },
+    ];
 
-    expect(isApiProvider(validProvider)).toBe(true);
+    validProviders.forEach((provider) => {
+      expect(isApiProvider(provider)).toBe(true);
+    });
   });
 
-  it('should return false for null/undefined', () => {
-    expect(isApiProvider(null)).toBe(false);
-    expect(isApiProvider(undefined)).toBe(false);
-  });
+  it('should correctly identify invalid ApiProvider objects', () => {
+    const invalidProviders = [
+      null,
+      undefined,
+      {},
+      { id: 'string-id' }, // id should be a function
+      { id: null },
+      { id: undefined },
+      { id: 42 },
+      'string-provider',
+      42,
+      true,
+      [],
+      new Date(),
+    ];
 
-  it('should return false for non-object values', () => {
-    expect(isApiProvider('string')).toBe(false);
-    expect(isApiProvider(123)).toBe(false);
-    expect(isApiProvider(true)).toBe(false);
-  });
-
-  it('should return false for object missing required properties', () => {
-    expect(isApiProvider({})).toBe(false);
-    expect(isApiProvider({ id: 'test' })).toBe(false);
-    expect(isApiProvider({ callApi: () => ({}) })).toBe(false);
-  });
-
-  it('should return false if id is not a function', () => {
-    const invalidProvider = {
-      id: 'test-provider',
-      callApi: async () => ({ output: 'test' }),
-    };
-
-    expect(isApiProvider(invalidProvider)).toBe(false);
+    invalidProviders.forEach((provider) => {
+      expect(isApiProvider(provider)).toBe(false);
+    });
   });
 });
 
 describe('isProviderOptions', () => {
-  it('should return true for valid ProviderOptions object', () => {
-    const validOptions = {
-      id: 'test-provider',
-      label: 'Test Provider',
-      config: { key: 'value' },
-    };
+  it('should correctly identify valid ProviderOptions objects', () => {
+    const validOptions: ProviderOptions[] = [
+      {
+        id: 'test-provider',
+      },
+      {
+        id: 'full-options',
+        label: 'Test Provider',
+        config: { temperature: 0.7 },
+        prompts: ['Hello, {{name}}!'],
+        transform: 'toLowerCase()',
+        delay: 1000,
+        env: { OPENAI_API_KEY: 'test-key' },
+      },
+      {
+        id: 'minimal-options',
+      },
+    ];
 
-    expect(isProviderOptions(validOptions)).toBe(true);
+    validOptions.forEach((options) => {
+      expect(isProviderOptions(options)).toBe(true);
+    });
   });
 
-  it('should return false for null/undefined', () => {
-    expect(isProviderOptions(null)).toBe(false);
-    expect(isProviderOptions(undefined)).toBe(false);
+  it('should correctly identify invalid ProviderOptions objects', () => {
+    const invalidOptions = [
+      null,
+      undefined,
+      {},
+      { id: undefined },
+      { id: null },
+      { id: 42 },
+      { id: () => 'function-not-string' },
+      { label: 'Missing ID' },
+      'string-options',
+      42,
+      true,
+      [],
+      new Date(),
+    ];
+
+    invalidOptions.forEach((options) => {
+      expect(isProviderOptions(options)).toBe(false);
+    });
   });
 
-  it('should return false for non-object values', () => {
-    expect(isProviderOptions('string')).toBe(false);
-    expect(isProviderOptions(123)).toBe(false);
-    expect(isProviderOptions(true)).toBe(false);
-  });
+  it('should handle edge cases', () => {
+    const edgeCases = [
+      { id: 'valid', extraField: 'ignored' },
+      { id: 'valid', config: null },
+      { id: 'valid', prompts: [] },
+      { id: 'valid', delay: 0 },
+      { id: 'valid', env: {} },
+    ];
 
-  it('should return false for object missing required properties', () => {
-    expect(isProviderOptions({})).toBe(false);
-    expect(isProviderOptions({ label: 'Test' })).toBe(false);
-  });
-
-  it('should return false if id is not a string', () => {
-    const invalidOptions = {
-      id: () => 'test',
-      label: 'Test Provider',
-    };
-
-    expect(isProviderOptions(invalidOptions)).toBe(false);
+    edgeCases.forEach((options) => {
+      expect(isProviderOptions(options)).toBe(true);
+    });
   });
 });
