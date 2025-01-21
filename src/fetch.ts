@@ -76,8 +76,8 @@ export async function fetchWithProxy(
   if (caCertPath) {
     try {
       const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
-      const ca = fs.readFileSync(resolvedPath);
-      tlsOptions.ca = [ca];
+      const ca = fs.readFileSync(resolvedPath, 'utf8');
+      tlsOptions.ca = ca;
       logger.debug(`Using custom CA certificate from ${resolvedPath}`);
     } catch (e) {
       logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
@@ -89,6 +89,7 @@ export async function fetchWithProxy(
     const agent = new ProxyAgent({
       uri: proxyUrl,
       proxyTls: tlsOptions,
+      requestTls: tlsOptions,
     });
     setGlobalDispatcher(agent);
   }
