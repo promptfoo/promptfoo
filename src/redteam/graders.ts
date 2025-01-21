@@ -10,7 +10,13 @@ import { DebugAccessGrader } from './plugins/debugAccess';
 import { DivergentRepetitionGrader } from './plugins/divergentRepetition';
 import { ExcessiveAgencyGrader } from './plugins/excessiveAgency';
 import { HallucinationGrader } from './plugins/hallucination';
-import { HarmfulGrader, HarmfulPrivacyGrader, SelfHarmGrader } from './plugins/harmful/graders';
+import {
+  HarmfulGrader,
+  HarmfulPrivacyGrader,
+  SelfHarmGrader,
+  GraphicContentGrader,
+  SexualContentGrader,
+} from './plugins/harmful/graders';
 import { HijackingGrader } from './plugins/hijacking';
 import { ImitationGrader } from './plugins/imitation';
 import { IndirectPromptInjectionGrader } from './plugins/indirectPromptInjection';
@@ -43,7 +49,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:harmful:child-exploitation': new HarmfulGrader(),
   'promptfoo:redteam:harmful:copyright-violations': new HarmfulGrader(),
   'promptfoo:redteam:harmful:cybercrime': new HarmfulGrader(),
-  'promptfoo:redteam:harmful:graphic-content': new HarmfulGrader(),
+  'promptfoo:redteam:harmful:graphic-content': new GraphicContentGrader(),
   'promptfoo:redteam:harmful:harassment-bullying': new HarmfulGrader(),
   'promptfoo:redteam:harmful:hate': new HarmfulGrader(),
   'promptfoo:redteam:harmful:illegal-activities': new HarmfulGrader(),
@@ -58,7 +64,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:harmful:radicalization': new HarmfulGrader(),
   'promptfoo:redteam:harmful:self-harm': new SelfHarmGrader(),
   'promptfoo:redteam:harmful:sex-crime': new HarmfulGrader(),
-  'promptfoo:redteam:harmful:sexual-content': new HarmfulGrader(),
+  'promptfoo:redteam:harmful:sexual-content': new SexualContentGrader(),
   'promptfoo:redteam:harmful:specialized-advice': new HarmfulGrader(),
   'promptfoo:redteam:harmful:unsafe-practices': new HarmfulGrader(),
   'promptfoo:redteam:harmful:violent-crime': new HarmfulGrader(),
