@@ -333,7 +333,6 @@ describe('fetchWithProxy', () => {
 
     process.env.HTTPS_PROXY = mockProxyUrl;
 
-    // Update basePath in cliState
     cliState.basePath = mockBasePath;
 
     jest.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
@@ -375,7 +374,6 @@ describe('fetchWithProxy', () => {
     });
     expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(ProxyAgent));
 
-    // Reset basePath
     cliState.basePath = undefined;
   });
 
@@ -398,6 +396,10 @@ describe('fetchWithProxy', () => {
 
     const testCases = [
       {
+        env: { HTTPS_PROXY: mockProxyUrls.HTTPS_PROXY },
+        expected: { url: mockProxyUrls.HTTPS_PROXY },
+      },
+      {
         env: { https_proxy: mockProxyUrls.https_proxy },
         expected: { url: mockProxyUrls.https_proxy },
       },
@@ -418,11 +420,6 @@ describe('fetchWithProxy', () => {
         delete process.env[key];
       });
 
-      const existingProxyVars = allProxyVars.filter((key) => process.env[key]);
-      if (existingProxyVars.length > 0) {
-        console.warn('Found unexpected proxy variables:', existingProxyVars);
-      }
-
       Object.entries(testCase.env).forEach(([key, value]) => {
         process.env[key] = value;
       });
@@ -438,23 +435,11 @@ describe('fetchWithProxy', () => {
       expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(ProxyAgent));
 
       const debugCalls = jest.mocked(logger.debug).mock.calls;
-      expect(debugCalls).toEqual(
-        expect.arrayContaining([
-          [
-            expect.stringMatching(
-              new RegExp(
-                `Found proxy configuration in .*https?_proxy.*: ${testCase.expected.url}`,
-                'i',
-              ),
-            ),
-          ],
-          [`Using proxy: ${testCase.expected.url}`],
-        ]),
-      );
-
-      allProxyVars.forEach((key) => {
-        delete process.env[key];
-      });
+      const normalizedCalls = debugCalls.map((call) => call[0].replace(/\/$/, ''));
+      expect(normalizedCalls).toEqual([
+        `Found proxy configuration in ${Object.keys(testCase.env)[0]}: ${testCase.expected.url}`,
+        `Using proxy: ${testCase.expected.url}`,
+      ]);
     }
   });
 });
@@ -633,8 +618,8 @@ describe('fetchWithRetries', () => {
       'Request failed after 2 retries: Network error',
     );
 
-    expect(global.fetch).toHaveBeenCalledTimes(3); // Initial attempt + 2 retries
-    expect(sleep).toHaveBeenCalledTimes(2); // Should sleep between attempts, but not after last attempt
+    expect(global.fetch).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenCalledTimes(2);
   });
 
   it('should not sleep after the final attempt', async () => {
@@ -644,8 +629,8 @@ describe('fetchWithRetries', () => {
       'Request failed after 1 retries: Network error',
     );
 
-    expect(global.fetch).toHaveBeenCalledTimes(2); // Initial attempt + 1 retry
-    expect(sleep).toHaveBeenCalledTimes(1); // Should only sleep once between attempts
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(1);
   });
 
   it('should handle 5XX errors when PROMPTFOO_RETRY_5XX is true', async () => {
@@ -704,7 +689,7 @@ describe('fetchWithRetries', () => {
       'Request failed after 2 retries: Network error',
     );
 
-    expect(mockFetch).toHaveBeenCalledTimes(3); // Initial attempt + 2 retries
+    expect(mockFetch).toHaveBeenCalledTimes(3);
     expect(sleep).toHaveBeenCalledTimes(2);
   });
 });
