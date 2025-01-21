@@ -231,3 +231,5 @@ export async function fetchWithRetries(
   }
   throw new Error(`Request failed after ${maxRetries} retries: ${(lastError as Error).message}`);
 }
+
+export { sanitizeUrl, getProxyUrl };
