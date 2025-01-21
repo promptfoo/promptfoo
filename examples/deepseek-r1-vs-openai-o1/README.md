@@ -4,7 +4,7 @@ This example demonstrates how to benchmark DeepSeek's R1 model against OpenAI's 
 
 ## Prerequisites
 
-- promptfoo CLI installed (`npm install -g promptfoo`)
+- promptfoo CLI installed (`npm install -g promptfoo` or `brew install promptfoo`)
 - OpenAI API key set as `OPENAI_API_KEY`
 - DeepSeek API key set as `DEEPSEEK_API_KEY`
 - Hugging Face account and access token (for MMLU dataset)
@@ -93,7 +93,36 @@ You can modify the test by editing `promptfooconfig.yaml`:
      - huggingface://datasets/cais/mmlu?split=test&subset=physics
    ```
 
-2. Customize the prompt template or compare prompts side by side.
+2. Try different prompting strategies:
+
+   ```yaml
+   prompts:
+     # Zero-shot with step-by-step reasoning (default)
+     - |
+       You are an expert test taker. Please solve the following multiple choice question step by step.
+
+       Question: {{question}}
+
+       Options:
+       A) {{choices[0]}}
+       B) {{choices[1]}}
+       C) {{choices[2]}}
+       D) {{choices[3]}}
+
+       Think through this step by step, then provide your final answer in the format "Therefore, the answer is A/B/C/D."
+
+     # Zero-shot with direct answer
+     - |
+       Question: {{question}}
+
+       A) {{choices[0]}}
+       B) {{choices[1]}}
+       C) {{choices[2]}}
+       D) {{choices[3]}}
+
+       Answer with just the letter (A/B/C/D) of the correct option.
+   ```
+
 3. Change the number of questions:
 
    ```yaml
