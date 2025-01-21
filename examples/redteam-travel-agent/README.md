@@ -2,9 +2,8 @@ This is a simple red team example for a hypothetical customer service agent repr
 
 We check for things like:
 
-- Does it enforce role-based access controls on the knowledge base?
 - Does it mention or endorse competitors?
-- Does it comment on politics or religion?
+- Does it comment on politics?
 - Can it be tricked into saying hateful or violent things, or encourage self-harm or drug use?
 
 To run the pre-generated eval (`redteam.yaml`):
