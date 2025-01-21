@@ -2230,10 +2230,12 @@ describe('RSA signature authentication', () => {
 
     await provider.callApi('test');
 
-    // Verify signature generation
+    // Verify signature generation with specific data
     expect(fs.readFileSync).toHaveBeenCalledWith('/path/to/key.pem', 'utf8');
     expect(crypto.createSign).toHaveBeenCalledWith('SHA256');
-    expect(mockUpdate).toHaveBeenCalledWith('test-client1000v1');
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+    expect(mockUpdate).toHaveBeenCalledWith('test-client1000v1'); // Default template
+    expect(mockEnd).toHaveBeenCalledTimes(1);
     expect(mockSign).toHaveBeenCalledWith(mockPrivateKey);
 
     // Verify headers in request
@@ -2343,8 +2345,12 @@ describe('RSA signature authentication', () => {
 
     await provider.callApi('test');
 
-    // Verify custom template was used
-    expect(mockUpdate).toHaveBeenCalledWith('test-client-1000-v1');
+    // Verify signature generation with custom template
+    expect(crypto.createSign).toHaveBeenCalledWith('SHA256');
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+    expect(mockUpdate).toHaveBeenCalledWith('test-client-1000-v1'); // Custom template
+    expect(mockEnd).toHaveBeenCalledTimes(1);
+    expect(mockSign).toHaveBeenCalledWith(mockPrivateKey);
   });
 
   it('should use custom header names', async () => {
