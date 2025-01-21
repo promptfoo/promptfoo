@@ -1,5 +1,5 @@
 import type { ApiProvider, ProviderOptions } from '../types/providers';
-import type { Severity, Plugin } from './constants';
+import type { Plugin, Severity } from './constants';
 
 // Base types
 export type RedteamObjectConfig = Record<string, unknown>;
@@ -22,6 +22,14 @@ type ConfigurableObject = {
 
 type WithNumTests = {
   numTests?: number;
+};
+
+type TestCase = {
+  description?: string;
+  vars?: Record<string, unknown>;
+  provider?: string | ProviderOptions | ApiProvider;
+  providerOutput?: string | Record<string, unknown>;
+  assert?: any;
 };
 
 // Derived types
@@ -138,4 +146,5 @@ export interface SavedRedteamConfig {
     connectedSystems?: string;
   };
   entities: string[];
+  defaultTest?: TestCase;
 }

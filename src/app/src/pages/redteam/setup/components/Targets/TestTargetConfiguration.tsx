@@ -33,16 +33,17 @@ import 'prismjs/themes/prism.css';
 
 interface TestTargetConfigurationProps {
   testingTarget: boolean;
+  hasTestedTarget: boolean;
   handleTestTarget: () => void;
   selectedTarget: ProviderOptions;
   testResult: any;
   requiresTransformResponse: (target: ProviderOptions) => boolean;
   updateCustomTarget: (field: string, value: any) => void;
-  hasTestedTarget: boolean;
 }
 
 const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
   testingTarget,
+  hasTestedTarget,
   handleTestTarget,
   selectedTarget,
   testResult,
@@ -142,11 +143,10 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                   onValueChange={(code) => updateCustomTarget('transformResponse', code)}
                   highlight={(code) => highlight(code, languages.javascript)}
                   padding={10}
-                  placeholder={dedent`Optional: Transform the API response before using it. Format as either:
-
-                      1. A JavaScript object path: \`json.choices[0].message.content\`
-                      2. A function that receives response data: \`(json, text) => json.choices[0].message.content || text\`
-                    `}
+                  placeholder={dedent`Optional: A JavaScript expression to parse the response.
+                    Simple transform: json.choices[0].message.content
+                    
+                    With guardrails: { output: json.choices[0].message.content, guardrails: { flagged: context.response.status === 500 } }`}
                   style={{
                     fontFamily: '"Fira code", "Fira Mono", monospace',
                     fontSize: 14,
