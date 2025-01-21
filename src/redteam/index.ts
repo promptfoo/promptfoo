@@ -379,6 +379,7 @@ export async function synthesize({
     logger.info(
       `Using strategies:\n\n${chalk.yellow(
         strategies
+          .filter((s) => s.id !== 'basic')
           .map((s) => {
             const testCount = getTestCount(s, totalPluginTests, strategies);
             return `${s.id} (${formatTestCount(testCount, true)})`;
