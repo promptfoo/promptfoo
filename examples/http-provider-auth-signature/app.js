@@ -12,9 +12,8 @@ const SIGNATURE_CONFIG = {
   signatureHeader: 'signature',
   timestampHeader: 'timestamp',
   clientIdHeader: 'client-id',
-  keyVersionHeader: 'key-version',
   signatureValidityMs: 300000, // 5 minutes
-  signatureDataTemplate: '{{clientId}}{{timestamp}}{{keyVersion}}',
+  signatureDataTemplate: 'promptfoo-app{{timestamp}}',
   signatureAlgorithm: 'SHA256',
 };
 
@@ -24,10 +23,9 @@ function validateSignature(req, res, next) {
     const signature = req.headers[SIGNATURE_CONFIG.signatureHeader];
     const timestamp = req.headers[SIGNATURE_CONFIG.timestampHeader];
     const clientId = req.headers[SIGNATURE_CONFIG.clientIdHeader];
-    const keyVersion = req.headers[SIGNATURE_CONFIG.keyVersionHeader];
 
     // Check if all required headers are present
-    if (!signature || !timestamp || !clientId || !keyVersion) {
+    if (!signature || !timestamp || !clientId) {
       console.warn('Request rejected: Missing signature headers');
       return res.status(401).json({ error: 'Missing signature headers' });
     }
@@ -42,10 +40,10 @@ function validateSignature(req, res, next) {
     }
 
     // Generate signature data using the template
-    const signatureData = SIGNATURE_CONFIG.signatureDataTemplate
-      .replace('{{clientId}}', clientId)
-      .replace('{{timestamp}}', timestamp)
-      .replace('{{keyVersion}}', keyVersion);
+    const signatureData = SIGNATURE_CONFIG.signatureDataTemplate.replace(
+      '{{timestamp}}',
+      timestamp,
+    );
 
     // Verify signature
     const publicKey = fs.readFileSync(SIGNATURE_CONFIG.publicKeyPath, 'utf8');

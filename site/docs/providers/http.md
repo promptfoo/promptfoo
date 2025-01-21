@@ -522,9 +522,11 @@ providers:
     config:
       url: 'https://api.example.com/v1'
       method: 'POST'
+      headers:
+        'x-signature': '{{signature}}'
+        'x-timestamp': '{{signatureTimestamp}}'
       signatureAuth:
         privateKeyPath: '/path/to/private.key'
-        keyVersion: '1'
         clientId: 'your-client-id'
 ```
 
@@ -535,22 +537,41 @@ providers:
   - id: https
     config:
       url: 'https://api.example.com/v1'
+      headers:
+        'x-signature': '{{signature}}'
+        'x-timestamp': '{{signatureTimestamp}}'
+        'x-client-id': 'your-client-id'
       signatureAuth:
-        # Required fields
-        privateKeyPath: '/path/to/private.key'
-        keyVersion: '1'
+        # Required fields - provide either privateKeyPath or privateKey
+        privateKeyPath: '/path/to/private.key' # Path to key file
+        # privateKey: '-----BEGIN PRIVATE KEY-----\n...'  # Or direct key string
         clientId: 'your-client-id'
 
         # Optional fields with defaults shown
-        signatureHeader: 'x-signature'
-        timestampHeader: 'x-timestamp'
-        clientIdHeader: 'x-client-id'
-        keyVersionHeader: 'x-key-version'
         signatureValidityMs: 300000 # 5 minutes
         signatureAlgorithm: 'SHA256'
-        signatureDataTemplate: '{{clientId}}{{timestamp}}{{keyVersion}}'
+        signatureDataTemplate: '{{clientId}}{{timestamp}}\n' # \n is interpreted as a newline
         signatureRefreshBufferMs: 30000 # Optional: custom refresh buffer
 ```
+
+When signature authentication is enabled, the following variables are available for use in headers or other templated fields:
+
+- `signature`: The generated signature string (base64 encoded)
+- `signatureTimestamp`: The Unix timestamp when the signature was generated
+
+### Signature Auth Options
+
+| Option                   | Type   | Required | Default                             | Description                                                                                                           |
+| ------------------------ | ------ | -------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| privateKeyPath           | string | No\*     | -                                   | Path to the private key file used for signing                                                                         |
+| privateKey               | string | No\*     | -                                   | Private key string (if not using privateKeyPath)                                                                      |
+| clientId                 | string | Yes      | -                                   | Client identifier used in signature generation                                                                        |
+| signatureValidityMs      | number | No       | 300000                              | Validity period of the signature in milliseconds                                                                      |
+| signatureAlgorithm       | string | No       | 'SHA256'                            | Signature algorithm to use (any supported by Node.js crypto)                                                          |
+| signatureDataTemplate    | string | No       | '\{\{clientId\}\}\{\{timestamp\}\}' | Template for formatting the data to be signed. Note: `\n` in the template will be interpreted as a newline character. |
+| signatureRefreshBufferMs | number | No       | 10% of validityMs                   | Buffer time before expiry to refresh signature                                                                        |
+
+\* Either `privateKeyPath` or `privateKey` must be provided
 
 ## Request Retries
 
@@ -590,21 +611,17 @@ Supported config options:
 
 ### Signature Auth Options
 
-| Option                   | Type   | Required | Default                                               | Description                                                  |
-| ------------------------ | ------ | -------- | ----------------------------------------------------- | ------------------------------------------------------------ |
-| privateKeyPath           | string | Yes      | -                                                     | Path to the private key file used for signing                |
-| keyVersion               | string | Yes      | -                                                     | Version identifier for the key being used                    |
-| clientId                 | string | Yes      | -                                                     | Client identifier used in signature generation               |
-| signatureHeader          | string | No       | 'signature'                                           | Header name for the generated signature                      |
-| timestampHeader          | string | No       | 'timestamp'                                           | Header name for the signature timestamp                      |
-| clientIdHeader           | string | No       | 'client-id'                                           | Header name for the client identifier                        |
-| keyVersionHeader         | string | No       | 'key-version'                                         | Header name for the key version                              |
-| signatureValidityMs      | number | No       | 300000                                                | Validity period of the signature in milliseconds             |
-| signatureAlgorithm       | string | No       | 'SHA256'                                              | Signature algorithm to use (any supported by Node.js crypto) |
-| signatureDataTemplate    | string | No       | '\{\{clientId\}\}\{\{timestamp\}\}\{\{keyVersion\}\}' | Template for formatting the data to be signed                |
-| signatureRefreshBufferMs | number | No       | 10% of validityMs                                     | Buffer time before expiry to refresh signature               |
+| Option                   | Type   | Required | Default                             | Description                                                                                                           |
+| ------------------------ | ------ | -------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| privateKeyPath           | string | No\*     | -                                   | Path to the private key file used for signing                                                                         |
+| privateKey               | string | No\*     | -                                   | Private key string (if not using privateKeyPath)                                                                      |
+| clientId                 | string | Yes      | -                                   | Client identifier used in signature generation                                                                        |
+| signatureValidityMs      | number | No       | 300000                              | Validity period of the signature in milliseconds                                                                      |
+| signatureAlgorithm       | string | No       | 'SHA256'                            | Signature algorithm to use (any supported by Node.js crypto)                                                          |
+| signatureDataTemplate    | string | No       | '\{\{clientId\}\}\{\{timestamp\}\}' | Template for formatting the data to be signed. Note: `\n` in the template will be interpreted as a newline character. |
+| signatureRefreshBufferMs | number | No       | 10% of validityMs                   | Buffer time before expiry to refresh signature                                                                        |
 
-Note: All string values in the config (including those nested in `headers`, `body`, and `queryParams`) support Nunjucks templating. This means you can use the `{{prompt}}` variable or any other variables passed in the test context.
+\* Either `privateKeyPath` or `privateKey` must be provided
 
 In addition to a full URL, the provider `id` field accepts `http` or `https` as values.
 

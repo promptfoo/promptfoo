@@ -16,6 +16,7 @@ import {
 import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared';
 import { maybeLoadFromExternalFile } from '../../src/util';
 
+jest.mock('../../src/globalConfig/globalConfig');
 jest.mock('../../src/cache', () => ({
   ...jest.requireActual('../../src/cache'),
   fetchWithCache: jest.fn(),
@@ -2206,15 +2207,13 @@ describe('RSA signature authentication', () => {
     jest.restoreAllMocks();
   });
 
-  it('should generate and include signature headers in request', async () => {
+  it('should generate and include signature in vars', async () => {
     const provider = new HttpProvider('http://example.com', {
       config: {
         method: 'POST',
         body: { key: 'value' },
         signatureAuth: {
           privateKeyPath: '/path/to/key.pem',
-          keyVersion: 'v1',
-          clientId: 'test-client',
           signatureValidityMs: 300000, // 5 minutes
         },
       },
@@ -2234,26 +2233,8 @@ describe('RSA signature authentication', () => {
     expect(fs.readFileSync).toHaveBeenCalledWith('/path/to/key.pem', 'utf8');
     expect(crypto.createSign).toHaveBeenCalledWith('SHA256');
     expect(mockUpdate).toHaveBeenCalledTimes(1);
-    expect(mockUpdate).toHaveBeenCalledWith('test-client1000v1'); // Default template
     expect(mockEnd).toHaveBeenCalledTimes(1);
     expect(mockSign).toHaveBeenCalledWith(mockPrivateKey);
-
-    // Verify headers in request
-    expect(fetchWithCache).toHaveBeenCalledWith(
-      'http://example.com',
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          signature: 'bW9ja3NpZ25hdHVyZQ==', // Base64 encoded 'mocksignature'
-          timestamp: '1000',
-          'client-id': 'test-client',
-          'key-version': 'v1',
-        }),
-      }),
-      expect.any(Number),
-      'text',
-      undefined,
-      undefined,
-    );
   });
 
   it('should reuse cached signature when within validity period', async () => {
@@ -2263,8 +2244,6 @@ describe('RSA signature authentication', () => {
         body: { key: 'value' },
         signatureAuth: {
           privateKeyPath: '/path/to/key.pem',
-          keyVersion: 'v1',
-          clientId: 'test-client',
           signatureValidityMs: 300000,
         },
       },
@@ -2295,8 +2274,6 @@ describe('RSA signature authentication', () => {
         body: { key: 'value' },
         signatureAuth: {
           privateKeyPath: '/path/to/key.pem',
-          keyVersion: 'v1',
-          clientId: 'test-client',
           signatureValidityMs: 300000,
         },
       },
@@ -2327,10 +2304,8 @@ describe('RSA signature authentication', () => {
         body: { key: 'value' },
         signatureAuth: {
           privateKeyPath: '/path/to/key.pem',
-          keyVersion: 'v1',
-          clientId: 'test-client',
           signatureValidityMs: 300000,
-          signatureDataTemplate: '{{clientId}}-{{timestamp}}-{{keyVersion}}',
+          signatureDataTemplate: 'custom-{{signatureTimestamp}}',
         },
       },
     });
@@ -2348,25 +2323,19 @@ describe('RSA signature authentication', () => {
     // Verify signature generation with custom template
     expect(crypto.createSign).toHaveBeenCalledWith('SHA256');
     expect(mockUpdate).toHaveBeenCalledTimes(1);
-    expect(mockUpdate).toHaveBeenCalledWith('test-client-1000-v1'); // Custom template
+    expect(mockUpdate).toHaveBeenCalledWith('custom-1000'); // Custom template
     expect(mockEnd).toHaveBeenCalledTimes(1);
     expect(mockSign).toHaveBeenCalledWith(mockPrivateKey);
   });
 
-  it('should use custom header names', async () => {
+  it('should support using privateKey directly instead of privateKeyPath', async () => {
     const provider = new HttpProvider('http://example.com', {
       config: {
         method: 'POST',
         body: { key: 'value' },
         signatureAuth: {
-          privateKeyPath: '/path/to/key.pem',
-          keyVersion: 'v1',
-          clientId: 'test-client',
+          privateKey: mockPrivateKey,
           signatureValidityMs: 300000,
-          signatureHeader: 'x-signature',
-          timestampHeader: 'x-timestamp',
-          clientIdHeader: 'x-client-id',
-          keyVersionHeader: 'x-key-version',
         },
       },
     });
@@ -2381,20 +2350,9 @@ describe('RSA signature authentication', () => {
 
     await provider.callApi('test');
 
-    expect(fetchWithCache).toHaveBeenCalledWith(
-      'http://example.com',
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          'x-signature': 'bW9ja3NpZ25hdHVyZQ==',
-          'x-timestamp': '1000',
-          'x-client-id': 'test-client',
-          'x-key-version': 'v1',
-        }),
-      }),
-      expect.any(Number),
-      'text',
-      undefined,
-      undefined,
-    );
+    // Verify signature generation using privateKey directly
+    expect(fs.readFileSync).not.toHaveBeenCalled(); // Should not read from file
+    expect(crypto.createSign).toHaveBeenCalledWith('SHA256');
+    expect(mockSign).toHaveBeenCalledWith(mockPrivateKey);
   });
 });
