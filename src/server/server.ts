@@ -205,9 +205,11 @@ export async function startServer(
 
   setupSignalWatcher(async () => {
     const latestEval = await getLatestEval(filterDescription);
-    logger.info(`Emitting update with eval ID: ${latestEval?.config?.description || 'unknown'}`);
-    io.emit('update', latestEval);
-    allPrompts = null;
+    if ((latestEval?.results.results.length || 0) > 0) {
+      logger.info(`Emitting update with eval ID: ${latestEval?.config?.description || 'unknown'}`);
+      io.emit('update', latestEval);
+      allPrompts = null;
+    }
   });
 
   io.on('connection', async (socket) => {
