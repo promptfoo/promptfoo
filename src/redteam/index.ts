@@ -267,6 +267,51 @@ export function getTestCount(
 }
 
 /**
+ * Calculates the total number of tests to be generated based on plugins and strategies.
+ * @param plugins - The array of plugins to generate tests for
+ * @param strategies - The array of strategies to apply
+ * @returns Object containing total tests and intermediate calculations
+ */
+export function calculateTotalTests(
+  plugins: SynthesizeOptions['plugins'],
+  strategies: RedteamStrategyObject[],
+): {
+  effectiveStrategyCount: number;
+  includeBasicTests: boolean;
+  multilingualStrategy: RedteamStrategyObject | undefined;
+  totalPluginTests: number;
+  totalTests: number;
+} {
+  const multilingualStrategy = strategies.find((s) => s.id === 'multilingual');
+  const numLanguages = multilingualStrategy
+    ? Object.keys(multilingualStrategy?.config?.languages ?? {}).length || DEFAULT_LANGUAGES.length
+    : 1;
+
+  const basicStrategy = strategies.find((s) => s.id === 'basic');
+  const basicStrategyExists = basicStrategy !== undefined;
+  const includeBasicTests = basicStrategy?.config?.enabled ?? true;
+
+  const effectiveStrategyCount =
+    basicStrategyExists && !includeBasicTests ? strategies.length - 1 : strategies.length;
+
+  const totalPluginTests = plugins.reduce((sum, p) => sum + (p.numTests || 0), 0);
+
+  // When there are no strategies, we should just return the total plugin tests
+  const totalTests =
+    strategies.length === 0
+      ? totalPluginTests
+      : totalPluginTests * effectiveStrategyCount * numLanguages;
+
+  return {
+    effectiveStrategyCount,
+    includeBasicTests,
+    multilingualStrategy,
+    totalPluginTests,
+    totalTests,
+  };
+}
+
+/**
  * Synthesizes test cases based on provided options.
  * @param options - The options for test case synthesis.
  * @returns A promise that resolves to an object containing the purpose, entities, and test cases.
@@ -309,24 +354,13 @@ export async function synthesize({
 
   const redteamProvider = await redteamProviderManager.getProvider({ provider });
 
-  // We need to know how many languages we're generating for
-  // We generate multilingual attacks for all of our test cases so it's plugins * strategies * languages
-  const multilingualStrategy = strategies.find((s) => s.id === 'multilingual');
-  const numLanguages = multilingualStrategy
-    ? Object.keys(multilingualStrategy?.config?.languages ?? {}).length || DEFAULT_LANGUAGES.length
-    : 1;
-
-  // Find if basic strategy is disabled
-  const basicStrategy = strategies.find((s) => s.id === 'basic');
-  const basicStrategyExists = basicStrategy !== undefined;
-  const includeBasicTests = basicStrategy?.config?.enabled ?? true;
-  // If basic exists but is disabled, subtract 1 from total strategies
-  const effectiveStrategyCount =
-    basicStrategyExists && !includeBasicTests ? strategies.length - 1 : strategies.length;
-
-  const totalPluginTests = plugins.reduce((sum, p) => sum + (p.numTests || 0), 0);
-
-  const totalTests = totalPluginTests * effectiveStrategyCount * numLanguages;
+  const {
+    effectiveStrategyCount,
+    includeBasicTests,
+    multilingualStrategy,
+    totalPluginTests,
+    totalTests,
+  } = calculateTotalTests(plugins, strategies);
 
   logger.info(
     `Synthesizing test cases for ${prompts.length} ${
