@@ -94,16 +94,18 @@ export default class GoatProvider implements ApiProvider {
 
     for (let turn = 0; turn < this.maxTurns; turn++) {
       try {
+        const body = JSON.stringify({
+          goal: context?.vars[this.injectVar],
+          i: turn,
+          messages,
+          prompt: context?.prompt?.raw,
+          task: 'goat',
+          version: VERSION,
+          email: getUserEmail(),
+        });
+        logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
         response = await fetch(getRemoteGenerationUrl(), {
-          body: JSON.stringify({
-            goal: context?.vars[this.injectVar],
-            i: turn,
-            messages,
-            prompt: context?.prompt?.raw,
-            task: 'goat',
-            version: VERSION,
-            email: getUserEmail(),
-          }),
+          body,
           headers: {
             'Content-Type': 'application/json',
           },

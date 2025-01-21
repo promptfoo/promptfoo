@@ -1,0 +1,41 @@
+- type: function
+  function:
+    name: get_billing_history
+    description: >-
+      Get the billing history of a given user ID or name. Use this
+      sparingly, only when user asks about a specific purchase or
+      billing.
+    parameters:
+      type: object
+      properties:
+        user_id:
+          type: string
+          description: The user ID or name
+      required:
+        - user_id
+- type: function
+  function:
+    name: query_database
+    description: >-
+      Query the database for hotel booking information. Use this
+      sparingly, only if a user needs to retrieve booking information.
+    parameters:
+      type: object
+      properties:
+        query:
+          type: string
+          description: The SQL query to execute
+      required:
+        - query
+- type: function
+  function:
+    name: run_command
+    description: Run a system command
+    parameters:
+      type: object
+      properties:
+        command:
+          type: string
+          description: The command to execute
+      required:
+        - command
