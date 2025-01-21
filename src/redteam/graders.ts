@@ -15,6 +15,7 @@ import {
   HarmfulPrivacyGrader,
   SelfHarmGrader,
   GraphicContentGrader,
+  SexualContentGrader,
 } from './plugins/harmful/graders';
 import { HijackingGrader } from './plugins/hijacking';
 import { ImitationGrader } from './plugins/imitation';
@@ -63,7 +64,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:harmful:radicalization': new HarmfulGrader(),
   'promptfoo:redteam:harmful:self-harm': new SelfHarmGrader(),
   'promptfoo:redteam:harmful:sex-crime': new HarmfulGrader(),
-  'promptfoo:redteam:harmful:sexual-content': new HarmfulGrader(),
+  'promptfoo:redteam:harmful:sexual-content': new SexualContentGrader(),
   'promptfoo:redteam:harmful:specialized-advice': new HarmfulGrader(),
   'promptfoo:redteam:harmful:unsafe-practices': new HarmfulGrader(),
   'promptfoo:redteam:harmful:violent-crime': new HarmfulGrader(),
