@@ -29,8 +29,8 @@ import {
 } from '../shared';
 import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from './prompts';
 
-const DEFAULT_MAX_ROUNDS = 10;
-const DEFAULT_MAX_BACKTRACKS = 10;
+export const DEFAULT_MAX_ROUNDS = 10;
+export const DEFAULT_MAX_BACKTRACKS = 10;
 
 interface CrescendoConfig {
   injectVar: string;
@@ -63,7 +63,7 @@ export class MemorySystem {
   }
 }
 
-class CrescendoProvider implements ApiProvider {
+export class CrescendoProvider implements ApiProvider {
   readonly config: CrescendoConfig;
   private readonly nunjucks: any;
   private userGoal: string | undefined;
@@ -706,5 +706,3 @@ class CrescendoProvider implements ApiProvider {
 }
 
 export default CrescendoProvider;
-
-export { DEFAULT_MAX_ROUNDS, DEFAULT_MAX_BACKTRACKS, CrescendoProvider };
