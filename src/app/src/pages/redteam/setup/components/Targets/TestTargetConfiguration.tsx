@@ -15,6 +15,7 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
+import Switch from '@mui/material/Switch';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -188,6 +189,200 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                   shrink: true,
                 }}
               />
+            </AccordionDetails>
+          </Accordion>
+
+          <Accordion defaultExpanded={!!selectedTarget.config.signatureAuth}>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Box>
+                <Typography variant="h6">Digital Signature Authentication</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Sign requests sent to the API
+                </Typography>
+              </Box>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                Configure signature-based authentication for secure API calls. See{' '}
+                <a
+                  href="https://www.promptfoo.dev/docs/providers/http/#digital-signature-authentication"
+                  target="_blank"
+                >
+                  docs
+                </a>{' '}
+                for more information.
+              </Typography>
+              <Stack spacing={2}>
+                <Stack direction="row" alignItems="center" spacing={1}>
+                  <Switch
+                    checked={!!selectedTarget.config.signatureAuth}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        updateCustomTarget('signatureAuth', {
+                          privateKeyPath: '',
+                          clientId: '',
+                          signatureValidityMs: 300000,
+                        });
+                      } else {
+                        updateCustomTarget('signatureAuth', undefined);
+                      }
+                    }}
+                  />
+                  <Typography>Use Signature Authentication</Typography>
+                </Stack>
+
+                {selectedTarget.config.signatureAuth && (
+                  <>
+                    <Stack spacing={2}>
+                      <TextField
+                        fullWidth
+                        label="Private Key"
+                        value={selectedTarget.config.signatureAuth?.privateKey || ''}
+                        onChange={(e) =>
+                          updateCustomTarget('signatureAuth', {
+                            ...selectedTarget.config.signatureAuth,
+                            privateKey: e.target.value || undefined,
+                            // Unset private key path if set
+                            privateKeyPath: undefined,
+                          })
+                        }
+                        placeholder="Paste signature private key here"
+                        multiline
+                        rows={4}
+                        InputLabelProps={{
+                          shrink: true,
+                        }}
+                      />
+
+                      <TextField
+                        fullWidth
+                        label="Client ID"
+                        value={selectedTarget.config.signatureAuth?.clientId || ''}
+                        onChange={(e) =>
+                          updateCustomTarget('signatureAuth', {
+                            ...selectedTarget.config.signatureAuth,
+                            clientId: e.target.value,
+                          })
+                        }
+                        placeholder="Your client identifier"
+                        InputLabelProps={{
+                          shrink: true,
+                        }}
+                      />
+                      <TextField
+                        fullWidth
+                        label="Signature Validity (ms)"
+                        type="number"
+                        value={selectedTarget.config.signatureAuth?.signatureValidityMs || '300000'}
+                        onChange={(e) =>
+                          updateCustomTarget('signatureAuth', {
+                            ...selectedTarget.config.signatureAuth,
+                            signatureValidityMs: Number.parseInt(e.target.value),
+                          })
+                        }
+                        placeholder="How long the signature remains valid"
+                        InputLabelProps={{
+                          shrink: true,
+                        }}
+                      />
+                      <TextField
+                        fullWidth
+                        label="Signature Header"
+                        value={selectedTarget.config.signatureAuth?.signatureHeader}
+                        onChange={(e) =>
+                          updateCustomTarget('signatureAuth', {
+                            ...selectedTarget.config.signatureAuth,
+                            signatureHeader: e.target.value,
+                          })
+                        }
+                        placeholder="Header name for the signature"
+                        InputLabelProps={{
+                          shrink: true,
+                        }}
+                      />
+                      <TextField
+                        fullWidth
+                        label="Timestamp Header"
+                        value={selectedTarget.config.signatureAuth?.timestampHeader}
+                        onChange={(e) =>
+                          updateCustomTarget('signatureAuth', {
+                            ...selectedTarget.config.signatureAuth,
+                            timestampHeader: e.target.value,
+                          })
+                        }
+                        placeholder="Header name for the timestamp"
+                        InputLabelProps={{
+                          shrink: true,
+                        }}
+                      />
+                      <TextField
+                        fullWidth
+                        label="Client ID Header"
+                        value={selectedTarget.config.signatureAuth?.clientIdHeader}
+                        onChange={(e) =>
+                          updateCustomTarget('signatureAuth', {
+                            ...selectedTarget.config.signatureAuth,
+                            clientIdHeader: e.target.value,
+                          })
+                        }
+                        placeholder="Header name for the client ID"
+                        InputLabelProps={{
+                          shrink: true,
+                        }}
+                      />
+                      <TextField
+                        fullWidth
+                        label="Signature Data Template"
+                        value={
+                          selectedTarget.config.signatureAuth?.signatureDataTemplate ||
+                          '{{clientId}}{{timestamp}}'
+                        }
+                        onChange={(e) =>
+                          updateCustomTarget('signatureAuth', {
+                            ...selectedTarget.config.signatureAuth,
+                            signatureDataTemplate: e.target.value,
+                          })
+                        }
+                        placeholder="Template for generating signature data"
+                        InputLabelProps={{
+                          shrink: true,
+                        }}
+                      />
+                      <TextField
+                        fullWidth
+                        label="Signature Algorithm"
+                        value={selectedTarget.config.signatureAuth?.signatureAlgorithm || 'SHA256'}
+                        onChange={(e) =>
+                          updateCustomTarget('signatureAuth', {
+                            ...selectedTarget.config.signatureAuth,
+                            signatureAlgorithm: e.target.value,
+                          })
+                        }
+                        placeholder="Signature algorithm (default: SHA256)"
+                        InputLabelProps={{
+                          shrink: true,
+                        }}
+                      />
+                      <TextField
+                        fullWidth
+                        label="Signature Refresh Buffer (ms)"
+                        type="number"
+                        value={selectedTarget.config.signatureAuth?.signatureRefreshBufferMs}
+                        onChange={(e) =>
+                          updateCustomTarget('signatureAuth', {
+                            ...selectedTarget.config.signatureAuth,
+                            signatureRefreshBufferMs: Number.parseInt(e.target.value),
+                          })
+                        }
+                        placeholder="Buffer time before signature expiry to refresh - defaults to 10% of signature validity"
+                        InputLabelProps={{
+                          shrink: true,
+                        }}
+                      />
+                    </Stack>
+                  </>
+                )}
+              </Stack>
             </AccordionDetails>
           </Accordion>
 

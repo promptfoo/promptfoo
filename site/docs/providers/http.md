@@ -524,7 +524,6 @@ providers:
       method: 'POST'
       signatureAuth:
         privateKeyPath: '/path/to/private.key'
-        keyVersion: '1'
         clientId: 'your-client-id'
 ```
 
@@ -538,17 +537,15 @@ providers:
       signatureAuth:
         # Required fields
         privateKeyPath: '/path/to/private.key'
-        keyVersion: '1'
         clientId: 'your-client-id'
 
         # Optional fields with defaults shown
         signatureHeader: 'x-signature'
         timestampHeader: 'x-timestamp'
         clientIdHeader: 'x-client-id'
-        keyVersionHeader: 'x-key-version'
         signatureValidityMs: 300000 # 5 minutes
         signatureAlgorithm: 'SHA256'
-        signatureDataTemplate: '{{clientId}}{{timestamp}}{{keyVersion}}'
+        signatureDataTemplate: '{{clientId}}{{timestamp}}'
         signatureRefreshBufferMs: 30000 # Optional: custom refresh buffer
 ```
 
@@ -590,19 +587,18 @@ Supported config options:
 
 ### Signature Auth Options
 
-| Option                   | Type   | Required | Default                                               | Description                                                  |
-| ------------------------ | ------ | -------- | ----------------------------------------------------- | ------------------------------------------------------------ |
-| privateKeyPath           | string | Yes      | -                                                     | Path to the private key file used for signing                |
-| keyVersion               | string | Yes      | -                                                     | Version identifier for the key being used                    |
-| clientId                 | string | Yes      | -                                                     | Client identifier used in signature generation               |
-| signatureHeader          | string | No       | 'signature'                                           | Header name for the generated signature                      |
-| timestampHeader          | string | No       | 'timestamp'                                           | Header name for the signature timestamp                      |
-| clientIdHeader           | string | No       | 'client-id'                                           | Header name for the client identifier                        |
-| keyVersionHeader         | string | No       | 'key-version'                                         | Header name for the key version                              |
-| signatureValidityMs      | number | No       | 300000                                                | Validity period of the signature in milliseconds             |
-| signatureAlgorithm       | string | No       | 'SHA256'                                              | Signature algorithm to use (any supported by Node.js crypto) |
-| signatureDataTemplate    | string | No       | '\{\{clientId\}\}\{\{timestamp\}\}\{\{keyVersion\}\}' | Template for formatting the data to be signed                |
-| signatureRefreshBufferMs | number | No       | 10% of validityMs                                     | Buffer time before expiry to refresh signature               |
+| Option                   | Type   | Required | Default                             | Description                                                                                                           |
+| ------------------------ | ------ | -------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| privateKeyPath           | string | Yes      | -                                   | Path to the private key file used for signing                                                                         |
+| clientId                 | string | Yes      | -                                   | Client identifier used in signature generation                                                                        |
+| signatureHeader          | string | No       | 'signature'                         | Header name for the generated signature                                                                               |
+| timestampHeader          | string | No       | 'timestamp'                         | Header name for the signature timestamp                                                                               |
+| clientIdHeader           | string | No       | 'client-id'                         | Header name for the client identifier                                                                                 |
+| keyVersionHeader         | string | No       | 'key-version'                       | Header name for the key version                                                                                       |
+| signatureValidityMs      | number | No       | 300000                              | Validity period of the signature in milliseconds                                                                      |
+| signatureAlgorithm       | string | No       | 'SHA256'                            | Signature algorithm to use (any supported by Node.js crypto)                                                          |
+| signatureDataTemplate    | string | No       | '\{\{clientId\}\}\{\{timestamp\}\}' | Template for formatting the data to be signed. Note: `\n` in the template will be interpreted as a newline character. |
+| signatureRefreshBufferMs | number | No       | 10% of validityMs                   | Buffer time before expiry to refresh signature                                                                        |
 
 Note: All string values in the config (including those nested in `headers`, `body`, and `queryParams`) support Nunjucks templating. This means you can use the `{{prompt}}` variable or any other variables passed in the test context.
 
