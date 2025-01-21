@@ -548,7 +548,7 @@ providers:
         keyVersionHeader: 'x-key-version'
         signatureValidityMs: 300000 # 5 minutes
         signatureAlgorithm: 'SHA256'
-        signatureDataTemplate: '\{\{clientId\}\}\{\{timestamp\}\}\{\{keyVersion\}\}'
+        signatureDataTemplate: '{{clientId}}{{timestamp}}{{keyVersion}}'
         signatureRefreshBufferMs: 30000 # Optional: custom refresh buffer
 ```
 
