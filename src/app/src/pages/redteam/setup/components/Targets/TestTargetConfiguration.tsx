@@ -57,6 +57,14 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
   const theme = useTheme();
   const darkMode = theme.palette.mode === 'dark';
 
+  const [signatureAuthExpanded, setSignatureAuthExpanded] = React.useState(
+    !!selectedTarget.config.signatureAuth,
+  );
+
+  const handleSignatureAuthChange = (_event: React.SyntheticEvent, isExpanded: boolean) => {
+    setSignatureAuthExpanded(isExpanded);
+  };
+
   return (
     <Box mt={4}>
       {requiresTransformResponse(selectedTarget) && (
@@ -195,7 +203,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
             </AccordionDetails>
           </Accordion>
 
-          <Accordion defaultExpanded={!!selectedTarget.config.signatureAuth}>
+          <Accordion expanded={signatureAuthExpanded} onChange={handleSignatureAuthChange}>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
               <Box>
                 <Typography variant="h6">Digital Signature Authentication</Typography>
