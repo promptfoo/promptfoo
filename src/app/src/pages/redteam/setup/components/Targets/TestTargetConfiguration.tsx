@@ -224,6 +224,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                         updateCustomTarget('signatureAuth', {
                           privateKeyPath: '',
                           signatureValidityMs: 300000,
+                          signatureDataTemplate: '{{signatureTimestamp}}',
                         });
                       } else {
                         updateCustomTarget('signatureAuth', undefined);
