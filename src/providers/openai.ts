@@ -137,18 +137,49 @@ interface OpenAiSharedOptions {
   headers?: { [key: string]: string };
 }
 
-export type OpenAiCompletionOptions = OpenAiSharedOptions & {
-  temperature?: number;
-  max_completion_tokens?: number;
-  max_tokens?: number;
-  top_p?: number;
-  frequency_penalty?: number;
-  presence_penalty?: number;
-  best_of?: number;
-  functions?: OpenAiFunction[];
-  function_call?: 'none' | 'auto' | { name: string };
+/** Base options shared between all OpenAI models */
+interface OpenAiBaseCompletionOptions extends OpenAiSharedOptions {
+  /** For deterministic outputs. Same seed + parameters should return similar results.
+   * Check system_fingerprint in response to monitor backend changes affecting determinism.
+   */
+  seed?: number;
+
+  /** Additional parameters to pass directly to the API. Use with caution. */
+  passthrough?: object;
+
+  /** Callback functions to automatically execute when the model calls specific tools.
+   * Maps function names to their implementations.
+   */
+  functionToolCallbacks?: Record<
+    OpenAI.FunctionDefinition['name'],
+    (arg: string) => Promise<string>
+  >;
+
+  /** Up to 4 sequences where the API will stop generating further tokens. */
+  stop?: string[];
+
+  /** Optional name for the participant in the conversation.
+   * Helps model differentiate between participants with the same role.
+   */
+  name?: string;
+
+  /** List of tools (currently only functions) that the model may use.
+   * Provides a list of functions the model may generate JSON inputs for.
+   */
   tools?: OpenAiTool[];
+
+  /** Controls which tool (if any) the model should use.
+   * - 'none': model will not use any tool
+   * - 'auto': model can choose between generating a message or using tools
+   * - 'required': model must use at least one tool
+   * - object: forces the model to use a specific tool
+   */
   tool_choice?: 'none' | 'auto' | 'required' | { type: 'function'; function?: { name: string } };
+
+  /** Specifies the format that the model must output.
+   * - json_object: Ensures the message is valid JSON
+   * - json_schema: Enables Structured Outputs matching your schema
+   */
   response_format?:
     | {
         type: 'json_object';
@@ -163,22 +194,117 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
             properties: Record<string, any>;
             required?: string[];
             additionalProperties: false;
+            $defs?: Record<string, any>; // For shared schema definitions
           };
         };
       };
-  stop?: string[];
-  seed?: number;
-  passthrough?: object;
 
-  /**
-   * If set, automatically call these functions when the assistant activates
-   * these function tools.
+  /** The prompt text to send to the model */
+  prompt?: string;
+
+  /** Indicates which type of model this is */
+  model_type?: 'o1' | 'standard';
+
+  // Standard model parameters
+  /** Temperature controls randomness in the model's output. Values between 0 and 2.
+   * Higher values (e.g., 0.8) make output more random, lower values (e.g., 0.2) make it more focused.
    */
-  functionToolCallbacks?: Record<
-    OpenAI.FunctionDefinition['name'],
-    (arg: string) => Promise<string>
-  >;
-};
+  temperature?: number;
+
+  /** The maximum number of tokens to generate. */
+  max_tokens?: number;
+
+  /** An alternative to temperature for controlling randomness. Value between 0 and 1.
+   * Only considers tokens comprising the top_p probability mass. E.g., 0.1 means only top 10% likely tokens are considered.
+   */
+  top_p?: number;
+
+  /** Number between -2.0 and 2.0. Positive values penalize new tokens based on their frequency,
+   * decreasing the model's likelihood to repeat the same line verbatim.
+   */
+  frequency_penalty?: number;
+
+  /** Number between -2.0 and 2.0. Positive values penalize new tokens based on whether they appear in the text so far,
+   * increasing the model's likelihood to talk about new topics.
+   */
+  presence_penalty?: number;
+
+  /** Number of completions to generate for each prompt. Keep as 1 to minimize costs.
+   * @deprecated Rarely used in newer models
+   */
+  best_of?: number;
+
+  /** @deprecated Use tools instead. List of functions the model may generate JSON inputs for. */
+  functions?: OpenAiFunction[];
+
+  /** @deprecated Use tool_choice instead. Controls how the model uses functions. */
+  function_call?: 'none' | 'auto' | { name: string };
+
+  // o1 model parameters
+  /** Maximum number of tokens to generate in the completion.
+   * Replaces max_tokens for o1 models.
+   */
+  max_completion_tokens?: number;
+
+  /** Developer-provided instructions that the model should follow.
+   * More authoritative than system messages for controlling model behavior.
+   */
+  developer_instructions?: string;
+
+  /** Predicted output content for faster responses.
+   * Useful when regenerating known content like text files.
+   */
+  prediction?: {
+    content: string | Array<{ type: 'text'; text: string }>;
+    type: 'content';
+  };
+
+  /** Controls reasoning effort for o1 models.
+   * - 'low': Faster responses, fewer tokens on reasoning
+   * - 'medium': Balanced approach
+   * - 'high': More thorough reasoning, potentially slower and more tokens
+   */
+  reasoning_effort?: 'low' | 'medium' | 'high';
+
+  /** Controls processing latency tier.
+   * - 'auto': Uses scale tier if available, otherwise default
+   * - 'default': Lower uptime SLA, no latency guarantee
+   */
+  service_tier?: 'auto' | 'default';
+
+  /** Whether to store completion for model distillation/evaluation.
+   * Enables using the output for improving model performance.
+   */
+  store?: boolean;
+}
+
+export type OpenAiCompletionOptions = OpenAiBaseCompletionOptions;
+
+/** Type guard to check if config has o1 features */
+function isO1Config(config: OpenAiCompletionOptions): boolean {
+  return config.model_type === 'o1' || (
+    'max_completion_tokens' in config ||
+    'developer_instructions' in config ||
+    'prediction' in config ||
+    'reasoning_effort' in config ||
+    'service_tier' in config ||
+    'store' in config
+  );
+}
+
+/** Type guard to check if config has standard features */
+function isStandardConfig(config: OpenAiCompletionOptions): boolean {
+  return config.model_type === 'standard' || (
+    'max_tokens' in config ||
+    'temperature' in config ||
+    'top_p' in config ||
+    'presence_penalty' in config ||
+    'frequency_penalty' in config ||
+    'best_of' in config ||
+    'functions' in config ||
+    'function_call' in config
+  );
+}
 
 export function failApiCall(err: any) {
   if (err instanceof OpenAI.APIError) {
@@ -481,81 +607,96 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     this.config = options.config || {};
   }
 
-  getOpenAiBody(
-    prompt: string,
-    context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
-  ) {
-    // Merge configs from the provider and the prompt
-    const config = {
-      ...this.config,
-      ...context?.prompt?.config,
+  private getOpenAiBody(rawConfig: OpenAiCompletionOptions): Record<string, any> {
+    const isO1Model = this.modelName.startsWith('o1');
+    const config: OpenAiCompletionOptions = {
+      ...rawConfig,
+      model_type: isO1Model ? 'o1' : 'standard'
     };
 
-    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+    // Parse messages and handle developer instructions if present
+    const messages = parseChatPrompt(rawConfig.prompt || '', [{ 
+      role: 'user', 
+      content: rawConfig.prompt || '',
+      ...(rawConfig.name ? { name: rawConfig.name } : {})
+    }]);
+    
+    // Add developer instructions as a system message if present
+    if (isO1Config(config) && config.developer_instructions) {
+      messages.unshift({
+        role: 'system',
+        content: config.developer_instructions,
+      });
+    }
 
-    // NOTE: Special handling for o1 models which do not support max_tokens and temperature
-    const isO1Model = this.modelName.startsWith('o1');
-    const maxCompletionTokens = isO1Model
-      ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
-      : undefined;
-    const maxTokens = isO1Model
-      ? undefined
-      : (config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024));
-    const temperature = isO1Model
-      ? undefined
-      : (config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0));
-
-    const body = {
+    const body: Record<string, any> = {
       model: this.modelName,
       messages,
-      seed: config.seed,
-      ...(maxTokens ? { max_tokens: maxTokens } : {}),
-      ...(maxCompletionTokens ? { max_completion_tokens: maxCompletionTokens } : {}),
-      ...(temperature ? { temperature } : {}),
-      ...(config.top_p !== undefined || process.env.OPENAI_TOP_P
-        ? { top_p: config.top_p ?? Number.parseFloat(process.env.OPENAI_TOP_P || '1') }
-        : {}),
-      ...(config.presence_penalty !== undefined || process.env.OPENAI_PRESENCE_PENALTY
-        ? {
-            presence_penalty:
-              config.presence_penalty ??
-              Number.parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
-          }
-        : {}),
-      ...(config.frequency_penalty !== undefined || process.env.OPENAI_FREQUENCY_PENALTY
-        ? {
-            frequency_penalty:
-              config.frequency_penalty ??
-              Number.parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
-          }
-        : {}),
-      ...(config.functions
-        ? {
-            functions: maybeLoadFromExternalFile(
-              renderVarsInObject(config.functions, context?.vars),
-            ),
-          }
-        : {}),
-      ...(config.function_call ? { function_call: config.function_call } : {}),
-      ...(config.tools
-        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)) }
-        : {}),
-      ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
-      ...(config.tool_resources ? { tool_resources: config.tool_resources } : {}),
-      ...(config.response_format
-        ? {
-            response_format: maybeLoadFromExternalFile(
-              renderVarsInObject(config.response_format, context?.vars),
-            ),
-          }
-        : {}),
-      ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
-      ...(config.stop ? { stop: config.stop } : {}),
-      ...(config.passthrough || {}),
     };
 
-    return { body, config };
+    // Add o1-specific parameters
+    if (isO1Model && isO1Config(config)) {
+      if (config.max_completion_tokens !== undefined) {
+        body.max_completion_tokens = config.max_completion_tokens;
+      }
+      if (config.prediction !== undefined) {
+        body.prediction = config.prediction;
+      }
+      if (config.reasoning_effort !== undefined) {
+        body.reasoning_effort = config.reasoning_effort;
+      }
+      if (config.service_tier !== undefined) {
+        body.service_tier = config.service_tier;
+      }
+      if (config.store !== undefined) {
+        body.store = config.store;
+      }
+    } else if (!isO1Model && isStandardConfig(config)) {
+      // Add standard model parameters
+      if (config.max_tokens !== undefined) {
+        body.max_tokens = config.max_tokens;
+      }
+      if (config.temperature !== undefined) {
+        body.temperature = config.temperature;
+      }
+      if (config.top_p !== undefined) {
+        body.top_p = config.top_p;
+      }
+      if (config.presence_penalty !== undefined) {
+        body.presence_penalty = config.presence_penalty;
+      }
+      if (config.frequency_penalty !== undefined) {
+        body.frequency_penalty = config.frequency_penalty;
+      }
+      if (config.best_of !== undefined) {
+        body.best_of = config.best_of;
+      }
+      if (config.functions !== undefined) {
+        body.functions = config.functions;
+      }
+      if (config.function_call !== undefined) {
+        body.function_call = config.function_call;
+      }
+    }
+
+    // Add shared parameters
+    if (config.seed !== undefined) {
+      body.seed = config.seed;
+    }
+    if (config.stop !== undefined) {
+      body.stop = config.stop;
+    }
+    if (config.tools !== undefined) {
+      body.tools = config.tools;
+    }
+    if (config.tool_choice !== undefined) {
+      body.tool_choice = config.tool_choice;
+    }
+    if (config.response_format !== undefined) {
+      body.response_format = config.response_format;
+    }
+
+    return body;
   }
 
   async callApi(
@@ -569,7 +710,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       );
     }
 
-    const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
+    // Merge provider config with prompt config
+    const mergedConfig = {
+      ...this.config,
+      ...context?.prompt?.config,
+      prompt,
+    };
+
+    const body = this.getOpenAiBody(mergedConfig);
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
 
     let data, status, statusText;
@@ -583,7 +731,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.getApiKey()}`,
             ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-            ...config.headers,
+            ...this.config.headers,
           },
           body: JSON.stringify(body),
         },
@@ -633,7 +781,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       );
 
       // Handle structured output
-      if (config.response_format?.type === 'json_schema' && typeof output === 'string') {
+      if ((mergedConfig.response_format?.type === 'json_schema' || 
+           mergedConfig.response_format?.type === 'json_object') && 
+          typeof output === 'string') {
         try {
           output = JSON.parse(output);
         } catch (error) {
@@ -643,13 +793,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
       // Handle function tool callbacks
       const functionCalls = message.function_call ? [message.function_call] : message.tool_calls;
-      if (functionCalls && config.functionToolCallbacks) {
+      if (functionCalls && this.config.functionToolCallbacks) {
         const results = [];
         for (const functionCall of functionCalls) {
           const functionName = functionCall.name || functionCall.function?.name;
-          if (config.functionToolCallbacks[functionName]) {
+          if (this.config.functionToolCallbacks[functionName]) {
             try {
-              const functionResult = await config.functionToolCallbacks[functionName](
+              const functionResult = await this.config.functionToolCallbacks[functionName](
                 functionCall.arguments || functionCall.function?.arguments,
               );
               results.push(functionResult);
@@ -666,7 +816,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             logProbs,
             cost: calculateOpenAICost(
               this.modelName,
-              config,
+              this.config,
               data.usage?.prompt_tokens,
               data.usage?.completion_tokens,
             ),
@@ -681,7 +831,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         logProbs,
         cost: calculateOpenAICost(
           this.modelName,
-          config,
+          this.config,
           data.usage?.prompt_tokens,
           data.usage?.completion_tokens,
         ),

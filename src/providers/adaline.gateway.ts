@@ -370,20 +370,28 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
       formatType = this.checkRequestFormat(prompt).formatType;
       logger.debug(`Calling Adaline Gateway Chat API with prompt format: ${formatType}`);
       if (formatType === 'openai') {
-        // create a temp openai provider to get the entire body that would have been sent to openai
-        const openAiProvider = new OpenAiChatCompletionProvider(
-          this.modelName,
-          this.providerOptions,
-        );
-        const { body } = openAiProvider.getOpenAiBody(prompt, context, callApiOptions);
-        // create a temp gateway openai model to transform the body to gateway types
+        // Create a config object that matches what OpenAI expects
+        const openAiConfig: OpenAiCompletionOptions = {
+          ...this.config,
+          prompt,
+          ...(context?.prompt?.config || {}),
+        };
+        // Create a temp gateway openai model to transform the config to gateway types
         const gatewayOpenAiDummyModel = new GatewayOpenAI().chatModel({
           modelName: 'gpt-4o',
           apiKey: 'random-api-key',
         });
 
-        // create gateway types from the body
-        const gatewayRequest = gatewayOpenAiDummyModel.transformModelRequest(body);
+        // Create gateway types from the OpenAI config
+        const gatewayRequest = gatewayOpenAiDummyModel.transformModelRequest({
+          model: this.modelName,
+          messages: parseChatPrompt(prompt, [{ 
+            role: 'user', 
+            content: prompt,
+            ...(openAiConfig.name ? { name: openAiConfig.name } : {})
+          }]),
+          ...openAiConfig,
+        });
         gatewayConfig = gatewayRequest.config;
         gatewayMessages = gatewayRequest.messages;
         gatewayTools = gatewayRequest.tools;
