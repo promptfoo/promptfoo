@@ -10,6 +10,7 @@ import {
   fetchWithTimeout,
   handleRateLimit,
   isRateLimited,
+  sanitizeUrl,
 } from '../src/fetch';
 import logger from '../src/logger';
 import { sleep } from '../src/util/time';
@@ -34,7 +35,7 @@ jest.mock('../src/logger');
 jest.mock('../src/envars', () => ({
   getEnvString: jest.fn().mockImplementation((key: string, defaultValue: string = '') => ''),
   getEnvBool: jest.fn().mockImplementation((key: string, defaultValue: boolean = false) => false),
-  getEnvInt: jest.fn().mockReturnValue(100),
+  getEnvInt: jest.fn().mockImplementation((key: string, defaultValue: number = 0) => defaultValue),
 }));
 
 jest.mock('fs', () => ({
@@ -716,5 +717,69 @@ describe('fetchWithRetries', () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(3);
     expect(sleep).toHaveBeenCalledTimes(2);
+  });
+
+  it('should handle detailed error information', async () => {
+    const error = new Error('Network error');
+    (error as any).code = 'ECONNREFUSED';
+    (error as any).cause = 'Connection refused';
+    jest.mocked(global.fetch).mockRejectedValue(error);
+
+    await expect(fetchWithRetries('https://example.com', {}, 1000, 1)).rejects.toThrow(
+      'Request failed after 1 retries: Network error',
+    );
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it('should handle non-Error objects in rejection', async () => {
+    jest.mocked(global.fetch).mockRejectedValue('String error');
+
+    await expect(fetchWithRetries('https://example.com', {}, 1000, 1)).rejects.toThrow(
+      'Request failed after 1 retries: undefined',
+    );
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it('should handle rate limits with OpenAI specific headers', async () => {
+    const rateLimitedResponse = createMockResponse({
+      status: 429,
+      headers: new Headers({
+        'x-ratelimit-reset-tokens': '5',
+      }),
+    });
+    const successResponse = createMockResponse();
+
+    const mockFetch = jest
+      .fn()
+      .mockResolvedValueOnce(rateLimitedResponse)
+      .mockResolvedValueOnce(successResponse);
+    global.fetch = mockFetch;
+
+    await fetchWithRetries('https://example.com', {}, 1000, 2);
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Rate limited on URL'));
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('sanitizeUrl', () => {
+  it('should mask credentials in URLs', () => {
+    const url = 'https://username:password@example.com/api';
+    expect(sanitizeUrl(url)).toBe('https://***:***@example.com/api');
+  });
+
+  it('should handle URLs without credentials', () => {
+    const url = 'https://example.com/api';
+    expect(sanitizeUrl(url)).toBe(url);
+  });
+
+  it('should return original string for invalid URLs', () => {
+    const invalidUrl = 'not-a-url';
+    expect(sanitizeUrl(invalidUrl)).toBe(invalidUrl);
   });
 });
