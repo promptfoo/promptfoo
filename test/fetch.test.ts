@@ -458,9 +458,20 @@ describe('fetchWithProxy', () => {
 
       const debugCalls = jest.mocked(logger.debug).mock.calls;
       const normalizedCalls = debugCalls.map((call) => call[0].replace(/\/$/, ''));
+
+      // On Windows, environment variables are case-insensitive
+      const isWindows = process.platform === 'win32';
+      const expectedEnvVar = Object.keys(testCase.env)[0];
+      const expectedUrl = testCase.expected.url;
+
       expect(normalizedCalls).toEqual([
-        `Found proxy configuration in ${Object.keys(testCase.env)[0]}: ${testCase.expected.url}`,
-        `Using proxy: ${testCase.expected.url}`,
+        expect.stringMatching(
+          new RegExp(
+            `Found proxy configuration in ${isWindows ? '.*' : expectedEnvVar}: ${expectedUrl}`,
+            isWindows ? 'i' : '',
+          ),
+        ),
+        `Using proxy: ${expectedUrl}`,
       ]);
 
       allProxyVars.forEach((key) => {
