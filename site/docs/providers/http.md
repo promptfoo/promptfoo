@@ -456,6 +456,7 @@ The input to the session parser is an object with a `headers` field, which conta
 ```typescript
 {
   headers: Record<string, string>;
+  body: Record<string, string>;
 }
 ```
 
@@ -476,6 +477,28 @@ providers:
       url: 'https://example.com/api'
       headers:
         'Cookie': '{{sessionId}}'
+```
+
+You can use the `{{sessionId}}` var anywhere in a header or body. Example:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://example.com/api'
+      body:
+        'message': '{{prompt}}'
+        'sessionId': '{{sessionId}}'
+```
+
+Accessing the headers or body:
+
+```yaml
+sessionParser: 'body.sessionId'
+```
+
+```yaml
+sessionParser: 'headers.x-session-Id'
 ```
 
 ### Client-side session management

@@ -111,7 +111,15 @@ function contentTypeIsJson(headers: Record<string, string> | undefined) {
 
 export async function createSessionParser(
   parser: string | Function | undefined,
-): Promise<({ headers }: { headers: Record<string, string> }) => string> {
+): Promise<
+  ({
+    headers,
+    body,
+  }: {
+    headers?: Record<string, string> | null;
+    body?: Record<string, string> | null;
+  }) => string
+> {
   if (!parser) {
     return () => '';
   }
@@ -139,6 +147,15 @@ export async function createSessionParser(
       `Response transform malformed: ${filename} must export a function or have a default export as a function`,
     );
   } else if (typeof parser === 'string') {
+    if (parser.startsWith('body.') || parser.startsWith('headers.')) {
+      return ({ headers, body }) => {
+        return new Function(
+          'body',
+          'headers',
+          `console.log(${parser.trim()}); return ${parser.trim()}`,
+        )(body, headers);
+      };
+    }
     return ({ headers }) => {
       return new Function('headers', `return headers[${JSON.stringify(parser)}]`)(headers);
     };
@@ -465,7 +482,15 @@ export class HttpProvider implements ApiProvider {
   private transformResponse: Promise<
     (data: any, text: string, context?: TransformResponseContext) => ProviderResponse
   >;
-  private sessionParser: Promise<({ headers }: { headers: Record<string, string> }) => string>;
+  private sessionParser: Promise<
+    ({
+      headers,
+      body,
+    }: {
+      headers?: Record<string, string> | null;
+      body?: Record<string, string> | null;
+    }) => string
+  >;
   private transformRequest: Promise<(prompt: string) => any>;
   private validateStatus: Promise<(status: number) => boolean>;
   private lastSignatureTimestamp?: number;
@@ -708,11 +733,12 @@ export class HttpProvider implements ApiProvider {
 
     try {
       const sessionId =
-        response.headers && this.sessionParser !== null
-          ? (await this.sessionParser)({ headers: response.headers })
-          : undefined;
+        this.sessionParser == null
+          ? undefined
+          : (await this.sessionParser)({ headers: response.headers, body: parsedData });
       if (sessionId) {
         ret.sessionId = sessionId;
+        console.error({ sessionId });
       }
     } catch (err) {
       logger.error(
