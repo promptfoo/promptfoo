@@ -1,7 +1,9 @@
 import React from 'react';
 import Editor from 'react-simple-code-editor';
+import ClearIcon from '@mui/icons-material/Clear';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import InfoIcon from '@mui/icons-material/Info';
+import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -9,6 +11,7 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
+import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemIcon from '@mui/material/ListItemIcon';
@@ -233,31 +236,69 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 {selectedTarget.config.signatureAuth && (
                   <>
                     <Stack spacing={4}>
-                      <TextField
-                        fullWidth
-                        label="Private Key"
-                        value={selectedTarget.config.signatureAuth?.privateKey || ''}
-                        onChange={(e) =>
-                          updateCustomTarget('signatureAuth', {
-                            ...selectedTarget.config.signatureAuth,
-                            privateKey: e.target.value || undefined,
-                            // Remove privateKeyPath if privateKey is provided
-                            privateKeyPath: undefined,
-                          })
-                        }
-                        placeholder="Paste signature private key here"
-                        multiline
-                        rows={4}
-                        InputLabelProps={{
-                          shrink: true,
-                        }}
-                      />
+                      <Box>
+                        <input
+                          type="file"
+                          accept=".pem,.key"
+                          style={{ display: 'none' }}
+                          id="private-key-upload"
+                          onClick={(e) => {
+                            // Reset value to trigger onChange even if same file selected
+                            (e.target as HTMLInputElement).value = '';
+                          }}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            console.log('Loaded file', file);
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onload = (event) => {
+                                const content = event.target?.result as string;
+                                updateCustomTarget('signatureAuth', {
+                                  ...selectedTarget.config.signatureAuth,
+                                  privateKey: content,
+                                  privateKeyPath: undefined,
+                                });
+                              };
+                              reader.readAsText(file);
+                            }
+                          }}
+                        />
+                        <label htmlFor="private-key-upload">
+                          <Button variant="contained" component="span" startIcon={<VpnKeyIcon />}>
+                            Upload Key File
+                          </Button>
+                        </label>
+                        {selectedTarget.config.signatureAuth?.privateKey ? (
+                          <>
+                            <Typography variant="caption" color="textSecondary" sx={{ ml: 1 }}>
+                              Key file loaded
+                            </Typography>
+                            <IconButton
+                              size="small"
+                              onClick={() =>
+                                updateCustomTarget('signatureAuth', {
+                                  ...selectedTarget.config.signatureAuth,
+                                  privateKey: undefined,
+                                  privateKeyPath: undefined,
+                                })
+                              }
+                              title="Clear private key"
+                            >
+                              <ClearIcon fontSize="small" />
+                            </IconButton>
+                          </>
+                        ) : (
+                          <Typography variant="caption" color="textSecondary" sx={{ ml: 1 }}>
+                            RSA private key in PEM format (e.g., "-----BEGIN PRIVATE KEY-----")
+                          </Typography>
+                        )}
+                      </Box>
                       <TextField
                         fullWidth
                         label="Signature Data Template"
                         value={
                           selectedTarget.config.signatureAuth?.signatureDataTemplate ||
-                          '{{timestamp}}'
+                          '{{signatureTimestamp}}'
                         }
                         onChange={(e) =>
                           updateCustomTarget('signatureAuth', {
