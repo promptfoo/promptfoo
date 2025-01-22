@@ -1,6 +1,5 @@
 import compression from 'compression';
 import cors from 'cors';
-import dedent from 'dedent';
 import type { Request, Response } from 'express';
 import express from 'express';
 import http from 'node:http';
@@ -227,12 +226,7 @@ export async function startServer(
     .on('error', (error: NodeJS.ErrnoException) => {
       if (error.code === 'EADDRINUSE') {
         logger.error(
-          dedent`Port ${port} is already in use. Do you have another Promptfoo instance running?
-
-          To resolve this:
-            1. Check if another promptfoo instance is running (try 'ps aux | grep promptfoo')
-            2. Kill the process using the port: 'lsof -i :${port}' then 'kill <PID>'
-            3. Or specify a different port with --port <number>`,
+          `Port ${port} is already in use. Do you have another Promptfoo instance running?`,
         );
         process.exit(1);
       } else {
