@@ -9,7 +9,7 @@ import logger from './logger';
 import invariant from './util/invariant';
 import { sleep } from './util/time';
 
-function sanitizeUrl(url: string): string {
+export function sanitizeUrl(url: string): string {
   try {
     const parsedUrl = new URL(url);
     if (parsedUrl.username || parsedUrl.password) {
@@ -22,7 +22,7 @@ function sanitizeUrl(url: string): string {
   }
 }
 
-function getProxyUrl(): string | undefined {
+export function getProxyUrl(): string | undefined {
   const proxyEnvVars = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy'];
 
   for (const envVar of proxyEnvVars) {

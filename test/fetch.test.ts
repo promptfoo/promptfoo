@@ -10,6 +10,7 @@ import {
   fetchWithTimeout,
   handleRateLimit,
   isRateLimited,
+  sanitizeUrl,
 } from '../src/fetch';
 import logger from '../src/logger';
 import { sleep } from '../src/util/time';
@@ -34,7 +35,7 @@ jest.mock('../src/logger');
 jest.mock('../src/envars', () => ({
   getEnvString: jest.fn().mockImplementation((key: string, defaultValue: string = '') => ''),
   getEnvBool: jest.fn().mockImplementation((key: string, defaultValue: boolean = false) => false),
-  getEnvInt: jest.fn().mockReturnValue(100),
+  getEnvInt: jest.fn().mockImplementation((key: string, defaultValue: number = 0) => defaultValue),
 }));
 
 jest.mock('fs', () => ({
@@ -345,7 +346,6 @@ describe('fetchWithProxy', () => {
 
     process.env.HTTPS_PROXY = mockProxyUrl;
 
-    // Update basePath in cliState
     cliState.basePath = mockBasePath;
 
     jest.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
@@ -393,7 +393,6 @@ describe('fetchWithProxy', () => {
     });
     expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(ProxyAgent));
 
-    // Reset basePath
     cliState.basePath = undefined;
   });
 
@@ -416,6 +415,10 @@ describe('fetchWithProxy', () => {
 
     const testCases = [
       {
+        env: { HTTPS_PROXY: mockProxyUrls.HTTPS_PROXY },
+        expected: { url: mockProxyUrls.HTTPS_PROXY },
+      },
+      {
         env: { https_proxy: mockProxyUrls.https_proxy },
         expected: { url: mockProxyUrls.https_proxy },
       },
@@ -436,11 +439,6 @@ describe('fetchWithProxy', () => {
         delete process.env[key];
       });
 
-      const existingProxyVars = allProxyVars.filter((key) => process.env[key]);
-      if (existingProxyVars.length > 0) {
-        console.warn('Found unexpected proxy variables:', existingProxyVars);
-      }
-
       Object.entries(testCase.env).forEach(([key, value]) => {
         process.env[key] = value;
       });
@@ -459,19 +457,22 @@ describe('fetchWithProxy', () => {
       expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(ProxyAgent));
 
       const debugCalls = jest.mocked(logger.debug).mock.calls;
-      expect(debugCalls).toEqual(
-        expect.arrayContaining([
-          [
-            expect.stringMatching(
-              new RegExp(
-                `Found proxy configuration in .*https?_proxy.*: ${testCase.expected.url}/`,
-                'i',
-              ),
-            ),
-          ],
-          [`Using proxy: ${testCase.expected.url}/`],
-        ]),
-      );
+      const normalizedCalls = debugCalls.map((call) => call[0].replace(/\/$/, ''));
+
+      // On Windows, environment variables are case-insensitive
+      const isWindows = process.platform === 'win32';
+      const expectedEnvVar = Object.keys(testCase.env)[0];
+      const expectedUrl = testCase.expected.url;
+
+      expect(normalizedCalls).toEqual([
+        expect.stringMatching(
+          new RegExp(
+            `Found proxy configuration in ${isWindows ? '.*' : expectedEnvVar}: ${expectedUrl}`,
+            isWindows ? 'i' : '',
+          ),
+        ),
+        `Using proxy: ${expectedUrl}`,
+      ]);
 
       allProxyVars.forEach((key) => {
         delete process.env[key];
@@ -654,8 +655,8 @@ describe('fetchWithRetries', () => {
       'Request failed after 2 retries: Network error',
     );
 
-    expect(global.fetch).toHaveBeenCalledTimes(3); // Initial attempt + 2 retries
-    expect(sleep).toHaveBeenCalledTimes(2); // Should sleep between attempts, but not after last attempt
+    expect(global.fetch).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenCalledTimes(2);
   });
 
   it('should not sleep after the final attempt', async () => {
@@ -665,8 +666,8 @@ describe('fetchWithRetries', () => {
       'Request failed after 1 retries: Network error',
     );
 
-    expect(global.fetch).toHaveBeenCalledTimes(2); // Initial attempt + 1 retry
-    expect(sleep).toHaveBeenCalledTimes(1); // Should only sleep once between attempts
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(1);
   });
 
   it('should handle 5XX errors when PROMPTFOO_RETRY_5XX is true', async () => {
@@ -725,7 +726,71 @@ describe('fetchWithRetries', () => {
       'Request failed after 2 retries: Network error',
     );
 
-    expect(mockFetch).toHaveBeenCalledTimes(3); // Initial attempt + 2 retries
+    expect(mockFetch).toHaveBeenCalledTimes(3);
     expect(sleep).toHaveBeenCalledTimes(2);
+  });
+
+  it('should handle detailed error information', async () => {
+    const error = new Error('Network error');
+    (error as any).code = 'ECONNREFUSED';
+    (error as any).cause = 'Connection refused';
+    jest.mocked(global.fetch).mockRejectedValue(error);
+
+    await expect(fetchWithRetries('https://example.com', {}, 1000, 1)).rejects.toThrow(
+      'Request failed after 1 retries: Network error',
+    );
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it('should handle non-Error objects in rejection', async () => {
+    jest.mocked(global.fetch).mockRejectedValue('String error');
+
+    await expect(fetchWithRetries('https://example.com', {}, 1000, 1)).rejects.toThrow(
+      'Request failed after 1 retries: undefined',
+    );
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it('should handle rate limits with OpenAI specific headers', async () => {
+    const rateLimitedResponse = createMockResponse({
+      status: 429,
+      headers: new Headers({
+        'x-ratelimit-reset-tokens': '5',
+      }),
+    });
+    const successResponse = createMockResponse();
+
+    const mockFetch = jest
+      .fn()
+      .mockResolvedValueOnce(rateLimitedResponse)
+      .mockResolvedValueOnce(successResponse);
+    global.fetch = mockFetch;
+
+    await fetchWithRetries('https://example.com', {}, 1000, 2);
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Rate limited on URL'));
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('sanitizeUrl', () => {
+  it('should mask credentials in URLs', () => {
+    const url = 'https://username:password@example.com/api';
+    expect(sanitizeUrl(url)).toBe('https://***:***@example.com/api');
+  });
+
+  it('should handle URLs without credentials', () => {
+    const url = 'https://example.com/api';
+    expect(sanitizeUrl(url)).toBe(url);
+  });
+
+  it('should return original string for invalid URLs', () => {
+    const invalidUrl = 'not-a-url';
+    expect(sanitizeUrl(invalidUrl)).toBe(invalidUrl);
   });
 });
