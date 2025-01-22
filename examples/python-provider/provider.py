@@ -45,3 +45,20 @@ async def async_provider(prompt, options, context):
     )
 
     return {"output": chat_completion.choices[0].message.content}
+
+
+if __name__ == "__main__":
+    # Example usage showing prompt, options with config, and context with vars
+    prompt = "What is the weather in San Francisco?"
+    options = {
+        "config": {
+            "optionFromYaml": 123
+        }
+    }
+    context = {
+        "vars": {
+            "location": "San Francisco"
+        }
+    }
+    
+    print(call_api(prompt, options, context))
