@@ -27,12 +27,36 @@ providers:
       output_format: 'png' # Lossless format
       disable_safety_checker: true
 
+  # High quality photorealistic images with Luma Photon
+  - id: replicate:luma/photon
+    config:
+      num_inference_steps: 50
+      guidance_scale: 7.5
+      disable_safety_checker: true
+      seed: 42
+
+  # High quality images with Sana
+  - id: replicate:nvidia/sana:c6b5d2b7459910fec94432e9e1203c3cdce92d6db20f714f1355747990b52fa6
+    config:
+      width: 1024
+      height: 1024
+      model_variant: '1600M-1024px'
+      guidance_scale: 5
+      pag_guidance_scale: 2
+      num_inference_steps: 18
+      negative_prompt: ''
+      disable_safety_checker: true
+
 tests:
   # Nature & Wildlife
   - vars:
       topic: 'majestic snow leopard perched on a rocky outcrop in the Himalayas, morning mist swirling around'
   - vars:
       topic: 'ancient redwood forest bathed in golden sunlight, with rays piercing through the canopy'
+  - vars:
+      topic: 'adorable red panda playing in fresh snow, its russet fur contrasting beautifully with the white landscape'
+  - vars:
+      topic: 'red panda in martial arts gi performing a perfect karate kick, focused expression on its face'
 
   # Architecture & Urban
   - vars:
@@ -62,7 +86,7 @@ tests:
   - vars:
       topic: 'seductive model with piercing gaze and glossy red lips in revealing silk gown, reclining provocatively on velvet chaise, dramatic noir shadows'
   - vars:
-      topic: 'stunning Asian model with hypnotic almond eyes and flowing raven hair cascading down her curves, wearing a sheer holographic bodycon dress that hugs every contour, posing seductively in an ultra-modern penthouse lounge with glittering crystal decor and a breathtaking cityscape of pulsing neon lights dancing across floor-to-ceiling windows'
+      topic: 'alluring Asian model with parted lips and sultry gaze, wearing a sheer silk slip dress with lace trim that reveals her curves, her expression inviting and seductive as she reclines on velvet'
 
 evaluateOptions:
   maxConcurrency: 2
