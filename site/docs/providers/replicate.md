@@ -4,120 +4,249 @@ sidebar_position: 99
 
 # Replicate
 
-Replicate is an API for machine learning models. It currently hosts models like [Llama v2](https://replicate.com/replicate/llama70b-v2-chat), [Gemma](https://replicate.com/google-deepmind/gemma-7b-it), and [Mistral/Mixtral](https://replicate.com/mistralai/mixtral-8x7b-instruct-v0.1).
+Replicate is an API for machine learning models. It hosts a wide variety of state-of-the-art AI models across different domains.
 
-To run a model, specify the Replicate model name and version, like so:
+## Authentication
 
-```
-replicate:replicate/llama70b-v2-chat:e951f18578850b652510200860fc4ea62b3b16fac280f83ff32282f87bbd2e48
-```
+You can authenticate with Replicate in several ways:
 
-## Examples
-
-Here's an example of using Llama on Replicate. In the case of Llama, the version hash and everything under `config` is optional:
+1. Using the `auth` parameter in your config (recommended):
 
 ```yaml
 providers:
-  - id: replicate:meta/llama-2-7b-chat
+  - id: replicate:black-forest-labs/flux-schnell
     config:
-      temperature: 0.01
-      max_length: 1024
-      prompt:
-        prefix: '[INST] '
-        suffix: ' [/INST]'
+      auth: 'your-replicate-token'
 ```
 
-Here's an example of using Gemma on Replicate. Note that unlike Llama, it does not have a default version, so we specify the model version:
+2. Using the legacy `apiKey` parameter (supported for backward compatibility):
 
 ```yaml
 providers:
-  - id: replicate:google-deepmind/gemma-7b-it:2790a695e5dcae15506138cc4718d1106d0d475e6dca4b1d43f42414647993d5
+  - id: replicate:black-forest-labs/flux-schnell
     config:
-      temperature: 0.01
-      max_new_tokens: 1024
-      prompt:
-        prefix: "<start_of_turn>user\n"
-        suffix: "<end_of_turn>\n<start_of_turn>model"
+      apiKey: 'your-replicate-token'
+```
+
+3. Using environment variables:
+
+- `REPLICATE_API_TOKEN` (recommended)
+- `REPLICATE_API_KEY` (alternative)
+
+## Model Formats
+
+To run a model, specify the Replicate model name and version in one of these formats:
+
+- `owner/name` (uses the latest version)
+- `owner/name:version` (uses a specific version)
+
+For example:
+
+```yaml
+providers:
+  - id: replicate:black-forest-labs/flux-schnell:39ed52f2a78e934b3ba6e2a89f5b1c712de17b06d828e588458e4add38383b0f
 ```
 
 ## Configuration
 
-The Replicate provider supports several [configuration options](https://github.com/promptfoo/promptfoo/blob/main/src/providers/replicate.ts#L9-L17) that can be used to customize the behavior of the models, like so:
+The Replicate provider supports several configuration options that can be used to customize the behavior of the models:
 
-| Parameter            | Description                                                   |
-| -------------------- | ------------------------------------------------------------- |
-| `temperature`        | Controls randomness in the generation process.                |
-| `max_length`         | Specifies the maximum length of the generated text.           |
-| `max_new_tokens`     | Limits the number of new tokens to generate.                  |
-| `top_p`              | Nucleus sampling: a float between 0 and 1.                    |
-| `top_k`              | Top-k sampling: number of highest probability tokens to keep. |
-| `repetition_penalty` | Penalizes repetition of words in the generated text.          |
-| `system_prompt`      | Sets a system-level prompt for all requests.                  |
-| `stop_sequences`     | Specifies stopping sequences that halt the generation.        |
-| `seed`               | Sets a seed for reproducible results.                         |
+| Parameter             | Description                                                 |
+| --------------------- | ----------------------------------------------------------- |
+| `auth`                | Your Replicate API token (recommended)                      |
+| `apiKey`              | Alternative way to specify your API token (legacy support)  |
+| `width`               | Output image width (model-dependent)                        |
+| `height`              | Output image height (model-dependent)                       |
+| `num_inference_steps` | Number of inference steps for generation                    |
+| `guidance_scale`      | How closely to follow the prompt (default varies by model)  |
+| `seed`                | Sets a seed for reproducible results                        |
+| `negative_prompt`     | Things to avoid in the generation                           |
+| `mode`                | Generation mode (e.g., "raw" or "ultra" for FLUX Pro Ultra) |
+| `strength`            | Strength of conditioning for controlled generation          |
+| `variation_strength`  | Strength of variation for Redux models                      |
+| `system_prompt`       | System-level prompt for text models                         |
+| `max_new_tokens`      | Maximum number of tokens to generate                        |
+| `temperature`         | Controls randomness in text generation                      |
+| `top_p`               | Controls nucleus sampling                                   |
+| `top_k`               | Controls top-k sampling                                     |
 
 :::warning
-Not every model supports every completion parameter. Be sure to review the API provided by the model beforehand.
+Not every model supports every parameter. Be sure to review the API provided by the model beforehand.
 :::
 
-These parameters are supported for all models:
+## Environment Variables
 
-| Parameter       | Description                                                              |
-| --------------- | ------------------------------------------------------------------------ |
-| `apiKey`        | The API key for authentication with Replicate.                           |
-| `prompt.prefix` | String added before each prompt. Useful for instruction/chat formatting. |
-| `prompt.suffix` | String added after each prompt. Useful for instruction/chat formatting.  |
+The following environment variables are supported:
 
-Supported environment variables:
+- `REPLICATE_API_TOKEN` - Your Replicate API token (recommended)
+- `REPLICATE_API_KEY` - Alternative way to specify your API token
+- `REPLICATE_MAX_NEW_TOKENS` - Maximum number of new tokens to generate
+- `REPLICATE_TEMPERATURE` - Temperature for generation
+- `REPLICATE_TOP_P` - Top-p value for nucleus sampling
+- `REPLICATE_TOP_K` - Top-k value for sampling
+- `REPLICATE_SYSTEM_PROMPT` - System-level prompt
+- `REPLICATE_SEED` - Seed for reproducible results
+- `PROMPTFOO_DELAY_MS` - Delay between API calls (useful for rate limits)
+- `PROMPTFOO_REQUEST_BACKOFF_MS` - Base backoff time for retries
 
-- `REPLICATE_API_TOKEN` - Your Replicate API key.
-- `REPLICATE_API_KEY` - An alternative to `REPLICATE_API_TOKEN` for your API key.
-- `REPLICATE_MAX_LENGTH` - Specifies the maximum length of the generated text.
-- `REPLICATE_TEMPERATURE` - Controls randomness in the generation process.
-- `REPLICATE_REPETITION_PENALTY` - Penalizes repetition of words in the generated text.
-- `REPLICATE_TOP_P` - Controls the nucleus sampling: a float between 0 and 1.
-- `REPLICATE_TOP_K` - Controls the top-k sampling: the number of highest probability vocabulary tokens to keep for top-k-filtering.
-- `REPLICATE_SEED` - Sets a seed for reproducible results.
-- `REPLICATE_STOP_SEQUENCES` - Specifies stopping sequences that halt the generation.
-- `REPLICATE_SYSTEM_PROMPT` - Sets a system-level prompt for all requests.
+## File Outputs
 
-## Images
+Starting with Replicate v1.0.1, file outputs (like images, videos, or audio) are returned as URLs that can be used directly. The output will be formatted as a markdown-compatible link that can be used in documentation or UI.
 
-Image generators such as SDXL can be used like so:
+## Popular Models
+
+Here are some of the most widely used models on Replicate:
+
+### Text-to-Video Generation
+
+- **minimax/video-01**: Generate 6-second videos from prompts or images. Supports character-based videos with reference images.
+- **tencent/hunyuan-video**: High-quality video generation with realistic motion from text descriptions.
+- **luma/ray**: Fast, high-quality text-to-video and image-to-video generation.
+
+### Text-to-Image Generation
+
+- **black-forest-labs/flux-1.1-pro-ultra**: High-quality image generation with ultra and raw modes, supporting up to 4 megapixel images.
+- **recraft-ai/recraft-v3**: SOTA in image generation with strong text rendering capabilities.
+- **bytedance/sdxl-lightning-4step**: Fast text-to-image model optimized for speed and quality.
+
+### Image Processing
+
+- **salesforce/blip**: Generate accurate image captions.
+- **sczhou/codeformer**: Restore and enhance old photos and AI-generated faces.
+- **xinntao/gfpgan**: Practical face restoration for old photos and AI-generated faces.
+
+### AI Safety and Analysis
+
+- **falcons-ai/nsfw_image_detection**: Fine-tuned Vision Transformer for content moderation.
+- **andreasjansson/clip-features**: Extract CLIP features for advanced image analysis.
+
+### FLUX Family Models
+
+The FLUX family of models from Black Forest Labs represents some of the most advanced and widely-used image generation models:
+
+#### Core Models
+
+- **flux-1.1-pro-ultra**: Flagship model supporting ultra and raw modes for up to 4 megapixel images. Best for high-quality, photorealistic outputs.
+- **flux-schnell**: Ultra-fast image generation model optimized for rapid development and personal use.
+- **flux-dev**: 12B parameter rectified flow transformer for high-quality text-to-image generation.
+- **flux-pro**: State-of-the-art model with exceptional prompt following and output diversity.
+
+#### Specialized Models
+
+- **flux-fill-pro**: Professional inpainting and outpainting for seamless image editing and extension.
+- **flux-depth-pro**: Depth-aware image generation for preserving spatial relationships.
+- **flux-canny-pro**: Edge-guided generation using Canny edge detection for precise structure control.
+
+#### Fine-Tuning Support
+
+- **flux-dev-lora**: Supports fast fine-tuned LoRA inference for customized image generation.
+- **flux-schnell-lora**: Fastest model with fine-tuning capabilities.
+
+:::tip
+FLUX models are known for their:
+
+- Exceptional image quality and prompt adherence
+- Fast generation speeds (especially Schnell variants)
+- Support for various control methods (depth, edges, inpainting)
+- Fine-tuning capabilities with LoRA
+  :::
+
+## Image Generation Examples
+
+FLUX models offer various capabilities for image generation and manipulation. Here are some examples:
+
+### Basic Image Generation
+
+Using the fast FLUX Schnell model for rapid iteration:
 
 ```yaml
 prompts:
   - 'Generate an image: {{subject}}'
 
 providers:
-  - id: replicate:image:stability-ai/sdxl:7762fd07cf82c948538e41f63f77d685e02b063e37e496e96eefd46c929f9bdc
+  - id: replicate:black-forest-labs/flux-schnell
     config:
       width: 768
       height: 768
-      num_inference_steps: 50
+      num_inference_steps: 20 # Faster generation
 
 tests:
   - vars:
-      subject: fruit loops
+      subject: 'a serene mountain landscape at sunset'
 ```
 
-## Supported Parameters for Images
+### High-Quality Generation
 
-These parameters are supported for image generation models:
+Using FLUX Pro Ultra for maximum quality:
 
-| Parameter             | Description                                                   |
-| --------------------- | ------------------------------------------------------------- |
-| `width`               | The width of the generated image.                             |
-| `height`              | The height of the generated image.                            |
-| `refine`              | Which refine style to use                                     |
-| `apply_watermark`     | Apply a watermark to the generated image.                     |
-| `num_inference_steps` | The number of inference steps to use during image generation. |
+```yaml
+providers:
+  - id: replicate:black-forest-labs/flux-1.1-pro-ultra
+    config:
+      width: 1024
+      height: 1024
+      mode: 'raw' # For more photorealistic results
+      num_inference_steps: 50
+```
 
-:::warning
-Not every model supports every image parameter. Be sure to review the API provided by the model beforehand.
-:::
+### Image Inpainting
 
-Supported environment variables for images:
+Using FLUX Fill Pro for seamless editing:
 
-- `REPLICATE_API_TOKEN` - Your Replicate API key.
-- `REPLICATE_API_KEY` - An alternative to `REPLICATE_API_TOKEN` for your API key.
+```yaml
+providers:
+  - id: replicate:black-forest-labs/flux-fill-pro
+    config:
+      image: 'path/to/original.png'
+      mask: 'path/to/mask.png'
+      prompt: 'a red sports car'
+```
+
+### FLUX Configuration Parameters
+
+These parameters are supported across FLUX models:
+
+| Parameter             | Description                                        |
+| --------------------- | -------------------------------------------------- |
+| `width`               | Output image width (up to 4096 for Ultra models)   |
+| `height`              | Output image height (up to 4096 for Ultra models)  |
+| `mode`                | Generation mode ("raw" or "ultra" for Pro Ultra)   |
+| `num_inference_steps` | Number of steps (more = higher quality, slower)    |
+| `guidance_scale`      | How closely to follow the prompt (default: 7.5)    |
+| `seed`                | Seed for reproducible results                      |
+| `negative_prompt`     | Things to avoid in the generation                  |
+| `strength`            | Strength of conditioning for controlled generation |
+| `variation_strength`  | Strength of variation for Redux models             |
+
+:::tip
+
+- Use Schnell models for rapid prototyping and iteration
+- Use Pro/Ultra models for final, high-quality outputs
+- Specialized models (Fill, Canny, Depth) offer precise control
+  :::
+
+## Troubleshooting
+
+### Rate Limits
+
+If you encounter rate limits with Replicate:
+
+1. **Reduce concurrency** by setting `--max-concurrency 1` in the CLI or `evaluateOptions.maxConcurrency` in the config
+2. **Add delay between requests** using `--delay 3000` in CLI, `evaluateOptions.delay` in config, or `PROMPTFOO_DELAY_MS` environment variable
+3. **Adjust retry backoff** using `PROMPTFOO_REQUEST_BACKOFF_MS` (defaults to 5000ms)
+
+### Common Issues
+
+1. **Model Version Not Found**: Ensure you're using a valid model version hash or omit it to use the latest version
+2. **Authentication Errors**: Verify your API token is correct and has necessary permissions
+3. **Invalid Parameters**: Check the model's documentation for supported parameters and their valid ranges
+4. **File Output Errors**: Ensure your code properly handles the URL format returned for file outputs
+
+:::tip
+For the best experience with FLUX models:
+
+- Start with Schnell variants for rapid prototyping
+- Use Pro/Ultra models for production-quality outputs
+- Consider using specialized models (Fill, Canny, Depth) for specific needs
+- Monitor your API usage through the Replicate dashboard
+  :::

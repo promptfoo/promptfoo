@@ -18,7 +18,8 @@ import { ellipsize } from '../utils/text';
 import { parseChatPrompt } from './shared';
 
 interface ReplicateCompletionOptions {
-  apiKey?: string;
+  auth?: string;
+  apiKey?: string; // For backward compatibility
   temperature?: number;
   max_length?: number;
   max_new_tokens?: number;
@@ -41,7 +42,7 @@ interface ReplicateCompletionOptions {
 
 export class ReplicateProvider implements ApiProvider {
   modelName: string;
-  apiKey?: string;
+  auth?: string;
   replicate: any;
   config: ReplicateCompletionOptions;
 
@@ -51,8 +52,9 @@ export class ReplicateProvider implements ApiProvider {
   ) {
     const { config, id, env } = options;
     this.modelName = modelName;
-    this.apiKey =
-      config?.apiKey ||
+    this.auth =
+      config?.auth ||
+      config?.apiKey || // Support legacy apiKey config
       env?.REPLICATE_API_KEY ||
       env?.REPLICATE_API_TOKEN ||
       getEnvString('REPLICATE_API_TOKEN') ||
@@ -70,9 +72,9 @@ export class ReplicateProvider implements ApiProvider {
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
-    if (!this.apiKey) {
+    if (!this.auth) {
       throw new Error(
-        'Replicate API key is not set. Set the REPLICATE_API_TOKEN environment variable or or add `apiKey` to the provider config.',
+        'Replicate API token is not set. Set the REPLICATE_API_TOKEN environment variable or add `auth` to the provider config.',
       );
     }
 
@@ -99,8 +101,9 @@ export class ReplicateProvider implements ApiProvider {
     }
 
     const replicate = new Replicate({
-      auth: this.apiKey,
+      auth: this.auth,
       fetch: fetch as any,
+      useFileOutput: true, // Enable FileOutput objects for file responses
     });
 
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
@@ -133,12 +136,35 @@ export class ReplicateProvider implements ApiProvider {
           ...Object.fromEntries(Object.entries(inputOptions).filter(([_, v]) => v !== undefined)),
         },
       };
-      response = await replicate.run(this.modelName as any, data);
+
+      // Split model name into owner/name format and validate
+      const parts = this.modelName.split('/');
+      if (parts.length < 2) {
+        throw new Error('Model name must be in format owner/name or owner/name:version');
+      }
+
+      const [owner, nameAndVersion] = parts;
+      const [name, version] = nameAndVersion.split(':');
+      const modelIdentifier = version
+        ? (`${owner}/${name}:${version}` as const)
+        : (`${owner}/${name}` as const);
+
+      // Use the new run method which returns FileOutput objects for file responses
+      const output = await replicate.run(modelIdentifier, data);
+      const firstOutput = Array.isArray(output) ? output[0] : output;
+
+      // Handle FileOutput objects
+      if (firstOutput && typeof firstOutput === 'object' && 'url' in firstOutput) {
+        response = await firstOutput.url();
+      } else {
+        response = firstOutput;
+      }
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
       };
     }
+
     logger.debug(`\tReplicate API response: ${JSON.stringify(response)}`);
     try {
       let formattedOutput;
@@ -154,8 +180,19 @@ export class ReplicateProvider implements ApiProvider {
         formattedOutput = JSON.stringify(response);
       }
 
+      // Strip quotes if response is a URL in quotes
+      formattedOutput = formattedOutput.match(/^"(https?:\/\/.+)"$/)
+        ? formattedOutput.slice(1, -1)
+        : formattedOutput;
+
+      const sanitizedPrompt = String(prompt)
+        .replace(/\r?\n|\r/g, ' ')
+        .replace(/\[/g, '(')
+        .replace(/\]/g, ')');
+      const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
+
       const result = {
-        output: formattedOutput,
+        output: `![${ellipsizedPrompt}](${formattedOutput})`,
         tokenUsage: {}, // TODO: add token usage once Replicate API supports it
       };
       if (cache && cacheKey) {
@@ -189,9 +226,9 @@ export class ReplicateModerationProvider
   implements ApiModerationProvider
 {
   async callModerationApi(prompt: string, assistant: string): Promise<ProviderModerationResponse> {
-    if (!this.apiKey) {
+    if (!this.auth) {
       throw new Error(
-        'Replicate API key is not set. Set the REPLICATE_API_TOKEN environment variable or or add `apiKey` to the provider config.',
+        'Replicate API token is not set. Set the REPLICATE_API_TOKEN environment variable or add `auth` to the provider config.',
       );
     }
 
@@ -213,7 +250,7 @@ export class ReplicateModerationProvider
     }
 
     const replicate = new Replicate({
-      auth: this.apiKey,
+      auth: this.auth,
       fetch: fetch as any,
     });
 
@@ -226,7 +263,20 @@ export class ReplicateModerationProvider
           assistant,
         },
       };
-      const resp = await replicate.run(this.modelName as any, data);
+
+      // Split model name into owner/name format and validate
+      const parts = this.modelName.split('/');
+      if (parts.length < 2) {
+        throw new Error('Model name must be in format owner/name or owner/name:version');
+      }
+
+      const [owner, nameAndVersion] = parts;
+      const [name, version] = nameAndVersion.split(':');
+      const modelIdentifier = version
+        ? (`${owner}/${name}:${version}` as const)
+        : (`${owner}/${name}` as const);
+
+      const resp = await replicate.run(modelIdentifier, data);
       // Replicate SDK seems to be mis-typed for this type of model.
       output = resp as unknown as string;
     } catch (err) {
@@ -301,14 +351,14 @@ export class ReplicateImageProvider extends ReplicateProvider {
     const cache = getCache();
     const cacheKey = `replicate:image:${safeJsonStringify({ context, prompt })}`;
 
-    if (!this.apiKey) {
+    if (!this.auth) {
       throw new Error(
-        'Replicate API key is not set. Set the REPLICATE_API_TOKEN environment variable or add `apiKey` to the provider config.',
+        'Replicate API token is not set. Set the REPLICATE_API_TOKEN environment variable or add `auth` to the provider config.',
       );
     }
 
     const replicate = new Replicate({
-      auth: this.apiKey,
+      auth: this.auth,
     });
 
     let response: any | undefined;
@@ -323,6 +373,18 @@ export class ReplicateImageProvider extends ReplicateProvider {
     }
 
     if (!response) {
+      // Split model name into owner/name format and validate
+      const parts = this.modelName.split('/');
+      if (parts.length < 2) {
+        throw new Error('Model name must be in format owner/name or owner/name:version');
+      }
+
+      const [owner, nameAndVersion] = parts;
+      const [name, version] = nameAndVersion.split(':');
+      const modelIdentifier = version
+        ? (`${owner}/${name}:${version}` as const)
+        : (`${owner}/${name}` as const);
+
       const data = {
         input: {
           width: this.config.width || 768,
@@ -330,7 +392,7 @@ export class ReplicateImageProvider extends ReplicateProvider {
           prompt,
         },
       };
-      response = await replicate.run(this.modelName as any, data);
+      response = await replicate.run(modelIdentifier, data);
     }
 
     const url = response[0];
@@ -348,13 +410,10 @@ export class ReplicateImageProvider extends ReplicateProvider {
       }
     }
 
-    const sanitizedPrompt = prompt
-      .replace(/\r?\n|\r/g, ' ')
-      .replace(/\[/g, '(')
-      .replace(/\]/g, ')');
-    const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
+    logger.warn(`Returning image URL: ${url}`);
+
     return {
-      output: `![${ellipsizedPrompt}](${url})`,
+      output: url,
       cached,
     };
   }

@@ -1,0 +1,69 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Replicate FLUX Models Demo'
+
+prompts:
+  - 'Create a stunning photorealistic portrait of {{topic}} with natural lighting, crisp details, and professional studio-quality composition'
+  - 'Generate a breathtaking high-end photograph of {{topic}} with dramatic lighting, shallow depth of field, and magazine-worthy post-processing'
+
+providers:
+  # Fast iterations with FLUX Schnell
+  - id: replicate:black-forest-labs/flux-schnell
+    config:
+      go_fast: true
+      num_inference_steps: 2 # Faster generation
+      megapixels: '1'
+      aspect_ratio: '1:1'
+      output_format: 'webp'
+      output_quality: 80
+      disable_safety_checker: true
+
+  # High quality with FLUX Pro Ultra
+  - id: replicate:black-forest-labs/flux-1.1-pro-ultra
+    config:
+      go_fast: false # Use original bf16 for best quality
+      num_inference_steps: 4
+      megapixels: '4' # Higher resolution
+      aspect_ratio: '16:9' # Widescreen
+      output_format: 'png' # Lossless format
+      disable_safety_checker: true
+
+tests:
+  # Nature & Wildlife
+  - vars:
+      topic: 'majestic snow leopard perched on a rocky outcrop in the Himalayas, morning mist swirling around'
+  - vars:
+      topic: 'ancient redwood forest bathed in golden sunlight, with rays piercing through the canopy'
+
+  # Architecture & Urban
+  - vars:
+      topic: 'futuristic sustainable city with vertical gardens, solar glass towers, and flying electric vehicles'
+  - vars:
+      topic: 'historic Italian piazza during sunrise, with locals setting up their morning market stalls'
+
+  # People & Culture
+  - vars:
+      topic: 'elderly craftsman in traditional workshop carefully creating intricate wood carvings'
+  - vars:
+      topic: 'elegant fashion model in avant-garde couture against brutalist architecture backdrop'
+
+  # Science & Technology
+  - vars:
+      topic: 'cutting-edge robotics laboratory with advanced AI prototypes and holographic displays'
+  - vars:
+      topic: 'microscopic view of iridescent butterfly wing scales showing natural photonic crystals'
+
+  # Abstract & Artistic
+  - vars:
+      topic: 'surreal floating islands with impossible waterfalls and bioluminescent flora'
+  - vars:
+      topic: 'dynamic abstract sculpture made of flowing liquid metal catching rainbow light reflections'
+
+  # Portrait & Fashion
+  - vars:
+      topic: 'seductive model with piercing gaze and glossy red lips in revealing silk gown, reclining provocatively on velvet chaise, dramatic noir shadows'
+  - vars:
+      topic: 'stunning Asian model with hypnotic almond eyes and flowing raven hair cascading down her curves, wearing a sheer holographic bodycon dress that hugs every contour, posing seductively in an ultra-modern penthouse lounge with glittering crystal decor and a breathtaking cityscape of pulsing neon lights dancing across floor-to-ceiling windows'
+
+evaluateOptions:
+  maxConcurrency: 2
+  delay: 1000
