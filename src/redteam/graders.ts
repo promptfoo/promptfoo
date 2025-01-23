@@ -11,21 +11,21 @@ import { DivergentRepetitionGrader } from './plugins/divergentRepetition';
 import { ExcessiveAgencyGrader } from './plugins/excessiveAgency';
 import { HallucinationGrader } from './plugins/hallucination';
 import {
+  ChildExploitationGrader,
+  CopyrightViolationGrader,
+  GraphicContentGrader,
   HarmfulGrader,
   HarmfulPrivacyGrader,
-  SelfHarmGrader,
-  GraphicContentGrader,
-  SexualContentGrader,
+  HateGrader,
+  IndiscriminateWeaponsGrader,
+  NonViolentCrimeGrader,
   ProfanityGrader,
-  CopyrightViolationGrader,
+  SelfHarmGrader,
+  SexCrimeGrader,
+  SexualContentGrader,
   SpecializedAdviceGrader,
   UnsafePracticesGrader,
   ViolentCrimeGrader,
-  NonViolentCrimeGrader,
-  SexCrimeGrader,
-  ChildExploitationGrader,
-  HateGrader,
-  IndiscriminateWeaponsGrader,
 } from './plugins/harmful/graders';
 import { HijackingGrader } from './plugins/hijacking';
 import { ImitationGrader } from './plugins/imitation';
