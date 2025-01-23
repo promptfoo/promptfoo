@@ -1550,7 +1550,10 @@ describe('session handling', () => {
 
     const result = await provider.callApi('test');
     expect(result.sessionId).toBe('test-session');
-    expect(sessionParser).toHaveBeenCalledWith({ headers: mockResponse.headers });
+    expect(sessionParser).toHaveBeenCalledWith({
+      headers: mockResponse.headers,
+      body: { result: 'success' },
+    });
   });
 });
 
@@ -1899,7 +1902,7 @@ describe('session parser', () => {
     const provider = new HttpProvider('http://test.com', {
       config: {
         method: 'GET',
-        sessionParser: 'x-session-id',
+        sessionParser: 'data.headers["x-session-id"]',
       },
     });
 
@@ -2354,5 +2357,92 @@ describe('RSA signature authentication', () => {
     expect(fs.readFileSync).not.toHaveBeenCalled(); // Should not read from file
     expect(crypto.createSign).toHaveBeenCalledWith('SHA256');
     expect(mockSign).toHaveBeenCalledWith(mockPrivateKey);
+  });
+});
+
+describe('createSessionParser', () => {
+  it('should return empty string when no parser is provided', async () => {
+    const parser = await createSessionParser(undefined);
+    const result = parser({ headers: {}, body: {} });
+    expect(result).toBe('');
+  });
+
+  it('should handle function parser', async () => {
+    const functionParser = ({ headers }: { headers: Record<string, string> }) =>
+      headers['session-id'];
+    const parser = await createSessionParser(functionParser);
+    const result = parser({ headers: { 'session-id': 'test-session' } });
+    expect(result).toBe('test-session');
+  });
+
+  it('should handle header path expression', async () => {
+    const parser = await createSessionParser('data.headers["x-session-id"]');
+    const result = parser({
+      headers: { 'x-session-id': 'test-session' },
+      body: {},
+    });
+    expect(result).toBe('test-session');
+  });
+
+  it('should handle body path expression', async () => {
+    const parser = await createSessionParser('data.body.session.id');
+    const result = parser({
+      headers: {},
+      body: { session: { id: 'test-session' } },
+    });
+    expect(result).toBe('test-session');
+  });
+
+  it('should handle file:// parser', async () => {
+    const mockParser = jest.fn(({ headers }) => headers['session-id']);
+    jest.mocked(importModule).mockResolvedValueOnce(mockParser);
+
+    const parser = await createSessionParser('file://session-parser.js');
+    const result = parser({ headers: { 'session-id': 'test-session' } });
+
+    expect(result).toBe('test-session');
+    expect(importModule).toHaveBeenCalledWith(
+      path.resolve('/mock/base/path', 'session-parser.js'),
+      undefined,
+    );
+  });
+
+  it('should handle file:// parser with specific function', async () => {
+    const mockParser = jest.fn(({ body }) => body.sessionId);
+    jest.mocked(importModule).mockResolvedValueOnce(mockParser);
+
+    const parser = await createSessionParser('file://session-parser.js:parseSession');
+    const result = parser({ headers: {}, body: { sessionId: 'test-session' } });
+
+    expect(result).toBe('test-session');
+    expect(importModule).toHaveBeenCalledWith(
+      path.resolve('/mock/base/path', 'session-parser.js'),
+      'parseSession',
+    );
+  });
+
+  it('should throw error for malformed file:// parser', async () => {
+    jest.mocked(importModule).mockResolvedValueOnce({});
+
+    await expect(createSessionParser('file://invalid-parser.js')).rejects.toThrow(
+      /Response transform malformed/,
+    );
+  });
+
+  it('should handle complex body path expression', async () => {
+    const parser = await createSessionParser('data.body.data.attributes.session.id');
+    const result = parser({
+      headers: {},
+      body: {
+        data: {
+          attributes: {
+            session: {
+              id: 'test-session',
+            },
+          },
+        },
+      },
+    });
+    expect(result).toBe('test-session');
   });
 });
