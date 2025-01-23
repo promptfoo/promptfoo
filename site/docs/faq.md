@@ -60,30 +60,48 @@ No, we do not collect any personally identifiable information (PII).
 
 ### How do I use a proxy with Promptfoo?
 
-Promptfoo proxy settings are configured through environment variables:
+Promptfoo uses standard proxy environment variables for configuration. The following variables are supported in order of precedence:
 
-1. `HTTP_PROXY`: For HTTP requests
-2. `HTTPS_PROXY`: For HTTPS requests
+1. `HTTPS_PROXY` / `https_proxy`: For HTTPS requests
+2. `HTTP_PROXY` / `http_proxy`: For HTTP requests
+3. `ALL_PROXY` / `all_proxy`: Fallback proxy for all protocols
+4. `NO_PROXY` / `no_proxy`: Comma-separated list of hostnames, domain names, or IP addresses to bypass proxy
 
 The proxy URL format is: `[protocol://][user:password@]host[:port]`
 
 For example:
 
 ```bash
-# Basic proxy
+# Basic proxy configuration
 export HTTPS_PROXY=http://proxy.company.com:8080
+export HTTP_PROXY=http://proxy.company.com:8080
 
 # Proxy with authentication
 export HTTPS_PROXY=http://username:password@proxy.company.com:8080
+
+# Bypass proxy for specific domains
+export NO_PROXY=localhost,127.0.0.1,.internal.company.com
 ```
 
-Note: Environment variables are specific to your terminal/shell instance. If you need them permanently, add them to your shell's startup file (e.g., `~/.bashrc`, `~/.zshrc`).
+Notes:
+
+- For HTTPS URLs, the HTTPS_PROXY setting takes precedence over HTTP_PROXY
+- Environment variables are case-insensitive (https_proxy works the same as HTTPS_PROXY)
+- NO_PROXY supports domain suffixes (e.g., `.internal.company.com` matches any subdomain)
+- Environment variables are specific to your terminal/shell instance. For persistence, add them to your shell's startup file (e.g., `~/.bashrc`, `~/.zshrc`)
+
+Common troubleshooting:
+
+- Certificate errors: Check if your proxy requires a custom CA certificate (see SSL configuration below)
+- Connection timeouts: Verify proxy URL format and credentials
+- Internal sites not accessible: Configure NO_PROXY for internal domains
+- Authentication issues: Ensure proxy credentials are properly URL-encoded
 
 ### How do I configure SSL certificates and security?
 
 For environments with custom certificate authorities (like corporate environments), configure SSL/TLS settings using these environment variables:
 
-1. `PROMPTFOO_CA_CERT_PATH`: Path to a custom CA certificate bundle. The path can be absolute or relative to your working directory. Invalid paths will log a warning:
+1. `PROMPTFOO_CA_CERT_PATH`: Path to a custom CA certificate bundle in PEM format. The path can be absolute or relative to your working directory:
 
    ```bash
    # Absolute path
@@ -93,10 +111,23 @@ For environments with custom certificate authorities (like corporate environment
    export PROMPTFOO_CA_CERT_PATH=./certs/ca-bundle.crt
    ```
 
-2. `PROMPTFOO_INSECURE_SSL`: Set to `true` to disable SSL certificate verification:
+2. `PROMPTFOO_INSECURE_SSL`: Disables SSL certificate verification. Use only for testing, never in production:
    ```bash
    export PROMPTFOO_INSECURE_SSL=true
    ```
+
+Important security notes:
+
+- Custom CA certificates apply to both direct connections and proxy connections
+- When using proxy authentication, protect environment variables in shared environments
+- Certificate verification should remain enabled in production environments
+- Invalid certificate paths will log a warning but won't prevent execution
+- The certificate bundle must be in PEM format
+- For proxy servers with self-signed certificates, you need to include their CA certificate in your bundle
+- Multiple certificates can be concatenated in a single PEM file
+- All sensitive information (proxy credentials, certificate paths) is automatically redacted in logs for security
+- Enable verbose mode with `LOG_LEVEL=debug` to see detailed connection information (credentials and paths are automatically redacted)
+- No sensitive configuration data (certificates, proxy credentials) is ever transmitted to promptfoo servers
 
 Remember that like all environment variables, these settings are specific to your terminal/shell instance.
 

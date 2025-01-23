@@ -22,17 +22,42 @@ export function sanitizeUrl(url: string): string {
   }
 }
 
-export function getProxyUrl(): string | undefined {
-  const proxyEnvVars = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy'];
+// Configure global TLS options for both direct connections and proxy
+const tlsOptions: ConnectionOptions = {
+  rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', false),
+};
 
-  for (const envVar of proxyEnvVars) {
-    const proxyUrl = process.env[envVar];
-    if (proxyUrl) {
-      logger.debug(`Found proxy configuration in ${envVar}: ${sanitizeUrl(proxyUrl)}`);
-      return proxyUrl;
-    }
+// Add custom CA certificates if configured
+const caCertPath = getEnvString('PROMPTFOO_CA_CERT_PATH');
+if (caCertPath) {
+  try {
+    const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
+    const ca = fs.readFileSync(resolvedPath, 'utf8');
+    tlsOptions.ca = ca;
+    logger.debug(`Using custom CA certificate from ${resolvedPath}`);
+  } catch (e) {
+    logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
   }
-  return undefined;
+}
+
+// Configure global undici dispatcher with proxy support
+// undici's ProxyAgent automatically respects NO_PROXY/no_proxy environment variables
+const proxyUrl =
+  process.env.HTTPS_PROXY ||
+  process.env.https_proxy ||
+  process.env.HTTP_PROXY ||
+  process.env.http_proxy ||
+  process.env.ALL_PROXY ||
+  process.env.all_proxy;
+
+if (proxyUrl) {
+  logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
+  const agent = new ProxyAgent({
+    uri: proxyUrl,
+    requestTls: tlsOptions,
+    proxyTls: tlsOptions,
+  });
+  setGlobalDispatcher(agent);
 }
 
 export async function fetchWithProxy(
@@ -74,35 +99,6 @@ export async function fetchWithProxy(
     } catch (e) {
       logger.debug(`URL parsing failed in fetchWithProxy: ${e}`);
     }
-  }
-
-  const proxyUrl = getProxyUrl();
-
-  const tlsOptions: ConnectionOptions = {
-    rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', false),
-  };
-
-  // Support custom CA certificates
-  const caCertPath = getEnvString('PROMPTFOO_CA_CERT_PATH');
-  if (caCertPath) {
-    try {
-      const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
-      const ca = fs.readFileSync(resolvedPath, 'utf8');
-      tlsOptions.ca = ca;
-      logger.debug(`Using custom CA certificate from ${resolvedPath}`);
-    } catch (e) {
-      logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
-    }
-  }
-
-  if (proxyUrl) {
-    logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
-    const agent = new ProxyAgent({
-      uri: proxyUrl,
-      proxyTls: tlsOptions,
-      requestTls: tlsOptions,
-    });
-    setGlobalDispatcher(agent);
   }
 
   return fetch(finalUrl, finalOptions);
