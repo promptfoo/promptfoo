@@ -16,6 +16,10 @@ The guardrails assertion is currently supported on:
 - AWS Bedrock with [Amazon Guardrails](https://docs.aws.amazon.com/bedrock/latest/userguide/guardrails-create.html) enabled
 - Azure OpenAI with [Content Filters](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/content-filter?tabs=warning%2Cuser-prompt%2Cpython-new) enabled
 
+:::note
+For Azure, if the prompt fails the input content safety filter, the response status is 400 with code `content_filter`. In this case, the guardrails assertion passes.
+:::
+
 Other providers do not currently support this assertion type. The assertion will pass with a score of 0 for unsupported providers.
 
 ## Basic Usage
