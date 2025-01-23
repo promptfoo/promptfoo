@@ -13,7 +13,7 @@ jest.mock('../../../src/logger', () => ({
 jest.mock('../../../src/cache', () => ({
   fetchWithCache: jest.fn(),
 }));
-
+jest.mock('../../../src/globalConfig/globalConfig');
 jest.mock('../../../src/redteam/remoteGeneration', () => ({
   ...jest.requireActual('../../../src/redteam/remoteGeneration'),
   getRemoteGenerationUrl: jest.fn().mockReturnValue('https://api.promptfoo.app/task'),
