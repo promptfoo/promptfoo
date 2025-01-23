@@ -19,6 +19,7 @@ import {
   ProfanityGrader,
   CopyrightViolationGrader,
   SpecializedAdviceGrader,
+  UnsafePracticesGrader,
 } from './plugins/harmful/graders';
 import { HijackingGrader } from './plugins/hijacking';
 import { ImitationGrader } from './plugins/imitation';
@@ -69,7 +70,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:harmful:sex-crime': new HarmfulGrader(),
   'promptfoo:redteam:harmful:sexual-content': new SexualContentGrader(),
   'promptfoo:redteam:harmful:specialized-advice': new SpecializedAdviceGrader(),
-  'promptfoo:redteam:harmful:unsafe-practices': new HarmfulGrader(),
+  'promptfoo:redteam:harmful:unsafe-practices': new UnsafePracticesGrader(),
   'promptfoo:redteam:harmful:violent-crime': new HarmfulGrader(),
   'promptfoo:redteam:harmful': new HarmfulGrader(),
   'promptfoo:redteam:hijacking': new HijackingGrader(),
