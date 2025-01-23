@@ -7,7 +7,7 @@ sidebar_position: 99
 promptfoo includes support for the [HuggingFace Inference API](https://huggingface.co/inference-api), for text generation, classification, and embeddings related tasks, as well as [HuggingFace Datasets](https://huggingface.co/docs/datasets).
 
 :::tip
-Looking to load test cases from HuggingFace datasets? Check out our [HuggingFace Datasets guide](/docs/configuration/datasets/huggingface).
+Looking to load test cases from HuggingFace datasets? Check out our [Datasets guide](/docs/configuration/datasets) and the specific [HuggingFace Datasets guide](/docs/configuration/datasets/huggingface).
 :::
 
 To run a model, specify the task type and model name. Supported models include:

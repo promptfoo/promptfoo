@@ -1,18 +1,25 @@
 ---
-title: Google Sheets Integration
-sidebar_label: Google Sheets
-displayed_sidebar: null
+sidebar_position: 3
 ---
 
-import { Redirect } from '@docusaurus/router';
+# Google Sheets
 
-<Redirect to="/docs/configuration/datasets/google-sheets" />
+promptfoo allows you to load test cases directly from Google Sheets, making it easy to collaborate on test cases with team members and maintain test data in a familiar spreadsheet format.
 
-# Google Sheets Integration
+## Quick Start
 
-promptfoo allows you to import eval test cases directly from Google Sheets. This can be done either unauthenticated (if the sheet is public) or authenticated using Google's Default Application Credentials, typically with a service account for programmatic access.
+```yaml
+# Load test cases from a public Google Sheet
+tests: https://docs.google.com/spreadsheets/d/your-sheet-id/edit
 
-## Importing Test Cases from Google Sheets
+# Or combine with other test sources
+tests:
+  - https://docs.google.com/spreadsheets/d/your-sheet-id/edit
+  - file://local-tests.csv
+  - huggingface://datasets/cais/mmlu
+```
+
+## Setting Up Access
 
 ### Public Sheets (Unauthenticated)
 
@@ -25,9 +32,7 @@ prompts:
 providers:
   - anthropic:messages:claude-3-5-sonnet-20241022
   - openai:chat:gpt-4o
-// highlight-start
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
-// highlight-end
 ```
 
 > 💡 See our [example sheet](https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit#gid=0) for the expected format. For details on sheet structure, refer to [loading assertions from CSV](/docs/configuration/expected-outputs/#load-assertions-from-csv).
@@ -61,7 +66,7 @@ For private sheets, you'll need to set up Google's Default Application Credentia
    ```
    The system will automatically use authenticated access when the sheet is not public.
 
-## Writing Evaluation Results to Google Sheets
+## Writing Results to Google Sheets
 
 The `outputPath` parameter (`--output` or `-o` on the command line) supports writing evaluation results directly to Google Sheets. This requires Default Application Credentials with write access configured.
 
@@ -74,9 +79,7 @@ providers:
   - ...
 tests:
   - ...
-// highlight-start
 outputPath: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
-// highlight-end
 ```
 
 ### Targeting Specific Sheets
@@ -121,3 +124,10 @@ defaultTest:
 ```
 
 For more details on customizing the LLM grader, see the [model-graded metrics documentation](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader).
+
+## Related Resources
+
+- [CSV Datasets](/docs/configuration/datasets/csv)
+- [HuggingFace Datasets](/docs/configuration/datasets/huggingface)
+- [Configuration Guide](/docs/configuration/guide)
+- [Model-Graded Metrics](/docs/configuration/expected-outputs/model-graded)

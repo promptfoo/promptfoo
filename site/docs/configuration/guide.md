@@ -154,8 +154,12 @@ tests:
 ```
 
 :::tip
-We also support CSV datasets from [local file](/docs/configuration/parameters/#import-from-csv) and [Google Sheets](/docs/integrations/google-sheets).
-:::
+promptfoo supports multiple ways to load test data:
+
+- [CSV files and Google Sheets](/docs/configuration/datasets/csv) for spreadsheet-based test cases
+- [HuggingFace datasets](/docs/configuration/datasets/huggingface) for popular benchmarks and evaluation datasets
+- Local YAML/JSON files for version-controlled test suites
+  :::
 
 ## Import vars from separate files
 
@@ -269,9 +273,6 @@ In this example, we use a `llm-rubric` assertion to ensure that the LLM does not
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
-providers:
-  - openai:gpt-4o-mini
-  - vertex:gemini-pro
 // highlight-start
 defaultTest:
   assert:
@@ -785,34 +786,74 @@ or
 promptfoo eval -c config1.yaml -c config2.yaml -c config3.yaml
 ```
 
-## Loading tests from CSV
+## Loading Tests
 
-YAML is nice, but some organizations maintain their LLM tests in spreadsheets for ease of collaboration. promptfoo supports a special [CSV file format](/docs/configuration/parameters#tests-file).
+promptfoo supports multiple ways to load test cases:
+
+### From Files and Directories
+
+The `tests` config property takes a list of paths to files or directories:
 
 ```yaml
-prompts:
-  - file://prompt1.txt
-  - file://prompt2.txt
-providers:
-  - openai:gpt-4o-mini
-  - vertex:gemini-pro
-// highlight-next-line
+prompts: file://prompts.txt
+providers: openai:gpt-4
+
+tests:
+  # You can supply an exact filepath
+  - file://tests/tests2.yaml
+
+  # Or a glob (wildcard)
+  - file://tests/*
+
+  # Mix and match with actual test cases
+  - vars:
+      var1: foo
+      var2: bar
+```
+
+A single string is also valid:
+
+```yaml
+tests: tests/*
+```
+
+Or a list of paths:
+
+```yaml
+tests:
+  - 'tests/accuracy'
+  - 'tests/creativity'
+  - 'tests/hallucination'
+```
+
+### From CSV and Spreadsheets
+
+CSV files and Google Sheets provide an easy way to collaborate on test cases with non-technical team members:
+
+```yaml
+# Load from a local CSV file
 tests: file://tests.csv
+
+# Or directly from Google Sheets
+tests: https://docs.google.com/spreadsheets/d/your-sheet-id/edit
 ```
 
-promptfoo also has built-in ability to pull test cases from a Google Sheet. The easiest way to get started is to set the sheet visible to "anyone with the link". For example:
+See the [CSV datasets guide](/docs/configuration/datasets/csv) for detailed examples and best practices.
+
+### From Evaluation Datasets
+
+promptfoo integrates with HuggingFace datasets, making it easy to evaluate your models against popular benchmarks:
 
 ```yaml
-prompts:
-  - file://prompt1.txt
-  - file://prompt2.txt
-providers:
-  - openai:gpt-4o-mini
-  - vertex:gemini-pro
-// highlight-next-line
-tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
+# Test against MMLU benchmark
+tests: huggingface://datasets/cais/mmlu?split=test&subset=mathematics
+
+# Or use the ChatGPT prompts dataset
+tests: huggingface://datasets/fka/awesome-chatgpt-prompts
 ```
 
-Here's a [full example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-sheets).
+See the [HuggingFace datasets guide](/docs/configuration/datasets/huggingface) for more examples and configuration options.
 
-See [Google Sheets integration](/docs/integrations/google-sheets) for details on how to set up promptfoo to access a private spreadsheet.
+:::tip
+For a complete overview of dataset options, see the [Datasets guide](/docs/configuration/datasets).
+:::
