@@ -77,6 +77,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:harmful:privacy': new HarmfulPrivacyGrader(),
   'promptfoo:redteam:harmful:profanity': new ProfanityGrader(),
   'promptfoo:redteam:harmful:radicalization': new RadicalizationGrader(),
+  'promptfoo:redteam:harmful:rag-full-document-exfiltration': new CopyrightViolationGrader(),
   'promptfoo:redteam:harmful:self-harm': new SelfHarmGrader(),
   'promptfoo:redteam:harmful:sex-crime': new SexCrimeGrader(),
   'promptfoo:redteam:harmful:sexual-content': new SexualContentGrader(),

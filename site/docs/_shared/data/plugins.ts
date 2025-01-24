@@ -337,6 +337,20 @@ export const PLUGINS = [
   },
   {
     category: 'Compliance and Legal',
+    description: 'Content related to RAG Full Document Exfiltration',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/harmful/',
+    name: 'RAG Full Document Exfiltration',
+    pluginId: 'harmful:rag-full-document-exfiltration',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'criminal',
+  },
+  {
+    category: 'Compliance and Legal',
     description: 'Content related to cybercriminal activities',
     label: 'harmful',
     link: '/docs/red-team/plugins/harmful/',
