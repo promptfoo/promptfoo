@@ -28,6 +28,7 @@ providers:
 | [Azure OpenAI](./azure.md)                          | Azure-hosted OpenAI models                 | `azureopenai:gpt-4o-custom-deployment-name`     |
 | [Cloudflare AI](./cloudflare-ai.md)                 | Cloudflare's AI platform                   | `cloudflare-ai:@cf/meta/llama-3-8b-instruct`    |
 | [Cohere](./cohere.md)                               | Cohere's language models                   | `cohere:command`                                |
+| [DeepSeek](./deepseek.md)                           | DeepSeek's language models                 | `deepseek:deepseek-chat`                        |
 | [F5](./f5.md)                                       | OpenAI-compatible AI Gateway interface     | `f5:path-name`                                  |
 | [fal.ai](./fal.md)                                  | Image Generation Provider                  | `fal:image:fal-ai/fast-sdxl`                    |
 | [GitHub](./github.md)                               | GitHub AI Gateway                          | `github:gpt-4o-mini`                            |

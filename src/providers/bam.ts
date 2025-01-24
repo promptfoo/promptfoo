@@ -2,7 +2,7 @@ import type {
   Client as GenAIClient,
   TextGenerationCreateInput,
   TextGenerationCreateOutput,
-} from '@ibm-generative-ai/node-sdk' with { 'resolution-mode': 'import' };
+} from '@ibm-generative-ai/node-sdk';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
@@ -69,7 +69,7 @@ interface BAMModerations {
       };
 }
 
-function convertResponse(response: TextGenerationCreateOutput): ProviderResponse {
+export function convertResponse(response: TextGenerationCreateOutput): ProviderResponse {
   const totalGeneratedTokens = response.results.reduce(
     (acc, result) => acc + result.generated_token_count,
     0,

@@ -217,7 +217,12 @@ OpenAI tools and functions are supported. See [OpenAI tools example](https://git
 
 ### Using tools
 
-To set `tools` on an OpenAI provider, use the provider's `config` key. Add your function definitions under this key.
+To set `tools` on an OpenAI provider, use the provider's `config` key. The model may return tool calls in two formats:
+
+1. An array of tool calls: `[{type: 'function', function: {...}}]`
+2. A message with tool calls: `{content: '...', tool_calls: [{type: 'function', function: {...}}]}`
+
+Tools can be defined inline or loaded from an external file:
 
 ```yaml
 prompts:
@@ -226,6 +231,9 @@ providers:
   - id: openai:chat:gpt-4o-mini
     // highlight-start
     config:
+      # Load tools from external file
+      tools: file://./weather_tools.yaml
+      # Or define inline
       tools: [
         {
         "type": "function",
@@ -527,6 +535,7 @@ The following properties can be overwritten in provider config:
 - `thread.messages` - A list of message objects that the thread is created with.
 - `temperature` - Temperature for the model
 - `toolChoice` - Controls whether the AI should use a tool
+- `tool_resources` - Tool resources to include in the thread - see [Assistant v2 tool resources](https://platform.openai.com/docs/assistants/migration)
 - `attachments` - File attachments to include in messages - see [Assistant v2 attachments](https://platform.openai.com/docs/assistants/migration)
 
 Here's an example of a more detailed config:

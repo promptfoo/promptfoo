@@ -29,8 +29,8 @@ import {
 } from '../shared';
 import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from './prompts';
 
-const DEFAULT_MAX_ROUNDS = 10;
-const DEFAULT_MAX_BACKTRACKS = 10;
+export const DEFAULT_MAX_ROUNDS = 10;
+export const DEFAULT_MAX_BACKTRACKS = 10;
 
 interface CrescendoConfig {
   injectVar: string;
@@ -63,7 +63,7 @@ export class MemorySystem {
   }
 }
 
-class CrescendoProvider implements ApiProvider {
+export class CrescendoProvider implements ApiProvider {
   readonly config: CrescendoConfig;
   private readonly nunjucks: any;
   private userGoal: string | undefined;
@@ -213,7 +213,7 @@ class CrescendoProvider implements ApiProvider {
     });
 
     const assertToUse = test?.assert?.find((a: { type: string }) => a.type);
-    const { getGraderById } = await import('../../graders.js');
+    const { getGraderById } = await import('../../graders');
     let graderPassed: boolean | undefined;
 
     while (roundNum < this.maxRounds) {

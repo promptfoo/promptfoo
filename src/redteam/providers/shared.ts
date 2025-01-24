@@ -31,7 +31,7 @@ async function loadRedteamProvider({
     ret = redteamProvider;
   } else if (typeof redteamProvider === 'string' || isProviderOptions(redteamProvider)) {
     logger.debug(`Loading redteam provider: ${JSON.stringify(redteamProvider)}`);
-    const loadApiProvidersModule = await import('../../providers.js');
+    const loadApiProvidersModule = await import('../../providers');
     // Async import to avoid circular dependency
     ret = (await loadApiProvidersModule.loadApiProviders([redteamProvider]))[0];
   } else {

@@ -221,6 +221,17 @@ export async function loadApiProvider(
         apiKeyEnvar: 'GITHUB_TOKEN',
       },
     });
+  } else if (providerPath.startsWith('deepseek:')) {
+    const splits = providerPath.split(':');
+    const modelName = splits.slice(1).join(':') || 'deepseek-chat';
+    ret = new OpenAiChatCompletionProvider(modelName, {
+      ...providerOptions,
+      config: {
+        ...providerOptions.config,
+        apiBaseUrl: 'https://api.deepseek.com/v1',
+        apiKeyEnvar: 'DEEPSEEK_API_KEY',
+      },
+    });
   } else if (providerPath.startsWith('f5')) {
     const splits = providerPath.split(':');
     let endpoint = splits.slice(1).join(':');

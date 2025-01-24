@@ -526,11 +526,23 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ...(maxCompletionTokens ? { max_completion_tokens: maxCompletionTokens } : {}),
       ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
       ...(temperature ? { temperature } : {}),
-      top_p: config.top_p ?? Number.parseFloat(process.env.OPENAI_TOP_P || '1'),
-      presence_penalty:
-        config.presence_penalty ?? Number.parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
-      frequency_penalty:
-        config.frequency_penalty ?? Number.parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
+      ...(config.top_p !== undefined || process.env.OPENAI_TOP_P
+        ? { top_p: config.top_p ?? Number.parseFloat(process.env.OPENAI_TOP_P || '1') }
+        : {}),
+      ...(config.presence_penalty !== undefined || process.env.OPENAI_PRESENCE_PENALTY
+        ? {
+            presence_penalty:
+              config.presence_penalty ??
+              Number.parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
+          }
+        : {}),
+      ...(config.frequency_penalty !== undefined || process.env.OPENAI_FREQUENCY_PENALTY
+        ? {
+            frequency_penalty:
+              config.frequency_penalty ??
+              Number.parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
+          }
+        : {}),
       ...(config.functions
         ? {
             functions: maybeLoadFromExternalFile(
@@ -543,6 +555,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? { tools: maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)) }
         : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
+      ...(config.tool_resources ? { tool_resources: config.tool_resources } : {}),
       ...(config.response_format
         ? {
             response_format: maybeLoadFromExternalFile(
@@ -711,9 +724,11 @@ type OpenAiAssistantOptions = OpenAiSharedOptions & {
   toolChoice?:
     | 'none'
     | 'auto'
+    | 'required'
     | { type: 'function'; function?: { name: string } }
     | { type: 'file_search' };
   attachments?: OpenAI.Beta.Threads.Message.Attachment[];
+  tool_resources?: OpenAI.Beta.Threads.ThreadCreateAndRunParams['tool_resources'];
 };
 
 export class OpenAiAssistantProvider extends OpenAiGenericProvider {
@@ -768,6 +783,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       metadata: this.assistantConfig.metadata || undefined,
       temperature: this.assistantConfig.temperature || undefined,
       tool_choice: this.assistantConfig.toolChoice || undefined,
+      tool_resources: this.assistantConfig.tool_resources || undefined,
       thread: {
         messages,
       },

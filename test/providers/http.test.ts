@@ -1,4 +1,6 @@
+import crypto from 'crypto';
 import dedent from 'dedent';
+import fs from 'fs';
 import path from 'path';
 import { fetchWithCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
@@ -14,6 +16,7 @@ import {
 import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared';
 import { maybeLoadFromExternalFile } from '../../src/util';
 
+jest.mock('../../src/globalConfig/globalConfig');
 jest.mock('../../src/cache', () => ({
   ...jest.requireActual('../../src/cache'),
   fetchWithCache: jest.fn(),
@@ -633,14 +636,14 @@ describe('HttpProvider', () => {
   });
 
   describe('getHeaders', () => {
-    it('should combine default headers with config headers', () => {
+    it('should combine default headers with config headers', async () => {
       const provider = new HttpProvider(mockUrl, {
         config: {
           headers: { 'X-Custom': '{{ prompt }}' },
           body: 'test',
         },
       });
-      const result = provider['getHeaders'](
+      const result = await provider.getHeaders(
         { 'content-type': 'application/json' },
         { prompt: 'test' },
       );
@@ -650,14 +653,14 @@ describe('HttpProvider', () => {
       });
     });
 
-    it('should render template strings in headers', () => {
+    it('should render template strings in headers', async () => {
       const provider = new HttpProvider(mockUrl, {
         config: {
           headers: { 'X-Custom': '{{ prompt | upper }}' },
           body: 'test',
         },
       });
-      const result = provider['getHeaders']({}, { prompt: 'test' });
+      const result = await provider.getHeaders({}, { prompt: 'test' });
       expect(result).toEqual({
         'x-custom': 'TEST',
       });
@@ -1547,7 +1550,10 @@ describe('session handling', () => {
 
     const result = await provider.callApi('test');
     expect(result.sessionId).toBe('test-session');
-    expect(sessionParser).toHaveBeenCalledWith({ headers: mockResponse.headers });
+    expect(sessionParser).toHaveBeenCalledWith({
+      headers: mockResponse.headers,
+      body: { result: 'success' },
+    });
   });
 });
 
@@ -1896,7 +1902,7 @@ describe('session parser', () => {
     const provider = new HttpProvider('http://test.com', {
       config: {
         method: 'GET',
-        sessionParser: 'x-session-id',
+        sessionParser: 'data.headers["x-session-id"]',
       },
     });
 
@@ -2173,5 +2179,270 @@ describe('string-based validators', () => {
     jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await expect(provider.callApi('test')).rejects.toThrow('Invalid status validator expression');
+  });
+});
+
+describe('RSA signature authentication', () => {
+  let mockPrivateKey: string;
+  let mockSign: jest.SpyInstance;
+  let mockUpdate: jest.SpyInstance;
+  let mockEnd: jest.SpyInstance;
+
+  beforeEach(() => {
+    mockPrivateKey = '-----BEGIN PRIVATE KEY-----\nMOCK_KEY\n-----END PRIVATE KEY-----';
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(mockPrivateKey);
+
+    mockUpdate = jest.fn();
+    mockEnd = jest.fn();
+    mockSign = jest.fn().mockReturnValue(Buffer.from('mocksignature'));
+
+    const mockSignObject = {
+      update: mockUpdate,
+      end: mockEnd,
+      sign: mockSign,
+    };
+
+    jest.spyOn(crypto, 'createSign').mockReturnValue(mockSignObject as any);
+    jest.spyOn(Date, 'now').mockReturnValue(1000); // Mock timestamp
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('should generate and include signature in vars', async () => {
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        signatureAuth: {
+          privateKeyPath: '/path/to/key.pem',
+          signatureValidityMs: 300000, // 5 minutes
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test');
+
+    // Verify signature generation with specific data
+    expect(fs.readFileSync).toHaveBeenCalledWith('/path/to/key.pem', 'utf8');
+    expect(crypto.createSign).toHaveBeenCalledWith('SHA256');
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+    expect(mockEnd).toHaveBeenCalledTimes(1);
+    expect(mockSign).toHaveBeenCalledWith(mockPrivateKey);
+  });
+
+  it('should reuse cached signature when within validity period', async () => {
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        signatureAuth: {
+          privateKeyPath: '/path/to/key.pem',
+          signatureValidityMs: 300000,
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    // First call should generate signature
+    await provider.callApi('test');
+    expect(crypto.createSign).toHaveBeenCalledTimes(1);
+
+    // Second call within validity period should reuse signature
+    jest.spyOn(Date, 'now').mockReturnValue(2000); // Still within validity period
+    await provider.callApi('test');
+    expect(crypto.createSign).toHaveBeenCalledTimes(1); // Should not be called again
+  });
+
+  it('should regenerate signature when expired', async () => {
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        signatureAuth: {
+          privateKeyPath: '/path/to/key.pem',
+          signatureValidityMs: 300000,
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    // First call should generate signature
+    await provider.callApi('test');
+    expect(crypto.createSign).toHaveBeenCalledTimes(1);
+
+    // Second call after validity period should regenerate signature
+    jest.spyOn(Date, 'now').mockReturnValue(301000); // After validity period
+    await provider.callApi('test');
+    expect(crypto.createSign).toHaveBeenCalledTimes(2); // Should be called again
+  });
+
+  it('should use custom signature data template', async () => {
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        signatureAuth: {
+          privateKeyPath: '/path/to/key.pem',
+          signatureValidityMs: 300000,
+          signatureDataTemplate: 'custom-{{signatureTimestamp}}',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test');
+
+    // Verify signature generation with custom template
+    expect(crypto.createSign).toHaveBeenCalledWith('SHA256');
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+    expect(mockUpdate).toHaveBeenCalledWith('custom-1000'); // Custom template
+    expect(mockEnd).toHaveBeenCalledTimes(1);
+    expect(mockSign).toHaveBeenCalledWith(mockPrivateKey);
+  });
+
+  it('should support using privateKey directly instead of privateKeyPath', async () => {
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        signatureAuth: {
+          privateKey: mockPrivateKey,
+          signatureValidityMs: 300000,
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test');
+
+    // Verify signature generation using privateKey directly
+    expect(fs.readFileSync).not.toHaveBeenCalled(); // Should not read from file
+    expect(crypto.createSign).toHaveBeenCalledWith('SHA256');
+    expect(mockSign).toHaveBeenCalledWith(mockPrivateKey);
+  });
+});
+
+describe('createSessionParser', () => {
+  it('should return empty string when no parser is provided', async () => {
+    const parser = await createSessionParser(undefined);
+    const result = parser({ headers: {}, body: {} });
+    expect(result).toBe('');
+  });
+
+  it('should handle function parser', async () => {
+    const functionParser = ({ headers }: { headers: Record<string, string> }) =>
+      headers['session-id'];
+    const parser = await createSessionParser(functionParser);
+    const result = parser({ headers: { 'session-id': 'test-session' } });
+    expect(result).toBe('test-session');
+  });
+
+  it('should handle header path expression', async () => {
+    const parser = await createSessionParser('data.headers["x-session-id"]');
+    const result = parser({
+      headers: { 'x-session-id': 'test-session' },
+      body: {},
+    });
+    expect(result).toBe('test-session');
+  });
+
+  it('should handle body path expression', async () => {
+    const parser = await createSessionParser('data.body.session.id');
+    const result = parser({
+      headers: {},
+      body: { session: { id: 'test-session' } },
+    });
+    expect(result).toBe('test-session');
+  });
+
+  it('should handle file:// parser', async () => {
+    const mockParser = jest.fn(({ headers }) => headers['session-id']);
+    jest.mocked(importModule).mockResolvedValueOnce(mockParser);
+
+    const parser = await createSessionParser('file://session-parser.js');
+    const result = parser({ headers: { 'session-id': 'test-session' } });
+
+    expect(result).toBe('test-session');
+    expect(importModule).toHaveBeenCalledWith(
+      path.resolve('/mock/base/path', 'session-parser.js'),
+      undefined,
+    );
+  });
+
+  it('should handle file:// parser with specific function', async () => {
+    const mockParser = jest.fn(({ body }) => body.sessionId);
+    jest.mocked(importModule).mockResolvedValueOnce(mockParser);
+
+    const parser = await createSessionParser('file://session-parser.js:parseSession');
+    const result = parser({ headers: {}, body: { sessionId: 'test-session' } });
+
+    expect(result).toBe('test-session');
+    expect(importModule).toHaveBeenCalledWith(
+      path.resolve('/mock/base/path', 'session-parser.js'),
+      'parseSession',
+    );
+  });
+
+  it('should throw error for malformed file:// parser', async () => {
+    jest.mocked(importModule).mockResolvedValueOnce({});
+
+    await expect(createSessionParser('file://invalid-parser.js')).rejects.toThrow(
+      /Response transform malformed/,
+    );
+  });
+
+  it('should handle complex body path expression', async () => {
+    const parser = await createSessionParser('data.body.data.attributes.session.id');
+    const result = parser({
+      headers: {},
+      body: {
+        data: {
+          attributes: {
+            session: {
+              id: 'test-session',
+            },
+          },
+        },
+      },
+    });
+    expect(result).toBe('test-session');
   });
 });

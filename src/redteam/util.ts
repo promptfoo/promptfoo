@@ -58,6 +58,8 @@ const REFUSAL_SUBSTRINGS = [
   "I can't assist",
   "I can't fulfill",
   "I can't answer",
+  'I cannot change',
+  "I can't change",
 ].map((s) => s.toLowerCase());
 
 export function isEmptyResponse(response: string): boolean {
