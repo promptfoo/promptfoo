@@ -8,6 +8,15 @@ This provider supports the [Anthropic Claude](https://www.anthropic.com/claude) 
 
 > **Note:** Anthropic models can also be accessed through Amazon Bedrock. For information on using Anthropic models via Bedrock, please refer to our [AWS Bedrock documentation](/docs/providers/aws-bedrock).
 
+## Examples
+
+We provide several example implementations demonstrating different Claude capabilities:
+
+- [Tool Use Example](https://github.com/promptfoo/promptfoo/tree/main/examples/tool-use) - Shows how to use Claude's tool calling capabilities
+- [Vision Example](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-vision) - Demonstrates using Claude for image analysis
+- [Model Comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-vs-gpt) - Compares Claude with GPT-4 on various tasks
+- [Image Analysis Comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-vs-gpt-image) - Compares image analysis capabilities between Claude and GPT
+
 ## Setup
 
 To use Anthropic, you need to set the `ANTHROPIC_API_KEY` environment variable or specify the `apiKey` in the provider configuration.
@@ -537,11 +546,18 @@ See the [Anthropic migration guide](https://docs.anthropic.com/claude/reference/
 
 ## Model-Graded Tests
 
-[Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) such as `factuality` or `llm-rubric` use OpenAI by default and expect `OPENAI_API_KEY` as an environment variable. If you are using Anthropic, you may override the grader to point to a different provider.
+[Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) such as `factuality` or `llm-rubric` will automatically use Anthropic as the grading provider if:
+
+1. `ANTHROPIC_API_KEY` is set
+2. `OPENAI_API_KEY` is not set
+
+If both API keys are present, OpenAI will be used by default. You can explicitly override the grading provider in your configuration.
 
 Because of how model-graded evals are implemented, **the model must support chat-formatted prompts** (except for embedding or classification models).
 
-The easiest way to do this for _all_ your test cases is to add the [`defaultTest`](/docs/configuration/guide/#default-test-cases) property to your config:
+You can override the grading provider in several ways:
+
+1. For all test cases using `defaultTest`:
 
 ```yaml title=promptfooconfig.yaml
 defaultTest:
@@ -552,32 +568,26 @@ defaultTest:
         # optional provider config options
 ```
 
-However, you can also do this for individual assertions:
+2. For individual assertions:
 
 ```yaml
-# ...
 assert:
   - type: llm-rubric
     value: Do not mention that you are an AI or chat assistant
     provider:
       id: anthropic:messages:claude-3-5-sonnet-20241022
-      config:
-        # optional provider config options
 ```
 
-Or individual tests:
+3. For specific tests:
 
 ```yaml
-# ...
 tests:
   - vars:
-      # ...
+      question: What is the capital of France?
     options:
       provider:
         id: anthropic:messages:claude-3-5-sonnet-20241022
-        config:
-          # optional provider config options
     assert:
       - type: llm-rubric
-        value: Do not mention that you are an AI or chat assistant
+        value: Answer should mention Paris
 ```
