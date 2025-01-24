@@ -148,7 +148,7 @@ export const RedteamGenerateOptionsSchema = z.object({
   purpose: z.string().optional().describe('Purpose of the redteam generation'),
   strategies: z.array(RedteamStrategySchema).optional().describe('Strategies to use'),
   write: z.boolean().describe('Whether to write the output'),
-  burpEscapeJson: z.boolean().describe('Whether to escape quotes in Burp payloads'),
+  burpEscapeJson: z.boolean().describe('Whether to escape quotes in Burp payloads').optional(),
 });
 
 /**
