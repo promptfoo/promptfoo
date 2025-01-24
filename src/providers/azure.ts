@@ -585,7 +585,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       ...(config.o1
         ? {
             max_completion_tokens: config.max_completion_tokens,
-            reasoning_effort: config.reasoning_effort,
+            reasoning_effort: renderVarsInObject(config.reasoning_effort, context?.vars),
           }
         : {
             max_tokens: config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024),
