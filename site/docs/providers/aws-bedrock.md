@@ -1,4 +1,5 @@
 ---
+sidebar_label: AWS Bedrock
 sidebar_position: 3
 ---
 
