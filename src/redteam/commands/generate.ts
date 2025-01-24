@@ -53,16 +53,21 @@ export async function doGenerateRedteam(
   // Check for updates to the config file and decide whether to generate
   let shouldGenerate = options.force;
   if (!options.force && fs.existsSync(outputPath) && configPath && fs.existsSync(configPath)) {
-    const redteamContent = yaml.load(fs.readFileSync(outputPath, 'utf8')) as Partial<UnifiedConfig>;
-    const storedHash = redteamContent.metadata?.configHash;
-    const currentHash = getConfigHash(configPath);
+    // Skip hash check for .burp files since they're not YAML
+    if (!outputPath.endsWith('.burp')) {
+      const redteamContent = yaml.load(
+        fs.readFileSync(outputPath, 'utf8'),
+      ) as Partial<UnifiedConfig>;
+      const storedHash = redteamContent.metadata?.configHash;
+      const currentHash = getConfigHash(configPath);
 
-    shouldGenerate = storedHash !== currentHash;
-    if (!shouldGenerate) {
-      logger.warn(
-        'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
-      );
-      return redteamContent;
+      shouldGenerate = storedHash !== currentHash;
+      if (!shouldGenerate) {
+        logger.warn(
+          'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
+        );
+        return redteamContent;
+      }
     }
   } else {
     shouldGenerate = true;
@@ -191,6 +196,7 @@ export async function doGenerateRedteam(
     testCases: redteamTests,
     purpose,
     entities,
+    injectVar: finalInjectVar,
   } = await synthesize({
     ...parsedConfig.data,
     language: config.language,
@@ -215,7 +221,19 @@ export async function doGenerateRedteam(
   };
 
   let ret: Partial<UnifiedConfig> | undefined;
-  if (options.output) {
+  if (options.output && options.output.endsWith('.burp')) {
+    // Write in Burp Intruder compatible format
+    const outputLines = redteamTests
+      .map((test) => encodeURIComponent(String(test.vars?.[finalInjectVar] ?? '')))
+      .filter((line) => line.length > 0)
+      .join('\n');
+    fs.writeFileSync(options.output, outputLines);
+    logger.info(
+      chalk.green(`Wrote ${redteamTests.length} test cases to ${chalk.bold(options.output)}`),
+    );
+    // No need to return anything, Burp outputs are only invoked via command line.
+    return {};
+  } else if (options.output) {
     const existingYaml = configPath
       ? (yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>)
       : {};

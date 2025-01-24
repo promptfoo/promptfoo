@@ -1,7 +1,9 @@
 import React from 'react';
 import Editor from 'react-simple-code-editor';
+import ClearIcon from '@mui/icons-material/Clear';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import InfoIcon from '@mui/icons-material/Info';
+import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -9,6 +11,7 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
+import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemIcon from '@mui/material/ListItemIcon';
@@ -53,6 +56,14 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
 }) => {
   const theme = useTheme();
   const darkMode = theme.palette.mode === 'dark';
+
+  const [signatureAuthExpanded, setSignatureAuthExpanded] = React.useState(
+    !!selectedTarget.config.signatureAuth,
+  );
+
+  const handleSignatureAuthChange = (_event: React.SyntheticEvent, isExpanded: boolean) => {
+    setSignatureAuthExpanded(isExpanded);
+  };
 
   return (
     <Box mt={4}>
@@ -146,7 +157,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                   padding={10}
                   placeholder={dedent`Optional: A JavaScript expression to parse the response.
                     Simple transform: json.choices[0].message.content
-                    
+
                     With guardrails: { output: json.choices[0].message.content, guardrails: { flagged: context.response.status === 500 } }`}
                   style={{
                     fontFamily: '"Fira code", "Fira Mono", monospace',
@@ -161,7 +172,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
           <Accordion defaultExpanded={!!selectedTarget.config.sessionParser}>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
               <Box>
-                <Typography variant="h6">Session Header</Typography>
+                <Typography variant="h6">Sessions</Typography>
                 <Typography variant="body2" color="text.secondary">
                   Handle stateful API sessions
                 </Typography>
@@ -169,7 +180,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
             </AccordionSummary>
             <AccordionDetails>
               <Typography variant="body1" sx={{ mb: 2 }}>
-                Extract session IDs from HTTP response headers for stateful systems. See{' '}
+                Extract session IDs from HTTP response headers or the body for stateful systems. See{' '}
                 <a
                   href="https://www.promptfoo.dev/docs/providers/http/#session-management"
                   target="_blank"
@@ -180,9 +191,9 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
               </Typography>
               <TextField
                 fullWidth
-                label="Session Header"
+                label="Session"
                 value={selectedTarget.config.sessionParser}
-                placeholder="Optional: Enter the name of the header that contains the session ID"
+                placeholder="Optional: Enter a javascript expression to extract the session Id"
                 onChange={(e) => updateCustomTarget('sessionParser', e.target.value)}
                 margin="normal"
                 InputLabelProps={{
@@ -192,7 +203,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
             </AccordionDetails>
           </Accordion>
 
-          <Accordion defaultExpanded={!!selectedTarget.config.signatureAuth}>
+          <Accordion expanded={signatureAuthExpanded} onChange={handleSignatureAuthChange}>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
               <Box>
                 <Typography variant="h6">Digital Signature Authentication</Typography>
@@ -221,6 +232,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                         updateCustomTarget('signatureAuth', {
                           privateKeyPath: '',
                           signatureValidityMs: 300000,
+                          signatureDataTemplate: '{{signatureTimestamp}}',
                         });
                       } else {
                         updateCustomTarget('signatureAuth', undefined);
@@ -233,31 +245,69 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 {selectedTarget.config.signatureAuth && (
                   <>
                     <Stack spacing={4}>
-                      <TextField
-                        fullWidth
-                        label="Private Key"
-                        value={selectedTarget.config.signatureAuth?.privateKey || ''}
-                        onChange={(e) =>
-                          updateCustomTarget('signatureAuth', {
-                            ...selectedTarget.config.signatureAuth,
-                            privateKey: e.target.value || undefined,
-                            // Remove privateKeyPath if privateKey is provided
-                            privateKeyPath: undefined,
-                          })
-                        }
-                        placeholder="Paste signature private key here"
-                        multiline
-                        rows={4}
-                        InputLabelProps={{
-                          shrink: true,
-                        }}
-                      />
+                      <Box>
+                        <input
+                          type="file"
+                          accept=".pem,.key"
+                          style={{ display: 'none' }}
+                          id="private-key-upload"
+                          onClick={(e) => {
+                            // Reset value to trigger onChange even if same file selected
+                            (e.target as HTMLInputElement).value = '';
+                          }}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            console.log('Loaded file', file);
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onload = (event) => {
+                                const content = event.target?.result as string;
+                                updateCustomTarget('signatureAuth', {
+                                  ...selectedTarget.config.signatureAuth,
+                                  privateKey: content,
+                                  privateKeyPath: undefined,
+                                });
+                              };
+                              reader.readAsText(file);
+                            }
+                          }}
+                        />
+                        <label htmlFor="private-key-upload">
+                          <Button variant="contained" component="span" startIcon={<VpnKeyIcon />}>
+                            Upload Key File
+                          </Button>
+                        </label>
+                        {selectedTarget.config.signatureAuth?.privateKey ? (
+                          <>
+                            <Typography variant="caption" color="textSecondary" sx={{ ml: 1 }}>
+                              Key file loaded
+                            </Typography>
+                            <IconButton
+                              size="small"
+                              onClick={() =>
+                                updateCustomTarget('signatureAuth', {
+                                  ...selectedTarget.config.signatureAuth,
+                                  privateKey: undefined,
+                                  privateKeyPath: undefined,
+                                })
+                              }
+                              title="Clear private key"
+                            >
+                              <ClearIcon fontSize="small" />
+                            </IconButton>
+                          </>
+                        ) : (
+                          <Typography variant="caption" color="textSecondary" sx={{ ml: 1 }}>
+                            RSA private key in PEM format (e.g., "-----BEGIN PRIVATE KEY-----")
+                          </Typography>
+                        )}
+                      </Box>
                       <TextField
                         fullWidth
                         label="Signature Data Template"
                         value={
                           selectedTarget.config.signatureAuth?.signatureDataTemplate ||
-                          '{{timestamp}}'
+                          '{{signatureTimestamp}}'
                         }
                         onChange={(e) =>
                           updateCustomTarget('signatureAuth', {
@@ -363,7 +413,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                   placeholder={dedent`Customize HTTP status code validation. Examples:
 
                       () => true                     // Default: accept all responses - javascript function
-                      status >= 200 && status < 300  // Accept only 2xx codes - javascript expression  
+                      status >= 200 && status < 300  // Accept only 2xx codes - javascript expression
                       (status) => status < 500       // Accept anything but server errors - javascript function`}
                   style={{
                     fontFamily: '"Fira code", "Fira Mono", monospace',

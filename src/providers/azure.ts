@@ -679,6 +679,16 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     logger.debug(`Azure API response: ${JSON.stringify(data)}`);
     try {
       if (data.error) {
+        if (data.error.code === 'content_filter' && data.error.status === 400) {
+          return {
+            output: data.error.message,
+            guardrails: {
+              flagged: true,
+              flaggedInput: true,
+              flaggedOutput: false,
+            },
+          };
+        }
         return {
           error: `API response error: ${data.error.code} ${data.error.message}`,
         };
