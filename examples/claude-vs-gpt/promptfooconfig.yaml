@@ -5,7 +5,13 @@ prompts:
   - file://prompt.yaml
 
 providers:
-  - anthropic:messages:claude-3-5-sonnet-20241022
+  - id: anthropic:messages:claude-3-5-sonnet-20241022
+    config:
+      temperature: 0
+      max_tokens: 1024
+      # Enable prompt caching for better performance
+      cache_control:
+        type: ephemeral
   - openai:chat:gpt-4o
 
 defaultTest:
@@ -28,7 +34,7 @@ tests:
       - type: llm-rubric
         value: Do not apologize
   - vars:
-      riddle: 'You see a boat filled with people. It has not sunk, but when you look again you don’t see a single person on the boat. Why?'
+      riddle: "You see a boat filled with people. It has not sunk, but when you look again you don't see a single person on the boat. Why?"
     assert:
       - type: llm-rubric
         value: explains that the people are below deck, or they are all in a relationship
@@ -40,7 +46,7 @@ tests:
   - vars:
       riddle: >-
         I have keys but no locks. I have space but no room. You can enter, but
-        can’t go outside. What am I?
+        can't go outside. What am I?
     assert:
       - type: icontains
         value: keyboard
@@ -107,7 +113,7 @@ tests:
         value: David
   - vars:
       riddle: >-
-        I am light as a feather, but even the world's strongest man couldn’t
+        I am light as a feather, but even the world's strongest man couldn't
         hold me for much longer than a minute. What am I?
     assert:
       - type: icontains

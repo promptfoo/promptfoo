@@ -1,6 +1,13 @@
-- role: system
-  content: 'Be concise'
-- role: user
-  content: |
-    Answer this riddle:
-    {{riddle}}
+messages:
+  - role: system
+    content:
+      - type: text
+        text: 'Be concise'
+        cache_control:
+          type: ephemeral
+  - role: user
+    content:
+      - type: text
+        text: |
+          Answer this riddle:
+          {{riddle}}
