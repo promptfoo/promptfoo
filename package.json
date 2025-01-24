@@ -156,7 +156,7 @@
     "@adaline/together-ai": "0.8.0",
     "@adaline/types": "0.15.0",
     "@adaline/vertex": "0.9.0",
-    "@anthropic-ai/sdk": "^0.35.0",
+    "@anthropic-ai/sdk": "^0.36.2",
     "@apidevtools/json-schema-ref-parser": "^11.7.3",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
