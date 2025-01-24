@@ -109,13 +109,17 @@ function contentTypeIsJson(headers: Record<string, string> | undefined) {
   });
 }
 
+interface SessionParserData {
+  headers?: Record<string, string> | null;
+  body?: Record<string, any> | string | null;
+}
+
 export async function createSessionParser(
   parser: string | Function | undefined,
-): Promise<({ headers }: { headers: Record<string, string> }) => string> {
+): Promise<(data: SessionParserData) => string> {
   if (!parser) {
     return () => '';
   }
-
   if (typeof parser === 'function') {
     return (response) => parser(response);
   }
@@ -139,8 +143,10 @@ export async function createSessionParser(
       `Response transform malformed: ${filename} must export a function or have a default export as a function`,
     );
   } else if (typeof parser === 'string') {
-    return ({ headers }) => {
-      return new Function('headers', `return headers[${JSON.stringify(parser)}]`)(headers);
+    return (data: SessionParserData) => {
+      const trimmedParser = parser.trim();
+
+      return new Function('data', `return (${trimmedParser});`)(data);
     };
   }
   throw new Error(
@@ -465,7 +471,7 @@ export class HttpProvider implements ApiProvider {
   private transformResponse: Promise<
     (data: any, text: string, context?: TransformResponseContext) => ProviderResponse
   >;
-  private sessionParser: Promise<({ headers }: { headers: Record<string, string> }) => string>;
+  private sessionParser: Promise<(data: SessionParserData) => string>;
   private transformRequest: Promise<(prompt: string) => any>;
   private validateStatus: Promise<(status: number) => boolean>;
   private lastSignatureTimestamp?: number;
@@ -708,15 +714,15 @@ export class HttpProvider implements ApiProvider {
 
     try {
       const sessionId =
-        response.headers && this.sessionParser !== null
-          ? (await this.sessionParser)({ headers: response.headers })
-          : undefined;
+        this.sessionParser == null
+          ? undefined
+          : (await this.sessionParser)({ headers: response.headers, body: parsedData ?? rawText });
       if (sessionId) {
         ret.sessionId = sessionId;
       }
     } catch (err) {
       logger.error(
-        `Error parsing session ID: ${String(err)}. Got headers: ${safeJsonStringify(response.headers)}`,
+        `Error parsing session ID: ${String(err)}. Got headers: ${safeJsonStringify(response.headers)} and parsed body: ${safeJsonStringify(parsedData)}`,
       );
       throw err;
     }

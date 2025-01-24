@@ -144,7 +144,7 @@ export const EXAMPLE_CONFIG: Config = {
         role: 'engineering',
       },
       transformResponse: 'json.response',
-      sessionParser: 'x-session-id',
+      sessionParser: 'data.headers["x-session-id"]',
     },
   },
   plugins: ['harmful:hate', 'harmful:self-harm', 'rbac'],
