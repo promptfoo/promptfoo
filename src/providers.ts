@@ -221,6 +221,17 @@ export async function loadApiProvider(
         apiKeyEnvar: 'GITHUB_TOKEN',
       },
     });
+  } else if (providerPath.startsWith('hyperbolic:')) {
+    const splits = providerPath.split(':');
+    const modelName = splits.slice(1).join(':') || 'meta-llama/Meta-Llama-3-70B-Instruct';
+    ret = new OpenAiChatCompletionProvider(modelName, {
+      ...providerOptions,
+      config: {
+        ...providerOptions.config,
+        apiBaseUrl: 'https://api.hyperbolic.xyz/v1',
+        apiKeyEnvar: 'HYPERBOLIC_API_KEY',
+      },
+    });
   } else if (providerPath.startsWith('deepseek:')) {
     const splits = providerPath.split(':');
     const modelName = splits.slice(1).join(':') || 'deepseek-chat';
