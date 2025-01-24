@@ -280,6 +280,10 @@ const config = {
                 href: '/careers/',
               },
               {
+                label: 'Status',
+                href: 'https://status.promptfoo.dev',
+              },
+              {
                 label: 'GitHub',
                 href: 'https://github.com/promptfoo/promptfoo',
               },
