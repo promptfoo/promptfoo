@@ -111,6 +111,7 @@ export const RedteamStrategySchema = z.union([
 /**
  * Schema for `promptfoo redteam generate` command options
  */
+// NOTE: Remember to edit types/redteam.ts:RedteamCliGenerateOptions if you edit this schema
 export const RedteamGenerateOptionsSchema = z.object({
   addPlugins: z
     .array(z.enum(REDTEAM_ADDITIONAL_PLUGINS as readonly string[] as [string, ...string[]]))
@@ -147,6 +148,7 @@ export const RedteamGenerateOptionsSchema = z.object({
   purpose: z.string().optional().describe('Purpose of the redteam generation'),
   strategies: z.array(RedteamStrategySchema).optional().describe('Strategies to use'),
   write: z.boolean().describe('Whether to write the output'),
+  burpEscapeJson: z.boolean().describe('Whether to escape quotes in Burp payloads'),
 });
 
 /**

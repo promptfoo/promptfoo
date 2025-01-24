@@ -224,7 +224,13 @@ export async function doGenerateRedteam(
   if (options.output && options.output.endsWith('.burp')) {
     // Write in Burp Intruder compatible format
     const outputLines = redteamTests
-      .map((test) => encodeURIComponent(String(test.vars?.[finalInjectVar] ?? '')))
+      .map((test) => {
+        const value = String(test.vars?.[finalInjectVar] ?? '');
+        if (options.burpEscapeJson) {
+          return encodeURIComponent(JSON.stringify(value).slice(1, -1));
+        }
+        return encodeURIComponent(value);
+      })
       .filter((line) => line.length > 0)
       .join('\n');
     fs.writeFileSync(options.output, outputLines);
@@ -388,6 +394,7 @@ export function redteamGenerateCommand(
     .option('--remote', 'Force remote inference wherever possible', false)
     .option('--force', 'Force generation even if no changes are detected', false)
     .option('--verbose', 'Show debug output', false)
+    .option('--burp-escape-json', 'Escape quotes in Burp payloads', false)
     .action((opts: Partial<RedteamCliGenerateOptions>): void => {
       if (opts.verbose) {
         setLogLevel('debug');

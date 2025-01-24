@@ -72,6 +72,7 @@ type CommonOptions = {
   sharing?: boolean;
 };
 
+// NOTE: Remember to edit validators/redteam.ts:RedteamGenerateOptionsSchema if you edit this schema
 export interface RedteamCliGenerateOptions extends CommonOptions {
   cache: boolean;
   config?: string;
@@ -85,6 +86,7 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   inRedteamRun?: boolean;
   verbose?: boolean;
   abortSignal?: AbortSignal;
+  burpEscapeJson?: boolean;
 }
 
 export interface RedteamFileConfig extends CommonOptions {
