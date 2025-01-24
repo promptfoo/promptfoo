@@ -1,7 +1,3 @@
----
-sidebar_position: 43
----
-
 # Google AI Studio
 
 The `google` provider is compatible with Google AI Studio (formerly known as [PaLM](https://developers.generativeai.google/)), which offers access to Gemini models.

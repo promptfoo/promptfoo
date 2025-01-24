@@ -1,6 +1,5 @@
 ---
 sidebar_label: LocalAI (Llama, Alpaca, GPT4All, ...)
-sidebar_position: 99
 ---
 
 # Local AI
