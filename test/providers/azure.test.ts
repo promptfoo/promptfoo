@@ -1,11 +1,13 @@
 import { fetchWithCache } from '../../src/cache';
-import { AzureCompletionProvider } from '../../src/providers/azure';
-import { AzureGenericProvider } from '../../src/providers/azure';
-import { AzureChatCompletionProvider } from '../../src/providers/azure';
+import {
+  AzureChatCompletionProvider,
+  AzureCompletionProvider,
+  AzureGenericProvider,
+} from '../../src/providers/azure';
 import { maybeEmitAzureOpenAiWarning } from '../../src/providers/azureUtil';
 import { HuggingfaceTextGenerationProvider } from '../../src/providers/huggingface';
 import { OpenAiCompletionProvider } from '../../src/providers/openai';
-import type { TestSuite, TestCase } from '../../src/types';
+import type { TestCase, TestSuite } from '../../src/types';
 
 jest.mock('../../src/logger');
 jest.mock('../../src/cache', () => ({
@@ -450,6 +452,42 @@ describe('AzureOpenAiChatCompletionProvider', () => {
           },
         },
       ]);
+    });
+
+    it('should handle content filter error response', async () => {
+      const mockResponse = {
+        error: {
+          message:
+            "The response was filtered due to the prompt triggering Azure OpenAI's content management policy.",
+          code: 'content_filter',
+          status: 400,
+          innererror: {
+            code: 'ResponsibleAIPolicyViolation',
+            content_filter_result: {
+              hate: { filtered: true, severity: 'medium' },
+              jailbreak: { filtered: false, detected: false },
+              self_harm: { filtered: false, severity: 'safe' },
+              sexual: { filtered: false, severity: 'safe' },
+              violence: { filtered: false, severity: 'low' },
+            },
+          },
+        },
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      });
+
+      const result = await provider.callApi('test prompt');
+      expect(result.output).toBe(mockResponse.error.message);
+      expect(result.guardrails).toEqual({
+        flagged: true,
+        flaggedInput: true,
+        flaggedOutput: false,
+      });
     });
   });
 
