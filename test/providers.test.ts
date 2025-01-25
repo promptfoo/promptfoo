@@ -83,20 +83,6 @@ describe('loadApiProvider', () => {
     expect(provider).toBeDefined();
   });
 
-  it('should load Hyperbolic provider with default model', async () => {
-    const provider = await loadApiProvider('hyperbolic:');
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-      'meta-llama/Meta-Llama-3-70B-Instruct',
-      {
-        config: expect.objectContaining({
-          apiBaseUrl: 'https://api.hyperbolic.xyz/v1',
-          apiKeyEnvar: 'HYPERBOLIC_API_KEY',
-        }),
-      },
-    );
-    expect(provider).toBeDefined();
-  });
-
   it('should load Hyperbolic provider with specific model', async () => {
     const provider = await loadApiProvider('hyperbolic:meta-llama/Meta-Llama-3-8B-Instruct-Turbo');
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(

@@ -4,7 +4,7 @@ sidebar_position: 42
 
 # Hyperbolic
 
-The `hyperbolic` provider supports [Hyperbolic's API](https://docs.hyperbolic.xyz), which provides access to various LLM models including Meta's Llama 3 series. The API is compatible with OpenAI's format, making it easy to integrate into existing applications.
+The `hyperbolic` provider supports [Hyperbolic's API](https://docs.hyperbolic.xyz), which provides access to various LLM models through an [OpenAI-compatible API format](/docs/providers/openai). This makes it easy to integrate into existing applications that use the OpenAI SDK.
 
 ## Setup
 
@@ -24,12 +24,18 @@ The provider format is:
 hyperbolic:<model_name>
 ```
 
-For example:
+### Available Models
 
-- `hyperbolic:meta-llama/Meta-Llama-3-70B-Instruct`
-- `hyperbolic:meta-llama/Meta-Llama-3-8B-Instruct-Turbo`
+Hyperbolic provides access to a variety of state-of-the-art models:
 
-If no model is specified, it defaults to `meta-llama/Meta-Llama-3-70B-Instruct`.
+- `hyperbolic:deepseek-ai/DeepSeek-R1-Zero` - Best open-source reasoner LLM trained with pure RL
+- `hyperbolic:meta-llama/Llama-3.3-70B-Instruct` - Meta's latest 70B LLM, comparable to Llama 3.1 405B
+- `hyperbolic:qwen/Qwen2.5-72B-Instruct` - Latest Qwen LLM with enhanced coding and math capabilities
+- `hyperbolic:qwen/Qwen2.5-Coder-32B` - Optimized for coding tasks
+- `hyperbolic:deepseek/DeepSeek-V2.5` - Merged model combining chat and coding capabilities
+- `hyperbolic:hermes/Hermes-3-70B` - Latest flagship model in the Hermes series
+- `hyperbolic:meta-llama/Llama-3.1-8B` - Fast and efficient model for quick responses
+- `hyperbolic:meta-llama/Llama-3.2-3B` - Latest instruction-tuned small model
 
 ## Configuration
 
@@ -37,11 +43,11 @@ Configure the provider in your promptfoo configuration file:
 
 ```yaml
 providers:
-  - id: hyperbolic:meta-llama/Meta-Llama-3-70B-Instruct
+  - id: hyperbolic:deepseek-ai/DeepSeek-R1-Zero
     config:
       temperature: 0.1
       top_p: 0.9
-      max_tokens: 1000
+      apiKey: ... # override the environment variable
 ```
 
 ### Configuration Options
@@ -66,39 +72,36 @@ Here's an example configuration using the Hyperbolic provider:
 
 ```yaml
 prompts:
-  - file://prompts/travel_guide.json
+  - file://prompts/coding_assistant.json
 providers:
-  - id: hyperbolic:meta-llama/Meta-Llama-3-70B-Instruct
+  - id: hyperbolic:qwen/Qwen2.5-Coder-32B
     config:
-      temperature: 0.7
-      max_tokens: 500
+      temperature: 0.1
+      max_tokens: 4096
       presence_penalty: 0.1
       seed: 42
 
 tests:
   - vars:
-      location: 'San Francisco'
-      days: 3
+      task: 'Write a Python function to find the longest common subsequence of two strings'
     assert:
       - type: contains
-        value: 'Golden Gate Bridge'
+        value: 'def lcs'
       - type: contains
-        value: "Fisherman's Wharf"
+        value: 'dynamic programming'
 ```
 
-Example prompt template (`prompts/travel_guide.json`):
+Example prompt template (`prompts/coding_assistant.json`):
 
 ```json
-{
-  "messages": [
-    {
-      "role": "system",
-      "content": "You are an expert travel guide."
-    },
-    {
-      "role": "user",
-      "content": "Tell me fun things to do in {{location}} for {{days}} days."
-    }
-  ]
-}
+[
+  {
+    "role": "system",
+    "content": "You are an expert programming assistant."
+  },
+  {
+    "role": "user",
+    "content": "{{task}}"
+  }
+]
 ```

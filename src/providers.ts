@@ -223,7 +223,7 @@ export async function loadApiProvider(
     });
   } else if (providerPath.startsWith('hyperbolic:')) {
     const splits = providerPath.split(':');
-    const modelName = splits.slice(1).join(':') || 'meta-llama/Meta-Llama-3-70B-Instruct';
+    const modelName = splits.slice(1).join(':');
     ret = new OpenAiChatCompletionProvider(modelName, {
       ...providerOptions,
       config: {
