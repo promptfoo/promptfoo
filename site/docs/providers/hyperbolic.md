@@ -28,14 +28,15 @@ hyperbolic:<model_name>
 
 Hyperbolic provides access to a variety of state-of-the-art models:
 
-- `hyperbolic:deepseek-ai/DeepSeek-R1-Zero` - Best open-source reasoner LLM trained with pure RL
-- `hyperbolic:meta-llama/Llama-3.3-70B-Instruct` - Meta's latest 70B LLM, comparable to Llama 3.1 405B
-- `hyperbolic:qwen/Qwen2.5-72B-Instruct` - Latest Qwen LLM with enhanced coding and math capabilities
-- `hyperbolic:qwen/Qwen2.5-Coder-32B` - Optimized for coding tasks
-- `hyperbolic:deepseek/DeepSeek-V2.5` - Merged model combining chat and coding capabilities
-- `hyperbolic:hermes/Hermes-3-70B` - Latest flagship model in the Hermes series
-- `hyperbolic:meta-llama/Llama-3.1-8B` - Fast and efficient model for quick responses
-- `hyperbolic:meta-llama/Llama-3.2-3B` - Latest instruction-tuned small model
+- `hyperbolic:deepseek-ai/DeepSeek-R1`
+- `hyperbolic:deepseek-ai/DeepSeek-R1-Zero`
+- `hyperbolic:deepseek/DeepSeek-V2.5`
+- `hyperbolic:hermes/Hermes-3-70B`
+- `hyperbolic:meta-llama/Llama-3.1-8B`
+- `hyperbolic:meta-llama/Llama-3.2-3B`
+- `hyperbolic:meta-llama/Llama-3.3-70B-Instruct`
+- `hyperbolic:qwen/Qwen2.5-72B-Instruct`
+- `hyperbolic:qwen/Qwen2.5-Coder-32B`
 
 ## Configuration
 
