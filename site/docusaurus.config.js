@@ -203,19 +203,23 @@ const config = {
             items: [
               {
                 label: 'Intro',
-                to: '/docs/intro',
+                to: '/docs/intro/',
               },
               {
                 label: 'Command Line',
-                to: '/docs/getting-started',
+                to: '/docs/getting-started/',
               },
               {
                 label: 'Node Package',
-                to: '/docs/usage/node-package',
+                to: '/docs/usage/node-package/',
               },
               {
                 label: 'Privacy Policy',
-                to: '/privacy',
+                to: '/privacy/',
+              },
+              {
+                label: 'Terms of Service',
+                to: '/terms-of-service/',
               },
               {
                 html: `
