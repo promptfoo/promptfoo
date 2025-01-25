@@ -59,3 +59,5 @@ export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider 
     });
   }
 }
+
+export { toKebabCase };
