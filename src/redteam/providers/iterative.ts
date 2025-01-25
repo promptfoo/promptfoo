@@ -45,7 +45,27 @@ async function runRedteamConversation({
   targetProvider: ApiProvider;
   test?: AtomicTestCase;
   vars: Record<string, string | object>;
-}) {
+}): Promise<{
+  output: string;
+  metadata: {
+    finalIteration: number;
+    highestScore: number;
+    redteamFinalPrompt?: string;
+    redteamHistory: {
+      prompt: string;
+      output: string;
+      score: number;
+    }[];
+  };
+  testCases: AtomicTestCase[];
+  tokenUsage: {
+    total: number;
+    prompt: number;
+    completion: number;
+    numRequests: number;
+    cached: number;
+  };
+}> {
   const nunjucks = getNunjucksEngine();
   const goal = vars[injectVar];
 
@@ -67,6 +87,7 @@ async function runRedteamConversation({
   let finalIteration = 0;
   let bestInjectVar: string | undefined = undefined;
   let targetPrompt: string | null = null;
+  const testCases: AtomicTestCase[] = [];
 
   const totalTokenUsage = {
     total: 0,
@@ -387,7 +408,18 @@ async function runRedteamConversation({
       totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
     }
 
-    if (currentScore >= 10 || graderPassed === false) {
+    if (graderPassed === false) {
+      const newTestCase: AtomicTestCase = {
+        assert: test?.assert,
+        vars: {
+          ...vars,
+          [injectVar]: targetResponse.output,
+        },
+      };
+      testCases.push(newTestCase);
+    }
+
+    if (currentScore >= 10 || (graderPassed === false && i > 8)) {
       finalIteration = i + 1;
       break;
     }
@@ -402,6 +434,7 @@ async function runRedteamConversation({
       redteamFinalPrompt: bestInjectVar,
     },
     tokenUsage: totalTokenUsage,
+    testCases,
   };
 }
 
@@ -445,7 +478,19 @@ class RedteamIterativeProvider implements ApiProvider {
    * @param options
    * @returns
    */
-  async callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<{
+    output: string;
+    metadata: {
+      finalIteration: number;
+      highestScore: number;
+      redteamFinalPrompt?: string;
+    };
+    testCases: AtomicTestCase[];
+  }> {
     logger.debug(`[Iterative] callApi context: ${safeJsonStringify(context)}`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context.vars, 'Expected vars to be set');

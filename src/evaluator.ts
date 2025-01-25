@@ -1,4 +1,4 @@
-import async from 'async';
+import { queue } from 'async';
 import chalk from 'chalk';
 import type { MultiBar, SingleBar } from 'cli-progress';
 import { randomUUID } from 'crypto';
@@ -815,20 +815,47 @@ class Evaluator {
       await createMultiBars(runEvalOptions);
     }
 
-    // Separate serial and concurrent eval options
-    const serialRunEvalOptions: RunEvalOptions[] = [];
-    const concurrentRunEvalOptions: RunEvalOptions[] = [];
+    // Create a queue with the specified concurrency before we start gathering options
+    const q = queue(async (evalStep: RunEvalOptions, callback: (error?: Error) => void) => {
+      try {
+        checkAbort();
+        await processEvalStep(evalStep, runEvalOptions.indexOf(evalStep));
+        callback?.();
+      } catch (err) {
+        callback?.(err as Error);
+      }
+    }, concurrency);
 
+    // Add error handling
+    q.error((err: Error, task: RunEvalOptions) => {
+      logger.error(`Error processing task: ${err}`);
+    });
+
+    // Track serial evaluations and count of concurrent ones
+    const serialRunEvalOptions: RunEvalOptions[] = [];
+    let concurrentCount = 0;
+
+    // Process options and start concurrent tasks immediately
     for (const evalOption of runEvalOptions) {
       if (evalOption.test.options?.runSerially) {
         serialRunEvalOptions.push(evalOption);
       } else {
-        concurrentRunEvalOptions.push(evalOption);
+        concurrentCount++;
+        // Push to queue immediately
+        q.push(evalOption);
       }
     }
 
+    // Log info about concurrent evaluations
+    logger.info(
+      `Processing ${concurrentCount} concurrent evaluations with up to ${concurrency} threads...`,
+    );
+
+    // Wait for all concurrent tasks to complete
+    await q.drain();
+
+    // Then run serial evaluations
     if (serialRunEvalOptions.length > 0) {
-      // Run serial evaluations first
       logger.info(`Running ${serialRunEvalOptions.length} serial evaluations...`);
       for (const evalStep of serialRunEvalOptions) {
         if (isWebUI) {
@@ -845,15 +872,6 @@ class Evaluator {
         await processEvalStep(evalStep, serialRunEvalOptions.indexOf(evalStep));
       }
     }
-
-    // Then run concurrent evaluations
-    logger.info(
-      `Running ${concurrentRunEvalOptions.length} concurrent evaluations with up to ${concurrency} threads...`,
-    );
-    await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, async (evalStep, index) => {
-      checkAbort();
-      await processEvalStep(evalStep, index);
-    });
 
     // Do we have to run comparisons between row outputs?
     const compareRowsCount = rowsWithSelectBestAssertion.size;
