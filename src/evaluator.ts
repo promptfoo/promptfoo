@@ -40,6 +40,11 @@ import { transform, type TransformContext, TransformInputType } from './util/tra
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
+function fanoutJailbreakPrompt(prompt: string): string[] {
+  // TODO: implement this
+  return [prompt];
+}
+
 /**
  * Validates if a given prompt is allowed based on the provided list of allowed
  * prompt labels. Providers can be configured with a `prompts` attribute, which
@@ -235,6 +240,7 @@ class Evaluator {
           },
         );
       }
+
       const endTime = Date.now();
       latencyMs = endTime - startTime;
 
@@ -323,6 +329,14 @@ class Evaluator {
         }
         ret.response = processedResponse;
         ret.gradingResult = checkResult;
+
+        if (
+          test.metadata?.strategyId === 'jailbreak' &&
+          !checkResult.pass &&
+          ret.failureReason !== ResultFailureReason.ERROR
+        ) {
+          // TODO: queue up a new test case with the prompt modified by function call fanoutJailbreakPrompt(prompt: string)
+        }
       }
 
       // Update token usage stats
