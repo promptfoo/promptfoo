@@ -21,6 +21,7 @@ import {
 import { BAMChatProvider, BAMEmbeddingProvider } from './providers/bam';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './providers/bedrock';
 import { BrowserProvider } from './providers/browser';
+import { ClouderaAiChatCompletionProvider } from './providers/cloudera';
 import * as CloudflareAiProviders from './providers/cloudflare-ai';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './providers/cohere';
 import { FalImageGenerationProvider } from './providers/fal';
@@ -128,6 +129,12 @@ export async function loadApiProvider(
       id: () => 'echo',
       callApi: async (input: string) => ({ output: input }),
     };
+  } else if (providerPath.startsWith('cloudera:')) {
+    const modelName = providerPath.split(':')[1];
+    ret = new ClouderaAiChatCompletionProvider(modelName, {
+      ...providerOptions,
+      config: providerOptions.config || {},
+    });
   } else if (providerPath.startsWith('exec:')) {
     // Load script module
     const scriptPath = providerPath.split(':')[1];
@@ -627,6 +634,7 @@ export default {
   AzureChatCompletionProvider,
   AzureCompletionProvider,
   AzureEmbeddingProvider,
+  ClouderaAiChatCompletionProvider,
 
   // Backwards compatibility for Azure rename 2024-11-09 / 0.96.0
   AzureOpenAiAssistantProvider: AzureAssistantProvider,

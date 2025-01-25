@@ -2,7 +2,7 @@ import type { ProviderOptions } from '../types';
 import { OpenAiChatCompletionProvider, type OpenAiCompletionOptions } from './openai';
 
 interface PortkeyProviderOptions extends ProviderOptions {
-  config?: {
+  config?: OpenAiCompletionOptions & {
     portkeyApiKey?: string;
     portkeyVirtualKey?: string;
     portkeyMetadata?: Record<string, any>;
@@ -44,10 +44,7 @@ export function getPortkeyHeaders(config: Record<string, any> = {}): Record<stri
 }
 
 export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider {
-  constructor(
-    modelName: string,
-    providerOptions: PortkeyProviderOptions & OpenAiCompletionOptions,
-  ) {
+  constructor(modelName: string, providerOptions: PortkeyProviderOptions) {
     super(modelName, {
       ...providerOptions,
       config: {
