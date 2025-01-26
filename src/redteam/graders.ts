@@ -41,6 +41,7 @@ import { PiiGrader } from './plugins/pii';
 import { PolicyViolationGrader } from './plugins/policy';
 import { PoliticsGrader } from './plugins/politics';
 import { PromptExtractionGrader } from './plugins/promptExtraction';
+import { RagFullDocumentExfiltrationGrader } from './plugins/ragFullEocumentExfiltration';
 import { RbacGrader } from './plugins/rbac';
 import { ReligionGrader } from './plugins/religion';
 import { ShellInjectionGrader } from './plugins/shellInjection';
@@ -77,7 +78,6 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:harmful:privacy': new HarmfulPrivacyGrader(),
   'promptfoo:redteam:harmful:profanity': new ProfanityGrader(),
   'promptfoo:redteam:harmful:radicalization': new RadicalizationGrader(),
-  'promptfoo:redteam:harmful:rag-full-document-exfiltration': new CopyrightViolationGrader(),
   'promptfoo:redteam:harmful:self-harm': new SelfHarmGrader(),
   'promptfoo:redteam:harmful:sex-crime': new SexCrimeGrader(),
   'promptfoo:redteam:harmful:sexual-content': new SexualContentGrader(),
@@ -90,6 +90,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:indirect-prompt-injection': new IndirectPromptInjectionGrader(),
   'promptfoo:redteam:intent': new IntentGrader(),
   'promptfoo:redteam:overreliance': new OverrelianceGrader(),
+  'promptfoo:redteam:rag-full-document-exfiltration': new RagFullDocumentExfiltrationGrader(),
   'promptfoo:redteam:pii:api-db': new PiiGrader(),
   'promptfoo:redteam:pii:direct': new PiiGrader(),
   'promptfoo:redteam:pii:session': new PiiGrader(),
