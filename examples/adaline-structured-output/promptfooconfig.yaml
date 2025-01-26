@@ -1,5 +1,9 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Adaline Gateway OpenAI Structured Output'
+description: 'Adaline Gateway Structured Output Example'
+
+# Note: Adaline Gateway packages are peer dependencies. Install them first:
+# npm install @adaline/openai@latest @adaline/gateway@latest @adaline/types@latest
+
 prompts:
   - 'Analyze the following customer support query: "{{query}}"'
 

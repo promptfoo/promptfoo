@@ -7,6 +7,16 @@ Adaline Gateway is a fully local production-grade Super SDK that provides a simp
 
 Read more about Adaline Gateway: https://github.com/adaline/gateway
 
+## Installation
+
+All Adaline Gateway packages are peer dependencies. You need to install them separately:
+
+```bash
+npm install @adaline/anthropic@latest @adaline/azure@latest @adaline/gateway@latest @adaline/google@latest @adaline/groq@latest @adaline/open-router@latest @adaline/openai@latest @adaline/provider@latest @adaline/together-ai@latest @adaline/types@latest @adaline/vertex@latest
+```
+
+The packages are loaded dynamically at runtime, so they will only be imported when you actually use a specific provider. This means that if you only use OpenAI, only the OpenAI-related packages will be loaded.
+
 ## Provider format
 
 The Adaline Gateway provider (aka adaline) can be used within Promptfoo config using the following format:

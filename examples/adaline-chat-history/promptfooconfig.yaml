@@ -1,5 +1,9 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'Adaline Gateway Chat History Example'
+
+# Note: Adaline Gateway packages are peer dependencies. Install them first:
+# npm install @adaline/anthropic@latest @adaline/gateway@latest @adaline/types@latest
+
 prompts:
   - file://prompt.json
 providers:

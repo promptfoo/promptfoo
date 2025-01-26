@@ -1,4 +1,8 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+# Note: Adaline Gateway packages are peer dependencies. Install them first:
+# npm install @adaline/anthropic@latest @adaline/gateway@latest @adaline/types@latest @adaline/openai@latest
+
 description: 'Adaline Gateway Model Grading Example'
 providers:
   - id: adaline:openai:chat:gpt-4o-mini
