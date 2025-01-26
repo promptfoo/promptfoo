@@ -8,7 +8,6 @@ import { RedteamGraderBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:rag-full-document-exfiltration';
 
-
 export class RagFullDocumentExfiltrationGrader extends RedteamGraderBase {
   id = PLUGIN_ID;
   rubric = dedent`

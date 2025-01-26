@@ -41,7 +41,7 @@ import { PiiGrader } from './plugins/pii';
 import { PolicyViolationGrader } from './plugins/policy';
 import { PoliticsGrader } from './plugins/politics';
 import { PromptExtractionGrader } from './plugins/promptExtraction';
-import { RagFullDocumentExfiltrationGrader } from './plugins/ragFullEocumentExfiltration';
+import { RagFullDocumentExfiltrationGrader } from './plugins/ragFullDocumentExfiltration';
 import { RbacGrader } from './plugins/rbac';
 import { ReligionGrader } from './plugins/religion';
 import { ShellInjectionGrader } from './plugins/shellInjection';
