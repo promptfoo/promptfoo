@@ -708,7 +708,6 @@ describe('redteamConfigSchema', () => {
         'harmful:graphic-content',
         'harmful:unsafe-practices',
         'harmful:radicalization',
-        'harmful:rag-full-document-exfiltration',
         'harmful:profanity',
         'harmful:insults',
         'harmful:privacy',
