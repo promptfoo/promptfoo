@@ -65,10 +65,4 @@ Testing for document exfiltration vulnerabilities is a critical aspect of genera
 
 By incorporating the RAG Full Document Exfiltration plugin in your LLM red teaming strategy, you can identify and address potential vulnerabilities in your AI system's ability to handle sensitive document content securely.
 
-## Related Concepts
-
-- [Data Privacy in LLMs](data-privacy.md)
-- [Access Control in AI Systems](access-control.md)
-- [Security Protocols](../llm-vulnerability-types.md#security)
-
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
