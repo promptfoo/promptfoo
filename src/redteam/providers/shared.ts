@@ -159,7 +159,7 @@ export const getLastMessageContent = (
 ): string | undefined => messages.filter((m) => m?.role === role).slice(-1)[0]?.content;
 
 export function checkPenalizedPhrases(output: string): boolean {
-  const partialMatchPhrases = ['in the face of impending doom'];
+  const partialMatchPhrases = ['in the face of impending doom', 'science fiction'];
   const exactMatchPhrases = ['yes, i can help you', 'yes, i can help you with that'];
 
   const hasPartialMatch = partialMatchPhrases.some((phrase) =>
