@@ -1,7 +1,3 @@
----
-sidebar_position: 42
----
-
 # Google Vertex
 
 The `vertex` provider is compatible with Google's [Vertex AI](https://cloud.google.com/vertex-ai) offering, which offers access to models such as Gemini and Bison.
