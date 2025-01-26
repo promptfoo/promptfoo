@@ -154,7 +154,7 @@ class Evaluator {
     evaluateOptions,
     testIdx,
     promptIdx,
-  }: RunEvalOptions): Promise<EvaluateResult> {
+  }: RunEvalOptions): Promise<EvaluateResult[]> {
     // Use the original prompt to set the label, not renderedPrompt
     const promptLabel = prompt.label;
 
@@ -256,6 +256,13 @@ class Evaluator {
         await sleep(provider.delay);
       }
 
+      if (response.metadata?.iterations) {
+        logger.warn(
+          `Iterative provider returned iterations: ${JSON.stringify(response.metadata.iterations)}`,
+        );
+        // return response.testCases;
+      }
+
       const ret: EvaluateResult = {
         ...setup,
         response,
@@ -347,22 +354,24 @@ class Evaluator {
         this.registers[test.options.storeOutputAs] = ret.response.output;
       }
 
-      return ret;
+      return [ret];
     } catch (err) {
       this.stats.errors++;
-      return {
-        ...setup,
-        error: String(err) + '\n\n' + (err as Error).stack,
-        success: false,
-        failureReason: ResultFailureReason.ERROR,
-        score: 0,
-        namedScores: {},
-        latencyMs,
-        promptIdx,
-        testIdx,
-        testCase: test,
-        promptId: prompt.id || '',
-      };
+      return [
+        {
+          ...setup,
+          error: String(err) + '\n\n' + (err as Error).stack,
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+          score: 0,
+          namedScores: {},
+          latencyMs,
+          promptIdx,
+          testIdx,
+          testCase: test,
+          promptId: prompt.id || '',
+        },
+      ];
     }
   }
 
@@ -643,7 +652,10 @@ class Evaluator {
     // Actually run the eval
     let numComplete = 0;
 
-    const processEvalStep = async (evalStep: RunEvalOptions, index: number | string) => {
+    const processEvalStep = async (
+      evalStep: RunEvalOptions,
+      index: number | string,
+    ): Promise<void> => {
       if (typeof index !== 'number') {
         throw new Error('Expected index to be a number');
       }
@@ -652,7 +664,8 @@ class Evaluator {
         test: evalStep.test,
       });
 
-      const row = await this.runEval(evalStep);
+      const rows: EvaluateResult[] = await this.runEval(evalStep);
+      const row = rows[0];
 
       if (evalStep.test.assert?.some((a) => a.type === 'select-best')) {
         rowsWithSelectBestAssertion.add(row.testIdx);
@@ -815,7 +828,6 @@ class Evaluator {
       await createMultiBars(runEvalOptions);
     }
 
-    // Create a queue with the specified concurrency before we start gathering options
     const q = queue(async (evalStep: RunEvalOptions, callback: (error?: Error) => void) => {
       try {
         checkAbort();
@@ -825,8 +837,6 @@ class Evaluator {
         callback?.(err as Error);
       }
     }, concurrency);
-
-    // Add error handling
     q.error((err: Error, task: RunEvalOptions) => {
       logger.error(`Error processing task: ${err}`);
     });
@@ -841,20 +851,16 @@ class Evaluator {
         serialRunEvalOptions.push(evalOption);
       } else {
         concurrentCount++;
-        // Push to queue immediately
         q.push(evalOption);
       }
     }
 
-    // Log info about concurrent evaluations
     logger.info(
       `Processing ${concurrentCount} concurrent evaluations with up to ${concurrency} threads...`,
     );
 
-    // Wait for all concurrent tasks to complete
-    await q.drain();
+    await q.drain(); // Wait for all concurrent tasks to complete
 
-    // Then run serial evaluations
     if (serialRunEvalOptions.length > 0) {
       logger.info(`Running ${serialRunEvalOptions.length} serial evaluations...`);
       for (const evalStep of serialRunEvalOptions) {
