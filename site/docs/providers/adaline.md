@@ -19,15 +19,15 @@ adaline:<provider_name>:<model_type>:<model_name>
 
 | provider_name | chat models | embedding models |
 | ------------- | ----------- | ---------------- |
-| openai        | ✅           | ✅                |
-| anthropic     | ✅           | ❌                |
-| google        | ✅           | ❌                |
-| vertex        | ✅           | ✅                |
-| azureopenai   | ✅           | ✅                |
-| groq          | ✅           | ❌                |
-| togetherai    | ✅           | ❌                |
-| openrouter    | ✅           | ❌                |
-| voyage        | ❌           | ✅                |
+| openai        | ✅          | ✅               |
+| anthropic     | ✅          | ❌               |
+| google        | ✅          | ❌               |
+| vertex        | ✅          | ✅               |
+| azureopenai   | ✅          | ✅               |
+| groq          | ✅          | ❌               |
+| togetherai    | ✅          | ❌               |
+| openrouter    | ✅          | ❌               |
+| voyage        | ❌          | ✅               |
 
 `model_type` can be any of the following:
 
@@ -149,36 +149,44 @@ Here is an example of prompt messages used by adaline:
 ```typescript
 [
   {
-    role: "system",
-    content: [{
-      modality: "text",
-      value: "You are a helpful assistant. You are extremely concise."
-    }],
-  },
-  {
-    role: "user",
-    content: [{
-      modality: "text",
-      value: "What is 34 + 43?",
-    }],
-  },
-  {
-    role: "assistant",
-    content: [{
-      modality: "text",
-      value: `77`,
-    }],
-  },
-  {
-    role: "user",
-    content: [{
-      modality: "image",
-      detail: "auto",
-      value: {
-        "type": "url",
-        "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
+    role: 'system',
+    content: [
+      {
+        modality: 'text',
+        value: 'You are a helpful assistant. You are extremely concise.',
       },
-    }],
+    ],
+  },
+  {
+    role: 'user',
+    content: [
+      {
+        modality: 'text',
+        value: 'What is 34 + 43?',
+      },
+    ],
+  },
+  {
+    role: 'assistant',
+    content: [
+      {
+        modality: 'text',
+        value: `77`,
+      },
+    ],
+  },
+  {
+    role: 'user',
+    content: [
+      {
+        modality: 'image',
+        detail: 'auto',
+        value: {
+          type: 'url',
+          url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg',
+        },
+      },
+    ],
   },
 ];
 ```
