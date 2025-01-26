@@ -16,12 +16,14 @@ import logger from './logger';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureUtil';
+import { addCompositeTestCases } from './redteam/strategies/singleTurnComposite';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import type { Vars } from './types';
 import {
   type ApiProvider,
   type Assertion,
+  type AtomicTestCase,
   type CompletedPrompt,
   type EvaluateOptions,
   type EvaluateResult,
@@ -39,10 +41,35 @@ import { sleep } from './util/time';
 import { transform, type TransformContext, TransformInputType } from './util/transform';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
+export const DEFAULT_MAX_FANOUT_ITERATIONS = 1;
 
-function fanoutJailbreakPrompt(prompt: string): string[] {
-  // TODO: implement this
-  return [prompt];
+interface JailbreakFanoutResult {
+  prompt: Prompt;
+  testCase: AtomicTestCase;
+}
+
+async function fanoutJailbreakPrompt(
+  newPromptString: string,
+  testCase: AtomicTestCase,
+): Promise<JailbreakFanoutResult[]> {
+  const originalTestCase: AtomicTestCase = JSON.parse(JSON.stringify(testCase));
+  const newTestCases = await addCompositeTestCases([originalTestCase], 'prompt', {});
+  const results = await Promise.all(
+    newTestCases.map(async (testCase) => {
+      return {
+        prompt: {
+          raw: newPromptString,
+          label: newPromptString,
+          type: 'string',
+        },
+        testCase: {
+          ...testCase,
+          provider: undefined, // remove the old iterative provider
+        },
+      };
+    }),
+  ).then((results) => results.filter((result) => result !== null));
+  return results;
 }
 
 /**
@@ -122,6 +149,8 @@ class Evaluator {
   >;
   registers: Record<string, string | object>;
   fileWriters: JsonlFileWriter[];
+  fanoutQueue: RunEvalOptions[];
+  currentFanoutIteration: number;
   constructor(testSuite: TestSuite, evalRecord: Eval, options: EvaluateOptions) {
     this.testSuite = testSuite;
     this.evalRecord = evalRecord;
@@ -140,6 +169,8 @@ class Evaluator {
     };
     this.conversations = {};
     this.registers = {};
+    this.fanoutQueue = [];
+    this.currentFanoutIteration = 0;
 
     const jsonlFiles = Array.isArray(evalRecord.config.outputPath)
       ? evalRecord.config.outputPath.filter((p) => p.endsWith('.jsonl'))
@@ -159,6 +190,7 @@ class Evaluator {
     evaluateOptions,
     testIdx,
     promptIdx,
+    fanoutIteration = 0, // Add fanoutIteration parameter with default 0
   }: RunEvalOptions): Promise<EvaluateResult> {
     // Use the original prompt to set the label, not renderedPrompt
     const promptLabel = prompt.label;
@@ -333,9 +365,42 @@ class Evaluator {
         if (
           test.metadata?.strategyId === 'jailbreak' &&
           !checkResult.pass &&
-          ret.failureReason !== ResultFailureReason.ERROR
+          ret.failureReason !== ResultFailureReason.ERROR &&
+          fanoutIteration < DEFAULT_MAX_FANOUT_ITERATIONS
         ) {
-          // TODO: queue up a new test case with the prompt modified by function call fanoutJailbreakPrompt(prompt: string)
+          // Queue up fanout prompts for later processing
+          const nextIteration = fanoutIteration + 1;
+          logger.info(`[Fanout] Starting fanout iteration ${nextIteration}`);
+          const newPromptString = ret.metadata?.redteamFinalPrompt;
+          if (!newPromptString) {
+            logger.warn('[Fanout] No final prompt found in metadata');
+            return ret;
+          }
+
+          try {
+            const fanoutResults = await fanoutJailbreakPrompt(newPromptString, test);
+            logger.info(
+              `[Fanout] Pushing ${fanoutResults.length} fanout results to queue for iteration ${nextIteration}`,
+            );
+            for (const fanoutResult of fanoutResults) {
+              this.fanoutQueue.push({
+                provider,
+                prompt: fanoutResult.prompt,
+                test: fanoutResult.testCase,
+                delay,
+                nunjucksFilters: filters,
+                evaluateOptions,
+                testIdx,
+                promptIdx,
+                repeatIndex: 0,
+                fanoutIteration: nextIteration,
+              });
+            }
+          } catch (err) {
+            logger.error(
+              `[Fanout] Error during fanout: ${err instanceof Error ? err.message : String(err)}\n${err instanceof Error ? err.stack : ''}`,
+            );
+          }
         }
       }
 
@@ -868,6 +933,42 @@ class Evaluator {
       checkAbort();
       await processEvalStep(evalStep, index);
     });
+
+    // Process fanout prompts that were queued during evaluation, potentially multiple iterations
+    while (
+      this.fanoutQueue.length > 0 &&
+      this.currentFanoutIteration < DEFAULT_MAX_FANOUT_ITERATIONS
+    ) {
+      const currentQueueLength = this.fanoutQueue.length;
+      logger.info(
+        `[Fanout] Processing ${currentQueueLength} fanout prompts (iteration ${this.currentFanoutIteration + 1})...`,
+      );
+
+      // Process current batch of fanouts
+      const currentBatch = this.fanoutQueue;
+      this.fanoutQueue = []; // Clear queue for next iteration's fanouts
+
+      await async.forEachOfLimit(currentBatch, concurrency, async (evalStep, index) => {
+        logger.info(`[Fanout] Processing fanout prompt ${index} of ${currentBatch.length}`);
+        checkAbort();
+        await processEvalStep(evalStep, concurrentRunEvalOptions.length + Number(index));
+      });
+
+      this.currentFanoutIteration++;
+
+      if (this.fanoutQueue.length > 0) {
+        logger.info(
+          `[Fanout] Queued ${this.fanoutQueue.length} new fanout prompts for next iteration...`,
+        );
+      }
+    }
+
+    if (this.fanoutQueue.length > 0) {
+      logger.warn(
+        `[Fanout] Reached maximum fanout iterations (${DEFAULT_MAX_FANOUT_ITERATIONS}). Stopping with ${this.fanoutQueue.length} unprocessed fanouts.`,
+      );
+      this.fanoutQueue = []; // Clear any remaining fanouts
+    }
 
     // Do we have to run comparisons between row outputs?
     const compareRowsCount = rowsWithSelectBestAssertion.size;
