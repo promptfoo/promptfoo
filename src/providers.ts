@@ -473,10 +473,6 @@ export async function loadApiProvider(
       ret = new LocalAiChatProvider(modelType, providerOptions);
     }
   } else if (providerPath.startsWith('adaline:')) {
-    const { AdalineGatewayChatProvider, AdalineGatewayEmbeddingProvider } = await import(
-      './providers/adaline.gateway'
-    );
-
     const splits = providerPath.split(':');
     if (splits.length < 4) {
       throw new Error(
@@ -486,7 +482,9 @@ export async function loadApiProvider(
     const providerName = splits[1];
     const modelType = splits[2];
     const modelName = splits[3];
-
+    const { AdalineGatewayChatProvider, AdalineGatewayEmbeddingProvider } = await import(
+      './providers/adaline.gateway'
+    );
     if (modelType === 'embedding' || modelType === 'embeddings') {
       ret = new AdalineGatewayEmbeddingProvider(providerName, modelName, providerOptions);
     } else {
