@@ -49,7 +49,7 @@ import { VertexChatProvider, VertexEmbeddingProvider } from './vertex';
 import { getGoogleClient } from './vertexUtil';
 import { VoyageEmbeddingProvider } from './voyage';
 
-// Allows Adaline Gateway to R/W PromptFoo's cache
+// Allows Adaline Gateway to R/W Promptfoo's cache
 class AdalineGatewayCachePlugin<T> implements GatewayCache<T> {
   async get(key: string): Promise<T | undefined> {
     const cache = await getCache();

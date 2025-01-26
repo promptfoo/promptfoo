@@ -6,14 +6,14 @@ sidebar_position: 1
 
 Adaline Gateway is a fully local production-grade Super SDK that provides a simple, unified, and powerful interface for calling more than 200+ LLMs.
 
-- Adaline Gateway runs locally within PromptFoo, it is not a proxy.
-- Adaline Gateway uses custom types for config / parameters, prompts, tools that will work across LLMs. This allows users to setup their PromptFoo config prompts, tests, assertions just once and have them work flawlessly across providers.
+- Adaline Gateway runs locally within Promptfoo, it is not a proxy.
+- Adaline Gateway uses custom types for config/parameters, prompts, tools that will work across LLMs. This allows users to set up their Promptfoo config prompts, tests, assertions just once and have them work flawlessly across providers.
 
 Read more about Adaline Gateway: https://github.com/adaline/gateway
 
 ## Provider format
 
-The Adaline Gateway provider (aka adaline) can be used within PromptFoo config using the following format:
+The Adaline Gateway provider (aka adaline) can be used within Promptfoo config using the following format:
 
 ```
 adaline:<provider_name>:<model_type>:<model_name>
@@ -23,15 +23,15 @@ adaline:<provider_name>:<model_type>:<model_name>
 
 | provider_name | chat models | embedding models |
 | ------------- | ----------- | ---------------- |
-| openai        | ✅          | ✅               |
-| anthropic     | ✅          | ❌               |
-| google        | ✅          | ❌               |
-| vertex        | ✅          | ✅               |
-| azureopenai   | ✅          | ✅               |
-| groq          | ✅          | ❌               |
-| togetherai    | ✅          | ❌               |
-| openrouter    | ✅          | ❌               |
-| voyage        | ❌          | ✅               |
+| openai        | ✅           | ✅                |
+| anthropic     | ✅           | ❌                |
+| google        | ✅           | ❌                |
+| vertex        | ✅           | ✅                |
+| azureopenai   | ✅           | ✅                |
+| groq          | ✅           | ❌                |
+| togetherai    | ✅           | ❌                |
+| openrouter    | ✅           | ❌                |
+| voyage        | ❌           | ✅                |
 
 `model_type` can be any of the following:
 
@@ -50,13 +50,13 @@ Examples:
 - `adaline:voyage:embedding:voyage-3`
 - `adaline:vertex:embedding:text-embedding-004`
 
-## Compatibilty with PromptFoo's OpenAI provider
+## Compatibility with Promptfoo's OpenAI provider
 
 Apart from being able to use Adaline Gateway's types, the adaline provider also supports prompts, tools, config / parameters in OpenAI types. If OpenAI types are used in your config file, then expect the response in OpenAI types for the output object when writing tests and assertions, especially for tool calls (see in example section). These configs should still work flawlessly across adaline supported providers and models.
 
 ## Env variables
 
-adaline provider uses API keys set using standard PromptFoo env variables such as `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, etc. The API key can also be set from within the config, example:
+adaline provider uses API keys set using standard Promptfoo env variables such as `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, etc. The API key can also be set from within the config, example:
 
 ```yaml title=promptfooconfig.yaml
 providers:
@@ -65,11 +65,11 @@ providers:
       apiKey: sk-random-openai-api-key
 ```
 
-Env variables for each of the PromptFoo supported providers are supported by adaline provider as well -- such as `OPENAI_ORGANIZATION`, `OPENAI_TEMPERATURE`, `ANTHROPIC_BASE_URL`, etc. Please check each provider's individual documentation for an exhaustive list of env variables.
+Env variables for each of the Promptfoo supported providers are supported by adaline provider as well -- such as `OPENAI_ORGANIZATION`, `OPENAI_TEMPERATURE`, `ANTHROPIC_BASE_URL`, etc. Please check each provider's individual documentation for an exhaustive list of env variables.
 
 ## Configuring parameters
 
-LLM parameters can be set in `config`, exmaple:
+LLM parameters can be set in `config`, example:
 
 ```yaml title=promptfooconfig.yaml
 providers:
@@ -100,12 +100,12 @@ Complete list of supported parameters:
 | `topK`              | Restricts word selection during text generation to the top K most probable words                                                                          |
 | `seed`              | Seed used for deterministic output                                                                                                                        |
 | `stop`              | Defines a list of tokens that signal the end of the output                                                                                                |
-| `logProbs`          | Flag to specify the model to return log probabilites along with the generated text                                                                        |
+| `logProbs`          | Flag to specify the model to return log probabilities along with the generated text                                                                       |
 | `toolChoice`        | Controls whether the model should use a tool, not use a tool, or a specific tool                                                                          |
 | `tools`             | Specify custom tools for model to respond with                                                                                                            |
 | `responseFormat`    | Controls the response format of the generated text, can be `text`, `json_object`, `json_schema`                                                           |
 | `responseSchema`    | Specifies the schema of generated text when `responseFormat` is set to `json_schema`                                                                      |
-| `safetySettings`    | Specifes safety thresholds in various categories (only used with Google, Vertex : https://ai.google.dev/gemini-api/docs/safety-settings)                  |
+| `safetySettings`    | Specifies safety thresholds in various categories (only used with Google, Vertex: https://ai.google.dev/gemini-api/docs/safety-settings)                  |
 
 Here are the type declarations of `config` parameters:
 
@@ -177,10 +177,10 @@ Here is an example of prompt messages used by adaline:
     role: "user",
     content: [{
       modality: "image",
-      detail: "auto"
+      detail: "auto",
       value: {
-      	"type": "url",
-      	"url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
+        "type": "url",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
       },
     }],
   },
