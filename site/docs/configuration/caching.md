@@ -6,7 +6,7 @@ sidebar_position: 40
 
 promptfoo caches the results of API calls to LLM providers to help save time and cost.
 
-The cache is managed by [`cache-manager`](https://www.npmjs.com/package/cache-manager/) with the [`cache-manager-fs-hash`](https://www.npmjs.com/package/cache-manager-fs-hash) store for disk-based caching. By default, promptfoo uses disk-based storage (`~/.promptfoo/cache`).
+The cache is managed by [`flat-cache`](https://www.npmjs.com/package/flat-cache), a simple key/value storage using files to persist the data. By default, promptfoo uses disk-based storage (`~/.promptfoo/cache`).
 
 ## How Caching Works
 
@@ -41,10 +41,11 @@ For example:
 - Error responses are not cached to allow for retry attempts
 - Cache is automatically invalidated when:
   - TTL expires (default: 14 days)
-  - Cache size exceeds limit (default: 10MB)
-  - Cache file count exceeds limit (default: 10,000)
+  - Cache size exceeds limit (default: 10,000 items)
   - Cache is manually cleared
 - Memory storage is used automatically when `NODE_ENV=test`
+- Cache is automatically persisted to disk every 5 minutes
+- Expired items are checked and removed every hour
 
 ## Command Line
 
@@ -79,10 +80,9 @@ The cache is configurable through environment variables:
 | ------------------------------ | ----------------------------------------- | -------------------------------------------------- |
 | PROMPTFOO_CACHE_ENABLED        | Enable or disable the cache               | true                                               |
 | PROMPTFOO_CACHE_TYPE           | `disk` or `memory`                        | `memory` if `NODE_ENV` is `test`, otherwise `disk` |
-| PROMPTFOO_CACHE_MAX_FILE_COUNT | Maximum number of files in the cache      | 10,000                                             |
+| PROMPTFOO_CACHE_MAX_FILE_COUNT | Maximum number of items in the cache      | 10,000                                             |
 | PROMPTFOO_CACHE_PATH           | Path to the cache directory               | `~/.promptfoo/cache`                               |
 | PROMPTFOO_CACHE_TTL            | Time to live for cache entries in seconds | 14 days                                            |
-| PROMPTFOO_CACHE_MAX_SIZE       | Maximum size of the cache in bytes        | 10 MB                                              |
 
 #### Additional Cache Details
 

@@ -1,4 +1,3 @@
-import type { Cache } from 'cache-manager';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
@@ -53,7 +52,6 @@ class FalProvider<Input = any> implements ApiProvider {
     }
 
     let response: any;
-    let cache: Cache | undefined;
     let cached = false;
 
     const input = {
@@ -63,31 +61,40 @@ class FalProvider<Input = any> implements ApiProvider {
     };
     const cacheKey = `fal:${this.modelName}:${JSON.stringify(input)}`;
     if (isCacheEnabled()) {
-      cache = getCache();
+      const cache = getCache();
       const cachedResponse = await cache.get<string>(cacheKey);
       response = cachedResponse ? JSON.parse(cachedResponse) : undefined;
       cached = response !== undefined;
-    }
 
-    if (!this.fal) {
-      this.fal = await import('@fal-ai/serverless-client');
-    }
+      if (!response) {
+        if (!this.fal) {
+          this.fal = await import('@fal-ai/serverless-client');
+        }
 
-    this.fal.config({
-      credentials: this.apiKey,
-      fetch: fetch as any, // TODO fix type incompatibility
-    });
+        this.fal.config({
+          credentials: this.apiKey,
+          fetch: fetch as any, // TODO fix type incompatibility
+        });
 
-    if (!response) {
-      response = await this.runInference(input);
-    }
+        response = await this.runInference(input);
 
-    if (!cached && isCacheEnabled() && cache) {
-      try {
-        await cache.set(cacheKey, JSON.stringify(response));
-      } catch (err) {
-        logger.error(`Failed to cache response: ${String(err)}`);
+        try {
+          await cache.set(cacheKey, JSON.stringify(response));
+        } catch (err) {
+          logger.error(`Failed to cache response: ${String(err)}`);
+        }
       }
+    } else {
+      if (!this.fal) {
+        this.fal = await import('@fal-ai/serverless-client');
+      }
+
+      this.fal.config({
+        credentials: this.apiKey,
+        fetch: fetch as any, // TODO fix type incompatibility
+      });
+
+      response = await this.runInference(input);
     }
 
     return {

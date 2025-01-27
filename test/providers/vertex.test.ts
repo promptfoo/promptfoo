@@ -7,7 +7,13 @@ import * as vertexUtil from '../../src/providers/vertexUtil';
 jest.mock('../../src/cache', () => ({
   getCache: jest.fn().mockReturnValue({
     get: jest.fn(),
-    set: jest.fn(),
+    set: jest.fn().mockResolvedValue(undefined),
+    del: jest.fn().mockResolvedValue(undefined),
+    reset: jest.fn().mockResolvedValue(undefined),
+    wrap: jest.fn(),
+    store: {
+      name: 'memory',
+    },
   }),
   isCacheEnabled: jest.fn(),
 }));

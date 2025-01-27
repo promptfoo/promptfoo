@@ -185,6 +185,7 @@
     "fast-deep-equal": "^3.1.3",
     "fast-xml-parser": "^4.5.1",
     "fastest-levenshtein": "^1.0.16",
+    "flat-cache": "^6.1.5",
     "glob": "^10.4.3",
     "groq-sdk": "^0.12.0",
     "http-z": "^7.1.1",

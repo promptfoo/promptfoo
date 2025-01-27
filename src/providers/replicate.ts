@@ -1,4 +1,3 @@
-import type { Cache } from 'cache-manager';
 import Replicate from 'replicate';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString, getEnvFloat, getEnvInt } from '../envars';
@@ -195,68 +194,91 @@ export class ReplicateModerationProvider
       );
     }
 
-    let cache: Cache | undefined;
     let cacheKey: string | undefined;
     if (isCacheEnabled()) {
-      cache = await getCache();
+      const cache = getCache();
       cacheKey = `replicate:${this.modelName}:${JSON.stringify(
         this.config,
       )}:${prompt}:${assistant}`;
 
       // Try to get the cached response
-      const cachedResponse = await cache.get(cacheKey);
+      const cachedResponse = await cache.get<ProviderModerationResponse>(cacheKey);
 
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
-        return JSON.parse(cachedResponse as string);
+        return cachedResponse;
+      }
+
+      const replicate = new Replicate({
+        auth: this.apiKey,
+        fetch: fetch as any,
+      });
+
+      logger.debug(`Calling Replicate moderation API: prompt [${prompt}] assistant [${assistant}]`);
+
+      try {
+        const response = await replicate.run(
+          this.modelName as `${string}/${string}` | `${string}/${string}:${string}`,
+          {
+            input: {
+              text: assistant,
+            },
+          },
+        );
+
+        const moderationResponse = this.processResponse(response);
+
+        // Cache the response
+        try {
+          await cache.set(cacheKey, moderationResponse);
+        } catch (err) {
+          logger.error(`Failed to cache response: ${String(err)}`);
+        }
+
+        return moderationResponse;
+      } catch (err) {
+        logger.error(`API call error: ${String(err)}`);
+        return {
+          error: `API call error: ${String(err)}`,
+        };
       }
     }
 
+    // If caching is disabled, just make the API call
     const replicate = new Replicate({
       auth: this.apiKey,
       fetch: fetch as any,
     });
 
-    logger.debug(`Calling Replicate moderation API: prompt [${prompt}] assistant [${assistant}]`);
-    let output: string | undefined;
     try {
-      const data = {
-        input: {
-          prompt,
-          assistant,
+      const response = await replicate.run(
+        this.modelName as `${string}/${string}` | `${string}/${string}:${string}`,
+        {
+          input: {
+            text: assistant,
+          },
         },
-      };
-      const resp = await replicate.run(this.modelName as any, data);
-      // Replicate SDK seems to be mis-typed for this type of model.
-      output = resp as unknown as string;
+      );
+
+      return this.processResponse(response);
     } catch (err) {
+      logger.error(`API call error: ${String(err)}`);
       return {
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tReplicate moderation API response: ${JSON.stringify(output)}`);
-    try {
-      if (!output) {
-        throw new Error('API response error: no output');
-      }
-      const [safeString, codes] = output.split('\n');
-      const saveCache = async () => {
-        if (cache && cacheKey) {
-          await cache.set(cacheKey, JSON.stringify(output));
-        }
-      };
+  }
 
-      const flags: ModerationFlag[] = [];
-      if (safeString === 'safe') {
-        await saveCache();
-      } else {
-        const splits = codes.split(',');
-        for (const code of splits) {
-          if (LLAMAGUARD_DESCRIPTIONS[code]) {
+  private processResponse(response: any): ProviderModerationResponse {
+    const flags: ModerationFlag[] = [];
+    try {
+      if (response && Array.isArray(response)) {
+        for (const result of response) {
+          if (result.label && result.confidence) {
             flags.push({
-              code,
-              description: `${LLAMAGUARD_DESCRIPTIONS[code]} (${code})`,
-              confidence: 1,
+              code: result.label,
+              description: result.label,
+              confidence: result.confidence,
             });
           }
         }
@@ -264,7 +286,7 @@ export class ReplicateModerationProvider
       return { flags };
     } catch (err) {
       return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(output)}`,
+        error: `API response error: ${String(err)}: ${JSON.stringify(response)}`,
       };
     }
   }

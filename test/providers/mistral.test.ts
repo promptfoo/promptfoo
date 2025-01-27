@@ -6,10 +6,16 @@ import {
 } from '../../src/providers/mistral';
 
 jest.mock('../../src/cache', () => ({
-  ...jest.requireActual('../../src/cache'),
-  fetchWithCache: jest.fn(),
-  getCache: jest.fn(),
-  isCacheEnabled: jest.fn(),
+  getCache: jest.fn().mockReturnValue({
+    get: jest.fn().mockResolvedValue(null),
+    set: jest.fn().mockResolvedValue(undefined),
+    del: jest.fn().mockResolvedValue(undefined),
+    reset: jest.fn().mockResolvedValue(undefined),
+    wrap: jest.fn(),
+    store: {
+      name: 'memory',
+    },
+  }),
 }));
 
 jest.mock('../../src/util');
@@ -21,14 +27,18 @@ describe('Mistral', () => {
     jest.mocked(fetchWithCache).mockReset();
     jest.mocked(isCacheEnabled).mockReturnValue(false);
     jest.mocked(getCache).mockReturnValue({
-      get: jest.fn().mockResolvedValue(null),
-      set: jest.fn(),
+      get: jest.fn().mockResolvedValue({
+        output: 'Cached output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        cached: true,
+        cost: 0.000005,
+      }),
+      set: jest.fn().mockResolvedValue(undefined),
+      del: jest.fn().mockResolvedValue(undefined),
+      reset: jest.fn().mockResolvedValue(undefined),
       wrap: jest.fn(),
-      del: jest.fn(),
-      reset: jest.fn(),
       store: {
-        get: jest.fn(),
-        set: jest.fn(),
+        name: 'memory',
       },
     });
   });
@@ -102,13 +112,12 @@ describe('Mistral', () => {
           cached: true,
           cost: 0.000005,
         }),
-        set: jest.fn(),
+        set: jest.fn().mockResolvedValue(undefined),
+        del: jest.fn().mockResolvedValue(undefined),
+        reset: jest.fn().mockResolvedValue(undefined),
         wrap: jest.fn(),
-        del: jest.fn(),
-        reset: jest.fn(),
         store: {
-          get: jest.fn(),
-          set: jest.fn(),
+          name: 'memory',
         },
       });
       const result = await provider.callApi('Test prompt');

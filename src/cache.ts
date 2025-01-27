@@ -1,6 +1,4 @@
-import cacheManager from 'cache-manager';
-import type { Cache } from 'cache-manager';
-import fsStore from 'cache-manager-fs-hash';
+import { FlatCache } from 'flat-cache';
 import fs from 'fs';
 import path from 'path';
 import { getEnvBool, getEnvString, getEnvInt } from './envars';
@@ -9,6 +7,75 @@ import logger from './logger';
 import { REQUEST_TIMEOUT_MS } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
 
+// Define the Store interface that cache-manager expects
+interface Store {
+  name: string;
+}
+
+// Define a Cache interface that matches what providers expect
+export interface Cache {
+  store: Store;
+  get<T>(key: string): Promise<T | undefined>;
+  set<T>(key: string, value: T, ttl?: number): Promise<void>;
+  del(key: string): Promise<void>;
+  reset(): Promise<void>;
+  wrap<T>(key: string, fn: () => Promise<T>): Promise<T>;
+}
+
+// Create a wrapper class that implements the Cache interface using FlatCache
+class CacheWrapper implements Cache {
+  private flatCache: FlatCache;
+  public store: Store;
+
+  constructor(flatCache: FlatCache, isMemory: boolean = false) {
+    this.flatCache = flatCache;
+    this.store = {
+      name: isMemory ? 'memory' : 'fs-hash',
+    };
+  }
+
+  async get<T>(key: string): Promise<T | undefined> {
+    const value = this.flatCache.getKey(key);
+    if (value === undefined) {
+      return undefined;
+    }
+    try {
+      return JSON.parse(value) as T;
+    } catch {
+      return value as T;
+    }
+  }
+
+  async set<T>(key: string, value: T | undefined | null): Promise<void> {
+    if (value === undefined || value === null) {
+      this.flatCache.setKey(key, undefined);
+    } else {
+      this.flatCache.setKey(key, typeof value === 'string' ? value : JSON.stringify(value));
+    }
+    this.flatCache.save();
+  }
+
+  async del(key: string): Promise<void> {
+    this.flatCache.setKey(key, undefined);
+    this.flatCache.save();
+  }
+
+  async reset(): Promise<void> {
+    this.flatCache.clear();
+    this.flatCache.save();
+  }
+
+  async wrap<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    const cached = await this.get<T>(key);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const value = await fn();
+    await this.set(key, value);
+    return value;
+  }
+}
+
 let cacheInstance: Cache | undefined;
 
 let enabled = getEnvBool('PROMPTFOO_CACHE_ENABLED', true);
@@ -16,7 +83,7 @@ let enabled = getEnvBool('PROMPTFOO_CACHE_ENABLED', true);
 const cacheType =
   getEnvString('PROMPTFOO_CACHE_TYPE') || (getEnvString('NODE_ENV') === 'test' ? 'memory' : 'disk');
 
-export function getCache() {
+export function getCache(): Cache {
   if (!cacheInstance) {
     let cachePath = '';
     if (cacheType === 'disk' && enabled) {
@@ -27,16 +94,19 @@ export function getCache() {
         fs.mkdirSync(cachePath, { recursive: true });
       }
     }
-    cacheInstance = cacheManager.caching({
-      store: cacheType === 'disk' && enabled ? fsStore : 'memory',
-      options: {
-        max: getEnvInt('PROMPTFOO_CACHE_MAX_FILE_COUNT', 10_000), // number of files
-        path: cachePath,
-        ttl: getEnvInt('PROMPTFOO_CACHE_TTL', 60 * 60 * 24 * 14), // in seconds, 14 days
-        maxsize: getEnvInt('PROMPTFOO_CACHE_MAX_SIZE', 1e7), // in bytes, 10mb
-        //zip: true, // whether to use gzip compression
-      },
-    });
+
+    const cacheId = 'promptfoo-cache';
+    const options = {
+      ttl: getEnvInt('PROMPTFOO_CACHE_TTL', 60 * 60 * 24 * 14), // in seconds, 14 days
+      lruSize: getEnvInt('PROMPTFOO_CACHE_MAX_FILE_COUNT', 10_000), // number of files
+      expirationInterval: 60 * 60 * 1000, // 1 hour in milliseconds
+      persistInterval: 5 * 60 * 1000, // 5 minutes in milliseconds
+      cacheDir: cachePath,
+    };
+
+    const flatCache = new FlatCache(options);
+    flatCache.load(cacheId);
+    cacheInstance = new CacheWrapper(flatCache, cacheType === 'memory');
   }
   return cacheInstance;
 }
@@ -74,7 +144,7 @@ export async function fetchWithCache<T = any>(
     }
   }
 
-  const cache = await getCache();
+  const cache = getCache();
 
   const copy = Object.assign({}, options);
   delete copy.headers;
@@ -83,8 +153,10 @@ export async function fetchWithCache<T = any>(
   let cached = true;
   let errorResponse = null;
 
-  // Use wrap to ensure that the fetch is only done once even for concurrent invocations
-  const cachedResponse = await cache.wrap(cacheKey, async () => {
+  // Check if we have a cached response
+  const cachedResponse = await cache.get<string>(cacheKey);
+
+  if (!cachedResponse) {
     // Fetch the actual data and store it in the cache
     cached = false;
     const response = await fetchWithRetries(url, options, timeout, maxRetries);
@@ -110,14 +182,14 @@ export async function fetchWithCache<T = any>(
           errorResponse = data;
         }
         // Don't cache error responses
-        return;
+        return JSON.parse(errorResponse || '{}');
       }
       if (!data) {
         // Don't cache empty responses
-        return;
+        return JSON.parse(errorResponse || '{}');
       }
       logger.debug(`Storing ${url} response in cache: ${data}`);
-      return data;
+      await cache.set(cacheKey, data);
     } catch (err) {
       throw new Error(
         `Error parsing response from ${url}: ${
@@ -125,13 +197,13 @@ export async function fetchWithCache<T = any>(
         }. Received text: ${responseText}`,
       );
     }
-  });
+  }
 
   if (cached && cachedResponse) {
     logger.debug(`Returning cached response for ${url}: ${cachedResponse}`);
   }
 
-  const parsedResponse = JSON.parse((cachedResponse ?? errorResponse) as string);
+  const parsedResponse = JSON.parse(cachedResponse as string);
   return {
     cached,
     data: parsedResponse.data as T,
@@ -150,7 +222,8 @@ export function disableCache() {
 }
 
 export async function clearCache() {
-  return getCache().reset();
+  const cache = getCache();
+  await cache.reset();
 }
 
 export function isCacheEnabled() {
