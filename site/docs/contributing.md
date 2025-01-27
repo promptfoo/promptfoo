@@ -311,33 +311,35 @@ As a maintainer, when you are ready to release a new version:
    git add package.json package-lock.json
    ```
 
-4. Create a new branch:
+4. Run `npm run postversion` to correctly set the packageversion in `CITATION.cff`.
+
+5. Create a new branch:
 
    ```sh
    git checkout -b chore/bump-version-0.X.Y
    ```
 
-5. Commit the changes:
+6. Commit the changes:
 
    ```sh
    git commit -am "chore: Bump version to 0.X.Y"
    ```
 
-6. Push the changes to a remote branch:
+7. Push the changes to a remote branch:
 
    ```sh
    git push --set-upstream origin chore/bump-version-0.X.Y
    ```
 
-7. Open a pull request against the `main` branch. You can do this by visiting the following link template on your browser:
+8. Open a pull request against the `main` branch. You can do this by visiting the following link template on your browser:
 
    ```
    https://github.com/promptfoo/promptfoo/pull/new/<your-branch-name>
    ```
 
-8. Once your PR is approved and landed, a version tag will be created automatically by a GitHub Action. After the version tag has been created, generate a [new release](https://github.com/promptfoo/promptfoo/releases/new) based on the tagged version.
+9. Once your PR is approved and landed, a version tag will be created automatically by a GitHub Action. After the version tag has been created, generate a [new release](https://github.com/promptfoo/promptfoo/releases/new) based on the tagged version.
 
-9. Cleanup the release notes. You can look at [this](https://github.com/promptfoo/promptfoo/releases/tag/0.103.13) release as an example
+10. Cleanup the release notes. You can look at [this](https://github.com/promptfoo/promptfoo/releases/tag/0.103.13) release as an example
 
 - Break up each PR in the release into one of the following 5 sections (as applicable)
   - New Features
