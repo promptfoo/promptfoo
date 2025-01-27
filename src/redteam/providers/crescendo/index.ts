@@ -37,7 +37,9 @@ interface CrescendoConfig {
   maxRounds?: number;
   maxBacktracks?: number;
   redteamProvider: RedteamFileConfig['provider'];
+  // @deprecated
   stateless?: boolean;
+  stateful?: boolean;
 }
 
 export class MemorySystem {
@@ -74,7 +76,7 @@ export class CrescendoProvider implements ApiProvider {
   private redTeamingChatConversationId: string;
   private maxRounds: number;
   private maxBacktracks: number;
-  private stateless: boolean;
+  private stateful: boolean;
 
   constructor(config: CrescendoConfig) {
     this.config = config;
@@ -84,7 +86,8 @@ export class CrescendoProvider implements ApiProvider {
     this.memory = new MemorySystem();
     this.targetConversationId = uuidv4();
     this.redTeamingChatConversationId = uuidv4();
-    this.stateless = config.stateless ?? true;
+
+    this.stateful = config.stateful ?? (config.stateless == null ? false : !config.stateless);
     if (config.stateless !== undefined) {
       telemetry.recordOnce('feature_used', {
         feature: 'stateless',
@@ -92,7 +95,7 @@ export class CrescendoProvider implements ApiProvider {
       });
     }
 
-    if (!this.stateless) {
+    if (this.stateful) {
       this.maxBacktracks = 0;
     }
     logger.debug(
@@ -264,7 +267,7 @@ export class CrescendoProvider implements ApiProvider {
           totalTokenUsage.cached += lastResponse.tokenUsage.cached || 0;
         }
 
-        if (lastResponse.sessionId && !this.stateless) {
+        if (lastResponse.sessionId && this.stateful) {
           vars['sessionId'] = lastResponse.sessionId;
           if (!context) {
             context = {
@@ -541,10 +544,10 @@ export class CrescendoProvider implements ApiProvider {
     }
 
     const conversationHistory = this.memory.getConversation(this.targetConversationId);
-    const targetPrompt = this.stateless ? JSON.stringify(conversationHistory) : renderedPrompt;
+    const targetPrompt = this.stateful ? renderedPrompt : JSON.stringify(conversationHistory);
 
     logger.debug(
-      `[Crescendo] Sending to target chat (${this.stateless ? conversationHistory.length : 1} messages):`,
+      `[Crescendo] Sending to target chat (${this.stateful ? 1 : conversationHistory.length} messages):`,
     );
     logger.debug(targetPrompt);
 

@@ -15,7 +15,7 @@ strategies:
   - id: goat
     config:
       maxTurns: 5 # Maximum conversation turns (default)
-      stateless: true # Sends the entire conversation history with each turn (Default), set to False if you're using any custom providers
+      stateful: false # Sends the entire conversation history with each turn (Default)
 ```
 
 :::warning
@@ -23,7 +23,7 @@ This is a remote-only strategy and requires an connection to promptfoo's free gr
 :::
 
 :::warning
-If your system maintains a conversation history and only expects the latest message to be sent, set `stateless: false`. [Make sure to configure cookies or sessions in your provider as well.](/docs/providers/http/#server-side-session-management)
+If your system maintains a conversation history and only expects the latest message to be sent, set `stateful: true`. [Make sure to configure cookies or sessions in your provider as well.](/docs/providers/http/#server-side-session-management)
 :::
 
 ## How It Works
