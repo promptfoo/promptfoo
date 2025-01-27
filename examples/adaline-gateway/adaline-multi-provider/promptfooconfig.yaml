@@ -1,7 +1,9 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Adaline Gateway Multi Provider Example'
+description: 'Adaline Gateway Multi-Provider Example'
+
 prompts:
   - file://prompt.json
+
 providers:
   - id: adaline:openai:chat:gpt-4o
   - id: adaline:anthropic:chat:claude-3-opus-20240229

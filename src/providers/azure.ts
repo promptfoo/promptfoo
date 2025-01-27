@@ -698,18 +698,26 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         };
       }
       const hasDataSources = !!config.dataSources;
-      const message = hasDataSources
+      const choice = hasDataSources
         ? data.choices.find(
             (choice: { message: { role: string; content: string } }) =>
               choice.message.role === 'assistant',
-          )?.message
-        : data.choices[0].message;
+          )
+        : data.choices[0];
+
+      const message = choice?.message;
 
       // Handle structured output
       let output = message.content;
+
       if (output == null) {
-        // Restore tool_calls and function_call handling
-        output = message.tool_calls ?? message.function_call;
+        if (choice.finish_reason === 'content_filter') {
+          output =
+            'The generated content was filtered due to triggering Azure OpenAI Service’s content filtering system.';
+        } else {
+          // Restore tool_calls and function_call handling
+          output = message.tool_calls ?? message.function_call;
+        }
       } else if (
         config.response_format?.type === 'json_schema' ||
         config.response_format?.type === 'json_object'

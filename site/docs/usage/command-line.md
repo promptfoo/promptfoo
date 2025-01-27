@@ -285,6 +285,7 @@ Generate adversarial test cases to challenge your prompts and models.
 | `--delay <number>`               | Delay in milliseconds between plugin API calls                       |                      |
 | `--remote`                       | Force remote inference wherever possible                             | false                |
 | `--force`                        | Force generation even if no changes are detected                     | false                |
+| `--burp-escape-json`             | Escape special characters in .burp output for JSON payloads          | false                |
 
 For example, let's suppose we have the following `promptfooconfig.yaml`:
 
