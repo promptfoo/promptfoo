@@ -1,36 +1,33 @@
 # Google AI Studio (Gemini) Example
 
-This example demonstrates various features of the Google AI Studio integration with Gemini models:
+This example demonstrates using Google's Gemini models with promptfoo to evaluate math puzzle solving capabilities.
 
-- Basic chat completion with temperature and token control
-- Structured output with JSON schema validation
-- Function calling with custom tools
-- Different model variants:
-  - Gemini 1.5 Pro (standard model)
-  - Gemini 1.5 Flash (fast responses)
-  - Gemini 2.0 Flash (experimental)
-  - Gemini 2.0 Flash Thinking (with thought process, uses v1alpha API)
+## Prerequisites
 
-## Model Details
+- promptfoo CLI installed (`npm install -g promptfoo` or `brew install promptfoo`)
+- Google AI Studio API key set as `GOOGLE_API_KEY`
 
-### Gemini 2.0 Flash Thinking
+## Available Models
 
-This experimental model automatically uses the `v1alpha` API endpoint for advanced features like thought process visibility. No additional configuration is needed - the provider handles this automatically.
+The example tests across multiple Gemini models:
 
-## Usage
+- Gemini 2.0 Flash
+- Gemini 2.0 Flash Thinking
+- Gemini 1.5 Flash
+- Gemini 1.5 Pro - Standard model for complex reasoning, used with both structured JSON output and function calling capabilities
 
-1. Set your Google AI Studio API key:
+## Running the Eval
 
-```bash
-export GOOGLE_API_KEY=your_api_key_here
+1. Get a local copy of the configuration:
+
+```sh
+promptfoo init --example google-aistudio-gemini
 ```
 
 2. Run the example:
 
-```bash
+```sh
 promptfoo eval
 ```
-
-The example tests a math puzzle across different models, comparing their accuracy and output formats.
 
 Afterwards, you can view the results by running `promptfoo view`
