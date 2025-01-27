@@ -332,7 +332,7 @@ As a maintainer, when you are ready to release a new version:
 - Sort the lines in each section alphabetically
 - Ensure that the author of the PR is correctly cited
 
-9. A GitHub Action should automatically publish the package to npm. If it does not, please publish manually.
+8. A GitHub Action should automatically publish the package to npm. If it does not, please publish manually.
 
 ## Getting Help
 
