@@ -46,7 +46,7 @@ export default class GoatProvider implements ApiProvider {
       `[GOAT] Constructor options: ${JSON.stringify({
         injectVar: options.injectVar,
         maxTurns: options.maxTurns,
-        stateful: options.stateless,
+        stateful: options.stateful,
       })}`,
     );
     if (options.stateless !== undefined) {
