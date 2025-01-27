@@ -63,10 +63,6 @@ providers:
 
 Note: First request with a new schema may take 10-30 seconds to prepare.
 
-## Common Configuration Options
-
-For standard options like `temperature`, `max_tokens`, etc., see our [OpenAI provider documentation](/docs/providers/openai#configuration-options).
-
 Additional Perplexity-specific options:
 
 - `return_images` (default: false) - Include images in responses
