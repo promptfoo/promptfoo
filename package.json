@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.103.14",
+  "version": "0.103.15",
   "license": "MIT",
   "type": "commonjs",
   "repository": {
@@ -55,7 +55,7 @@
     "local:web": "npm run dev --prefix src/app",
     "local": "ts-node --cwdMode --transpileOnly src/main.ts",
     "preversion": "echo $npm_package_version",
-    "postversion": "npm run install &&npm run citation:generate && git add CITATION.cff && git commit --amend --no-edit && git checkout -b \"chore/bump-version-$npm_package_version\"",
+    "postversion": "npm run ci && npm run citation:generate && git add CITATION.cff && git commit --amend --no-edit && git checkout -b \"chore/bump-version-$npm_package_version\"",
     "prepublishOnly": "npm run build:clean && npm run build",
     "test:app": "npm run test --prefix src/app",
     "test:integration": "jest --config jest.integration.config.ts integration",
