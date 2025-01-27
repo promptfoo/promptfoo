@@ -146,6 +146,13 @@ export class GoogleChatProvider extends GoogleGenericProvider {
       const output = data.candidates[0].content;
       return {
         output,
+        tokenUsage: {
+          prompt: data.usageMetadata?.promptTokenCount,
+          completion: data.usageMetadata?.candidatesTokenCount,
+          total: data.usageMetadata?.totalTokenCount,
+          numRequests: 1,
+        },
+        raw: data,
       };
     } catch (err) {
       return {
@@ -213,6 +220,11 @@ export class GoogleChatProvider extends GoogleGenericProvider {
             safetyRatings: Array<{ category: string; probability: string }>;
           }>;
           promptFeedback?: { safetyRatings: Array<{ category: string; probability: string }> };
+          usageMetadata?: {
+            promptTokenCount: number;
+            candidatesTokenCount: number;
+            totalTokenCount: number;
+          };
         };
       });
     } catch (err) {
@@ -235,6 +247,19 @@ export class GoogleChatProvider extends GoogleGenericProvider {
     try {
       return {
         output: parts,
+        tokenUsage: {
+          prompt: data.usageMetadata?.promptTokenCount,
+          completion: data.usageMetadata?.candidatesTokenCount,
+          total: data.usageMetadata?.totalTokenCount,
+          numRequests: 1,
+        },
+        raw: data,
+        guardrails: {
+          flaggedInput: data.promptFeedback?.safetyRatings?.some(
+            (r) => r.probability !== 'NEGLIGIBLE',
+          ),
+          flaggedOutput: candidate.safetyRatings?.some((r) => r.probability !== 'NEGLIGIBLE'),
+        },
       };
     } catch (err) {
       return {

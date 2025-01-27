@@ -1,7 +1,9 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
 prompts:
-  - 'Write a very concise, funny tweet about {{topic}}'
+  - |
+    Given this math puzzle: {{puzzle}}
+    Provide a short, clear answer with minimal explanation.
 
 providers:
   # Basic chat model with standard settings
@@ -22,34 +24,34 @@ providers:
         response_schema:
           type: 'object'
           properties:
-            title:
+            answer:
               type: 'string'
-            key_points:
-              type: 'array'
-              items:
-                type: 'string'
-            sentiment:
+              description: 'The numerical or text answer'
+            confidence:
               type: 'string'
-              enum: ['positive', 'neutral', 'negative']
-          required: ['title', 'key_points', 'sentiment']
+              enum: ['high', 'medium', 'low']
+            method_used:
+              type: 'string'
+              description: 'One-word description of solving method'
+          required: ['answer', 'confidence', 'method_used']
 
   # Function calling example
   - id: google:gemini-1.5-pro
     config:
       tools:
         function_declarations:
-          - name: 'get_weather'
-            description: 'Get current weather for a location'
+          - name: 'verify_answer'
+            description: 'Verify if the answer is correct'
             parameters:
               type: 'object'
               properties:
-                location:
+                answer:
                   type: 'string'
-                  description: 'City name or coordinates'
-                units:
+                  description: 'The proposed answer'
+                explanation:
                   type: 'string'
-                  enum: ['celsius', 'fahrenheit']
-              required: ['location']
+                  description: 'Brief explanation'
+              required: ['answer']
       tool_config:
         function_calling_config:
           mode: 'auto'
@@ -82,4 +84,10 @@ providers:
 
 tests:
   - vars:
-      topic: bananas
+      puzzle: 'If a train travels at 60 mph for 2.5 hours, then at 40 mph for 1.5 hours, what is the average speed for the entire journey?'
+    assert:
+      - type: 'contains-any'
+        value: ['52.5 mph', '52.5', '52.5 miles per hour']
+      - type: llm-rubric
+        value: |
+          The answer should be 52.5 mph.
