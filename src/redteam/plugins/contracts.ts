@@ -116,3 +116,5 @@ export class ContractsGrader extends RedteamGraderBase {
     ];
   }
 }
+
+export { DEFAULT_EXAMPLES };
