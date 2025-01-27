@@ -1,11 +1,9 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'Adaline Gateway Embedding Similarity Example'
 
-# Note: Adaline Gateway packages are peer dependencies. Install them first:
-# npm install @adaline/anthropic@latest @adaline/gateway@latest @adaline/types@latest @adaline/openai@latest
-
 prompts:
   - file://prompt.json
+
 providers:
   - id: adaline:anthropic:chat:claude-3-5-sonnet-20240620
     config:
