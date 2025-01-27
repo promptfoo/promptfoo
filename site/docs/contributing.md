@@ -318,15 +318,32 @@ As a maintainer, when you are ready to release a new version:
    git commit -am "chore: Bump version to 0.X.Y"
    ```
 
-6. Push the changes to the main branch:
+6. Push the changes to a remote branch:
 
    ```sh
-   git push origin main
+   git push --set-upstream origin chore/bump-version-0.X.Y
    ```
 
-7. A version tag will be created automatically by a GitHub Action. After the version tag has been created, generate a new release based on the tagged version.
+7. Open a pull request against the `main` branch.
 
-8. A GitHub Action should automatically publish the package to npm. If it does not, please publish manually.
+   ```
+   Visit https://github.com/promptfoo/promptfoo/compare/main...<your-branch-name>
+   ```
+
+8. Once your PR is approved and landed, a version tag will be created automatically by a GitHub Action. After the version tag has been created, generate a [new release](https://github.com/promptfoo/promptfoo/releases/new) based on the tagged version.
+
+9. Cleanup the release notes. You can look at [this](https://github.com/promptfoo/promptfoo/releases/tag/0.103.13) release as an example
+
+- Break up each PR in the release into one of the following 5 sections (as applicable)
+  - New Features
+  - Bug Fixes
+  - Chores
+  - Docs
+  - Dependencies
+- Sort the lines in each section alphabetically
+- Ensure that the author of the PR is correctly cited
+
+10. A GitHub Action should automatically publish the package to npm. If it does not, please publish manually.
 
 ## Getting Help
 
