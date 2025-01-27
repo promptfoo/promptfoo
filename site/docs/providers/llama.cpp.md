@@ -1,7 +1,3 @@
----
-sidebar_position: 40
----
-
 # Llama.cpp
 
 The `llama` provider is compatible with the HTTP server bundled with [llama.cpp](https://github.com/ggerganov/llama.cpp). This allows you to leverage the power of `llama.cpp` models within Promptfoo.

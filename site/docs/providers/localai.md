@@ -1,6 +1,5 @@
 ---
 sidebar_label: LocalAI
-sidebar_position: 99
 ---
 
 # Local AI

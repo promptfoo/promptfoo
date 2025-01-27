@@ -25,6 +25,13 @@ import { calculateCost, REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from 
 
 // see https://platform.openai.com/docs/models
 export const OPENAI_CHAT_MODELS = [
+  ...['chatgpt-4o-latest'].map((model) => ({
+    id: model,
+    cost: {
+      input: 5 / 1e6,
+      output: 15 / 1e6,
+    },
+  })),
   ...['o1', 'o1-2024-12-17', 'o1-preview', 'o1-preview-2024-09-12'].map((model) => ({
     id: model,
     cost: {
