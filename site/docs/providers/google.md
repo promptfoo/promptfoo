@@ -6,9 +6,8 @@ You can use it by specifying one of the [available models](https://ai.google.dev
 
 ## Available Models
 
-- `google:gemini-2.0-flash` - Latest multimodal model with next generation features
-- `google:gemini-2.0-flash-exp` - Experimental version of Gemini 2.0 Flash
-- `google:gemini-2.0-thinking` - Optimized for complex reasoning and problem-solving
+- `google:gemini-2.0-flash-exp` - Latest multimodal model with next generation features
+- `google:gemini-2.0-flash-thinking-exp` - Optimized for complex reasoning and problem-solving
 - `google:gemini-1.5-flash-8b` - Fast and cost-efficient multimodal model
 - `google:gemini-1.5-pro` - Best performing multimodal model for complex reasoning
 - `google:gemini-pro` - General purpose text and chat
@@ -87,20 +86,6 @@ providers:
       maxOutputTokens: 2048
       topP: 0.9
       topK: 40
-```
-
-### Gemini 2.0 Thinking
-
-Optimized for complex reasoning and step-by-step problem solving:
-
-```yaml
-providers:
-  - id: google:gemini-2.0-thinking
-    config:
-      temperature: 0.3 # Lower temperature for more focused reasoning
-      maxOutputTokens: 4096 # Larger context for complex problems
-      topP: 0.8
-      topK: 20
 ```
 
 ## Advanced Features
