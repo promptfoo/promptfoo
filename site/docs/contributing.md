@@ -97,7 +97,7 @@ If you're not sure where to start, check out our [good first issues](https://git
    git push origin your-branch-name
    ```
 
-4. Open a pull request (PR) against the `main` branch of the promptfoo repository.
+4. [Open a pull request](https://github.com/promptfoo/promptfoo/compare) (PR) against the `main` branch of the promptfoo repository.
 
 When opening a pull request:
 
@@ -125,10 +125,14 @@ To run tests in watch mode:
 npm run test:watch
 ```
 
-You can also run specific tests with:
+You can also run specific tests with (see [jest documentation](https://jestjs.io/docs/cli#jest-regexfortestfiles)):
 
 ```sh
 npx jest [pattern]
+
+# Example:
+# Runs all provider tests
+npx jest providers
 ```
 
 ### Writing Tests
@@ -302,20 +306,27 @@ As a maintainer, when you are ready to release a new version:
    git add package.json package-lock.json
    ```
 
-4. Commit the changes:
+4. Create a new branch:
 
    ```sh
-   git commit -m "chore: Bump version to 0.X.Y"
+   git checkout -b chore/bump-version-0.X.Y
    ```
 
-5. Push the changes to the main branch:
+5. Commit the changes:
+
+   ```sh
+   git commit -am "chore: Bump version to 0.X.Y"
+   ```
+
+6. Push the changes to the main branch:
 
    ```sh
    git push origin main
    ```
 
-6. A version tag will be created automatically by a GitHub Action. After the version tag has been created, generate a new release based on the tagged version.
-7. A GitHub Action should automatically publish the package to npm. If it does not, please publish manually.
+7. A version tag will be created automatically by a GitHub Action. After the version tag has been created, generate a new release based on the tagged version.
+
+8. A GitHub Action should automatically publish the package to npm. If it does not, please publish manually.
 
 ## Getting Help
 
