@@ -1,32 +1,18 @@
 # Google AI / Gemini
 
-:::note
-This documentation was previously located at `/docs/providers/palm`. It has been moved to `/docs/providers/google` to reflect the current Google AI branding.
-:::
-
-:::warning
-As of August 15, 2024, the PaLM API will be decommissioned. Please migrate to the Gemini API. For more information, see the [migration guide](https://ai.google.dev/docs/migration_guide).
-:::
-
-The `google` provider is compatible with Google AI Studio, which offers access to Gemini models through the Gemini API.
+The `google` provider enables integration with Google AI Studio and the Gemini API. It provides access to Google's state-of-the-art language models with support for text, images, and video inputs.
 
 You can use it by specifying one of the [available models](https://ai.google.dev/models). Currently, the following models are supported:
 
 Production Models:
 
 - `google:gemini-2.0-flash` - Latest multimodal model with next generation features
+- `google:gemini-2.0-flash-exp` - Experimental version of Gemini 2.0 Flash
 - `google:gemini-2.0-thinking` - Optimized for complex reasoning and problem-solving
 - `google:gemini-1.5-flash-8b` - Fast and cost-efficient multimodal model
 - `google:gemini-1.5-pro` - Best performing multimodal model for complex reasoning
 - `google:gemini-pro` - Legacy model (consider upgrading to 1.5 or 2.0)
 - `google:gemini-pro-vision` - Legacy vision model (consider upgrading to 1.5 or 2.0)
-
-Experimental Models:
-:::warning
-Experimental models are not for production use and can be changed or removed without prior notice. They are provided to showcase the latest innovations and gather feedback.
-:::
-
-- `google:gemini-2.0-flash-exp` - Experimental version of Gemini 2.0 Flash
 
 :::tip
 If you are using Google Vertex, see the [`vertex` provider](/docs/providers/vertex).
