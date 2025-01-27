@@ -23,7 +23,7 @@ import { getLastMessageContent } from './shared';
 export default class GoatProvider implements ApiProvider {
   private maxTurns: number;
   private readonly injectVar: string;
-  private readonly stateless: boolean;
+  private readonly stateful: boolean;
 
   id() {
     return 'promptfoo:redteam:goat';
@@ -33,17 +33,20 @@ export default class GoatProvider implements ApiProvider {
     options: ProviderOptions & {
       maxTurns?: number;
       injectVar?: string;
+      // @deprecated
       stateless?: boolean;
+      stateful?: boolean;
     } = {},
   ) {
     if (neverGenerateRemote()) {
       throw new Error(`GOAT strategy requires remote grading to be enabled`);
     }
+    this.stateful = options.stateful ?? (options.stateless == null ? true : !options.stateless);
     logger.debug(
       `[GOAT] Constructor options: ${JSON.stringify({
         injectVar: options.injectVar,
         maxTurns: options.maxTurns,
-        stateless: options.stateless,
+        stateful: options.stateful,
       })}`,
     );
     if (options.stateless !== undefined) {
@@ -55,7 +58,6 @@ export default class GoatProvider implements ApiProvider {
     invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = options.injectVar;
     this.maxTurns = options.maxTurns || 5;
-    this.stateless = options.stateless ?? true;
   }
 
   async callApi(
@@ -149,10 +151,9 @@ export default class GoatProvider implements ApiProvider {
         `,
         );
 
-        const targetPrompt = this.stateless
-          ? JSON.stringify(messages)
-          : messages[messages.length - 1].content;
-
+        const targetPrompt = this.stateful
+          ? messages[messages.length - 1].content
+          : JSON.stringify(messages);
         logger.debug(`GOAT turn ${turn} target prompt: ${renderedAttackerPrompt}`);
         const targetResponse = await targetProvider.callApi(targetPrompt, context, options);
 
