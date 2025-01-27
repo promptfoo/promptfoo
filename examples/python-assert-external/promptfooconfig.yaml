@@ -2,7 +2,7 @@
 prompts:
   - 'Tell me about {{topic}} in three words'
 providers:
-  - openai:chatgpt-4o-latest
+  - openai:gpt-4o-mini
 
 tests:
   - vars:
