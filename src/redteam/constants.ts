@@ -527,6 +527,26 @@ export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
 export const ALL_STRATEGIES = ['default', ...DEFAULT_STRATEGIES, ...ADDITIONAL_STRATEGIES] as const;
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
+export const STRATEGY_PROBE_MULTIPLER: Record<Strategy, number> = {
+  default: 1,
+  basic: 1,
+  jailbreak: 1,
+  'jailbreak:composite': 5,
+  'prompt-injection': 1,
+  base64: 1,
+  citation: 1,
+  crescendo: 10,
+  gcg: 1,
+  goat: 5,
+  'jailbreak:tree': 150,
+  'jailbreak:likert': 1,
+  leetspeak: 1,
+  'math-prompt': 1,
+  multilingual: 3,
+  rot13: 1,
+  'best-of-n': 1,
+};
+
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   default: 'Standard security testing plugins',
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',

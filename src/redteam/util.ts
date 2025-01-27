@@ -1,3 +1,7 @@
+import { STRATEGY_PROBE_MULTIPLER } from './constants';
+import type { Strategy } from './constants';
+import { RedteamPluginObject, RedteamStrategyObject } from './types';
+
 /**
  * Normalizes different types of apostrophes to a standard single quote
  */
@@ -89,4 +93,42 @@ export function removePrefix(str: string, prefix: string) {
   str = str.replace(/^\*+(.+?)\*+:?\s*/i, '$1');
   str = str.replace(new RegExp(prefix + ':', 'i'), '').trim();
   return str;
+}
+
+/**
+ * This gets the estimated probes based on default settings. It does not take into account custom plugin configurations
+ *
+ * @param plugins
+ * @param strategies
+ * @param numTests
+ * @returns
+ */
+export function getEstimatedProbes(
+  plugins: RedteamPluginObject[],
+  strategies: RedteamStrategyObject[],
+  numTests = 5,
+) {
+  const baseProbes = numTests * plugins.length;
+
+  // Calculate total multiplier for all active strategies
+  const strategyMultiplier = strategies.reduce((total, strategy) => {
+    const strategyId: Strategy =
+      typeof strategy === 'string' ? (strategy as Strategy) : (strategy.id as Strategy);
+    // Don't add 1 since we handle multilingual separately
+    return total + (strategyId === 'multilingual' ? 0 : STRATEGY_PROBE_MULTIPLER[strategyId]);
+  }, 0);
+
+  // Find if multilingual strategy is present and get number of languages
+  const multilingualStrategy = strategies.find(
+    (s) => (typeof s === 'string' ? s : s.id) === 'multilingual',
+  );
+
+  const numLanguages =
+    multilingualStrategy && typeof multilingualStrategy !== 'string'
+      ? ((multilingualStrategy.config?.languages as string[]) || []).length || 3
+      : 1;
+
+  const strategyProbes = strategyMultiplier * baseProbes;
+
+  return (baseProbes + strategyProbes) * numLanguages;
 }
