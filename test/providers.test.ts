@@ -63,7 +63,7 @@ describe('loadApiProvider', () => {
   });
 
   it('should load ChatGPT-4o-latest provider', async () => {
-    const provider = await loadApiProvider('openai:chat:chatgpt-4o-latest');
+    const provider = await loadApiProvider('openai:chatgpt-4o-latest');
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
       'chatgpt-4o-latest',
       expect.any(Object),
