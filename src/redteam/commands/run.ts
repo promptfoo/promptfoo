@@ -70,7 +70,11 @@ export function redteamRunCommand(program: Command) {
             logger.error(`  ${err.path.join('.')}: ${err.message}`);
           });
         } else {
-          logger.error(`An unexpected error occurred: ${error}`);
+          logger.error(
+            `An unexpected error occurred during red team run: ${error instanceof Error ? error.message : String(error)}\n${
+              error instanceof Error ? error.stack : ''
+            }`,
+          );
         }
         process.exitCode = 1;
       }
