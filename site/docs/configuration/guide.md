@@ -141,20 +141,20 @@ tests:
 A single string is also valid:
 
 ```yaml
-tests: tests/*
+tests: file://tests/*
 ```
 
 Or a list of paths:
 
 ```yaml
 tests:
-  - 'tests/accuracy'
-  - 'tests/creativity'
-  - 'tests/hallucination'
+  - file://tests/accuracy
+  - file://tests/creativity
+  - file://tests/hallucination
 ```
 
 :::tip
-We also support CSV datasets from [local file](/docs/configuration/parameters/#import-from-csv) and [Google Sheets](/docs/integrations/google-sheets).
+Test files can be defined in YAML/JSON, JSONL, [CSV](/docs/configuration/parameters/#import-from-csv), and TypeScript/JavaScript. We also support [Google Sheets](/docs/integrations/google-sheets) CSV datasets.
 :::
 
 ## Import vars from separate files
@@ -269,9 +269,6 @@ In this example, we use a `llm-rubric` assertion to ensure that the LLM does not
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
-providers:
-  - openai:gpt-4o-mini
-  - vertex:gemini-pro
 // highlight-start
 defaultTest:
   assert:
@@ -793,9 +790,6 @@ YAML is nice, but some organizations maintain their LLM tests in spreadsheets fo
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
-providers:
-  - openai:gpt-4o-mini
-  - vertex:gemini-pro
 // highlight-next-line
 tests: file://tests.csv
 ```
@@ -806,9 +800,6 @@ promptfoo also has built-in ability to pull test cases from a Google Sheet. The 
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
-providers:
-  - openai:gpt-4o-mini
-  - vertex:gemini-pro
 // highlight-next-line
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
 ```
