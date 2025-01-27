@@ -6,10 +6,6 @@ import path from 'path';
 import cliState from './cliState';
 import { importModule } from './esm';
 import logger from './logger';
-import {
-  AdalineGatewayChatProvider,
-  AdalineGatewayEmbeddingProvider,
-} from './providers/adaline.gateway';
 import { AI21ChatCompletionProvider } from './providers/ai21';
 import { AnthropicCompletionProvider, AnthropicMessagesProvider } from './providers/anthropic';
 import {
@@ -486,7 +482,9 @@ export async function loadApiProvider(
     const providerName = splits[1];
     const modelType = splits[2];
     const modelName = splits[3];
-
+    const { AdalineGatewayChatProvider, AdalineGatewayEmbeddingProvider } = await import(
+      './providers/adaline.gateway'
+    );
     if (modelType === 'embedding' || modelType === 'embeddings') {
       ret = new AdalineGatewayEmbeddingProvider(providerName, modelName, providerOptions);
     } else {
