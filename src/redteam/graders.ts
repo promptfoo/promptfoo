@@ -90,7 +90,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:indirect-prompt-injection': new IndirectPromptInjectionGrader(),
   'promptfoo:redteam:intent': new IntentGrader(),
   'promptfoo:redteam:overreliance': new OverrelianceGrader(),
-  'promptfoo:redteam:rag-full-document-exfiltration': new RagFullDocumentExfiltrationGrader(),
+  'promptfoo:redteam:rag-document-exfiltration': new RagFullDocumentExfiltrationGrader(),
   'promptfoo:redteam:pii:api-db': new PiiGrader(),
   'promptfoo:redteam:pii:direct': new PiiGrader(),
   'promptfoo:redteam:pii:session': new PiiGrader(),

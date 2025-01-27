@@ -734,7 +734,7 @@ export const PLUGINS = [
     label: 'technical',
     link: '/docs/red-team/plugins/harmful/',
     name: 'RAG Full Document Exfiltration',
-    pluginId: 'rag-full-document-exfiltration',
+    pluginId: 'rag-document-exfiltration',
     applicationTypes: {
       rag: true,
       agent: true,
