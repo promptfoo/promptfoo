@@ -106,16 +106,17 @@ export class GoogleChatProvider extends GoogleGenericProvider {
       temperature: this.config.temperature,
       topP: this.config.topP,
       topK: this.config.topK,
-
       safetySettings: this.config.safetySettings,
       stopSequences: this.config.stopSequences,
       maxOutputTokens: this.config.maxOutputTokens,
     };
+
     logger.debug(`Calling Google API: ${JSON.stringify(body)}`);
 
-    let data;
+    let data,
+      cached = false;
     try {
-      ({ data } = (await fetchWithCache(
+      ({ data, cached } = (await fetchWithCache(
         `https://${this.getApiHost()}/v1beta3/models/${
           this.modelName
         }:generateMessage?key=${this.getApiKey()}`,
@@ -127,6 +128,8 @@ export class GoogleChatProvider extends GoogleGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
+        'json',
+        false,
       )) as unknown as any);
     } catch (err) {
       return {
@@ -146,13 +149,20 @@ export class GoogleChatProvider extends GoogleGenericProvider {
       const output = data.candidates[0].content;
       return {
         output,
-        tokenUsage: {
-          prompt: data.usageMetadata?.promptTokenCount,
-          completion: data.usageMetadata?.candidatesTokenCount,
-          total: data.usageMetadata?.totalTokenCount,
-          numRequests: 1,
-        },
+        tokenUsage: cached
+          ? {
+              cached: data.usageMetadata?.totalTokenCount,
+              total: data.usageMetadata?.totalTokenCount,
+              numRequests: 0,
+            }
+          : {
+              prompt: data.usageMetadata?.promptTokenCount,
+              completion: data.usageMetadata?.candidatesTokenCount,
+              total: data.usageMetadata?.totalTokenCount,
+              numRequests: 1,
+            },
         raw: data,
+        cached,
       };
     } catch (err) {
       return {
@@ -180,7 +190,6 @@ export class GoogleChatProvider extends GoogleGenericProvider {
     };
 
     if (this.config.responseSchema) {
-      // If the `response_schema` has already been set by the client.
       if (body.generationConfig.response_schema) {
         throw new Error(
           '`responseSchema` provided but `generationConfig.response_schema` already set.',
@@ -197,11 +206,10 @@ export class GoogleChatProvider extends GoogleGenericProvider {
 
     logger.debug(`Calling Google API: ${JSON.stringify(body)}`);
 
-    let data;
+    let data,
+      cached = false;
     try {
-      // https://ai.google.dev/docs/gemini_api_overview#curl
-      // https://ai.google.dev/tutorials/rest_quickstart
-      ({ data } = (await fetchWithCache(
+      ({ data, cached } = (await fetchWithCache(
         `https://${this.getApiHost()}/v1beta/models/${
           this.modelName
         }:generateContent?key=${this.getApiKey()}`,
@@ -213,6 +221,8 @@ export class GoogleChatProvider extends GoogleGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
+        'json',
+        false,
       )) as {
         data: {
           candidates: Array<{
@@ -226,6 +236,7 @@ export class GoogleChatProvider extends GoogleGenericProvider {
             totalTokenCount: number;
           };
         };
+        cached: boolean;
       });
     } catch (err) {
       return {
@@ -247,13 +258,20 @@ export class GoogleChatProvider extends GoogleGenericProvider {
     try {
       return {
         output: parts,
-        tokenUsage: {
-          prompt: data.usageMetadata?.promptTokenCount,
-          completion: data.usageMetadata?.candidatesTokenCount,
-          total: data.usageMetadata?.totalTokenCount,
-          numRequests: 1,
-        },
+        tokenUsage: cached
+          ? {
+              cached: data.usageMetadata?.totalTokenCount,
+              total: data.usageMetadata?.totalTokenCount,
+              numRequests: 0,
+            }
+          : {
+              prompt: data.usageMetadata?.promptTokenCount,
+              completion: data.usageMetadata?.candidatesTokenCount,
+              total: data.usageMetadata?.totalTokenCount,
+              numRequests: 1,
+            },
         raw: data,
+        cached,
         guardrails: {
           flaggedInput: data.promptFeedback?.safetyRatings?.some(
             (r) => r.probability !== 'NEGLIGIBLE',
