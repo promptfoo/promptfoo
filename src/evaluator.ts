@@ -35,7 +35,6 @@ import {
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import invariant from './util/invariant';
 import { safeJsonStringify } from './util/json';
-import { sleep } from './util/time';
 import { transform, type TransformContext, TransformInputType } from './util/transform';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
@@ -154,6 +153,7 @@ class Evaluator {
     evaluateOptions,
     testIdx,
     promptIdx,
+    repeatIndex,
   }: RunEvalOptions): Promise<EvaluateResult[]> {
     // Use the original prompt to set the label, not renderedPrompt
     const promptLabel = prompt.label;
@@ -238,32 +238,8 @@ class Evaluator {
       const endTime = Date.now();
       latencyMs = endTime - startTime;
 
-      let conversationLastInput = undefined;
-      if (renderedJson && Array.isArray(renderedJson)) {
-        const lastElt = renderedJson[renderedJson.length - 1];
-        // Use the `content` field if present (OpenAI chat format)
-        conversationLastInput = lastElt?.content || lastElt;
-      }
-      this.conversations[conversationKey] = this.conversations[conversationKey] || [];
-      this.conversations[conversationKey].push({
-        prompt: renderedJson || renderedPrompt,
-        input: conversationLastInput || renderedJson || renderedPrompt,
-        output: response.output || '',
-      });
-
-      if (!response.cached && provider.delay > 0) {
-        logger.debug(`Sleeping for ${provider.delay}ms`);
-        await sleep(provider.delay);
-      }
-
-      if (response.metadata?.iterations) {
-        logger.warn(
-          `Iterative provider returned iterations: ${JSON.stringify(response.metadata.iterations)}`,
-        );
-        // return response.testCases;
-      }
-
-      const ret: EvaluateResult = {
+      // Create base result
+      const baseResult: EvaluateResult = {
         ...setup,
         response,
         success: false,
@@ -278,59 +254,98 @@ class Evaluator {
         testCase: test,
         promptId: prompt.id || '',
       };
+
+      // If we have iterations, create multiple test cases
+      if (response.metadata?.iterations && Array.isArray(response.metadata.iterations)) {
+        const testCases = response.metadata.iterations.map((iteration, idx) => ({
+          ...test,
+          vars: {
+            ...test.vars,
+          },
+          metadata: {
+            ...test.metadata,
+            redteamFinalPrompt: iteration.input,
+            iterationIndex: idx,
+          },
+          providerOutput: iteration.output,
+        }));
+
+        // Run evaluation for each test case
+        const results: EvaluateResult[] = [];
+        for (const testCase of testCases) {
+          const result = await this.runEval({
+            provider,
+            prompt,
+            test: testCase,
+            delay,
+            nunjucksFilters: filters,
+            evaluateOptions,
+            testIdx: testIdx + results.length,
+            promptIdx,
+            repeatIndex: evaluateOptions.repeatIndex || 0,
+          });
+          results.push(...result);
+        }
+        return results;
+      }
+
+      // Handle single result case
       if (response.error) {
-        ret.error = response.error;
+        baseResult.error = response.error;
+        this.stats.errors++;
+        return [baseResult];
       } else if (response.output === null || response.output === undefined) {
         // NOTE: empty output often indicative of guardrails, so behavior differs for red teams.
         if (this.testSuite.redteam) {
-          ret.success = true;
+          baseResult.success = true;
         } else {
-          ret.success = false;
-          ret.score = 0;
-          ret.error = 'No output';
+          baseResult.success = false;
+          baseResult.score = 0;
+          baseResult.error = 'No output';
         }
-      } else {
-        // Create a copy of response so we can potentially mutate it.
-        const processedResponse = { ...response };
-        const transforms: string[] = [
-          provider.transform, // Apply provider transform first
-          // NOTE: postprocess is deprecated. Use the first defined transform.
-          [test.options?.transform, test.options?.postprocess].find((s) => s),
-        ]
-          .flat()
-          .filter((s): s is string => typeof s === 'string');
-        for (const t of transforms) {
-          processedResponse.output = await transform(t, processedResponse.output, {
-            vars,
-            prompt,
-          });
-        }
-
-        invariant(processedResponse.output != null, 'Response output should not be null');
-        const checkResult = await runAssertions({
-          prompt: renderedPrompt,
-          provider,
-          providerResponse: processedResponse,
-          test,
-          latencyMs: response.cached ? undefined : latencyMs,
-        });
-        if (!checkResult.pass) {
-          ret.error = checkResult.reason;
-          ret.failureReason = ResultFailureReason.ASSERT;
-        }
-        ret.success = checkResult.pass;
-        ret.score = checkResult.score;
-        ret.namedScores = checkResult.namedScores || {};
-        if (checkResult.tokensUsed) {
-          this.stats.tokenUsage.total += checkResult.tokensUsed.total || 0;
-          this.stats.tokenUsage.prompt += checkResult.tokensUsed.prompt || 0;
-          this.stats.tokenUsage.completion += checkResult.tokensUsed.completion || 0;
-          this.stats.tokenUsage.cached += checkResult.tokensUsed.cached || 0;
-          this.stats.tokenUsage.numRequests += checkResult.tokensUsed.numRequests || 1;
-        }
-        ret.response = processedResponse;
-        ret.gradingResult = checkResult;
+        return [baseResult];
       }
+
+      // Create a copy of response so we can potentially mutate it.
+      const processedResponse = { ...response };
+      const transforms: string[] = [
+        provider.transform, // Apply provider transform first
+        // NOTE: postprocess is deprecated. Use the first defined transform.
+        [test.options?.transform, test.options?.postprocess].find((s) => s),
+      ]
+        .flat()
+        .filter((s): s is string => typeof s === 'string');
+      for (const t of transforms) {
+        processedResponse.output = await transform(t, processedResponse.output, {
+          vars,
+          prompt,
+        });
+      }
+
+      invariant(processedResponse.output != null, 'Response output should not be null');
+      const checkResult = await runAssertions({
+        prompt: renderedPrompt,
+        provider,
+        providerResponse: processedResponse,
+        test,
+        latencyMs: response.cached ? undefined : latencyMs,
+      });
+      if (!checkResult.pass) {
+        baseResult.error = checkResult.reason;
+        baseResult.failureReason = ResultFailureReason.ASSERT;
+      }
+      baseResult.success = checkResult.pass;
+      baseResult.score = checkResult.score;
+      baseResult.namedScores = checkResult.namedScores || {};
+      if (checkResult.tokensUsed) {
+        this.stats.tokenUsage.total += checkResult.tokensUsed.total || 0;
+        this.stats.tokenUsage.prompt += checkResult.tokensUsed.prompt || 0;
+        this.stats.tokenUsage.completion += checkResult.tokensUsed.completion || 0;
+        this.stats.tokenUsage.cached += checkResult.tokensUsed.cached || 0;
+        this.stats.tokenUsage.numRequests += checkResult.tokensUsed.numRequests || 1;
+      }
+      baseResult.response = processedResponse;
+      baseResult.gradingResult = checkResult;
 
       // Update token usage stats
       if (response.tokenUsage) {
@@ -341,20 +356,33 @@ class Evaluator {
         this.stats.tokenUsage.numRequests += response.tokenUsage.numRequests || 1;
       }
 
-      if (ret.success) {
+      if (baseResult.success) {
         this.stats.successes++;
-      } else if (ret.failureReason === ResultFailureReason.ERROR) {
+      } else if (baseResult.failureReason === ResultFailureReason.ERROR) {
         this.stats.errors++;
       } else {
         this.stats.failures++;
       }
 
-      if (test.options?.storeOutputAs && ret.response?.output) {
+      if (test.options?.storeOutputAs && baseResult.response?.output) {
         // Save the output in a register for later use
-        this.registers[test.options.storeOutputAs] = ret.response.output;
+        this.registers[test.options.storeOutputAs] = baseResult.response.output;
       }
 
-      return [ret];
+      let conversationLastInput = undefined;
+      if (renderedJson && Array.isArray(renderedJson)) {
+        const lastElt = renderedJson[renderedJson.length - 1];
+        // Use the `content` field if present (OpenAI chat format)
+        conversationLastInput = lastElt?.content || lastElt;
+      }
+      this.conversations[conversationKey] = this.conversations[conversationKey] || [];
+      this.conversations[conversationKey].push({
+        prompt: renderedJson || renderedPrompt,
+        input: conversationLastInput || renderedJson || renderedPrompt,
+        output: response.output || '',
+      });
+
+      return [baseResult];
     } catch (err) {
       this.stats.errors++;
       return [
@@ -665,95 +693,95 @@ class Evaluator {
       });
 
       const rows: EvaluateResult[] = await this.runEval(evalStep);
-      const row = rows[0];
-
-      if (evalStep.test.assert?.some((a) => a.type === 'select-best')) {
-        rowsWithSelectBestAssertion.add(row.testIdx);
-      }
-      for (const assert of evalStep.test.assert || []) {
-        if (assert.type) {
-          assertionTypes.add(assert.type);
+      for (const row of rows) {
+        if (evalStep.test.assert?.some((a) => a.type === 'select-best')) {
+          rowsWithSelectBestAssertion.add(row.testIdx);
         }
-      }
-
-      numComplete++;
-      if (options.progressCallback) {
-        options.progressCallback(
-          this.evalRecord.results.length,
-          runEvalOptions.length,
-          index,
-          evalStep,
-        );
-      }
-
-      try {
-        await this.evalRecord.addResult(row, evalStep.test);
-      } catch (error) {
-        logger.error(`Error saving result: ${error} ${safeJsonStringify(row)}`);
-      }
-
-      for (const writer of this.fileWriters) {
-        await writer.write(row);
-      }
-
-      const { promptIdx } = row;
-      const metrics = prompts[promptIdx].metrics;
-      invariant(metrics, 'Expected prompt.metrics to be set');
-      metrics.score += row.score;
-      for (const [key, value] of Object.entries(row.namedScores)) {
-        metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
-        metrics.namedScoresCount[key] = (metrics.namedScoresCount[key] || 0) + 1;
-      }
-
-      if (testSuite.derivedMetrics) {
-        const math = await import('mathjs'); // TODO: move this
-        for (const metric of testSuite.derivedMetrics) {
-          if (metrics.namedScores[metric.name] === undefined) {
-            metrics.namedScores[metric.name] = 0;
+        for (const assert of evalStep.test.assert || []) {
+          if (assert.type) {
+            assertionTypes.add(assert.type);
           }
-          try {
-            if (typeof metric.value === 'function') {
-              metrics.namedScores[metric.name] = metric.value(metrics.namedScores, evalStep);
-            } else {
-              const evaluatedValue = math.evaluate(metric.value, metrics.namedScores);
-              metrics.namedScores[metric.name] = evaluatedValue;
+        }
+
+        numComplete++;
+        if (options.progressCallback) {
+          options.progressCallback(
+            this.evalRecord.results.length,
+            runEvalOptions.length,
+            index,
+            evalStep,
+          );
+        }
+
+        try {
+          await this.evalRecord.addResult(row, evalStep.test);
+        } catch (error) {
+          logger.error(`Error saving result: ${error} ${safeJsonStringify(row)}`);
+        }
+
+        for (const writer of this.fileWriters) {
+          await writer.write(row);
+        }
+
+        const { promptIdx } = row;
+        const metrics = prompts[promptIdx].metrics;
+        invariant(metrics, 'Expected prompt.metrics to be set');
+        metrics.score += row.score;
+        for (const [key, value] of Object.entries(row.namedScores)) {
+          metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
+          metrics.namedScoresCount[key] = (metrics.namedScoresCount[key] || 0) + 1;
+        }
+
+        if (testSuite.derivedMetrics) {
+          const math = await import('mathjs'); // TODO: move this
+          for (const metric of testSuite.derivedMetrics) {
+            if (metrics.namedScores[metric.name] === undefined) {
+              metrics.namedScores[metric.name] = 0;
             }
-          } catch (error) {
-            logger.debug(
-              `Could not evaluate derived metric '${metric.name}': ${(error as Error).message}`,
-            );
+            try {
+              if (typeof metric.value === 'function') {
+                metrics.namedScores[metric.name] = metric.value(metrics.namedScores, evalStep);
+              } else {
+                const evaluatedValue = math.evaluate(metric.value, metrics.namedScores);
+                metrics.namedScores[metric.name] = evaluatedValue;
+              }
+            } catch (error) {
+              logger.debug(
+                `Could not evaluate derived metric '${metric.name}': ${(error as Error).message}`,
+              );
+            }
           }
         }
-      }
-      metrics.testPassCount += row.success ? 1 : 0;
-      if (!row.success) {
-        if (row.failureReason === ResultFailureReason.ERROR) {
-          metrics.testErrorCount += 1;
-        } else {
-          metrics.testFailCount += 1;
+        metrics.testPassCount += row.success ? 1 : 0;
+        if (!row.success) {
+          if (row.failureReason === ResultFailureReason.ERROR) {
+            metrics.testErrorCount += 1;
+          } else {
+            metrics.testFailCount += 1;
+          }
         }
-      }
-      metrics.assertPassCount +=
-        row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
-      metrics.assertFailCount +=
-        row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
-      metrics.totalLatencyMs += row.latencyMs || 0;
-      metrics.tokenUsage.cached =
-        (metrics.tokenUsage.cached || 0) + (row.response?.tokenUsage?.cached || 0);
-      metrics.tokenUsage.completion =
-        (metrics.tokenUsage.completion || 0) + (row.response?.tokenUsage?.completion || 0);
-      metrics.tokenUsage.prompt =
-        (metrics.tokenUsage.prompt || 0) + (row.response?.tokenUsage?.prompt || 0);
-      metrics.tokenUsage.total =
-        (metrics.tokenUsage.total || 0) + (row.response?.tokenUsage?.total || 0);
-      metrics.tokenUsage.numRequests =
-        (metrics.tokenUsage.numRequests || 0) + (row.response?.tokenUsage?.numRequests || 1);
-      metrics.cost += row.cost || 0;
+        metrics.assertPassCount +=
+          row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
+        metrics.assertFailCount +=
+          row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
+        metrics.totalLatencyMs += row.latencyMs || 0;
+        metrics.tokenUsage.cached =
+          (metrics.tokenUsage.cached || 0) + (row.response?.tokenUsage?.cached || 0);
+        metrics.tokenUsage.completion =
+          (metrics.tokenUsage.completion || 0) + (row.response?.tokenUsage?.completion || 0);
+        metrics.tokenUsage.prompt =
+          (metrics.tokenUsage.prompt || 0) + (row.response?.tokenUsage?.prompt || 0);
+        metrics.tokenUsage.total =
+          (metrics.tokenUsage.total || 0) + (row.response?.tokenUsage?.total || 0);
+        metrics.tokenUsage.numRequests =
+          (metrics.tokenUsage.numRequests || 0) + (row.response?.tokenUsage?.numRequests || 1);
+        metrics.cost += row.cost || 0;
 
-      await runExtensionHook(testSuite.extensions, 'afterEach', {
-        test: evalStep.test,
-        result: row,
-      });
+        await runExtensionHook(testSuite.extensions, 'afterEach', {
+          test: evalStep.test,
+          result: row,
+        });
+      }
     };
 
     // Set up main progress bars

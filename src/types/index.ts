@@ -154,6 +154,7 @@ const EvaluateOptionsSchema = z.object({
     .optional(),
   repeat: z.number().optional(),
   showProgressBar: z.boolean().optional(),
+  repeatIndex: z.number().optional(),
 });
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & { abortSignal?: AbortSignal };
 
