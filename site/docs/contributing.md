@@ -303,7 +303,7 @@ As a maintainer, when you are ready to release a new version:
    - Patch will bump the version by 0.0.1 and we typically use this for bug fixes and minor features
    - Minor will bump the version by 0.1.0 and we typically use this for major features and breaking changes
 
-2. Verify that all your changes look good by running `git diff main` (or alternately, `git difftool -d main`) and ensuring that only the relevant files have been updated (you should only see the version number change in package.json and CITATION.cff).
+2. Verify that all your changes look good by running `git diff main` (or alternately, `git difftool -d main`) and ensuring that only the relevant files have been updated (you should only see the version number change in package.json, package-lock.json and CITATION.cff).
 
 3. Push the changes to a remote branch:
 
