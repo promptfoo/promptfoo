@@ -1,6 +1,7 @@
 import fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
+import { logger } from '../src/logger';
 import { loadApiProvider, loadApiProviders } from '../src/providers';
 import { HttpProvider } from '../src/providers/http';
 import { OpenAiChatCompletionProvider } from '../src/providers/openai';
@@ -68,6 +69,9 @@ describe('loadApiProvider', () => {
       expect.any(Object),
     );
     expect(provider).toBeDefined();
+    expect(logger.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('Unknown OpenAI chat model: chatgpt-4o-latest'),
+    );
   });
 
   it('should load DeepSeek provider with default model', async () => {
