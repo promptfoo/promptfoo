@@ -32,7 +32,7 @@ providers:
 | [F5](./f5.md)                                       | OpenAI-compatible AI Gateway interface     | `f5:path-name`                                    |
 | [fal.ai](./fal.md)                                  | Image Generation Provider                  | `fal:image:fal-ai/fast-sdxl`                      |
 | [GitHub](./github.md)                               | GitHub AI Gateway                          | `github:gpt-4o-mini`                              |
-| [Google AI Studio (PaLM)](./palm.md)                | Gemini and PaLM models                     | `google:gemini-pro`                               |
+| [Google AI Studio](./google.md)                     | Gemini models                              | `google:gemini-2.0-flash-thinking-exp`            |
 | [Google Vertex AI](./vertex.md)                     | Google Cloud's AI platform                 | `vertex:gemini-pro`                               |
 | [Groq](./groq.md)                                   | High-performance inference API             | `groq:llama-3.3-70b-versatile`                    |
 | [Hyperbolic](./hyperbolic.md)                       | OpenAI-compatible Llama 3 provider         | `hyperbolic:meta-llama/Meta-Llama-3-70B-Instruct` |
