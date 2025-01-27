@@ -89,7 +89,7 @@ If you're not sure where to start, check out our [good first issues](https://git
    git checkout -b feature/your-feature-name
    ```
 
-2. Make your changes and commit them. We try to follow the [Conventional Commits](https://www.conventionalcommits.org/) specification, but this is not required for feature branches. We merge all PRs into `main` with a squash merge and a conventional commit message.
+2. Make your changes and commit them. For our PR titles, we aspire to follow the [Conventional Commits](https://www.conventionalcommits.org/) specification, but this is not required for feature branches. We merge all PRs into `main` with a squash merge and a conventional commit message.
 
 3. Push your branch to your fork:
 
@@ -105,7 +105,7 @@ When opening a pull request:
 - Ensure test coverage for new code or bug fixes.
 - Provide clear instructions on how to reproduce the problem or test the new feature.
 - Be responsive to feedback and be prepared to make changes if requested.
-- Ensure your tests are passing and your code is properly linted.
+- Ensure your tests are passing and your code is properly linted and formatted. You can do this by running `npm run lint -- --fix` and `npm run format` respectively.
 
 Don't hesitate to ask for help. We're here to support you. If you're worried about whether your PR will be accepted, please talk to us first (see [Getting Help](#getting-help)).
 
