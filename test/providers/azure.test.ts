@@ -1,4 +1,6 @@
 import { fetchWithCache } from '../../src/cache';
+import { clearCache, disableCache, enableCache } from '../../src/cache';
+import { loadApiProvider } from '../../src/providers';
 import {
   AzureChatCompletionProvider,
   AzureCompletionProvider,
@@ -12,7 +14,20 @@ import type { TestCase, TestSuite } from '../../src/types';
 jest.mock('../../src/logger');
 jest.mock('../../src/cache', () => ({
   fetchWithCache: jest.fn(),
+  clearCache: jest.fn(),
+  disableCache: jest.fn(),
+  enableCache: jest.fn(),
 }));
+
+const defaultMockResponse = {
+  data: {
+    choices: [{ text: 'Test output' }],
+    usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+  },
+  cached: false,
+  status: 200,
+  statusText: 'OK',
+};
 
 describe('maybeEmitAzureOpenAiWarning', () => {
   it('should not emit warning when no Azure providers are used', () => {
@@ -712,5 +727,208 @@ describe('AzureCompletionProvider', () => {
     expect(result1.output).toBe('Test response');
     expect(result1.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
     expect(result2.tokenUsage).toEqual({ cached: 10, total: 10 });
+  });
+});
+
+describe('Azure Providers', () => {
+  const mockFetchWithCache = jest.mocked(fetchWithCache);
+
+  beforeEach(() => {
+    mockFetchWithCache.mockReset();
+  });
+
+  afterEach(async () => {
+    jest.clearAllMocks();
+    await clearCache();
+  });
+
+  describe('Provider Loading', () => {
+    it('loadApiProvider with azureopenai:completion:modelName', async () => {
+      const provider = await loadApiProvider('azureopenai:completion:text-davinci-003');
+      expect(provider).toBeInstanceOf(AzureCompletionProvider);
+    });
+
+    it('loadApiProvider with azureopenai:chat:modelName', async () => {
+      const provider = await loadApiProvider('azureopenai:chat:gpt-3.5-turbo');
+      expect(provider).toBeInstanceOf(AzureChatCompletionProvider);
+    });
+  });
+
+  describe('API Calls', () => {
+    const defaultConfig = {
+      config: {
+        apiHost: 'test.openai.azure.com',
+        apiKey: 'test-key',
+      },
+    };
+
+    it('AzureOpenAiCompletionProvider callApi', async () => {
+      mockFetchWithCache.mockResolvedValue(defaultMockResponse);
+
+      const provider = new AzureCompletionProvider('text-davinci-003', defaultConfig);
+      const result = await provider.callApi('Test prompt');
+
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe('Test output');
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+    });
+
+    it('AzureOpenAiChatCompletionProvider callApi', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new AzureChatCompletionProvider('gpt-4o-mini', defaultConfig);
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+      );
+
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe('Test output');
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+    });
+
+    it('AzureOpenAiChatCompletionProvider callApi with dataSources', async () => {
+      const dataSources = [
+        {
+          type: 'AzureCognitiveSearch',
+          endpoint: 'https://search.windows.net',
+          indexName: 'search-test',
+          semanticConfiguration: 'default',
+          queryType: 'vectorSimpleHybrid',
+        },
+      ];
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [
+            { message: { role: 'system', content: 'System prompt' } },
+            { message: { role: 'user', content: 'Test prompt' } },
+            { message: { role: 'assistant', content: 'Test response' } },
+          ],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new AzureChatCompletionProvider('gpt-4o-mini', {
+        ...defaultConfig,
+        config: {
+          ...defaultConfig.config,
+          dataSources,
+        },
+      });
+      const result = await provider.callApi(
+        JSON.stringify([
+          { role: 'system', content: 'System prompt' },
+          { role: 'user', content: 'Test prompt' },
+        ]),
+      );
+
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe('Test response');
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+    });
+
+    it('AzureOpenAiChatCompletionProvider callApi with cache disabled', async () => {
+      disableCache();
+
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new AzureChatCompletionProvider('gpt-4o-mini', defaultConfig);
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+      );
+
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe('Test output');
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+
+      enableCache();
+    });
+  });
+
+  describe('Content Filtering', () => {
+    beforeEach(() => {
+      mockFetchWithCache.mockReset();
+    });
+
+    describe('AzureCompletionProvider', () => {
+      it('should handle content filtering via error response', async () => {
+        const provider = new AzureCompletionProvider('text-davinci-003', {
+          config: {
+            apiHost: 'test.openai.azure.com',
+            apiKey: 'test-key',
+          },
+        });
+        mockFetchWithCache.mockResolvedValue({
+          data: {
+            error: {
+              message: 'The response was filtered',
+              type: 'invalid_request_error',
+              param: null,
+              code: 'content_filter',
+              status: 400,
+            },
+          },
+          cached: false,
+          status: 400,
+          statusText: 'Bad Request',
+        });
+
+        const result = await provider.callApi('test prompt');
+        expect(result.error).toBe(
+          'API response error: TypeError: Cannot read properties of undefined (reading \'0\'): {"error":{"message":"The response was filtered","type":"invalid_request_error","param":null,"code":"content_filter","status":400}}',
+        );
+      });
+    });
+
+    describe('AzureChatCompletionProvider', () => {
+      it('should handle content filtering via error response', async () => {
+        const provider = new AzureChatCompletionProvider('gpt-4', {
+          config: {
+            apiHost: 'test.openai.azure.com',
+            apiKey: 'test-key',
+          },
+        });
+        mockFetchWithCache.mockResolvedValue({
+          data: {
+            error: {
+              message: 'The response was filtered',
+              type: 'invalid_request_error',
+              param: null,
+              code: 'content_filter',
+              status: 400,
+            },
+          },
+          cached: false,
+          status: 400,
+          statusText: 'Bad Request',
+        });
+
+        const result = await provider.callApi('test prompt');
+        expect(result.output).toBe('The response was filtered');
+        expect(result.guardrails).toEqual({
+          flagged: true,
+          flaggedInput: true,
+          flaggedOutput: false,
+        });
+      });
+    });
   });
 });

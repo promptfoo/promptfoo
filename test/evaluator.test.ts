@@ -25,6 +25,7 @@ jest.mock('../src/util/time', () => ({
   ...jest.requireActual('../src/util/time'),
   sleep: jest.fn(),
 }));
+jest.mock('../src/globalConfig/globalConfig');
 
 const mockApiProvider: ApiProvider = {
   id: jest.fn().mockReturnValue('test-provider'),
