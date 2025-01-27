@@ -298,39 +298,32 @@ Note: releases are only issued by maintainers. If you need to to release a new v
 
 As a maintainer, when you are ready to release a new version:
 
-1. Run `npm version <minor|patch>`. We do not increment the major version per our adoption of [0ver](https://0ver.org/). This will automatically update `package.json`, `package-lock.json` and `CITATION.cff`with the new version as well as create a new branch with the new verison number. When creating a new release version, please follow these guidelines:
+1. From main, run `npm version <minor|patch>`. We do not increment the major version per our adoption of [0ver](https://0ver.org/). This will automatically:
+
+   - Pull latest changes from main branch
+   - Update `package.json`, `package-lock.json` and `CITATION.cff` with the new version
+   - Create a new branch named `chore/bump-version-<new-version>`
+   - Create a pull request titled "chore: bump version <new-version>"
+
+   When creating a new release version, please follow these guidelines:
 
    - Patch will bump the version by 0.0.1 and is used for bug fixes and minor features
    - Minor will bump the version by 0.1.0 and is used for major features and breaking changes
 
-2. Verify that all your changes look good by running `git diff main` (or alternately, `git difftool -d main`) and ensuring that only the relevant files have been updated (you should only see the version number change in package.json, package-lock.json and CITATION.cff).
+2. Once your PR is approved and landed, a version tag will be created automatically by a GitHub Action. After the version tag has been created, generate a [new release](https://github.com/promptfoo/promptfoo/releases/new) based on the tagged version.
 
-3. Push the changes to a remote branch:
+3. Cleanup the release notes. You can look at [this](https://github.com/promptfoo/promptfoo/releases/tag/0.103.13) release as an example
 
-   ```sh
-   git push --set-upstream origin chore/bump-version-0.X.Y
-   ```
+   - Break up each PR in the release into one of the following 5 sections (as applicable)
+     - New Features
+     - Bug Fixes
+     - Chores
+     - Docs
+     - Dependencies
+   - Sort the lines in each section alphabetically
+   - Ensure that the author of the PR is correctly cited
 
-4. Open a pull request against the `main` branch. You can do this by visiting the following link template on your browser:
-
-   ```
-   https://github.com/promptfoo/promptfoo/pull/new/<your-branch-name>
-   ```
-
-5. Once your PR is approved and landed, a version tag will be created automatically by a GitHub Action. After the version tag has been created, generate a [new release](https://github.com/promptfoo/promptfoo/releases/new) based on the tagged version.
-
-6. Cleanup the release notes. You can look at [this](https://github.com/promptfoo/promptfoo/releases/tag/0.103.13) release as an example
-
-- Break up each PR in the release into one of the following 5 sections (as applicable)
-  - New Features
-  - Bug Fixes
-  - Chores
-  - Docs
-  - Dependencies
-- Sort the lines in each section alphabetically
-- Ensure that the author of the PR is correctly cited
-
-8. A GitHub Action should automatically publish the package to npm. If it does not, please publish manually.
+4. A GitHub Action should automatically publish the package to npm. If it does not, please publish manually.
 
 ## Getting Help
 
