@@ -298,8 +298,13 @@ Note: releases are only issued by maintainers. If you need to to release a new v
 
 As a maintainer, when you are ready to release a new version:
 
-1. Update the version in `package.json`.
-2. Run `npm install`.
+1. Run `npm version <minor|patch>`. We do not increment the major version per our adoption of [0ver](https://0ver.org/). This will automatically update `package.json` with the new version.
+
+   - Patch will bump the version by 0.0.1 and we typically use this for bug fixes and minor features
+   - Minor will bump the version by 0.1.0 and we typically use this for major features and breaking changes
+
+2. Run `npm install` to ensure that package-lock.json is updated.
+
 3. Add the updated files to Git:
 
    ```sh
