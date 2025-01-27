@@ -303,31 +303,25 @@ As a maintainer, when you are ready to release a new version:
    - Patch will bump the version by 0.0.1 and we typically use this for bug fixes and minor features
    - Minor will bump the version by 0.1.0 and we typically use this for major features and breaking changes
 
-2. Run `npm install` to ensure that package-lock.json is updated.
+2. Run `npm run postversion` to correctly set the package version in `CITATION.cff` and create a new branch with the new verison number.
 
-3. Add the updated files to Git:
+3. Verify that all your changes look good by running `git diff main` (or alternately, `git difftool -d main`) and ensuring that only the relevant files have been updated (you should only see changes in package.json, package-lock.json, and CITATION.cff).
 
-   ```sh
-   git add package.json package-lock.json
-   ```
-
-4. Run `npm run postversion` to correctly set the package version in `CITATION.cff` and create a new branch with the new verison number.
-
-5. Push the changes to a remote branch:
+4. Push the changes to a remote branch:
 
    ```sh
    git push --set-upstream origin chore/bump-version-0.X.Y
    ```
 
-6. Open a pull request against the `main` branch. You can do this by visiting the following link template on your browser:
+5. Open a pull request against the `main` branch. You can do this by visiting the following link template on your browser:
 
    ```
    https://github.com/promptfoo/promptfoo/pull/new/<your-branch-name>
    ```
 
-7. Once your PR is approved and landed, a version tag will be created automatically by a GitHub Action. After the version tag has been created, generate a [new release](https://github.com/promptfoo/promptfoo/releases/new) based on the tagged version.
+6. Once your PR is approved and landed, a version tag will be created automatically by a GitHub Action. After the version tag has been created, generate a [new release](https://github.com/promptfoo/promptfoo/releases/new) based on the tagged version.
 
-8. Cleanup the release notes. You can look at [this](https://github.com/promptfoo/promptfoo/releases/tag/0.103.13) release as an example
+7. Cleanup the release notes. You can look at [this](https://github.com/promptfoo/promptfoo/releases/tag/0.103.13) release as an example
 
 - Break up each PR in the release into one of the following 5 sections (as applicable)
   - New Features
