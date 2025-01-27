@@ -1,7 +1,12 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import type { ApiProvider, ProviderResponse, CallApiContextParams } from '../types';
+import type {
+  ApiProvider,
+  ProviderResponse,
+  CallApiContextParams,
+  GuardrailResponse,
+} from '../types';
 import type { EnvOverrides } from '../types/env';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
 import { CHAT_MODELS } from './googleShared';
@@ -175,14 +180,22 @@ export class GoogleChatProvider extends GoogleGenericProvider {
     const { contents, systemInstruction } = maybeCoerceToGeminiFormat(
       parseChatPrompt(prompt, [{ content: prompt }]),
     );
+
+    // Determine API version based on model
+    const apiVersion = this.modelName === 'gemini-2.0-flash-thinking-exp' ? 'v1alpha' : 'v1beta';
+
     const body: Record<string, any> = {
       contents,
       generationConfig: {
-        temperature: this.config.temperature,
-        topP: this.config.topP,
-        topK: this.config.topK,
-        stopSequences: this.config.stopSequences,
-        maxOutputTokens: this.config.maxOutputTokens,
+        ...(this.config.temperature !== undefined && { temperature: this.config.temperature }),
+        ...(this.config.topP !== undefined && { topP: this.config.topP }),
+        ...(this.config.topK !== undefined && { topK: this.config.topK }),
+        ...(this.config.stopSequences !== undefined && {
+          stopSequences: this.config.stopSequences,
+        }),
+        ...(this.config.maxOutputTokens !== undefined && {
+          maxOutputTokens: this.config.maxOutputTokens,
+        }),
         ...this.config.generationConfig,
       },
       safetySettings: this.config.safetySettings,
@@ -206,11 +219,11 @@ export class GoogleChatProvider extends GoogleGenericProvider {
 
     logger.debug(`Calling Google API: ${JSON.stringify(body)}`);
 
-    let data,
-      cached = false;
+    let data;
+    let cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
-        `https://${this.getApiHost()}/v1beta/models/${
+        `https://${this.getApiHost()}/${apiVersion}/models/${
           this.modelName
         }:generateContent?key=${this.getApiKey()}`,
         {
@@ -256,6 +269,22 @@ export class GoogleChatProvider extends GoogleGenericProvider {
     const parts = candidate.content.parts.map((part) => part.text).join('');
 
     try {
+      let guardrails: GuardrailResponse | undefined;
+
+      if (data.promptFeedback?.safetyRatings || candidate.safetyRatings) {
+        const flaggedInput = data.promptFeedback?.safetyRatings?.some(
+          (r) => r.probability !== 'NEGLIGIBLE',
+        );
+        const flaggedOutput = candidate.safetyRatings?.some((r) => r.probability !== 'NEGLIGIBLE');
+        const flagged = flaggedInput || flaggedOutput;
+
+        guardrails = {
+          flaggedInput,
+          flaggedOutput,
+          flagged,
+        };
+      }
+
       return {
         output: parts,
         tokenUsage: cached
@@ -272,12 +301,7 @@ export class GoogleChatProvider extends GoogleGenericProvider {
             },
         raw: data,
         cached,
-        guardrails: {
-          flaggedInput: data.promptFeedback?.safetyRatings?.some(
-            (r) => r.probability !== 'NEGLIGIBLE',
-          ),
-          flaggedOutput: candidate.safetyRatings?.some((r) => r.probability !== 'NEGLIGIBLE'),
-        },
+        ...(guardrails && { guardrails }),
       };
     } catch (err) {
       return {

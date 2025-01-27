@@ -9,7 +9,13 @@ This example demonstrates various features of the Google AI Studio integration w
   - Gemini 1.5 Pro (standard model)
   - Gemini 1.5 Flash (fast responses)
   - Gemini 2.0 Flash (experimental)
-  - Gemini 2.0 Flash Thinking (with thought process)
+  - Gemini 2.0 Flash Thinking (with thought process, uses v1alpha API)
+
+## Model Details
+
+### Gemini 2.0 Flash Thinking
+
+This experimental model automatically uses the `v1alpha` API endpoint for advanced features like thought process visibility. No additional configuration is needed - the provider handles this automatically.
 
 ## Usage
 

@@ -6,13 +6,9 @@ prompts:
     Provide a short, clear answer with minimal explanation.
 
 providers:
-  # Latest Gemini 2.0 model (experimental)
   - google:gemini-2.0-flash-exp
-  - id: google:gemini-2.0-flash-thinking-exp
-    config:
-      http_options:
-        api_version: 'v1alpha'
-
+  # thinking model - automatically sets api_version to v1alpha
+  - google:gemini-2.0-flash-thinking-exp
   # Overrides for Gemini 1.5 Flash
   - id: google:gemini-1.5-flash
     config:
