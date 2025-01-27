@@ -145,6 +145,7 @@ export const EXAMPLE_CONFIG: Config = {
       },
       transformResponse: 'json.response',
       sessionParser: 'data.headers["x-session-id"]',
+      stateful: true,
     },
   },
   plugins: ['harmful:hate', 'harmful:self-harm', 'rbac'],

@@ -46,7 +46,7 @@ redteam:
     - id: jailbreak:tree # Tree-based search for optimal safety bypass vectors
     - id: crescendo # Multi-turn attack strategy that gradually escalates malicious intent
       config:
-        stateless: false
+        stateful: true
     - id: goat # Dynamic multi-turn attack generation using adversarial techniques
       config:
-        stateless: false
+        stateful: true
