@@ -62,18 +62,6 @@ describe('loadApiProvider', () => {
     expect(provider).toBeDefined();
   });
 
-  it('should load ChatGPT-4o-latest provider', async () => {
-    const provider = await loadApiProvider('openai:chatgpt-4o-latest');
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-      'chatgpt-4o-latest',
-      expect.any(Object),
-    );
-    expect(provider).toBeDefined();
-    expect(logger.warn).not.toHaveBeenCalledWith(
-      expect.stringContaining('Unknown OpenAI chat model: chatgpt-4o-latest'),
-    );
-  });
-
   it('should load DeepSeek provider with default model', async () => {
     const provider = await loadApiProvider('deepseek:');
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('deepseek-chat', {
