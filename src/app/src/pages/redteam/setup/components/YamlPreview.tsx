@@ -107,11 +107,29 @@ export default function YamlPreview({ config }: YamlPreviewProps) {
       if (!parsedYaml.description || !parsedYaml.prompts || !parsedYaml.targets) {
         throw new Error('Invalid YAML structure');
       }
+      const strategies = parsedYaml?.redteam?.strategies || [];
+      let target = Array.isArray(parsedYaml.targets) ? parsedYaml.targets[0] : '';
+
+      const hasAnyStatefulStrategies = strategies.some(
+        (strat) => typeof strat !== 'string' && strat?.config?.stateful,
+      );
+      console.log({ hasAnyStatefulStrategies, strategies });
+      if (hasAnyStatefulStrategies) {
+        if (typeof target === 'string') {
+          target = { id: target, config: { stateful: true } };
+        } else {
+          target.config = { ...target.config, stateful: true };
+        }
+      }
+
+      console.log({ target });
+
       updateConfig('description', parsedYaml.description);
       updateConfig('prompts', parsedYaml.prompts);
-      updateConfig('target', Array.isArray(parsedYaml.targets) ? parsedYaml.targets[0] : '');
+      updateConfig('target', target);
       updateConfig('plugins', parsedYaml?.redteam?.plugins || []);
-      updateConfig('strategies', parsedYaml?.redteam?.strategies || []);
+      updateConfig('strategies', strategies);
+
       updateConfig('purpose', parsedYaml?.redteam?.purpose || '');
       updateConfig('entities', parsedYaml?.redteam?.entities || []);
       handleCloseModal();

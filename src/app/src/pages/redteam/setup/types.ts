@@ -51,6 +51,7 @@ export interface ProviderOptions {
           path?: string;
         }>
       | string;
+    stateful: boolean;
   };
 }
 

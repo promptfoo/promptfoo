@@ -37,7 +37,7 @@ redteam:
   strategies:
     - id: goat
       config:
-        stateless: true
+        stateful: false
     - id: crescendo
       config:
-        stateless: true
+        stateful: false
