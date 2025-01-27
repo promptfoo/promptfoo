@@ -298,10 +298,10 @@ Note: releases are only issued by maintainers. If you need to to release a new v
 
 As a maintainer, when you are ready to release a new version:
 
-1. Run `npm version <minor|patch>`. We do not increment the major version per our adoption of [0ver](https://0ver.org/). This will automatically update `package.json` with the new version. The `postversion` script will update all necessary files and create a new branch with the new verison number.
+1. Run `npm version <minor|patch>`. We do not increment the major version per our adoption of [0ver](https://0ver.org/). This will automatically update `package.json`, `package-lock.json` and `CITATION.cff`with the new version as well as create a new branch with the new verison number. When creating a new release version, please follow these guidelines:
 
-   - Patch will bump the version by 0.0.1 and we typically use this for bug fixes and minor features
-   - Minor will bump the version by 0.1.0 and we typically use this for major features and breaking changes
+   - Patch will bump the version by 0.0.1 and is used for bug fixes and minor features
+   - Minor will bump the version by 0.1.0 and is used for major features and breaking changes
 
 2. Verify that all your changes look good by running `git diff main` (or alternately, `git difftool -d main`) and ensuring that only the relevant files have been updated (you should only see the version number change in package.json, package-lock.json and CITATION.cff).
 
