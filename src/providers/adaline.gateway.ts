@@ -704,3 +704,5 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
     }
   }
 }
+
+export { AdalineGatewayCachePlugin, adalineGateway };
