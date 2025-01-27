@@ -19,7 +19,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - vertex:gemini-pro
+  - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
       language: French
@@ -47,7 +47,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - vertex:gemini-pro
+  - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
       language: French
@@ -71,7 +71,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - vertex:gemini-pro
+  - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
       language: French
@@ -269,6 +269,9 @@ In this example, we use a `llm-rubric` assertion to ensure that the LLM does not
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
+providers:
+  - openai:gpt-4o-mini
+  - vertex:gemini-2.0-flash-exp
 // highlight-start
 defaultTest:
   assert:
@@ -330,7 +333,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - vertex:gemini-pro
+  - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
       language: French
@@ -790,6 +793,9 @@ YAML is nice, but some organizations maintain their LLM tests in spreadsheets fo
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
+providers:
+  - openai:gpt-4o-mini
+  - vertex:gemini-2.0-flash-exp
 // highlight-next-line
 tests: file://tests.csv
 ```
@@ -800,6 +806,9 @@ promptfoo also has built-in ability to pull test cases from a Google Sheet. The 
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
+providers:
+  - openai:gpt-4o-mini
+  - vertex:gemini-2.0-flash-exp
 // highlight-next-line
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
 ```
