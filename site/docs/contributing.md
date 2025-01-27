@@ -311,7 +311,7 @@ As a maintainer, when you are ready to release a new version:
    git add package.json package-lock.json
    ```
 
-4. Run `npm run postversion` to correctly set the packageversion in `CITATION.cff`.
+4. Run `npm run postversion` to correctly set the package version in `CITATION.cff`.
 
 5. Create a new branch:
 
