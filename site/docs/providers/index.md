@@ -42,7 +42,7 @@ providers:
 | [Mistral AI](./mistral.md)                          | Mistral's language models                  | `mistral:open-mistral-nemo`                       |
 | [OpenLLM](./openllm.md)                             | BentoML's model serving framework          | Compatible with OpenAI syntax                     |
 | [OpenRouter](./openrouter.md)                       | Unified API for multiple providers         | `openrouter:mistral/7b-instruct`                  |
-| [Perplexity AI](./perplexity.md)                    | Specialized in question-answering          | Compatible with OpenAI syntax                     |
+| [Perplexity AI](./perplexity.md)                    | Search-augmented chat with citations       | `perplexity:sonar-pro`                            |
 | [Replicate](./replicate.md)                         | Various hosted models                      | `replicate:stability-ai/sdxl`                     |
 | [Together AI](./togetherai.md)                      | Various hosted models                      | Compatible with OpenAI syntax                     |
 | [Voyage AI](./voyage.md)                            | Specialized embedding models               | `voyage:voyage-3`                                 |
