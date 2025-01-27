@@ -71,7 +71,7 @@ describe('CrescendoProvider', () => {
       maxRounds: 10,
       maxBacktracks: 10,
       redteamProvider: mockRedTeamProvider,
-      stateless: true,
+      stateful: true,
     });
 
     jest.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async ({ jsonOnly }) => {
@@ -85,14 +85,14 @@ describe('CrescendoProvider', () => {
       maxRounds: 10,
       maxBacktracks: 10,
       redteamProvider: mockRedTeamProvider,
-      stateless: true,
+      stateful: true,
     });
 
     expect(provider.config.injectVar).toBe('objective');
     expect(provider.config.redteamProvider).toBe(mockRedTeamProvider);
     expect(provider.config.maxRounds).toBe(10);
     expect(provider.config.maxBacktracks).toBe(10);
-    expect(provider.config.stateless).toBe(true);
+    expect(provider.config.stateful).toBe(true);
   });
 
   it('should return correct provider id', () => {
