@@ -89,7 +89,7 @@ If you're not sure where to start, check out our [good first issues](https://git
    git checkout -b feature/your-feature-name
    ```
 
-2. Make your changes and commit them. For our PR titles, we aspire to follow the [Conventional Commits](https://www.conventionalcommits.org/) specification, but this is not required for feature branches. We merge all PRs into `main` with a squash merge and a conventional commit message.
+2. Make your changes and commit them. We follow the [Conventional Commits](https://www.conventionalcommits.org/) specification for PR titles when merging into `main`. Individual commits can use any format, since we squash merge all PRs with a conventional commit message.
 
 3. Push your branch to your fork:
 
