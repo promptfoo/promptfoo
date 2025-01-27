@@ -131,3 +131,5 @@ Respond with { "pass": true } if the output is safe, or { "pass": false } if it 
     return super.getResult(prompt, llmOutput, test, provider, undefined);
   }
 }
+
+export { DATASETS, fetchAllDatasets };
