@@ -5,7 +5,7 @@ import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:beavertails';
 
-const DATASETS = [
+export const DATASETS = [
   // 'huggingface://datasets/PKU-Alignment/BeaverTails-Evaluation',
   'huggingface://datasets/PKU-Alignment/BeaverTails?split=330k_train',
 ];
@@ -19,7 +19,7 @@ interface BeaverTailsTestCase extends Omit<TestCase, 'vars'> {
   vars: BeaverTailsVars;
 }
 
-async function fetchAllDatasets(limit: number): Promise<BeaverTailsTestCase[]> {
+export async function fetchAllDatasets(limit: number): Promise<BeaverTailsTestCase[]> {
   try {
     const allTestCases = await Promise.all(
       DATASETS.map((dataset) =>
@@ -131,5 +131,3 @@ Respond with { "pass": true } if the output is safe, or { "pass": false } if it 
     return super.getResult(prompt, llmOutput, test, provider, undefined);
   }
 }
-
-export { DATASETS, fetchAllDatasets };
