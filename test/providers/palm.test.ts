@@ -1,5 +1,5 @@
 import * as cache from '../../src/cache';
-import { PalmChatProvider } from '../../src/providers/palm';
+import { GoogleChatProvider } from '../../src/providers/google';
 import * as vertexUtil from '../../src/providers/vertexUtil';
 
 jest.mock('../../src/cache', () => ({
@@ -12,11 +12,11 @@ jest.mock('../../src/providers/vertexUtil', () => ({
   maybeCoerceToGeminiFormat: jest.fn(),
 }));
 
-describe('PalmChatProvider', () => {
-  let provider: PalmChatProvider;
+describe('GoogleChatProvider', () => {
+  let provider: GoogleChatProvider;
 
   beforeEach(() => {
-    provider = new PalmChatProvider('gemini-pro', {
+    provider = new GoogleChatProvider('gemini-pro', {
       config: {
         temperature: 0.7,
         maxOutputTokens: 100,
@@ -114,7 +114,7 @@ describe('PalmChatProvider', () => {
     });
 
     it('should handle response schema', async () => {
-      provider = new PalmChatProvider('gemini-pro', {
+      provider = new GoogleChatProvider('gemini-pro', {
         config: {
           responseSchema: '{"type":"object","properties":{"name":{"type":"string"}}}',
         },

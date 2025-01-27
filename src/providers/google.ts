@@ -10,7 +10,7 @@ import { maybeCoerceToGeminiFormat } from './vertexUtil';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
 
-interface PalmCompletionOptions {
+interface GoogleCompletionOptions {
   apiKey?: string;
   apiHost?: string;
   safetySettings?: { category: string; probability: string }[];
@@ -23,15 +23,15 @@ interface PalmCompletionOptions {
   responseSchema?: string;
 }
 
-class PalmGenericProvider implements ApiProvider {
+class GoogleGenericProvider implements ApiProvider {
   modelName: string;
 
-  config: PalmCompletionOptions;
+  config: GoogleCompletionOptions;
   env?: EnvOverrides;
 
   constructor(
     modelName: string,
-    options: { config?: PalmCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: { config?: GoogleCompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     const { config, id, env } = options;
     this.env = env;
@@ -41,7 +41,7 @@ class PalmGenericProvider implements ApiProvider {
   }
 
   id(): string {
-    return `palm:${this.modelName}`;
+    return `google:${this.modelName}`;
   }
 
   toString(): string {
@@ -75,10 +75,10 @@ class PalmGenericProvider implements ApiProvider {
   }
 }
 
-export class PalmChatProvider extends PalmGenericProvider {
+export class GoogleChatProvider extends GoogleGenericProvider {
   constructor(
     modelName: string,
-    options: { config?: PalmCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: { config?: GoogleCompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     if (!CHAT_MODELS.includes(modelName)) {
       logger.debug(`Using unknown Google chat model: ${modelName}`);

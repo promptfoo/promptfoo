@@ -1,19 +1,84 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
 prompts:
-  - 'Write a tweet about {{topic}}'
   - 'Write a very concise, funny tweet about {{topic}}'
 
 providers:
-  - id: google:gemini-1.5-pro-latest
+  # Basic chat model with standard settings
+  - id: google:gemini-1.5-pro
+    config:
+      temperature: 0.7
+      maxOutputTokens: 1024
+      topP: 0.9
+      topK: 40
+
+  # Structured output example
+  - id: google:gemini-1.5-pro
     config:
       generationConfig:
         temperature: 0
-        topP: 1
-  - id: google:gemini-1.5-flash-latest
+        maxOutputTokens: 1024
+        response_mime_type: 'application/json'
+        response_schema:
+          type: 'object'
+          properties:
+            title:
+              type: 'string'
+            key_points:
+              type: 'array'
+              items:
+                type: 'string'
+            sentiment:
+              type: 'string'
+              enum: ['positive', 'neutral', 'negative']
+          required: ['title', 'key_points', 'sentiment']
+
+  # Function calling example
+  - id: google:gemini-1.5-pro
     config:
-      generationConfig:
-        temperature: 0
-        topP: 1
+      tools:
+        function_declarations:
+          - name: 'get_weather'
+            description: 'Get current weather for a location'
+            parameters:
+              type: 'object'
+              properties:
+                location:
+                  type: 'string'
+                  description: 'City name or coordinates'
+                units:
+                  type: 'string'
+                  enum: ['celsius', 'fahrenheit']
+              required: ['location']
+      tool_config:
+        function_calling_config:
+          mode: 'auto'
+
+  # Fast model for quick responses
+  - id: google:gemini-1.5-flash
+    config:
+      temperature: 0.7
+      maxOutputTokens: 512
+
+  # Latest Gemini 2.0 model (experimental)
+  - id: google:gemini-2.0-flash-exp
+    config:
+      temperature: 0.7
+      maxOutputTokens: 2048
+      topP: 0.9
+      topK: 40
+
+  # Thinking model with thought process
+  - id: google:gemini-2.0-flash-thinking-exp
+    config:
+      thinking_config:
+        include_thoughts: true
+      http_options:
+        api_version: 'v1alpha'
+      temperature: 0.3
+      maxOutputTokens: 4096
+      topP: 0.8
+      topK: 20
 
 tests:
   - vars:
