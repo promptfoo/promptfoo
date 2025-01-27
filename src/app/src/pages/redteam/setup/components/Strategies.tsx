@@ -71,7 +71,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       ) as RedteamStrategy[],
   );
 
-  const [isStatefulValue, setIsStatefulValue] = useState(config.target.config.stateful);
+  const [isStatefulValue, setIsStatefulValue] = useState(config.target?.config?.stateful === true);
 
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [selectedConfigStrategy, setSelectedConfigStrategy] = useState<string | null>(null);
@@ -445,7 +445,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
               />
             </RadioGroup>
 
-            {!config.target.config.sessionParser && config.target.config.sessionParser && (
+            {!config.target.config.sessionParser && config.target.config.stateful && (
               <Alert severity="warning">
                 Your system is stateful but you don't have session handling setup. Please return to
                 your Target setup to configure it.
