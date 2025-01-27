@@ -324,10 +324,10 @@ As a maintainer, when you are ready to release a new version:
    git push --set-upstream origin chore/bump-version-0.X.Y
    ```
 
-7. Open a pull request against the `main` branch.
+7. Open a pull request against the `main` branch. You can do this by visiting the following link template on your browser:
 
    ```
-   Visit https://github.com/promptfoo/promptfoo/compare/main...<your-branch-name>
+   https://github.com/promptfoo/promptfoo/pull/new/<your-branch-name>
    ```
 
 8. Once your PR is approved and landed, a version tag will be created automatically by a GitHub Action. After the version tag has been created, generate a [new release](https://github.com/promptfoo/promptfoo/releases/new) based on the tagged version.
