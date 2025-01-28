@@ -19,7 +19,7 @@ import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import type { Message } from './shared';
-import { getLastMessageContent } from './shared';
+import { getLastMessageContent, messagesToRedteamHistory } from './shared';
 import type { BaseRedteamMetadata, BaseRedteamResponse } from './shared';
 
 /**
@@ -260,6 +260,7 @@ export default class GoatProvider implements ApiProvider {
         redteamFinalPrompt: getLastMessageContent(messages, 'user') || '',
         messages: messages as Record<string, any>[],
         stopReason: graderPassed === false ? 'Grader failed' : 'Max turns reached',
+        redteamHistory: messagesToRedteamHistory(messages),
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastTargetResponse?.guardrails,

@@ -25,6 +25,7 @@ import type { BaseRedteamMetadata, BaseRedteamResponse } from '../shared';
 import {
   getLastMessageContent,
   getTargetResponse,
+  messagesToRedteamHistory,
   redteamProviderManager,
   type TargetResponse,
 } from '../shared';
@@ -417,6 +418,7 @@ export class CrescendoProvider implements ApiProvider {
         stopReason: (graderPassed === false ? 'Grader failed' : 'Max backtracks reached') as
           | 'Grader failed'
           | 'Max backtracks reached',
+        redteamHistory: messagesToRedteamHistory(messages),
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastResponse.guardrails,
