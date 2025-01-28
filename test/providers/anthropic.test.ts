@@ -1,12 +1,3 @@
-/**
- * Anthropic Provider Tests
- *
- * Example implementations:
- * - Tool Use: examples/tool-use/
- * - Vision: examples/claude-vision/
- * - Model Comparison: examples/claude-vs-gpt/
- * - Image Analysis: examples/claude-vs-gpt-image/
- */
 import type Anthropic from '@anthropic-ai/sdk';
 import dedent from 'dedent';
 import { clearCache, disableCache, enableCache, getCache } from '../../src/cache';
