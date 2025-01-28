@@ -69,6 +69,10 @@ export default function Review() {
     updateConfig('description', event.target.value);
   };
 
+  useEffect(() => {
+    recordEvent('webui_page_view', { page: 'redteam_config_review' });
+  }, []);
+
   const handleSaveYaml = () => {
     const blob = new Blob([yamlContent], { type: 'text/yaml' });
     const url = URL.createObjectURL(blob);
@@ -173,6 +177,13 @@ export default function Review() {
       clearInterval(pollInterval);
       setPollInterval(null);
     }
+
+    recordEvent('feature_used', {
+      feature: 'redteam_config_run',
+      numPlugins: config.plugins.length,
+      numStrategies: config.strategies.length,
+      targetType: config.target.id,
+    });
 
     setIsRunning(true);
     setLogs([]);

@@ -31,6 +31,11 @@ export async function generatePrompts(prompt: string, num: number): Promise<Gene
         total: resp.tokenUsage?.total || 0,
         prompt: resp.tokenUsage?.prompt || 0,
         completion: resp.tokenUsage?.completion || 0,
+        completionDetails: resp.tokenUsage?.completionDetails || {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     };
   }
@@ -42,6 +47,11 @@ export async function generatePrompts(prompt: string, num: number): Promise<Gene
         total: resp.tokenUsage?.total || 0,
         prompt: resp.tokenUsage?.prompt || 0,
         completion: resp.tokenUsage?.completion || 0,
+        completionDetails: resp.tokenUsage?.completionDetails || {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     };
   } catch {
@@ -51,6 +61,11 @@ export async function generatePrompts(prompt: string, num: number): Promise<Gene
         total: resp.tokenUsage?.total || 0,
         prompt: resp.tokenUsage?.prompt || 0,
         completion: resp.tokenUsage?.completion || 0,
+        completionDetails: resp.tokenUsage?.completionDetails || {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     };
   }

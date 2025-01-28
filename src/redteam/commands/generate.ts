@@ -445,7 +445,9 @@ export function redteamGenerateCommand(
           });
         } else {
           logger.error(
-            `An unexpected error occurred: ${error instanceof Error ? error.message : String(error)}`,
+            `An unexpected error occurred during generation: ${error instanceof Error ? error.message : String(error)}\n${
+              error instanceof Error ? error.stack : ''
+            }`,
           );
         }
         process.exit(1);

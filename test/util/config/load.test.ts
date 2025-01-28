@@ -687,6 +687,28 @@ describe('combineConfigs', () => {
       strategies: ['strategy1'],
     });
   });
+
+  it('should merge shared object from multiple configs with urls', async () => {
+    const config1 = {
+      sharing: {
+        apiBaseUrl: 'http://localhost',
+        appBaseUrl: 'http://localhost',
+      },
+    };
+    const config2 = {};
+
+    jest
+      .mocked(fs.readFileSync)
+      .mockReturnValueOnce(JSON.stringify(config1))
+      .mockReturnValueOnce(JSON.stringify(config2));
+
+    const result = await combineConfigs(['config1.json', 'config2.json']);
+
+    expect(result.sharing).toEqual({
+      apiBaseUrl: 'http://localhost',
+      appBaseUrl: 'http://localhost',
+    });
+  });
 });
 
 describe('dereferenceConfig', () => {

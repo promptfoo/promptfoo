@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Adaline Gateway OpenAI Format Example'
+
 prompts:
   - 'What is the weather like in {{city}}?'
 
