@@ -18,6 +18,7 @@ import { addLikertTestCases } from './likert';
 import { addMathPrompt } from './mathPrompt';
 import { addMultilingual } from './multilingual';
 import { addInjections } from './promptInjections';
+import { retryPreviousTests } from './retryFailed';
 import { addRot13 } from './rot13';
 import { addCompositeTestCases } from './singleTurnComposite';
 
@@ -37,6 +38,15 @@ export const Strategies: Strategy[] = [
       // Basic strategy doesn't modify test cases, it just controls whether they're included
       // The actual filtering happens in synthesize()
       return [];
+    },
+  },
+  {
+    id: 'retry-previous',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding retry test cases to ${testCases.length} test cases`);
+      const newTestCases = await retryPreviousTests(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length - testCases.length} retry test cases`);
+      return newTestCases;
     },
   },
   {
