@@ -1,12 +1,6 @@
 - role: system
-  content:
-    - type: text
-      text: 'Be concise'
-      cache_control:
-        type: ephemeral
+  content: 'Be concise'
 - role: user
-  content:
-    - type: text
-      text: |
-        Answer this riddle:
-        {{riddle}}
+  content: |
+    Answer this riddle:
+    {{riddle}}
