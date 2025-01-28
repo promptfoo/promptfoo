@@ -5,13 +5,14 @@ import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import type { Assertion, AssertionSet, AtomicTestCase } from '../../types';
+import type { Assertion, AssertionSet, AtomicTestCase, TokenUsage } from '../../types';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderOptions,
   ProviderResponse,
+  GuardrailResponse,
 } from '../../types/providers';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
@@ -19,6 +20,25 @@ import { sleep } from '../../util/time';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import type { Message } from './shared';
 import { getLastMessageContent } from './shared';
+
+/**
+ * Represents metadata for the GOAT conversation process.
+ */
+export interface GoatMetadata {
+  redteamFinalPrompt?: string;
+  messages: string;
+  stopReason: 'Grader failed' | 'Max turns reached';
+}
+
+/**
+ * Represents the complete response from a GOAT conversation.
+ */
+export interface GoatResponse {
+  output: string;
+  metadata: GoatMetadata;
+  tokenUsage: TokenUsage;
+  guardrails?: GuardrailResponse;
+}
 
 export default class GoatProvider implements ApiProvider {
   private maxTurns: number;
@@ -64,7 +84,7 @@ export default class GoatProvider implements ApiProvider {
     prompt: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
+  ): Promise<GoatResponse> {
     let response: Response | undefined = undefined;
     logger.debug(`[GOAT] callApi context: ${safeJsonStringify(context)}`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
@@ -235,10 +255,10 @@ export default class GoatProvider implements ApiProvider {
     delete context?.vars?.sessionId;
 
     return {
-      output: getLastMessageContent(messages, 'assistant'),
+      output: getLastMessageContent(messages, 'assistant') || '',
       metadata: {
-        redteamFinalPrompt: getLastMessageContent(messages, 'user'),
-        messages: JSON.stringify(messages, null, 2),
+        redteamFinalPrompt: getLastMessageContent(messages, 'user') || '',
+        messages: JSON.stringify(messages || [], null, 2),
         stopReason: graderPassed === false ? 'Grader failed' : 'Max turns reached',
       },
       tokenUsage: totalTokenUsage,
