@@ -730,10 +730,10 @@ export const PLUGINS = [
   },
   {
     category: 'Compliance and Legal',
-    description: 'Content related to RAG Full Document Exfiltration',
+    description: 'Content related to RAG Document Exfiltration',
     label: 'technical',
-    link: '/docs/red-team/plugins/harmful/',
-    name: 'RAG Full Document Exfiltration',
+    link: '/docs/red-team/plugins/rag-document-exfiltration',
+    name: 'RAG Document Exfiltration',
     pluginId: 'rag-document-exfiltration',
     applicationTypes: {
       rag: true,

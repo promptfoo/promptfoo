@@ -1,8 +1,4 @@
----
-sidebar_label: RAG Full Document Exfiltration
----
-
-# RAG Full Document Exfiltration Plugin
+# RAG Document Exfiltration Plugin
 
 The RAG Document Exfiltration plugin is designed to identify vulnerabilities where an AI model might inadvertently expose entire documents during retrieval-augmented generation processes. RAGs often contain internal documents, and it is crucial to ensure these are not exposed without proper authorization, as they may contain sensitive or proprietary information.
 
@@ -24,7 +20,7 @@ The plugin generates test cases that simulate scenarios where full documents mig
 
 ## Configuration
 
-To include the RAG Full Document Exfiltration plugin in your LLM red teaming setup:
+To include the RAG Document Exfiltration plugin in your LLM red teaming setup:
 
 ```yaml
 redteam:
@@ -63,6 +59,6 @@ Testing for document exfiltration vulnerabilities is a critical aspect of genera
 - Maintain strict access controls
 - Prioritize data security over convenience
 
-By incorporating the RAG Full Document Exfiltration plugin in your LLM red teaming strategy, you can identify and address potential vulnerabilities in your AI system's ability to handle sensitive document content securely.
+By incorporating the RAG Document Exfiltration plugin in your LLM red teaming strategy, you can identify and address potential vulnerabilities in your AI system's ability to handle sensitive document content securely.
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
