@@ -161,10 +161,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.36.3",
     "@apidevtools/json-schema-ref-parser": "^11.7.3",
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.0",
     "@googleapis/sheets": "^9.3.1",
-    "@mui/material": "^6.1.10",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "async": "^3.2.6",
