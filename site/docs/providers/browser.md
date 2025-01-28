@@ -1,5 +1,4 @@
 ---
-sidebar_position: 54
 sidebar_label: Web Browser
 ---
 

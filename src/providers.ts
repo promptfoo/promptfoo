@@ -6,10 +6,6 @@ import path from 'path';
 import cliState from './cliState';
 import { importModule } from './esm';
 import logger from './logger';
-import {
-  AdalineGatewayChatProvider,
-  AdalineGatewayEmbeddingProvider,
-} from './providers/adaline.gateway';
 import { AI21ChatCompletionProvider } from './providers/ai21';
 import { AnthropicCompletionProvider, AnthropicMessagesProvider } from './providers/anthropic';
 import {
@@ -21,6 +17,7 @@ import {
 import { BAMChatProvider, BAMEmbeddingProvider } from './providers/bam';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './providers/bedrock';
 import { BrowserProvider } from './providers/browser';
+import { ClouderaAiChatCompletionProvider } from './providers/cloudera';
 import * as CloudflareAiProviders from './providers/cloudflare-ai';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './providers/cohere';
 import { FalImageGenerationProvider } from './providers/fal';
@@ -128,6 +125,12 @@ export async function loadApiProvider(
       id: () => 'echo',
       callApi: async (input: string) => ({ output: input }),
     };
+  } else if (providerPath.startsWith('cloudera:')) {
+    const modelName = providerPath.split(':')[1];
+    ret = new ClouderaAiChatCompletionProvider(modelName, {
+      ...providerOptions,
+      config: providerOptions.config || {},
+    });
   } else if (providerPath.startsWith('exec:')) {
     // Load script module
     const scriptPath = providerPath.split(':')[1];
@@ -219,6 +222,28 @@ export async function loadApiProvider(
         ...providerOptions.config,
         apiBaseUrl: 'https://models.inference.ai.azure.com',
         apiKeyEnvar: 'GITHUB_TOKEN',
+      },
+    });
+  } else if (providerPath.startsWith('perplexity:')) {
+    const splits = providerPath.split(':');
+    const modelName = splits.slice(1).join(':');
+    ret = new OpenAiChatCompletionProvider(modelName, {
+      ...providerOptions,
+      config: {
+        ...providerOptions.config,
+        apiBaseUrl: 'https://api.perplexity.ai',
+        apiKeyEnvar: 'PERPLEXITY_API_KEY',
+      },
+    });
+  } else if (providerPath.startsWith('hyperbolic:')) {
+    const splits = providerPath.split(':');
+    const modelName = splits.slice(1).join(':');
+    ret = new OpenAiChatCompletionProvider(modelName, {
+      ...providerOptions,
+      config: {
+        ...providerOptions.config,
+        apiBaseUrl: 'https://api.hyperbolic.xyz/v1',
+        apiKeyEnvar: 'HYPERBOLIC_API_KEY',
       },
     });
   } else if (providerPath.startsWith('deepseek:')) {
@@ -468,7 +493,9 @@ export async function loadApiProvider(
     const providerName = splits[1];
     const modelType = splits[2];
     const modelName = splits[3];
-
+    const { AdalineGatewayChatProvider, AdalineGatewayEmbeddingProvider } = await import(
+      './providers/adaline.gateway'
+    );
     if (modelType === 'embedding' || modelType === 'embeddings') {
       ret = new AdalineGatewayEmbeddingProvider(providerName, modelName, providerOptions);
     } else {
@@ -627,6 +654,7 @@ export default {
   AzureChatCompletionProvider,
   AzureCompletionProvider,
   AzureEmbeddingProvider,
+  ClouderaAiChatCompletionProvider,
 
   // Backwards compatibility for Azure rename 2024-11-09 / 0.96.0
   AzureOpenAiAssistantProvider: AzureAssistantProvider,

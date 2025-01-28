@@ -1,7 +1,3 @@
----
-sidebar_position: 49
----
-
 # Generic webhook
 
 The webhook provider can be useful for triggering more complex flows or prompt chains end to end in your app.
