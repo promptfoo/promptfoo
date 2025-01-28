@@ -2,6 +2,7 @@ import { handleContextFaithfulness } from '../../src/assertions/contextFaithfuln
 import * as matchers from '../../src/matchers';
 
 jest.mock('../../src/matchers');
+jest.mock('../../src/globalConfig/globalConfig');
 
 describe('handleContextFaithfulness', () => {
   beforeEach(() => {
