@@ -43,6 +43,21 @@ const mockApiProvider2: ApiProvider = {
   }),
 };
 
+const mockReasoningApiProvider: ApiProvider = {
+  id: jest.fn().mockReturnValue('test-reasoning-provider'),
+  callApi: jest.fn().mockResolvedValue({
+    output: 'Test output',
+    tokenUsage: {
+      total: 21,
+      prompt: 9,
+      completion: 12,
+      cached: 0,
+      numRequests: 1,
+      completionDetails: { reasoning: 11, acceptedPrediction: 12, rejectedPrediction: 13 },
+    },
+  }),
+};
+
 const mockGradingApiProviderPasses: ApiProvider = {
   id: jest.fn().mockReturnValue('test-grading-provider'),
   callApi: jest.fn().mockResolvedValue({
@@ -113,6 +128,11 @@ describe('evaluator', () => {
       completion: 5,
       cached: 0,
       numRequests: 1,
+      completionDetails: {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
@@ -142,6 +162,11 @@ describe('evaluator', () => {
       completion: 5,
       cached: 0,
       numRequests: 1,
+      completionDetails: {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt 1 < 2 he said "hello world"...');
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
@@ -171,6 +196,11 @@ describe('evaluator', () => {
       completion: 5,
       cached: 0,
       numRequests: 1,
+      completionDetails: {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1.prop1 }} {{ var2 }}');
@@ -200,6 +230,11 @@ describe('evaluator', () => {
       completion: 5,
       cached: 0,
       numRequests: 1,
+      completionDetails: {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
     expect(summary.results[0].prompt.label).toBe('test display name');
@@ -229,6 +264,11 @@ describe('evaluator', () => {
       completion: 20,
       cached: 0,
       numRequests: 4,
+      completionDetails: {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
@@ -258,6 +298,11 @@ describe('evaluator', () => {
       completion: 10,
       cached: 0,
       numRequests: 2,
+      completionDetails: {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
@@ -282,6 +327,11 @@ describe('evaluator', () => {
       completion: 5,
       cached: 0,
       numRequests: 1,
+      completionDetails: {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt');
     expect(summary.results[0].prompt.label).toBe('Test prompt');
@@ -306,6 +356,40 @@ describe('evaluator', () => {
       completion: 15,
       cached: 0,
       numRequests: 3,
+      completionDetails: {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
+    });
+    expect(summary.results[0].prompt.raw).toBe('Test prompt');
+    expect(summary.results[0].prompt.label).toBe('Test prompt');
+    expect(summary.results[0].response?.output).toBe('Test output');
+  });
+
+  it('evaluate for reasoning', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockReasoningApiProvider],
+      prompts: [toPrompt('Test prompt')],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(mockReasoningApiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.stats.tokenUsage).toEqual({
+      total: 21,
+      prompt: 9,
+      completion: 12,
+      cached: 0,
+      numRequests: 1,
+      completionDetails: {
+        reasoning: 11,
+        acceptedPrediction: 12,
+        rejectedPrediction: 13,
+      },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt');
     expect(summary.results[0].prompt.label).toBe('Test prompt');
@@ -798,6 +882,11 @@ describe('evaluator', () => {
       completion: 5,
       cached: 0,
       numRequests: 1,
+      completionDetails: {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt 1');
     expect(summary.results[0].prompt.label).toBe('Test prompt 1');

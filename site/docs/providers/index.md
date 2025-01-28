@@ -32,7 +32,7 @@ providers:
 | [F5](./f5.md)                                       | OpenAI-compatible AI Gateway interface     | `f5:path-name`                                    |
 | [fal.ai](./fal.md)                                  | Image Generation Provider                  | `fal:image:fal-ai/fast-sdxl`                      |
 | [GitHub](./github.md)                               | GitHub AI Gateway                          | `github:gpt-4o-mini`                              |
-| [Google AI Studio (PaLM)](./palm.md)                | Gemini and PaLM models                     | `google:gemini-pro`                               |
+| [Google AI Studio](./google.md)                     | Gemini models                              | `google:gemini-2.0-flash-thinking-exp`            |
 | [Google Vertex AI](./vertex.md)                     | Google Cloud's AI platform                 | `vertex:gemini-pro`                               |
 | [Groq](./groq.md)                                   | High-performance inference API             | `groq:llama-3.3-70b-versatile`                    |
 | [Hyperbolic](./hyperbolic.md)                       | OpenAI-compatible Llama 3 provider         | `hyperbolic:meta-llama/Meta-Llama-3-70B-Instruct` |
@@ -42,7 +42,7 @@ providers:
 | [Mistral AI](./mistral.md)                          | Mistral's language models                  | `mistral:open-mistral-nemo`                       |
 | [OpenLLM](./openllm.md)                             | BentoML's model serving framework          | Compatible with OpenAI syntax                     |
 | [OpenRouter](./openrouter.md)                       | Unified API for multiple providers         | `openrouter:mistral/7b-instruct`                  |
-| [Perplexity AI](./perplexity.md)                    | Specialized in question-answering          | Compatible with OpenAI syntax                     |
+| [Perplexity AI](./perplexity.md)                    | Search-augmented chat with citations       | `perplexity:sonar-pro`                            |
 | [Replicate](./replicate.md)                         | Various hosted models                      | `replicate:stability-ai/sdxl`                     |
 | [Together AI](./togetherai.md)                      | Various hosted models                      | Compatible with OpenAI syntax                     |
 | [Voyage AI](./voyage.md)                            | Specialized embedding models               | `voyage:voyage-3`                                 |

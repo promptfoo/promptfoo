@@ -375,6 +375,24 @@ export default [
 ];
 ```
 
+### Import from JSON/JSONL
+
+JSON files contain an array of test cases:
+
+```json
+[
+  { "vars": { "var1": "value1" }, "assert": [], "description": "Test #1" },
+  { "vars": { "var1": "value2" }, "assert": [], "description": "Test #2" }
+]
+```
+
+JSONL files contain one JSON test case per line:
+
+```jsonl
+{"vars": {"var1": "value1"}, "assert": [], "description": "Test #1"}
+{"vars": {"var1": "value2"}, "assert": [], "description": "Test #2"}
+```
+
 ### Import from CSV
 
 promptfoo also supports a test CSV format.

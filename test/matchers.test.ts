@@ -102,6 +102,7 @@ describe('matchesSimilarity', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
   });
@@ -120,6 +121,7 @@ describe('matchesSimilarity', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
   });
@@ -140,6 +142,7 @@ describe('matchesSimilarity', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
   });
@@ -160,6 +163,7 @@ describe('matchesSimilarity', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
   });
@@ -197,6 +201,7 @@ describe('matchesSimilarity', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith('Expected output');
@@ -277,6 +282,7 @@ describe('matchesLlmRubric', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
   });
@@ -303,6 +309,7 @@ describe('matchesLlmRubric', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
   });
@@ -340,6 +347,7 @@ describe('matchesLlmRubric', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith('Grading prompt');
@@ -380,6 +388,7 @@ describe('matchesLlmRubric', () => {
         prompt: 5,
         completion: 5,
         cached: 0,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
       },
     });
   });
@@ -489,6 +498,7 @@ describe('matchesFactuality', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
   });
@@ -512,6 +522,7 @@ describe('matchesFactuality', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
   });
@@ -546,6 +557,7 @@ describe('matchesFactuality', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
   });
@@ -616,6 +628,7 @@ describe('matchesClosedQa', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
   });
@@ -640,6 +653,7 @@ describe('matchesClosedQa', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
   });
@@ -687,6 +701,7 @@ describe('matchesClosedQa', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
     expect(isJson).toBeTruthy();
@@ -885,6 +900,7 @@ describe('matchesAnswerRelevance', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith(
@@ -934,6 +950,7 @@ describe('matchesAnswerRelevance', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith(
@@ -1074,6 +1091,7 @@ describe('matchesContextRelevance', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith(
@@ -1105,6 +1123,7 @@ describe('matchesContextRelevance', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith(
@@ -1146,6 +1165,7 @@ describe('matchesContextFaithfulness', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
     expect(mockCallApi).toHaveBeenCalledTimes(2);
@@ -1183,6 +1203,7 @@ describe('matchesContextFaithfulness', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
     expect(mockCallApi).toHaveBeenCalledTimes(2);
@@ -1214,6 +1235,7 @@ describe('matchesContextRecall', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith(expect.stringContaining(CONTEXT_RECALL.slice(0, 100)));
@@ -1243,6 +1265,7 @@ describe('matchesContextRecall', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith(expect.stringContaining(CONTEXT_RECALL.slice(0, 100)));
