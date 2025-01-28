@@ -81,7 +81,13 @@ Running it via Promptfoo eval shows that **about 85% of this dataset is censored
 
 Here's a link to the [eval results](https://www.promptfoo.app/eval/eval-0l1-2025-01-28T19:28:13). The ~15% of prompts that were not refused were generally not China-specific enough.
 
-You can run this eval yourself by pointing it to the [HuggingFace dataset](https://huggingface.co/datasets/promptfoo/CCP-sensitive-prompts), downloading [the CSV file](https://docs.google.com/spreadsheets/d/1gkCuApXHaMO5C8d9abYJg5sZLxkbGzcx40N6J4krAm8/edit?gid=1854643394#gid=1854643394), or running it directly through a [Google Sheets integration](https://www.promptfoo.dev/docs/integrations/google-sheets/).
+Run this eval yourself by pointing it to the [HuggingFace dataset](https://huggingface.co/datasets/promptfoo/CCP-sensitive-prompts), downloading [the CSV file](https://docs.google.com/spreadsheets/d/1gkCuApXHaMO5C8d9abYJg5sZLxkbGzcx40N6J4krAm8/edit?gid=1854643394#gid=1854643394), or running it directly through a [Google Sheets integration](https://www.promptfoo.dev/docs/integrations/google-sheets/).
+
+You can also run this eval directly through the [Promptfoo command line](/docs/getting-started/):
+
+```
+npx promptfoo@latest init --example redteam-deepseek
+```
 
 ## Jailbreaking DeepSeek
 
@@ -129,8 +135,8 @@ This means that the censorship is brittle and can be trivially bypassed. Common 
 - Omitting China-specific context. For example, some questions can be switched to be about the U.S., North Korea, or other oppressive regimes (even hypothetical ones).
   ![DeepSeek Refusal on North Korea](/img/blog/deepseek/north_korea.png)
 
-This is aided by the fact that DeepSeek automatically assumes U.S. context if you don't ask specifically about China—presumably a side effect of U.S.-centric training data (or because it may have been [trained on ChatGPT](https://techcrunch.com/2024/12/27/why-deepseeks-new-ai-model-thinks-its-chatgpt/?guccounter=1).
-![DeepSeek Assuming U.S. Context](/img/blog/deepseek/US_context.png)
+  This is aided by the fact that DeepSeek automatically assumes U.S. context if you don't ask specifically about China—presumably a side effect of U.S.-centric training data (or because it may have been [trained on ChatGPT](https://techcrunch.com/2024/12/27/why-deepseeks-new-ai-model-thinks-its-chatgpt/?guccounter=1).
+  ![DeepSeek Assuming U.S. Context](/img/blog/deepseek/US_context.png)
 
 - Wrapping the prompt as a request for benign historical context. The conversational red teamers quickly found that generalizing the question would elicit a full response.
   ![Red Team Conversation Example for DeepSeek](/img/blog/deepseek/red_team_conversation_example.png)
@@ -146,4 +152,4 @@ It will matter less once models similar to R1 are reproduced without these restr
 
 In later blog posts, we'll conduct the same evaluation on American foundation models and compare how Chinese and American models handle politically sensitive topics from both countries.
 
-Next up: 1,360 prompts censored by ChatGPT 😉
+Next up: 1,156 prompts censored by ChatGPT 😉
