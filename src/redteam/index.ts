@@ -142,11 +142,7 @@ function pluginMatchesStrategyTargets(
   if (STRATEGY_EXEMPT_PLUGINS.includes(pluginId as StrategyExemptPlugin)) {
     return false;
   }
-  if (
-    pluginId === 'intent' &&
-    isProviderOptions(testCase.provider) &&
-    testCase.provider?.id === 'sequence'
-  ) {
+  if (isProviderOptions(testCase.provider) && testCase.provider?.id === 'sequence') {
     // Sequence providers are verbatim and strategies don't apply
     return false;
   }
