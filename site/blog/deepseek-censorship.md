@@ -135,7 +135,7 @@ This means that the censorship is brittle and can be trivially bypassed. Common 
 - Omitting China-specific context. For example, some questions can be switched to be about the U.S., North Korea, or other oppressive regimes (even hypothetical ones).
   ![DeepSeek Refusal on North Korea](/img/blog/deepseek/north_korea.png)
 
-  This is aided by the fact that DeepSeek automatically assumes U.S. context if you don't ask specifically about China—presumably a side effect of U.S.-centric training data (or because it may have been [trained on ChatGPT](https://techcrunch.com/2024/12/27/why-deepseeks-new-ai-model-thinks-its-chatgpt/?guccounter=1).
+  This is aided by the fact that DeepSeek automatically assumes U.S. context if you don't ask specifically about China - presumably a side effect of U.S.-centric training data (or because it may have been [trained on ChatGPT](https://techcrunch.com/2024/12/27/why-deepseeks-new-ai-model-thinks-its-chatgpt/?guccounter=1)).
   ![DeepSeek Assuming U.S. Context](/img/blog/deepseek/US_context.png)
 
 - Wrapping the prompt as a request for benign historical context. The conversational red teamers quickly found that generalizing the question would elicit a full response.
@@ -148,8 +148,8 @@ This means that the censorship is brittle and can be trivially bypassed. Common 
 
 DeepSeek-R1 is impressive, but its utility is clouded by concerns over censorship and the use of user data for training. The censorship is not unusual for Chinese models. It seems to be applied by brute force, which makes it easy to test and detect.
 
-It will matter less once models similar to R1 are reproduced without these restrictions (which will probably happen in a week or so).
+It will matter less once models similar to R1 are reproduced without these restrictions (which will probably be in a week or so).
 
-In later blog posts, we'll conduct the same evaluation on American foundation models and compare how Chinese and American models handle politically sensitive topics from both countries.
+In the next post, we'll conduct the same evaluation on American foundation models and compare how Chinese and American models handle politically sensitive topics from both countries.
 
 Next up: 1,156 prompts censored by ChatGPT 😉
