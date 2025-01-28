@@ -21,9 +21,11 @@ import { sleep } from '../../../util/time';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { isBasicRefusal } from '../../util';
 import type { Message } from '../shared';
+import type { BaseRedteamMetadata, BaseRedteamResponse } from '../shared';
 import {
   getLastMessageContent,
   getTargetResponse,
+  messagesToRedteamHistory,
   redteamProviderManager,
   type TargetResponse,
 } from '../shared';
@@ -31,6 +33,24 @@ import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } fr
 
 export const DEFAULT_MAX_ROUNDS = 10;
 export const DEFAULT_MAX_BACKTRACKS = 10;
+
+/**
+ * Represents metadata for the Crescendo conversation process.
+ */
+export interface CrescendoMetadata extends BaseRedteamMetadata {
+  crescendoRoundsCompleted: number;
+  crescendoBacktrackCount: number;
+  crescendoResult: boolean;
+  crescendoConfidence: number | null;
+  stopReason: 'Grader failed' | 'Max backtracks reached';
+}
+
+/**
+ * Represents the complete response from a Crescendo conversation.
+ */
+export interface CrescendoResponse extends BaseRedteamResponse {
+  metadata: CrescendoMetadata;
+}
 
 interface CrescendoConfig {
   injectVar: string;
@@ -144,7 +164,11 @@ export class CrescendoProvider implements ApiProvider {
     return 'promptfoo:redteam:crescendo';
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<CrescendoResponse> {
     logger.debug(`[Crescendo] callApi context: ${safeJsonStringify(context)}`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
@@ -181,7 +205,7 @@ export class CrescendoProvider implements ApiProvider {
     context?: CallApiContextParams;
     options?: CallApiOptionsParams;
     test?: AtomicTestCase;
-  }) {
+  }): Promise<CrescendoResponse> {
     logger.debug(
       `[Crescendo] Starting attack with: prompt=${JSON.stringify(prompt)}, filtersPresent=${!!filters}, varsKeys=${Object.keys(vars)}, providerType=${provider.constructor.name}`,
     );
@@ -385,14 +409,16 @@ export class CrescendoProvider implements ApiProvider {
     return {
       output: lastResponse.output,
       metadata: {
-        // Displayed in UI
         redteamFinalPrompt: getLastMessageContent(messages, 'user'),
-        messages: JSON.stringify(messages, null, 2),
+        messages: messages as Record<string, any>[],
         crescendoRoundsCompleted: roundNum,
         crescendoBacktrackCount: backtrackCount,
         crescendoResult: evalFlag,
         crescendoConfidence: evalPercentage,
-        stopReason: graderPassed === false ? 'Grader failed' : 'Max backtracks reached',
+        stopReason: (graderPassed === false ? 'Grader failed' : 'Max backtracks reached') as
+          | 'Grader failed'
+          | 'Max backtracks reached',
+        redteamHistory: messagesToRedteamHistory(messages),
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastResponse.guardrails,
