@@ -1,6 +1,6 @@
 ---
-date: 2024-01-28
-image: [DeepSeek Whale with Promptfoo Panda](/img/blog/deepseek/deepseek_panda.png)
+date: 2025-01-29
+image: /img/blog/deepseek/deepseek_panda.png
 ---
 
 # Does DeepSeek's Latest Model Actually Censor Sensitive Political Questions?
@@ -8,6 +8,8 @@ image: [DeepSeek Whale with Promptfoo Panda](/img/blog/deepseek/deepseek_panda.p
 Last Monday, the Chinese foundation lab DeepSeek [released](https://api-docs.deepseek.com/news/news250120) its latest model: R1, a reasoning model that outperforms OpenAI-o1 in [key benchmark tests](https://github.com/deepseek-ai/DeepSeek-R1/blob/main/DeepSeek_R1.pdf). Popularity has skyrocketed for this new model, launching it to the top of the App Store. It has also sparked interest and concern from the tech industry because it required less AI compute infrastructure during training.
 
 DeepSeek's popularity is not only sparking conversation because of its performance and radically lower training costs, but also because it is from a Chinese foundation lab. This has [prompted concerns](https://www.nbcnews.com/tech/tech-news/china-ai-assistant-deepseek-rcna189385) from U.S. media companies regarding whether DeepSeek censors politically sensitive issues in China.
+
+<!-- truncate -->
 
 This question is interesting from two perspectives: can we verify that DeepSeek (or other Chinese models) censors based on politically sensitive questions, and could we _invert_ this theory by asking American foundation models about politically sensitive topics as well?
 
