@@ -66,9 +66,11 @@
   },
   "overrides": {
     "uri-js": "npm:uri-js-replace",
+    "chokidar": "4.0.1",
     "whatwg-url": "14.1.0",
     "*": {
-      "whatwg-url": "14.1.0"
+      "whatwg-url": "14.1.0",
+      "chokidar": "4.0.1"
     }
   },
   "peerDependencies": {
@@ -107,8 +109,8 @@
     "@azure/identity": "^4.6.0",
     "@eslint/js": "^9.17.0",
     "@libsql/client": "^0.14.0",
-    "@swc/cli": "^0.5.2",
-    "@swc/core": "^1.10.6",
+    "@swc/cli": "^0.6.0",
+    "@swc/core": "^1.10.11",
     "@swc/jest": "^0.2.37",
     "@trivago/prettier-plugin-sort-imports": "^5.2.1",
     "@types/async": "^3.2.24",
@@ -170,7 +172,7 @@
     "cache-manager": "^4.1.0",
     "cache-manager-fs-hash": "^1.0.0",
     "chalk": "^4.1.2",
-    "chokidar": "^3.6.0",
+    "chokidar": "4.0.1",
     "cli-progress": "^3.12.0",
     "cli-table3": "^0.6.5",
     "commander": "^12.1.0",
