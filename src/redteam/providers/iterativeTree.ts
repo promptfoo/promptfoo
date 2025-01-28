@@ -374,6 +374,32 @@ export interface TreeSearchOutput {
 }
 
 /**
+ * Represents metadata for the iterative tree search process.
+ */
+export interface TreeIterativeMetadata {
+  highestScore: number;
+  redteamFinalPrompt?: string;
+  stoppingReason:
+    | 'TARGET_SCORE'
+    | 'MAX_ATTEMPTS'
+    | 'MAX_DEPTH'
+    | 'NO_IMPROVEMENT'
+    | 'GRADER_FAILED';
+  attempts: number;
+  redteamTreeHistory: TreeSearchOutput[];
+}
+
+/**
+ * Represents the complete response from a red team conversation.
+ */
+export interface RedteamTreeResponse {
+  output: string;
+  metadata: TreeIterativeMetadata;
+  tokenUsage: TokenUsage;
+  guardrails?: GuardrailResponse;
+}
+
+/**
  * Runs the red team conversation process.
  * @param params - The parameters for the red team conversation.
  * @returns A promise that resolves to an object with the output and metadata.
@@ -398,23 +424,7 @@ export async function runRedteamConversation({
   targetProvider: ApiProvider;
   test?: AtomicTestCase;
   vars: Record<string, string | object>;
-}): Promise<{
-  output: string;
-  metadata: {
-    highestScore: number;
-    redteamFinalPrompt?: string;
-    stoppingReason:
-      | 'TARGET_SCORE'
-      | 'MAX_ATTEMPTS'
-      | 'MAX_DEPTH'
-      | 'NO_IMPROVEMENT'
-      | 'GRADER_FAILED';
-    attempts: number;
-    redteamTreeHistory: TreeSearchOutput[];
-  };
-  tokenUsage?: TokenUsage;
-  guardrails?: GuardrailResponse;
-}> {
+}): Promise<RedteamTreeResponse> {
   const nunjucks = getNunjucksEngine();
   const goal: string = vars[injectVar] as string;
 
@@ -825,7 +835,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
     prompt: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
-  ): Promise<{ output: string; metadata: { redteamFinalPrompt?: string } }> {
+  ): Promise<RedteamTreeResponse> {
     logger.debug(`[IterativeTree] callApi context: ${safeJsonStringify(context)}`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
