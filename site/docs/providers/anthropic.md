@@ -8,15 +8,6 @@ This provider supports the [Anthropic Claude](https://www.anthropic.com/claude) 
 
 > **Note:** Anthropic models can also be accessed through Amazon Bedrock. For information on using Anthropic models via Bedrock, please refer to our [AWS Bedrock documentation](/docs/providers/aws-bedrock).
 
-## Examples
-
-We provide several example implementations demonstrating different Claude capabilities:
-
-- [Tool Use Example](https://github.com/promptfoo/promptfoo/tree/main/examples/tool-use) - Shows how to use Claude's tool calling capabilities
-- [Vision Example](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-vision) - Demonstrates using Claude for image analysis
-- [Model Comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-vs-gpt) - Compares Claude with GPT-4 on various tasks
-- [Image Analysis Comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-vs-gpt-image) - Compares image analysis capabilities between Claude and GPT
-
 ## Setup
 
 To use Anthropic, you need to set the `ANTHROPIC_API_KEY` environment variable or specify the `apiKey` in the provider configuration.
@@ -49,24 +40,32 @@ export ANTHROPIC_API_KEY=your_api_key_here
 
 The `anthropic` provider supports the following models via the messages API:
 
-| Model ID                                        | Description                      | Status |
-| ----------------------------------------------- | -------------------------------- | ------ |
-| `anthropic:messages:claude-3-5-sonnet-20241022` | Latest Claude 3.5 Sonnet model   | Active |
-| `anthropic:messages:claude-3-5-sonnet-20240620` | Previous Claude 3.5 Sonnet model | Active |
-| `anthropic:messages:claude-3-5-haiku-20241022`  | Latest Claude 3.5 Haiku model    | Active |
-| `anthropic:messages:claude-3-opus-20240229`     | Claude 3 Opus model              | Active |
-| `anthropic:messages:claude-3-sonnet-20240229`   | Claude 3 Sonnet model            | Active |
-| `anthropic:messages:claude-3-haiku-20240307`    | Claude 3 Haiku model             | Active |
-| `anthropic:messages:claude-2.0`                 | Claude 2.0 model                 | Legacy |
-| `anthropic:messages:claude-2.1`                 | Claude 2.1 model                 | Legacy |
-| `anthropic:messages:claude-instant-1.2`         | Claude Instant 1.2 model         | Legacy |
+| Model ID                                                                   | Description                      | Status |
+| -------------------------------------------------------------------------- | -------------------------------- | ------ |
+| `anthropic:messages:claude-3-5-sonnet-20241022` (claude-3-5-sonnet-latest) | Latest Claude 3.5 Sonnet model   | Active |
+| `anthropic:messages:claude-3-5-sonnet-20240620`                            | Previous Claude 3.5 Sonnet model | Active |
+| `anthropic:messages:claude-3-5-haiku-20241022` (claude-3-5-haiku-latest)   | Latest Claude 3.5 Haiku model    | Active |
+| `anthropic:messages:claude-3-opus-20240229` (claude-3-opus-latest)         | Claude 3 Opus model              | Active |
+| `anthropic:messages:claude-3-sonnet-20240229`                              | Claude 3 Sonnet model            | Active |
+| `anthropic:messages:claude-3-haiku-20240307`                               | Claude 3 Haiku model             | Active |
+| `anthropic:messages:claude-2.0`                                            | Claude 2.0 model                 | Legacy |
+| `anthropic:messages:claude-2.1`                                            | Claude 2.1 model                 | Legacy |
+| `anthropic:messages:claude-instant-1.2`                                    | Claude Instant 1.2 model         | Legacy |
 
-> **Note:** Model capabilities vary:
->
-> - Opus models offer the highest capabilities and longest context windows
-> - Sonnet models balance performance and cost
-> - Haiku models are optimized for speed and lower cost
-> - Legacy models (Claude 2.x) have more limited capabilities
+### Cross-Platform Model Availability
+
+Claude models are available across multiple platforms. Here's how the model names map across different providers:
+
+| Model             | Anthropic API                                         | AWS Bedrock                               | GCP Vertex AI                 |
+| ----------------- | ----------------------------------------------------- | ----------------------------------------- | ----------------------------- |
+| Claude 3.5 Sonnet | claude-3-5-sonnet-20241022 (claude-3-5-sonnet-latest) | anthropic.claude-3-5-sonnet-20241022-v2:0 | claude-3-5-sonnet-v2@20241022 |
+| Claude 3.5 Haiku  | claude-3-5-haiku-20241022 (claude-3-5-haiku-latest)   | anthropic.claude-3-5-haiku-20241022-v1:0  | claude-3-5-haiku@20241022     |
+| Claude 3 Opus     | claude-3-opus-20240229 (claude-3-opus-latest)         | anthropic.claude-3-opus-20240229-v1:0     | claude-3-opus@20240229        |
+| Claude 3 Sonnet   | claude-3-sonnet-20240229                              | anthropic.claude-3-sonnet-20240229-v1:0   | claude-3-sonnet@20240229      |
+| Claude 3 Haiku    | claude-3-haiku-20240307                               | anthropic.claude-3-haiku-20240307-v1:0    | claude-3-haiku@20240307       |
+
+For information on using Claude models via AWS Bedrock, see our [AWS Bedrock documentation](/docs/providers/aws-bedrock).
+For information on using Claude models via Google Cloud Vertex AI, see our [Vertex AI documentation](/docs/providers/vertex).
 
 ### Prompt Template
 
@@ -283,3 +282,26 @@ tests:
       - type: llm-rubric
         value: Answer should mention Paris
 ```
+
+## See Also
+
+### Examples
+
+We provide several example implementations demonstrating Claude's capabilities:
+
+#### Core Features
+
+- [Tool Use Example](https://github.com/promptfoo/promptfoo/tree/main/examples/tool-use) - Shows how to use Claude's tool calling capabilities
+- [Vision Example](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-vision) - Demonstrates using Claude's vision capabilities
+
+#### Model Comparisons & Evaluations
+
+- [Claude vs GPT](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-vs-gpt) - Compares Claude with GPT-4 on various tasks
+- [Claude vs GPT Image Analysis](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-vs-gpt-image) - Compares Claude's and GPT's image analysis capabilities
+
+#### Cloud Platform Integrations
+
+- [AWS Bedrock](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) - Using Claude through AWS Bedrock
+- [Google Vertex AI](https://github.com/promptfoo/promptfoo/tree/main/examples/google-vertex) - Using Claude through Google Vertex AI
+
+For more examples and general usage patterns, visit our [examples directory](https://github.com/promptfoo/promptfoo/tree/main/examples) on GitHub.
