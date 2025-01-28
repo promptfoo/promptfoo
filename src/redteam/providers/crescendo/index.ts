@@ -204,7 +204,7 @@ export class CrescendoProvider implements ApiProvider {
     context?: CallApiContextParams;
     options?: CallApiOptionsParams;
     test?: AtomicTestCase;
-  }) {
+  }): Promise<CrescendoResponse> {
     logger.debug(
       `[Crescendo] Starting attack with: prompt=${JSON.stringify(prompt)}, filtersPresent=${!!filters}, varsKeys=${Object.keys(vars)}, providerType=${provider.constructor.name}`,
     );
@@ -409,7 +409,7 @@ export class CrescendoProvider implements ApiProvider {
       output: lastResponse.output,
       metadata: {
         redteamFinalPrompt: getLastMessageContent(messages, 'user'),
-        messages: JSON.stringify(messages, null, 2),
+        messages: messages as Record<string, any>[],
         crescendoRoundsCompleted: roundNum,
         crescendoBacktrackCount: backtrackCount,
         crescendoResult: evalFlag,

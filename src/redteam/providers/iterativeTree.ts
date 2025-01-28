@@ -630,7 +630,7 @@ export async function runRedteamConversation({
             metadata: {
               highestScore: maxScore,
               redteamFinalPrompt: bestNode.prompt,
-              messages: JSON.stringify(treeOutputs, null, 2),
+              messages: treeOutputs as Record<string, any>[],
               attempts,
               redteamTreeHistory: treeOutputs,
               stopReason: stoppingReason,
@@ -661,7 +661,7 @@ export async function runRedteamConversation({
             metadata: {
               highestScore: maxScore,
               redteamFinalPrompt: bestNode.prompt,
-              messages: JSON.stringify(treeOutputs, null, 2),
+              messages: treeOutputs as Record<string, any>[],
               attempts,
               redteamTreeHistory: treeOutputs,
               stopReason: stoppingReason,
@@ -693,7 +693,7 @@ export async function runRedteamConversation({
             metadata: {
               highestScore: maxScore,
               redteamFinalPrompt: bestNode.prompt,
-              messages: JSON.stringify(treeOutputs, null, 2),
+              messages: treeOutputs as Record<string, any>[],
               attempts,
               redteamTreeHistory: treeOutputs,
               stopReason: stoppingReason,
@@ -786,7 +786,7 @@ export async function runRedteamConversation({
     metadata: {
       highestScore: maxScore,
       redteamFinalPrompt: bestNode.prompt,
-      messages: JSON.stringify(treeOutputs, null, 2),
+      messages: treeOutputs as Record<string, any>[],
       attempts,
       redteamTreeHistory: treeOutputs,
       stopReason: stoppingReason,
