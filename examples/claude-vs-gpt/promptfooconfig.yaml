@@ -1,15 +1,4 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-# See documentation:
-# - Anthropic Provider: https://www.promptfoo.dev/docs/providers/anthropic
-# - Tool Use Guide: https://docs.anthropic.com/claude/docs/tool-use
-# - Citations Guide: https://docs.anthropic.com/claude/docs/citations
-# - Prompt Caching Guide: https://docs.anthropic.com/claude/docs/prompt-caching
-#
-# Related examples:
-# - Tool Use: examples/tool-use/
-# - Vision: examples/claude-vision/
-# - Image Analysis: examples/claude-vs-gpt-image/
-
 description: 'Claude 3.5 vs GPT 4o'
 
 prompts:
