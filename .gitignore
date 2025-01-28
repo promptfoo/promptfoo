@@ -24,3 +24,4 @@ examples/redteam-dalle/images
 
 .vite
 *.tsbuildinfo
+*.tsbuildinfo
