@@ -267,22 +267,26 @@ class Evaluator {
       };
 
       // If we have redteam history, create test cases for failed attempts
-      if (response.metadata?.redteamHistory && Array.isArray(response.metadata.redteamHistory)) {
-        const failedAttempts = response.metadata.redteamHistory.filter(
-          (attempt) => attempt.graderPassed === false,
+      const testCasesToUnpack: { graderPassed: boolean; input: string; output: string }[] =
+        (response.metadata?.redteamHistory ?? [])?.filter(
+          (attempt: { graderPassed: boolean }) => attempt.graderPassed === false,
+        ) ?? [];
+      if (testCasesToUnpack.length > 0) {
+        const testCases = testCasesToUnpack.map(
+          (iteration: { graderPassed: boolean; input: string; output: string }, idx: number) => ({
+            ...test,
+            vars: {
+              ...test.vars,
+              [this.evalRecord.config?.redteam?.injectVar || '']: iteration.input,
+            },
+            metadata: {
+              ...test.metadata,
+              redteamFinalPrompt: iteration.input,
+              iterationIndex: idx,
+            },
+            providerOutput: iteration.output,
+          }),
         );
-        const testCases = failedAttempts.map((iteration, idx) => ({
-          ...test,
-          vars: {
-            ...test.vars,
-          },
-          metadata: {
-            ...test.metadata,
-            redteamFinalPrompt: iteration.input,
-            iterationIndex: idx,
-          },
-          providerOutput: iteration.output,
-        }));
 
         // Run evaluation for each test case
         const results: EvaluateResult[] = [];
