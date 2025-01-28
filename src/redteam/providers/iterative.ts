@@ -496,3 +496,5 @@ class RedteamIterativeProvider implements ApiProvider {
 }
 
 export default RedteamIterativeProvider;
+
+export { runRedteamConversation, RedteamIterativeProvider };
