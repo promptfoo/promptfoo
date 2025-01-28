@@ -45,7 +45,7 @@ interface TokenUsage {
   cached: number;
 }
 
-async function runRedteamConversation({
+export async function runRedteamConversation({
   context,
   filters,
   injectVar,
@@ -496,5 +496,3 @@ class RedteamIterativeProvider implements ApiProvider {
 }
 
 export default RedteamIterativeProvider;
-
-export { runRedteamConversation, RedteamIterativeProvider };
