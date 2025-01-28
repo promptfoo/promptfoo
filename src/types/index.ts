@@ -220,7 +220,7 @@ export interface EvaluateResult {
   promptId: string; // on the new version 2, this is stored per-result
   provider: Pick<ProviderOptions, 'id' | 'label'>;
   prompt: Prompt;
-  vars: Record<string, string | object>;
+  vars: Vars;
   response?: ProviderResponse;
   error?: string | null;
   failureReason: ResultFailureReason;

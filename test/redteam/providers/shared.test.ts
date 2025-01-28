@@ -6,7 +6,12 @@ import {
   ATTACKER_MODEL_SMALL,
   TEMPERATURE,
 } from '../../../src/redteam/providers/constants';
-import { redteamProviderManager, getTargetResponse } from '../../../src/redteam/providers/shared';
+import {
+  redteamProviderManager,
+  getTargetResponse,
+  messagesToRedteamHistory,
+  type Message,
+} from '../../../src/redteam/providers/shared';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -345,6 +350,78 @@ describe('shared redteam provider utilities', () => {
         output: 'test response',
         tokenUsage: { numRequests: 1 },
       });
+    });
+  });
+
+  describe('messagesToRedteamHistory', () => {
+    it('converts valid messages to redteamHistory format', () => {
+      const messages: Message[] = [
+        { role: 'system', content: 'system message' },
+        { role: 'user', content: 'user message 1' },
+        { role: 'assistant', content: 'assistant response 1' },
+        { role: 'user', content: 'user message 2' },
+        { role: 'assistant', content: 'assistant response 2' },
+      ];
+
+      const result = messagesToRedteamHistory(messages);
+
+      expect(result).toEqual([
+        { prompt: 'user message 1', output: 'assistant response 1' },
+        { prompt: 'user message 2', output: 'assistant response 2' },
+      ]);
+    });
+
+    it('handles empty messages array', () => {
+      const messages: Message[] = [];
+      const result = messagesToRedteamHistory(messages);
+      expect(result).toEqual([]);
+    });
+
+    it('handles messages with missing content', () => {
+      const messages: Message[] = [
+        { role: 'user', content: '' },
+        { role: 'assistant', content: undefined as any },
+        { role: 'user', content: 'valid message' },
+        { role: 'assistant', content: 'valid response' },
+      ];
+
+      const result = messagesToRedteamHistory(messages);
+
+      expect(result).toEqual([
+        { prompt: '', output: '' },
+        { prompt: 'valid message', output: 'valid response' },
+      ]);
+    });
+
+    it('handles malformed messages gracefully', () => {
+      const messages = [
+        { wrong: 'format' },
+        null,
+        undefined,
+        { role: 'user', content: 'valid message' },
+        { role: 'assistant', content: 'valid response' },
+      ] as Message[];
+
+      const result = messagesToRedteamHistory(messages);
+
+      expect(result).toEqual([{ prompt: 'valid message', output: 'valid response' }]);
+    });
+
+    it('handles non-array input gracefully', () => {
+      const result = messagesToRedteamHistory(null as any);
+      expect(result).toEqual([]);
+    });
+
+    it('skips incomplete message pairs', () => {
+      const messages: Message[] = [
+        { role: 'user', content: 'user message 1' },
+        { role: 'user', content: 'user message 2' },
+        { role: 'assistant', content: 'assistant response 2' },
+      ];
+
+      const result = messagesToRedteamHistory(messages);
+
+      expect(result).toEqual([{ prompt: 'user message 2', output: 'assistant response 2' }]);
     });
   });
 });

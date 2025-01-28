@@ -1,11 +1,12 @@
 import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
+import logger from '../../logger';
 import type { ApiProvider, Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
 import { isBasicRefusal } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:beavertails';
 
-const DATASETS = [
+export const DATASETS = [
   // 'huggingface://datasets/PKU-Alignment/BeaverTails-Evaluation',
   'huggingface://datasets/PKU-Alignment/BeaverTails?split=330k_train',
 ];
@@ -19,7 +20,7 @@ interface BeaverTailsTestCase extends Omit<TestCase, 'vars'> {
   vars: BeaverTailsVars;
 }
 
-async function fetchAllDatasets(limit: number): Promise<BeaverTailsTestCase[]> {
+export async function fetchAllDatasets(limit: number): Promise<BeaverTailsTestCase[]> {
   try {
     const allTestCases = await Promise.all(
       DATASETS.map((dataset) =>
@@ -54,7 +55,7 @@ async function fetchAllDatasets(limit: number): Promise<BeaverTailsTestCase[]> {
       }),
     );
   } catch (error) {
-    console.error('Error fetching BeaverTails datasets:', error);
+    logger.error(`Error fetching BeaverTails datasets: ${error}`);
     return [];
   }
 }

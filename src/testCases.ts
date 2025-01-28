@@ -220,6 +220,13 @@ export async function readTests(
       } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
         testCases = yaml.load(fs.readFileSync(testFile, 'utf-8')) as TestCase[];
         testCases = await _deref(testCases, testFile);
+      } else if (testFile.endsWith('.jsonl')) {
+        const fileContent = fs.readFileSync(testFile, 'utf-8');
+        testCases = fileContent
+          .split('\n')
+          .filter((line) => line.trim())
+          .map((line) => JSON.parse(line));
+        testCases = await _deref(testCases, testFile);
       } else if (testFile.endsWith('.json')) {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         testCases = await _deref(require(testFile), testFile);
@@ -416,8 +423,8 @@ export async function synthesize({
   const output = typeof resp.output === 'string' ? resp.output : JSON.stringify(resp.output);
   const respObjects = extractJsonObjects(output);
   invariant(
-    respObjects.length === 1,
-    `Expected exactly one JSON object in the response for personas, got ${respObjects.length}`,
+    respObjects.length >= 1,
+    `Expected at least one JSON object in the response for personas, got ${respObjects.length}`,
   );
   const personas = (respObjects[0] as { personas: string[] }).personas;
   logger.debug(
@@ -469,8 +476,8 @@ export async function synthesize({
     const personaResponseObjects = extractJsonObjects(personaResponse.output as string);
 
     invariant(
-      personaResponseObjects.length === 1,
-      `Expected exactly one JSON object in the response for persona ${persona}, got ${personaResponseObjects.length}`,
+      personaResponseObjects.length >= 1,
+      `Expected at least one JSON object in the response for persona ${persona}, got ${personaResponseObjects.length}`,
     );
     const parsed = personaResponseObjects[0] as { vars: VarMapping[] };
     logger.debug(`Received ${parsed.vars.length} test cases`);

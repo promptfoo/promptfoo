@@ -6,10 +6,6 @@ import path from 'path';
 import cliState from './cliState';
 import { importModule } from './esm';
 import logger from './logger';
-import {
-  AdalineGatewayChatProvider,
-  AdalineGatewayEmbeddingProvider,
-} from './providers/adaline.gateway';
 import { AI21ChatCompletionProvider } from './providers/ai21';
 import { AnthropicCompletionProvider, AnthropicMessagesProvider } from './providers/anthropic';
 import {
@@ -26,6 +22,7 @@ import * as CloudflareAiProviders from './providers/cloudflare-ai';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './providers/cohere';
 import { FalImageGenerationProvider } from './providers/fal';
 import { GolangProvider } from './providers/golangCompletion';
+import { GoogleChatProvider } from './providers/google';
 import { GroqProvider } from './providers/groq';
 import { HttpProvider } from './providers/http';
 import {
@@ -57,7 +54,6 @@ import {
   OpenAiModerationProvider,
 } from './providers/openai';
 import { parsePackageProvider } from './providers/packageParser';
-import { PalmChatProvider } from './providers/palm';
 import { PortkeyChatCompletionProvider } from './providers/portkey';
 import { PythonProvider } from './providers/pythonCompletion';
 import {
@@ -214,6 +210,9 @@ export async function loadApiProvider(
           ...(providerOptions.config.models && { models: providerOptions.config.models }),
           ...(providerOptions.config.route && { route: providerOptions.config.route }),
           ...(providerOptions.config.provider && { provider: providerOptions.config.provider }),
+          ...(providerOptions.config.passthrough && {
+            passthrough: providerOptions.config.passthrough,
+          }),
         },
       },
     });
@@ -226,6 +225,17 @@ export async function loadApiProvider(
         ...providerOptions.config,
         apiBaseUrl: 'https://models.inference.ai.azure.com',
         apiKeyEnvar: 'GITHUB_TOKEN',
+      },
+    });
+  } else if (providerPath.startsWith('perplexity:')) {
+    const splits = providerPath.split(':');
+    const modelName = splits.slice(1).join(':');
+    ret = new OpenAiChatCompletionProvider(modelName, {
+      ...providerOptions,
+      config: {
+        ...providerOptions.config,
+        apiBaseUrl: 'https://api.perplexity.ai',
+        apiKeyEnvar: 'PERPLEXITY_API_KEY',
       },
     });
   } else if (providerPath.startsWith('hyperbolic:')) {
@@ -423,9 +433,9 @@ export async function loadApiProvider(
       const modelName = splits.slice(1).join(':');
       ret = new OllamaCompletionProvider(modelName, providerOptions);
     }
-  } else if (providerPath.startsWith('palm:') || providerPath.startsWith('google:')) {
+  } else if (providerPath.startsWith('google:') || providerPath.startsWith('palm:')) {
     const modelName = providerPath.split(':')[1];
-    ret = new PalmChatProvider(modelName, providerOptions);
+    ret = new GoogleChatProvider(modelName, providerOptions);
   } else if (providerPath.startsWith('vertex:')) {
     const splits = providerPath.split(':');
     const firstPart = splits[1];
@@ -486,7 +496,9 @@ export async function loadApiProvider(
     const providerName = splits[1];
     const modelType = splits[2];
     const modelName = splits[3];
-
+    const { AdalineGatewayChatProvider, AdalineGatewayEmbeddingProvider } = await import(
+      './providers/adaline.gateway'
+    );
     if (modelType === 'embedding' || modelType === 'embeddings') {
       ret = new AdalineGatewayEmbeddingProvider(providerName, modelName, providerOptions);
     } else {
@@ -671,7 +683,7 @@ export default {
   OllamaEmbeddingProvider,
   OllamaCompletionProvider,
   OllamaChatProvider,
-  PalmChatProvider,
+  GoogleChatProvider,
   PortkeyChatCompletionProvider,
   PythonProvider,
   ScriptCompletionProvider,
