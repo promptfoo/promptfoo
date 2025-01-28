@@ -1,5 +1,8 @@
+# Environment and local config
 .env
+.local
 
+# Temporary and generated files
 scratch
 *.sw[op]
 *.log
@@ -7,21 +10,19 @@ scratch
 node_modules
 dist
 .aider*
-.local
+.vite
+*.tsbuildinfo
 
+# Python-related
 __pycache__
 
-# jest
+# Jest and test-related
 .coverage
 .ruff_cache
 
-# IDE
+# IDE-specific
 .idea/
 
-# examples related
+# Examples-related
 examples/**/package-lock.json
 examples/redteam-dalle/images
-
-.vite
-*.tsbuildinfo
-*.tsbuildinfo
