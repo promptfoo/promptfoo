@@ -158,7 +158,7 @@ describe('RedteamGoatProvider', () => {
     };
 
     const result = await provider.callApi('test prompt', context);
-    const messages = JSON.parse(result.metadata?.messages);
+    const messages = result.metadata?.messages;
     expect(messages[messages.length - 1].content).toBe(JSON.stringify(objectResponse));
   });
 });

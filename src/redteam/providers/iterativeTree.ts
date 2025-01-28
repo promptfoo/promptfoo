@@ -37,6 +37,7 @@ import { shouldGenerateRemote } from '../remoteGeneration';
 import { PENALIZED_PHRASES } from './constants';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
 import { getTargetResponse, redteamProviderManager } from './shared';
+import type { BaseRedteamMetadata, BaseRedteamResponse } from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -374,6 +375,24 @@ export interface TreeSearchOutput {
 }
 
 /**
+ * Represents metadata for the iterative tree search process.
+ */
+export interface TreeIterativeMetadata extends BaseRedteamMetadata {
+  highestScore: number;
+  redteamFinalPrompt?: string;
+  stopReason: 'TARGET_SCORE' | 'MAX_ATTEMPTS' | 'MAX_DEPTH' | 'NO_IMPROVEMENT' | 'GRADER_FAILED';
+  attempts: number;
+  redteamTreeHistory: TreeSearchOutput[];
+}
+
+/**
+ * Represents the complete response from a red team conversation.
+ */
+export interface RedteamTreeResponse extends BaseRedteamResponse {
+  metadata: TreeIterativeMetadata;
+}
+
+/**
  * Runs the red team conversation process.
  * @param params - The parameters for the red team conversation.
  * @returns A promise that resolves to an object with the output and metadata.
@@ -398,23 +417,7 @@ export async function runRedteamConversation({
   targetProvider: ApiProvider;
   test?: AtomicTestCase;
   vars: Record<string, string | object>;
-}): Promise<{
-  output: string;
-  metadata: {
-    highestScore: number;
-    redteamFinalPrompt?: string;
-    stoppingReason:
-      | 'TARGET_SCORE'
-      | 'MAX_ATTEMPTS'
-      | 'MAX_DEPTH'
-      | 'NO_IMPROVEMENT'
-      | 'GRADER_FAILED';
-    attempts: number;
-    redteamTreeHistory: TreeSearchOutput[];
-  };
-  tokenUsage?: TokenUsage;
-  guardrails?: GuardrailResponse;
-}> {
+}): Promise<RedteamTreeResponse> {
   const nunjucks = getNunjucksEngine();
   const goal: string = vars[injectVar] as string;
 
@@ -627,9 +630,10 @@ export async function runRedteamConversation({
             metadata: {
               highestScore: maxScore,
               redteamFinalPrompt: bestNode.prompt,
-              stoppingReason,
+              messages: treeOutputs as Record<string, any>[],
               attempts,
               redteamTreeHistory: treeOutputs,
+              stopReason: stoppingReason,
             },
             tokenUsage: totalTokenUsage,
             guardrails: targetResponse.guardrails,
@@ -657,9 +661,10 @@ export async function runRedteamConversation({
             metadata: {
               highestScore: maxScore,
               redteamFinalPrompt: bestNode.prompt,
-              stoppingReason,
+              messages: treeOutputs as Record<string, any>[],
               attempts,
               redteamTreeHistory: treeOutputs,
+              stopReason: stoppingReason,
             },
             tokenUsage: totalTokenUsage,
             guardrails: targetResponse.guardrails,
@@ -688,9 +693,10 @@ export async function runRedteamConversation({
             metadata: {
               highestScore: maxScore,
               redteamFinalPrompt: bestNode.prompt,
-              stoppingReason,
+              messages: treeOutputs as Record<string, any>[],
               attempts,
               redteamTreeHistory: treeOutputs,
+              stopReason: stoppingReason,
             },
             tokenUsage: totalTokenUsage,
             guardrails: targetResponse.guardrails,
@@ -780,9 +786,10 @@ export async function runRedteamConversation({
     metadata: {
       highestScore: maxScore,
       redteamFinalPrompt: bestNode.prompt,
-      stoppingReason,
+      messages: treeOutputs as Record<string, any>[],
       attempts,
       redteamTreeHistory: treeOutputs,
+      stopReason: stoppingReason,
     },
     tokenUsage: totalTokenUsage,
     guardrails: finalTargetResponse.guardrails,
@@ -825,7 +832,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
     prompt: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
-  ): Promise<{ output: string; metadata: { redteamFinalPrompt?: string } }> {
+  ): Promise<RedteamTreeResponse> {
     logger.debug(`[IterativeTree] callApi context: ${safeJsonStringify(context)}`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');

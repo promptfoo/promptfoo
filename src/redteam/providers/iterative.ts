@@ -27,10 +27,6 @@ interface IterativeMetadata {
   finalIteration: number;
   highestScore: number;
   redteamFinalPrompt?: string;
-  iterations: {
-    input: string;
-    output: string;
-  }[];
   redteamHistory: {
     prompt: string;
     output: string;
@@ -49,7 +45,7 @@ interface TokenUsage {
   cached: number;
 }
 
-async function runRedteamConversation({
+export async function runRedteamConversation({
   context,
   filters,
   injectVar,
