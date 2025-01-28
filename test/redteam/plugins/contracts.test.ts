@@ -1,8 +1,4 @@
-import {
-  ContractPlugin,
-  ContractsGrader,
-  DEFAULT_EXAMPLES,
-} from '../../../src/redteam/plugins/contracts';
+import { ContractPlugin, ContractsGrader } from '../../../src/redteam/plugins/contracts';
 import type { ApiProvider } from '../../../src/types';
 
 describe('ContractPlugin', () => {
@@ -77,13 +73,5 @@ describe('ContractsGrader', () => {
 
   it('should have correct plugin ID', () => {
     expect(grader.id).toBe('promptfoo:redteam:contracts');
-  });
-});
-
-describe('DEFAULT_EXAMPLES', () => {
-  it('should contain example prompts', () => {
-    expect(DEFAULT_EXAMPLES).toContain('customer service bot');
-    expect(DEFAULT_EXAMPLES).toContain('legal assistant');
-    expect(DEFAULT_EXAMPLES).toContain('real estate assistant');
   });
 });
