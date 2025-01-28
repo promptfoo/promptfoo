@@ -35,6 +35,7 @@ import {
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import invariant from './util/invariant';
 import { safeJsonStringify } from './util/json';
+import { sleep } from './util/time';
 import { transform, type TransformContext, TransformInputType } from './util/transform';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
@@ -243,6 +244,11 @@ class Evaluator {
       const endTime = Date.now();
       latencyMs = endTime - startTime;
 
+      if (!response.cached && provider.delay > 0) {
+        logger.debug(`Sleeping for ${provider.delay}ms`);
+        await sleep(provider.delay);
+      }
+
       // Create base result
       const baseResult: EvaluateResult = {
         ...setup,
@@ -401,6 +407,11 @@ class Evaluator {
         input: conversationLastInput || renderedJson || renderedPrompt,
         output: response.output || '',
       });
+
+      if (!response.cached && provider.delay > 0) {
+        logger.debug(`Sleeping for ${provider.delay}ms`);
+        await sleep(provider.delay);
+      }
 
       return [baseResult];
     } catch (err) {
