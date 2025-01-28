@@ -214,7 +214,9 @@ export async function loadApiProvider(
           ...(providerOptions.config.models && { models: providerOptions.config.models }),
           ...(providerOptions.config.route && { route: providerOptions.config.route }),
           ...(providerOptions.config.provider && { provider: providerOptions.config.provider }),
-          ...(providerOptions.config.passthrough && { passthrough: providerOptions.config.passthrough }) ,
+          ...(providerOptions.config.passthrough && {
+            passthrough: providerOptions.config.passthrough,
+          }),
         },
       },
     });
