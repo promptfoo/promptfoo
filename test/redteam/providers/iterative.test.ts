@@ -1,5 +1,7 @@
 import { jest } from '@jest/globals';
-import RedteamIterativeProvider from '../../../src/redteam/providers/iterative';
+import RedteamIterativeProvider, {
+  runRedteamConversation,
+} from '../../../src/redteam/providers/iterative';
 import type { ApiProvider, ProviderResponse } from '../../../src/types';
 
 const mockGetProvider = jest.fn<() => Promise<ApiProvider>>();
@@ -14,35 +16,9 @@ jest.mock('../../../src/redteam/providers/shared', () => ({
   checkPenalizedPhrases: mockCheckPenalizedPhrases,
 }));
 
-jest.mock('../../../src/cliState', () => ({
-  config: {
-    openai: {
-      apiKey: 'test-key',
-    },
-  },
-}));
-
-jest.mock('../../../src/providers/openai', () => ({
-  OpenAiChatCompletionProvider: jest.fn().mockImplementation(() => ({
-    id: jest.fn().mockReturnValue('mock-openai'),
-    callApi: jest.fn(),
-  })),
-}));
-
-jest.mock('../../../src/providers', () => ({
-  loadApiProviders: jest.fn().mockImplementation(
-    () =>
-      [
-        {
-          id: () => 'mock-provider',
-          callApi: jest.fn(),
-        },
-      ] as ApiProvider[],
-  ),
-}));
-
 describe('RedteamIterativeProvider', () => {
   let mockRedteamProvider: jest.Mocked<ApiProvider>;
+  let mockTargetProvider: jest.Mocked<ApiProvider>;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -74,6 +50,13 @@ describe('RedteamIterativeProvider', () => {
             };
           }
         }),
+    } as jest.Mocked<ApiProvider>;
+
+    mockTargetProvider = {
+      id: jest.fn().mockReturnValue('mock-target'),
+      callApi: jest.fn<() => Promise<ProviderResponse>>().mockResolvedValue({
+        output: 'mock target response',
+      }),
     } as jest.Mocked<ApiProvider>;
 
     mockGetProvider.mockImplementation(() => Promise.resolve(mockRedteamProvider));
@@ -114,6 +97,42 @@ describe('RedteamIterativeProvider', () => {
       const provider = new RedteamIterativeProvider({ injectVar: 'test' });
       expect(provider['numIterations']).toBe(15);
       delete process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS;
+    });
+  });
+
+  describe('runRedteamConversation', () => {
+    it('should stop iteration when score reaches 10', async () => {
+      mockRedteamProvider.callApi
+        .mockImplementationOnce(async () => ({
+          output: JSON.stringify({
+            improvement: 'test',
+            prompt: 'test',
+          }),
+        }))
+        .mockImplementationOnce(async () => ({
+          output: JSON.stringify({ onTopic: true }),
+        }))
+        .mockImplementationOnce(async () => ({
+          output: JSON.stringify({
+            currentResponse: { rating: 10, explanation: 'perfect' },
+            previousBestResponse: { rating: 5, explanation: 'good' },
+          }),
+        }));
+
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 5,
+        options: {},
+        prompt: { raw: 'test', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal' },
+      });
+
+      expect(result.metadata.finalIteration).toBe(1);
+      expect(result.metadata.highestScore).toBe(10);
     });
   });
 });
