@@ -6,11 +6,6 @@ sidebar_position: 1
 
 To use the OpenAI API, set the `OPENAI_API_KEY` environment variable, specify via `apiKey` field in the configuration file or pass the API key as an argument to the constructor.
 
-> **Note:** OpenAI is used as the default provider for operations like grading, suggestions, and dataset generation when:
->
-> 1. `OPENAI_API_KEY` is present
-> 2. No other provider (Anthropic, Azure OpenAI, or Vertex AI) takes precedence based on their configuration
-
 Example:
 
 ```sh

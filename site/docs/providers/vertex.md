@@ -2,8 +2,6 @@
 
 The `vertex` provider is compatible with Google's [Vertex AI](https://cloud.google.com/vertex-ai) offering, which offers access to models such as Gemini and Bison.
 
-> **Note:** When Google credentials are configured and no OpenAI or Anthropic API keys are present, Vertex AI will be used as the default provider for operations like grading, suggestions, and dataset generation.
-
 You can use it by specifying any of the available stable or latest [model versions](https://cloud.google.com/vertex-ai/docs/generative-ai/learn/model-versioning) offered by Vertex AI. These include:
 
 - `vertex:chat-bison`
@@ -99,6 +97,8 @@ AI safety settings can be configured using the `safetySettings` key. For example
 See more details on Google's SafetySetting API [here](https://ai.google.dev/api/generate-content#safetysetting).
 
 ## Overriding graders
+
+> **Note:** When Google credentials are configured and no OpenAI or Anthropic API keys are present, Vertex AI will be used as the default provider for operations like grading, suggestions, and dataset generation.
 
 To use Vertex models for model grading (e.g. `llm-rubric` and `factuality` assertions), or to override the embeddings provider for the `similar` assertion, use `defaultTest` to override providers for all tests:
 
