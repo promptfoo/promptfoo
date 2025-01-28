@@ -102,6 +102,7 @@ jest.mock('../../src/redteam/remoteGeneration', () => ({
   neverGenerateRemote: jest.fn().mockReturnValue(false),
   getRemoteGenerationUrl: jest.fn().mockReturnValue('http://test-url'),
 }));
+jest.mock('../../src/providers/websocket');
 
 const mockFetch = jest.mocked(jest.fn());
 global.fetch = mockFetch;
@@ -114,6 +115,18 @@ const defaultMockResponse = {
     entries: jest.fn().mockReturnValue([]),
   },
 };
+
+// Dynamic import
+jest.mock('../../src/providers/adaline.gateway', () => ({
+  AdalineGatewayChatProvider: jest.fn().mockImplementation((providerName, modelName) => ({
+    id: () => `adaline:${providerName}:chat:${modelName}`,
+    constructor: { name: 'AdalineGatewayChatProvider' },
+  })),
+  AdalineGatewayEmbeddingProvider: jest.fn().mockImplementation((providerName, modelName) => ({
+    id: () => `adaline:${providerName}:embedding:${modelName}`,
+    constructor: { name: 'AdalineGatewayEmbeddingProvider' },
+  })),
+}));
 
 describe('call provider apis', () => {
   afterEach(async () => {
@@ -845,6 +858,14 @@ describe('loadApiProvider', () => {
     expect(provider.id()).toBe('gpt-4o-mini');
   });
 
+  it('loadApiProvider with perplexity', async () => {
+    const provider = await loadApiProvider('perplexity:llama-3-sonar-large-32k-online');
+    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(provider.id()).toBe('llama-3-sonar-large-32k-online');
+    expect(provider.config.apiBaseUrl).toBe('https://api.perplexity.ai');
+    expect(provider.config.apiKeyEnvar).toBe('PERPLEXITY_API_KEY');
+  });
+
   it('loadApiProvider with togetherai', async () => {
     const provider = await loadApiProvider(
       'togetherai:chat:meta/meta-llama/Meta-Llama-3-8B-Instruct',
@@ -1106,10 +1127,10 @@ describe('loadApiProvider', () => {
   });
 
   it('supports templating in provider URL', async () => {
-    process.env.MYHOST = 'api.example.com';
-    process.env.MYPORT = '8080';
+    process.env.MY_HOST = 'api.example.com';
+    process.env.MY_PORT = '8080';
 
-    const provider = await loadApiProvider('https://{{ env.MYHOST }}:{{ env.MYPORT }}/query', {
+    const provider = await loadApiProvider('https://{{ env.MY_HOST }}:{{ env.MY_PORT }}/query', {
       options: {
         config: {
           body: {},
@@ -1117,8 +1138,8 @@ describe('loadApiProvider', () => {
       },
     });
     expect(provider.id()).toBe('https://api.example.com:8080/query');
-    delete process.env.MYHOST;
-    delete process.env.MYPORT;
+    delete process.env.MY_HOST;
+    delete process.env.MY_PORT;
   });
 
   it('throws an error for unidentified providers', async () => {
@@ -1159,5 +1180,21 @@ describe('loadApiProvider', () => {
     expect(provider.id()).toBe('grok-2');
     expect(provider.config.apiBaseUrl).toBe('https://api.x.ai/v1');
     expect(provider.config.apiKeyEnvar).toBe('XAI_API_KEY');
+  });
+
+  it('loadApiProvider with adaline:openai:chat', async () => {
+    const provider = await loadApiProvider('adaline:openai:chat:gpt-4');
+    expect(provider.id()).toBe('adaline:openai:chat:gpt-4');
+  });
+
+  it('loadApiProvider with adaline:openai:embedding', async () => {
+    const provider = await loadApiProvider('adaline:openai:embedding:text-embedding-3-large');
+    expect(provider.id()).toBe('adaline:openai:embedding:text-embedding-3-large');
+  });
+
+  it('should throw error for invalid adaline provider path', async () => {
+    await expect(loadApiProvider('adaline:invalid')).rejects.toThrow(
+      "Invalid adaline provider path: adaline:invalid. path format should be 'adaline:<provider_name>:<model_type>:<model_name>' eg. 'adaline:openai:chat:gpt-4o'",
+    );
   });
 });

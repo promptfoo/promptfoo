@@ -341,6 +341,10 @@ const config = {
             from: '/docs/category/troubleshooting',
             to: '/docs/usage/troubleshooting',
           },
+          {
+            from: '/docs/providers/palm',
+            to: '/docs/providers/google',
+          },
         ],
       },
     ],

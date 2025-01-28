@@ -293,17 +293,36 @@ function EvalOutputCell({
       output.response?.tokenUsage?.total ?? 0,
     );
 
-    tokenUsageDisplay = (
-      <Tooltip
-        title={`${promptTokens} prompt tokens + ${completionTokens} completion tokens = ${totalTokens} total`}
-      >
-        <span>
-          {totalTokens}
-          {(promptTokens !== '0' || completionTokens !== '0') &&
-            ` (${promptTokens}+${completionTokens})`}
-        </span>
-      </Tooltip>
-    );
+    if (output.response?.tokenUsage?.completionDetails?.reasoning) {
+      const reasoningTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
+        output.response.tokenUsage.completionDetails.reasoning ?? 0,
+      );
+
+      tokenUsageDisplay = (
+        <Tooltip
+          title={`${promptTokens} prompt tokens + ${completionTokens} completion tokens = ${totalTokens} total & ${reasoningTokens} reasoning tokens`}
+        >
+          <span>
+            {totalTokens}
+            {(promptTokens !== '0' || completionTokens !== '0') &&
+              ` (${promptTokens}+${completionTokens})`}
+            {` R${reasoningTokens}`}
+          </span>
+        </Tooltip>
+      );
+    } else {
+      tokenUsageDisplay = (
+        <Tooltip
+          title={`${promptTokens} prompt tokens + ${completionTokens} completion tokens = ${totalTokens} total`}
+        >
+          <span>
+            {totalTokens}
+            {(promptTokens !== '0' || completionTokens !== '0') &&
+              ` (${promptTokens}+${completionTokens})`}
+          </span>
+        </Tooltip>
+      );
+    }
   }
 
   const comment =

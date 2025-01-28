@@ -25,6 +25,13 @@ import { calculateCost, REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from 
 
 // see https://platform.openai.com/docs/models
 export const OPENAI_CHAT_MODELS = [
+  ...['chatgpt-4o-latest'].map((model) => ({
+    id: model,
+    cost: {
+      input: 5 / 1e6,
+      output: 15 / 1e6,
+    },
+  })),
   ...['o1', 'o1-2024-12-17', 'o1-preview', 'o1-preview-2024-09-12'].map((model) => ({
     id: model,
     cost: {
@@ -200,6 +207,15 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
         total: data.usage.total_tokens,
         prompt: data.usage.prompt_tokens || 0,
         completion: data.usage.completion_tokens || 0,
+        ...(data.usage.completion_tokens_details
+          ? {
+              completionDetails: {
+                reasoning: data.usage.completion_tokens_details.reasoning_tokens,
+                acceptedPrediction: data.usage.completion_tokens_details.accepted_prediction_tokens,
+                rejectedPrediction: data.usage.completion_tokens_details.rejected_prediction_tokens,
+              },
+            }
+          : {}),
       };
     }
   }
@@ -505,6 +521,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const temperature = isO1Model
       ? undefined
       : (config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0));
+    const reasoningEffort = isO1Model
+      ? renderVarsInObject(config.reasoning_effort, context?.vars)
+      : undefined;
 
     const body = {
       model: this.modelName,
@@ -512,6 +531,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       seed: config.seed,
       ...(maxTokens ? { max_tokens: maxTokens } : {}),
       ...(maxCompletionTokens ? { max_completion_tokens: maxCompletionTokens } : {}),
+      ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
       ...(temperature ? { temperature } : {}),
       ...(config.top_p !== undefined || process.env.OPENAI_TOP_P
         ? { top_p: config.top_p ?? Number.parseFloat(process.env.OPENAI_TOP_P || '1') }

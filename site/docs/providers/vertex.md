@@ -1,7 +1,3 @@
----
-sidebar_position: 42
----
-
 # Google Vertex
 
 The `vertex` provider is compatible with Google's [Vertex AI](https://cloud.google.com/vertex-ai) offering, which offers access to models such as Gemini and Bison.
@@ -41,7 +37,7 @@ You can use it by specifying any of the available stable or latest [model versio
 Embeddings models such as `vertex:embedding:text-embedding-004` are also supported.
 
 :::tip
-If you are using Google AI Studio, see the [`google` provider](/docs/providers/palm).
+If you are using Google AI Studio, see the [`google` provider](/docs/providers/google).
 :::
 
 ## Authenticating with Google
