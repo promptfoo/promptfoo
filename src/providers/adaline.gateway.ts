@@ -36,6 +36,7 @@ import type { EnvOverrides } from '../types/env';
 import { safeJsonStringify } from '../util/json';
 import { AnthropicMessagesProvider, calculateAnthropicCost } from './anthropic';
 import { AzureChatCompletionProvider, AzureEmbeddingProvider, calculateAzureCost } from './azure';
+import { GoogleChatProvider } from './google';
 import { GroqProvider } from './groq';
 import {
   OpenAiChatCompletionProvider,
@@ -43,7 +44,6 @@ import {
   calculateOpenAICost,
   type OpenAiCompletionOptions,
 } from './openai';
-import { PalmChatProvider } from './palm';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 import { VertexChatProvider, VertexEmbeddingProvider } from './vertex';
 import { getGoogleClient } from './vertexUtil';
@@ -455,7 +455,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
         });
       } else if (this.providerName === 'google') {
         const provider = new GatewayGoogle();
-        const parentClass = new PalmChatProvider(this.modelName, this.providerOptions);
+        const parentClass = new GoogleChatProvider(this.modelName, this.providerOptions);
         const apiKey = parentClass.getApiKey();
         if (!apiKey) {
           throw new Error(

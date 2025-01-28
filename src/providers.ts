@@ -22,6 +22,7 @@ import * as CloudflareAiProviders from './providers/cloudflare-ai';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './providers/cohere';
 import { FalImageGenerationProvider } from './providers/fal';
 import { GolangProvider } from './providers/golangCompletion';
+import { GoogleChatProvider } from './providers/google';
 import { GroqProvider } from './providers/groq';
 import { HttpProvider } from './providers/http';
 import {
@@ -53,7 +54,6 @@ import {
   OpenAiModerationProvider,
 } from './providers/openai';
 import { parsePackageProvider } from './providers/packageParser';
-import { PalmChatProvider } from './providers/palm';
 import { PortkeyChatCompletionProvider } from './providers/portkey';
 import { PythonProvider } from './providers/pythonCompletion';
 import {
@@ -430,9 +430,9 @@ export async function loadApiProvider(
       const modelName = splits.slice(1).join(':');
       ret = new OllamaCompletionProvider(modelName, providerOptions);
     }
-  } else if (providerPath.startsWith('palm:') || providerPath.startsWith('google:')) {
+  } else if (providerPath.startsWith('google:') || providerPath.startsWith('palm:')) {
     const modelName = providerPath.split(':')[1];
-    ret = new PalmChatProvider(modelName, providerOptions);
+    ret = new GoogleChatProvider(modelName, providerOptions);
   } else if (providerPath.startsWith('vertex:')) {
     const splits = providerPath.split(':');
     const firstPart = splits[1];
@@ -680,7 +680,7 @@ export default {
   OllamaEmbeddingProvider,
   OllamaCompletionProvider,
   OllamaChatProvider,
-  PalmChatProvider,
+  GoogleChatProvider,
   PortkeyChatCompletionProvider,
   PythonProvider,
   ScriptCompletionProvider,
