@@ -18,7 +18,7 @@ strategies:
   # With configuration
   - id: jailbreak
     config:
-      # Optional: Number of iterations to attempt (default: 10). Each attempt is a call to the target llm. Jailbreak will stop early if a successful jailbreak is found.
+      # Optional: Number of iterations to attempt (default: 10). Each attempt is a call to the target LLM. Jailbreak will stop early if a successful jailbreak is found.
       numIterations: 50
       # Optional: Additional attempts to run after a successful jailbreak is found. This can be used to find more relevant or harmful jailbreaks. Defaults to 0.
       numAdditionalIterations: 12
