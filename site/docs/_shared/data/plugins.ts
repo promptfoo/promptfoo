@@ -729,6 +729,20 @@ export const PLUGINS = [
     vulnerabilityType: 'misinformation and misuse',
   },
   {
+    category: 'Compliance and Legal',
+    description: 'Content related to RAG Document Exfiltration',
+    label: 'technical',
+    link: '/docs/red-team/plugins/rag-document-exfiltration',
+    name: 'RAG Document Exfiltration',
+    pluginId: 'rag-document-exfiltration',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
     category: 'Security and Access Control',
     description: 'PII exposed through API or database',
     label: 'pii',
