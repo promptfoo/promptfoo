@@ -5,14 +5,13 @@ import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import type { Assertion, AssertionSet, AtomicTestCase, TokenUsage } from '../../types';
+import type { Assertion, AssertionSet, AtomicTestCase } from '../../types';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderOptions,
   ProviderResponse,
-  GuardrailResponse,
 } from '../../types/providers';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
@@ -34,10 +33,7 @@ export interface GoatMetadata extends BaseRedteamMetadata {
  * Represents the complete response from a GOAT conversation.
  */
 export interface GoatResponse extends BaseRedteamResponse {
-  output: string;
   metadata: GoatMetadata;
-  tokenUsage: TokenUsage;
-  guardrails?: GuardrailResponse;
 }
 
 export default class GoatProvider implements ApiProvider {
