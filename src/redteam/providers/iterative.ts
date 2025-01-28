@@ -45,7 +45,7 @@ interface TokenUsage {
   cached: number;
 }
 
-async function runRedteamConversation({
+export async function runRedteamConversation({
   context,
   filters,
   injectVar,
