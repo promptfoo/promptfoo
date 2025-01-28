@@ -134,7 +134,7 @@ export interface RunEvalOptions {
 
   testIdx: number;
   promptIdx: number;
-  repeatIndex: number;
+  repeat: number;
 }
 
 const EvaluateOptionsSchema = z.object({
@@ -154,7 +154,6 @@ const EvaluateOptionsSchema = z.object({
     .optional(),
   repeat: z.number().optional(),
   showProgressBar: z.boolean().optional(),
-  repeatIndex: z.number().optional(),
 });
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & { abortSignal?: AbortSignal };
 

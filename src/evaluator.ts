@@ -158,7 +158,7 @@ class Evaluator {
     evaluateOptions,
     testIdx,
     promptIdx,
-    repeatIndex,
+    repeat,
   }: RunEvalOptions): Promise<EvaluateResult[]> {
     // Use the original prompt to set the label, not renderedPrompt
     const promptLabel = prompt.label;
@@ -287,7 +287,7 @@ class Evaluator {
             evaluateOptions,
             testIdx: testIdx + results.length,
             promptIdx,
-            repeatIndex: evaluateOptions.repeatIndex || 0,
+            repeat,
           });
           results.push(...result);
         }
@@ -650,7 +650,7 @@ class Evaluator {
           : generateVarCombinations(testCase.vars || {});
 
       const numRepeat = this.options.repeat || 1;
-      for (let repeatIndex = 0; repeatIndex < numRepeat; repeatIndex++) {
+      for (let repeat = 0; repeat < numRepeat; repeat++) {
         for (const vars of varCombinations) {
           let promptIdx = 0;
           // Order matters - keep provider in outer loop to reduce need to swap models during local inference.
@@ -671,7 +671,7 @@ class Evaluator {
                 nunjucksFilters: testSuite.nunjucksFilters,
                 testIdx,
                 promptIdx,
-                repeatIndex,
+                repeat,
                 evaluateOptions: options,
               });
               promptIdx++;
