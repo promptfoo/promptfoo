@@ -20,11 +20,12 @@ import { sleep } from '../../util/time';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import type { Message } from './shared';
 import { getLastMessageContent } from './shared';
+import type { BaseRedteamMetadata, BaseRedteamResponse } from './shared';
 
 /**
  * Represents metadata for the GOAT conversation process.
  */
-export interface GoatMetadata {
+export interface GoatMetadata extends BaseRedteamMetadata {
   redteamFinalPrompt?: string;
   messages: string;
   stopReason: 'Grader failed' | 'Max turns reached';
@@ -33,7 +34,7 @@ export interface GoatMetadata {
 /**
  * Represents the complete response from a GOAT conversation.
  */
-export interface GoatResponse {
+export interface GoatResponse extends BaseRedteamResponse {
   output: string;
   metadata: GoatMetadata;
   tokenUsage: TokenUsage;

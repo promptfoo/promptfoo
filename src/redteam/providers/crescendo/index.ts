@@ -9,7 +9,6 @@ import type {
   AtomicTestCase,
   CallApiContextParams,
   CallApiOptionsParams,
-  GuardrailResponse,
   NunjucksFilterMap,
   Prompt,
   RedteamFileConfig,
@@ -22,6 +21,7 @@ import { sleep } from '../../../util/time';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { isBasicRefusal } from '../../util';
 import type { Message } from '../shared';
+import type { BaseRedteamMetadata, BaseRedteamResponse } from '../shared';
 import {
   getLastMessageContent,
   getTargetResponse,
@@ -36,9 +36,7 @@ export const DEFAULT_MAX_BACKTRACKS = 10;
 /**
  * Represents metadata for the Crescendo conversation process.
  */
-export interface CrescendoMetadata {
-  redteamFinalPrompt?: string;
-  messages: string;
+export interface CrescendoMetadata extends BaseRedteamMetadata {
   crescendoRoundsCompleted: number;
   crescendoBacktrackCount: number;
   crescendoResult: boolean;
@@ -49,11 +47,8 @@ export interface CrescendoMetadata {
 /**
  * Represents the complete response from a Crescendo conversation.
  */
-export interface CrescendoResponse {
-  output: string;
+export interface CrescendoResponse extends BaseRedteamResponse {
   metadata: CrescendoMetadata;
-  tokenUsage: TokenUsage;
-  guardrails?: GuardrailResponse;
 }
 
 interface CrescendoConfig {

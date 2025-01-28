@@ -37,6 +37,7 @@ import { shouldGenerateRemote } from '../remoteGeneration';
 import { PENALIZED_PHRASES } from './constants';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
 import { getTargetResponse, redteamProviderManager } from './shared';
+import type { BaseRedteamMetadata, BaseRedteamResponse } from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -376,15 +377,10 @@ export interface TreeSearchOutput {
 /**
  * Represents metadata for the iterative tree search process.
  */
-export interface TreeIterativeMetadata {
+export interface TreeIterativeMetadata extends BaseRedteamMetadata {
   highestScore: number;
   redteamFinalPrompt?: string;
-  stoppingReason:
-    | 'TARGET_SCORE'
-    | 'MAX_ATTEMPTS'
-    | 'MAX_DEPTH'
-    | 'NO_IMPROVEMENT'
-    | 'GRADER_FAILED';
+  stopReason: 'TARGET_SCORE' | 'MAX_ATTEMPTS' | 'MAX_DEPTH' | 'NO_IMPROVEMENT' | 'GRADER_FAILED';
   attempts: number;
   redteamTreeHistory: TreeSearchOutput[];
 }
@@ -392,11 +388,8 @@ export interface TreeIterativeMetadata {
 /**
  * Represents the complete response from a red team conversation.
  */
-export interface RedteamTreeResponse {
-  output: string;
+export interface RedteamTreeResponse extends BaseRedteamResponse {
   metadata: TreeIterativeMetadata;
-  tokenUsage: TokenUsage;
-  guardrails?: GuardrailResponse;
 }
 
 /**
@@ -637,9 +630,10 @@ export async function runRedteamConversation({
             metadata: {
               highestScore: maxScore,
               redteamFinalPrompt: bestNode.prompt,
-              stoppingReason,
+              messages: JSON.stringify(treeOutputs, null, 2),
               attempts,
               redteamTreeHistory: treeOutputs,
+              stopReason: stoppingReason,
             },
             tokenUsage: totalTokenUsage,
             guardrails: targetResponse.guardrails,
@@ -667,9 +661,10 @@ export async function runRedteamConversation({
             metadata: {
               highestScore: maxScore,
               redteamFinalPrompt: bestNode.prompt,
-              stoppingReason,
+              messages: JSON.stringify(treeOutputs, null, 2),
               attempts,
               redteamTreeHistory: treeOutputs,
+              stopReason: stoppingReason,
             },
             tokenUsage: totalTokenUsage,
             guardrails: targetResponse.guardrails,
@@ -698,9 +693,10 @@ export async function runRedteamConversation({
             metadata: {
               highestScore: maxScore,
               redteamFinalPrompt: bestNode.prompt,
-              stoppingReason,
+              messages: JSON.stringify(treeOutputs, null, 2),
               attempts,
               redteamTreeHistory: treeOutputs,
+              stopReason: stoppingReason,
             },
             tokenUsage: totalTokenUsage,
             guardrails: targetResponse.guardrails,
@@ -790,9 +786,10 @@ export async function runRedteamConversation({
     metadata: {
       highestScore: maxScore,
       redteamFinalPrompt: bestNode.prompt,
-      stoppingReason,
+      messages: JSON.stringify(treeOutputs, null, 2),
       attempts,
       redteamTreeHistory: treeOutputs,
+      stopReason: stoppingReason,
     },
     tokenUsage: totalTokenUsage,
     guardrails: finalTargetResponse.guardrails,
