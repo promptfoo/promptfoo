@@ -1,4 +1,5 @@
 import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
+import logger from '../../logger';
 import type { ApiProvider, Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
 import { isBasicRefusal } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
@@ -54,7 +55,7 @@ export async function fetchAllDatasets(limit: number): Promise<BeaverTailsTestCa
       }),
     );
   } catch (error) {
-    console.error('Error fetching BeaverTails datasets:', error);
+    logger.error(`Error fetching BeaverTails datasets: ${error}`);
     return [];
   }
 }

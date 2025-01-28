@@ -9,6 +9,7 @@ import type {
   AtomicTestCase,
   CallApiContextParams,
   CallApiOptionsParams,
+  GuardrailResponse,
   NunjucksFilterMap,
   Prompt,
   RedteamFileConfig,
@@ -31,6 +32,29 @@ import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } fr
 
 export const DEFAULT_MAX_ROUNDS = 10;
 export const DEFAULT_MAX_BACKTRACKS = 10;
+
+/**
+ * Represents metadata for the Crescendo conversation process.
+ */
+export interface CrescendoMetadata {
+  redteamFinalPrompt?: string;
+  messages: string;
+  crescendoRoundsCompleted: number;
+  crescendoBacktrackCount: number;
+  crescendoResult: boolean;
+  crescendoConfidence: number | null;
+  stopReason: 'Grader failed' | 'Max backtracks reached';
+}
+
+/**
+ * Represents the complete response from a Crescendo conversation.
+ */
+export interface CrescendoResponse {
+  output: string;
+  metadata: CrescendoMetadata;
+  tokenUsage: TokenUsage;
+  guardrails?: GuardrailResponse;
+}
 
 interface CrescendoConfig {
   injectVar: string;
@@ -144,7 +168,11 @@ export class CrescendoProvider implements ApiProvider {
     return 'promptfoo:redteam:crescendo';
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<CrescendoResponse> {
     logger.debug(`[Crescendo] callApi context: ${safeJsonStringify(context)}`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
@@ -385,14 +413,15 @@ export class CrescendoProvider implements ApiProvider {
     return {
       output: lastResponse.output,
       metadata: {
-        // Displayed in UI
         redteamFinalPrompt: getLastMessageContent(messages, 'user'),
         messages: JSON.stringify(messages, null, 2),
         crescendoRoundsCompleted: roundNum,
         crescendoBacktrackCount: backtrackCount,
         crescendoResult: evalFlag,
         crescendoConfidence: evalPercentage,
-        stopReason: graderPassed === false ? 'Grader failed' : 'Max backtracks reached',
+        stopReason: (graderPassed === false ? 'Grader failed' : 'Max backtracks reached') as
+          | 'Grader failed'
+          | 'Max backtracks reached',
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastResponse.guardrails,
