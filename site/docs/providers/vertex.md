@@ -98,6 +98,8 @@ See more details on Google's SafetySetting API [here](https://ai.google.dev/api/
 
 ## Overriding graders
 
+> **Note:** When Google credentials are configured and no OpenAI or Anthropic API keys are present, Vertex AI will be used as the default provider for operations like grading, suggestions, and dataset generation.
+
 To use Vertex models for model grading (e.g. `llm-rubric` and `factuality` assertions), or to override the embeddings provider for the `similar` assertion, use `defaultTest` to override providers for all tests:
 
 ```yaml
