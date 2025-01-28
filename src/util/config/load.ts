@@ -423,7 +423,14 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     extensions,
     redteam,
     metadata: configs.reduce((prev, curr) => ({ ...prev, ...curr.metadata }), {}),
-    sharing: !configs.some((config) => config.sharing === false),
+    sharing: (() => {
+      if (configs.some((config) => config.sharing === false)) {
+        return false;
+      }
+
+      const sharingConfig = configs.find((config) => typeof config.sharing === 'object');
+      return sharingConfig ? sharingConfig.sharing : true;
+    })(),
   };
 
   return combinedConfig;

@@ -19,7 +19,7 @@ import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import type { Message } from './shared';
-import { getLastMessageContent } from './shared';
+import { getLastMessageContent, messagesToRedteamHistory } from './shared';
 import type { BaseRedteamMetadata, BaseRedteamResponse } from './shared';
 
 /**
@@ -27,7 +27,6 @@ import type { BaseRedteamMetadata, BaseRedteamResponse } from './shared';
  */
 export interface GoatMetadata extends BaseRedteamMetadata {
   redteamFinalPrompt?: string;
-  messages: string;
   stopReason: 'Grader failed' | 'Max turns reached';
 }
 
@@ -259,8 +258,9 @@ export default class GoatProvider implements ApiProvider {
       output: getLastMessageContent(messages, 'assistant') || '',
       metadata: {
         redteamFinalPrompt: getLastMessageContent(messages, 'user') || '',
-        messages: JSON.stringify(messages || [], null, 2),
+        messages: messages as Record<string, any>[],
         stopReason: graderPassed === false ? 'Grader failed' : 'Max turns reached',
+        redteamHistory: messagesToRedteamHistory(messages),
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastTargetResponse?.guardrails,
