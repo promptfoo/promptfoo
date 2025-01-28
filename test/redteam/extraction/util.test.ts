@@ -24,6 +24,7 @@ jest.mock('../../../src/cache', () => ({
 jest.mock('../../../src/redteam/remoteGeneration', () => ({
   getRemoteGenerationUrl: jest.fn().mockReturnValue('https://api.promptfoo.app/task'),
 }));
+jest.mock('../../../src/globalConfig/globalConfig');
 
 describe('fetchRemoteGeneration', () => {
   beforeAll(() => {

@@ -130,6 +130,11 @@ class Evaluator {
         completion: 0,
         cached: 0,
         numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     };
     this.conversations = {};
@@ -303,49 +308,56 @@ class Evaluator {
           baseResult.score = 0;
           baseResult.error = 'No output';
         }
-        return [baseResult];
-      }
+      } else {
+        // Create a copy of response so we can potentially mutate it.
+        const processedResponse = { ...response };
+        const transforms: string[] = [
+          provider.transform, // Apply provider transform first
+          // NOTE: postprocess is deprecated. Use the first defined transform.
+          [test.options?.transform, test.options?.postprocess].find((s) => s),
+        ]
+          .flat()
+          .filter((s): s is string => typeof s === 'string');
+        for (const t of transforms) {
+          processedResponse.output = await transform(t, processedResponse.output, {
+            vars,
+            prompt,
+          });
+        }
 
-      // Create a copy of response so we can potentially mutate it.
-      const processedResponse = { ...response };
-      const transforms: string[] = [
-        provider.transform, // Apply provider transform first
-        // NOTE: postprocess is deprecated. Use the first defined transform.
-        [test.options?.transform, test.options?.postprocess].find((s) => s),
-      ]
-        .flat()
-        .filter((s): s is string => typeof s === 'string');
-      for (const t of transforms) {
-        processedResponse.output = await transform(t, processedResponse.output, {
-          vars,
-          prompt,
+        invariant(processedResponse.output != null, 'Response output should not be null');
+        const checkResult = await runAssertions({
+          prompt: renderedPrompt,
+          provider,
+          providerResponse: processedResponse,
+          test,
+          latencyMs: response.cached ? undefined : latencyMs,
         });
+        if (!checkResult.pass) {
+          baseResult.error = checkResult.reason;
+          baseResult.failureReason = ResultFailureReason.ASSERT;
+        }
+        baseResult.success = checkResult.pass;
+        baseResult.score = checkResult.score;
+        baseResult.namedScores = checkResult.namedScores || {};
+        if (checkResult.tokensUsed) {
+          this.stats.tokenUsage.total += checkResult.tokensUsed.total || 0;
+          this.stats.tokenUsage.prompt += checkResult.tokensUsed.prompt || 0;
+          this.stats.tokenUsage.completion += checkResult.tokensUsed.completion || 0;
+          this.stats.tokenUsage.cached += checkResult.tokensUsed.cached || 0;
+          this.stats.tokenUsage.numRequests += checkResult.tokensUsed.numRequests || 1;
+          if (checkResult.tokensUsed.completionDetails) {
+            this.stats.tokenUsage.completionDetails.reasoning! +=
+              checkResult.tokensUsed.completionDetails.reasoning || 0;
+            this.stats.tokenUsage.completionDetails.acceptedPrediction! +=
+              checkResult.tokensUsed.completionDetails.acceptedPrediction || 0;
+            this.stats.tokenUsage.completionDetails.rejectedPrediction! +=
+              checkResult.tokensUsed.completionDetails.rejectedPrediction || 0;
+          }
+        }
+        baseResult.response = processedResponse;
+        baseResult.gradingResult = checkResult;
       }
-
-      invariant(processedResponse.output != null, 'Response output should not be null');
-      const checkResult = await runAssertions({
-        prompt: renderedPrompt,
-        provider,
-        providerResponse: processedResponse,
-        test,
-        latencyMs: response.cached ? undefined : latencyMs,
-      });
-      if (!checkResult.pass) {
-        baseResult.error = checkResult.reason;
-        baseResult.failureReason = ResultFailureReason.ASSERT;
-      }
-      baseResult.success = checkResult.pass;
-      baseResult.score = checkResult.score;
-      baseResult.namedScores = checkResult.namedScores || {};
-      if (checkResult.tokensUsed) {
-        this.stats.tokenUsage.total += checkResult.tokensUsed.total || 0;
-        this.stats.tokenUsage.prompt += checkResult.tokensUsed.prompt || 0;
-        this.stats.tokenUsage.completion += checkResult.tokensUsed.completion || 0;
-        this.stats.tokenUsage.cached += checkResult.tokensUsed.cached || 0;
-        this.stats.tokenUsage.numRequests += checkResult.tokensUsed.numRequests || 1;
-      }
-      baseResult.response = processedResponse;
-      baseResult.gradingResult = checkResult;
 
       // Update token usage stats
       if (response.tokenUsage) {
@@ -354,6 +366,14 @@ class Evaluator {
         this.stats.tokenUsage.completion += response.tokenUsage.completion || 0;
         this.stats.tokenUsage.cached += response.tokenUsage.cached || 0;
         this.stats.tokenUsage.numRequests += response.tokenUsage.numRequests || 1;
+        if (response.tokenUsage.completionDetails) {
+          this.stats.tokenUsage.completionDetails.reasoning! +=
+            response.tokenUsage.completionDetails.reasoning || 0;
+          this.stats.tokenUsage.completionDetails.acceptedPrediction! +=
+            response.tokenUsage.completionDetails.acceptedPrediction || 0;
+          this.stats.tokenUsage.completionDetails.rejectedPrediction! +=
+            response.tokenUsage.completionDetails.rejectedPrediction || 0;
+        }
       }
 
       if (baseResult.success) {
@@ -775,6 +795,17 @@ class Evaluator {
           (metrics.tokenUsage.total || 0) + (row.response?.tokenUsage?.total || 0);
         metrics.tokenUsage.numRequests =
           (metrics.tokenUsage.numRequests || 0) + (row.response?.tokenUsage?.numRequests || 1);
+        metrics.tokenUsage.completionDetails = {
+          reasoning:
+            (metrics.tokenUsage.completionDetails?.reasoning || 0) +
+            (row.response?.tokenUsage?.completionDetails?.reasoning || 0),
+          acceptedPrediction:
+            (metrics.tokenUsage.completionDetails?.acceptedPrediction || 0) +
+            (row.response?.tokenUsage?.completionDetails?.acceptedPrediction || 0),
+          rejectedPrediction:
+            (metrics.tokenUsage.completionDetails?.rejectedPrediction || 0) +
+            (row.response?.tokenUsage?.completionDetails?.rejectedPrediction || 0),
+        };
         metrics.cost += row.cost || 0;
 
         await runExtensionHook(testSuite.extensions, 'afterEach', {
