@@ -266,9 +266,12 @@ class Evaluator {
         promptId: prompt.id || '',
       };
 
-      // If we have iterations, create multiple test cases
-      if (response.metadata?.iterations && Array.isArray(response.metadata.iterations)) {
-        const testCases = response.metadata.iterations.map((iteration, idx) => ({
+      // If we have redteam history, create test cases for failed attempts
+      if (response.metadata?.redteamHistory && Array.isArray(response.metadata.redteamHistory)) {
+        const failedAttempts = response.metadata.redteamHistory.filter(
+          (attempt) => attempt.graderPassed === false,
+        );
+        const testCases = failedAttempts.map((iteration, idx) => ({
           ...test,
           vars: {
             ...test.vars,
