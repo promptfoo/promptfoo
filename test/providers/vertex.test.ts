@@ -1,8 +1,9 @@
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
-import { getCache, isCacheEnabled } from '../../src/cache';
+import { getCache, isCacheEnabled, clearCache } from '../../src/cache';
 import logger from '../../src/logger';
-import { VertexChatProvider } from '../../src/providers/vertex';
+import { VertexChatProvider, VertexEmbeddingProvider } from '../../src/providers/vertex';
 import * as vertexUtil from '../../src/providers/vertexUtil';
+import { loadApiProvider } from '../../src/providers';
 
 jest.mock('../../src/cache', () => ({
   getCache: jest.fn().mockReturnValue({
@@ -10,6 +11,7 @@ jest.mock('../../src/cache', () => ({
     set: jest.fn(),
   }),
   isCacheEnabled: jest.fn(),
+  clearCache: jest.fn(),
 }));
 
 jest.mock('../../src/providers/vertexUtil', () => ({
@@ -252,5 +254,114 @@ describe('maybeCoerceToGeminiFormat', () => {
       systemInstruction: undefined,
     });
     expect(loggerSpy).toHaveBeenCalledWith(`Unknown format for Gemini: ${JSON.stringify(input)}`);
+  });
+});
+
+describe('Vertex Providers', () => {
+  afterEach(async () => {
+    jest.clearAllMocks();
+    await clearCache();
+  });
+
+  describe('Provider Loading', () => {
+    it('loadApiProvider with vertex:chat', async () => {
+      const provider = await loadApiProvider('vertex:chat:vertex-chat-model');
+      expect(provider).toBeInstanceOf(VertexChatProvider);
+      expect(provider.id()).toBe('vertex:vertex-chat-model');
+    });
+
+    it('loadApiProvider with vertex:embedding', async () => {
+      const provider = await loadApiProvider('vertex:embedding:vertex-embedding-model');
+      expect(provider).toBeInstanceOf(VertexEmbeddingProvider);
+      expect(provider.id()).toBe('vertex:vertex-embedding-model');
+    });
+
+    it('loadApiProvider with vertex:embeddings', async () => {
+      const provider = await loadApiProvider('vertex:embeddings:vertex-embedding-model');
+      expect(provider).toBeInstanceOf(VertexEmbeddingProvider);
+      expect(provider.id()).toBe('vertex:vertex-embedding-model');
+    });
+
+    it('loadApiProvider with vertex:modelname', async () => {
+      const provider = await loadApiProvider('vertex:vertex-chat-model');
+      expect(provider).toBeInstanceOf(VertexChatProvider);
+      expect(provider.id()).toBe('vertex:vertex-chat-model');
+    });
+  });
+
+  describe('API Calls', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('VertexChatProvider callApi', async () => {
+      const mockResponse = {
+        data: [
+          {
+            candidates: [{ content: { parts: [{ text: 'Test output' }] } }],
+            usageMetadata: {
+              totalTokenCount: 10,
+              promptTokenCount: 5,
+              candidatesTokenCount: 5,
+            },
+          },
+        ],
+      };
+
+      const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+
+      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+        client: {
+          request: mockRequest,
+        } as unknown as JSONClient,
+        projectId: 'test-project-id',
+      });
+
+      const provider = new VertexChatProvider('vertex-chat-model');
+      const result = await provider.callApi('Test prompt');
+
+      expect(mockRequest).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe('Test output');
+      expect(result.tokenUsage).toEqual({
+        total: 10,
+        prompt: 5,
+        completion: 5,
+      });
+    });
+
+    it('VertexEmbeddingProvider callEmbeddingApi', async () => {
+      const mockResponse = {
+        data: {
+          predictions: [
+            {
+              embeddings: {
+                values: [0.1, 0.2, 0.3],
+                statistics: {
+                  token_count: 10,
+                },
+              },
+            },
+          ],
+        },
+      };
+
+      const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+
+      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+        client: {
+          request: mockRequest,
+        } as unknown as JSONClient,
+        projectId: 'test-project-id',
+      });
+
+      const provider = new VertexEmbeddingProvider('vertex-embedding-model');
+      const result = await provider.callEmbeddingApi('Test text');
+
+      expect(mockRequest).toHaveBeenCalledTimes(1);
+      expect(result.embedding).toEqual([0.1, 0.2, 0.3]);
+      expect(result.tokenUsage).toEqual({
+        total: 10,
+      });
+    });
   });
 });
