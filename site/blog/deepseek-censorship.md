@@ -73,11 +73,11 @@ providers:
 tests: tests.csv
 ```
 
-Running it via Promptfoo eval shows that **about 94% of this dataset is censored by DeepSeek**:
+Running it via Promptfoo eval shows that **about 85% of this dataset is censored by DeepSeek**:
 
 ![Another DeepSeek Refusal Based on Chinese Censorship Prompts](/img/blog/deepseek/second_refusal.png)
 
-Here's a link to the eval results. The ~6% of prompts that were not refused were generally not China-specific enough.
+Here's a link to the [eval results](https://www.promptfoo.app/eval/eval-0l1-2025-01-28T19:28:13). The ~15% of prompts that were not refused were generally not China-specific enough.
 
 You can run this eval yourself by downloading [the CSV file](https://docs.google.com/spreadsheets/d/1gkCuApXHaMO5C8d9abYJg5sZLxkbGzcx40N6J4krAm8/edit?gid=1854643394#gid=1854643394) or running it directly through a [Google Sheets integration](https://www.promptfoo.dev/docs/integrations/google-sheets/).
 
