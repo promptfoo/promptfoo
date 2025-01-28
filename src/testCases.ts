@@ -220,6 +220,13 @@ export async function readTests(
       } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
         testCases = yaml.load(fs.readFileSync(testFile, 'utf-8')) as TestCase[];
         testCases = await _deref(testCases, testFile);
+      } else if (testFile.endsWith('.jsonl')) {
+        const fileContent = fs.readFileSync(testFile, 'utf-8');
+        testCases = fileContent
+          .split('\n')
+          .filter((line) => line.trim())
+          .map((line) => JSON.parse(line));
+        testCases = await _deref(testCases, testFile);
       } else if (testFile.endsWith('.json')) {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         testCases = await _deref(require(testFile), testFile);

@@ -86,6 +86,7 @@ interface AzureCompletionOptions {
       };
   stop?: string[];
   seed?: number;
+  reasoning_effort?: 'low' | 'medium' | 'high';
 
   passthrough?: object;
 }
@@ -582,7 +583,10 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       presence_penalty: config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0),
       frequency_penalty: config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0),
       ...(config.o1
-        ? { max_completion_tokens: config.max_completion_tokens }
+        ? {
+            max_completion_tokens: config.max_completion_tokens,
+            reasoning_effort: renderVarsInObject(config.reasoning_effort, context?.vars),
+          }
         : {
             max_tokens: config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024),
             temperature: config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
@@ -754,6 +758,17 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
               total: data.usage?.total_tokens,
               prompt: data.usage?.prompt_tokens,
               completion: data.usage?.completion_tokens,
+              ...(data.usage?.completion_tokens_details
+                ? {
+                    completionDetails: {
+                      reasoning: data.usage.completion_tokens_details.reasoning_tokens,
+                      acceptedPrediction:
+                        data.usage.completion_tokens_details.accepted_prediction_tokens,
+                      rejectedPrediction:
+                        data.usage.completion_tokens_details.rejected_prediction_tokens,
+                    },
+                  }
+                : {}),
             },
         cached,
         logProbs,

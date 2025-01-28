@@ -1,7 +1,12 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import type { ApiProvider, ProviderResponse, CallApiContextParams } from '../types';
+import type {
+  ApiProvider,
+  ProviderResponse,
+  CallApiContextParams,
+  GuardrailResponse,
+} from '../types';
 import type { EnvOverrides } from '../types/env';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
 import { CHAT_MODELS } from './googleShared';
@@ -10,7 +15,7 @@ import { maybeCoerceToGeminiFormat } from './vertexUtil';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
 
-interface PalmCompletionOptions {
+interface GoogleCompletionOptions {
   apiKey?: string;
   apiHost?: string;
   safetySettings?: { category: string; probability: string }[];
@@ -23,15 +28,15 @@ interface PalmCompletionOptions {
   responseSchema?: string;
 }
 
-class PalmGenericProvider implements ApiProvider {
+class GoogleGenericProvider implements ApiProvider {
   modelName: string;
 
-  config: PalmCompletionOptions;
+  config: GoogleCompletionOptions;
   env?: EnvOverrides;
 
   constructor(
     modelName: string,
-    options: { config?: PalmCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: { config?: GoogleCompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     const { config, id, env } = options;
     this.env = env;
@@ -41,7 +46,7 @@ class PalmGenericProvider implements ApiProvider {
   }
 
   id(): string {
-    return `palm:${this.modelName}`;
+    return `google:${this.modelName}`;
   }
 
   toString(): string {
@@ -75,10 +80,10 @@ class PalmGenericProvider implements ApiProvider {
   }
 }
 
-export class PalmChatProvider extends PalmGenericProvider {
+export class GoogleChatProvider extends GoogleGenericProvider {
   constructor(
     modelName: string,
-    options: { config?: PalmCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: { config?: GoogleCompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     if (!CHAT_MODELS.includes(modelName)) {
       logger.debug(`Using unknown Google chat model: ${modelName}`);
@@ -106,16 +111,17 @@ export class PalmChatProvider extends PalmGenericProvider {
       temperature: this.config.temperature,
       topP: this.config.topP,
       topK: this.config.topK,
-
       safetySettings: this.config.safetySettings,
       stopSequences: this.config.stopSequences,
       maxOutputTokens: this.config.maxOutputTokens,
     };
+
     logger.debug(`Calling Google API: ${JSON.stringify(body)}`);
 
-    let data;
+    let data,
+      cached = false;
     try {
-      ({ data } = (await fetchWithCache(
+      ({ data, cached } = (await fetchWithCache(
         `https://${this.getApiHost()}/v1beta3/models/${
           this.modelName
         }:generateMessage?key=${this.getApiKey()}`,
@@ -127,6 +133,8 @@ export class PalmChatProvider extends PalmGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
+        'json',
+        false,
       )) as unknown as any);
     } catch (err) {
       return {
@@ -146,6 +154,20 @@ export class PalmChatProvider extends PalmGenericProvider {
       const output = data.candidates[0].content;
       return {
         output,
+        tokenUsage: cached
+          ? {
+              cached: data.usageMetadata?.totalTokenCount,
+              total: data.usageMetadata?.totalTokenCount,
+              numRequests: 0,
+            }
+          : {
+              prompt: data.usageMetadata?.promptTokenCount,
+              completion: data.usageMetadata?.candidatesTokenCount,
+              total: data.usageMetadata?.totalTokenCount,
+              numRequests: 1,
+            },
+        raw: data,
+        cached,
       };
     } catch (err) {
       return {
@@ -158,14 +180,22 @@ export class PalmChatProvider extends PalmGenericProvider {
     const { contents, systemInstruction } = maybeCoerceToGeminiFormat(
       parseChatPrompt(prompt, [{ content: prompt }]),
     );
+
+    // Determine API version based on model
+    const apiVersion = this.modelName === 'gemini-2.0-flash-thinking-exp' ? 'v1alpha' : 'v1beta';
+
     const body: Record<string, any> = {
       contents,
       generationConfig: {
-        temperature: this.config.temperature,
-        topP: this.config.topP,
-        topK: this.config.topK,
-        stopSequences: this.config.stopSequences,
-        maxOutputTokens: this.config.maxOutputTokens,
+        ...(this.config.temperature !== undefined && { temperature: this.config.temperature }),
+        ...(this.config.topP !== undefined && { topP: this.config.topP }),
+        ...(this.config.topK !== undefined && { topK: this.config.topK }),
+        ...(this.config.stopSequences !== undefined && {
+          stopSequences: this.config.stopSequences,
+        }),
+        ...(this.config.maxOutputTokens !== undefined && {
+          maxOutputTokens: this.config.maxOutputTokens,
+        }),
         ...this.config.generationConfig,
       },
       safetySettings: this.config.safetySettings,
@@ -173,7 +203,6 @@ export class PalmChatProvider extends PalmGenericProvider {
     };
 
     if (this.config.responseSchema) {
-      // If the `response_schema` has already been set by the client.
       if (body.generationConfig.response_schema) {
         throw new Error(
           '`responseSchema` provided but `generationConfig.response_schema` already set.',
@@ -191,11 +220,10 @@ export class PalmChatProvider extends PalmGenericProvider {
     logger.debug(`Calling Google API: ${JSON.stringify(body)}`);
 
     let data;
+    let cached = false;
     try {
-      // https://ai.google.dev/docs/gemini_api_overview#curl
-      // https://ai.google.dev/tutorials/rest_quickstart
-      ({ data } = (await fetchWithCache(
-        `https://${this.getApiHost()}/v1beta/models/${
+      ({ data, cached } = (await fetchWithCache(
+        `https://${this.getApiHost()}/${apiVersion}/models/${
           this.modelName
         }:generateContent?key=${this.getApiKey()}`,
         {
@@ -206,6 +234,8 @@ export class PalmChatProvider extends PalmGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
+        'json',
+        false,
       )) as {
         data: {
           candidates: Array<{
@@ -213,7 +243,13 @@ export class PalmChatProvider extends PalmGenericProvider {
             safetyRatings: Array<{ category: string; probability: string }>;
           }>;
           promptFeedback?: { safetyRatings: Array<{ category: string; probability: string }> };
+          usageMetadata?: {
+            promptTokenCount: number;
+            candidatesTokenCount: number;
+            totalTokenCount: number;
+          };
         };
+        cached: boolean;
       });
     } catch (err) {
       return {
@@ -233,8 +269,39 @@ export class PalmChatProvider extends PalmGenericProvider {
     const parts = candidate.content.parts.map((part) => part.text).join('');
 
     try {
+      let guardrails: GuardrailResponse | undefined;
+
+      if (data.promptFeedback?.safetyRatings || candidate.safetyRatings) {
+        const flaggedInput = data.promptFeedback?.safetyRatings?.some(
+          (r) => r.probability !== 'NEGLIGIBLE',
+        );
+        const flaggedOutput = candidate.safetyRatings?.some((r) => r.probability !== 'NEGLIGIBLE');
+        const flagged = flaggedInput || flaggedOutput;
+
+        guardrails = {
+          flaggedInput,
+          flaggedOutput,
+          flagged,
+        };
+      }
+
       return {
         output: parts,
+        tokenUsage: cached
+          ? {
+              cached: data.usageMetadata?.totalTokenCount,
+              total: data.usageMetadata?.totalTokenCount,
+              numRequests: 0,
+            }
+          : {
+              prompt: data.usageMetadata?.promptTokenCount,
+              completion: data.usageMetadata?.candidatesTokenCount,
+              total: data.usageMetadata?.totalTokenCount,
+              numRequests: 1,
+            },
+        raw: data,
+        cached,
+        ...(guardrails && { guardrails }),
       };
     } catch (err) {
       return {

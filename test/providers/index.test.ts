@@ -858,6 +858,14 @@ describe('loadApiProvider', () => {
     expect(provider.id()).toBe('gpt-4o-mini');
   });
 
+  it('loadApiProvider with perplexity', async () => {
+    const provider = await loadApiProvider('perplexity:llama-3-sonar-large-32k-online');
+    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(provider.id()).toBe('llama-3-sonar-large-32k-online');
+    expect(provider.config.apiBaseUrl).toBe('https://api.perplexity.ai');
+    expect(provider.config.apiKeyEnvar).toBe('PERPLEXITY_API_KEY');
+  });
+
   it('loadApiProvider with togetherai', async () => {
     const provider = await loadApiProvider(
       'togetherai:chat:meta/meta-llama/Meta-Llama-3-8B-Instruct',
