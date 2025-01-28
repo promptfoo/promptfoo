@@ -1,8 +1,9 @@
+import crypto from 'crypto';
+import fs from 'fs';
 import httpZ from 'http-z';
 import path from 'path';
-import invariant from 'tiny-invariant';
 import { z } from 'zod';
-import { fetchWithCache } from '../cache';
+import { fetchWithCache, type FetchWithCacheResult } from '../cache';
 import cliState from '../cliState';
 import { importModule } from '../esm';
 import logger from '../logger';
@@ -14,15 +15,53 @@ import type {
 } from '../types';
 import { maybeLoadFromExternalFile } from '../util';
 import { isJavascriptFile } from '../util/file';
+import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 const nunjucks = getNunjucksEngine();
 
+export async function generateSignature(
+  privateKeyPathOrKey: string,
+  signatureTimestamp: number,
+  signatureDataTemplate: string,
+  signatureAlgorithm: string = 'SHA256',
+  isPath: boolean = true,
+): Promise<string> {
+  try {
+    const privateKey = isPath ? fs.readFileSync(privateKeyPathOrKey, 'utf8') : privateKeyPathOrKey;
+    const data = nunjucks
+      .renderString(signatureDataTemplate, {
+        signatureTimestamp,
+      })
+      .replace(/\\n/g, '\n');
+    const sign = crypto.createSign(signatureAlgorithm);
+    sign.update(data);
+    sign.end();
+    const signature = sign.sign(privateKey);
+    return signature.toString('base64');
+  } catch (err) {
+    logger.error(`Error generating signature: ${String(err)}`);
+    throw new Error(`Failed to generate signature: ${String(err)}`);
+  }
+}
+
+export function needsSignatureRefresh(
+  timestamp: number,
+  validityMs: number,
+  bufferMs?: number,
+): boolean {
+  const now = Date.now();
+  const timeElapsed = now - timestamp;
+  const effectiveBufferMs = bufferMs ?? Math.floor(validityMs * 0.1); // Default to 10% of validity time
+  return timeElapsed + effectiveBufferMs >= validityMs;
+}
+
 export const HttpProviderConfigSchema = z.object({
   body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
   headers: z.record(z.string()).optional(),
+  maxRetries: z.number().min(0).optional(),
   method: z.string().optional(),
   queryParams: z.record(z.string()).optional(),
   request: z.string().optional(),
@@ -30,10 +69,30 @@ export const HttpProviderConfigSchema = z.object({
   transformRequest: z.union([z.string(), z.function()]).optional(),
   transformResponse: z.union([z.string(), z.function()]).optional(),
   url: z.string().optional(),
+  validateStatus: z
+    .union([z.string(), z.function().returns(z.boolean()).args(z.number())])
+    .optional(),
   /**
-   * @deprecated
+   * @deprecated use transformResponse instead
    */
   responseParser: z.union([z.string(), z.function()]).optional(),
+  // Digital Signature Authentication
+  signatureAuth: z
+    .object({
+      privateKeyPath: z.string().optional(),
+      privateKey: z.string().optional(),
+      signatureValidityMs: z.number().default(300000), // 5 minutes
+      // Template for generating the data to sign
+      signatureDataTemplate: z.string().default('{{timestamp}}'),
+      // Signature algorithm to use (defaults to SHA256)
+      signatureAlgorithm: z.string().default('SHA256'),
+      // Buffer time in ms before expiry to refresh (defaults to 10% of validity time)
+      signatureRefreshBufferMs: z.number().optional(),
+    })
+    .refine((data) => data.privateKeyPath !== undefined || data.privateKey !== undefined, {
+      message: 'Either privateKeyPath or privateKey must be provided',
+    })
+    .optional(),
 });
 
 export type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
@@ -50,13 +109,17 @@ function contentTypeIsJson(headers: Record<string, string> | undefined) {
   });
 }
 
+interface SessionParserData {
+  headers?: Record<string, string> | null;
+  body?: Record<string, any> | string | null;
+}
+
 export async function createSessionParser(
   parser: string | Function | undefined,
-): Promise<({ headers }: { headers: Record<string, string> }) => string> {
+): Promise<(data: SessionParserData) => string> {
   if (!parser) {
     return () => '';
   }
-
   if (typeof parser === 'function') {
     return (response) => parser(response);
   }
@@ -77,31 +140,41 @@ export async function createSessionParser(
       return requiredModule;
     }
     throw new Error(
-      `Response parser malformed: ${filename} must export a function or have a default export as a function`,
+      `Response transform malformed: ${filename} must export a function or have a default export as a function`,
     );
   } else if (typeof parser === 'string') {
-    return ({ headers }) => {
-      return new Function('headers', `return headers[${JSON.stringify(parser)}]`)(headers);
+    return (data: SessionParserData) => {
+      const trimmedParser = parser.trim();
+
+      return new Function('data', `return (${trimmedParser});`)(data);
     };
   }
   throw new Error(
-    `Unsupported response parser type: ${typeof parser}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
+    `Unsupported response transform type: ${typeof parser}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
   );
+}
+
+interface TransformResponseContext {
+  response: FetchWithCacheResult<any>;
 }
 
 export async function createTransformResponse(
   parser: string | Function | undefined,
-): Promise<(data: any, text: string) => ProviderResponse> {
+): Promise<(data: any, text: string, context?: TransformResponseContext) => ProviderResponse> {
   if (!parser) {
     return (data, text) => ({ output: data || text });
   }
+
   if (typeof parser === 'function') {
-    return (data, text) => {
+    return (data, text, context) => {
       try {
-        const result = parser(data, text);
+        const result = parser(data, text, context);
+        if (typeof result === 'string') {
+          return { output: result };
+        }
         return { output: result };
       } catch (err) {
-        logger.error(`Error in response parser function: ${String(err)}`);
+        logger.error(`Error in response transform function: ${String(err)}`);
         throw err;
       }
     };
@@ -123,15 +196,37 @@ export async function createTransformResponse(
       return requiredModule;
     }
     throw new Error(
-      `Response parser malformed: ${filename} must export a function or have a default export as a function`,
+      `Response transform malformed: ${filename} must export a function or have a default export as a function`,
     );
   } else if (typeof parser === 'string') {
-    return (data, text) => ({
-      output: new Function('json', 'text', `return ${parser}`)(data, text),
-    });
+    return (data, text, context) => {
+      try {
+        const trimmedParser = parser.trim();
+        const transformFn = new Function(
+          'json',
+          'text',
+          'context',
+          `try { return (${trimmedParser}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
+        );
+        let resp: ProviderResponse | string;
+        if (context) {
+          resp = transformFn(data || null, text, context);
+        } else {
+          resp = transformFn(data || null, text);
+        }
+
+        if (typeof resp === 'string') {
+          return { output: resp };
+        }
+        return resp;
+      } catch (err) {
+        logger.error(`Error in response transform: ${String(err)}`);
+        throw new Error(`Failed to transform response: ${String(err)}`);
+      }
+    };
   }
   throw new Error(
-    `Unsupported response parser type: ${typeof parser}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
+    `Unsupported response transform type: ${typeof parser}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
   );
 }
 
@@ -226,7 +321,16 @@ export async function createTransformRequest(
   }
 
   if (typeof transform === 'function') {
-    return (prompt) => transform(prompt);
+    return async (prompt) => {
+      try {
+        return await transform(prompt);
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        const wrappedError = new Error(`Error in request transform function: ${errorMessage}`);
+        logger.error(wrappedError.message);
+        throw wrappedError;
+      }
+    };
   }
 
   if (typeof transform === 'string') {
@@ -244,16 +348,36 @@ export async function createTransformRequest(
         functionName,
       );
       if (typeof requiredModule === 'function') {
-        return requiredModule;
+        return async (prompt) => {
+          try {
+            return await requiredModule(prompt);
+          } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            const wrappedError = new Error(
+              `Error in request transform function from ${filename}: ${errorMessage}`,
+            );
+            logger.error(wrappedError.message);
+            throw wrappedError;
+          }
+        };
       }
       throw new Error(
         `Request transform malformed: ${filename} must export a function or have a default export as a function`,
       );
     }
     // Handle string template
-    return (prompt) => {
-      const rendered = nunjucks.renderString(transform, { prompt });
-      return new Function('prompt', `${rendered}`)(prompt);
+    return async (prompt) => {
+      try {
+        const rendered = nunjucks.renderString(transform, { prompt });
+        return await new Function('prompt', `${rendered}`)(prompt);
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        const wrappedError = new Error(
+          `Error in request transform string template: ${errorMessage}`,
+        );
+        logger.error(wrappedError.message);
+        throw wrappedError;
+      }
     };
   }
 
@@ -287,12 +411,72 @@ export function determineRequestBody(
   });
 }
 
+export async function createValidateStatus(
+  validator: string | ((status: number) => boolean) | undefined,
+): Promise<(status: number) => boolean> {
+  if (!validator) {
+    return (status: number) => true;
+  }
+
+  if (typeof validator === 'function') {
+    return validator;
+  }
+
+  if (typeof validator === 'string') {
+    if (validator.startsWith('file://')) {
+      let filename = validator.slice('file://'.length);
+      let functionName: string | undefined;
+      if (filename.includes(':')) {
+        const splits = filename.split(':');
+        if (splits[0] && isJavascriptFile(splits[0])) {
+          [filename, functionName] = splits;
+        }
+      }
+      try {
+        const requiredModule = await importModule(
+          path.resolve(cliState.basePath || '', filename),
+          functionName,
+        );
+        if (typeof requiredModule === 'function') {
+          return requiredModule;
+        }
+        throw new Error('Exported value must be a function');
+      } catch (err: any) {
+        throw new Error(`Status validator malformed: ${filename} - ${err?.message || String(err)}`);
+      }
+    }
+    // Handle string template - wrap in a function body
+    try {
+      const trimmedValidator = validator.trim();
+      // Check if it's an arrow function or regular function
+      if (trimmedValidator.includes('=>') || trimmedValidator.startsWith('function')) {
+        // For arrow functions and regular functions, evaluate the whole function
+        return new Function(`return ${trimmedValidator}`)() as (status: number) => boolean;
+      }
+      // For expressions, wrap in a function body
+      return new Function('status', `return ${trimmedValidator}`) as (status: number) => boolean;
+    } catch (err: any) {
+      throw new Error(`Invalid status validator expression: ${err?.message || String(err)}`);
+    }
+  }
+
+  throw new Error(
+    `Unsupported status validator type: ${typeof validator}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
+  );
+}
+
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
-  private transformResponse: Promise<(data: any, text: string) => ProviderResponse>;
-  private sessionParser: Promise<({ headers }: { headers: Record<string, string> }) => string>;
+  private transformResponse: Promise<
+    (data: any, text: string, context?: TransformResponseContext) => ProviderResponse
+  >;
+  private sessionParser: Promise<(data: SessionParserData) => string>;
   private transformRequest: Promise<(prompt: string) => any>;
+  private validateStatus: Promise<(status: number) => boolean>;
+  private lastSignatureTimestamp?: number;
+  private lastSignature?: string;
+
   constructor(url: string, options: ProviderOptions) {
     this.config = HttpProviderConfigSchema.parse(options.config);
     this.url = this.config.url || url;
@@ -301,7 +485,7 @@ export class HttpProvider implements ApiProvider {
     );
     this.sessionParser = createSessionParser(this.config.sessionParser);
     this.transformRequest = createTransformRequest(this.config.transformRequest);
-
+    this.validateStatus = createValidateStatus(this.config.validateStatus);
     if (this.config.request) {
       this.config.request = maybeLoadFromExternalFile(this.config.request) as string;
     } else {
@@ -320,6 +504,48 @@ export class HttpProvider implements ApiProvider {
 
   toString(): string {
     return `[HTTP Provider ${this.url}]`;
+  }
+
+  private async refreshSignatureIfNeeded(): Promise<void> {
+    if (!this.config.signatureAuth) {
+      logger.debug('[HTTP Provider Auth]: No signature auth configured');
+      return;
+    }
+
+    const {
+      privateKeyPath,
+      privateKey,
+      signatureValidityMs,
+      signatureDataTemplate,
+      signatureAlgorithm,
+      signatureRefreshBufferMs,
+    } = this.config.signatureAuth;
+
+    if (
+      !this.lastSignatureTimestamp ||
+      !this.lastSignature ||
+      needsSignatureRefresh(
+        this.lastSignatureTimestamp,
+        signatureValidityMs,
+        signatureRefreshBufferMs,
+      )
+    ) {
+      logger.debug('[HTTP Provider Auth]: Generating new signature');
+      this.lastSignatureTimestamp = Date.now();
+      this.lastSignature = await generateSignature(
+        privateKeyPath || privateKey!,
+        this.lastSignatureTimestamp,
+        signatureDataTemplate,
+        signatureAlgorithm,
+        privateKeyPath !== undefined,
+      );
+      logger.debug('[HTTP Provider Auth]: Generated new signature successfully');
+    } else {
+      logger.debug('[HTTP Provider Auth]: Using cached signature');
+    }
+
+    invariant(this.lastSignature, 'Signature should be defined at this point');
+    invariant(this.lastSignatureTimestamp, 'Timestamp should be defined at this point');
   }
 
   private getDefaultHeaders(body: any): Record<string, string> {
@@ -349,15 +575,16 @@ export class HttpProvider implements ApiProvider {
     }
   }
 
-  private getHeaders(
+  async getHeaders(
     defaultHeaders: Record<string, string>,
     vars: Record<string, any>,
-  ): Record<string, string> {
+  ): Promise<Record<string, string>> {
     const configHeaders = this.config.headers || {};
     // Convert all keys in configHeaders to lowercase
     const headers = Object.fromEntries(
       Object.entries(configHeaders).map(([key, value]) => [key.toLowerCase(), value]),
     );
+
     return Object.fromEntries(
       Object.entries({ ...defaultHeaders, ...headers }).map(([key, value]) => [
         key,
@@ -370,18 +597,42 @@ export class HttpProvider implements ApiProvider {
     const vars = {
       ...(context?.vars || {}),
       prompt,
-    };
+    } as Record<string, any>;
+
+    // Add signature values to vars if signature auth is enabled
+    if (this.config.signatureAuth) {
+      await this.refreshSignatureIfNeeded();
+      invariant(this.lastSignature, 'Signature should be defined at this point');
+      invariant(this.lastSignatureTimestamp, 'Timestamp should be defined at this point');
+
+      if (vars.signature) {
+        logger.warn(
+          '[HTTP Provider Auth]: `signature` is already defined in vars and will be overwritten',
+        );
+      }
+      if (vars.signatureTimestamp) {
+        logger.warn(
+          '[HTTP Provider Auth]: `signatureTimestamp` is already defined in vars and will be overwritten',
+        );
+      }
+
+      vars.signature = this.lastSignature;
+      vars.signatureTimestamp = this.lastSignatureTimestamp;
+    }
 
     if (this.config.request) {
       return this.callApiWithRawRequest(vars);
     }
 
     const defaultHeaders = this.getDefaultHeaders(this.config.body);
-    const headers = this.getHeaders(defaultHeaders, vars);
+    const headers = await this.getHeaders(defaultHeaders, vars);
     this.validateContentTypeAndBody(headers, this.config.body);
 
     // Transform prompt using request transform
     const transformedPrompt = await (await this.transformRequest)(prompt);
+    logger.debug(
+      `[HTTP Provider]: Transformed prompt: ${transformedPrompt}. Original prompt: ${prompt}`,
+    );
 
     const renderedConfig: Partial<HttpProviderConfig> = {
       url: this.url,
@@ -416,30 +667,35 @@ export class HttpProvider implements ApiProvider {
       url = `${url}?${queryString}`;
     }
 
-    logger.debug(`Calling HTTP provider: ${url} with config: ${safeJsonStringify(renderedConfig)}`);
-    let response;
-    try {
-      response = await fetchWithCache(
-        url,
-        {
-          method: renderedConfig.method,
-          headers: renderedConfig.headers,
-          ...(method !== 'GET' && {
-            body: contentTypeIsJson(headers)
-              ? JSON.stringify(renderedConfig.body)
-              : String(renderedConfig.body)?.trim(),
-          }),
-        },
-        REQUEST_TIMEOUT_MS,
-        'text',
-        context?.debug,
+    logger.debug(
+      `[HTTP Provider]: Calling ${url} with config: ${safeJsonStringify(renderedConfig)}`,
+    );
+
+    const response = await fetchWithCache(
+      url,
+      {
+        method: renderedConfig.method,
+        headers: renderedConfig.headers,
+        ...(method !== 'GET' && {
+          body: contentTypeIsJson(headers)
+            ? JSON.stringify(renderedConfig.body)
+            : String(renderedConfig.body)?.trim(),
+        }),
+      },
+      REQUEST_TIMEOUT_MS,
+      'text',
+      context?.debug,
+      this.config.maxRetries,
+    );
+
+    logger.debug(`[HTTP Provider]: Response: ${response.data}`);
+    if (!(await this.validateStatus)(response.status)) {
+      throw new Error(
+        `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
       );
-    } catch (err) {
-      return {
-        error: `HTTP call error: ${String(err)}`,
-      };
     }
-    logger.debug(`\tHTTP response: ${response.data}`);
+    logger.debug(`[HTTP Provider]: Response (HTTP ${response.status}): ${response.data}`);
+
     const ret: ProviderResponse = {};
     if (context?.debug) {
       ret.raw = response.data;
@@ -455,28 +711,32 @@ export class HttpProvider implements ApiProvider {
     } catch {
       parsedData = null;
     }
+
     try {
-      const parsedOutput = (await this.transformResponse)(parsedData, rawText);
-      ret.output = parsedOutput.output || parsedOutput;
-      try {
-        const sessionId =
-          response.headers && this.sessionParser !== null
-            ? (await this.sessionParser)({ headers: response.headers })
-            : undefined;
-        if (sessionId) {
-          ret.sessionId = sessionId;
-        }
-      } catch (err) {
-        logger.error(
-          `Error parsing session ID: ${String(err)}. Got headers: ${safeJsonStringify(response.headers)}`,
-        );
+      const sessionId =
+        this.sessionParser == null
+          ? undefined
+          : (await this.sessionParser)({ headers: response.headers, body: parsedData ?? rawText });
+      if (sessionId) {
+        ret.sessionId = sessionId;
       }
-      return ret;
     } catch (err) {
-      logger.error(`Error parsing response: ${String(err)}. Got response: ${rawText}`);
-      ret.error = `Error parsing response: ${String(err)}. Got response: ${rawText}`;
-      return ret;
+      logger.error(
+        `Error parsing session ID: ${String(err)}. Got headers: ${safeJsonStringify(response.headers)} and parsed body: ${safeJsonStringify(parsedData)}`,
+      );
+      throw err;
     }
+    const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
+    if (parsedOutput?.output) {
+      return {
+        ...ret,
+        ...parsedOutput,
+      };
+    }
+    return {
+      ...ret,
+      output: parsedOutput,
+    };
   }
 
   private async callApiWithRawRequest(vars: Record<string, any>): Promise<ProviderResponse> {
@@ -490,26 +750,27 @@ export class HttpProvider implements ApiProvider {
       `${protocol}://${parsedRequest.headers['host']}`,
     ).toString();
 
-    logger.debug(`Calling HTTP provider with raw request: ${url}`);
-    logger.debug(`Calling HTTP provider with raw request: ${parsedRequest}`);
-    let response;
-    try {
-      response = await fetchWithCache(
-        url,
-        {
-          method: parsedRequest.method,
-          headers: parsedRequest.headers,
-          ...(parsedRequest.body && { body: parsedRequest.body.text.trim() }),
-        },
-        REQUEST_TIMEOUT_MS,
-        'text',
+    logger.debug(`[HTTP Provider]: Calling ${url} with raw request: ${parsedRequest}`);
+    const response = await fetchWithCache(
+      url,
+      {
+        method: parsedRequest.method,
+        headers: parsedRequest.headers,
+        ...(parsedRequest.body && { body: parsedRequest.body.text.trim() }),
+      },
+      REQUEST_TIMEOUT_MS,
+      'text',
+      undefined,
+      this.config.maxRetries,
+    );
+
+    logger.debug(`[HTTP Provider]: Response: ${response.data}`);
+
+    if (!(await this.validateStatus)(response.status)) {
+      throw new Error(
+        `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
       );
-    } catch (err) {
-      return {
-        error: `HTTP call error: ${String(err)}`,
-      };
     }
-    logger.debug(`\tHTTP response: ${response.data}`);
 
     const rawText = response.data as string;
     let parsedData;
@@ -519,16 +780,12 @@ export class HttpProvider implements ApiProvider {
       parsedData = null;
     }
 
-    try {
-      const parsedOutput = (await this.transformResponse)(parsedData, rawText);
-      return {
-        output: parsedOutput.output || parsedOutput,
-      };
-    } catch (err) {
-      logger.error(`Error parsing response: ${String(err)}. Got response: ${rawText}`);
-      return {
-        error: `Error parsing response: ${String(err)}. Got response: ${rawText}`,
-      };
+    const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
+    if (parsedOutput?.output) {
+      return parsedOutput;
     }
+    return {
+      output: parsedOutput,
+    };
   }
 }

@@ -146,15 +146,31 @@ assert:
       maximumOutputSize: 10
 ```
 
-The Javascript file must export an assertion function. Here's an example:
+You can specify a particular function to use by appending it after a colon:
+
+```yaml
+assert:
+  - type: javascript
+    value: file://relative/path/to/script.js:customFunction
+```
+
+The JavaScript file must export an assertion function. Here are examples:
 
 ```js
+// Default export
 module.exports = (output, context) => {
   return output.length > 10;
 };
 ```
 
-This is an example of an assertion that uses data from a configuration defined in the assertion's YML file:
+```js
+// Named exports
+module.exports.customFunction = (output, context) => {
+  return output.includes('specific text');
+};
+```
+
+Here's an example using configuration data defined in the assertion's YAML file:
 
 ```js
 module.exports = (output, context) => {

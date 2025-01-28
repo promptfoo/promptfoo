@@ -1,10 +1,18 @@
 import { render, screen } from '@testing-library/react';
-import type { AssertionType, EvaluateTableOutput } from '@promptfoo/types';
+import {
+  ResultFailureReason,
+  type AssertionType,
+  type EvaluateTableOutput,
+} from '@promptfoo/types';
 import userEvent from '@testing-library/user-event';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
 import type { EvalOutputCellProps } from './EvalOutputCell';
 import EvalOutputCell from './EvalOutputCell';
+
+const renderWithProviders = (ui: React.ReactElement) => {
+  return render(<ShiftKeyProvider>{ui}</ShiftKeyProvider>);
+};
 
 vi.mock('./store', () => ({
   useStore: () => ({
@@ -12,6 +20,8 @@ vi.mock('./store', () => ({
     renderMarkdown: true,
     showPassFail: true,
     showPrompts: true,
+    maxImageWidth: 256,
+    maxImageHeight: 256,
   }),
 }));
 
@@ -28,10 +38,6 @@ interface MockEvalOutputCellProps extends EvalOutputCellProps {
 describe('EvalOutputCell', () => {
   const mockOnRating = vi.fn();
 
-  const renderWithProviders = (ui: React.ReactElement) => {
-    return render(<ShiftKeyProvider>{ui}</ShiftKeyProvider>);
-  };
-
   const defaultProps: MockEvalOutputCellProps = {
     firstOutput: {
       cost: 0,
@@ -39,10 +45,12 @@ describe('EvalOutputCell', () => {
       latencyMs: 100,
       namedScores: {},
       pass: true,
+      failureReason: ResultFailureReason.NONE,
       prompt: 'Test prompt',
       provider: 'test-provider',
       score: 0.8,
       text: 'Test output text',
+      testCase: {},
     },
     maxTextLength: 100,
     onRating: mockOnRating,
@@ -80,10 +88,12 @@ describe('EvalOutputCell', () => {
       latencyMs: 100,
       namedScores: {},
       pass: true,
+      failureReason: ResultFailureReason.NONE,
       prompt: 'Test prompt',
       provider: 'test-provider',
       score: 0.8,
       text: 'Test output text',
+      testCase: {},
     },
     promptIndex: 0,
     rowIndex: 0,
@@ -202,5 +212,94 @@ describe('EvalOutputCell', () => {
 
     const dialogContent = screen.getByTestId('context-text');
     expect(dialogContent).toHaveTextContent('Test output text');
+  });
+});
+
+describe('EvalOutputCell provider override', () => {
+  const defaultProps: MockEvalOutputCellProps = {
+    firstOutput: {
+      cost: 0,
+      id: 'test-id',
+      latencyMs: 100,
+      namedScores: {},
+      pass: true,
+      failureReason: ResultFailureReason.NONE,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      score: 0.8,
+      text: 'Test output text',
+      testCase: {},
+    },
+    maxTextLength: 100,
+    onRating: vi.fn(),
+    output: {
+      cost: 0,
+      id: 'test-id',
+      latencyMs: 100,
+      namedScores: {},
+      pass: true,
+      failureReason: ResultFailureReason.NONE,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      score: 0.8,
+      text: 'Test output text',
+      testCase: {},
+    },
+    promptIndex: 0,
+    rowIndex: 0,
+    searchText: '',
+    showDiffs: false,
+    showStats: true,
+  };
+
+  it('shows provider override when test case has a provider string', () => {
+    const props = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        provider: 'openai:gpt-4',
+        testCase: {
+          provider: 'openai:gpt-4-mini',
+        },
+      },
+    };
+
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+    expect(container.querySelector('.provider.pill')).toHaveTextContent('openai:gpt-4-mini');
+  });
+
+  it('shows provider override when test case has a provider object', () => {
+    const props = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        provider: 'openai:gpt-4',
+        testCase: {
+          provider: {
+            id: 'openai:gpt-4-mini',
+            config: {
+              model: 'gpt-4-mini',
+            },
+          },
+        },
+      },
+    };
+
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+    expect(container.querySelector('.provider.pill')).toHaveTextContent('openai:gpt-4-mini');
+  });
+
+  it('does not show provider override when test case has no provider', () => {
+    const props = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        provider: 'openai:gpt-4',
+        testCase: {},
+      },
+    };
+
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+    expect(container.querySelector('.provider.pill')).not.toBeInTheDocument();
   });
 });

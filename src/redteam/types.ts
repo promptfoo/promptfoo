@@ -1,5 +1,5 @@
 import type { ApiProvider, ProviderOptions } from '../types/providers';
-import type { Severity, Plugin } from './constants';
+import type { Plugin, Severity } from './constants';
 
 // Base types
 export type RedteamObjectConfig = Record<string, unknown>;
@@ -24,6 +24,14 @@ type WithNumTests = {
   numTests?: number;
 };
 
+type TestCase = {
+  description?: string;
+  vars?: Record<string, unknown>;
+  provider?: string | ProviderOptions | ApiProvider;
+  providerOutput?: string | Record<string, unknown>;
+  assert?: any;
+};
+
 // Derived types
 export type RedteamPluginObject = ConfigurableObject &
   WithNumTests & {
@@ -32,8 +40,10 @@ export type RedteamPluginObject = ConfigurableObject &
 export type RedteamPlugin = string | RedteamPluginObject;
 
 export type RedteamStrategyObject = ConfigurableObject & {
-  config?: StrategyConfig & {
-    plugins?: RedteamPluginObject['id'][];
+  id: string;
+  config?: {
+    enabled?: boolean;
+    plugins?: string[];
     [key: string]: unknown;
   };
 };
@@ -59,8 +69,10 @@ type CommonOptions = {
   strategies?: RedteamStrategy[];
   delay?: number;
   remote?: boolean;
+  sharing?: boolean;
 };
 
+// NOTE: Remember to edit validators/redteam.ts:RedteamGenerateOptionsSchema if you edit this schema
 export interface RedteamCliGenerateOptions extends CommonOptions {
   cache: boolean;
   config?: string;
@@ -73,6 +85,8 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   write: boolean;
   inRedteamRun?: boolean;
   verbose?: boolean;
+  abortSignal?: AbortSignal;
+  burpEscapeJson?: boolean;
 }
 
 export interface RedteamFileConfig extends CommonOptions {
@@ -88,6 +102,51 @@ export interface SynthesizeOptions extends CommonOptions {
   plugins: (RedteamPluginObject & { id: string; numTests: number })[];
   prompts: [string, ...string[]];
   strategies: RedteamStrategyObject[];
+  abortSignal?: AbortSignal;
 }
 
 export type RedteamAssertionTypes = `promptfoo:redteam:${string}`;
+
+export interface RedteamRunOptions {
+  id?: string;
+  config?: string;
+  output?: string;
+  cache?: boolean;
+  envPath?: string;
+  maxConcurrency?: number;
+  delay?: number;
+  remote?: boolean;
+  force?: boolean;
+  filterProviders?: string;
+  filterTargets?: string;
+  verbose?: boolean;
+
+  // Used by webui
+  liveRedteamConfig?: any;
+  logCallback?: (message: string) => void;
+  abortSignal?: AbortSignal;
+
+  loadedFromCloud?: boolean;
+}
+
+export interface SavedRedteamConfig {
+  description: string;
+  prompts: string[];
+  target: ProviderOptions;
+  plugins: (RedteamPlugin | { id: string; config?: any })[];
+  strategies: RedteamStrategy[];
+  purpose?: string;
+  numTests?: number;
+  applicationDefinition: {
+    purpose?: string;
+    systemPrompt?: string;
+    redteamUser?: string;
+    accessToData?: string;
+    forbiddenData?: string;
+    accessToActions?: string;
+    forbiddenActions?: string;
+    connectedSystems?: string;
+  };
+  entities: string[];
+  defaultTest?: TestCase;
+}

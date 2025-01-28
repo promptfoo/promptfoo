@@ -1,6 +1,6 @@
-import invariant from 'tiny-invariant';
 import { getGraderById } from '../redteam/graders';
 import type { AssertionParams, GradingResult } from '../types';
+import invariant from '../util/invariant';
 
 export const handleRedteam = async ({
   assertion,

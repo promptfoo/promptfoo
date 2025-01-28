@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Adaline Gateway Model Grading Example'
+
+providers:
+  - id: adaline:openai:chat:gpt-4o-mini
+    config:
+      maxTokens: 120
+      responseFormat: text
+
+prompts:
+  - file://prompts/name_capitals_concise.txt
+  - file://prompts/name_capitals_verbose.txt
+
+defaultTest:
+  # Uses adaline as the grading provider
+  options:
+    provider:
+      id: adaline:openai:chat:gpt-4o-mini
+
+tests:
+  - vars:
+      location: Sacramento
+
+    assert:
+      # Ensure the answer agrees with the provided facts
+      - type: factuality
+        value: The capital of California is Sacramento
+
+      # Ensure the answer meets the criteria
+      - type: model-graded-closedqa
+        value: Does not include any extra information or facts about Sacramento

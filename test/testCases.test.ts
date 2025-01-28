@@ -168,6 +168,27 @@ describe('readStandaloneTestsFile', () => {
     ]);
   });
 
+  it('should read JS file and return test cases', async () => {
+    jest.mock(
+      '../test.js',
+      () => [
+        { vars: { var1: 'value1', var2: 'value2' } },
+        { vars: { var1: 'value3', var2: 'value4' } },
+      ],
+      { virtual: true },
+    );
+
+    const result = await readStandaloneTestsFile('test.js');
+    expect(result).toEqual([
+      {
+        vars: { var1: 'value1', var2: 'value2' },
+      },
+      {
+        vars: { var1: 'value3', var2: 'value4' },
+      },
+    ]);
+  });
+
   it('should handle file:// prefix in file path', async () => {
     jest.mocked(fs.readFileSync).mockReturnValue('var1,var2\nvalue1,value2');
     await readStandaloneTestsFile('file://test.csv');

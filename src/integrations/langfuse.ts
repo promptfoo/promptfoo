@@ -1,4 +1,3 @@
-import { Langfuse } from 'langfuse';
 import { getEnvString } from '../envars';
 
 const langfuseParams = {
@@ -7,7 +6,7 @@ const langfuseParams = {
   baseUrl: getEnvString('LANGFUSE_HOST'),
 };
 
-const langfuse = new Langfuse(langfuseParams);
+let langfuse: any;
 
 export async function getPrompt(
   id: string,
@@ -16,6 +15,12 @@ export async function getPrompt(
   version?: number,
 ): Promise<string> {
   let prompt;
+
+  if (!langfuse) {
+    const { Langfuse } = await import('langfuse');
+    langfuse = new Langfuse(langfuseParams);
+  }
+
   if (type === 'text' || type === undefined) {
     prompt = await langfuse.getPrompt(id, version, { type: 'text' });
   } else {

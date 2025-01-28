@@ -45,10 +45,14 @@ export type EnvOverrides = {
   REPLICATE_API_TOKEN?: string;
   VERTEX_API_HOST?: string;
   VERTEX_API_KEY?: string;
+  VERTEX_API_VERSION?: string;
   VERTEX_PROJECT_ID?: string;
   VERTEX_PUBLISHER?: string;
   VERTEX_REGION?: string;
   WATSONX_AI_APIKEY?: string;
   WATSONX_AI_PROJECT_ID?: string;
   WATSONX_AI_BEARER_TOKEN?: string;
+  WATSONX_AI_AUTH_TYPE?: string;
+  PROMPTFOO_CA_CERT_PATH?: string;
+  PROMPTFOO_INSECURE_SSL?: string;
 };

@@ -1,6 +1,6 @@
-import invariant from 'tiny-invariant';
 import { matchesLlmRubric } from '../matchers';
 import type { AssertionParams, GradingResult } from '../types';
+import invariant from '../util/invariant';
 
 export const handleLlmRubric = async ({
   assertion,

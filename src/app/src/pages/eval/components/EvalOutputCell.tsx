@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useShiftKey } from '@app/hooks/useShiftKey';
 import Tooltip from '@mui/material/Tooltip';
-import type { EvaluateTableOutput } from '@promptfoo/types';
+import { ResultFailureReason, type EvaluateTableOutput } from '@promptfoo/types';
 import { diffSentences, diffJson, diffWords } from 'diff';
 import remarkGfm from 'remark-gfm';
 import CustomMetrics from './CustomMetrics';
@@ -293,17 +293,36 @@ function EvalOutputCell({
       output.response?.tokenUsage?.total ?? 0,
     );
 
-    tokenUsageDisplay = (
-      <Tooltip
-        title={`${promptTokens} prompt tokens + ${completionTokens} completion tokens = ${totalTokens} total`}
-      >
-        <span>
-          {totalTokens}
-          {(promptTokens !== '0' || completionTokens !== '0') &&
-            ` (${promptTokens}+${completionTokens})`}
-        </span>
-      </Tooltip>
-    );
+    if (output.response?.tokenUsage?.completionDetails?.reasoning) {
+      const reasoningTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
+        output.response.tokenUsage.completionDetails.reasoning ?? 0,
+      );
+
+      tokenUsageDisplay = (
+        <Tooltip
+          title={`${promptTokens} prompt tokens + ${completionTokens} completion tokens = ${totalTokens} total & ${reasoningTokens} reasoning tokens`}
+        >
+          <span>
+            {totalTokens}
+            {(promptTokens !== '0' || completionTokens !== '0') &&
+              ` (${promptTokens}+${completionTokens})`}
+            {` R${reasoningTokens}`}
+          </span>
+        </Tooltip>
+      );
+    } else {
+      tokenUsageDisplay = (
+        <Tooltip
+          title={`${promptTokens} prompt tokens + ${completionTokens} completion tokens = ${totalTokens} total`}
+        >
+          <span>
+            {totalTokens}
+            {(promptTokens !== '0' || completionTokens !== '0') &&
+              ` (${promptTokens}+${completionTokens})`}
+          </span>
+        </Tooltip>
+      );
+    }
   }
 
   const comment =
@@ -414,6 +433,7 @@ function EvalOutputCell({
   // Pass/fail badge creation
   let passCount = 0;
   let failCount = 0;
+  let errorCount = 0;
   const gradingResult = output.gradingResult;
 
   if (gradingResult) {
@@ -435,8 +455,14 @@ function EvalOutputCell({
     failCount = 1;
   }
 
+  if (output.failureReason === ResultFailureReason.ERROR) {
+    errorCount = 1;
+  }
+
   let passFailText;
-  if (failCount === 1 && passCount === 1) {
+  if (errorCount === 1) {
+    passFailText = 'ERROR';
+  } else if (failCount === 1 && passCount === 1) {
     passFailText = (
       <>
         {`${failCount} FAIL`} {`${passCount} PASS`}
@@ -483,35 +509,51 @@ function EvalOutputCell({
       .join('\n\n');
   };
 
+  const providerOverride = useMemo(() => {
+    const provider = output.testCase?.provider;
+    let testCaseProvider: string | null = null;
+
+    if (!provider) {
+      return null;
+    }
+
+    if (typeof provider === 'string') {
+      testCaseProvider = provider;
+    } else if (typeof provider === 'object' && 'id' in provider) {
+      const id = provider.id;
+      if (typeof id === 'string') {
+        testCaseProvider = id;
+      }
+    }
+
+    if (testCaseProvider) {
+      return (
+        <Tooltip title="Model override for this test" arrow placement="top">
+          <span className="provider pill">{testCaseProvider}</span>
+        </Tooltip>
+      );
+    }
+    return null;
+  }, [output]);
+
   return (
     <div className="cell" style={cellStyle}>
       {showPassFail && (
-        <>
-          {output.pass ? (
-            <>
-              <div className="status pass">
-                <div className="pill">
-                  {passFailText}
-                  {scoreString && <span className="score"> {scoreString}</span>}
-                </div>
-                <CustomMetrics lookup={output.namedScores} />
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="status fail">
-                <div className="pill">
-                  {passFailText}
-                  {scoreString && <span className="score"> {scoreString}</span>}
-                </div>
-                <CustomMetrics lookup={output.namedScores} />
-                <span className="fail-reason">
-                  <FailReasonCarousel failReasons={failReasons} />
-                </span>
-              </div>
-            </>
+        <div className={`status ${output.pass ? 'pass' : 'fail'}`}>
+          <div className="status-row">
+            <div className="pill">
+              {passFailText}
+              {scoreString && <span className="score"> {scoreString}</span>}
+            </div>
+            {providerOverride}
+          </div>
+          <CustomMetrics lookup={output.namedScores} />
+          {!output.pass && (
+            <span className="fail-reason">
+              <FailReasonCarousel failReasons={failReasons} />
+            </span>
           )}
-        </>
+        </div>
       )}
       {showPrompts && firstOutput.prompt && (
         <div className="prompt">

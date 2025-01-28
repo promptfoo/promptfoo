@@ -1,3 +1,8 @@
+---
+sidebar_label: AWS Bedrock
+sidebar_position: 3
+---
+
 # Bedrock
 
 The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to access Anthropic's Claude, Meta's Llama 3.1, Amazon's Nova, AI21's Jamba, and other models. The complete list of available models can be found [here](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns).
@@ -24,7 +29,7 @@ The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to
 
    ```yaml
    providers:
-     - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
+     - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
    ```
 
    Note that the provider is `bedrock:` followed by the [ARN/model id](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns) of the model.
@@ -33,7 +38,7 @@ The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to
 
    ```yaml
    providers:
-     - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
+     - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
        config:
          accessKeyId: YOUR_ACCESS_KEY_ID
          secretAccessKey: YOUR_SECRET_ACCESS_KEY
@@ -50,7 +55,7 @@ Configure Amazon Bedrock authentication in your provider's `config` section usin
 
 ```yaml
 providers:
-  - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       accessKeyId: 'YOUR_ACCESS_KEY_ID'
       secretAccessKey: 'YOUR_SECRET_ACCESS_KEY'
@@ -62,7 +67,7 @@ providers:
 
 ```yaml
 providers:
-  - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       profile: 'YOUR_SSO_PROFILE'
       region: 'us-east-1' # Optional, defaults to us-east-1
@@ -158,7 +163,7 @@ config:
 
 ### Claude Models
 
-For Claude models (e.g., `anthropic.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
+For Claude models (e.g., `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
 
 ```yaml
 config:
@@ -291,7 +296,7 @@ For example:
 
 ```yaml
 providers:
-  - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       guardrailIdentifier: 'test-guardrail'
       guardrailVersion: 1 # The version number for the guardrail. The value can also be DRAFT.
@@ -305,9 +310,10 @@ The following environment variables can be used to configure the Bedrock provide
 - `AWS_BEDROCK_MAX_TOKENS`: Default maximum number of tokens to generate
 - `AWS_BEDROCK_TEMPERATURE`: Default temperature for generation
 - `AWS_BEDROCK_TOP_P`: Default top_p value for generation
-- `AWS_BEDROCK_STOP`: Default stop sequences (as a JSON string)
 - `AWS_BEDROCK_FREQUENCY_PENALTY`: Default frequency penalty (for supported models)
 - `AWS_BEDROCK_PRESENCE_PENALTY`: Default presence penalty (for supported models)
+- `AWS_BEDROCK_STOP`: Default stop sequences (as a JSON string)
+- `AWS_BEDROCK_MAX_RETRIES`: Number of retry attempts for failed API calls (default: 10)
 
 Model-specific environment variables:
 
@@ -315,3 +321,43 @@ Model-specific environment variables:
 - `COHERE_TEMPERATURE`, `COHERE_P`, `COHERE_K`, `COHERE_MAX_TOKENS`: For Cohere models
 
 These environment variables can be overridden by the configuration specified in the YAML file.
+
+## Troubleshooting
+
+### ValidationException: On-demand throughput isn't supported
+
+If you see this error:
+
+```text
+ValidationException: Invocation of model ID anthropic.claude-3-5-sonnet-20241022-v2:0 with on-demand throughput isn't supported. Retry your request with the ID or ARN of an inference profile that contains this model.
+```
+
+This usually means you need to use the region-specific model ID. Update your provider configuration to include the regional prefix:
+
+```yaml
+providers:
+  # Instead of this:
+  - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
+  # Use this:
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0 # US region
+  # or
+  - id: bedrock:eu.anthropic.claude-3-5-sonnet-20241022-v2:0 # EU region
+  # or
+  - id: bedrock:apac.anthropic.claude-3-5-sonnet-20241022-v2:0 # APAC region
+```
+
+Make sure to:
+
+1. Choose the correct regional prefix (`us.`, `eu.`, or `apac.`) based on your AWS region
+2. Configure the corresponding region in your provider config
+3. Ensure you have model access enabled in your AWS Bedrock console for that region
+
+### AccessDeniedException: You don't have access to the model with the specified model ID
+
+If you see this error. Make sure you have access to the model in the region you're using:
+
+1. Verify model access in AWS Console:
+   - Go to AWS Bedrock Console
+   - Navigate to "Model access"
+   - Enable access for the specific model
+2. Check your region configuration matches the model's region.

@@ -15,7 +15,9 @@ interface GroqCompletionOptions {
   apiKey?: string;
   model?: string;
   temperature?: number;
+  /** @deprecated Use max_completion_tokens instead */
   max_tokens?: number;
+  max_completion_tokens?: number;
   top_p?: number;
   tools?: Array<{
     type: 'function';
@@ -65,6 +67,17 @@ export class GroqProvider implements ApiProvider {
     return `[Groq Provider ${this.modelName}]`;
   }
 
+  toJSON() {
+    return {
+      provider: 'groq',
+      model: this.modelName,
+      config: {
+        ...this.config,
+        ...(this.apiKey && { apiKey: undefined }),
+      },
+    };
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -82,7 +95,7 @@ export class GroqProvider implements ApiProvider {
       messages,
       model: this.config.model || this.modelName,
       temperature: this.config.temperature ?? 0.7,
-      max_tokens: this.config.max_tokens ?? 1000,
+      max_completion_tokens: this.config.max_completion_tokens ?? this.config.max_tokens ?? 1000,
       top_p: this.config.top_p ?? 1,
       tools: this.config.tools ? maybeLoadFromExternalFile(this.config.tools) : undefined,
       tool_choice: this.config.tool_choice ?? 'auto',

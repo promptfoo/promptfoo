@@ -1,6 +1,6 @@
+import dedent from 'dedent';
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import invariant from 'tiny-invariant';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 import { fromZodError } from 'zod-validation-error';
@@ -17,17 +17,25 @@ import logger from '../../logger';
 import Eval from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { updateResult, deleteEval, writeResultsToDatabase } from '../../util';
+import invariant from '../../util/invariant';
 import { ApiSchemas } from '../apiSchemas';
 
 export const evalRouter = Router();
 
 // Running jobs
-const evalJobs = new Map<string, Job>();
+export const evalJobs = new Map<string, Job>();
 
 evalRouter.post('/job', (req: Request, res: Response): void => {
   const { evaluateOptions, ...testSuite } = req.body as EvaluateTestSuiteWithEvaluateOptions;
   const id = uuidv4();
-  evalJobs.set(id, { status: 'in-progress', progress: 0, total: 0, result: null });
+  evalJobs.set(id, {
+    evalId: null,
+    status: 'in-progress',
+    progress: 0,
+    total: 0,
+    result: null,
+    logs: [],
+  });
 
   promptfoo
     .evaluate(
@@ -51,6 +59,7 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
       invariant(job, 'Job not found');
       job.status = 'complete';
       job.result = await result.toEvaluateSummary();
+      job.evalId = result.id;
       console.log(`[${id}] Complete`);
     });
 
@@ -65,9 +74,19 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
     return;
   }
   if (job.status === 'complete') {
-    res.json({ status: 'complete', result: job.result });
+    res.json({
+      status: 'complete',
+      result: job.result,
+      evalId: job.evalId,
+      logs: job.logs,
+    });
   } else {
-    res.json({ status: 'in-progress', progress: job.progress, total: job.total });
+    res.json({
+      status: 'in-progress',
+      progress: job.progress,
+      total: job.total,
+      logs: job.logs,
+    });
   }
 });
 
@@ -121,10 +140,33 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
       const validationError = fromZodError(error);
       res.status(400).json({ error: validationError.message });
     } else {
-      console.error('Failed to update eval author:', error);
+      logger.error(`Failed to update eval author: ${error}`);
       res.status(500).json({ error: 'Failed to update eval author' });
     }
   }
+});
+
+evalRouter.post('/:id/results', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const results = req.body as unknown as EvalResult[];
+
+  if (!Array.isArray(results)) {
+    res.status(400).json({ error: 'Results must be an array' });
+    return;
+  }
+  const eval_ = await Eval.findById(id);
+  if (!eval_) {
+    res.status(404).json({ error: 'Eval not found' });
+    return;
+  }
+  try {
+    await eval_.addResults(results);
+  } catch (error) {
+    logger.error(`Failed to add results to eval: ${error}`);
+    res.status(500).json({ error: 'Failed to add results to eval' });
+    return;
+  }
+  res.status(204).send();
 });
 
 evalRouter.post(
@@ -224,7 +266,9 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
       res.json({ id: eval_.id });
     }
   } catch (error) {
-    console.error('Failed to write eval to database', error, body);
+    logger.error(dedent`Failed to write eval to database:
+      Error: ${error}
+      Body: ${JSON.stringify(body, null, 2)}`);
     res.status(500).json({ error: 'Failed to write eval to database' });
   }
 });

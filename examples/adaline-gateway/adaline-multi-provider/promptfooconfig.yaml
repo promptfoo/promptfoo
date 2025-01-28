@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Adaline Gateway Multi-Provider Example'
+
+prompts:
+  - file://prompt.json
+
+providers:
+  - id: adaline:openai:chat:gpt-4o
+  - id: adaline:anthropic:chat:claude-3-opus-20240229
+  - id: adaline:google:chat:gemini-1.5-pro
+
+tests:
+  - vars:
+      question: 'Do you think you can solve 1 + 0.5 + 0.25 + 0.125 + 0.0625 + 0.03125 + 0.015625 .... till 0 ?'
+    assert:
+      - type: contains
+        value: 'Yes'
+      - type: contains
+        value: ' 2'

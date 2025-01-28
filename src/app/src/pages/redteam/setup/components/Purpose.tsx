@@ -1,23 +1,28 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import { Alert } from '@mui/material';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
 import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
-import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import { EXAMPLE_CONFIG, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 
 interface PromptsProps {
   onNext: () => void;
 }
 
 export default function Purpose({ onNext }: PromptsProps) {
-  const { config, updateApplicationDefinition } = useRedTeamConfig();
+  const { config, updateApplicationDefinition, setFullConfig } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
 
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_purpose' });
@@ -25,11 +30,31 @@ export default function Purpose({ onNext }: PromptsProps) {
 
   const isPurposePresent = config.purpose && config.purpose.trim() !== '';
 
+  const handleLoadExample = () => {
+    if (config.purpose || Object.values(config.applicationDefinition).some((val) => val)) {
+      setConfirmDialogOpen(true);
+    } else {
+      recordEvent('feature_used', { feature: 'redteam_config_example' });
+      setFullConfig(EXAMPLE_CONFIG);
+    }
+  };
+
+  const handleConfirmLoadExample = () => {
+    recordEvent('feature_used', { feature: 'redteam_config_example' });
+    setFullConfig(EXAMPLE_CONFIG);
+    setConfirmDialogOpen(false);
+  };
+
   return (
     <Stack direction="column" spacing={4}>
-      <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
-        Application Details
-      </Typography>
+      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold' }}>
+          Application Details
+        </Typography>
+        <Button variant="outlined" onClick={handleLoadExample}>
+          Load Example
+        </Button>
+      </Box>
       <Alert
         severity="info"
         sx={{
@@ -180,6 +205,19 @@ export default function Purpose({ onNext }: PromptsProps) {
           </Box>
         </Grid>
       </Box>
+      <Dialog open={confirmDialogOpen} onClose={() => setConfirmDialogOpen(false)}>
+        <DialogTitle>Load Example Configuration?</DialogTitle>
+        <DialogContent>
+          Load example configuration with demo chat endpoint and sample application details? Current
+          settings will be replaced.
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleConfirmLoadExample} variant="contained" color="primary">
+            Load Example
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Stack>
   );
 }

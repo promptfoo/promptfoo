@@ -1,6 +1,5 @@
 import dedent from 'dedent';
 import * as fs from 'fs';
-import { createRequire } from 'node:module';
 import * as path from 'path';
 import { runAssertion, runAssertions } from '../../src/assertions';
 import { validateXml, containsXml } from '../../src/assertions/xml';
@@ -11,8 +10,6 @@ import {
   OpenAiChatCompletionProvider,
 } from '../../src/providers/openai';
 import { ReplicateModerationProvider } from '../../src/providers/replicate';
-import { runPython } from '../../src/python/pythonUtils';
-import { runPythonCode } from '../../src/python/wrapper';
 import type {
   Assertion,
   ApiProvider,
@@ -44,22 +41,6 @@ jest.mock('../../src/fetch', () => {
   return {
     ...actual,
     fetchWithRetries: jest.fn(actual.fetchWithRetries),
-  };
-});
-
-jest.mock('../../src/python/wrapper', () => {
-  const actual = jest.requireActual('../../src/python/wrapper');
-  return {
-    ...actual,
-    runPythonCode: jest.fn(actual.runPythonCode),
-  };
-});
-
-jest.mock('../../src/python/pythonUtils', () => {
-  const actual = jest.requireActual('../../src/python/pythonUtils');
-  return {
-    ...actual,
-    runPython: jest.fn(actual.runPython),
   };
 });
 
@@ -580,23 +561,6 @@ describe('runAssertion', () => {
     value: 'output === "Expected output"',
   };
 
-  const javascriptMultilineStringAssertion: Assertion = {
-    type: 'javascript',
-    value: `
-      if (output === "Expected output") {
-        return {
-          pass: true,
-          score: 0.5,
-          reason: 'Assertion passed',
-        };
-      }
-      return {
-        pass: false,
-        score: 0,
-        reason: 'Assertion failed',
-      };`,
-  };
-
   const javascriptStringAssertionWithNumber: Assertion = {
     type: 'javascript',
     value: 'output.length * 10',
@@ -614,26 +578,6 @@ describe('runAssertion', () => {
     type: 'javascript',
     value: 'output.length * 10',
     threshold: 0.5,
-  };
-
-  const javascriptFunctionAssertion: Assertion = {
-    type: 'javascript',
-    value: async (output: string) => ({
-      pass: true,
-      score: 0.5,
-      reason: 'Assertion passed',
-      assertion: null,
-    }),
-  };
-
-  const javascriptFunctionFailAssertion: Assertion = {
-    type: 'javascript',
-    value: async (output: string) => ({
-      pass: false,
-      score: 0.5,
-      reason: 'Assertion failed',
-      assertion: null,
-    }),
   };
 
   it('should pass when the equality assertion passes', async () => {
@@ -1580,6 +1524,34 @@ describe('runAssertion', () => {
     });
   });
 
+  it('should disregard invalid inputs for assert index', async () => {
+    const output = 'Expected output';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: javascriptBooleanAssertionWithConfig,
+      test: {
+        assert: [
+          {
+            type: 'javascript',
+            value: 'output.length <= context.config.maximumOutputSize',
+            config: {
+              maximumOutputSize: 1,
+            },
+          } as Assertion,
+        ],
+      } as AtomicTestCase,
+      providerResponse: { output },
+      assertIndex: 45,
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1.0,
+      reason: 'Assertion passed',
+    });
+  });
+
   it('should fail when javascript returns an output string that is larger than the maximum size threshold', async () => {
     const output = 'Expected output with some extra characters';
 
@@ -1686,113 +1658,6 @@ describe('runAssertion', () => {
     expect(result).toMatchObject({
       pass: true,
       reason: 'Assertion passed',
-    });
-  });
-
-  it('should pass when javascript function assertion passes - with vars', async () => {
-    const output = 'Expected output';
-
-    const javascriptStringAssertionWithVars: Assertion = {
-      type: 'javascript',
-      value: 'output === "Expected output" && context.vars.foo === "bar"',
-    };
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: javascriptStringAssertionWithVars,
-      test: { vars: { foo: 'bar' } } as AtomicTestCase,
-      providerResponse: { output },
-    });
-    expect(result).toMatchObject({
-      pass: true,
-      reason: 'Assertion passed',
-    });
-  });
-
-  it('should fail when the javascript does not match vars', async () => {
-    const output = 'Expected output';
-
-    const javascriptStringAssertionWithVars: Assertion = {
-      type: 'javascript',
-      value: 'output === "Expected output" && context.vars.foo === "something else"',
-    };
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: javascriptStringAssertionWithVars,
-      test: { vars: { foo: 'bar' } } as AtomicTestCase,
-      providerResponse: { output },
-    });
-    expect(result).toMatchObject({
-      pass: false,
-      reason:
-        'Custom function returned false\noutput === "Expected output" && context.vars.foo === "something else"',
-    });
-  });
-
-  it('should pass when the function returns pass', async () => {
-    const output = 'Expected output';
-
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: javascriptFunctionAssertion,
-      test: {} as AtomicTestCase,
-      providerResponse: { output },
-    });
-    expect(result).toMatchObject({
-      pass: true,
-      score: 0.5,
-      reason: 'Assertion passed',
-    });
-  });
-
-  it('should fail when the function returns fail', async () => {
-    const output = 'Expected output';
-
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: javascriptFunctionFailAssertion,
-      test: {} as AtomicTestCase,
-      providerResponse: { output },
-    });
-    expect(result).toMatchObject({
-      pass: false,
-      score: 0.5,
-      reason: 'Assertion failed',
-    });
-  });
-
-  it('should pass when the multiline javascript assertion passes', async () => {
-    const output = 'Expected output';
-
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      assertion: javascriptMultilineStringAssertion,
-      test: {} as AtomicTestCase,
-      providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-    });
-    expect(result).toMatchObject({
-      pass: true,
-      reason: 'Assertion passed',
-    });
-  });
-
-  it('should pass when the multiline javascript assertion fails', async () => {
-    const output = 'Not the expected output';
-
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      assertion: javascriptMultilineStringAssertion,
-      test: {} as AtomicTestCase,
-      providerResponse: { output },
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-    });
-    expect(result).toMatchObject({
-      pass: false,
-      reason: 'Assertion failed',
     });
   });
 
@@ -2373,390 +2238,6 @@ describe('runAssertion', () => {
     });
   });
 
-  it.each([
-    [
-      'boolean',
-      jest.fn((output: string) => output === 'Expected output'),
-      true,
-      'Assertion passed',
-    ],
-    ['number', jest.fn((output: string) => output.length), true, 'Assertion passed'],
-    [
-      'GradingResult',
-      jest.fn((output: string) => ({ pass: true, score: 1, reason: 'Custom reason' })),
-      true,
-      'Custom reason',
-    ],
-    [
-      'boolean',
-      jest.fn((output: string) => output !== 'Expected output'),
-      false,
-      'Custom function returned false',
-    ],
-    ['number', jest.fn((output: string) => 0), false, 'Custom function returned false'],
-    [
-      'GradingResult',
-      jest.fn((output: string) => ({ pass: false, score: 0.1, reason: 'Custom reason' })),
-      false,
-      'Custom reason',
-    ],
-    [
-      'boolean Promise',
-      jest.fn((output: string) => Promise.resolve(true)),
-      true,
-      'Assertion passed',
-    ],
-  ])(
-    'should pass when the file:// assertion with .js file returns a %s',
-    async (type, mockFn, expectedPass, expectedReason) => {
-      const output = 'Expected output';
-
-      jest.doMock(path.resolve('/path/to/assert.js'), () => mockFn, { virtual: true });
-
-      const fileAssertion: Assertion = {
-        type: 'javascript',
-        value: 'file:///path/to/assert.js',
-      };
-
-      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
-      const providerResponse = { output };
-      const result: GradingResult = await runAssertion({
-        prompt: 'Some prompt',
-        provider,
-        assertion: fileAssertion,
-        test: {} as AtomicTestCase,
-        providerResponse,
-      });
-
-      expect(mockFn).toHaveBeenCalledWith('Expected output', {
-        prompt: 'Some prompt',
-        vars: {},
-        test: {},
-        provider,
-        providerResponse,
-      });
-      expect(result).toMatchObject({
-        pass: expectedPass,
-        reason: expect.stringContaining(expectedReason),
-      });
-    },
-  );
-
-  it.each([
-    [
-      'boolean',
-      jest.fn((output: string) => output === 'Expected output'),
-      true,
-      'Assertion passed',
-    ],
-    ['number', jest.fn((output: string) => output.length), true, 'Assertion passed'],
-    [
-      'GradingResult',
-      jest.fn((output: string) => ({ pass: true, score: 1, reason: 'Custom reason' })),
-      true,
-      'Custom reason',
-    ],
-    [
-      'boolean',
-      jest.fn((output: string) => output !== 'Expected output'),
-      false,
-      'Custom function returned false',
-    ],
-    ['number', jest.fn((output: string) => 0), false, 'Custom function returned false'],
-    [
-      'GradingResult',
-      jest.fn((output: string) => ({ pass: false, score: 0.1, reason: 'Custom reason' })),
-      false,
-      'Custom reason',
-    ],
-    [
-      'boolean Promise',
-      jest.fn((output: string) => Promise.resolve(true)),
-      true,
-      'Assertion passed',
-    ],
-  ])(
-    'should pass when assertion is a package path',
-    async (type, mockFn, expectedPass, expectedReason) => {
-      const output = 'Expected output';
-
-      const require = createRequire('');
-      jest.spyOn(require, 'resolve').mockReturnValueOnce('/node_modules/@promptfoo/fake/index.js');
-      jest.doMock(
-        path.resolve('/node_modules/@promptfoo/fake/index.js'),
-        () => {
-          return {
-            assertionFunction: mockFn,
-          };
-        },
-        { virtual: true },
-      );
-
-      const fileAssertion: Assertion = {
-        type: 'javascript',
-        value: 'package:@promptfoo/fake:assertionFunction',
-      };
-
-      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
-      const providerResponse = { output };
-      const result: GradingResult = await runAssertion({
-        prompt: 'Some prompt',
-        provider,
-        assertion: fileAssertion,
-        test: {} as AtomicTestCase,
-        providerResponse,
-      });
-
-      expect(mockFn).toHaveBeenCalledWith('Expected output', {
-        prompt: 'Some prompt',
-        vars: {},
-        test: {},
-        provider,
-        providerResponse,
-      });
-      expect(result).toMatchObject({
-        pass: expectedPass,
-        reason: expect.stringContaining(expectedReason),
-      });
-    },
-  );
-
-  it('should resolve js paths relative to the configuration file', async () => {
-    const output = 'Expected output';
-    const mockFn = jest.fn((output: string) => output === 'Expected output');
-
-    jest.doMock(path.resolve('/base/path/path/to/assert.js'), () => mockFn, { virtual: true });
-
-    const fileAssertion: Assertion = {
-      type: 'javascript',
-      value: 'file://./path/to/assert.js',
-    };
-
-    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
-    const providerResponse = { output };
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider,
-      assertion: fileAssertion,
-      test: {} as AtomicTestCase,
-      providerResponse,
-    });
-
-    expect(mockFn).toHaveBeenCalledWith('Expected output', {
-      prompt: 'Some prompt',
-      vars: {},
-      test: {},
-      provider,
-      providerResponse,
-    });
-    expect(result).toMatchObject({
-      pass: true,
-      reason: 'Assertion passed',
-    });
-  });
-
-  it('should handle output strings with both single and double quotes correctly in python assertion', async () => {
-    const expectedPythonValue = '0.5';
-
-    jest.mocked(runPythonCode).mockResolvedValueOnce(expectedPythonValue);
-
-    const output =
-      'This is a string with "double quotes"\n and \'single quotes\' \n\n and some \n\t newlines.';
-
-    const pythonAssertion: Assertion = {
-      type: 'python',
-      value: expectedPythonValue,
-    };
-
-    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
-    const providerResponse = { output };
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider,
-      assertion: pythonAssertion,
-      test: {} as AtomicTestCase,
-      providerResponse,
-    });
-
-    expect(runPythonCode).toHaveBeenCalledTimes(1);
-    expect(runPythonCode).toHaveBeenCalledWith(expect.anything(), 'main', [
-      output,
-      { prompt: 'Some prompt', test: {}, vars: {}, provider, providerResponse },
-    ]);
-
-    expect(result).toMatchObject({
-      pass: true,
-      reason: 'Assertion passed',
-      score: Number(expectedPythonValue),
-    });
-  });
-
-  it.each([
-    ['boolean', false, 0, 'Python code returned false', false, undefined],
-    ['number', 0, 0, 'Python code returned false', false, undefined],
-    [
-      'GradingResult',
-      `{"pass": false, "score": 0, "reason": "Custom error"}`,
-      0,
-      'Custom error',
-      false,
-      undefined,
-    ],
-    ['boolean', true, 1, 'Assertion passed', true, undefined],
-    ['number', 1, 1, 'Assertion passed', true, undefined],
-    [
-      'GradingResult',
-      `{"pass": true, "score": 1, "reason": "Custom success"}`,
-      1,
-      'Custom success',
-      true,
-      undefined,
-    ],
-    [
-      'GradingResult',
-      // This score is less than the assertion threshold in the test
-      `{"pass": true, "score": 0.4, "reason": "Foo bar"}`,
-      0.4,
-      'Python score 0.4 is less than threshold 0.5',
-      false,
-      0.5,
-    ],
-  ])(
-    'should handle inline return type %s with return value: %p',
-    async (type, returnValue, expectedScore, expectedReason, expectedPass, threshold) => {
-      const output =
-        'This is a string with "double quotes"\n and \'single quotes\' \n\n and some \n\t newlines.';
-
-      let resolvedValue;
-      if (type === 'GradingResult') {
-        resolvedValue = JSON.parse(returnValue as string);
-      } else {
-        resolvedValue = returnValue;
-      }
-
-      const pythonAssertion: Assertion = {
-        type: 'python',
-        value: returnValue.toString(),
-        threshold,
-      };
-
-      jest.mocked(runPythonCode).mockResolvedValueOnce(resolvedValue);
-
-      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
-      const providerResponse = { output };
-      const result: GradingResult = await runAssertion({
-        prompt: 'Some prompt',
-        provider,
-        assertion: pythonAssertion,
-        test: {} as AtomicTestCase,
-        providerResponse,
-      });
-
-      expect(runPythonCode).toHaveBeenCalledTimes(1);
-      expect(runPythonCode).toHaveBeenCalledWith(expect.anything(), 'main', [
-        output,
-        { prompt: 'Some prompt', test: {}, vars: {}, provider, providerResponse },
-      ]);
-
-      expect(result).toMatchObject({
-        pass: expectedPass,
-        reason: expect.stringMatching(expectedReason),
-        score: expectedScore,
-      });
-    },
-  );
-
-  it.each([
-    ['boolean', 'True', true, 'Assertion passed'],
-    ['number', '0.5', true, 'Assertion passed'],
-    ['boolean', true, true, 'Assertion passed'],
-    ['number', 0.5, true, 'Assertion passed'],
-    [
-      'GradingResult',
-      '{"pass": true, "score": 1, "reason": "Custom reason"}',
-      true,
-      'Custom reason',
-    ],
-    ['boolean', 'False', false, 'Python code returned false'],
-    ['number', '0', false, 'Python code returned false'],
-    [
-      'GradingResult',
-      '{"pass": false, "score": 0, "reason": "Custom reason"}',
-      false,
-      'Custom reason',
-    ],
-  ])(
-    'should handle when the file:// assertion with .py file returns a %s',
-    async (type, pythonOutput, expectedPass, expectedReason) => {
-      const output = 'Expected output';
-      jest.mocked(runPython).mockResolvedValueOnce(pythonOutput as string | object);
-
-      const fileAssertion: Assertion = {
-        type: 'python',
-        value: 'file:///path/to/assert.py',
-      };
-
-      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
-      const providerResponse = { output };
-      const result: GradingResult = await runAssertion({
-        prompt: 'Some prompt that includes "double quotes" and \'single quotes\'',
-        provider,
-        assertion: fileAssertion,
-        test: {} as AtomicTestCase,
-        providerResponse,
-      });
-
-      expect(runPython).toHaveBeenCalledWith(path.resolve('/path/to/assert.py'), 'get_assert', [
-        output,
-        {
-          prompt: 'Some prompt that includes "double quotes" and \'single quotes\'',
-          vars: {},
-          test: {},
-          provider,
-          providerResponse,
-        },
-      ]);
-
-      expect(result).toMatchObject({
-        pass: expectedPass,
-        reason: expect.stringContaining(expectedReason),
-      });
-      expect(runPython).toHaveBeenCalledTimes(1);
-    },
-  );
-
-  it('should handle when python file assertions throw an error', async () => {
-    const output = 'Expected output';
-    jest
-      .mocked(runPython)
-      .mockRejectedValue(
-        new Error('The Python script `call_api` function must return a dict with an `output`'),
-      );
-    const fileAssertion: Assertion = {
-      type: 'python',
-      value: 'file:///path/to/assert.py',
-    };
-    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
-    const providerResponse = { output };
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt that includes "double quotes" and \'single quotes\'',
-      provider,
-      assertion: fileAssertion,
-      test: {} as AtomicTestCase,
-      providerResponse,
-    });
-    expect(runPython).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({
-      assertion: {
-        type: 'python',
-        value: 'file:///path/to/assert.py',
-      },
-      pass: false,
-      reason: 'The Python script `call_api` function must return a dict with an `output`',
-      score: 0,
-    });
-  });
-
   describe('latency assertion', () => {
     it('should pass when the latency assertion passes', async () => {
       const output = 'Expected output';
@@ -3017,162 +2498,6 @@ describe('runAssertion', () => {
       expect(result).toMatchObject({
         pass: false,
         reason: 'Cost 0.0020 is greater than threshold 0.001',
-      });
-    });
-  });
-
-  describe('is-valid-openai-function-call assertion', () => {
-    it('should pass for a valid function call with correct arguments', async () => {
-      const output = { arguments: '{"x": 10, "y": 20}', name: 'add' };
-
-      const provider = new OpenAiChatCompletionProvider('foo', {
-        config: {
-          functions: [
-            {
-              name: 'add',
-              parameters: {
-                type: 'object',
-                properties: {
-                  x: { type: 'number' },
-                  y: { type: 'number' },
-                },
-                required: ['x', 'y'],
-              },
-            },
-          ],
-        },
-      });
-      const providerResponse = { output };
-      const result: GradingResult = await runAssertion({
-        prompt: 'Some prompt',
-        provider,
-        assertion: {
-          type: 'is-valid-openai-function-call',
-        },
-        test: {} as AtomicTestCase,
-        providerResponse,
-      });
-
-      expect(result).toMatchObject({
-        pass: true,
-        reason: 'Assertion passed',
-      });
-    });
-
-    it('should fail for an invalid function call with incorrect arguments', async () => {
-      const output = { arguments: '{"x": "10", "y": 20}', name: 'add' };
-
-      const result: GradingResult = await runAssertion({
-        prompt: 'Some prompt',
-        provider: new OpenAiChatCompletionProvider('foo', {
-          config: {
-            functions: [
-              {
-                name: 'add',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    x: { type: 'number' },
-                    y: { type: 'number' },
-                  },
-                  required: ['x', 'y'],
-                },
-              },
-            ],
-          },
-        }),
-        assertion: {
-          type: 'is-valid-openai-function-call',
-        },
-        test: {} as AtomicTestCase,
-        providerResponse: { output },
-      });
-
-      expect(result).toMatchObject({
-        pass: false,
-        reason: expect.stringContaining('Call to "add" does not match schema'),
-      });
-    });
-  });
-
-  describe('is-valid-openai-tools-call assertion', () => {
-    it('should pass for a valid tools call with correct arguments', async () => {
-      const output = [
-        { type: 'function', function: { arguments: '{"x": 10, "y": 20}', name: 'add' } },
-      ];
-
-      const result: GradingResult = await runAssertion({
-        prompt: 'Some prompt',
-        provider: new OpenAiChatCompletionProvider('foo', {
-          config: {
-            tools: [
-              {
-                type: 'function',
-                function: {
-                  name: 'add',
-                  parameters: {
-                    type: 'object',
-                    properties: {
-                      x: { type: 'number' },
-                      y: { type: 'number' },
-                    },
-                    required: ['x', 'y'],
-                  },
-                },
-              },
-            ],
-          },
-        }),
-        assertion: {
-          type: 'is-valid-openai-tools-call',
-        },
-        test: {} as AtomicTestCase,
-        providerResponse: { output },
-      });
-
-      expect(result).toMatchObject({
-        pass: true,
-        reason: 'Assertion passed',
-      });
-    });
-
-    it('should fail for an invalid tools call with incorrect arguments', async () => {
-      const output = [
-        { type: 'function', function: { arguments: '{"x": "foobar", "y": 20}', name: 'add' } },
-      ];
-
-      const result: GradingResult = await runAssertion({
-        prompt: 'Some prompt',
-        provider: new OpenAiChatCompletionProvider('foo', {
-          config: {
-            tools: [
-              {
-                type: 'function',
-                function: {
-                  name: 'add',
-                  parameters: {
-                    type: 'object',
-                    properties: {
-                      x: { type: 'number' },
-                      y: { type: 'number' },
-                    },
-                    required: ['x', 'y'],
-                  },
-                },
-              },
-            ],
-          },
-        }),
-        assertion: {
-          type: 'is-valid-openai-tools-call',
-        },
-        test: {} as AtomicTestCase,
-        providerResponse: { output },
-      });
-
-      expect(result).toMatchObject({
-        pass: false,
-        reason: expect.stringContaining('Call to "add" does not match schema'),
       });
     });
   });

@@ -1,4 +1,3 @@
-import invariant from 'tiny-invariant';
 import assertions from './assertions';
 import * as cache from './cache';
 import { evaluate as doEvaluate } from './evaluator';
@@ -25,6 +24,7 @@ import type {
   Scenario,
 } from './types';
 import { readFilters, writeMultipleOutputs, writeOutput } from './util';
+import invariant from './util/invariant';
 import { PromptSchema } from './validators/prompts';
 
 export * from './types';
@@ -76,9 +76,27 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   };
 
   // Resolve nested providers
+  if (constructedTestSuite.defaultTest?.options?.provider) {
+    if (typeof constructedTestSuite.defaultTest.options.provider === 'function') {
+      constructedTestSuite.defaultTest.options.provider = await loadApiProvider(
+        constructedTestSuite.defaultTest.options.provider,
+      );
+    } else if (typeof constructedTestSuite.defaultTest.options.provider === 'object') {
+      const casted = constructedTestSuite.defaultTest.options.provider as ProviderOptions;
+      invariant(casted.id, 'Provider object must have an id');
+      constructedTestSuite.defaultTest.options.provider = await loadApiProvider(casted.id, {
+        options: casted,
+      });
+    }
+  }
+
   for (const test of constructedTestSuite.tests || []) {
     if (test.options?.provider && typeof test.options.provider === 'function') {
       test.options.provider = await loadApiProvider(test.options.provider);
+    } else if (test.options?.provider && typeof test.options.provider === 'object') {
+      const casted = test.options.provider as ProviderOptions;
+      invariant(casted.id, 'Provider object must have an id');
+      test.options.provider = await loadApiProvider(casted.id, { options: casted });
     }
     if (test.assert) {
       for (const assertion of test.assert) {

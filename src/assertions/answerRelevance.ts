@@ -1,6 +1,6 @@
-import invariant from 'tiny-invariant';
 import { matchesAnswerRelevance } from '../matchers';
 import type { AssertionParams, GradingResult } from '../types';
+import invariant from '../util/invariant';
 
 export const handleAnswerRelevance = async ({
   assertion,

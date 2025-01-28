@@ -12,7 +12,7 @@ Add additional information to the `Purpose` property of your config file.
 
 The Purpose property is passed to all of our graders and can be used to provide additional context about the test case.
 
-#### For example:
+#### For example
 
 We are testing an internal RAG chatbot. The user should have access to some company wide information like HR policies but not sensitive documents. Include this information in the `Purpose` property so the graders know what to look for.
 

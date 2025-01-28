@@ -69,7 +69,7 @@ interface BAMModerations {
       };
 }
 
-function convertResponse(response: TextGenerationCreateOutput): ProviderResponse {
+export function convertResponse(response: TextGenerationCreateOutput): ProviderResponse {
   const totalGeneratedTokens = response.results.reduce(
     (acc, result) => acc + result.generated_token_count,
     0,

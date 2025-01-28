@@ -1,7 +1,8 @@
+import { fetchWithProxy } from './fetch';
 import logger from './logger';
 import type { CsvRow } from './types';
 
-async function checkGoogleSheetAccess(url: string) {
+export async function checkGoogleSheetAccess(url: string) {
   try {
     const response = await fetch(url);
     if (response.ok) {
@@ -10,14 +11,13 @@ async function checkGoogleSheetAccess(url: string) {
       return { public: false, status: response.status };
     }
   } catch (error) {
-    logger.error('Error checking sheet access:', error);
+    logger.error(`Error checking sheet access: ${error}`);
     return { public: false };
   }
 }
 
 export async function fetchCsvFromGoogleSheetUnauthenticated(url: string): Promise<CsvRow[]> {
   const { parse: parseCsv } = await import('csv-parse/sync');
-  const { fetchWithProxy } = await import('./fetch');
 
   const gid = new URL(url).searchParams.get('gid');
   const csvUrl = `${url.replace(/\/edit.*$/, '/export')}?format=csv${gid ? `&gid=${gid}` : ''}`;
@@ -95,7 +95,37 @@ export async function writeCsvToGoogleSheet(rows: CsvRow[], url: string): Promis
     throw new Error(`Invalid Google Sheets URL: ${url}`);
   }
   const spreadsheetId = match[1];
-  const range = 'A1:ZZZ';
+
+  let range = 'A1:ZZZ';
+  const gid = Number(new URL(url).searchParams.get('gid'));
+  if (gid) {
+    const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId, auth });
+    const sheetName = spreadsheet.data.sheets?.find((sheet) => sheet.properties?.sheetId === gid)
+      ?.properties?.title;
+    if (!sheetName) {
+      throw new Error(`Sheet not found for gid: ${gid}`);
+    }
+    range = `${sheetName}!${range}`;
+  } else {
+    // Create a new sheet if no gid is provided
+    const newSheetTitle = `Sheet${Date.now()}`;
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      auth,
+      requestBody: {
+        requests: [
+          {
+            addSheet: {
+              properties: {
+                title: newSheetTitle,
+              },
+            },
+          },
+        ],
+      },
+    });
+    range = `${newSheetTitle}!${range}`;
+  }
 
   // Extract headers from the first row
   const headers = Object.keys(rows[0]);

@@ -62,42 +62,41 @@ export default function DatasetDialog({ openDialog, handleClose, testCase }: Dat
             {testCase?.prompts
               ?.slice((page - 1) * rowsPerPage, page * rowsPerPage)
               .sort((a, b) => b.evalId.localeCompare(a.evalId))
-              .map((promptData, index) => (
-                <TableRow key={index} hover>
-                  <TableCell>
-                    <Link to={`/eval/?evalId=${promptData.evalId}`}>{promptData.evalId}</Link>
-                  </TableCell>
-                  <TableCell style={{ minWidth: '8em' }}>
-                    <Link to={`/prompts/?id=${promptData.id}`}>{promptData.id.slice(0, 6)}</Link>
-                  </TableCell>
-                  <TableCell>
-                    {typeof promptData.prompt.metrics?.score === 'number'
-                      ? promptData.prompt.metrics.score.toFixed(2)
-                      : '-'}
-                  </TableCell>
-                  <TableCell>
-                    {typeof promptData.prompt.metrics?.testPassCount === 'number' &&
-                    typeof promptData.prompt.metrics?.testFailCount === 'number' &&
-                    promptData.prompt.metrics.testPassCount +
-                      promptData.prompt.metrics.testFailCount >
-                      0
-                      ? (
-                          (promptData.prompt.metrics.testPassCount /
-                            (promptData.prompt.metrics.testPassCount +
-                              promptData.prompt.metrics.testFailCount)) *
-                          100.0
-                        ).toFixed(2) + '%'
-                      : '-'}
-                  </TableCell>
-                  <TableCell>{promptData.prompt.metrics?.testPassCount ?? '-'}</TableCell>
-                  <TableCell>{promptData.prompt.metrics?.testFailCount ?? '-'}</TableCell>
-                  <TableCell>
-                    {promptData.prompt.raw.length > 250
-                      ? promptData.prompt.raw.slice(0, 250) + '...'
-                      : promptData.prompt.raw}
-                  </TableCell>
-                </TableRow>
-              ))}
+              .map((promptData, index) => {
+                const testPassCount = promptData.prompt.metrics?.testPassCount ?? 0;
+                const testFailCount = promptData.prompt.metrics?.testFailCount ?? 0;
+                const testErrorCount = promptData.prompt.metrics?.testErrorCount ?? 0;
+                return (
+                  <TableRow key={index} hover>
+                    <TableCell>
+                      <Link to={`/eval/?evalId=${promptData.evalId}`}>{promptData.evalId}</Link>
+                    </TableCell>
+                    <TableCell style={{ minWidth: '8em' }}>
+                      <Link to={`/prompts/?id=${promptData.id}`}>{promptData.id.slice(0, 6)}</Link>
+                    </TableCell>
+                    <TableCell>
+                      {typeof promptData.prompt.metrics?.score === 'number'
+                        ? promptData.prompt.metrics.score.toFixed(2)
+                        : '-'}
+                    </TableCell>
+                    <TableCell>
+                      {testPassCount + testFailCount + testErrorCount > 0
+                        ? (
+                            (testPassCount / (testPassCount + testFailCount + testErrorCount)) *
+                            100.0
+                          ).toFixed(2) + '%'
+                        : '-'}
+                    </TableCell>
+                    <TableCell>{testPassCount}</TableCell>
+                    <TableCell>{testFailCount}</TableCell>
+                    <TableCell>
+                      {promptData.prompt.raw.length > 250
+                        ? promptData.prompt.raw.slice(0, 250) + '...'
+                        : promptData.prompt.raw}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
           </TableBody>
         </Table>
         {Math.ceil((testCase?.prompts?.length || 0) / rowsPerPage) > 1 && (

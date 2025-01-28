@@ -4,14 +4,13 @@ import type { Command } from 'commander';
 import dedent from 'dedent';
 import fs from 'fs';
 import * as path from 'path';
-import invariant from 'tiny-invariant';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { getEnvFloat, getEnvInt } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
-import { promptForEmailUnverified } from '../globalConfig/accounts';
+import { checkEmailStatusOrExit, promptForEmailUnverified } from '../globalConfig/accounts';
 import logger, { getLogLevel, setLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
@@ -32,6 +31,7 @@ import { isRunningUnderNpx, maybeLoadFromExternalFile } from '../util';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
+import invariant from '../util/invariant';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
 
@@ -63,7 +63,7 @@ export async function doEval(
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
   evaluateOptions: EvaluateOptions,
-) {
+): Promise<Eval> {
   setupEnv(cmdObj.envPath);
   if (cmdObj.verbose) {
     setLogLevel('debug');
@@ -134,9 +134,10 @@ export async function doEval(
     }
 
     testSuite.tests = await filterTests(testSuite, {
-      firstN: cmdObj.filterFirstN,
-      pattern: cmdObj.filterPattern,
       failing: cmdObj.filterFailing,
+      firstN: cmdObj.filterFirstN,
+      metadata: cmdObj.filterMetadata,
+      pattern: cmdObj.filterPattern,
       sample: cmdObj.filterSample,
     });
 
@@ -148,6 +149,7 @@ export async function doEval(
       testSuite.tests.length > 0
     ) {
       await promptForEmailUnverified();
+      await checkEmailStatusOrExit();
     }
 
     testSuite.providers = filterProviders(
@@ -203,9 +205,10 @@ export async function doEval(
       : new Eval(config);
 
     // Run the evaluation!!!!!!
-    await evaluate(testSuite, evalRecord, {
+    const ret = await evaluate(testSuite, evalRecord, {
       ...options,
       eventSource: 'cli',
+      abortSignal: evaluateOptions.abortSignal,
     });
 
     const shareableUrl =
@@ -213,12 +216,18 @@ export async function doEval(
 
     let successes = 0;
     let failures = 0;
+    let errors = 0;
     const tokenUsage = {
       total: 0,
       prompt: 0,
       completion: 0,
       cached: 0,
       numRequests: 0,
+      completionDetails: {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
     };
 
     // Calculate our total successes and failures
@@ -229,13 +238,24 @@ export async function doEval(
       if (prompt.metrics?.testFailCount) {
         failures += prompt.metrics.testFailCount;
       }
+      if (prompt.metrics?.testErrorCount) {
+        errors += prompt.metrics.testErrorCount;
+      }
       tokenUsage.total += prompt.metrics?.tokenUsage?.total || 0;
       tokenUsage.prompt += prompt.metrics?.tokenUsage?.prompt || 0;
       tokenUsage.completion += prompt.metrics?.tokenUsage?.completion || 0;
       tokenUsage.cached += prompt.metrics?.tokenUsage?.cached || 0;
       tokenUsage.numRequests += prompt.metrics?.tokenUsage?.numRequests || 0;
+      if (prompt.metrics?.tokenUsage?.completionDetails) {
+        tokenUsage.completionDetails.reasoning +=
+          prompt.metrics.tokenUsage.completionDetails.reasoning || 0;
+        tokenUsage.completionDetails.acceptedPrediction +=
+          prompt.metrics.tokenUsage.completionDetails.acceptedPrediction || 0;
+        tokenUsage.completionDetails.rejectedPrediction +=
+          prompt.metrics.tokenUsage.completionDetails.rejectedPrediction || 0;
+      }
     }
-    const totalTests = successes + failures;
+    const totalTests = successes + failures + errors;
     const passRate = (successes / totalTests) * 100;
 
     if (cmdObj.table && getLogLevel() !== 'debug' && totalTests < 500) {
@@ -297,12 +317,15 @@ export async function doEval(
 
     logger.info(chalk.green.bold(`Successes: ${successes}`));
     logger.info(chalk.red.bold(`Failures: ${failures}`));
+    if (!Number.isNaN(errors)) {
+      logger.info(chalk.red.bold(`Errors: ${errors}`));
+    }
     if (!Number.isNaN(passRate)) {
       logger.info(chalk.blue.bold(`Pass Rate: ${passRate.toFixed(2)}%`));
     }
     if (tokenUsage.total > 0) {
       logger.info(
-        `${isRedteam ? `Total probes: ${tokenUsage.numRequests.toLocaleString()} / ` : ''}Total tokens: ${tokenUsage.total.toLocaleString()} / Prompt tokens: ${tokenUsage.prompt.toLocaleString()} / Completion tokens: ${tokenUsage.completion.toLocaleString()} / Cached tokens: ${tokenUsage.cached.toLocaleString()}`,
+        `${isRedteam ? `Total probes: ${tokenUsage.numRequests.toLocaleString()} / ` : ''}Total tokens: ${tokenUsage.total.toLocaleString()} / Prompt tokens: ${tokenUsage.prompt.toLocaleString()} / Completion tokens: ${tokenUsage.completion.toLocaleString()} / Cached tokens: ${tokenUsage.cached.toLocaleString()}${tokenUsage.completionDetails?.reasoning ? ` / Reasoning tokens: ${tokenUsage.completionDetails.reasoning.toLocaleString()}` : ''}`,
       );
     }
 
@@ -319,7 +342,8 @@ export async function doEval(
         const configPaths = (cmdObj.config || [defaultConfigPath]).filter(Boolean) as string[];
         if (!configPaths.length) {
           logger.error('Could not locate config file(s) to watch');
-          process.exit(1);
+          process.exitCode = 1;
+          return ret;
         }
         const basePath = path.dirname(configPaths[0]);
         const promptPaths = Array.isArray(config.prompts)
@@ -393,7 +417,8 @@ export async function doEval(
           );
         }
         logger.info('Done.');
-        process.exit(Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100);
+        process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
+        return ret;
       } else {
         logger.info('Done.');
       }
@@ -401,9 +426,10 @@ export async function doEval(
     if (testSuite.redteam) {
       showRedteamProviderLabelMissingWarning(testSuite);
     }
+    return ret;
   };
 
-  await runEvaluation(true /* initialization */);
+  return await runEvaluation(true /* initialization */);
 }
 
 export function evalCommand(
@@ -505,6 +531,11 @@ export function evalCommand(
     )
     .option('--filter-sample <number>', 'Only run a random sample of N tests')
     .option('--filter-failing <path>', 'Path to json output file')
+    .option('--filter-errors-only <path>', 'Path to json output file with error tests')
+    .option(
+      '--filter-metadata <key=value>',
+      'Only run tests whose metadata matches the key=value pair (e.g. --filter-metadata pluginId=debug-access)',
+    )
 
     // Output configuration
     .option(
@@ -573,7 +604,8 @@ export function evalCommand(
           ${chalk.green(`${runCommand} -j 1`)}
         `),
         );
-        process.exit(2);
+        process.exitCode = 2;
+        return;
       }
 
       if (validatedOpts.remote) {

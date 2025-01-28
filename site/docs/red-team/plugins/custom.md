@@ -1,10 +1,12 @@
 ---
-sidebar_label: Custom Plugin
+sidebar_label: Custom Topics
 ---
 
 # Custom Plugin
 
-The Custom Plugin allows you to define your own red teaming plugin with custom generator and grader logic to create specialized tests tailored to your specific AI system and security requirements.
+The Custom Plugin enables you to create specialized security tests for your AI system by defining your own red teaming functionality.
+
+By implementing custom generator and grader components, you can craft targeted test scenarios that address your unique requirements.
 
 ## Configuration
 
@@ -19,8 +21,8 @@ redteam:
 The custom plugin YAML file should have the following structure:
 
 ```yaml
-generator: Your custom generator logic here
-grader: Your custom grader logic here
+generator: Your custom generator prompt here
+grader: Your custom grader prompt here
 ```
 
 The Custom Plugin loads the plugin definition from the specified YAML file and uses it to generate test cases and grade responses.

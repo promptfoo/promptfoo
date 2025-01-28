@@ -1,11 +1,12 @@
 import async from 'async';
 import { SingleBar, Presets } from 'cli-progress';
 import dedent from 'dedent';
-import invariant from 'tiny-invariant';
 import { fetchWithCache } from '../../cache';
+import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { TestCase } from '../../types';
+import invariant from '../../util/invariant';
 import { redteamProviderManager } from '../providers/shared';
 import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration';
 
@@ -52,6 +53,7 @@ export async function generateMathPrompt(
         testCases: batch,
         injectVar,
         config,
+        email: getUserEmail(),
       };
 
       const { data } = await fetchWithCache(

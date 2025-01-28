@@ -21,10 +21,10 @@ Configure the Groq provider in your promptfoo configuration file:
 
 ```yaml
 providers:
-  - id: groq:llama3-groq-70b-8192-tool-use-preview
+  - id: groq:llama-3.3-70b-versatile
     config:
       temperature: 0.7
-      max_tokens: 100
+      max_completion_tokens: 100
       tools:
         - type: function
           function:
@@ -49,7 +49,7 @@ providers:
 Key configuration options:
 
 - `temperature`: Controls randomness in output (0.0 to 1.0)
-- `max_tokens`: Maximum number of tokens in the response
+- `max_completion_tokens`: Maximum number of tokens to generate in the response
 - `tools`: Defines functions the model can use (for tool use/function calling)
 - `tool_choice`: Specifies how the model should choose tools ('auto', 'none', or a specific tool)
 
@@ -57,17 +57,23 @@ Key configuration options:
 
 Groq supports a variety of models, including:
 
-- `gemma-7b-it`
-- `gemma2-9b-it`
-- `llama-3.1-405b-reasoning`
-- `llama-3.1-70b-versatile`
-- `llama-3.1-8b-instant`
-- `llama2-70b-4096`
-- `llama3-70b-8192`
-- `llama3-8b-8192`
-- `llama3-groq-70b-8192-tool-use-preview` (recommended for tool use)
-- `llama3-groq-8b-8192-tool-use-preview` (recommended for tool use)
-- `mixtral-8x7b-32768`
+### Production Models
+
+- `gemma2-9b-it` - Google's 9B parameter instruction-tuned model (8K context)
+- `llama-3.3-70b-versatile` - Meta's 70B parameter model with 128K context window
+- `llama-3.1-8b-instant` - Meta's 8B parameter model with 128K context window
+- `llama-guard-3-8b` - Meta's 8B parameter safety model (8K context)
+- `llama3-70b-8192` - Meta's 70B parameter model with 8K context window
+- `llama3-8b-8192` - Meta's 8B parameter model with 8K context window
+- `mixtral-8x7b-32768` - Mistral's model with 32K context window
+
+### Preview Models
+
+- `llama-3.3-70b-specdec` - Meta's 70B parameter model for specialized tasks (8K context)
+- `llama-3.2-1b-preview` - Meta's 1B parameter model with 128K context window
+- `llama-3.2-3b-preview` - Meta's 3B parameter model with 128K context window
+- `llama-3.2-11b-vision-preview` - Meta's 11B parameter multimodal model
+- `llama-3.2-90b-vision-preview` - Meta's 90B parameter multimodal model
 
 For the most up-to-date list and detailed information about each model, refer to the [Groq Console documentation](https://console.groq.com/docs/models).
 
@@ -77,7 +83,7 @@ Specify the Groq provider in your test configuration:
 
 ```yaml
 providers:
-  - id: groq:llama3-groq-70b-8192-tool-use-preview
+  - id: groq:llama-3.3-70b-versatile
     config:
       temperature: 0.5
       max_tokens: 150
@@ -98,7 +104,7 @@ Groq supports tool use, allowing models to call predefined functions. Configure 
 
 ```yaml
 providers:
-  - id: groq:llama3-groq-70b-8192-tool-use-preview
+  - id: groq:llama-3.3-70b-versatile
     config:
       tools:
         - type: function
@@ -121,7 +127,7 @@ providers:
       tool_choice: auto
 ```
 
-For complex tools or ambiguous queries, use the `llama3-groq-70b-8192-tool-use-preview` model.
+For complex tools or ambiguous queries, use the `llama-3.3-70b-versatile` model.
 
 ## Additional Capabilities
 

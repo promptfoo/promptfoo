@@ -21,9 +21,10 @@ You can customize the behavior with these options:
 
 ```yaml
 strategies:
-  - jailbreak:composite:
-    modelFamily: gpt # optimize for one of: gpt, claude, llama
-    n: 5 # number of prompt variations to generate
+  - id: jailbreak:composite
+    config:
+      modelFamily: gpt # optimize for one of: gpt, claude, llama
+      n: 5 # number of prompt variations to generate
 ```
 
 ## How It Works
@@ -86,6 +87,7 @@ The composite approach is often more effective than single techniques because:
 
 For more information about LLM vulnerabilities and red teaming strategies, see:
 
-- [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types/)
 - [Jailbreak Iterative](/docs/red-team/strategies/iterative/)
 - [Jailbreak Tree Strategy](/docs/red-team/strategies/tree/)
+
+For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
