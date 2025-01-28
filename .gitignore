@@ -21,6 +21,8 @@ __pycache__
 # examples related
 examples/**/package-lock.json
 examples/redteam-dalle/images
+examples/harmbench/data
+examples/harmbench/.python-version
 
 .vite
 *.tsbuildinfo
