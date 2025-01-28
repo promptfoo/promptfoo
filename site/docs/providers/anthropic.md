@@ -20,6 +20,32 @@ Example of setting the environment variable:
 export ANTHROPIC_API_KEY=your_api_key_here
 ```
 
+## Models
+
+The `anthropic` provider supports the following models via the messages API:
+
+| Model ID                                                                   | Description                      |
+| -------------------------------------------------------------------------- | -------------------------------- |
+| `anthropic:messages:claude-3-5-sonnet-20241022` (claude-3-5-sonnet-latest) | Latest Claude 3.5 Sonnet model   |
+| `anthropic:messages:claude-3-5-sonnet-20240620`                            | Previous Claude 3.5 Sonnet model |
+| `anthropic:messages:claude-3-5-haiku-20241022` (claude-3-5-haiku-latest)   | Latest Claude 3.5 Haiku model    |
+| `anthropic:messages:claude-3-5-haiku-20241022` (claude-3-5-haiku-latest)   | Latest Claude 3.5 Haiku model    |
+| `anthropic:messages:claude-3-opus-20240229` (claude-3-opus-latest)         | Claude 3 Opus model              |
+| `anthropic:messages:claude-3-sonnet-20240229`                              | Claude 3 Sonnet model            |
+| `anthropic:messages:claude-3-haiku-20240307`                               | Claude 3 Haiku model             |
+
+### Cross-Platform Model Availability
+
+Claude models are available across multiple platforms. Here's how the model names map across different providers:
+
+| Model             | Anthropic API                                         | AWS Bedrock ([documentation](/docs/providers/aws-bedrock)) | GCP Vertex AI ([documentation](/docs/providers/vertex)) |
+| ----------------- | ----------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------- |
+| Claude 3.5 Sonnet | claude-3-5-sonnet-20241022 (claude-3-5-sonnet-latest) | anthropic.claude-3-5-sonnet-20241022-v2:0                  | claude-3-5-sonnet-v2@20241022                           |
+| Claude 3.5 Haiku  | claude-3-5-haiku-20241022 (claude-3-5-haiku-latest)   | anthropic.claude-3-5-haiku-20241022-v1:0                   | claude-3-5-haiku@20241022                               |
+| Claude 3 Opus     | claude-3-opus-20240229 (claude-3-opus-latest)         | anthropic.claude-3-opus-20240229-v1:0                      | claude-3-opus@20240229                                  |
+| Claude 3 Sonnet   | claude-3-sonnet-20240229                              | anthropic.claude-3-sonnet-20240229-v1:0                    | claude-3-sonnet@20240229                                |
+| Claude 3 Haiku    | claude-3-haiku-20240307                               | anthropic.claude-3-haiku-20240307-v1:0                     | claude-3-haiku@20240307                                 |
+
 ### Supported Parameters
 
 | Config Property | Environment Variable  | Description                                                       |
@@ -33,39 +59,6 @@ export ANTHROPIC_API_KEY=your_api_key_here
 | tools           | -                     | An array of tool or function definitions for the model to call    |
 | tool_choice     | -                     | An object specifying the tool to call                             |
 | headers         | -                     | Additional headers to be sent with the API request                |
-
-## Latest API (Messages)
-
-> The messages API supports all the latest Anthropic models.
-
-The `anthropic` provider supports the following models via the messages API:
-
-| Model ID                                                                   | Description                      | Status |
-| -------------------------------------------------------------------------- | -------------------------------- | ------ |
-| `anthropic:messages:claude-3-5-sonnet-20241022` (claude-3-5-sonnet-latest) | Latest Claude 3.5 Sonnet model   | Active |
-| `anthropic:messages:claude-3-5-sonnet-20240620`                            | Previous Claude 3.5 Sonnet model | Active |
-| `anthropic:messages:claude-3-5-haiku-20241022` (claude-3-5-haiku-latest)   | Latest Claude 3.5 Haiku model    | Active |
-| `anthropic:messages:claude-3-opus-20240229` (claude-3-opus-latest)         | Claude 3 Opus model              | Active |
-| `anthropic:messages:claude-3-sonnet-20240229`                              | Claude 3 Sonnet model            | Active |
-| `anthropic:messages:claude-3-haiku-20240307`                               | Claude 3 Haiku model             | Active |
-| `anthropic:messages:claude-2.0`                                            | Claude 2.0 model                 | Legacy |
-| `anthropic:messages:claude-2.1`                                            | Claude 2.1 model                 | Legacy |
-| `anthropic:messages:claude-instant-1.2`                                    | Claude Instant 1.2 model         | Legacy |
-
-### Cross-Platform Model Availability
-
-Claude models are available across multiple platforms. Here's how the model names map across different providers:
-
-| Model             | Anthropic API                                         | AWS Bedrock                               | GCP Vertex AI                 |
-| ----------------- | ----------------------------------------------------- | ----------------------------------------- | ----------------------------- |
-| Claude 3.5 Sonnet | claude-3-5-sonnet-20241022 (claude-3-5-sonnet-latest) | anthropic.claude-3-5-sonnet-20241022-v2:0 | claude-3-5-sonnet-v2@20241022 |
-| Claude 3.5 Haiku  | claude-3-5-haiku-20241022 (claude-3-5-haiku-latest)   | anthropic.claude-3-5-haiku-20241022-v1:0  | claude-3-5-haiku@20241022     |
-| Claude 3 Opus     | claude-3-opus-20240229 (claude-3-opus-latest)         | anthropic.claude-3-opus-20240229-v1:0     | claude-3-opus@20240229        |
-| Claude 3 Sonnet   | claude-3-sonnet-20240229                              | anthropic.claude-3-sonnet-20240229-v1:0   | claude-3-sonnet@20240229      |
-| Claude 3 Haiku    | claude-3-haiku-20240307                               | anthropic.claude-3-haiku-20240307-v1:0    | claude-3-haiku@20240307       |
-
-For information on using Claude models via AWS Bedrock, see our [AWS Bedrock documentation](/docs/providers/aws-bedrock).
-For information on using Claude models via Google Cloud Vertex AI, see our [Vertex AI documentation](/docs/providers/vertex).
 
 ### Prompt Template
 
@@ -156,8 +149,6 @@ See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main
 
 ### Prompt Caching
 
-> Available since Claude 3.5 (January 2024)
-
 Claude supports prompt caching to optimize API usage and reduce costs for repetitive tasks. This feature caches portions of your prompts to avoid reprocessing identical content in subsequent requests.
 
 Supported on all Claude 3 and 3.5 models. Basic example:
@@ -192,8 +183,6 @@ See [Anthropic's Prompt Caching Guide](https://docs.anthropic.com/claude/docs/pr
 
 ### Citations
 
-> Available since Claude 3.5 (January 2024)
-
 Claude can provide detailed citations when answering questions about documents. Basic example:
 
 ```yaml
@@ -216,33 +205,9 @@ prompts:
 
 See [Anthropic's Citations Guide](https://docs.anthropic.com/claude/docs/citations) for more details.
 
-### Additional Capabilities
-
-- **Caching**: Caches previous LLM requests by default.
-- **Token Usage Tracking**: Provides detailed information on the number of tokens used in each request, aiding in usage monitoring and optimization.
-- **Cost Calculation**: Calculates the cost of each request based on the number of tokens generated and the specific model used.
-
-## Deprecated API (Completions)
-
-> **Warning**: The completions API is deprecated and will be removed in a future release. Please migrate to the Messages API described above.
-
-### Supported Models
-
-| Model ID                                     | Description                      | Status     |
-| -------------------------------------------- | -------------------------------- | ---------- |
-| `anthropic:completion:claude-1`              | Original Claude model            | Deprecated |
-| `anthropic:completion:claude-1-100k`         | Claude with 100k context         | Deprecated |
-| `anthropic:completion:claude-instant-1`      | Faster, cheaper Claude variant   | Deprecated |
-| `anthropic:completion:claude-instant-1-100k` | Instant Claude with 100k context | Deprecated |
-
-See the [migration guide](https://docs.anthropic.com/claude/reference/migrating-from-text-completions-to-messages) for details on upgrading to the Messages API.
-
 ## Model-Graded Tests
 
-[Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) such as `factuality` or `llm-rubric` will automatically use Anthropic as the grading provider if:
-
-1. `ANTHROPIC_API_KEY` is set
-2. `OPENAI_API_KEY` is not set
+[Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) such as `factuality` or `llm-rubric` will automatically use Anthropic as the grading provider if `ANTHROPIC_API_KEY` is set and `OPENAI_API_KEY` is not set.
 
 If both API keys are present, OpenAI will be used by default. You can explicitly override the grading provider in your configuration.
 
@@ -255,8 +220,7 @@ You can override the grading provider in several ways:
 ```yaml title=promptfooconfig.yaml
 defaultTest:
   options:
-    provider:
-      id: anthropic:messages:claude-3-5-sonnet-20241022
+    provider: anthropic:messages:claude-3-5-sonnet-20241022
 ```
 
 2. For individual assertions:
@@ -267,6 +231,8 @@ assert:
     value: Do not mention that you are an AI or chat assistant
     provider:
       id: anthropic:messages:claude-3-5-sonnet-20241022
+      config:
+        temperature: 0.0
 ```
 
 3. For specific tests:
@@ -282,6 +248,12 @@ tests:
       - type: llm-rubric
         value: Answer should mention Paris
 ```
+
+### Additional Capabilities
+
+- **Caching**: Promptfoo caches previous LLM requests by default.
+- **Token Usage Tracking**: Provides detailed information on the number of tokens used in each request, aiding in usage monitoring and optimization.
+- **Cost Calculation**: Calculates the cost of each request based on the number of tokens generated and the specific model used.
 
 ## See Also
 
