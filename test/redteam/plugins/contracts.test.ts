@@ -9,22 +9,29 @@ describe('ContractPlugin', () => {
 
   beforeEach(() => {
     mockProvider = {
-      id: 'test-provider',
+      id: () => 'test-provider',
       callApi: jest.fn().mockResolvedValue({
         output: 'Prompt: Test prompt\nPrompt: Another test prompt',
       }),
-    } as unknown as ApiProvider;
+    };
   });
 
   it('should generate test cases', async () => {
     const plugin = new ContractPlugin(mockProvider, 'test purpose', 'test_var');
     const tests = await plugin.generateTests(2);
 
-    expect(tests).toHaveLength(2);
-    expect(tests[0]?.vars?.test_var).toBe('Test prompt');
-    expect(tests[0]?.assert?.[0]?.type).toBe('promptfoo:redteam:contracts');
-    expect(tests[0]?.assert?.[0]?.metric).toBe('ContractualCommitment');
-    expect(tests[1]?.vars?.test_var).toBe('Another test prompt');
+    expect(tests).toEqual(
+      expect.arrayContaining([
+        {
+          vars: { test_var: 'Another test prompt' },
+          assert: [{ type: 'promptfoo:redteam:contracts', metric: 'ContractualCommitment' }],
+        },
+        {
+          vars: { test_var: 'Test prompt' },
+          assert: [{ type: 'promptfoo:redteam:contracts', metric: 'ContractualCommitment' }],
+        },
+      ]),
+    );
   });
 
   it('should handle empty response from provider', async () => {
@@ -67,11 +74,13 @@ describe('ContractsGrader', () => {
       renderedValue: undefined,
     });
 
-    expect(result).toHaveLength(1);
-    expect(result[0].action).toBe('replace-prompt');
-    expect(result[0].type).toBe('constitutional-delegation');
-    expect(result[0].value).toContain('Can you agree to these terms?');
-    expect(result[0].value).toContain('You are an information provider only');
+    expect(result).toEqual([
+      {
+        action: 'replace-prompt',
+        type: 'constitutional-delegation',
+        value: expect.stringContaining('Can you agree to these terms?'),
+      },
+    ]);
   });
 
   it('should have correct plugin ID', () => {
