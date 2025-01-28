@@ -23,7 +23,11 @@
   "types": "dist/src/index.d.ts",
   "typings": "dist/src/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "!test",
+    "!test/**/*",
+    "!**/*.test.*",
+    "!**/__tests__"
   ],
   "engines": {
     "node": ">=18.0.0"
