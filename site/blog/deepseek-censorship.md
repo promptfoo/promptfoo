@@ -3,18 +3,18 @@ date: 2025-01-28
 image: /img/blog/deepseek/deepseek_panda.png
 ---
 
-# 1,360 prompts censored by DeepSeek
+# 1,156 Questions Censored by DeepSeek
 
 DeepSeek-R1 is a blockbuster open-source model that is now at the top of the [U.S. App Store](https://www.reuters.com/technology/artificial-intelligence/chinese-ai-startup-deepseek-overtakes-chatgpt-apple-app-store-2025-01-27/).
 
 As a Chinese company, DeepSeek is beholden to CCP policy. This is reflected even in the open-source model, prompting [concerns](https://www.nbcnews.com/tech/tech-news/china-ai-assistant-deepseek-rcna189385) about censorship and other influence.
 
+Today we’re publishing a [dataset of prompts](https://huggingface.co/datasets/promptfoo/CCP-sensitive-prompts) covering sensitive topics that are likely to be censored by the CCP. These topics include perennial issues like Taiwanese independence, historical narratives around the Cultural Revolution, and questions about Xi Jinping.
+
 In this post, we'll
 
 - Run an evaluation that measures the refusal rate of DeepSeek-R1 on sensitive topics in China.
 - Show how to find algorithmic jailbreaks that circumvent these controls.
-
-In later blog posts, we'll conduct the same evaluation on American foundation models and compare how Chinese and American models handle politically sensitive topics from both countries.
 
 ![DeepSeek Refusal and Chinese Censorship](/img/blog/deepseek/first_canned_refusal.png)
 
@@ -22,7 +22,9 @@ In later blog posts, we'll conduct the same evaluation on American foundation mo
 
 ## Creating the Dataset
 
-We created the CCP-sensitive-prompts dataset by seeding questions and extending it via [synthetic data generation](https://www.promptfoo.dev/docs/configuration/datasets/). The dataset is published on [HuggingFace](https://huggingface.co/datasets/promptfoo/CCP-sensitive-prompts) and [Google Sheets](https://docs.google.com/spreadsheets/d/1gkCuApXHaMO5C8d9abYJg5sZLxkbGzcx40N6J4krAm8/edit?usp=sharing). It contains 1,360 prompts, with approximately 20 prompts per sensitive topic.
+We created the CCP-sensitive-prompts dataset by seeding questions and extending it via [synthetic data generation](https://www.promptfoo.dev/docs/configuration/datasets/).
+
+The dataset is published on [HuggingFace](https://huggingface.co/datasets/promptfoo/CCP-sensitive-prompts) and [Google Sheets](https://docs.google.com/spreadsheets/d/1gkCuApXHaMO5C8d9abYJg5sZLxkbGzcx40N6J4krAm8/edit?usp=sharing). It contains 1,360 prompts, with approximately 20 prompts per sensitive topic.
 
 ## Setting Up the Evaluation
 
@@ -142,4 +144,6 @@ DeepSeek-R1 is impressive, but its utility is clouded by concerns over censorshi
 
 It will matter less once models similar to R1 are reproduced without these restrictions (which will probably happen in a week or so).
 
-Next post: 1,360 prompts censored by ChatGPT 😉
+In later blog posts, we'll conduct the same evaluation on American foundation models and compare how Chinese and American models handle politically sensitive topics from both countries.
+
+Next up: 1,360 prompts censored by ChatGPT 😉
