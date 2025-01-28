@@ -41,7 +41,7 @@ import { PiiGrader } from './plugins/pii';
 import { PolicyViolationGrader } from './plugins/policy';
 import { PoliticsGrader } from './plugins/politics';
 import { PromptExtractionGrader } from './plugins/promptExtraction';
-import { RagFullDocumentExfiltrationGrader } from './plugins/ragFullDocumentExfiltration';
+import { RagDocumentExfiltrationGrader } from './plugins/ragDocumentExfiltration';
 import { RbacGrader } from './plugins/rbac';
 import { ReligionGrader } from './plugins/religion';
 import { ShellInjectionGrader } from './plugins/shellInjection';
@@ -90,7 +90,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:indirect-prompt-injection': new IndirectPromptInjectionGrader(),
   'promptfoo:redteam:intent': new IntentGrader(),
   'promptfoo:redteam:overreliance': new OverrelianceGrader(),
-  'promptfoo:redteam:rag-document-exfiltration': new RagFullDocumentExfiltrationGrader(),
+  'promptfoo:redteam:rag-document-exfiltration': new RagDocumentExfiltrationGrader(),
   'promptfoo:redteam:pii:api-db': new PiiGrader(),
   'promptfoo:redteam:pii:direct': new PiiGrader(),
   'promptfoo:redteam:pii:session': new PiiGrader(),
