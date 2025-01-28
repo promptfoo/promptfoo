@@ -303,12 +303,18 @@ As a maintainer, when you are ready to release a new version:
    - Pull latest changes from main branch
    - Update `package.json`, `package-lock.json` and `CITATION.cff` with the new version
    - Create a new branch named `chore/bump-version-<new-version>`
-   - Create a pull request titled "chore: bump version <new-version>"
+   - Create a pull request titled `"chore: bump version <new-version>"`
 
    When creating a new release version, please follow these guidelines:
 
-   - Patch will bump the version by 0.0.1 and is used for bug fixes and minor features
-   - Minor will bump the version by 0.1.0 and is used for major features and breaking changes
+   - Patch will bump the version by `0.0.1` and is used for bug fixes and minor features
+   - Minor will bump the version by `0.1.0` and is used for major features and breaking changes
+
+   To determine the appropriate release type, review the changes between the latest release and main branch by visiting ([example](https://github.com/promptfoo/promptfoo/compare/0.103.13...main)):
+
+   ```
+   https://github.com/promptfoo/promptfoo/compare/[latest-version]...main
+   ```
 
 2. Once your PR is approved and landed, a version tag will be created automatically by a GitHub Action. After the version tag has been created, generate a [new release](https://github.com/promptfoo/promptfoo/releases/new) based on the tagged version.
 
