@@ -24,10 +24,8 @@
   "typings": "dist/src/index.d.ts",
   "files": [
     "dist",
-    "!test",
-    "!test/**/*",
-    "!**/*.test.*",
-    "!**/__tests__"
+    "!dist/test",
+    "!dist/src/__mocks__"
   ],
   "engines": {
     "node": ">=18.0.0"
