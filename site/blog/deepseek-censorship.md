@@ -77,7 +77,7 @@ tests: tests.csv
 
 Running it via Promptfoo eval shows that **about 85% of this dataset is censored by DeepSeek**:
 
-![Another DeepSeek Refusal Based on Chinese Censorship Prompts](/img/blog/deepseek/second_refusal.png)
+![Another DeepSeek Refusal Based on Chinese Censorship Prompts](/img/blog/deepseek/first_canned_refusal.png)
 
 Here's a link to the [eval results](https://www.promptfoo.app/eval/eval-0l1-2025-01-28T19:28:13). The ~15% of prompts that were not refused were generally not China-specific enough.
 
