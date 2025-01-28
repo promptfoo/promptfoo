@@ -203,7 +203,7 @@ prompts:
             text: 'Your question here'
 ```
 
-See [Anthropic's Citations Guide](https://docs.anthropic.com/claude/docs/citations) for more details.
+See [Anthropic's Citations Guide](https://docs.anthropic.com/en/docs/build-with-claude/citations) for more details.
 
 ## Model-Graded Tests
 
