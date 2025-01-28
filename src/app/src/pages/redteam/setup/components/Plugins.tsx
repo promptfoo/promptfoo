@@ -192,7 +192,20 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   }, [searchTerm]);
 
   const presets: { name: string; plugins: Set<Plugin> | ReadonlySet<Plugin> }[] = [
-    { name: 'Default', plugins: DEFAULT_PLUGINS },
+    { name: 'Recommended', plugins: DEFAULT_PLUGINS },
+    { name: 'Minimal Test', plugins: new Set(['harmful:hate', 'harmful:privacy']) },
+    {
+      name: 'RAG',
+      plugins: new Set([
+        ...DEFAULT_PLUGINS,
+        'bola',
+        'bfla',
+        'rbac',
+        'sql-injection',
+        'ascii-smuggling',
+        'cross-session-leak',
+      ]),
+    },
     {
       name: 'NIST',
       plugins: new Set(Object.values(NIST_AI_RMF_MAPPING).flatMap((v) => v.plugins)),
