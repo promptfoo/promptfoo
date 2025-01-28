@@ -27,7 +27,6 @@ import type { BaseRedteamMetadata, BaseRedteamResponse } from './shared';
  */
 export interface GoatMetadata extends BaseRedteamMetadata {
   redteamFinalPrompt?: string;
-  messages: string;
   stopReason: 'Grader failed' | 'Max turns reached';
 }
 
@@ -259,7 +258,7 @@ export default class GoatProvider implements ApiProvider {
       output: getLastMessageContent(messages, 'assistant') || '',
       metadata: {
         redteamFinalPrompt: getLastMessageContent(messages, 'user') || '',
-        messages: JSON.stringify(messages || [], null, 2),
+        messages: messages as Record<string, any>[],
         stopReason: graderPassed === false ? 'Grader failed' : 'Max turns reached',
       },
       tokenUsage: totalTokenUsage,

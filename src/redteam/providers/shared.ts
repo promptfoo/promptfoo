@@ -175,7 +175,7 @@ export function checkPenalizedPhrases(output: string): boolean {
  */
 export interface BaseRedteamMetadata {
   redteamFinalPrompt?: string;
-  messages: string;
+  messages: Record<string, any>[];
   stopReason: string;
 }
 
