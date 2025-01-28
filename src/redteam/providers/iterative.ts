@@ -93,7 +93,6 @@ export async function runRedteamConversation({
   let finalIteration = 0;
   let bestInjectVar: string | undefined = undefined;
   let targetPrompt: string | null = null;
-  const testCases: AtomicTestCase[] = [];
 
   const totalTokenUsage = {
     total: 0,
@@ -414,17 +413,6 @@ export async function runRedteamConversation({
       totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
     }
 
-    if (graderPassed === false) {
-      const newTestCase: AtomicTestCase = {
-        assert: test?.assert,
-        vars: {
-          ...vars,
-          [injectVar]: targetResponse.output,
-        },
-      };
-      testCases.push(newTestCase);
-    }
-
     const maxNewTestCases = 8;
     if (
       currentScore >= 10 ||
@@ -443,12 +431,6 @@ export async function runRedteamConversation({
       highestScore,
       redteamHistory: previousOutputs,
       redteamFinalPrompt: bestInjectVar,
-      iterations: previousOutputs
-        .filter((output) => output.graderPassed === false)
-        .map((output) => ({
-          input: output.prompt,
-          output: output.output,
-        })),
     },
     tokenUsage: totalTokenUsage,
   };
