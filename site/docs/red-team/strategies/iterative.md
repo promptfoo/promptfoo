@@ -18,8 +18,10 @@ strategies:
   # With configuration
   - id: jailbreak
     config:
-      # Optional: Number of iterations to attempt (default: 10)
+      # Optional: Number of iterations to attempt (default: 10). Each attempt is a call to the target llm. Jailbreak will stop early if a successful jailbreak is found.
       numIterations: 50
+      # Optional: Additional attempts to run after a successful jailbreak is found. This can be used to find more relevant or harmful jailbreaks. Defaults to 0.
+      numAdditionalIterations: 12
 ```
 
 You can also override the number of iterations via an environment variable:
@@ -37,7 +39,9 @@ The Iterative Jailbreaks strategy works by:
    - Analyze the AI's response
    - Track the conversation history
    - Generate increasingly refined prompts based on previous attempts
-3. Repeating this process for a configurable number of iterations
+3. Repeating this process until either:
+   - The maximum number of iterations is reached (`numIterations`)
+   - A successful prompt is found (score >= 10) via a heuristic LLM-as-a-Judge or the plugin's specific assertions fail.
 4. Selecting the most effective prompt variation discovered
 
 :::warning

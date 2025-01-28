@@ -124,6 +124,7 @@ describe('RedteamIterativeProvider', () => {
         filters: undefined,
         injectVar: 'test',
         numIterations: 5,
+        numAdditionalIterations: 0,
         options: {},
         prompt: { raw: 'test', label: 'test' },
         redteamProvider: mockRedteamProvider,

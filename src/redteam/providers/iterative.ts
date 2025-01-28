@@ -50,6 +50,7 @@ export async function runRedteamConversation({
   filters,
   injectVar,
   numIterations,
+  numAdditionalIterations,
   options,
   prompt,
   redteamProvider,
@@ -61,6 +62,7 @@ export async function runRedteamConversation({
   filters: NunjucksFilterMap | undefined;
   injectVar: string;
   numIterations: number;
+  numAdditionalIterations: number;
   options?: CallApiOptionsParams;
   prompt: Prompt;
   redteamProvider: ApiProvider;
@@ -413,11 +415,11 @@ export async function runRedteamConversation({
       totalTokenUsage.numRequests = (totalTokenUsage.numRequests || 0) + 1;
     }
 
-    const maxNewTestCases = 8;
     if (
       currentScore >= 10 ||
       (graderPassed === false &&
-        previousOutputs.filter((output) => output.graderPassed === false).length >= maxNewTestCases)
+        previousOutputs.filter((output) => output.graderPassed === false).length >=
+          numAdditionalIterations)
     ) {
       finalIteration = i + 1;
       break;
@@ -440,6 +442,8 @@ class RedteamIterativeProvider implements ApiProvider {
   private readonly redteamProvider: RedteamFileConfig['provider'];
   private readonly injectVar: string;
   private readonly numIterations: number;
+  private readonly numAdditionalIterations: number;
+
   constructor(readonly config: Record<string, string | object>) {
     logger.debug(`[Iterative] Constructor config: ${JSON.stringify(config)}`);
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
@@ -452,8 +456,12 @@ class RedteamIterativeProvider implements ApiProvider {
       10,
     );
 
-    // Redteam provider can be set from the config.
+    this.numAdditionalIterations = Number.parseInt(
+      (config.numAdditionalIterations as string | undefined) || '0',
+      10,
+    );
 
+    // Redteam provider can be set from the config.
     if (shouldGenerateRemote()) {
       this.redteamProvider = new PromptfooChatCompletionProvider({
         task: 'iterative',
@@ -493,6 +501,7 @@ class RedteamIterativeProvider implements ApiProvider {
       targetProvider: context.originalProvider,
       injectVar: this.injectVar,
       numIterations: this.numIterations,
+      numAdditionalIterations: this.numAdditionalIterations,
       context,
       options,
       test: context.test,
