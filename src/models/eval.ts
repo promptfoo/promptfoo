@@ -420,6 +420,11 @@ export default class Eval {
         prompt: 0,
         total: 0,
         numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     };
 
@@ -432,6 +437,13 @@ export default class Eval {
       stats.tokenUsage.completion += prompt.metrics?.tokenUsage.completion || 0;
       stats.tokenUsage.total += prompt.metrics?.tokenUsage.total || 0;
       stats.tokenUsage.numRequests += prompt.metrics?.tokenUsage.numRequests || 0;
+
+      stats.tokenUsage.completionDetails.reasoning! +=
+        prompt.metrics?.tokenUsage.completionDetails?.reasoning || 0;
+      stats.tokenUsage.completionDetails.acceptedPrediction! +=
+        prompt.metrics?.tokenUsage.completionDetails?.acceptedPrediction || 0;
+      stats.tokenUsage.completionDetails.rejectedPrediction! +=
+        prompt.metrics?.tokenUsage.completionDetails?.rejectedPrediction || 0;
     }
 
     const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
