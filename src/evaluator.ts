@@ -1,4 +1,4 @@
-import { queue } from 'async';
+import { forEachOfLimit } from 'async';
 import chalk from 'chalk';
 import type { MultiBar, SingleBar } from 'cli-progress';
 import { randomUUID } from 'crypto';
@@ -887,38 +887,18 @@ class Evaluator {
       await createMultiBars(runEvalOptions);
     }
 
-    const q = queue(async (evalStep: RunEvalOptions, callback: (error?: Error) => void) => {
-      try {
-        checkAbort();
-        await processEvalStep(evalStep, runEvalOptions.indexOf(evalStep));
-        callback?.();
-      } catch (err) {
-        callback?.(err as Error);
-      }
-    }, concurrency);
-    q.error((err: Error, task: RunEvalOptions) => {
-      logger.error(`Error processing task: ${err}`);
-    });
-
     // Track serial evaluations and count of concurrent ones
     const serialRunEvalOptions: RunEvalOptions[] = [];
-    let concurrentCount = 0;
+    const concurrentRunEvalOptions: RunEvalOptions[] = [];
 
     // Process options and start concurrent tasks immediately
     for (const evalOption of runEvalOptions) {
       if (evalOption.test.options?.runSerially) {
         serialRunEvalOptions.push(evalOption);
       } else {
-        concurrentCount++;
-        q.push(evalOption);
+        concurrentRunEvalOptions.push(evalOption);
       }
     }
-
-    logger.info(
-      `Processing ${concurrentCount} concurrent evaluations with up to ${concurrency} threads...`,
-    );
-
-    await q.drain(); // Wait for all concurrent tasks to complete
 
     if (serialRunEvalOptions.length > 0) {
       logger.info(`Running ${serialRunEvalOptions.length} serial evaluations...`);
@@ -937,6 +917,15 @@ class Evaluator {
         await processEvalStep(evalStep, serialRunEvalOptions.indexOf(evalStep));
       }
     }
+
+    // Then run concurrent evaluations
+    logger.info(
+      `Running ${concurrentRunEvalOptions.length} concurrent evaluations with up to ${concurrency} threads...`,
+    );
+    await forEachOfLimit(concurrentRunEvalOptions, concurrency, async (evalStep, index) => {
+      checkAbort();
+      await processEvalStep(evalStep, index);
+    });
 
     // Do we have to run comparisons between row outputs?
     const compareRowsCount = rowsWithSelectBestAssertion.size;
