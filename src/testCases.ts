@@ -423,8 +423,8 @@ export async function synthesize({
   const output = typeof resp.output === 'string' ? resp.output : JSON.stringify(resp.output);
   const respObjects = extractJsonObjects(output);
   invariant(
-    respObjects.length === 1,
-    `Expected exactly one JSON object in the response for personas, got ${respObjects.length}`,
+    respObjects.length >= 1,
+    `Expected at least one JSON object in the response for personas, got ${respObjects.length}`,
   );
   const personas = (respObjects[0] as { personas: string[] }).personas;
   logger.debug(
@@ -476,8 +476,8 @@ export async function synthesize({
     const personaResponseObjects = extractJsonObjects(personaResponse.output as string);
 
     invariant(
-      personaResponseObjects.length === 1,
-      `Expected exactly one JSON object in the response for persona ${persona}, got ${personaResponseObjects.length}`,
+      personaResponseObjects.length >= 1,
+      `Expected at least one JSON object in the response for persona ${persona}, got ${personaResponseObjects.length}`,
     );
     const parsed = personaResponseObjects[0] as { vars: VarMapping[] };
     logger.debug(`Received ${parsed.vars.length} test cases`);
