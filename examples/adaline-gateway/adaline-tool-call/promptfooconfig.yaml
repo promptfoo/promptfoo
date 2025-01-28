@@ -1,0 +1,64 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Adaline Gateway Tool Call Example'
+
+prompts:
+  - 'What is the weather like in {{city}}?'
+
+providers:
+  - id: adaline:openai:chat:gpt-4o-mini
+    config:
+      tools:
+        [
+          {
+            type: 'function',
+            definition:
+              {
+                schema:
+                  {
+                    name: 'get_weather_from_location',
+                    description: 'Get the current weather of a location',
+                    parameters:
+                      {
+                        type: 'object',
+                        properties:
+                          {
+                            location: { type: 'string', description: 'location to get weather of' },
+                          },
+                        required: ['location'],
+                      },
+                  },
+              },
+          },
+        ]
+
+tests:
+  - vars:
+      city: Boston
+    assert:
+      - type: is-json
+      - type: javascript
+        value: output[0].name === 'get_weather_from_location'
+      - type: javascript
+        value: JSON.parse(output[0].arguments).location === 'Boston'
+
+  - vars:
+      city: New York
+    options:
+      transform: output[0].name
+    assert:
+      - type: equals
+        value: get_weather_from_location
+
+  - vars:
+      city: Paris
+    assert:
+      - type: equals
+        value: get_weather_from_location
+        transform: output[0].name
+      - type: similar
+        value: Paris, France
+        threshold: 0.5
+        transform: JSON.parse(output[0].arguments).location
+
+  - vars:
+      city: Mars

@@ -1,5 +1,5 @@
 import type { ApiProvider, ProviderOptions } from '../types/providers';
-import type { Severity, Plugin } from './constants';
+import type { Plugin, Severity } from './constants';
 
 // Base types
 export type RedteamObjectConfig = Record<string, unknown>;
@@ -22,6 +22,14 @@ type ConfigurableObject = {
 
 type WithNumTests = {
   numTests?: number;
+};
+
+type TestCase = {
+  description?: string;
+  vars?: Record<string, unknown>;
+  provider?: string | ProviderOptions | ApiProvider;
+  providerOutput?: string | Record<string, unknown>;
+  assert?: any;
 };
 
 // Derived types
@@ -64,6 +72,7 @@ type CommonOptions = {
   sharing?: boolean;
 };
 
+// NOTE: Remember to edit validators/redteam.ts:RedteamGenerateOptionsSchema if you edit this schema
 export interface RedteamCliGenerateOptions extends CommonOptions {
   cache: boolean;
   config?: string;
@@ -77,6 +86,7 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   inRedteamRun?: boolean;
   verbose?: boolean;
   abortSignal?: AbortSignal;
+  burpEscapeJson?: boolean;
 }
 
 export interface RedteamFileConfig extends CommonOptions {
@@ -138,4 +148,5 @@ export interface SavedRedteamConfig {
     connectedSystems?: string;
   };
   entities: string[];
+  defaultTest?: TestCase;
 }

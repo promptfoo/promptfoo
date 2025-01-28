@@ -5,6 +5,7 @@ import { randomUUID } from 'crypto';
 import { globSync } from 'glob';
 import * as path from 'path';
 import readline from 'readline';
+import type winston from 'winston';
 import { runAssertions, runCompareAssertion } from './assertions';
 import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';
@@ -17,6 +18,7 @@ import { generateIdFromPrompt } from './models/prompt';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureUtil';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
+import type { Vars } from './types';
 import {
   type ApiProvider,
   type Assertion,
@@ -129,6 +131,11 @@ class Evaluator {
         completion: 0,
         cached: 0,
         numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     };
     this.conversations = {};
@@ -224,7 +231,7 @@ class Evaluator {
             test,
 
             // All of these are removed in python and script providers, but every Javascript provider gets them
-            logger,
+            logger: logger as winston.Logger,
             fetchWithCache,
             getCache,
           },
@@ -272,9 +279,14 @@ class Evaluator {
       if (response.error) {
         ret.error = response.error;
       } else if (response.output === null || response.output === undefined) {
-        ret.success = false;
-        ret.score = 0;
-        ret.error = 'No output';
+        // NOTE: empty output often indicative of guardrails, so behavior differs for red teams.
+        if (this.testSuite.redteam) {
+          ret.success = true;
+        } else {
+          ret.success = false;
+          ret.score = 0;
+          ret.error = 'No output';
+        }
       } else {
         // Create a copy of response so we can potentially mutate it.
         const processedResponse = { ...response };
@@ -313,6 +325,14 @@ class Evaluator {
           this.stats.tokenUsage.completion += checkResult.tokensUsed.completion || 0;
           this.stats.tokenUsage.cached += checkResult.tokensUsed.cached || 0;
           this.stats.tokenUsage.numRequests += checkResult.tokensUsed.numRequests || 1;
+          if (checkResult.tokensUsed.completionDetails) {
+            this.stats.tokenUsage.completionDetails.reasoning! +=
+              checkResult.tokensUsed.completionDetails.reasoning || 0;
+            this.stats.tokenUsage.completionDetails.acceptedPrediction! +=
+              checkResult.tokensUsed.completionDetails.acceptedPrediction || 0;
+            this.stats.tokenUsage.completionDetails.rejectedPrediction! +=
+              checkResult.tokensUsed.completionDetails.rejectedPrediction || 0;
+          }
         }
         ret.response = processedResponse;
         ret.gradingResult = checkResult;
@@ -325,6 +345,14 @@ class Evaluator {
         this.stats.tokenUsage.completion += response.tokenUsage.completion || 0;
         this.stats.tokenUsage.cached += response.tokenUsage.cached || 0;
         this.stats.tokenUsage.numRequests += response.tokenUsage.numRequests || 1;
+        if (response.tokenUsage.completionDetails) {
+          this.stats.tokenUsage.completionDetails.reasoning! +=
+            response.tokenUsage.completionDetails.reasoning || 0;
+          this.stats.tokenUsage.completionDetails.acceptedPrediction! +=
+            response.tokenUsage.completionDetails.acceptedPrediction || 0;
+          this.stats.tokenUsage.completionDetails.rejectedPrediction! +=
+            response.tokenUsage.completionDetails.rejectedPrediction || 0;
+        }
       }
 
       if (ret.success) {
@@ -520,12 +548,12 @@ class Evaluator {
 
     // Prepare vars
     const varNames: Set<string> = new Set();
-    const varsWithSpecialColsRemoved: Record<string, string | string[] | object>[] = [];
+    const varsWithSpecialColsRemoved: Vars[] = [];
     const inputTransformDefault = testSuite?.defaultTest?.options?.transformVars;
     for (const testCase of tests) {
       testCase.vars = { ...testSuite.defaultTest?.vars, ...testCase?.vars };
       if (testCase.vars) {
-        const varWithSpecialColsRemoved: Record<string, string | string[] | object> = {};
+        const varWithSpecialColsRemoved: Vars = {};
         const inputTransformForIndividualTest = testCase.options?.transformVars;
         const inputTransform = inputTransformForIndividualTest || inputTransformDefault;
         if (inputTransform) {
@@ -533,7 +561,7 @@ class Evaluator {
             prompt: {},
             uuid: randomUUID(),
           };
-          const transformedVars = await transform(
+          const transformedVars: Vars = await transform(
             inputTransform,
             testCase.vars,
             transformContext,
@@ -728,6 +756,17 @@ class Evaluator {
         (metrics.tokenUsage.total || 0) + (row.response?.tokenUsage?.total || 0);
       metrics.tokenUsage.numRequests =
         (metrics.tokenUsage.numRequests || 0) + (row.response?.tokenUsage?.numRequests || 1);
+      metrics.tokenUsage.completionDetails = {
+        reasoning:
+          (metrics.tokenUsage.completionDetails?.reasoning || 0) +
+          (row.response?.tokenUsage?.completionDetails?.reasoning || 0),
+        acceptedPrediction:
+          (metrics.tokenUsage.completionDetails?.acceptedPrediction || 0) +
+          (row.response?.tokenUsage?.completionDetails?.acceptedPrediction || 0),
+        rejectedPrediction:
+          (metrics.tokenUsage.completionDetails?.rejectedPrediction || 0) +
+          (row.response?.tokenUsage?.completionDetails?.rejectedPrediction || 0),
+      };
       metrics.cost += row.cost || 0;
 
       await runExtensionHook(testSuite.extensions, 'afterEach', {

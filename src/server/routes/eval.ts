@@ -1,3 +1,4 @@
+import dedent from 'dedent';
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
@@ -139,10 +140,33 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
       const validationError = fromZodError(error);
       res.status(400).json({ error: validationError.message });
     } else {
-      console.error('Failed to update eval author:', error);
+      logger.error(`Failed to update eval author: ${error}`);
       res.status(500).json({ error: 'Failed to update eval author' });
     }
   }
+});
+
+evalRouter.post('/:id/results', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const results = req.body as unknown as EvalResult[];
+
+  if (!Array.isArray(results)) {
+    res.status(400).json({ error: 'Results must be an array' });
+    return;
+  }
+  const eval_ = await Eval.findById(id);
+  if (!eval_) {
+    res.status(404).json({ error: 'Eval not found' });
+    return;
+  }
+  try {
+    await eval_.addResults(results);
+  } catch (error) {
+    logger.error(`Failed to add results to eval: ${error}`);
+    res.status(500).json({ error: 'Failed to add results to eval' });
+    return;
+  }
+  res.status(204).send();
 });
 
 evalRouter.post(
@@ -242,7 +266,9 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
       res.json({ id: eval_.id });
     }
   } catch (error) {
-    console.error('Failed to write eval to database', error, body);
+    logger.error(dedent`Failed to write eval to database:
+      Error: ${error}
+      Body: ${JSON.stringify(body, null, 2)}`);
     res.status(500).json({ error: 'Failed to write eval to database' });
   }
 });

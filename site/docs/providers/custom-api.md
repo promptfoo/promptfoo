@@ -1,5 +1,4 @@
 ---
-sidebar_position: 50
 sidebar_label: Custom Javascript
 ---
 
@@ -53,6 +52,9 @@ export interface ApiProvider {
 
   // Provider configuration
   config?: any;
+
+  // Optional method to customize how this provider is serialized to JSON. When JSON.stringify() is called on this provider, this method will be used instead of the default serialization behavior.
+  toJSON?: () => any;
 }
 
 export interface ProviderResponse {

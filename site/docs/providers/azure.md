@@ -1,5 +1,5 @@
 ---
-sidebar_position: 20
+sidebar_position: 4
 ---
 
 # Azure
@@ -279,18 +279,22 @@ Azure-specific config
 
 OpenAI config:
 
-| Name              | Description                                                            |
-| ----------------- | ---------------------------------------------------------------------- |
-| temperature       | Controls randomness of the output.                                     |
-| top_p             | Controls nucleus sampling.                                             |
-| frequency_penalty | Penalizes new tokens based on their frequency.                         |
-| presence_penalty  | Penalizes new tokens based on their presence.                          |
-| best_of           | Generates multiple outputs and chooses the best.                       |
-| functions         | Specifies functions available for use.                                 |
-| function_call     | Controls automatic function calling.                                   |
-| response_format   | Specifies the format of the response.                                  |
-| stop              | Specifies stop sequences for the generation.                           |
-| passthrough       | Anything under `passthrough` will be sent as a top-level request param |
+| Name                  | Description                                                                                                                                                                                  |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| o1                    | Set to `true` if your Azure deployment uses an o1 model. Since Azure allows custom model naming, this flag is required to properly handle o1 models which do not support certain parameters. |
+| max_completion_tokens | Maximum number of tokens to generate for o1 models. Only used when `o1` is set to `true`.                                                                                                    |
+| reasoning_effort      | Allows you to control how long the o1 model thinks before answering, 'low', 'medium' or 'high'. Only used when `o1` is set to `true`.                                                        |
+| temperature           | Controls randomness of the output. Not supported for o1 models and will be automatically excluded when `o1` is `true`.                                                                       |
+| max_tokens            | Maximum number of tokens to generate. Not supported for o1 models and will be automatically excluded when `o1` is `true`.                                                                    |
+| top_p                 | Controls nucleus sampling.                                                                                                                                                                   |
+| frequency_penalty     | Penalizes new tokens based on their frequency.                                                                                                                                               |
+| presence_penalty      | Penalizes new tokens based on their presence.                                                                                                                                                |
+| best_of               | Generates multiple outputs and chooses the best.                                                                                                                                             |
+| functions             | Specifies functions available for use.                                                                                                                                                       |
+| function_call         | Controls automatic function calling.                                                                                                                                                         |
+| response_format       | Specifies the format of the response.                                                                                                                                                        |
+| stop                  | Specifies stop sequences for the generation.                                                                                                                                                 |
+| passthrough           | Anything under `passthrough` will be sent as a top-level request param                                                                                                                       |
 
 ## Assistants
 

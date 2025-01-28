@@ -338,23 +338,16 @@
                             {
                               "type": "array",
                               "items": {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "boolean"
-                                  }
+                                "type": [
+                                  "string",
+                                  "number",
+                                  "boolean"
                                 ]
                               }
                             },
                             {
                               "type": "object",
-                              "properties": {},
-                              "additionalProperties": false
+                              "additionalProperties": {}
                             },
                             {
                               "type": "array"
@@ -1003,6 +996,7 @@
                           "policy",
                           "politics",
                           "prompt-extraction",
+                          "rag-document-exfiltration",
                           "rbac",
                           "religion",
                           "shell-injection",
@@ -1137,6 +1131,7 @@
                               "policy",
                               "politics",
                               "prompt-extraction",
+                              "rag-document-exfiltration",
                               "rbac",
                               "religion",
                               "shell-injection",

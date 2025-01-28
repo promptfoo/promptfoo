@@ -1,4 +1,5 @@
 import { fetchWithCache } from '../../src/cache';
+import { getEnvString } from '../../src/envars';
 import { fetchWithRetries } from '../../src/fetch';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import {
@@ -7,14 +8,28 @@ import {
   PromptfooSimulatedUserProvider,
 } from '../../src/providers/promptfoo';
 
-jest.mock('../../src/fetch');
 jest.mock('../../src/cache');
+jest.mock('../../src/envars');
+jest.mock('../../src/fetch');
 jest.mock('../../src/globalConfig/accounts');
+jest.mock('../../src/globalConfig/cloud', () => ({
+  CloudConfig: class {
+    isEnabled() {
+      return false;
+    }
+    getApiHost() {
+      return 'https://api.promptfoo.app';
+    }
+  },
+}));
+jest.mock('../../src/globalConfig/globalConfig');
+jest.mock('../../src/logger');
 
 describe('PromptfooHarmfulCompletionProvider', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     jest.mocked(getUserEmail).mockReturnValue('test@example.com');
+    jest.mocked(getEnvString).mockReturnValue('');
   });
 
   const options = {
@@ -70,6 +85,7 @@ describe('PromptfooChatCompletionProvider', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     jest.mocked(getUserEmail).mockReturnValue('test@example.com');
+    jest.mocked(getEnvString).mockReturnValue('');
   });
 
   const options = {
@@ -110,7 +126,9 @@ describe('PromptfooChatCompletionProvider', () => {
 
   it('should handle missing result', async () => {
     const mockResponse = {
-      data: {},
+      data: {
+        result: null,
+      },
       status: 200,
       statusText: 'OK',
       cached: false,

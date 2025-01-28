@@ -451,7 +451,7 @@ describe('Anthropic', () => {
 
     it('should return text from a single text block', () => {
       const message: Anthropic.Messages.Message = {
-        content: [{ type: 'text', text: 'Hello' }],
+        content: [{ type: 'text', text: 'Hello', citations: [] }],
         id: '',
         model: '',
         role: 'assistant',
@@ -473,8 +473,8 @@ describe('Anthropic', () => {
     it('should concatenate text blocks without tool_use blocks', () => {
       const message: Anthropic.Messages.Message = {
         content: [
-          { type: 'text', text: 'Hello' },
-          { type: 'text', text: 'World' },
+          { type: 'text', text: 'Hello', citations: [] },
+          { type: 'text', text: 'World', citations: [] },
         ],
         id: '',
         model: '',
@@ -533,14 +533,14 @@ describe('Anthropic', () => {
     it('should concatenate text and tool_use blocks as JSON strings', () => {
       const message: Anthropic.Messages.Message = {
         content: [
-          { type: 'text', text: 'Hello' },
+          { type: 'text', text: 'Hello', citations: [] },
           {
             type: 'tool_use',
             id: 'tool1',
             name: 'get_weather',
             input: { location: 'San Francisco, CA' },
           },
-          { type: 'text', text: 'World' },
+          { type: 'text', text: 'World', citations: [] },
         ],
         id: '',
         model: '',
@@ -560,6 +560,42 @@ describe('Anthropic', () => {
       expect(result).toBe(
         'Hello\n\n{"type":"tool_use","id":"tool1","name":"get_weather","input":{"location":"San Francisco, CA"}}\n\nWorld',
       );
+    });
+
+    it('should handle text blocks with citations', () => {
+      const message: Anthropic.Messages.Message = {
+        content: [
+          {
+            type: 'text',
+            text: 'The sky is blue',
+            citations: [
+              {
+                type: 'char_location',
+                cited_text: 'The sky is blue.',
+                document_index: 0,
+                document_title: 'Nature Facts',
+                start_char_index: 0,
+                end_char_index: 15,
+              },
+            ],
+          },
+        ],
+        id: '',
+        model: '',
+        role: 'assistant',
+        stop_reason: null,
+        stop_sequence: null,
+        type: 'message',
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      };
+
+      const result = outputFromMessage(message);
+      expect(result).toBe('The sky is blue');
     });
   });
 

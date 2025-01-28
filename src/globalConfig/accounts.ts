@@ -4,12 +4,11 @@ import { getEnvString, isCI } from '../envars';
 import { fetchWithTimeout } from '../fetch';
 import logger from '../logger';
 import telemetry from '../telemetry';
-import invariant from '../util/invariant';
 import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
 export function getUserEmail(): string | null {
   const globalConfig = readGlobalConfig();
-  return globalConfig.account?.email || null;
+  return globalConfig?.account?.email || null;
 }
 
 export function setUserEmail(email: string) {
@@ -42,7 +41,10 @@ export async function promptForEmailUnverified() {
 
 export async function checkEmailStatusOrExit() {
   const email = isCI() ? 'ci-placeholder@promptfoo.dev' : getUserEmail();
-  invariant(email, 'Email should be set before calling checkEmailStatusOrExit');
+  if (!email) {
+    logger.debug('Skipping email status check because email is not set');
+    return;
+  }
   try {
     const resp = await fetchWithTimeout(
       `https://api.promptfoo.app/api/users/status?email=${email}`,

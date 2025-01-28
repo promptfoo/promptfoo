@@ -82,6 +82,7 @@ describe('doGenerateRedteam', () => {
       ],
       purpose: 'Test purpose',
       entities: ['Test entity'],
+      injectVar: 'input',
     });
 
     await doGenerateRedteam(options);
@@ -140,6 +141,7 @@ describe('doGenerateRedteam', () => {
       ],
       purpose: 'Test purpose',
       entities: [],
+      injectVar: 'input',
     });
 
     await doGenerateRedteam(options);
@@ -202,6 +204,7 @@ describe('doGenerateRedteam', () => {
       ],
       purpose: 'Test purpose',
       entities: ['Test entity'],
+      injectVar: 'input',
     });
 
     await doGenerateRedteam(options);
@@ -270,6 +273,7 @@ describe('doGenerateRedteam', () => {
       ],
       purpose: 'Test purpose',
       entities: ['Test entity'],
+      injectVar: 'input',
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -335,6 +339,7 @@ describe('doGenerateRedteam', () => {
       ],
       purpose: 'Test purpose',
       entities: ['Company X', 'John Doe', 'Product Y'],
+      injectVar: 'input',
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -391,6 +396,7 @@ describe('doGenerateRedteam', () => {
       ],
       purpose: 'Test purpose',
       entities: [],
+      injectVar: 'input',
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -452,6 +458,7 @@ describe('doGenerateRedteam', () => {
       ],
       purpose: 'Test purpose',
       entities: ['Company X', 'John Doe', 'Product Y'],
+      injectVar: 'input',
     });
 
     const options: RedteamCliGenerateOptions = {

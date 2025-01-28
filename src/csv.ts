@@ -2,6 +2,7 @@
 import logger from './logger';
 import type { Assertion, AssertionType, CsvRow, TestCase, BaseAssertionTypes } from './types';
 import { BaseAssertionTypesSchema } from './types';
+import { isJavascriptFile } from './util/file';
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 
@@ -21,10 +22,11 @@ export function assertionFromString(expected: string): Assertion {
   if (
     expected.startsWith('javascript:') ||
     expected.startsWith('fn:') ||
-    expected.startsWith('eval:')
+    expected.startsWith('eval:') ||
+    (expected.startsWith('file://') && isJavascriptFile(expected.slice('file://'.length)))
   ) {
     // TODO(1.0): delete eval: legacy option
-    let sliceLength;
+    let sliceLength = 0;
     if (expected.startsWith('javascript:')) {
       sliceLength = 'javascript:'.length;
     }

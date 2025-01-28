@@ -41,6 +41,45 @@ describe('Groq', () => {
       expect(provider.toString()).toBe('[Groq Provider mixtral-8x7b-32768]');
     });
 
+    it('should serialize to JSON correctly without API key', () => {
+      const provider = new GroqProvider('mixtral-8x7b-32768', {
+        config: {
+          temperature: 0.7,
+          max_tokens: 100,
+        },
+      });
+
+      expect(provider.toJSON()).toEqual({
+        provider: 'groq',
+        model: 'mixtral-8x7b-32768',
+        config: {
+          temperature: 0.7,
+          max_tokens: 100,
+        },
+      });
+    });
+
+    it('should serialize to JSON correctly with API key redacted', () => {
+      const provider = new GroqProvider('mixtral-8x7b-32768', {
+        config: {
+          apiKey: 'secret-api-key',
+          temperature: 0.7,
+        },
+      });
+
+      const json = provider.toJSON();
+      expect(json).toEqual({
+        provider: 'groq',
+        model: 'mixtral-8x7b-32768',
+        config: {
+          temperature: 0.7,
+          apiKey: undefined,
+        },
+      });
+      // Ensure the original apiKey is not affected
+      expect(provider.getApiKey()).toBe('secret-api-key');
+    });
+
     describe('callApi', () => {
       it('should call Groq API and return output with correct structure', async () => {
         const mockResponse = {

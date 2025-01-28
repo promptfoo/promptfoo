@@ -41,7 +41,7 @@ providers:
   - id: openai:chat:gpt-4o-mini
     config:
       tools: file://external_tools.yaml
-  - id: groq:llama3-groq-70b-8192-tool-use-preview
+  - id: groq:llama-3.3-70b-versatile
     config:
       tools:
         - type: function

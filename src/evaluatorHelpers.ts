@@ -4,6 +4,9 @@ import * as path from 'path';
 import cliState from './cliState';
 import { getEnvBool } from './envars';
 import { importModule } from './esm';
+import { getPrompt as getHeliconePrompt } from './integrations/helicone';
+import { getPrompt as getLangfusePrompt } from './integrations/langfuse';
+import { getPrompt as getPortkeyPrompt } from './integrations/portkey';
 import logger from './logger';
 import { isPackagePath, loadFromPackage } from './providers/packageParser';
 import { runPython } from './python/pythonUtils';
@@ -168,11 +171,9 @@ export async function renderPrompt(
 
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
-    const { getPrompt } = await import('./integrations/portkey');
-    const portKeyResult = await getPrompt(prompt.raw.slice('portkey://'.length), vars);
+    const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
     return JSON.stringify(portKeyResult.messages);
   } else if (prompt.raw.startsWith('langfuse://')) {
-    const { getPrompt } = await import('./integrations/langfuse');
     const langfusePrompt = prompt.raw.slice('langfuse://'.length);
 
     // we default to "text" type.
@@ -181,7 +182,7 @@ export async function renderPrompt(
       throw new Error('Unknown promptfoo prompt type');
     }
 
-    const langfuseResult = await getPrompt(
+    const langfuseResult = await getLangfusePrompt(
       helper,
       vars,
       promptType,
@@ -189,11 +190,10 @@ export async function renderPrompt(
     );
     return langfuseResult;
   } else if (prompt.raw.startsWith('helicone://')) {
-    const { getPrompt } = await import('./integrations/helicone');
     const heliconePrompt = prompt.raw.slice('helicone://'.length);
     const [id, version] = heliconePrompt.split(':');
     const [majorVersion, minorVersion] = version ? version.split('.') : [undefined, undefined];
-    const heliconeResult = await getPrompt(
+    const heliconeResult = await getHeliconePrompt(
       id,
       vars,
       majorVersion === undefined ? undefined : Number(majorVersion),

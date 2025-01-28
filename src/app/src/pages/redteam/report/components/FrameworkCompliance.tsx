@@ -117,7 +117,7 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
       <CardContent>
         <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
           <Typography variant="h5">
-            Framework Compliance ({compliantFrameworks}/{totalFrameworks})
+            Frameworks ({compliantFrameworks}/{totalFrameworks})
           </Typography>
           <Typography variant="h6" color="textSecondary">
             {pluginComplianceStats.percentage.toFixed(0)}% ({pluginComplianceStats.compliant}/

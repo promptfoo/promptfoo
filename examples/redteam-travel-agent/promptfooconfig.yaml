@@ -1,0 +1,30 @@
+description: Travel agent red team
+
+prompts:
+  - file://prompt.json
+
+providers:
+  - id: openai:gpt-4o-mini
+    config:
+      tools: file://tools.yaml
+
+redteam:
+  numTests: 5
+
+  plugins:
+    - competitors
+    - politics
+    - harmful:hate
+    - harmful:illegal-drugs
+    - harmful:violent-crime
+    - harmful:self-harm
+    - harmful:profanity
+    - harmful:insults
+
+  strategies:
+    - jailbreak
+    - jailbreak:composite
+    - jailbreak:tree
+    - prompt-injection
+    - goat
+    - crescendo

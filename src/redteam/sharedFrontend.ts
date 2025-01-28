@@ -1,6 +1,11 @@
 // This file is imported by the frontend and shouldn't use native dependencies.
-import type { UnifiedConfig } from '../types';
-import { type Severity, type Plugin, riskCategorySeverityMap } from './constants';
+import type { TestCase, UnifiedConfig } from '../types';
+import {
+  MULTI_TURN_STRATEGIES,
+  type Plugin,
+  riskCategorySeverityMap,
+  type Severity,
+} from './constants';
 import type { RedteamPluginObject, SavedRedteamConfig } from './types';
 
 export function getRiskCategorySeverityMap(
@@ -30,6 +35,7 @@ export function getUnifiedConfig(
     description: config.description,
     targets: [config.target],
     prompts: config.prompts,
+    defaultTest: config.defaultTest as TestCase,
     redteam: {
       purpose: config.purpose,
       numTests: config.numTests,
@@ -44,12 +50,34 @@ export function getUnifiedConfig(
       }),
       strategies: config.strategies.map((strategy) => {
         if (typeof strategy === 'string') {
+          if (MULTI_TURN_STRATEGIES.includes(strategy as any) && config.target.config.stateful) {
+            return { id: strategy, config: { stateful: true } };
+          }
           return { id: strategy };
         }
+
+        // Determine if this is a stateful multi-turn strategy
+        const isStatefulMultiTurn =
+          MULTI_TURN_STRATEGIES.includes(strategy.id as any) && config.target.config.stateful;
+
+        // Check if we have any custom configuration
+        const hasCustomConfig = strategy.config && Object.keys(strategy.config).length > 0;
+
+        // If we don't need any configuration, return just the ID
+        if (!isStatefulMultiTurn && !hasCustomConfig) {
+          return { id: strategy.id };
+        }
+
+        // Build the configuration object
+        const configObject = {
+          ...(isStatefulMultiTurn && { stateful: true }),
+          ...(strategy.config || {}),
+        };
+
+        // Return the strategy with its configuration
         return {
           id: strategy.id,
-          ...(strategy.config &&
-            Object.keys(strategy.config).length > 0 && { config: strategy.config }),
+          config: configObject,
         };
       }),
     },

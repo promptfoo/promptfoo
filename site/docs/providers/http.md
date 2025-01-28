@@ -1,5 +1,4 @@
 ---
-sidebar_position: 53
 sidebar_label: HTTP API
 ---
 
@@ -189,7 +188,73 @@ If you are using promptfoo as a [node library](/docs/usage/node-package/), you c
 }
 ```
 
-## Response parser
+## Request Transform
+
+Request transform modifies your prompt after it is rendered but before it is sent to a provider API. This allows you to:
+
+- Format prompts into specific message structures
+- Add metadata or context
+- Handle nuanced message formats for multi-turn conversations
+
+### Basic Usage
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/chat'
+      transformRequest: '{"message": "{{prompt}}"}'
+      body:
+        user_message: '{{prompt}}'
+```
+
+### Transform Types
+
+#### String Template
+
+Use Nunjucks templates to transform the prompt:
+
+```yaml
+transformRequest: '{"text": "{{prompt}}"}'
+```
+
+#### JavaScript Function
+
+Define a function that transforms the prompt:
+
+```javascript
+transformRequest: (prompt) => JSON.stringify({ text: prompt, timestamp: Date.now() });
+```
+
+#### File-based Transform
+
+Load a transform from an external file:
+
+```yaml
+transformRequest: 'file://transforms/request.js'
+```
+
+Example transform file (transforms/request.js):
+
+```javascript
+module.exports = (prompt) => {
+  return {
+    text: prompt,
+    metadata: {
+      timestamp: Date.now(),
+      version: '1.0',
+    },
+  };
+};
+```
+
+You can also specify a specific function to use:
+
+```yaml
+transformRequest: 'file://transforms/request.js:transformRequest'
+```
+
+## Response Transform
 
 The `transformResponse` option allows you to extract and transform the API response. If no `transformResponse` is specified, the provider will attempt to parse the response as JSON. If JSON parsing fails, it will return the raw text response.
 
@@ -278,10 +343,16 @@ providers:
       transformResponse: 'json.choices[0].message.content'
 ```
 
-This expression will be evaluated with two variables available:
+This expression will be evaluated with three variables available:
 
 - `json`: The parsed JSON response (if the response is valid JSON)
 - `text`: The raw text response
+- `context`: `context.response` is of type `FetchWithCacheResult` which includes:
+  - `data`: The response data (parsed as JSON if possible)
+  - `cached`: Boolean indicating if response was from cache
+  - `status`: HTTP status code
+  - `statusText`: HTTP status text
+  - `headers`: Response headers (if present)
 
 #### Function parser
 
@@ -314,13 +385,26 @@ providers:
       transformResponse: 'file://path/to/parser.js'
 ```
 
-The parser file should export a function that takes two arguments (`json` and `text`) and returns the parsed output. For example:
+The parser file should export a function that takes three arguments (`json`, `text`, `context`) and return the parsed output. Note that text and context are optional.
 
 ```javascript
 module.exports = (json, text) => {
   return json.choices[0].message.content;
 };
 ```
+
+You can use the `context` parameter to access response metadata and implement custom logic. For example, implementing guardrails checking:
+
+```javascript
+module.exports = (json, text, context) => {
+  return {
+    output: json.choices[0].message.content,
+    guardrails: { flagged: context.response.headers['x-content-filtered'] === 'true' },
+  };
+};
+```
+
+This allows you to access additional response metadata and implement custom logic based on response status codes, headers, or other properties.
 
 You can also use a default export:
 
@@ -342,70 +426,20 @@ providers:
 
 This will import the function `parseResponse` from the file `path/to/parser.js`.
 
-## Request Transform
+### Guardrails Support
 
-Request transform modifies your prompt after it is rendered but before it is sent to a provider API. This allows you to:
-
-- Format prompts into specific message structures
-- Add metadata or context
-- Handle nuanced message formats for multi-turn conversations
-
-### Basic Usage
+If your HTTP target has guardrails set up, you need to return an object with both `output` and `guardrails` fields from your transform. The `guardrails` field should be a top-level field in your returned object and must conform to the [GuardrailResponse](/docs/configuration/reference#guardrails) interface. For example:
 
 ```yaml
 providers:
   - id: https
     config:
-      url: 'https://api.example.com/chat'
-      transformRequest: '{"message": "{{prompt}}"}'
-      body:
-        user_message: '{{prompt}}'
-```
-
-### Transform Types
-
-#### String Template
-
-Use Nunjucks templates to transform the prompt:
-
-```yaml
-transformRequest: '{"text": "{{prompt}}"}'
-```
-
-#### JavaScript Function
-
-Define a function that transforms the prompt:
-
-```javascript
-transformRequest: (prompt) => JSON.stringify({ text: prompt, timestamp: Date.now() });
-```
-
-#### File-based Transform
-
-Load a transform from an external file:
-
-```yaml
-transformRequest: 'file://transforms/request.js'
-```
-
-Example transform file (transforms/request.js):
-
-```javascript
-module.exports = (prompt) => {
-  return {
-    text: prompt,
-    metadata: {
-      timestamp: Date.now(),
-      version: '1.0',
-    },
-  };
-};
-```
-
-You can also specify a specific function to use:
-
-```yaml
-transformRequest: 'file://transforms/request.js:transformRequest'
+      url: 'https://example.com/api'
+      transformResponse: |
+        {
+          output: json.choices[0].message.content,
+          guardrails: { flagged: context.response.headers['x-content-filtered'] === 'true' }
+        }
 ```
 
 ## Session management
@@ -414,23 +448,40 @@ transformRequest: 'file://transforms/request.js:transformRequest'
 
 When using an HTTP provider with multi-turn redteam attacks like GOAT and Crescendo, you may need to maintain session IDs between rounds. The HTTP provider will automatically extract the session ID from the response headers and store it in the `vars` object.
 
-Create a session parser that extracts the session ID from the response headers and returns it. All of the same formats of response parsers are supported.
+A session parser is a javascript expression that should be used to extract the session ID from the response headers and returns it. All of the same formats of response parsers are supported.
 
-The input to the session parser is an object with a `headers` field, which contains the response headers:
+The input to the session parser is an object `data` with this interface:
 
 ```typescript
 {
-  headers: Record<string, string>;
+  headers?: Record<string, string> | null;
+  body?: Record<string, any> | null;
 }
 ```
 
 Simple header parser:
 
 ```yaml
-sessionParser: 'set-cookie'
+sessionParser: 'data.headers["set-cookie"]'
 ```
 
-The parser can take a string, file or function like the response parser. If you just include a string, it will be treated as a field on the `headers` object.
+Example extracting the session from the body:
+
+Example Response
+
+```json
+{
+  "responses": [{ "sessionId": "abd-abc", "message": "Bad LLM" }]
+}
+```
+
+Session Parser value:
+
+```yaml
+sessionParser: 'data.body.responses[0]?.sessionId
+```
+
+The parser can take a string, file or function like the response parser.
 
 Then you need to set the session ID in the `vars` object for the next round:
 
@@ -441,6 +492,28 @@ providers:
       url: 'https://example.com/api'
       headers:
         'Cookie': '{{sessionId}}'
+```
+
+You can use the `{{sessionId}}` var anywhere in a header or body. Example:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://example.com/api'
+      body:
+        'message': '{{prompt}}'
+        'sessionId': '{{sessionId}}'
+```
+
+Accessing the headers or body:
+
+```yaml
+sessionParser: data.body.sessionId'
+```
+
+```yaml
+sessionParser: 'data.headers.["x-session-Id"]'
 ```
 
 ### Client-side session management
@@ -467,6 +540,76 @@ providers:
       body:
         user_message: '{{prompt}}'
 ```
+
+## Digital Signature Authentication
+
+The HTTP provider supports digital signature authentication. This feature allows you to:
+
+- Automatically generate cryptographic signatures for requests
+- Manage signature expiration and refresh
+- Customize header names and signature formats
+- Configure different signature algorithms
+
+The current implementation uses asymmetric key cryptography (RSA by default), but the configuration is algorithm-agnostic.
+
+### Basic Usage
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/v1'
+      method: 'POST'
+      headers:
+        'x-signature': '{{signature}}'
+        'x-timestamp': '{{signatureTimestamp}}'
+      signatureAuth:
+        privateKeyPath: '/path/to/private.key'
+        clientId: 'your-client-id'
+```
+
+### Full Configuration
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/v1'
+      headers:
+        'x-signature': '{{signature}}'
+        'x-timestamp': '{{signatureTimestamp}}'
+        'x-client-id': 'your-client-id'
+      signatureAuth:
+        # Required fields - provide either privateKeyPath or privateKey
+        privateKeyPath: '/path/to/private.key' # Path to key file
+        # privateKey: '-----BEGIN PRIVATE KEY-----\n...'  # Or direct key string
+        clientId: 'your-client-id'
+
+        # Optional fields with defaults shown
+        signatureValidityMs: 300000 # 5 minutes
+        signatureAlgorithm: 'SHA256'
+        signatureDataTemplate: '{{clientId}}{{timestamp}}\n' # \n is interpreted as a newline
+        signatureRefreshBufferMs: 30000 # Optional: custom refresh buffer
+```
+
+When signature authentication is enabled, the following variables are available for use in headers or other templated fields:
+
+- `signature`: The generated signature string (base64 encoded)
+- `signatureTimestamp`: The Unix timestamp when the signature was generated
+
+### Signature Auth Options
+
+| Option                   | Type   | Required | Default                             | Description                                                                                                           |
+| ------------------------ | ------ | -------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| privateKeyPath           | string | No\*     | -                                   | Path to the private key file used for signing                                                                         |
+| privateKey               | string | No\*     | -                                   | Private key string (if not using privateKeyPath)                                                                      |
+| clientId                 | string | Yes      | -                                   | Client identifier used in signature generation                                                                        |
+| signatureValidityMs      | number | No       | 300000                              | Validity period of the signature in milliseconds                                                                      |
+| signatureAlgorithm       | string | No       | 'SHA256'                            | Signature algorithm to use (any supported by Node.js crypto)                                                          |
+| signatureDataTemplate    | string | No       | '\{\{clientId\}\}\{\{timestamp\}\}' | Template for formatting the data to be signed. Note: `\n` in the template will be interpreted as a newline character. |
+| signatureRefreshBufferMs | number | No       | 10% of validityMs                   | Buffer time before expiry to refresh signature                                                                        |
+
+\* Either `privateKeyPath` or `privateKey` must be provided
 
 ## Request Retries
 
@@ -501,9 +644,22 @@ Supported config options:
 | transformRequest  | string \| Function      | A function, string template, or file path to transform the prompt before sending it to the API.                                                                                     |
 | transformResponse | string \| Function      | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field. |
 | maxRetries        | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                |
-| validateStatus    | Function                | A function that takes a status code and returns a boolean indicating if the response should be treated as successful. By default, considers status codes 200-299 as successful.     |
+| validateStatus    | Function                | A function that takes a status code and returns a boolean indicating if the response should be treated as successful. By default, accepts all status codes.                         |
+| signatureAuth     | object                  | Configuration for digital signature authentication. See Signature Auth Options below.                                                                                               |
 
-Note: All string values in the config (including those nested in `headers`, `body`, and `queryParams`) support Nunjucks templating. This means you can use the `{{prompt}}` variable or any other variables passed in the test context.
+### Signature Auth Options
+
+| Option                   | Type   | Required | Default                             | Description                                                                                                           |
+| ------------------------ | ------ | -------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| privateKeyPath           | string | No\*     | -                                   | Path to the private key file used for signing                                                                         |
+| privateKey               | string | No\*     | -                                   | Private key string (if not using privateKeyPath)                                                                      |
+| clientId                 | string | Yes      | -                                   | Client identifier used in signature generation                                                                        |
+| signatureValidityMs      | number | No       | 300000                              | Validity period of the signature in milliseconds                                                                      |
+| signatureAlgorithm       | string | No       | 'SHA256'                            | Signature algorithm to use (any supported by Node.js crypto)                                                          |
+| signatureDataTemplate    | string | No       | '\{\{clientId\}\}\{\{timestamp\}\}' | Template for formatting the data to be signed. Note: `\n` in the template will be interpreted as a newline character. |
+| signatureRefreshBufferMs | number | No       | 10% of validityMs                   | Buffer time before expiry to refresh signature                                                                        |
+
+\* Either `privateKeyPath` or `privateKey` must be provided
 
 In addition to a full URL, the provider `id` field accepts `http` or `https` as values.
 
@@ -519,13 +675,13 @@ import { HttpConfigGenerator } from '@site/src/components/HttpConfigGenerator';
 
 The HTTP provider throws errors for:
 
-- Invalid response status codes
 - Network errors or request failures
 - Invalid response parsing
 - Session parsing errors
 - Invalid request configurations
+- Status codes that fail the configured validation (if `validateStatus` is set)
 
-By default, responses with status codes outside 200-299 are treated as errors. You can customize this using the `validateStatus` option:
+By default, all response status codes are accepted. You can customize this using the `validateStatus` option:
 
 ```yaml
 providers:
@@ -535,7 +691,7 @@ providers:
       # Function-based validation
       validateStatus: (status) => status < 500  # Accept any status below 500
       # Or string-based expression
-      validateStatus: 'status >= 200 && status <= 299'  # Default behavior
+      validateStatus: 'status >= 200 && status <= 299'  # Accept only 2xx responses
       # Or load from file
       validateStatus: 'file://validators/status.js'  # Load default export
       validateStatus: 'file://validators/status.js:validateStatus'  # Load specific function

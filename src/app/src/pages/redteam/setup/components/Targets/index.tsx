@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
@@ -10,8 +10,8 @@ import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import Link from '@mui/material/Link';
 import MenuItem from '@mui/material/MenuItem';
-import Select from '@mui/material/Select';
 import type { SelectChangeEvent } from '@mui/material/Select';
+import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
@@ -79,6 +79,9 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   const [selectedTarget, setSelectedTarget] = useState<ProviderOptions>(
     config.target || DEFAULT_HTTP_TARGET,
   );
+  const [useGuardrail, setUseGuardrail] = useState(
+    config.defaultTest?.assert?.some((a) => a.type === 'guardrails') ?? false,
+  );
   const [testingTarget, setTestingTarget] = useState(false);
   const [testResult, setTestResult] = useState<{
     success?: boolean;
@@ -103,7 +106,25 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   }, []);
 
   useEffect(() => {
-    updateConfig('target', selectedTarget);
+    const updatedTarget = { ...selectedTarget };
+
+    if (useGuardrail) {
+      const defaultTestConfig = {
+        assert: [
+          {
+            type: 'guardrails',
+            config: {
+              purpose: 'redteam',
+            },
+          },
+        ],
+      };
+      updateConfig('defaultTest', defaultTestConfig);
+    } else {
+      updateConfig('defaultTest', undefined);
+    }
+
+    updateConfig('target', updatedTarget);
     const missingFields: string[] = [];
 
     if (selectedTarget.label) {
@@ -122,7 +143,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
 
     setMissingFields(missingFields);
     setPromptRequired(requiresPrompt(selectedTarget));
-  }, [selectedTarget, updateConfig]);
+  }, [selectedTarget, useGuardrail, updateConfig]);
 
   const handleTargetChange = (event: SelectChangeEvent<string>) => {
     const value = event.target.value as string;
@@ -219,6 +240,29 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         } else {
           setBodyError(null);
         }
+      } else if (field === 'transformResponse') {
+        updatedTarget.config.transformResponse = value;
+        // Check if the transform response includes guardrails
+        const hasGuardrails =
+          value.includes('guardrails:') ||
+          value.includes('"guardrails"') ||
+          value.includes("'guardrails'");
+        setUseGuardrail(hasGuardrails);
+        if (hasGuardrails) {
+          const defaultTestConfig = {
+            assert: [
+              {
+                type: 'guardrails',
+                config: {
+                  purpose: 'redteam',
+                },
+              },
+            ],
+          };
+          updateConfig('defaultTest', defaultTestConfig);
+        } else {
+          updateConfig('defaultTest', undefined);
+        }
       } else if (field === 'label') {
         updatedTarget.label = value;
       } else {
@@ -308,6 +352,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         In Promptfoo targets are also known as providers. You can configure additional targets
         later.
       </Typography>
+
       <Typography variant="body1">
         For more information on available providers and how to configure them, please visit our{' '}
         <Link href="https://www.promptfoo.dev/docs/providers/" target="_blank" rel="noopener">
@@ -320,6 +365,29 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium', mb: 3 }}>
           Select a Target
         </Typography>
+        <Box sx={{ mt: 2, mb: 2 }}>
+          <FormControl fullWidth>
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+              <Box sx={{ flex: 1 }}>
+                <InputLabel id="predefined-target-label">Target Type</InputLabel>
+                <Select
+                  labelId="predefined-target-label"
+                  value={selectedTarget.id}
+                  onChange={handleTargetChange}
+                  label="Target Type"
+                  fullWidth
+                >
+                  {selectOptions.map((target) => (
+                    <MenuItem key={target.value} value={target.value}>
+                      {target.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </Box>
+            </Box>
+          </FormControl>
+        </Box>
+
         <TextField
           fullWidth
           sx={{ mb: 2 }}
@@ -341,26 +409,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
           'customer-service-agent', 'compliance-bot'
         </Typography>
 
-        <FormControl fullWidth>
-          <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
-            <Box sx={{ flex: 1 }}>
-              <InputLabel id="predefined-target-label">Target Type</InputLabel>
-              <Select
-                labelId="predefined-target-label"
-                value={selectedTarget.id}
-                onChange={handleTargetChange}
-                label="Target Type"
-                fullWidth
-              >
-                {selectOptions.map((target) => (
-                  <MenuItem key={target.value} value={target.value}>
-                    {target.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </Box>
-          </Box>
-        </FormControl>
         {(selectedTarget.id.startsWith('javascript') || selectedTarget.id.startsWith('python')) && (
           <TextField
             fullWidth

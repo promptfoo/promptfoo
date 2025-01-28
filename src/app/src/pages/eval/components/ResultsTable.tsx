@@ -38,6 +38,7 @@ import CustomMetrics from './CustomMetrics';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import GenerateTestCases from './GenerateTestCases';
+import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import type { TruncatedTextProps } from './TruncatedText';
 import TruncatedText from './TruncatedText';
 import { useStore as useMainStore } from './store';
@@ -411,7 +412,13 @@ function ResultsTable({
                 <TableHeader text={varName} maxLength={maxTextLength} className="font-bold" />
               ),
               cell: (info: CellContext<EvaluateTableRow, string>) => {
-                const value = info.getValue();
+                let value: string | object = info.getValue();
+                if (typeof value === 'object') {
+                  value = JSON.stringify(value, null, 2);
+                  if (renderMarkdown) {
+                    value = `\`\`\`json\n${value}\n\`\`\``;
+                  }
+                }
                 const truncatedValue =
                   value.length > maxTextLength
                     ? `${value.substring(0, maxTextLength - 3).trim()}...`
@@ -419,7 +426,9 @@ function ResultsTable({
                 return (
                   <div className="cell">
                     {renderMarkdown ? (
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{truncatedValue}</ReactMarkdown>
+                      <MarkdownErrorBoundary fallback={<>{value}</>}>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{truncatedValue}</ReactMarkdown>
+                      </MarkdownErrorBoundary>
                     ) : (
                       <>{value}</>
                     )}

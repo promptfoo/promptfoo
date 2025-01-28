@@ -258,6 +258,7 @@ export async function runAssertion({
     cost: handleCost,
     equals: handleEquals,
     factuality: handleFactuality,
+    guardrails: handleGuardrails,
     'g-eval': handleGEval,
     icontains: handleIContains,
     'icontains-all': handleIContainsAll,
@@ -282,7 +283,6 @@ export async function runAssertion({
     'rouge-n': handleRougeScore,
     similar: handleSimilar,
     'starts-with': handleStartsWith,
-    guardrails: handleGuardrails,
     webhook: handleWebhook,
   };
 

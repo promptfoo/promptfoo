@@ -97,16 +97,20 @@ describe('AssertionSchema', () => {
 
 describe('VarsSchema', () => {
   it('should validate and transform various types of values', () => {
-    expect.assertions(8);
+    expect.assertions(9);
     const testCases = [
       { input: { key: 'string value' }, expected: { key: 'string value' } },
-      { input: { key: 42 }, expected: { key: '42' } },
-      { input: { key: true }, expected: { key: 'true' } },
-      { input: { key: false }, expected: { key: 'false' } },
+      { input: { key: 42 }, expected: { key: 42 } },
+      { input: { key: true }, expected: { key: true } },
+      { input: { key: false }, expected: { key: false } },
       { input: { key: ['a', 'b', 'c'] }, expected: { key: ['a', 'b', 'c'] } },
-      { input: { key: [1, 2, 3] }, expected: { key: ['1', '2', '3'] } },
-      { input: { key: [true, false] }, expected: { key: ['true', 'false'] } },
+      { input: { key: [1, 2, 3] }, expected: { key: [1, 2, 3] } },
+      { input: { key: [true, false] }, expected: { key: [true, false] } },
       { input: { key: [{ nested: 'object' }] }, expected: { key: [{ nested: 'object' }] } },
+      {
+        input: { key: { arbitrary: 'value', nested: { object: true } } },
+        expected: { key: { arbitrary: 'value', nested: { object: true } } },
+      },
     ];
 
     testCases.forEach(({ input, expected }) => {

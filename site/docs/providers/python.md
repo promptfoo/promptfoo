@@ -1,5 +1,4 @@
 ---
-sidebar_position: 51
 sidebar_label: Custom Python
 ---
 

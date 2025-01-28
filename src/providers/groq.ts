@@ -67,6 +67,17 @@ export class GroqProvider implements ApiProvider {
     return `[Groq Provider ${this.modelName}]`;
   }
 
+  toJSON() {
+    return {
+      provider: 'groq',
+      model: this.modelName,
+      config: {
+        ...this.config,
+        ...(this.apiKey && { apiKey: undefined }),
+      },
+    };
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
