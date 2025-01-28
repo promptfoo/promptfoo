@@ -416,10 +416,9 @@ export async function runRedteamConversation({
     }
 
     if (
-      currentScore >= 10 ||
-      (graderPassed === false &&
-        previousOutputs.filter((output) => output.graderPassed === false).length >=
-          numAdditionalIterations)
+      (currentScore >= 10 || graderPassed === false) &&
+      previousOutputs.filter((output) => output.graderPassed === false).length >=
+        numAdditionalIterations
     ) {
       finalIteration = i + 1;
       break;
