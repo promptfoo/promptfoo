@@ -11,9 +11,11 @@ Assertions are _optional_. Many people get value out of reviewing outputs manual
 
 ## Example
 
-Let's imagine we're building an app that does language translation. This config runs each prompt through GPT-3.5 and Gemini, substituting `language` and `input` variables:
+Let's imagine we're building an app that does language translation. This config runs each prompt through GPT-4o-mini and Gemini 2.0 Flash, substituting `language` and `input` variables:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Language translation'
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
@@ -35,13 +37,15 @@ For more information on setting up a prompt file, see [input and output files](/
 
 :::
 
-Running `promptfoo eval` over this config will result in a _matrix view_ that you can use to evaluate GPT vs Gemini.
+Running `promptfoo eval` over this config will result in a _matrix view_ that you can use to evaluate GPT-4o-mini vs Gemini-2.0-flash.
 
 ## Use assertions to validate output
 
 Next, let's add an assertion. This automatically rejects any outputs that don't contain JSON:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Language translation'
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
@@ -61,11 +65,13 @@ tests:
       input: How's it going?
 ```
 
-We can create additional tests. Let's add a couple other [types of assertions](/docs/configuration/expected-outputs). Use an array of assertions for a single test case to ensure all conditions are met.
+We can create additional tests. Let's add a couple other **[types of assertions](/docs/configuration/expected-outputs)**. Use an array of assertions for a single test case to ensure all conditions are met.
 
 In this example, the `javascript` assertion runs Javascript against the LLM output. The `similar` assertion checks for semantic similarity using embeddings:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Language translation'
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
@@ -120,7 +126,8 @@ config:
 
 The `tests` config property takes a list of paths to files or directories. For example:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts: file://prompts.txt
 providers: openai:gpt-4o-mini
 
@@ -154,14 +161,8 @@ tests:
 ```
 
 :::tip
-Test files can be defined in YAML/JSON, JSONL, [CSV](/docs/configuration/parameters/#import-from-csv), and TypeScript/JavaScript. We also support [Google Sheets](/docs/integrations/google-sheets) CSV datasets.
-
-Additionally, promptfoo supports:
-
-- [CSV files and Google Sheets](/docs/configuration/datasets/csv) for spreadsheet-based test cases
-- [HuggingFace datasets](/docs/configuration/datasets/huggingface) for popular benchmarks and evaluation datasets
-- Local YAML/JSON files for version-controlled test suites
-  :::
+Test files can be defined in YAML, JSON, JSONL, JavaScript, TypeScript, [CSV](/docs/configuration/parameters/#import-from-csv), and [Google Sheets](/docs/integrations/google-sheets). Additionally, promptfoo supports [HuggingFace datasets](/docs/configuration/datasets/huggingface).
+:::
 
 ## Import vars from separate files
 
@@ -200,17 +201,20 @@ tests:
       paper: file://pdfs/arxiv_1.pdf
 ```
 
-Note that you must install the `pdf-parse` package to use PDFs as variables:
+:::info
+Note that you must install the [`pdf-parse`](https://www.npmjs.com/package/pdf-parse) package to use PDFs as variables:
 
-```
+```bash
 npm install pdf-parse
 ```
+
+:::
 
 ### Javascript variables
 
 To dynamically load a variable from a JavaScript file, use the `file://` prefix in your YAML configuration, pointing to a JavaScript file that exports a function.
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 tests:
   - vars:
       context: file://path/to/dynamicVarGenerator.js
@@ -218,7 +222,7 @@ tests:
 
 `dynamicVarGenerator.js` receives `varName`, `prompt`, and `otherVars` as arguments, which you can use to query a database or anything else based on test context:
 
-```js
+```js title="dynamicVarGenerator.js"
 module.exports = function (varName, prompt, otherVars) {
   // Example logic to return a value based on the varName
   if (varName === 'context') {
@@ -241,15 +245,13 @@ This JavaScript file processes input variables and returns a dynamic value based
 
 For Python, the approach is similar. Define a Python script that includes a `get_var` function to generate your variable's value. The function should accept `var_name`, `prompt`, and `other_vars`.
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 tests:
   - vars:
       context: file://fetch_dynamic_context.py
 ```
 
-fetch_dynamic_context.py:
-
-```python
+```python title="fetch_dynamic_context.py"
 def get_var(var_name: str, prompt: str, other_vars: Dict[str, str]) -> Dict[str, str]:
     # NOTE: Must return a dictionary with an 'output' key or an 'error' key.
     # Example logic to dynamically generate variable content
@@ -271,7 +273,8 @@ Use `defaultTest` to set properties for all tests.
 
 In this example, we use a `llm-rubric` assertion to ensure that the LLM does not refer to itself as an AI. This check applies to all test cases:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
@@ -333,7 +336,8 @@ promptfoo configurations support JSON schema [references](https://opis.io/json-s
 
 Use the `$ref` key to re-use assertions without having to fully define them more than once. Here's an example:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
@@ -374,7 +378,8 @@ The `vars` map in the test also supports array values. If values are an array, t
 
 For example:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts: file://prompts.txt
 providers:
   - openai:gpt-4o-mini
@@ -422,9 +427,8 @@ Use Nunjucks templates to exert additional control over your prompt templates, i
 
 In the above examples, `vars` values are strings. But `vars` can be any JSON or YAML entity, including nested objects. You can manipulate these objects in the prompt, which are [nunjucks](https://mozilla.github.io/nunjucks/) templates:
 
-promptfooconfig.yaml:
-
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 tests:
   - vars:
       user_profile:
@@ -440,9 +444,7 @@ tests:
           author: 'F. Scott Fitzgerald'
 ```
 
-prompt.txt:
-
-```liquid
+```liquid title="prompt.txt"
 User Profile:
 - Name: {{ user_profile.name }}
 - Interests: {{ user_profile.interests | join(', ') }}
@@ -564,7 +566,7 @@ The `TestCase.options.transform` field is a Javascript snippet that modifies the
 
 It is a function that takes a string output and a context object:
 
-```typescript
+```js title="transform.ts"
 transformFn: (output: string, context: {
   prompt: {
     // ID of the prompt, if assigned
@@ -635,13 +637,13 @@ Transform functions can be executed from external JavaScript or Python files. Yo
 
 For JavaScript:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 defaultTest:
   options:
     transform: file://transform.js:customTransform
 ```
 
-```js
+```js title="transform.js"
 module.exports = {
   customTransform: (output, context) => {
     // context.vars, context.prompt
@@ -652,13 +654,13 @@ module.exports = {
 
 For Python:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 defaultTest:
   options:
     transform: file://transform.py
 ```
 
-```python
+```python title="transform.py"
 def get_transform(output, context):
     # context['vars'], context['prompt']
     return output.upper()
@@ -676,7 +678,8 @@ You can also transform input variables before they are used in prompts using the
 
 The `transformVars` function should return an object with the transformed variable names and values. These transformed variables are added to the `vars` object and can override existing keys. For example:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Summarize the following text in {{topic_length}} words: {{file_content}}'
 
@@ -719,7 +722,7 @@ defaultTest:
     transformVars: file://transformVars.js:customTransformVars
 ```
 
-```js
+```js title="transformVars.js"
 const fs = require('fs');
 
 module.exports = {
@@ -748,7 +751,7 @@ defaultTest:
     transformVars: file://transform_vars.py
 ```
 
-```python
+```python title="transform_vars.py"
 import os
 
 def get_transform(vars, context):
@@ -799,9 +802,10 @@ promptfoo supports multiple ways to load test cases:
 
 The `tests` config property takes a list of paths to files or directories:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts: file://prompts.txt
-providers: openai:gpt-4
+providers: openai:gpt-4o
 
 tests:
   # You can supply an exact filepath
@@ -819,16 +823,16 @@ tests:
 A single string is also valid:
 
 ```yaml
-tests: tests/*
+tests: file://tests/*
 ```
 
 Or a list of paths:
 
 ```yaml
 tests:
-  - 'tests/accuracy'
-  - 'tests/creativity'
-  - 'tests/hallucination'
+  - file://tests/accuracy
+  - file://tests/creativity
+  - file://tests/hallucination
 ```
 
 ### From CSV and Spreadsheets
