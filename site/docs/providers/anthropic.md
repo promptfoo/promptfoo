@@ -64,9 +64,7 @@ Claude models are available across multiple platforms. Here's how the model name
 
 To allow for compatibility with the OpenAI prompt template, the following format is supported:
 
-Example: `prompt.json`
-
-```json
+```json title="prompt.json"
 [
   {
     "role": "system",
@@ -98,7 +96,7 @@ The Anthropic provider supports several options to customize the behavior of the
 
 Example configuration with options and prompts:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: anthropic:messages:claude-3-5-sonnet-20241022
     config:
@@ -112,7 +110,7 @@ prompts:
 
 The Anthropic provider supports tool use (or function calling). Here's an example configuration for defining tools:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: anthropic:messages:claude-3-5-sonnet-20241022
     config:
@@ -153,23 +151,26 @@ Claude supports prompt caching to optimize API usage and reduce costs for repeti
 
 Supported on all Claude 3 and 3.5 models. Basic example:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: anthropic:messages:claude-3-5-sonnet-20241022
 prompts:
-  - messages:
-      - role: system
-        content:
-          - type: text
-            text: 'System message'
-            cache_control:
-              type: ephemeral
-          - type: text
-            text: '{{context}}'
-            cache_control:
-              type: ephemeral
-      - role: user
-        content: '{{question}}'
+  - file://prompts.yaml
+```
+
+```yaml title="prompts.yaml"
+- role: system
+  content:
+    - type: text
+      text: 'System message'
+      cache_control:
+        type: ephemeral
+    - type: text
+      text: '{{context}}'
+      cache_control:
+        type: ephemeral
+- role: user
+  content: '{{question}}'
 ```
 
 Common use cases for caching:
@@ -185,22 +186,25 @@ See [Anthropic's Prompt Caching Guide](https://docs.anthropic.com/claude/docs/pr
 
 Claude can provide detailed citations when answering questions about documents. Basic example:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: anthropic:messages:claude-3-5-sonnet-20241022
 prompts:
-  - messages:
-      - role: user
-        content:
-          - type: document
-            source:
-              type: text
-              media_type: text/plain
-              data: 'Your document text here'
-            citations:
-              enabled: true
-          - type: text
-            text: 'Your question here'
+  - file://prompts.yaml
+```
+
+```yaml title="prompts.yaml"
+- role: user
+  content:
+    - type: document
+      source:
+        type: text
+        media_type: text/plain
+        data: 'Your document text here'
+      citations:
+        enabled: true
+    - type: text
+      text: 'Your question here'
 ```
 
 See [Anthropic's Citations Guide](https://docs.anthropic.com/en/docs/build-with-claude/citations) for more details.
