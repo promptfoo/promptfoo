@@ -93,15 +93,13 @@ const ListItem = styled('li')(({ theme }) => ({
 
 export default function LauncherPage() {
   const [isConnecting, setIsConnecting] = useState(true);
+  const [hasBeenConnected, setHasBeenConnected] = useState(false);
+  const [isInitialConnection, setIsInitialConnection] = useState(true);
   const navigate = useNavigate();
   const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
   const [darkMode, setDarkMode] = useState<boolean | null>(null);
   const isLargeScreen = useMediaQuery('(min-width:1200px)');
-  const {
-    status: healthStatus,
-    hasBeenConnected,
-    isInitialConnection,
-  } = useApiHealth(true, 2000, DEFAULT_LOCAL_API_URL);
+  const { status: healthStatus, checkHealth } = useApiHealth();
   const { apiBaseUrl, setApiBaseUrl, enablePersistApiBaseUrl } = useApiConfig();
 
   // Initialize API URL if not set
@@ -141,13 +139,24 @@ export default function LauncherPage() {
     }
   }, [darkMode]);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      checkHealth();
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [checkHealth]);
+
   // Handle connection status and navigation
   useEffect(() => {
     if (healthStatus === 'connected') {
       setIsConnecting(false);
+      setHasBeenConnected(true);
       // Only auto-navigate if this is the initial connection
       if (isInitialConnection) {
-        setTimeout(() => navigate('/eval'), 1000);
+        setTimeout(() => {
+          setIsInitialConnection(false);
+          navigate('/eval');
+        }, 1000);
       }
     } else if (healthStatus === 'blocked' || healthStatus === 'disabled') {
       setIsConnecting(true);
