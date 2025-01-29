@@ -1,5 +1,7 @@
 ---
 sidebar_position: 5
+pagination_prev: /docs/intro
+pagination_next: /docs/configuration/guide
 ---
 
 import CodeBlock from '@theme/CodeBlock';
@@ -130,7 +132,9 @@ See the [Configuration docs](/docs/configuration/guide) for a detailed guide.
 <details>
 <summary>Show example YAML</summary>
 
-```yaml
+```yaml title=promptfooconfig.yaml
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'My first promptfoo eval'
 prompts:
   - file://prompts.txt
 providers:
@@ -301,7 +305,7 @@ A similar approach can be used to run other model comparisons. For example, you 
 
 ## Other examples
 
-There are many examples available in the [`examples/` directory](https://github.com/promptfoo/promptfoo/tree/main/examples) of our Github repository.
+There are many examples available in the [`examples/`](https://github.com/promptfoo/promptfoo/tree/main/examples) directory of our Github repository.
 
 ## Automatically assess outputs
 
