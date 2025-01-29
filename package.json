@@ -114,7 +114,7 @@
     "@swc/cli": "^0.6.0",
     "@swc/core": "^1.10.11",
     "@swc/jest": "^0.2.37",
-    "@trivago/prettier-plugin-sort-imports": "^5.2.2",
+    "@trivago/prettier-plugin-sort-imports": "^5.2.1",
     "@types/async": "^3.2.24",
     "@types/better-sqlite3": "^7.6.12",
     "@types/cache-manager": "^4.0.6",
@@ -162,7 +162,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.36.3",
-    "@apidevtools/json-schema-ref-parser": "^11.9.0",
+    "@apidevtools/json-schema-ref-parser": "^11.7.3",
     "@googleapis/sheets": "^9.3.1",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
