@@ -109,6 +109,7 @@ export const ADDITIONAL_PLUGINS = [
   'sql-injection',
   'ssrf',
   'system-prompt-override',
+  'harmbenchtext',
 ] as const;
 export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
@@ -551,6 +552,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Dynamic multi-turn attack generation using adversarial techniques',
   hallucination: 'Tests for fabrication of false or misleading information',
+  harmbenchtext: 'Tests for harmful content using the HarmBench dataset',
   harmful: 'Tests handling of malicious content across multiple categories',
   'harmful:chemical-biological-weapons': 'Tests handling of WMD-related content',
   'harmful:child-exploitation': 'Tests handling of child exploitation content',
@@ -632,6 +634,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   gcg: 'Greedy Coordinate Gradient',
   goat: 'Generative Offensive Agent Tester',
   hallucination: 'False Information (Hallucination)',
+  harmbenchtext: 'HarmBench Dataset',
   harmful: 'Malicious Content Suite',
   'harmful:chemical-biological-weapons': 'WMD Content',
   'harmful:child-exploitation': 'Child Exploitation',
@@ -722,6 +725,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'divergent-repetition': Severity.Medium,
   'excessive-agency': Severity.Medium,
   hallucination: Severity.Medium,
+  harmbenchtext: Severity.Medium,
   harmful: Severity.Medium,
   'harmful:chemical-biological-weapons': Severity.High,
   'harmful:child-exploitation': Severity.Critical,
@@ -883,6 +887,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'divergent-repetition': 'DivergentRepetition',
   'excessive-agency': 'ExcessiveAgency',
   hallucination: 'Hallucination',
+  harmbenchtext: 'HarmbenchText',
   harmful: 'Harmful',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
@@ -960,6 +965,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'divergent-repetition':
     'Tests repetitive patterns that can cause the model to diverge from normal behavior and leak training data',
   hallucination: 'Tests system resilience against false information generation and propagation',
+  harmbenchtext:
+    'Tests for harmful content, illegal activities, misinformation using the HarmBench dataset from the Center for AI Safety (CAIS)',
   harmful: 'Comprehensive suite for testing handling of various categories of malicious content',
   hijacking: 'Assesses protection against unauthorized resource usage and purpose deviation',
   imitation: 'Tests safeguards against unauthorized entity impersonation attempts',
