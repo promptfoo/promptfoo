@@ -158,9 +158,11 @@ export default function Purpose({ onNext }: PromptsProps) {
                   <Box
                     sx={{
                       display: 'inline-block',
-                      border: '1px solid',
-                      borderColor: 'info.main',
-                      borderRadius: 1,
+                      backgroundColor: (theme) =>
+                        theme.palette.mode === 'dark'
+                          ? alpha('#9575cd', 0.2)
+                          : alpha('#9575cd', 0.1),
+                      borderRadius: '16px',
                       px: 1.5,
                       py: 0.5,
                     }}
@@ -168,7 +170,7 @@ export default function Purpose({ onNext }: PromptsProps) {
                     <Typography
                       variant="body2"
                       sx={{
-                        color: 'info.main',
+                        color: (theme) => (theme.palette.mode === 'dark' ? '#b39ddb' : '#7e57c2'),
                         fontWeight: 'medium',
                       }}
                     >
