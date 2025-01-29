@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
-import { Alert } from '@mui/material';
+import { Alert, FormControlLabel, Switch } from '@mui/material';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -23,9 +23,19 @@ export default function Purpose({ onNext }: PromptsProps) {
   const { config, updateApplicationDefinition, setFullConfig } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [hasExternalSystems, setHasExternalSystems] = useState(false);
 
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_purpose' });
+    setHasExternalSystems(
+      Boolean(
+        config.applicationDefinition.connectedSystems ||
+          config.applicationDefinition.accessToData ||
+          config.applicationDefinition.forbiddenData ||
+          config.applicationDefinition.accessToActions ||
+          config.applicationDefinition.forbiddenActions,
+      ),
+    );
   }, []);
 
   const isPurposePresent = config.purpose && config.purpose.trim() !== '';
@@ -36,12 +46,14 @@ export default function Purpose({ onNext }: PromptsProps) {
     } else {
       recordEvent('feature_used', { feature: 'redteam_config_example' });
       setFullConfig(EXAMPLE_CONFIG);
+      setHasExternalSystems(true);
     }
   };
 
   const handleConfirmLoadExample = () => {
     recordEvent('feature_used', { feature: 'redteam_config_example' });
     setFullConfig(EXAMPLE_CONFIG);
+    setHasExternalSystems(true);
     setConfirmDialogOpen(false);
   };
 
@@ -113,68 +125,154 @@ export default function Purpose({ onNext }: PromptsProps) {
           </Box>
 
           <Box>
-            <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium' }}>
-              External System Access
-            </Typography>
-            <Typography sx={{ mt: 2 }} variant="body1">
-              What external systems are connected to this application?
-            </Typography>
-            <TextField
-              fullWidth
-              value={config.applicationDefinition.connectedSystems}
-              onChange={(e) => updateApplicationDefinition('connectedSystems', e.target.value)}
-              multiline
-              rows={2}
-              placeholder="e.g. A CRM system for managing customer relationships. Flight booking system. Internal company knowledge base."
-            />
-            <Typography sx={{ mt: 2 }} variant="body1">
-              What data is available to the LLM from connected systems that the user has access to?
-            </Typography>
-            <TextField
-              fullWidth
-              value={config.applicationDefinition.accessToData}
-              onChange={(e) => updateApplicationDefinition('accessToData', e.target.value)}
-              multiline
-              rows={2}
-              placeholder="e.g. Flight prices and schedules, their own profile and purchase history. Basic HR information like holiday schedules, expense policy. 2024 Company plans, budget allocations and org chart."
-            />
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                mb: 3,
+                pb: 2,
+                borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
+              }}
+            >
+              <Typography variant="h5" sx={{ fontWeight: 'medium', mr: 2 }}>
+                External System Access
+              </Typography>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={hasExternalSystems}
+                    onChange={(e) => {
+                      setHasExternalSystems(e.target.checked);
+                      if (!e.target.checked) {
+                        // Clear all external system fields when toggled off
+                        updateApplicationDefinition('connectedSystems', '');
+                        updateApplicationDefinition('accessToData', '');
+                        updateApplicationDefinition('forbiddenData', '');
+                        updateApplicationDefinition('accessToActions', '');
+                        updateApplicationDefinition('forbiddenActions', '');
+                      }
+                    }}
+                  />
+                }
+                label={
+                  <Box
+                    sx={{
+                      display: 'inline-block',
+                      border: '1px solid',
+                      borderColor: 'info.main',
+                      borderRadius: 1,
+                      px: 1.5,
+                      py: 0.5,
+                    }}
+                  >
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: 'info.main',
+                        fontWeight: 'medium',
+                      }}
+                    >
+                      This application connects to external systems
+                    </Typography>
+                  </Box>
+                }
+              />
+            </Box>
 
-            <Typography sx={{ mt: 2 }} variant="body1">
-              What data is available to the LLM from connected systems that the user shouldn't have
-              access to?
-            </Typography>
-            <TextField
-              fullWidth
-              value={config.applicationDefinition.forbiddenData}
-              onChange={(e) => updateApplicationDefinition('forbiddenData', e.target.value)}
-              multiline
-              rows={2}
-              placeholder="e.g. Other users' profiles and purchase history. Sensitive company information like financials, strategy, other employee data."
-            />
+            {hasExternalSystems && (
+              <Stack spacing={3} sx={{ mt: 2 }}>
+                <Box>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
+                    Connected Systems
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
+                    What external systems are connected to this application?
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    value={config.applicationDefinition.connectedSystems}
+                    onChange={(e) =>
+                      updateApplicationDefinition('connectedSystems', e.target.value)
+                    }
+                    multiline
+                    rows={2}
+                    placeholder="e.g. A CRM system for managing customer relationships. Flight booking system. Internal company knowledge base."
+                  />
+                </Box>
 
-            <Typography sx={{ mt: 2 }} variant="body1">
-              What actions can the user take on connected systems?
-            </Typography>
-            <TextField
-              fullWidth
-              value={config.applicationDefinition.accessToActions}
-              onChange={(e) => updateApplicationDefinition('accessToActions', e.target.value)}
-              multiline
-              rows={2}
-              placeholder="e.g. Update their profile, search for flights, book flights, view purchase history, view HR information."
-            />
+                <Box>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
+                    Accessible Data
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
+                    What data is available to the LLM from connected systems that the user has
+                    access to?
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    value={config.applicationDefinition.accessToData}
+                    onChange={(e) => updateApplicationDefinition('accessToData', e.target.value)}
+                    multiline
+                    rows={2}
+                    placeholder="e.g. Flight prices and schedules, their own profile and purchase history. Basic HR information like holiday schedules, expense policy."
+                  />
+                </Box>
 
-            <Typography sx={{ mt: 2 }} variant="body1">
-              What actions shouldn't the user be able to take on connected systems?
-            </Typography>
-            <TextField
-              fullWidth
-              value={config.applicationDefinition.forbiddenActions}
-              onChange={(e) => updateApplicationDefinition('forbiddenActions', e.target.value)}
-              multiline
-              rows={2}
-              placeholder="e.g. Update other users' profile, cancel other users' flights."
-            />
+                <Box>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
+                    Restricted Data
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
+                    What data is available to the LLM from connected systems that the user shouldn't
+                    have access to?
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    value={config.applicationDefinition.forbiddenData}
+                    onChange={(e) => updateApplicationDefinition('forbiddenData', e.target.value)}
+                    multiline
+                    rows={2}
+                    placeholder="e.g. Other users' profiles and purchase history. Sensitive company information like financials, strategy, other employee data."
+                  />
+                </Box>
+
+                <Box>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
+                    Permitted Actions
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
+                    What actions can the user take on connected systems?
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    value={config.applicationDefinition.accessToActions}
+                    onChange={(e) => updateApplicationDefinition('accessToActions', e.target.value)}
+                    multiline
+                    rows={2}
+                    placeholder="e.g. Update their profile, search for flights, book flights, view purchase history, view HR information."
+                  />
+                </Box>
+
+                <Box>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
+                    Restricted Actions
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
+                    What actions shouldn't the user be able to take on connected systems?
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    value={config.applicationDefinition.forbiddenActions}
+                    onChange={(e) =>
+                      updateApplicationDefinition('forbiddenActions', e.target.value)
+                    }
+                    multiline
+                    rows={2}
+                    placeholder="e.g. Update other users' profile, cancel other users' flights."
+                  />
+                </Box>
+              </Stack>
+            )}
           </Box>
         </Stack>
 
