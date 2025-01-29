@@ -21,9 +21,11 @@ import { sleep } from '../../../util/time';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { isBasicRefusal } from '../../util';
 import type { Message } from '../shared';
+import type { BaseRedteamMetadata, BaseRedteamResponse } from '../shared';
 import {
   getLastMessageContent,
   getTargetResponse,
+  messagesToRedteamHistory,
   redteamProviderManager,
   type TargetResponse,
 } from '../shared';
@@ -32,12 +34,32 @@ import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } fr
 export const DEFAULT_MAX_ROUNDS = 10;
 export const DEFAULT_MAX_BACKTRACKS = 10;
 
+/**
+ * Represents metadata for the Crescendo conversation process.
+ */
+export interface CrescendoMetadata extends BaseRedteamMetadata {
+  crescendoRoundsCompleted: number;
+  crescendoBacktrackCount: number;
+  crescendoResult: boolean;
+  crescendoConfidence: number | null;
+  stopReason: 'Grader failed' | 'Max backtracks reached';
+}
+
+/**
+ * Represents the complete response from a Crescendo conversation.
+ */
+export interface CrescendoResponse extends BaseRedteamResponse {
+  metadata: CrescendoMetadata;
+}
+
 interface CrescendoConfig {
   injectVar: string;
   maxRounds?: number;
   maxBacktracks?: number;
   redteamProvider: RedteamFileConfig['provider'];
+  // @deprecated
   stateless?: boolean;
+  stateful?: boolean;
 }
 
 export class MemorySystem {
@@ -74,7 +96,7 @@ export class CrescendoProvider implements ApiProvider {
   private redTeamingChatConversationId: string;
   private maxRounds: number;
   private maxBacktracks: number;
-  private stateless: boolean;
+  private stateful: boolean;
 
   constructor(config: CrescendoConfig) {
     this.config = config;
@@ -84,7 +106,8 @@ export class CrescendoProvider implements ApiProvider {
     this.memory = new MemorySystem();
     this.targetConversationId = uuidv4();
     this.redTeamingChatConversationId = uuidv4();
-    this.stateless = config.stateless ?? true;
+
+    this.stateful = config.stateful ?? (config.stateless == null ? false : !config.stateless);
     if (config.stateless !== undefined) {
       telemetry.recordOnce('feature_used', {
         feature: 'stateless',
@@ -92,7 +115,7 @@ export class CrescendoProvider implements ApiProvider {
       });
     }
 
-    if (!this.stateless) {
+    if (this.stateful) {
       this.maxBacktracks = 0;
     }
     logger.debug(
@@ -141,7 +164,11 @@ export class CrescendoProvider implements ApiProvider {
     return 'promptfoo:redteam:crescendo';
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<CrescendoResponse> {
     logger.debug(`[Crescendo] callApi context: ${safeJsonStringify(context)}`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
@@ -178,7 +205,7 @@ export class CrescendoProvider implements ApiProvider {
     context?: CallApiContextParams;
     options?: CallApiOptionsParams;
     test?: AtomicTestCase;
-  }) {
+  }): Promise<CrescendoResponse> {
     logger.debug(
       `[Crescendo] Starting attack with: prompt=${JSON.stringify(prompt)}, filtersPresent=${!!filters}, varsKeys=${Object.keys(vars)}, providerType=${provider.constructor.name}`,
     );
@@ -264,7 +291,7 @@ export class CrescendoProvider implements ApiProvider {
           totalTokenUsage.cached += lastResponse.tokenUsage.cached || 0;
         }
 
-        if (lastResponse.sessionId && !this.stateless) {
+        if (lastResponse.sessionId && this.stateful) {
           vars['sessionId'] = lastResponse.sessionId;
           if (!context) {
             context = {
@@ -382,14 +409,16 @@ export class CrescendoProvider implements ApiProvider {
     return {
       output: lastResponse.output,
       metadata: {
-        // Displayed in UI
         redteamFinalPrompt: getLastMessageContent(messages, 'user'),
-        messages: JSON.stringify(messages, null, 2),
+        messages: messages as Record<string, any>[],
         crescendoRoundsCompleted: roundNum,
         crescendoBacktrackCount: backtrackCount,
         crescendoResult: evalFlag,
         crescendoConfidence: evalPercentage,
-        stopReason: graderPassed === false ? 'Grader failed' : 'Max backtracks reached',
+        stopReason: (graderPassed === false ? 'Grader failed' : 'Max backtracks reached') as
+          | 'Grader failed'
+          | 'Max backtracks reached',
+        redteamHistory: messagesToRedteamHistory(messages),
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastResponse.guardrails,
@@ -541,10 +570,10 @@ export class CrescendoProvider implements ApiProvider {
     }
 
     const conversationHistory = this.memory.getConversation(this.targetConversationId);
-    const targetPrompt = this.stateless ? JSON.stringify(conversationHistory) : renderedPrompt;
+    const targetPrompt = this.stateful ? renderedPrompt : JSON.stringify(conversationHistory);
 
     logger.debug(
-      `[Crescendo] Sending to target chat (${this.stateless ? conversationHistory.length : 1} messages):`,
+      `[Crescendo] Sending to target chat (${this.stateful ? 1 : conversationHistory.length} messages):`,
     );
     logger.debug(targetPrompt);
 

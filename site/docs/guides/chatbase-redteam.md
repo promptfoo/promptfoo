@@ -81,10 +81,10 @@ Enable multi-turn testing strategies in your `promptfooconfig.yaml`:
 strategies:
   - id: 'goat'
     config:
-      stateless: false
+      stateful: true
   - id: 'crescendo'
     config:
-      stateless: false
+      stateful: true
 ```
 
 ## Test Execution

@@ -142,11 +142,7 @@ function pluginMatchesStrategyTargets(
   if (STRATEGY_EXEMPT_PLUGINS.includes(pluginId as StrategyExemptPlugin)) {
     return false;
   }
-  if (
-    pluginId === 'intent' &&
-    isProviderOptions(testCase.provider) &&
-    testCase.provider?.id === 'sequence'
-  ) {
+  if (isProviderOptions(testCase.provider) && testCase.provider?.id === 'sequence') {
     // Sequence providers are verbatim and strategies don't apply
     return false;
   }
@@ -332,6 +328,7 @@ export async function synthesize({
   purpose: string;
   entities: string[];
   testCases: TestCaseWithPlugin[];
+  injectVar: string;
 }> {
   // Add abort check helper
   const checkAbort = () => {
@@ -641,5 +638,5 @@ export async function synthesize({
 
   logger.info(generateReport(pluginResults, strategyResults));
 
-  return { purpose, entities, testCases: finalTestCases };
+  return { purpose, entities, testCases: finalTestCases, injectVar };
 }

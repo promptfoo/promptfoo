@@ -32,8 +32,6 @@ export function getProxyUrl(): string | undefined {
       return proxyUrl;
     }
   }
-
-  logger.debug('No proxy configuration found in environment variables');
   return undefined;
 }
 

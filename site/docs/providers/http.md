@@ -1,5 +1,4 @@
 ---
-sidebar_position: 53
 sidebar_label: HTTP API
 ---
 
@@ -449,23 +448,40 @@ providers:
 
 When using an HTTP provider with multi-turn redteam attacks like GOAT and Crescendo, you may need to maintain session IDs between rounds. The HTTP provider will automatically extract the session ID from the response headers and store it in the `vars` object.
 
-Create a session parser that extracts the session ID from the response headers and returns it. All of the same formats of response parsers are supported.
+A session parser is a javascript expression that should be used to extract the session ID from the response headers and returns it. All of the same formats of response parsers are supported.
 
-The input to the session parser is an object with a `headers` field, which contains the response headers:
+The input to the session parser is an object `data` with this interface:
 
 ```typescript
 {
-  headers: Record<string, string>;
+  headers?: Record<string, string> | null;
+  body?: Record<string, any> | null;
 }
 ```
 
 Simple header parser:
 
 ```yaml
-sessionParser: 'set-cookie'
+sessionParser: 'data.headers["set-cookie"]'
 ```
 
-The parser can take a string, file or function like the response parser. If you just include a string, it will be treated as a field on the `headers` object.
+Example extracting the session from the body:
+
+Example Response
+
+```json
+{
+  "responses": [{ "sessionId": "abd-abc", "message": "Bad LLM" }]
+}
+```
+
+Session Parser value:
+
+```yaml
+sessionParser: 'data.body.responses[0]?.sessionId
+```
+
+The parser can take a string, file or function like the response parser.
 
 Then you need to set the session ID in the `vars` object for the next round:
 
@@ -476,6 +492,28 @@ providers:
       url: 'https://example.com/api'
       headers:
         'Cookie': '{{sessionId}}'
+```
+
+You can use the `{{sessionId}}` var anywhere in a header or body. Example:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://example.com/api'
+      body:
+        'message': '{{prompt}}'
+        'sessionId': '{{sessionId}}'
+```
+
+Accessing the headers or body:
+
+```yaml
+sessionParser: data.body.sessionId'
+```
+
+```yaml
+sessionParser: 'data.headers.["x-session-Id"]'
 ```
 
 ### Client-side session management

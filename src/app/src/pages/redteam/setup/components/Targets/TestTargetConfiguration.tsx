@@ -157,7 +157,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                   padding={10}
                   placeholder={dedent`Optional: A JavaScript expression to parse the response.
                     Simple transform: json.choices[0].message.content
-                    
+
                     With guardrails: { output: json.choices[0].message.content, guardrails: { flagged: context.response.status === 500 } }`}
                   style={{
                     fontFamily: '"Fira code", "Fira Mono", monospace',
@@ -172,7 +172,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
           <Accordion defaultExpanded={!!selectedTarget.config.sessionParser}>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
               <Box>
-                <Typography variant="h6">Session Header</Typography>
+                <Typography variant="h6">Sessions</Typography>
                 <Typography variant="body2" color="text.secondary">
                   Handle stateful API sessions
                 </Typography>
@@ -180,7 +180,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
             </AccordionSummary>
             <AccordionDetails>
               <Typography variant="body1" sx={{ mb: 2 }}>
-                Extract session IDs from HTTP response headers for stateful systems. See{' '}
+                Extract session IDs from HTTP response headers or the body for stateful systems. See{' '}
                 <a
                   href="https://www.promptfoo.dev/docs/providers/http/#session-management"
                   target="_blank"
@@ -191,9 +191,9 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
               </Typography>
               <TextField
                 fullWidth
-                label="Session Header"
+                label="Session"
                 value={selectedTarget.config.sessionParser}
-                placeholder="Optional: Enter the name of the header that contains the session ID"
+                placeholder="Optional: Enter a javascript expression to extract the session Id"
                 onChange={(e) => updateCustomTarget('sessionParser', e.target.value)}
                 margin="normal"
                 InputLabelProps={{
@@ -413,7 +413,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                   placeholder={dedent`Customize HTTP status code validation. Examples:
 
                       () => true                     // Default: accept all responses - javascript function
-                      status >= 200 && status < 300  // Accept only 2xx codes - javascript expression  
+                      status >= 200 && status < 300  // Accept only 2xx codes - javascript expression
                       (status) => status < 500       // Accept anything but server errors - javascript function`}
                   style={{
                     fontFamily: '"Fira code", "Fira Mono", monospace',

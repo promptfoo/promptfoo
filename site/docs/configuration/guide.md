@@ -19,7 +19,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - vertex:gemini-pro
+  - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
       language: French
@@ -47,7 +47,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - vertex:gemini-pro
+  - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
       language: French
@@ -71,7 +71,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - vertex:gemini-pro
+  - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
       language: French
@@ -141,25 +141,30 @@ tests:
 A single string is also valid:
 
 ```yaml
-tests: tests/*
+tests: file://tests/*
 ```
 
 Or a list of paths:
 
 ```yaml
 tests:
-  - 'tests/accuracy'
-  - 'tests/creativity'
-  - 'tests/hallucination'
+  - file://tests/accuracy
+  - file://tests/creativity
+  - file://tests/hallucination
 ```
 
 :::tip
+<<<<<<< HEAD
 promptfoo supports multiple ways to load test data:
 
 - [CSV files and Google Sheets](/docs/configuration/datasets/csv) for spreadsheet-based test cases
 - [HuggingFace datasets](/docs/configuration/datasets/huggingface) for popular benchmarks and evaluation datasets
 - Local YAML/JSON files for version-controlled test suites
   :::
+  =======
+  Test files can be defined in YAML/JSON, JSONL, [CSV](/docs/configuration/parameters/#import-from-csv), and TypeScript/JavaScript. We also support [Google Sheets](/docs/integrations/google-sheets) CSV datasets.
+  :::
+  > > > > > > > main
 
 ## Import vars from separate files
 
@@ -273,6 +278,12 @@ In this example, we use a `llm-rubric` assertion to ensure that the LLM does not
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
+<<<<<<< HEAD
+=======
+providers:
+  - openai:gpt-4o-mini
+  - vertex:gemini-2.0-flash-exp
+>>>>>>> main
 // highlight-start
 defaultTest:
   assert:
@@ -334,7 +345,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - vertex:gemini-pro
+  - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
       language: French

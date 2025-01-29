@@ -203,19 +203,23 @@ const config = {
             items: [
               {
                 label: 'Intro',
-                to: '/docs/intro',
+                to: '/docs/intro/',
               },
               {
                 label: 'Command Line',
-                to: '/docs/getting-started',
+                to: '/docs/getting-started/',
               },
               {
                 label: 'Node Package',
-                to: '/docs/usage/node-package',
+                to: '/docs/usage/node-package/',
               },
               {
                 label: 'Privacy Policy',
-                to: '/privacy',
+                to: '/privacy/',
+              },
+              {
+                label: 'Terms of Service',
+                to: '/terms-of-service/',
               },
               {
                 html: `
@@ -280,6 +284,10 @@ const config = {
                 href: '/careers/',
               },
               {
+                label: 'Status',
+                href: 'https://status.promptfoo.dev',
+              },
+              {
                 label: 'GitHub',
                 href: 'https://github.com/promptfoo/promptfoo',
               },
@@ -332,6 +340,10 @@ const config = {
           {
             from: '/docs/category/troubleshooting',
             to: '/docs/usage/troubleshooting',
+          },
+          {
+            from: '/docs/providers/palm',
+            to: '/docs/providers/google',
           },
         ],
       },
