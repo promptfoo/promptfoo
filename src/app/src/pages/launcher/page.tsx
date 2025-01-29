@@ -101,6 +101,10 @@ export default function LauncherPage() {
   const { apiBaseUrl, setApiBaseUrl, enablePersistApiBaseUrl } = useApiConfig();
 
   useEffect(() => {
+    document.title = 'Launcher | promptfoo';
+  }, []);
+
+  useEffect(() => {
     if (!apiBaseUrl) {
       setApiBaseUrl(DEFAULT_LOCAL_API_URL);
       enablePersistApiBaseUrl();

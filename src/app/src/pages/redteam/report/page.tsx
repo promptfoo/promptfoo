@@ -17,6 +17,10 @@ export default function ReportPage() {
   }, [fetchEmail]);
 
   useEffect(() => {
+    document.title = evalId ? `Report #${evalId} | promptfoo` : 'Red Team Reports | promptfoo';
+  }, [evalId]);
+
+  useEffect(() => {
     if (!isLoading && !email) {
       navigate(`/login?type=report&redirect=${window.location.pathname}${window.location.search}`);
     }

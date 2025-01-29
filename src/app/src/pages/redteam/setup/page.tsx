@@ -252,6 +252,10 @@ export default function RedTeamSetupPage() {
   const navigate = useNavigate();
   const { recordEvent } = useTelemetry();
 
+  useEffect(() => {
+    document.title = 'Red Team Setup | promptfoo';
+  }, []);
+
   // Get initial tab from URL hash or default to first page
   const [value, setValue] = useState(() => {
     const hash = location.hash.replace('#', '');

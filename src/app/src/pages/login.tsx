@@ -12,13 +12,18 @@ import Typography from '@mui/material/Typography';
 
 export default function LoginPage() {
   const [emailInput, setEmailInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const { email, isLoading, setEmail, fetchEmail } = useUserStore();
+  const { email, isLoading: userStoreLoading, setEmail, fetchEmail } = useUserStore();
 
   useEffect(() => {
     fetchEmail();
   }, [fetchEmail]);
+
+  useEffect(() => {
+    document.title = 'Login | promptfoo';
+  }, []);
 
   const params = new URLSearchParams(location.search);
   const handleRedirect = () => {
@@ -31,10 +36,10 @@ export default function LoginPage() {
   };
 
   useEffect(() => {
-    if (!isLoading && email) {
+    if (!userStoreLoading && email) {
       handleRedirect();
     }
-  }, [isLoading, email]);
+  }, [userStoreLoading, email]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
