@@ -44,12 +44,12 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'configuration/guide' },
         { type: 'doc', id: 'configuration/reference' },
-        { type: 'doc', id: 'configuration/parameters', label: 'Prompts, Tests, and Outputs' },
+        { type: 'doc', id: 'configuration/parameters', label: 'Prompts and Outputs' },
         { type: 'doc', id: 'configuration/chat', label: 'Chat Threads' },
         { type: 'doc', id: 'configuration/datasets', label: 'Dataset Generation' },
         {
           type: 'category',
-          label: 'External Tests',
+          label: 'Tests',
           collapsed: true,
           link: {
             type: 'doc',

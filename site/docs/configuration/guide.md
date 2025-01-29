@@ -161,7 +161,7 @@ tests:
 ```
 
 :::tip
-Test files can be defined in YAML, JSON, JSONL, JavaScript, TypeScript, [CSV](/docs/configuration/parameters/#import-from-csv), and [Google Sheets](/docs/integrations/google-sheets). Additionally, promptfoo supports [HuggingFace datasets](/docs/configuration/tests/huggingface).
+Test files can be defined in YAML, JSON, JSONL, JavaScript, TypeScript, [CSV](/docs/configuration/tests/csv), and [Google Sheets](/docs/configuration/tests/google-sheets). Additionally, promptfoo supports [HuggingFace datasets](/docs/configuration/tests/huggingface).
 :::
 
 ## Import vars from separate files

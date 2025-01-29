@@ -1,5 +1,6 @@
 ---
 sidebar_position: 4
+sidebar_label: Overview
 ---
 
 # Test Configuration Guide
@@ -62,33 +63,32 @@ tests:
       difficulty: 'easy'
 ```
 
-## External Data Sources
+### Separating Tests into Files
 
-### CSV and Spreadsheets
+As your test suite grows, you'll want to organize tests in separate files. There are several approaches:
 
-Perfect for team collaboration and quick iterations. CSV files support special columns for enhanced functionality:
-
-```csv title="tests.csv"
-input,expected,__description
-"What is 2+2?","4","Basic arithmetic"
-"List colors","red blue green","Color listing test"
-```
-
-[Learn more about CSV configuration →](/docs/configuration/tests/csv)
-
-### HuggingFace Datasets
-
-Access established benchmarks and standardized testing datasets:
+1. **Single Test File**
 
 ```yaml title="promptfooconfig.yaml"
-tests: huggingface://datasets/cais/mmlu?split=test&subset=mathematics
+prompts: # ... your prompts configuration
+providers: # ... your providers configuration
+tests: file://tests.yaml
 ```
 
-[Learn more about HuggingFace integration →](/docs/configuration/tests/huggingface)
+2. **Multiple Test Files**
 
-### Local Files
+```yaml title="promptfooconfig.yaml"
+tests:
+  - file://regression/*.yaml # Glob patterns for test categories
+  - file://accuracy/basic.yaml
+  - file://edge-cases.yaml
+```
 
-#### YAML Files
+## Test File Formats
+
+### YAML (Recommended)
+
+Best for readability and maintainability:
 
 ```yaml title="tests.yaml"
 - vars:
@@ -99,7 +99,9 @@ tests: huggingface://datasets/cais/mmlu?split=test&subset=mathematics
       value: 'Paris'
 ```
 
-#### JSON/JSONL Files
+### JSON/JSONL
+
+Good for programmatic generation and processing:
 
 ```json title="tests.json"
 {
@@ -120,7 +122,16 @@ tests: huggingface://datasets/cais/mmlu?split=test&subset=mathematics
 }
 ```
 
-#### JavaScript/TypeScript Files
+For large datasets, use JSONL (one test per line):
+
+```jsonl title="tests.jsonl"
+{"vars": {"input": "What is 2+2?", "expected": "4"}, "assert": [{"type": "equals", "value": "4"}]}
+{"vars": {"input": "List colors", "expected": "red blue green"}, "assert": [{"type": "contains-any", "value": ["red", "blue", "green"]}]}
+```
+
+### TypeScript/JavaScript
+
+Best for dynamic test generation and complex logic:
 
 ```typescript title="tests.ts"
 import { TestCase } from 'promptfoo';
@@ -141,11 +152,44 @@ export const tests: TestCase[] = [
 ];
 ```
 
+## External Data Sources
+
+### CSV and Spreadsheets
+
+Perfect for team collaboration and non-technical users. CSV files support special columns for enhanced functionality:
+
+```csv title="tests.csv"
+input,expected,__description,__prefix,__suffix,__metric,__threshold
+"What is 2+2?","4","Basic arithmetic","","","similarity",0.9
+"List colors","red blue green","Color listing test","Context: ","","contains-any",1.0
+```
+
+Special columns:
+
+- `__expected`: Test assertions (use `__expected1`, `__expected2`, etc. for multiple)
+- `__prefix`: String prepended to each prompt
+- `__suffix`: String appended to each prompt
+- `__description`: Test description
+- `__metric`: Assertion metric
+- `__threshold`: Assertion threshold
+
+[Learn more about CSV configuration →](/docs/configuration/tests/csv)
+
+### HuggingFace Datasets
+
+Access established benchmarks and standardized testing datasets:
+
+```yaml title="promptfooconfig.yaml"
+tests: huggingface://datasets/cais/mmlu?split=test&subset=mathematics
+```
+
+[Learn more about HuggingFace integration →](/docs/configuration/tests/huggingface)
+
 ## Advanced Configuration
 
 ### Combining Multiple Sources
 
-Mix different test sources for comprehensive testing:
+Create comprehensive test suites by combining different sources:
 
 ```yaml title="promptfooconfig.yaml"
 tests:
@@ -158,41 +202,78 @@ tests:
   # Custom test suites
   - file://tests/accuracy/*.yaml
   - file://tests/edge-cases.ts
+
+  # Direct test cases
+  - vars:
+      input: 'Test prompt'
+      expected: 'Expected output'
 ```
 
 ### Test Organization
 
 Structure your tests using:
 
-1. **Directories** - Group related test files
-2. **Metadata** - Tag tests with categories
-3. **Descriptions** - Document test purposes
-4. **File types** - Separate different kinds of tests
+1. **Directory Structure**
+
+   ```
+   tests/
+   ├── regression/    # Regression tests
+   ├── accuracy/      # Accuracy tests
+   ├── edge-cases/    # Edge cases
+   └── benchmarks/    # Benchmark tests
+   ```
+
+2. **Metadata and Tagging**
+   ```yaml
+   - description: 'Basic arithmetic test'
+     vars: { ... }
+     metadata:
+       category: 'math'
+       priority: 'high'
+       suite: 'regression'
+   ```
+
+### Output Configuration
+
+Configure test results output:
+
+```yaml title="promptfooconfig.yaml"
+outputPath: ./results/test-results.json # Default output file
+```
+
+Command-line output options:
+
+```bash
+promptfoo eval --output results.json     # JSON format
+promptfoo eval --output results.yaml     # YAML format
+promptfoo eval --output results.csv      # CSV format
+promptfoo eval --output results.html     # HTML format
+```
 
 ## Best Practices
 
 1. **Version Control**
 
    - Keep test files in version control
-   - Use meaningful file names and directory structure
-   - Document test case purposes
+   - Use meaningful file names
+   - Document test purposes
 
-2. **Test Management**
+2. **Test Organization**
 
    - Start with small test sets
-   - Incrementally add test cases
-   - Use descriptive test names
+   - Group related tests
+   - Use clear descriptions
    - Include edge cases
 
 3. **Performance**
 
-   - Enable caching for repeated evaluations
-   - Use appropriate file formats for your use case
-   - Split large test suites into multiple files
+   - Enable caching
+   - Split large test suites
+   - Use appropriate formats
 
 4. **Collaboration**
-   - Document test case purposes
-   - Use CSV/Sheets for non-technical team members
+   - Document test cases
+   - Use CSV for non-technical users
    - Maintain consistent formatting
 
 ## Troubleshooting
@@ -201,19 +282,19 @@ Common issues and solutions:
 
 1. **File Loading Issues**
 
-   - Verify file paths are relative to config location
-   - Check file permissions
-   - Validate JSON/YAML syntax
+   - Check relative paths
+   - Verify file permissions
+   - Validate syntax
 
 2. **Test Execution Problems**
    - Enable debug logging
-   - Verify variable substitution
-   - Check assertion syntax
+   - Check variable substitution
+   - Verify assertions
 
 ## Related Resources
 
 - [Configuration Guide](/docs/configuration/guide)
-- [CSV Dataset Guide](/docs/configuration/tests/csv)
+- [CSV Configuration](/docs/configuration/tests/csv)
 - [HuggingFace Integration](/docs/configuration/tests/huggingface)
 - [Google Sheets Integration](/docs/configuration/tests/google-sheets)
 - [Configuration Reference](/docs/configuration/reference)
