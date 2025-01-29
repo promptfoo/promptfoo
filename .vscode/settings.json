@@ -51,6 +51,7 @@
     "mixtral",
     "multibar",
     "ngrams",
+    "nvmrc",
     "ollama",
     "openai",
     "OPENROUTER",
@@ -73,6 +74,7 @@
     "transpiling",
     "unindented",
     "uuidv",
+    "VITE",
     "watsonx",
     "webui"
   ],
