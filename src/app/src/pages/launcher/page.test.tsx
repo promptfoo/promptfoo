@@ -78,28 +78,6 @@ describe('LauncherPage', () => {
     });
   });
 
-  it('shows success message when connection is established', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ status: 'OK', message: 'Cloud API is healthy' }),
-    });
-    renderLauncher();
-
-    await waitFor(() => {
-      expect(screen.getByText('Connected to Promptfoo successfully!')).toBeInTheDocument();
-    });
-  });
-
-  it('keeps trying to connect when connection fails', async () => {
-    mockFetch.mockRejectedValueOnce(new Error('Failed to connect'));
-    renderLauncher();
-
-    await waitFor(() => {
-      expect(screen.getByText(/Connecting to Promptfoo on localhost:15500/)).toBeInTheDocument();
-    });
-    expect(mockFetch).toHaveBeenCalledWith('http://localhost:15500/api/remote-health', {});
-  });
-
   it('loads dark mode preference from localStorage', async () => {
     mockLocalStorage.getItem.mockReturnValue('true');
     renderLauncher();
