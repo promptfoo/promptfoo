@@ -681,7 +681,7 @@ The `transformVars` function should return an object with the transformed variab
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
-  - 'Summarize the following text in {{topic_length}} words: {{file_content}}'
+  - 'Summarize the following text in {{topic_length}} words: {{processed_content}}'
 
 defaultTest:
   options:
@@ -689,13 +689,13 @@ defaultTest:
       return {
         uppercase_topic: vars.topic.toUpperCase(),
         topic_length: vars.topic.length,
-        file_content: fs.readFileSync(vars.file_path, 'utf-8')
+        processed_content: vars.content.trim()
       };
 
 tests:
   - vars:
       topic: 'climate change'
-      file_path: './data/climate_article.txt'
+      content: '  This is some text about climate change that needs processing.  '
     assert:
       - type: contains
         value: '{{uppercase_topic}}'
