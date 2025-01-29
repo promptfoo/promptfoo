@@ -153,3 +153,7 @@ It will matter less once models similar to R1 are reproduced without these restr
 In the next post, we'll conduct the same evaluation on American foundation models and compare how Chinese and American models handle politically sensitive topics from both countries.
 
 Next up: 1,156 prompts censored by ChatGPT 😉
+
+---
+
+**Want to reach out?** [Email](mailto:ian@promptfoo.dev) / [X](https://x.com/iwebst) / [LinkedIn](https://www.linkedin.com/in/ianww/)
