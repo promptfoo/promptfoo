@@ -9,7 +9,7 @@ prompts:
 
 providers:
   - 'ollama:mannix/llama3.1-8b-abliterated'
-  - 'openai:gpt-4o-mini'
+  - 'ollama:llama3'
 
 defaultTest:
   assert:
@@ -17,6 +17,6 @@ defaultTest:
 
 tests:
   # Load test sets with provided context
-  - 'file://data/harmbench_sample.csv'
+  - 'file://harmbench_sample.csv'
   # Follow the instructions in `README.md` to download the full dataset
-  # data/harmbench_behaviors_text_all.csv
+  # harmbench_behaviors_text_all.csv

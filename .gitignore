@@ -26,7 +26,7 @@ __pycache__
 # Examples-related
 examples/**/package-lock.json
 examples/redteam-dalle/images
-examples/harmbench/data
+examples/harmbench/harmbench_behaviors_text_all.csv
 
 # JavaScript-related and TypeScript-related
 .vite
