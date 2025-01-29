@@ -35,7 +35,8 @@ const StyledAppBar = styled(AppBar)(({ theme }) => ({
   backgroundColor: theme.palette.background.paper,
   color: theme.palette.text.primary,
   boxShadow: theme.shadows[1],
-  marginBottom: theme.spacing(2),
+  zIndex: theme.zIndex.drawer + 1,
+  width: '100%',
 }));
 
 const NavToolbar = styled(Toolbar)({
@@ -124,7 +125,7 @@ export default function Navigation({
 
   return (
     <>
-      <StyledAppBar position="static" elevation={0}>
+      <StyledAppBar position="fixed" elevation={0}>
         <NavToolbar>
           <NavSection>
             <Logo />

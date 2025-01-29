@@ -141,6 +141,7 @@ const Root = styled(Box)(({ theme }) => ({
   backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#fff',
   minHeight: '100vh',
   position: 'relative',
+  paddingTop: '64px',
 }));
 
 const OuterSidebarContainer = styled(Box)(({ theme }) => ({
