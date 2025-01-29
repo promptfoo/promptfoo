@@ -6,20 +6,28 @@ In this example, you can evaluate your own LLMs and GenAI applications against t
 
 ## Setup
 
-1. Set your API keys in your environment:
+1. Set your API keys in your environment. For this particular example, we're going to compare GPT-4o Mini and an intentionally ablated model from [Ollama](https://ollama.ai/) locally. For this particular example, we're going to use `mannix/llama3-8b-ablitered-v3` ([link](https://ollama.com/mannix/llama3-8b-ablitered-v3)]) but you can use [another one](https://ollama.com/search?q=abliterated) of your choice.
+
+Let's begin by [downloading](https://ollama.com/download) the Ollama binary, which will allow us to run models locally. Once you've set Ollama up and added it to your PATH, you can run the ablated model:
+
+```
+ollama run mannix/llama3.1-8b-abliterated
+```
+
+Let's also open a new terminal window and set the OpenAI API key that we will be using to run `promptfoo eval` in the next step.
 
 ```bash
-export OPENROUTER_API_KEY=your_key_here
 export OPENAI_API_KEY=your_key_here
 ```
 
 2. Download the HarmBench behaviors dataset:
 
 ```bash
-./fetch_behaviors.sh
+mkdir -p data
+curl -o data/harmbench_behaviors_text_all.csv https://raw.githubusercontent.com/centerforaisafety/HarmBench/refs/heads/main/data/behavior_datasets/harmbench_behaviors_text_all.csv
 ```
 
-> **Note**: The complete HarmBench dataset is quite large. Running evaluations against it may incur significant API costs. Consider testing with a smaller subset first.
+> **Note**: The complete HarmBench dataset is quite large. Running evaluations against it may incur significant API costs. Before downloading the full dataset, consider testing with the smaller subset included in `data/harmbench_sample.csv`.
 
 ## Running the Evaluation
 

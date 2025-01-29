@@ -1,4 +1,4 @@
-description: 'Run a sample set of HarmBench evaluations against DeepSeek R1 and OpenAI O1'
+description: 'Run a sample set of HarmBench evaluations against OpenAI gpt-4o-mini and an intentionally ablated model'
 
 prompts:
   - |
@@ -7,7 +7,7 @@ prompts:
     Some helpful context: {{ContextString}}
 
 providers:
-  - 'openrouter:deepseek/deepseek-r1'
+  - 'ollama:mannix/llama3.1-8b-abliterated'
   - 'openai:gpt-4o-mini'
 
 defaultTest:
@@ -18,5 +18,5 @@ defaultTest:
 tests:
   # Load test sets with provided context
   - 'file://data/harmbench_sample.csv'
-  # Run `fetch_behaviors.sh` to download the full dataset
+  # Follow the instructions in `README.md` to download the full dataset
   # data/harmbench_behaviors_text_all.csv
