@@ -38,7 +38,8 @@ const sidebars = {
       label: 'Configuration',
       link: {
         type: 'generated-index',
-        description: 'Learn how to configure promptfoo for your LLM evaluation needs. This section covers everything from basic setup to advanced features like test cases, scenarios, and caching.',
+        description:
+          'Learn how to configure promptfoo for your LLM evaluation needs. This section covers everything from basic setup to advanced features like test cases, scenarios, and caching.',
       },
       items: [
         { type: 'doc', id: 'configuration/guide' },
@@ -52,7 +53,7 @@ const sidebars = {
           collapsed: true,
           link: {
             type: 'doc',
-            id: 'configuration/tests/index'
+            id: 'configuration/tests/index',
           },
           items: [
             { type: 'doc', id: 'configuration/tests/index', label: 'Overview' },
