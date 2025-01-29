@@ -1,4 +1,5 @@
-description: 'Run a sample set of HarmBench evaluations against OpenAI gpt-4o-mini and an intentionally ablated model'
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'HarmBench Eval'
 
 prompts:
   - |
