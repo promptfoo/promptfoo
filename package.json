@@ -105,6 +105,92 @@
     "playwright-extra": "^4.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2"
   },
+  "peerDependenciesMeta": {
+    "@adaline/anthropic": {
+      "optional": true
+    },
+    "@adaline/azure": {
+      "optional": true
+    },
+    "@adaline/gateway": {
+      "optional": true
+    },
+    "@adaline/google": {
+      "optional": true
+    },
+    "@adaline/groq": {
+      "optional": true
+    },
+    "@adaline/open-router": {
+      "optional": true
+    },
+    "@adaline/openai": {
+      "optional": true
+    },
+    "@adaline/provider": {
+      "optional": true
+    },
+    "@adaline/together-ai": {
+      "optional": true
+    },
+    "@adaline/types": {
+      "optional": true
+    },
+    "@adaline/vertex": {
+      "optional": true
+    },
+    "@aws-sdk/client-bedrock-runtime": {
+      "optional": true
+    },
+    "@aws-sdk/credential-provider-sso": {
+      "optional": true
+    },
+    "@azure/identity": {
+      "optional": true
+    },
+    "@azure/openai-assistants": {
+      "optional": true
+    },
+    "@fal-ai/serverless-client": {
+      "optional": true
+    },
+    "@ibm-cloud/watsonx-ai": {
+      "optional": true
+    },
+    "@ibm-generative-ai/node-sdk": {
+      "optional": true
+    },
+    "@playwright/browser-chromium": {
+      "optional": true
+    },
+    "@smithy/node-http-handler": {
+      "optional": true
+    },
+    "google-auth-library": {
+      "optional": true
+    },
+    "ibm-cloud-sdk-core": {
+      "optional": true
+    },
+    "langfuse": {
+      "optional": true
+    },
+    "node-sql-parser": {
+      "optional": true
+    },
+    "pdf-parse": {
+      "optional": true
+    },
+    "playwright": {
+      "optional": true
+    },
+    "playwright-extra": {
+      "optional": true
+    },
+    "puppeteer-extra-plugin-stealth": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.734.0",
     "@aws-sdk/credential-provider-sso": "^3.734.0",
