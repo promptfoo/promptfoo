@@ -184,3 +184,5 @@ export class AI21ChatCompletionProvider implements ApiProvider {
     };
   }
 }
+
+export { AI21_CHAT_MODELS, getTokenUsage, calculateAI21Cost };
