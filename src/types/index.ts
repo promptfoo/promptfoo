@@ -135,6 +135,7 @@ export interface RunEvalOptions {
   testIdx: number;
   promptIdx: number;
   repeatIndex: number;
+  fanoutIteration?: number;
 }
 
 const EvaluateOptionsSchema = z.object({
