@@ -1,6 +1,4 @@
 name: 'Deploy Launcher'
-run-name: 'Deploy Launcher'
-
 on:
   # Runs on pushes targeting the default branch
   push:
