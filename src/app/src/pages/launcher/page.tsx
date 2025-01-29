@@ -22,7 +22,6 @@ import { useApiHealth } from '../../hooks/useApiHealth';
 
 const DEFAULT_LOCAL_API_URL = 'http://localhost:15500';
 
-// Create theme function (copied from PageShell.tsx)
 const createAppTheme = (darkMode: boolean) =>
   createTheme({
     typography: {
@@ -47,7 +46,6 @@ const createAppTheme = (darkMode: boolean) =>
     },
   });
 
-// Styled components to reduce inline styles and improve reusability
 const StyledPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
   borderRadius: theme.shape.borderRadius * 2,
@@ -102,7 +100,6 @@ export default function LauncherPage() {
   const { status: healthStatus, checkHealth } = useApiHealth();
   const { apiBaseUrl, setApiBaseUrl, enablePersistApiBaseUrl } = useApiConfig();
 
-  // Initialize API URL if not set
   useEffect(() => {
     if (!apiBaseUrl) {
       setApiBaseUrl(DEFAULT_LOCAL_API_URL);
@@ -111,7 +108,6 @@ export default function LauncherPage() {
   }, [apiBaseUrl, setApiBaseUrl, enablePersistApiBaseUrl]);
 
   useEffect(() => {
-    // Initialize from localStorage, fallback to system preference
     const savedMode = localStorage.getItem('darkMode');
     setDarkMode(savedMode === null ? prefersDarkMode : savedMode === 'true');
   }, [prefersDarkMode]);
@@ -146,7 +142,6 @@ export default function LauncherPage() {
     return () => clearInterval(interval);
   }, [checkHealth]);
 
-  // Handle connection status and navigation
   useEffect(() => {
     if (healthStatus === 'connected') {
       setIsConnecting(false);
@@ -164,7 +159,7 @@ export default function LauncherPage() {
   }, [healthStatus, navigate, isInitialConnection]);
 
   if (darkMode === null) {
-    return null; // Wait for theme to be determined
+    return null;
   }
 
   const theme = createAppTheme(darkMode);
@@ -280,7 +275,7 @@ export default function LauncherPage() {
             <StyledText sx={{ mb: 2 }}>
               This app will proxy requests to <code>localhost:15500</code> by default. You can also
               visit{' '}
-              <Link href="http://localhost:15500" target="_blank">
+              <Link href={DEFAULT_LOCAL_API_URL} target="_blank">
                 localhost:15500
               </Link>{' '}
               directly.

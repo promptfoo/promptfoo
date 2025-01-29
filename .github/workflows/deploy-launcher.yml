@@ -1,13 +1,9 @@
-name: 'Deploy Launcher'
+name: 'Deploy local.promptfoo.app'
 on:
-  # Runs on pushes targeting the default branch
   push:
     branches: ['main']
     paths:
       - 'src/app/**' # Only trigger on changes to frontend code
-  pull_request:
-    branches: ['main']
-
 jobs:
   deploy:
     name: Deploy to Cloudflare Pages

@@ -4,7 +4,6 @@ import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import LauncherPage from './page';
 
-// Mock fetch
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
