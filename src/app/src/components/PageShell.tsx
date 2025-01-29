@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import Navigation from '@app/components/Navigation';
+import Box from '@mui/material/Box';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
 
@@ -67,7 +68,20 @@ const lightTheme = createAppTheme(false);
 const darkTheme = createAppTheme(true);
 
 function Layout({ children }: { children: React.ReactNode }) {
-  return <div>{children}</div>;
+  const location = useLocation();
+  const isConfigPage = location.pathname.includes('/setup');
+
+  return (
+    <Box
+      sx={{
+        pt: isConfigPage ? 0 : 2,
+        maxWidth: '100%',
+        boxSizing: 'border-box',
+      }}
+    >
+      {children}
+    </Box>
+  );
 }
 
 export default function PageShell() {
