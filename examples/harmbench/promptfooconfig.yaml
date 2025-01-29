@@ -9,7 +9,7 @@ prompts:
 
 providers:
   - 'ollama:mannix/llama3.1-8b-abliterated'
-  - 'ollama:llama3'
+  - 'ollama:llama3.1:8b'
 
 defaultTest:
   assert:
