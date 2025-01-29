@@ -27,7 +27,3 @@ __pycache__
 examples/**/package-lock.json
 examples/redteam-dalle/images
 examples/harmbench/harmbench_behaviors_text_all.csv
-
-# JavaScript-related and TypeScript-related
-.vite
-*.tsbuildinfo
