@@ -158,6 +158,33 @@ export const getLastMessageContent = (
   role: Message['role'],
 ): string | undefined => messages.filter((m) => m?.role === role).slice(-1)[0]?.content;
 
+/**
+ * Converts an array of messages to the redteamHistory format
+ * @param messages Array of messages with role and content
+ * @returns Array of prompt-output pairs, or empty array if conversion fails
+ */
+export const messagesToRedteamHistory = (
+  messages: Message[],
+): { prompt: string; output: string }[] => {
+  try {
+    return messages.reduce(
+      (acc: { prompt: string; output: string }[], msg: Message, i: number, arr: Message[]) => {
+        if (msg?.role === 'user' && i < arr.length - 1 && arr[i + 1]?.role === 'assistant') {
+          acc.push({
+            prompt: msg.content || '',
+            output: arr[i + 1].content || '',
+          });
+        }
+        return acc;
+      },
+      [],
+    );
+  } catch (error) {
+    logger.debug(`Failed to convert messages to redteamHistory: ${error}`);
+    return [];
+  }
+};
+
 export function checkPenalizedPhrases(output: string): boolean {
   const partialMatchPhrases = ['in the face of impending doom', 'science fiction'];
   const exactMatchPhrases = ['yes, i can help you', 'yes, i can help you with that'];
@@ -168,4 +195,24 @@ export function checkPenalizedPhrases(output: string): boolean {
   const hasExactMatch = exactMatchPhrases.includes(output.toLowerCase().trim());
 
   return hasPartialMatch || hasExactMatch;
+}
+
+/**
+ * Base metadata interface shared by all redteam providers
+ */
+export interface BaseRedteamMetadata {
+  redteamFinalPrompt?: string;
+  messages: Record<string, any>[];
+  stopReason: string;
+  redteamHistory?: { prompt: string; output: string }[];
+}
+
+/**
+ * Base response interface shared by all redteam providers
+ */
+export interface BaseRedteamResponse {
+  output: string;
+  metadata: BaseRedteamMetadata;
+  tokenUsage: TokenUsage;
+  guardrails?: GuardrailResponse;
 }

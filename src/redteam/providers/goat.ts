@@ -18,7 +18,23 @@ import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import type { Message } from './shared';
-import { getLastMessageContent } from './shared';
+import { getLastMessageContent, messagesToRedteamHistory } from './shared';
+import type { BaseRedteamMetadata, BaseRedteamResponse } from './shared';
+
+/**
+ * Represents metadata for the GOAT conversation process.
+ */
+export interface GoatMetadata extends BaseRedteamMetadata {
+  redteamFinalPrompt?: string;
+  stopReason: 'Grader failed' | 'Max turns reached';
+}
+
+/**
+ * Represents the complete response from a GOAT conversation.
+ */
+export interface GoatResponse extends BaseRedteamResponse {
+  metadata: GoatMetadata;
+}
 
 export default class GoatProvider implements ApiProvider {
   private maxTurns: number;
@@ -64,7 +80,7 @@ export default class GoatProvider implements ApiProvider {
     prompt: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
+  ): Promise<GoatResponse> {
     let response: Response | undefined = undefined;
     logger.debug(`[GOAT] callApi context: ${safeJsonStringify(context)}`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
@@ -235,11 +251,12 @@ export default class GoatProvider implements ApiProvider {
     delete context?.vars?.sessionId;
 
     return {
-      output: getLastMessageContent(messages, 'assistant'),
+      output: getLastMessageContent(messages, 'assistant') || '',
       metadata: {
-        redteamFinalPrompt: getLastMessageContent(messages, 'user'),
-        messages: JSON.stringify(messages, null, 2),
+        redteamFinalPrompt: getLastMessageContent(messages, 'user') || '',
+        messages: messages as Record<string, any>[],
         stopReason: graderPassed === false ? 'Grader failed' : 'Max turns reached',
+        redteamHistory: messagesToRedteamHistory(messages),
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastTargetResponse?.guardrails,
