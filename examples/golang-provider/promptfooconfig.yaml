@@ -1,27 +1,40 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Golang example'
+description: Example of using a custom Go provider with internal packages
 
 prompts:
-  - 'Write an introductory sentence for a classroom lesson on {{topic}}'
+  - Write a tweet about our new AI product
+  - Write a blog post about machine learning
+  - Write a press release about our Series A funding
 
 providers:
-  - id: golang:provider.go # defaults to CallApi function
+  - id: file://provider.go
     config:
-      someOption: foobar
+      goExecutable: go # Optional, defaults to 'go'
 
 tests:
-  - vars:
-      topic: quantum mechanics
+  - description: Test Go provider with internal packages
+    vars:
+      prompt: Write a tweet about our new AI product
     assert:
       - type: contains
-        value: physics
-  - vars:
-      topic: the animal kingdom
+        value: AI
+      - type: javascript
+        value: response.output.length < 280 # Tweet length
+
+  - description: Test Go provider with longer content
+    vars:
+      prompt: Write a blog post about machine learning
     assert:
-      - type: llm-rubric
-        value: mentions at least 1 animal
-  - vars:
-      topic: turtles
+      - type: contains
+        value: machine learning
+      - type: javascript
+        value: response.output.length > 500 # Blog post should be substantial
+
+  - description: Test Go provider with formal content
+    vars:
+      prompt: Write a press release about our Series A funding
     assert:
-      - type: llm-rubric
-        value: is funny
+      - type: contains
+        value: funding
+      - type: contains
+        value: Series A
