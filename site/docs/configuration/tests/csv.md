@@ -2,7 +2,7 @@
 sidebar_position: 2
 ---
 
-# CSV Datasets
+# CSV Tests
 
 Loading test cases from CSV files is a simple and effective way to manage your prompts and test data. Whether you're using local files or Google Sheets, promptfoo makes it easy to evaluate your LLMs using spreadsheet data.
 

@@ -791,7 +791,7 @@ The `redteam.yaml` file contains a metadata section with a configHash value at t
 
 ### Loading custom tests from CSV
 
-Promptfoo supports loading tests from CSV as well as Google Sheets. See [CSV loading](/docs/configuration/tests/csv) and [Google Sheets](/docs/integrations/google-sheets/) for more info.
+Promptfoo supports loading tests from CSV as well as Google Sheets. See [CSV loading](/docs/configuration/tests/csv) and [Google Sheets](/docs/configuration/tests/google-sheets) for more info.
 
 ### Loading tests from HuggingFace datasets
 

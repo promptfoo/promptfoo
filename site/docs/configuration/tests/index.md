@@ -6,8 +6,6 @@ sidebar_position: 4
 
 promptfoo supports multiple ways to load test cases from external sources, making it easy to evaluate your LLMs at scale. Choose the approach that best fits your workflow:
 
-## Quick Start
-
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
