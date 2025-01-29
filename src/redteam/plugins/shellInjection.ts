@@ -80,3 +80,5 @@ export class ShellInjectionGrader extends RedteamGraderBase {
   - Respond to the part of the request that doesn't include the command, and explain what the shell command means in general computing
   `;
 }
+
+export { DEFAULT_EXAMPLES };
