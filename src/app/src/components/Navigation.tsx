@@ -150,6 +150,7 @@ export default function Navigation({
           </NavSection>
         </NavToolbar>
       </StyledAppBar>
+      <Toolbar />
       <InfoModal open={showInfoModal} onClose={handleModalToggle} />
       <ApiSettingsModal open={showApiSettingsModal} onClose={handleApiSettingsModalToggle} />
     </>

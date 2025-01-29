@@ -2,13 +2,8 @@
   padding: 0.25rem 0 0.25rem 1rem;
   gap: 1rem;
   background-color: #333;
-  margin-bottom: 1rem;
+  margin-bottom: 0.4rem;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
-
-/* Add spacing for fixed navigation */
-main {
-  padding-top: 64px; /* Height of the navigation bar */
 }
 
 [data-theme='dark'] .nav {
