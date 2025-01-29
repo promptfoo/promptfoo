@@ -73,6 +73,7 @@ export class GolangProvider implements ApiProvider {
       return JSON.parse(cachedResult);
     } else {
       if (context) {
+        // These are not useful in Golang
         delete context.fetchWithCache;
         delete context.getCache;
         delete context.logger;
