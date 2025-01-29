@@ -1,7 +1,7 @@
 ---
 sidebar_position: 5
-pagination_prev: /docs/intro
-pagination_next: /docs/configuration/guide
+pagination_prev: intro
+pagination_next: configuration/guide
 ---
 
 import CodeBlock from '@theme/CodeBlock';
@@ -132,7 +132,7 @@ See the [Configuration docs](/docs/configuration/guide) for a detailed guide.
 <details>
 <summary>Show example YAML</summary>
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'My first promptfoo eval'
 prompts:
@@ -181,7 +181,7 @@ In [this example](https://github.com/promptfoo/promptfoo/tree/main/examples/self
 
 Here is the configuration:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 # Load prompts
 prompts:
   - file://prompt1.txt
@@ -260,7 +260,7 @@ You can also output a nice [spreadsheet](https://docs.google.com/spreadsheets/d/
 
 In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-4o-vs-4o-mini), we evaluate the difference between GPT 4o and GPT 4o mini outputs for a given prompt:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt

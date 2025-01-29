@@ -28,7 +28,7 @@ tests:
 ```
 
 :::tip
-See the [Datasets Overview](/docs/configuration/datasets) for all available data sources and the [CSV guide](/docs/configuration/datasets/csv) for spreadsheet-based testing.
+See the [Datasets Overview](/docs/configuration/datasets) for all available data sources and the [CSV guide](/docs/configuration/tests/csv) for spreadsheet-based testing.
 :::
 
 ## Authentication
@@ -510,6 +510,6 @@ If you encounter issues:
 
 ## Related Resources
 
-- [Loading from CSV Files](/docs/configuration/datasets/csv)
+- [Loading from CSV Files](/docs/configuration/tests/csv)
 - [Configuration Guide](/docs/configuration/guide)
 - [Provider Configuration](/docs/configuration/reference)

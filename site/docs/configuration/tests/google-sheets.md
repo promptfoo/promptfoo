@@ -127,7 +127,7 @@ For more details on customizing the LLM grader, see the [model-graded metrics do
 
 ## Related Resources
 
-- [CSV Datasets](/docs/configuration/datasets/csv)
-- [HuggingFace Datasets](/docs/configuration/datasets/huggingface)
+- [CSV Datasets](/docs/configuration/tests/csv)
+- [HuggingFace Datasets](/docs/configuration/tests/huggingface)
 - [Configuration Guide](/docs/configuration/guide)
 - [Model-Graded Metrics](/docs/configuration/expected-outputs/model-graded)

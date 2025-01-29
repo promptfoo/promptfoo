@@ -161,7 +161,7 @@ tests:
 ```
 
 :::tip
-Test files can be defined in YAML, JSON, JSONL, JavaScript, TypeScript, [CSV](/docs/configuration/parameters/#import-from-csv), and [Google Sheets](/docs/integrations/google-sheets). Additionally, promptfoo supports [HuggingFace datasets](/docs/configuration/datasets/huggingface).
+Test files can be defined in YAML, JSON, JSONL, JavaScript, TypeScript, [CSV](/docs/configuration/parameters/#import-from-csv), and [Google Sheets](/docs/integrations/google-sheets). Additionally, promptfoo supports [HuggingFace datasets](/docs/configuration/tests/huggingface).
 :::
 
 ## Import vars from separate files
@@ -847,7 +847,7 @@ tests: file://tests.csv
 tests: https://docs.google.com/spreadsheets/d/your-sheet-id/edit
 ```
 
-See the [CSV datasets guide](/docs/configuration/datasets/csv) for detailed examples and best practices.
+See the [CSV tests guide](/docs/configuration/tests/csv) for detailed examples and best practices.
 
 ### From Evaluation Datasets
 
@@ -861,7 +861,7 @@ tests: huggingface://datasets/cais/mmlu?split=test&subset=mathematics
 tests: huggingface://datasets/fka/awesome-chatgpt-prompts
 ```
 
-See the [HuggingFace datasets guide](/docs/configuration/datasets/huggingface) for more examples and configuration options.
+See the [HuggingFace tests guide](/docs/configuration/tests/huggingface) for more examples and configuration options.
 
 :::tip
 For a complete overview of dataset options, see the [external tests guide](/docs/configuration/tests).

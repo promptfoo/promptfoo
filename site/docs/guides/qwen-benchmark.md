@@ -34,7 +34,7 @@ npx promptfoo@latest init --no-interactive qwen-benchmark
 
 Inside of the `qwen-benchmark` directory, edit `promptfooconfig.yaml` to include the models you want to compare. Here's an example configuration with Qwen, GPT-4o, and Llama:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - 'openai:gpt-4o'
   - 'openrouter:meta-llama/llama-3-70b-instruct'
@@ -52,7 +52,7 @@ export OPENAI_API_KEY=your_openai_api_key
 
 Customize the behavior of each model by setting parameters such as `temperature` and `max_tokens` or `max_length`:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:gpt-4o
     config:
@@ -72,7 +72,7 @@ providers:
 
 Set up the prompts that you want to run for each model. In this case, we'll just use a single simple prompt, because we want to compare model performance.
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   - 'You are a helpful customer support chatbot for Acme, Inc. You respond concisely in 1 or 2 sentences. Customer query: {{query}}'
 ```

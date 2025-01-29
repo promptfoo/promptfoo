@@ -1,6 +1,6 @@
 ---
 sidebar_position: 1
-pagination_next: /docs/getting-started
+pagination_next: getting-started
 ---
 
 # Intro

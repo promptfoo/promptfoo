@@ -230,7 +230,7 @@ Note that because of how model-graded evals are implemented, **the LLM grading m
 
 To set this for all your test cases, add the [`defaultTest`](/docs/configuration/guide/#default-test-cases) property to your config:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 defaultTest:
   options:
     provider:

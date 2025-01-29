@@ -64,7 +64,7 @@ Apart from being able to use Adaline Gateway's types, the adaline provider also 
 
 adaline provider uses API keys set using standard Promptfoo env variables such as `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, etc. The API key can also be set from within the config, example:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: adaline:openai:chat:gpt-4o-mini
     config:
@@ -77,7 +77,7 @@ Env variables for each of the Promptfoo supported providers are supported by ada
 
 LLM parameters can be set in `config`, example:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: adaline:openai:chat:gpt-4o-mini
     config:

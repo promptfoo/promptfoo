@@ -25,7 +25,7 @@ tests:
 ```
 
 :::tip
-See the [Datasets Overview](/docs/configuration/datasets) for all available data sources and the [Google Sheets guide](/docs/configuration/datasets/google-sheets) for detailed spreadsheet setup.
+See the [Datasets Overview](/docs/configuration/datasets) for all available data sources and the [Google Sheets guide](/docs/configuration/tests/google-sheets) for detailed spreadsheet setup.
 :::
 
 ## CSV Format
@@ -137,7 +137,7 @@ prompt,temperature,max_tokens,top_p
 
 ## Related Resources
 
-- [Loading from HuggingFace Datasets](/docs/configuration/datasets/huggingface)
+- [Loading from HuggingFace Datasets](/docs/configuration/tests/huggingface)
 - [Google Sheets Integration](/docs/integrations/google-sheets)
 - [Configuration Guide](/docs/configuration/guide)
 

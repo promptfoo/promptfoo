@@ -28,7 +28,7 @@ npx promptfoo@latest init llama-gpt-comparison
 
 Now let's start editing `promptfooconfig.yaml`. First, we'll add the list of models we'd like to compare:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - openai:gpt-4o
   - openai:gpt-4o-mini
@@ -56,7 +56,7 @@ First, we'll put the OpenAI chat prompts in `prompts/chat_prompt.json`:
 
 Now, let's go back to `promptfooconfig.yaml` and add our prompts. The Replicate provider supports the OpenAI format.
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 // highlight-start
 prompts:
   - file://prompts/chat_prompt.json
@@ -96,7 +96,7 @@ You are a helpful assistant<|eot_id|><|start_header_id|>user<|end_header_id|>
 
 Now, let's go back to `promptfooconfig.yaml` and add our prompts. We'll name them `chat_prompt` and `llama_prompt` respectively:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   prompts/chat_prompt.json: chat_prompt
   prompts/llama_prompt.txt: llama_prompt
@@ -125,7 +125,7 @@ The `tests` field in the `promptfooconfig.yaml` file is where you add your test 
 
 Here are the test cases we will use:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 # ...
 tests:
   - vars:
@@ -148,7 +148,7 @@ tests:
 
 Let's set up a few assertions to automatically assess the output for correctness:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 # ...
 tests:
   - vars:
@@ -197,7 +197,7 @@ Learn more about setting up test assertions [here](/docs/configuration/expected-
 
 Each model has a `config` field where you can specify additional parameters. Let's add `temperature` and `max_tokens` or `max_length` for each model:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:gpt-4o
     // highlight-start

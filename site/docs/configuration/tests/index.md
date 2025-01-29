@@ -90,7 +90,7 @@ This approach is great for:
 - Getting started with promptfoo
 - Sharing complete examples
 
-### [CSV and Spreadsheets](/docs/configuration/datasets/csv)
+### [CSV and Spreadsheets](/docs/configuration/tests/csv)
 
 Perfect for:
 
@@ -99,7 +99,7 @@ Perfect for:
 - Simple data organization
 - Integration with existing spreadsheet workflows
 
-### [HuggingFace Datasets](/docs/configuration/datasets/huggingface)
+### [HuggingFace Datasets](/docs/configuration/tests/huggingface)
 
 Ideal for:
 
@@ -266,9 +266,9 @@ defaultTest:
 ## Related Resources
 
 - [Configuration Guide](/docs/configuration/guide)
-- [CSV Dataset Guide](/docs/configuration/datasets/csv)
-- [HuggingFace Dataset Guide](/docs/configuration/datasets/huggingface)
-- [Google Sheets Integration](/docs/configuration/datasets/google-sheets)
+- [CSV Dataset Guide](/docs/configuration/tests/csv)
+- [HuggingFace Dataset Guide](/docs/configuration/tests/huggingface)
+- [Google Sheets Integration](/docs/configuration/tests/google-sheets)
 - [Configuration Reference](/docs/configuration/reference)
 
 ## Dataset Types Overview
