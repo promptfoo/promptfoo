@@ -68,10 +68,9 @@ providers:
 
 The following environment variables are supported:
 
-| Variable      | Description                                      |
-| ------------- | ------------------------------------------------ |
-| `JFROG_TOKEN` | The authentication token for JFrog ML API access |
-| `QWAK_TOKEN`  | Legacy token variable (still supported)          |
+| Variable     | Description                                      |
+| ------------ | ------------------------------------------------ |
+| `QWAK_TOKEN` | The authentication token for JFrog ML API access |
 
 ## API Compatibility
 
