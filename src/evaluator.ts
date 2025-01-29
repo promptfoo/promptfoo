@@ -80,6 +80,24 @@ export function newTokenUsage(): Required<TokenUsage> {
   };
 }
 
+/**
+ * Runs a single test case.
+ * @param options - The options for running the test case.
+ * {
+ *   provider - The provider to use for the test case.
+ *   prompt - The raw prompt to use for the test case.
+ *   test - The test case to run with assertions, etc.
+ *   delay - A delay in ms to wait before any provider calls
+ *   nunjucksFilters - The nunjucks filters to use for the test case.
+ *   evaluateOptions - Currently unused
+ *   testIdx - The index of the test case among all tests (row in the results table).
+ *   promptIdx - The index of the prompt among all prompts (column in the results table).
+ *   conversations - Evals can be run serially across multiple turns of a conversation. This gives access to the conversation history.
+ *   registers - The registers to use for the test case to store values for later tests.
+ *   isRedteam - Whether the test case is a redteam test case.
+ * }
+ * @returns The result of the test case.
+ */
 export async function runEval({
   provider,
   prompt, // raw prompt
@@ -89,7 +107,7 @@ export async function runEval({
   evaluateOptions,
   testIdx,
   promptIdx,
-  conversations,
+  conversations, //
   registers,
   isRedteam,
 }: RunEvalOptions): Promise<EvaluateResult> {
