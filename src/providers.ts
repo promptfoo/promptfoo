@@ -32,6 +32,7 @@ import {
   HuggingfaceTextGenerationProvider,
   HuggingfaceTokenExtractionProvider,
 } from './providers/huggingface';
+import { JfrogMlChatCompletionProvider } from './providers/jfrog';
 import { LlamaProvider } from './providers/llama';
 import {
   LocalAiCompletionProvider,
@@ -567,6 +568,10 @@ export async function loadApiProvider(
 
     const CustomApiProvider = await importModule(modulePath);
     ret = new CustomApiProvider(options);
+  } else if (providerPath.startsWith('jfrog:') || providerPath.startsWith('qwak:')) {
+    const splits = providerPath.split(':');
+    const modelName = splits.slice(1).join(':');
+    ret = new JfrogMlChatCompletionProvider(modelName, providerOptions);
   } else {
     logger.error(dedent`
       Could not identify provider: ${chalk.bold(providerPath)}.
