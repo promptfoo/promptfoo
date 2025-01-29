@@ -864,5 +864,5 @@ tests: huggingface://datasets/fka/awesome-chatgpt-prompts
 See the [HuggingFace datasets guide](/docs/configuration/datasets/huggingface) for more examples and configuration options.
 
 :::tip
-For a complete overview of dataset options, see the [Datasets guide](/docs/configuration/datasets).
+For a complete overview of dataset options, see the [external tests guide](/docs/configuration/tests).
 :::
