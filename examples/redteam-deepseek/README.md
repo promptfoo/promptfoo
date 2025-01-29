@@ -1,4 +1,4 @@
-To get started, set your OPENROUTER_API_KEY environment variable.
+To get started, set your `OPENROUTER_API_KEY` environment variable.
 
 This command will run the eval specified in `promptfooconfig.yaml`:
 
@@ -10,7 +10,7 @@ Afterwards, you can view the results by running `promptfoo view`
 
 To run a red team, edit `redteamconfig.yaml` and then run:
 
-```
+```sh
 promptfoo redteam run -c redteamconfig.yaml
 ```
 

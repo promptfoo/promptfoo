@@ -29,12 +29,6 @@ const sidebars = {
       type: 'doc',
       id: 'getting-started',
     },
-    /*
-    {
-      type: 'doc',
-      id: 'key-concepts',
-    },
-    */
     {
       type: 'doc',
       id: 'cloud/index',
@@ -51,6 +45,7 @@ const sidebars = {
         { type: 'doc', id: 'configuration/parameters' },
         { type: 'doc', id: 'configuration/chat' },
         { type: 'doc', id: 'configuration/datasets' },
+        { type: 'doc', id: 'configuration/tests/index' },
         { type: 'doc', id: 'configuration/scenarios' },
         { type: 'doc', id: 'configuration/caching' },
         { type: 'doc', id: 'configuration/telemetry' },

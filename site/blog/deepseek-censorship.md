@@ -30,7 +30,7 @@ The dataset is published on [HuggingFace](https://huggingface.co/datasets/prompt
 
 We'll run this evaluation using [Promptfoo](https://www.promptfoo.dev/docs/getting-started/). Running 1000+ prompts through DeepSeek only requires a couple of lines of YAML:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 description: 'DeepSeek Sensitive Prompts'
 
 providers:
@@ -55,7 +55,8 @@ We quickly noticed that this flavor of DeepSeek refusal supersedes the reasoning
 
 This means we can detect these canned refusals just by checking whether there is reasoning. Which brings our final config to this:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'DeepSeek Sensitive Prompts'
 
 prompts:
@@ -85,7 +86,7 @@ Run this eval yourself by pointing it to the [HuggingFace dataset](https://huggi
 
 You can also run this eval directly through the [Promptfoo command line](/docs/getting-started/):
 
-```
+```sh
 npx promptfoo@latest init --example redteam-deepseek
 ```
 
@@ -95,7 +96,8 @@ Promptfoo has [red teaming](https://www.promptfoo.dev/docs/red-team/quickstart/)
 
 The setup can be done [through the UI](https://www.promptfoo.dev/docs/red-team/quickstart/#provide-application-details), or we can just update the config file we used above.
 
-```yaml
+```yaml title="redteamconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'DeepSeek Sensitive Topics Red Team'
 
 providers:
