@@ -385,6 +385,12 @@ table.results-table,
   max-width: 90%;
   max-height: 90%;
   cursor: zoom-out;
+  background: white;
+  border-radius: 4px;
+}
+
+[data-theme='dark'] .results-table tr .cell .lightbox img {
+  background: #333;
 }
 
 .resizer {
@@ -525,6 +531,12 @@ thead.collapsed .header-dismiss {
   max-width: 90%;
   max-height: 90%;
   object-fit: contain;
+  background: white;
+  border-radius: 4px;
+}
+
+[data-theme='dark'] .lightbox img {
+  background: #333;
 }
 
 .error-pill {

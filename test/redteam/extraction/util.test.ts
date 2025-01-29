@@ -24,6 +24,7 @@ jest.mock('../../../src/cache', () => ({
 jest.mock('../../../src/redteam/remoteGeneration', () => ({
   getRemoteGenerationUrl: jest.fn().mockReturnValue('https://api.promptfoo.app/task'),
 }));
+jest.mock('../../../src/globalConfig/globalConfig');
 
 describe('fetchRemoteGeneration', () => {
   beforeAll(() => {
@@ -59,6 +60,7 @@ describe('fetchRemoteGeneration', () => {
           task: 'purpose',
           prompts: ['prompt1', 'prompt2'],
           version: VERSION,
+          email: null,
         }),
       },
       REQUEST_TIMEOUT_MS,
@@ -90,6 +92,7 @@ describe('fetchRemoteGeneration', () => {
           task: 'entities',
           prompts: ['prompt1', 'prompt2'],
           version: VERSION,
+          email: null,
         }),
       },
       REQUEST_TIMEOUT_MS,

@@ -16,7 +16,7 @@ import {
   type Strategy,
   type Plugin,
 } from '../redteam/constants';
-import type { RedteamFileConfig, RedteamPluginObject } from '../redteam/types';
+import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
 import { isJavascriptFile } from '../util/file';
 import { ProviderSchema } from '../validators/providers';
 
@@ -111,6 +111,7 @@ export const RedteamStrategySchema = z.union([
 /**
  * Schema for `promptfoo redteam generate` command options
  */
+// NOTE: Remember to edit types/redteam.ts:RedteamCliGenerateOptions if you edit this schema
 export const RedteamGenerateOptionsSchema = z.object({
   addPlugins: z
     .array(z.enum(REDTEAM_ADDITIONAL_PLUGINS as readonly string[] as [string, ...string[]]))
@@ -147,6 +148,7 @@ export const RedteamGenerateOptionsSchema = z.object({
   purpose: z.string().optional().describe('Purpose of the redteam generation'),
   strategies: z.array(RedteamStrategySchema).optional().describe('Strategies to use'),
   write: z.boolean().describe('Whether to write the output'),
+  burpEscapeJson: z.boolean().describe('Whether to escape quotes in Burp payloads').optional(),
 });
 
 /**
@@ -292,21 +294,27 @@ export const RedteamConfigSchema = z
       });
 
     const strategies = Array.from(
-      new Set(
-        [...(data.strategies || []), ...Array.from(strategySet)].flatMap((strategy) => {
-          if (typeof strategy === 'string') {
-            if (strategy === 'basic') {
-              return [];
+      new Map<string, RedteamStrategy>(
+        [...(data.strategies || []), ...Array.from(strategySet)].flatMap(
+          (strategy): Array<[string, RedteamStrategy]> => {
+            if (typeof strategy === 'string') {
+              if (strategy === 'basic') {
+                return [];
+              }
+              return strategy === 'default'
+                ? DEFAULT_STRATEGIES.map((id): [string, RedteamStrategy] => [id, { id }])
+                : [[strategy, { id: strategy }]];
             }
-            return strategy === 'default'
-              ? DEFAULT_STRATEGIES.map((id) => ({ id }))
-              : [{ id: strategy }];
-          }
-          // Just return the original strategy object
-          return [strategy];
-        }),
-      ),
-    ).sort((a, b) => a.id.localeCompare(b.id));
+            // Return tuple of [id, strategy] for Map to deduplicate by id
+            return [[strategy.id, strategy]];
+          },
+        ),
+      ).values(),
+    ).sort((a, b) => {
+      const aId = typeof a === 'string' ? a : a.id;
+      const bId = typeof b === 'string' ? b : b.id;
+      return aId.localeCompare(bId);
+    }) as RedteamStrategy[];
 
     return {
       numTests: data.numTests,

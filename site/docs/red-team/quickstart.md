@@ -72,6 +72,10 @@ Start by providing some details about the target application. The more details w
 
 At a minimum, be sure to fill out the **Purpose** field with a description of your application.
 
+:::tip
+If you just want to try out a quick example, click "Load Example" at the top of the Application Details page.
+:::
+
 ![llm red team setup](/img/docs/setup/application-details.png)
 
 ---
@@ -118,60 +122,6 @@ promptfoo redteam init --no-gui
 ```
 
 :::
-
-## Common target types
-
-### Attacking an API endpoint
-
-The configuration file includes a description of the target endpoint. You can edit the config to make changes to the target. For example:
-
-```yaml
-targets:
-  - id: https
-    label: 'travel-agent-agent'
-    config:
-      url: 'https://example.com/generate'
-      method: 'POST'
-      headers:
-        'Content-Type': 'application/json'
-      body:
-        myPrompt: '{{prompt}}'
-
-purpose: 'The user is a budget traveler looking for the best deals. The system is a travel agent that helps the user plan their trip. The user is anonymous and should not be able to access any information about other users, employees, or other individuals.'
-```
-
-The `label` is used to create issues and report the results of the red teaming. Make sure to re-use the same `label` when generating new redteam configs for the same target.
-
-Setting the `purpose` is optional, but it will significantly improve the quality of the generated test cases and grading. Be specific about who the user of the system is and what information and actions they should be able to access.
-
-:::info
-For more information on configuring an HTTP target, see [HTTP requests](/docs/providers/http/).
-:::
-
-### Alternative: Test specific prompts and models
-
-If you don't have a live endpoint, you can edit the config to set the specific prompt(s) and the LLM model(s) to test:
-
-```yaml
-prompts:
-  - 'Act as a travel agent and help the user plan their trip. User query: {{query}}'
-  # Paths to prompts also work:
-  # - file://path/to/prompt.txt
-
-targets:
-  - id: openai:gpt-4o-mini
-    label: 'travel-agent-mini'
-```
-
-Promptfoo supports dozens of model providers. For more information on supported targets, see [Custom Providers](/docs/red-team/configuration/#custom-providerstargets). For more information on supported prompt formats, see [prompts](/docs/configuration/parameters/#prompts).
-
-### Alternative: Talking directly to your app
-
-Promptfoo hooks directly into your existing LLM app to attack targets via Python, Javascript, RAG or agent workflows, HTTP API, and more. See [custom providers](/docs/red-team/configuration/#custom-providerstargets) for details on setting up:
-
-- [HTTP requests](/docs/red-team/configuration/#http-requests) to your API
-- [Custom Python scripts](/docs/red-team/configuration/#custom-scripts) for precise control
-- [Javascript](/docs/providers/custom-api/), [any executable](/docs/providers/custom-script/), local providers like [ollama](/docs/providers/ollama/), or other [provider types](/docs/providers/)
 
 ## Run the scan
 
@@ -241,6 +191,60 @@ The red teaming results provide insights into various aspects of your LLM applic
 2. **Severity levels**: Classifies vulnerabilities based on their potential impact and likelihood of occurrence.
 3. **Logs**: Provides concrete instances of inputs that triggered vulnerabilities.
 4. **Suggested mitigations**: Recommendations for addressing identified vulnerabilities, which may include prompt engineering, additional safeguards, or architectural changes.
+
+## Common target types
+
+### Attacking an API endpoint
+
+The configuration file includes a description of the target endpoint. You can edit the config to make changes to the target. For example:
+
+```yaml
+targets:
+  - id: https
+    label: 'travel-agent-agent'
+    config:
+      url: 'https://example.com/generate'
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/json'
+      body:
+        myPrompt: '{{prompt}}'
+
+purpose: 'The user is a budget traveler looking for the best deals. The system is a travel agent that helps the user plan their trip. The user is anonymous and should not be able to access any information about other users, employees, or other individuals.'
+```
+
+The `label` is used to create issues and report the results of the red teaming. Make sure to re-use the same `label` when generating new redteam configs for the same target.
+
+Setting the `purpose` is optional, but it will significantly improve the quality of the generated test cases and grading. Be specific about who the user of the system is and what information and actions they should be able to access.
+
+:::info
+For more information on configuring an HTTP target, see [HTTP requests](/docs/providers/http/).
+:::
+
+### Alternative: Test specific prompts and models
+
+If you don't have a live endpoint, you can edit the config to set the specific prompt(s) and the LLM model(s) to test:
+
+```yaml
+prompts:
+  - 'Act as a travel agent and help the user plan their trip. User query: {{query}}'
+  # Paths to prompts also work:
+  # - file://path/to/prompt.txt
+
+targets:
+  - id: openai:gpt-4o-mini
+    label: 'travel-agent-mini'
+```
+
+Promptfoo supports dozens of model providers. For more information on supported targets, see [Custom Providers](/docs/red-team/configuration/#custom-providerstargets). For more information on supported prompt formats, see [prompts](/docs/configuration/parameters/#prompts).
+
+### Alternative: Talking directly to your app
+
+Promptfoo hooks directly into your existing LLM app to attack targets via Python, Javascript, RAG or agent workflows, HTTP API, and more. See [custom providers](/docs/red-team/configuration/#custom-providerstargets) for details on setting up:
+
+- [HTTP requests](/docs/red-team/configuration/#http-requests) to your API
+- [Custom Python scripts](/docs/red-team/configuration/#custom-scripts) for precise control
+- [Javascript](/docs/providers/custom-api/), [any executable](/docs/providers/custom-script/), local providers like [ollama](/docs/providers/ollama/), or other [provider types](/docs/providers/)
 
 ## Continuous improvement
 

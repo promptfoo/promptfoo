@@ -53,16 +53,21 @@ export async function doGenerateRedteam(
   // Check for updates to the config file and decide whether to generate
   let shouldGenerate = options.force;
   if (!options.force && fs.existsSync(outputPath) && configPath && fs.existsSync(configPath)) {
-    const redteamContent = yaml.load(fs.readFileSync(outputPath, 'utf8')) as Partial<UnifiedConfig>;
-    const storedHash = redteamContent.metadata?.configHash;
-    const currentHash = getConfigHash(configPath);
+    // Skip hash check for .burp files since they're not YAML
+    if (!outputPath.endsWith('.burp')) {
+      const redteamContent = yaml.load(
+        fs.readFileSync(outputPath, 'utf8'),
+      ) as Partial<UnifiedConfig>;
+      const storedHash = redteamContent.metadata?.configHash;
+      const currentHash = getConfigHash(configPath);
 
-    shouldGenerate = storedHash !== currentHash;
-    if (!shouldGenerate) {
-      logger.warn(
-        'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
-      );
-      return redteamContent;
+      shouldGenerate = storedHash !== currentHash;
+      if (!shouldGenerate) {
+        logger.warn(
+          'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
+        );
+        return redteamContent;
+      }
     }
   } else {
     shouldGenerate = true;
@@ -100,7 +105,7 @@ export async function doGenerateRedteam(
     name: 'generate redteam - started',
     numPrompts: testSuite.prompts.length,
     numTestsExisting: (testSuite.tests || []).length,
-    plugins: redteamConfig?.plugins?.map((p) => p.id) || [],
+    plugins: redteamConfig?.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) || [],
     strategies: redteamConfig?.strategies?.map((s) => (typeof s === 'string' ? s : s.id)) || [],
   });
   await telemetry.send();
@@ -164,7 +169,7 @@ export async function doGenerateRedteam(
     logger.debug(`strategies: ${strategyObjs.map((s) => s.id ?? s).join(', ')}`);
   } catch (error) {
     logger.error('Error logging plugins and strategies. One did not have a valid id.');
-    logger.error(error);
+    logger.error(`Error details: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   const config = {
@@ -191,6 +196,7 @@ export async function doGenerateRedteam(
     testCases: redteamTests,
     purpose,
     entities,
+    injectVar: finalInjectVar,
   } = await synthesize({
     ...parsedConfig.data,
     language: config.language,
@@ -215,7 +221,25 @@ export async function doGenerateRedteam(
   };
 
   let ret: Partial<UnifiedConfig> | undefined;
-  if (options.output) {
+  if (options.output && options.output.endsWith('.burp')) {
+    // Write in Burp Intruder compatible format
+    const outputLines = redteamTests
+      .map((test) => {
+        const value = String(test.vars?.[finalInjectVar] ?? '');
+        if (options.burpEscapeJson) {
+          return encodeURIComponent(JSON.stringify(value).slice(1, -1));
+        }
+        return encodeURIComponent(value);
+      })
+      .filter((line) => line.length > 0)
+      .join('\n');
+    fs.writeFileSync(options.output, outputLines);
+    logger.info(
+      chalk.green(`Wrote ${redteamTests.length} test cases to ${chalk.bold(options.output)}`),
+    );
+    // No need to return anything, Burp outputs are only invoked via command line.
+    return {};
+  } else if (options.output) {
     const existingYaml = configPath
       ? (yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>)
       : {};
@@ -370,6 +394,7 @@ export function redteamGenerateCommand(
     .option('--remote', 'Force remote inference wherever possible', false)
     .option('--force', 'Force generation even if no changes are detected', false)
     .option('--verbose', 'Show debug output', false)
+    .option('--burp-escape-json', 'Escape quotes in Burp payloads', false)
     .action((opts: Partial<RedteamCliGenerateOptions>): void => {
       if (opts.verbose) {
         setLogLevel('debug');
@@ -419,7 +444,11 @@ export function redteamGenerateCommand(
             logger.error(`  ${err.path.join('.')}: ${err.message}`);
           });
         } else {
-          logger.error('An unexpected error occurred:', error);
+          logger.error(
+            `An unexpected error occurred during generation: ${error instanceof Error ? error.message : String(error)}\n${
+              error instanceof Error ? error.stack : ''
+            }`,
+          );
         }
         process.exit(1);
       }

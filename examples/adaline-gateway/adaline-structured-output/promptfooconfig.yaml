@@ -1,0 +1,159 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Adaline Gateway Structured Output Example'
+
+prompts:
+  - 'Analyze the following customer support query: "{{query}}"'
+
+providers:
+  - id: adaline:openai:chat:gpt-4o-mini
+    config:
+      seed: 322431
+      responseFormat: json_schema
+      responseSchema:
+        name: customer_support_analysis
+        strict: true
+        description: 'output schema for analysis of a customer support query'
+        schema:
+          type: object
+          properties:
+            query_summary:
+              type: string
+              description: "A brief summary of the customer's query"
+            category:
+              type: string
+              enum:
+                [
+                  'billing',
+                  'technical_issue',
+                  'product_inquiry',
+                  'complaint',
+                  'feature_request',
+                  'other',
+                ]
+              description: "The main category of the customer's query"
+            sentiment:
+              type: string
+              enum: ['positive', 'neutral', 'negative']
+              description: "The overall sentiment of the customer's query"
+            urgency:
+              type: string
+              enum: ['1', '2', '3', '4', '5']
+              description: 'The urgency level of the query, where 1 is lowest and 5 is highest'
+            suggested_actions:
+              type: array
+              items:
+                type: object
+                properties:
+                  action:
+                    type: string
+                    description: 'A specific action to be taken'
+                  priority:
+                    type: string
+                    enum: ['low', 'medium', 'high']
+                required: ['action', 'priority']
+                additionalProperties: false
+            estimated_resolution_time:
+              type: string
+              description: "Estimated time to resolve the query (e.g., '2 hours', '1 day')"
+          required:
+            [
+              'query_summary',
+              'category',
+              'sentiment',
+              'urgency',
+              'suggested_actions',
+              'estimated_resolution_time',
+            ]
+          additionalProperties: false
+
+tests:
+  - vars:
+      query: "I've been charged twice for my subscription this month. Can you please refund the extra charge?"
+    assert:
+      - type: is-json
+        metric: ValidJSON
+      - type: javascript
+        value: output.category === 'billing'
+        metric: CategoryAccuracy
+      - type: javascript
+        value: output.sentiment === 'negative'
+        metric: SentimentAccuracy
+      - type: javascript
+        value: parseInt(output.urgency) >= 3
+        metric: UrgencyAccuracy
+      - type: javascript
+        value: output.suggested_actions.length > 0 && output.suggested_actions.some(action => action.action.toLowerCase().includes('refund'))
+        metric: ActionRelevance
+      - type: llm-rubric
+        value: "Does the query summary accurately reflect the customer's issue about being charged twice?"
+        metric: SummaryAccuracy
+
+  - vars:
+      query: "How do I change my password? I can't find the option in my account settings."
+    assert:
+      - type: is-json
+        metric: ValidJSON
+      - type: javascript
+        value: output.category === 'technical_issue'
+        metric: CategoryAccuracy
+      - type: javascript
+        value: output.sentiment === 'neutral'
+        metric: SentimentAccuracy
+      - type: javascript
+        value: parseInt(output.urgency) <= 3
+        metric: UrgencyAccuracy
+      - type: javascript
+        value: output.suggested_actions.some(action => action.action.toLowerCase().includes('password'))
+        metric: ActionRelevance
+      - type: llm-rubric
+        value: "Does the query summary accurately reflect the customer's issue about changing their password?"
+        metric: SummaryAccuracy
+
+  - vars:
+      query: "I love your new feature! It's made my work so much easier. Any plans to expand on it?"
+    assert:
+      - type: is-json
+        metric: ValidJSON
+      - type: javascript
+        value: output.category === 'feature_request'
+        metric: CategoryAccuracy
+      - type: javascript
+        value: output.sentiment === 'positive'
+        metric: SentimentAccuracy
+      - type: javascript
+        value: parseInt(output.urgency) <= 2
+        metric: UrgencyAccuracy
+      - type: javascript
+        value: output.suggested_actions.some(action => action.action.toLowerCase().includes('feedback'))
+        metric: ActionRelevance
+      - type: llm-rubric
+        value: "Does the query summary accurately reflect the customer's positive feedback and interest in feature expansion?"
+        metric: SummaryAccuracy
+
+  - vars:
+      query: "Your product is terrible and never works! I want a full refund and I'm cancelling my account!"
+    assert:
+      - type: is-json
+        metric: ValidJSON
+      - type: javascript
+        value: output.category === 'complaint'
+        metric: CategoryAccuracy
+      - type: javascript
+        value: output.sentiment === 'negative'
+        metric: SentimentAccuracy
+      - type: javascript
+        value: |
+          output.urgency === '5'
+        metric: UrgencyAccuracy
+      - type: javascript
+        value: output.suggested_actions.some(action => action.priority === 'high')
+        metric: ActionRelevance
+      - type: llm-rubric
+        value: "Does the query summary accurately reflect the customer's severe complaint and refund request?"
+        metric: SummaryAccuracy
+
+derivedMetrics:
+  - name: 'OverallAccuracy'
+    value: '(CategoryAccuracy + SentimentAccuracy + UrgencyAccuracy + ActionRelevance + SummaryAccuracy) / 5'
+  - name: 'ResponseQuality'
+    value: '(ValidJSON + OverallAccuracy) / 2'

@@ -10,7 +10,7 @@ import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { getEnvFloat, getEnvInt } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
-import { promptForEmailUnverified } from '../globalConfig/accounts';
+import { checkEmailStatusOrExit, promptForEmailUnverified } from '../globalConfig/accounts';
 import logger, { getLogLevel, setLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
@@ -149,6 +149,7 @@ export async function doEval(
       testSuite.tests.length > 0
     ) {
       await promptForEmailUnverified();
+      await checkEmailStatusOrExit();
     }
 
     testSuite.providers = filterProviders(
@@ -222,6 +223,11 @@ export async function doEval(
       completion: 0,
       cached: 0,
       numRequests: 0,
+      completionDetails: {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
     };
 
     // Calculate our total successes and failures
@@ -240,6 +246,14 @@ export async function doEval(
       tokenUsage.completion += prompt.metrics?.tokenUsage?.completion || 0;
       tokenUsage.cached += prompt.metrics?.tokenUsage?.cached || 0;
       tokenUsage.numRequests += prompt.metrics?.tokenUsage?.numRequests || 0;
+      if (prompt.metrics?.tokenUsage?.completionDetails) {
+        tokenUsage.completionDetails.reasoning +=
+          prompt.metrics.tokenUsage.completionDetails.reasoning || 0;
+        tokenUsage.completionDetails.acceptedPrediction +=
+          prompt.metrics.tokenUsage.completionDetails.acceptedPrediction || 0;
+        tokenUsage.completionDetails.rejectedPrediction +=
+          prompt.metrics.tokenUsage.completionDetails.rejectedPrediction || 0;
+      }
     }
     const totalTests = successes + failures + errors;
     const passRate = (successes / totalTests) * 100;
@@ -311,7 +325,7 @@ export async function doEval(
     }
     if (tokenUsage.total > 0) {
       logger.info(
-        `${isRedteam ? `Total probes: ${tokenUsage.numRequests.toLocaleString()} / ` : ''}Total tokens: ${tokenUsage.total.toLocaleString()} / Prompt tokens: ${tokenUsage.prompt.toLocaleString()} / Completion tokens: ${tokenUsage.completion.toLocaleString()} / Cached tokens: ${tokenUsage.cached.toLocaleString()}`,
+        `${isRedteam ? `Total probes: ${tokenUsage.numRequests.toLocaleString()} / ` : ''}Total tokens: ${tokenUsage.total.toLocaleString()} / Prompt tokens: ${tokenUsage.prompt.toLocaleString()} / Completion tokens: ${tokenUsage.completion.toLocaleString()} / Cached tokens: ${tokenUsage.cached.toLocaleString()}${tokenUsage.completionDetails?.reasoning ? ` / Reasoning tokens: ${tokenUsage.completionDetails.reasoning.toLocaleString()}` : ''}`,
       );
     }
 

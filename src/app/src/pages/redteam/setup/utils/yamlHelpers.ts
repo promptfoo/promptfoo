@@ -1,6 +1,5 @@
 import { subCategoryDescriptions } from '@promptfoo/redteam/constants';
-import type { RedteamPluginObject } from '@promptfoo/redteam/types';
-import type { UnifiedConfig } from '@promptfoo/types';
+import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
 import yaml from 'js-yaml';
 import type { Config } from '../types';
 
@@ -19,7 +18,7 @@ const orderRedTeam = (redteam: any): any => {
 
 const orderKeys = (obj: any): any => {
   const orderedObj: any = {};
-  const keyOrder = ['description', 'targets', 'prompts', 'redteam'];
+  const keyOrder = ['description', 'targets', 'prompts', 'redteam', 'defaultTest'];
 
   keyOrder.forEach((key) => {
     if (Object.prototype.hasOwnProperty.call(obj, key)) {
@@ -39,39 +38,6 @@ const orderKeys = (obj: any): any => {
 
   return orderedObj;
 };
-
-export function getUnifiedConfig(
-  config: Config,
-): UnifiedConfig & { redteam: NonNullable<UnifiedConfig['redteam']> } {
-  return {
-    description: config.description,
-    targets: [config.target],
-    prompts: config.prompts,
-    redteam: {
-      purpose: config.purpose,
-      numTests: config.numTests,
-      plugins: config.plugins.map((plugin): RedteamPluginObject => {
-        if (typeof plugin === 'string') {
-          return { id: plugin };
-        }
-        return {
-          id: plugin.id,
-          ...(plugin.config && Object.keys(plugin.config).length > 0 && { config: plugin.config }),
-        };
-      }),
-      strategies: config.strategies.map((strategy) => {
-        if (typeof strategy === 'string') {
-          return { id: strategy };
-        }
-        return {
-          id: strategy.id,
-          ...(strategy.config &&
-            Object.keys(strategy.config).length > 0 && { config: strategy.config }),
-        };
-      }),
-    },
-  };
-}
 
 export function generateOrderedYaml(config: Config): string {
   const yamlConfig = getUnifiedConfig(config);

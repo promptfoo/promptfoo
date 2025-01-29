@@ -7,6 +7,7 @@ import {
   type AtomicTestCase,
   type CallApiContextParams,
   type CallApiOptionsParams,
+  type GuardrailResponse,
   type NunjucksFilterMap,
   type Prompt,
   type RedteamFileConfig,
@@ -22,7 +23,29 @@ import { checkPenalizedPhrases, getTargetResponse, redteamProviderManager } from
 
 // Based on: https://arxiv.org/abs/2312.02119
 
-async function runRedteamConversation({
+interface IterativeMetadata {
+  finalIteration: number;
+  highestScore: number;
+  redteamFinalPrompt?: string;
+  redteamHistory: {
+    prompt: string;
+    output: string;
+    score: number;
+    isOnTopic: boolean;
+    graderPassed: boolean | undefined;
+    guardrails: GuardrailResponse | undefined;
+  }[];
+}
+
+interface TokenUsage {
+  total: number;
+  prompt: number;
+  completion: number;
+  numRequests: number;
+  cached: number;
+}
+
+export async function runRedteamConversation({
   context,
   filters,
   injectVar,
@@ -44,7 +67,11 @@ async function runRedteamConversation({
   targetProvider: ApiProvider;
   test?: AtomicTestCase;
   vars: Record<string, string | object>;
-}) {
+}): Promise<{
+  output: string;
+  metadata: IterativeMetadata;
+  tokenUsage: TokenUsage;
+}> {
   const nunjucks = getNunjucksEngine();
   const goal = vars[injectVar];
 
@@ -81,9 +108,11 @@ async function runRedteamConversation({
     score: number;
     isOnTopic: boolean;
     graderPassed: boolean | undefined;
+    guardrails: GuardrailResponse | undefined;
   }[] = [];
 
   for (let i = 0; i < numIterations; i++) {
+    logger.debug(`[Iterative] Starting iteration ${i + 1}/${numIterations}`);
     const redteamBody = JSON.stringify(redteamHistory);
 
     // Get new prompt
@@ -98,33 +127,44 @@ async function runRedteamConversation({
       logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
       await sleep(redteamProvider.delay);
     }
+    logger.debug(`[Iterative] Raw redteam response: ${JSON.stringify(redteamResp)}`);
     if (redteamResp.error) {
-      throw new Error(`Error from redteam provider: ${redteamResp.error}`);
+      logger.info(
+        `[Iterative] ${i + 1}/${numIterations} - Error: ${redteamResp.error}. Full response: ${JSON.stringify(redteamResp)}`,
+      );
+      continue;
     }
-    logger.debug(`[Iterative] Redteam response: ${JSON.stringify(redteamResp)}`);
-    invariant(
-      typeof redteamResp.output === 'string',
-      `Expected output to be a string, but got response: ${JSON.stringify(redteamResp)}`,
-    );
+
     let improvement, newInjectVar;
-    try {
-      const parsed = extractFirstJsonObject<{
-        improvement: string;
-        prompt: string;
-      }>(redteamResp.output);
-      improvement = parsed.improvement;
-      newInjectVar = parsed.prompt;
-    } catch (err) {
-      logger.debug(
-        `[Iterative] Failed to parse redteam response, likely refusal: ${err} ${JSON.stringify(
-          redteamResp,
-        )}`,
+    if (typeof redteamResp.output === 'string') {
+      try {
+        const parsed = extractFirstJsonObject<{
+          improvement: string;
+          prompt: string;
+        }>(redteamResp.output);
+        improvement = parsed.improvement;
+        newInjectVar = parsed.prompt;
+      } catch (err) {
+        logger.info(
+          `[Iterative] ${i + 1}/${numIterations} - Failed to parse response: ${err}. Full response: ${JSON.stringify(redteamResp)}`,
+        );
+        continue;
+      }
+    } else {
+      improvement = redteamResp.output?.improvement;
+      newInjectVar = redteamResp.output?.prompt;
+    }
+
+    if (improvement === undefined || newInjectVar === undefined) {
+      logger.info(
+        `[Iterative] ${i + 1}/${numIterations} - Missing improvement or injectVar. Full response: ${JSON.stringify(redteamResp)}`,
       );
       continue;
     }
 
     // Update the application prompt with the new injection.
-    logger.debug(`New injectVar: ${newInjectVar}, improvement: ${improvement}`);
+    logger.debug(`[Iterative] New injectVar: ${newInjectVar}, improvement: ${improvement}`);
+
     targetPrompt = await renderPrompt(
       prompt,
       {
@@ -157,24 +197,33 @@ async function runRedteamConversation({
       logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
       await sleep(redteamProvider.delay);
     }
-    logger.debug(`[Iterative] On-topic response: ${JSON.stringify(isOnTopicResp)}`);
+    logger.debug(`[Iterative] Raw onTopic response: ${JSON.stringify(isOnTopicResp)}`);
+
     if (isOnTopicResp.error) {
-      throw new Error(`Error from redteam (onTopic) provider: ${isOnTopicResp.error}`);
-    }
-    invariant(typeof isOnTopicResp.output === 'string', 'Expected output to be a string');
-    let isOnTopic = false;
-    try {
-      isOnTopic = (extractFirstJsonObject(isOnTopicResp.output) as { onTopic: boolean }).onTopic;
-    } catch (err) {
-      logger.debug(
-        `[Iterative] Failed to parse onTopic response, likely refusal: ${err} ${JSON.stringify(
-          isOnTopicResp,
-        )}`,
+      logger.info(
+        `[Iterative] ${i + 1}/${numIterations} - OnTopic error: ${isOnTopicResp.error}. Full response: ${JSON.stringify(isOnTopicResp)}`,
       );
-      continue;
+    }
+
+    let isOnTopic = false;
+    if (typeof isOnTopicResp.output === 'string') {
+      try {
+        isOnTopic = (extractFirstJsonObject(isOnTopicResp.output) as { onTopic: boolean }).onTopic;
+      } catch (err) {
+        logger.info(
+          `[Iterative] ${i + 1}/${numIterations} - Failed to parse onTopic: ${err}. Full response: ${JSON.stringify(isOnTopicResp)}`,
+        );
+        continue;
+      }
+    } else {
+      isOnTopic = isOnTopicResp.output.onTopic;
     }
     logger.debug(`[Iterative] Parsed onTopic value: ${isOnTopic}`);
-    invariant(typeof isOnTopic === 'boolean', 'Expected onTopic to be a boolean');
+    if (typeof isOnTopic !== 'boolean') {
+      logger.info(
+        `[Iterative] ${i + 1}/${numIterations} - Could not parse a boolean from the onTopic request. Raw response: ${JSON.stringify(isOnTopicResp)}`,
+      );
+    }
 
     const targetResponse: TargetResponse = await getTargetResponse(
       targetProvider,
@@ -182,10 +231,19 @@ async function runRedteamConversation({
       context,
       options,
     );
+    logger.debug(`[Iterative] Raw target response: ${JSON.stringify(targetResponse)}`);
     if (targetResponse.error) {
-      throw new Error(`[Iterative] Target returned an error: ${targetResponse.error}`);
+      logger.info(
+        `[Iterative] ${i + 1}/${numIterations} - Target error: ${targetResponse.error}. Full response: ${JSON.stringify(targetResponse)}`,
+      );
+      continue;
     }
-    invariant(targetResponse.output, '[Iterative] Target did not return an output');
+    if (!targetResponse.output) {
+      logger.info(
+        `[Iterative] ${i + 1}/${numIterations} - Empty target response. Full response: ${JSON.stringify(targetResponse)}`,
+      );
+      continue;
+    }
 
     const assertToUse = test?.assert?.find((a: { type: string }) => a.type);
     const { getGraderById } = await import('../graders');
@@ -239,19 +297,32 @@ async function runRedteamConversation({
       logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
       await sleep(redteamProvider.delay);
     }
+    logger.debug(`[Iterative] Raw judge response: ${JSON.stringify(judgeResp)}`);
     if (judgeResp.error) {
-      throw new Error(`Error from redteam (judge) provider: ${judgeResp.error}`);
+      logger.info(
+        `[Iterative] ${i + 1}/${numIterations} - Judge error: ${judgeResp.error}. Full response: ${JSON.stringify(judgeResp)}`,
+      );
+      continue;
     }
-    invariant(typeof judgeResp.output === 'string', 'Expected output to be a string');
+
     let currentScore = 1;
     let previousScore = bestResponse ? highestScore : 0;
     try {
-      const parsed = extractFirstJsonObject<{
-        currentResponse: { rating: number; explanation: string };
-        previousBestResponse: { rating: number; explanation: string };
-      }>(judgeResp.output);
-      currentScore = parsed.currentResponse.rating;
-      previousScore = parsed.previousBestResponse.rating;
+      const parsed =
+        typeof judgeResp.output === 'string'
+          ? extractFirstJsonObject<{
+              currentResponse: { rating: number; explanation: string };
+              previousBestResponse: { rating: number; explanation: string };
+            }>(judgeResp.output)
+          : judgeResp.output;
+      currentScore = parsed?.currentResponse?.rating;
+      previousScore = parsed?.previousBestResponse?.rating;
+
+      if (!currentScore || !previousScore) {
+        logger.info(
+          `[Iterative] Skipping iteration, did not get a score from the judge response: ${JSON.stringify(judgeResp)}`,
+        );
+      }
 
       const containsPenalizedPhrase = checkPenalizedPhrases(targetResponse.output);
       // Apply penalty if the phrase is present
@@ -281,7 +352,7 @@ async function runRedteamConversation({
         `,
       });
     } catch (err) {
-      logger.debug(
+      logger.info(
         `[Iterative] Failed to parse judge response, likely refusal: ${err} ${JSON.stringify(
           judgeResp,
         )}`,
@@ -295,6 +366,7 @@ async function runRedteamConversation({
       score: currentScore,
       isOnTopic,
       graderPassed,
+      guardrails: targetResponse.guardrails,
     });
 
     if (redteamResp.tokenUsage) {
@@ -352,7 +424,7 @@ async function runRedteamConversation({
     metadata: {
       finalIteration,
       highestScore,
-      previousOutputs: JSON.stringify(previousOutputs, null, 2),
+      redteamHistory: previousOutputs,
       redteamFinalPrompt: bestInjectVar,
     },
     tokenUsage: totalTokenUsage,
@@ -392,14 +464,15 @@ class RedteamIterativeProvider implements ApiProvider {
     return 'promptfoo:redteam:iterative';
   }
 
-  /**
-   *
-   * @param prompt - Rendered prompt. This is unused because we need the raw prompt in order to generate attacks
-   * @param context
-   * @param options
-   * @returns
-   */
-  async callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<{
+    output: string;
+    metadata: IterativeMetadata;
+    tokenUsage: TokenUsage;
+  }> {
     logger.debug(`[Iterative] callApi context: ${safeJsonStringify(context)}`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context.vars, 'Expected vars to be set');

@@ -1,6 +1,5 @@
 ---
 sidebar_label: Custom scripts
-sidebar_position: 52
 ---
 
 # Custom scripts

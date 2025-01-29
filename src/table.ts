@@ -2,19 +2,13 @@ import chalk from 'chalk';
 import Table from 'cli-table3';
 import { TERMINAL_MAX_WIDTH } from './constants';
 import { ResultFailureReason, type EvaluateTable } from './types';
-
-function ellipsize(str: string, maxLen: number) {
-  if (str.length > maxLen) {
-    return str.slice(0, maxLen - 3) + '...';
-  }
-  return str;
-}
+import { ellipsize } from './utils/text';
 
 export function generateTable(
   evaluateTable: EvaluateTable,
   tableCellMaxLength = 250,
   maxRows = 25,
-) {
+): string {
   const head = evaluateTable.head;
   const headLength = head.prompts.length + head.vars.length;
   const table = new Table({
@@ -51,7 +45,7 @@ export function generateTable(
       }),
     ]);
   }
-  return table;
+  return table.toString();
 }
 
 export function wrapTable(rows: Record<string, string | number>[]) {

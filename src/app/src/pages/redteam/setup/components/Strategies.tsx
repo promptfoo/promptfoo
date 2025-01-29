@@ -42,12 +42,19 @@ const getStrategyId = (strategy: RedteamStrategy): string => {
 };
 
 // Add this constant at the top of the file to track which strategies have config options
-const CONFIGURABLE_STRATEGIES = ['jailbreak', 'multilingual'] as const;
+const CONFIGURABLE_STRATEGIES = ['basic', 'jailbreak', 'multilingual'] as const;
 
 // Split strategies into two groups
-const singleTurnStrategies = availableStrategies.filter(
-  (strategy) => !MULTI_TURN_STRATEGIES.includes(strategy.id as any),
-);
+const singleTurnStrategies = availableStrategies
+  .filter((strategy) => !MULTI_TURN_STRATEGIES.includes(strategy.id as any))
+  .sort((a, b) => {
+    const aIsRecommended = DEFAULT_STRATEGIES.includes(a.id as any);
+    const bIsRecommended = DEFAULT_STRATEGIES.includes(b.id as any);
+    if (aIsRecommended !== bIsRecommended) {
+      return aIsRecommended ? -1 : 1;
+    }
+    return a.name.localeCompare(b.name);
+  });
 const multiTurnStrategies = availableStrategies.filter((strategy) =>
   MULTI_TURN_STRATEGIES.includes(strategy.id as any),
 );
@@ -63,7 +70,9 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         typeof strategy === 'string' ? { id: strategy } : strategy,
       ) as RedteamStrategy[],
   );
-  const [isStateless, setIsStateless] = useState<boolean>(true);
+
+  const [isStatefulValue, setIsStatefulValue] = useState(config.target?.config?.stateful === true);
+
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [selectedConfigStrategy, setSelectedConfigStrategy] = useState<string | null>(null);
   const [strategyConfig, setStrategyConfig] = useState<Record<string, any>>(() => {
@@ -85,19 +94,10 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   }, [selectedStrategies, updateConfig]);
 
   useEffect(() => {
-    setSelectedStrategies((prev) =>
-      prev.map((strategy) => {
-        const strategyId = getStrategyId(strategy);
-        if (strategyId === 'goat' || strategyId === 'crescendo') {
-          return {
-            id: strategyId,
-            config: { stateless: isStateless },
-          };
-        }
-        return strategy;
-      }),
-    );
-  }, [isStateless]);
+    const target = { ...config.target };
+    target.config.stateful = isStatefulValue;
+    updateConfig('target', target);
+  }, [isStatefulValue]);
 
   const handleStrategyToggle = (strategyId: string) => {
     if (!selectedStrategies.find((strategy) => getStrategyId(strategy) === strategyId)) {
@@ -114,9 +114,14 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       } else {
         // Add strategy with any existing config
         const config = strategyConfig[strategyId];
+
         const newStrategy: RedteamStrategy = config
           ? { id: strategyId, config }
           : { id: strategyId };
+        if (MULTI_TURN_STRATEGIES.includes(strategyId as any)) {
+          const existingConfig = newStrategy.config ?? {};
+          newStrategy.config = { ...existingConfig, stateful: isStatefulValue };
+        }
         return [...prev, newStrategy];
       }
     });
@@ -407,25 +412,40 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           </Typography>
           <FormControl component="fieldset">
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Is the target system stateless? (Does it maintain conversation history?)
+              Is the target system Stateful? (Does it maintain conversation history?)
             </Typography>
             <RadioGroup
-              value={isStateless}
-              onChange={(e) => setIsStateless(e.target.value === 'true')}
+              value={isStatefulValue}
+              onChange={(e) => {
+                const isStateful = e.target.value === 'true';
+                const updatedStrategies = config.strategies.map((strategy) => {
+                  if (typeof strategy === 'string') {
+                    return strategy;
+                  }
+
+                  if (MULTI_TURN_STRATEGIES.includes(strategy.id as any)) {
+                    strategy.config = strategy.config || {};
+                    strategy.config.stateful = isStateful;
+                  }
+                  return strategy;
+                });
+                updateConfig('strategies', updatedStrategies);
+                setIsStatefulValue(isStateful);
+              }}
             >
               <FormControlLabel
-                value={true}
+                value="true"
                 control={<Radio />}
-                label="Yes - System is stateless (no conversation history)"
+                label="Yes - System is stateful, system maintains conversation history."
               />
               <FormControlLabel
-                value={false}
+                value="false"
                 control={<Radio />}
-                label="No - System maintains conversation history"
+                label="No - System does not maintains conversation history"
               />
             </RadioGroup>
 
-            {!config.target.config.sessionParser && !isStateless && (
+            {!config.target.config.sessionParser && config.target.config.stateful && (
               <Alert severity="warning">
                 Your system is stateful but you don't have session handling setup. Please return to
                 your Target setup to configure it.

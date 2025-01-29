@@ -41,6 +41,45 @@ describe('Groq', () => {
       expect(provider.toString()).toBe('[Groq Provider mixtral-8x7b-32768]');
     });
 
+    it('should serialize to JSON correctly without API key', () => {
+      const provider = new GroqProvider('mixtral-8x7b-32768', {
+        config: {
+          temperature: 0.7,
+          max_tokens: 100,
+        },
+      });
+
+      expect(provider.toJSON()).toEqual({
+        provider: 'groq',
+        model: 'mixtral-8x7b-32768',
+        config: {
+          temperature: 0.7,
+          max_tokens: 100,
+        },
+      });
+    });
+
+    it('should serialize to JSON correctly with API key redacted', () => {
+      const provider = new GroqProvider('mixtral-8x7b-32768', {
+        config: {
+          apiKey: 'secret-api-key',
+          temperature: 0.7,
+        },
+      });
+
+      const json = provider.toJSON();
+      expect(json).toEqual({
+        provider: 'groq',
+        model: 'mixtral-8x7b-32768',
+        config: {
+          temperature: 0.7,
+          apiKey: undefined,
+        },
+      });
+      // Ensure the original apiKey is not affected
+      expect(provider.getApiKey()).toBe('secret-api-key');
+    });
+
     describe('callApi', () => {
       it('should call Groq API and return output with correct structure', async () => {
         const mockResponse = {
@@ -66,7 +105,7 @@ describe('Groq', () => {
             ]),
             model: 'mixtral-8x7b-32768',
             temperature: 0.7,
-            max_tokens: 1000,
+            max_completion_tokens: 1000,
             top_p: 1,
             tool_choice: 'auto',
           }),
@@ -165,7 +204,7 @@ describe('Groq', () => {
         const customProvider = new GroqProvider('llama3-groq-8b-8192-tool-use-preview', {
           config: {
             temperature: 0.7,
-            max_tokens: 100,
+            max_completion_tokens: 100,
             top_p: 0.9,
             tools,
             tool_choice: 'auto',
@@ -183,12 +222,57 @@ describe('Groq', () => {
         expect(mockCreate).toHaveBeenCalledWith(
           expect.objectContaining({
             temperature: 0.7,
-            max_tokens: 100,
+            max_completion_tokens: 100,
             top_p: 0.9,
             tools,
             tool_choice: 'auto',
             messages: expect.any(Array),
             model: 'llama3-groq-8b-8192-tool-use-preview',
+          }),
+        );
+      });
+
+      it('should handle deprecated max_tokens parameter', async () => {
+        const customProvider = new GroqProvider('llama3-groq-8b-8192-tool-use-preview', {
+          config: {
+            max_tokens: 100,
+          },
+        });
+
+        const mockCreate = jest.fn().mockResolvedValue({
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        });
+        (customProvider as any).groq = { chat: { completions: { create: mockCreate } } };
+
+        await customProvider.callApi('Test prompt');
+
+        expect(mockCreate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            max_completion_tokens: 100,
+          }),
+        );
+      });
+
+      it('should prioritize max_completion_tokens over max_tokens', async () => {
+        const customProvider = new GroqProvider('llama3-groq-8b-8192-tool-use-preview', {
+          config: {
+            max_completion_tokens: 200,
+            max_tokens: 100,
+          },
+        });
+
+        const mockCreate = jest.fn().mockResolvedValue({
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        });
+        (customProvider as any).groq = { chat: { completions: { create: mockCreate } } };
+
+        await customProvider.callApi('Test prompt');
+
+        expect(mockCreate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            max_completion_tokens: 200,
           }),
         );
       });

@@ -2,14 +2,14 @@ import type { RedteamPluginObject, RedteamStrategy } from 'src/redteam/types';
 import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   ALL_STRATEGIES as REDTEAM_ALL_STRATEGIES,
-  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   COLLECTIONS,
+  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
 } from '../../src/redteam/constants';
 import {
-  RedteamGenerateOptionsSchema,
   RedteamConfigSchema,
+  RedteamGenerateOptionsSchema,
   RedteamPluginSchema,
   RedteamStrategySchema,
 } from '../../src/validators/redteam';
@@ -171,7 +171,7 @@ describe('redteamConfigSchema', () => {
         plugins: expect.arrayContaining(
           Array(REDTEAM_DEFAULT_PLUGINS.size).fill(expect.any(Object)),
         ),
-        strategies: [{ id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+        strategies: [{ id: 'basic' }, { id: 'jailbreak' }, { id: 'jailbreak:composite' }],
       },
     });
   });
@@ -185,7 +185,7 @@ describe('redteamConfigSchema', () => {
         plugins: expect.arrayContaining(
           Array(REDTEAM_DEFAULT_PLUGINS.size).fill(expect.any(Object)),
         ),
-        strategies: [{ id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+        strategies: [{ id: 'basic' }, { id: 'jailbreak' }, { id: 'jailbreak:composite' }],
       },
     });
   });
@@ -198,11 +198,8 @@ describe('redteamConfigSchema', () => {
       success: true,
       data: {
         numTests: undefined,
-        plugins: [
-          { id: 'hijacking', numTests: undefined },
-          { id: 'overreliance', numTests: undefined },
-        ],
-        strategies: [{ id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+        plugins: [{ id: 'hijacking' }, { id: 'overreliance' }],
+        strategies: [{ id: 'basic' }, { id: 'jailbreak' }, { id: 'jailbreak:composite' }],
       },
     });
   });
@@ -295,7 +292,7 @@ describe('redteamConfigSchema', () => {
             numTests: 3,
           }))
           .sort((a, b) => a.id.localeCompare(b.id)),
-        strategies: [{ id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+        strategies: [{ id: 'basic' }, { id: 'jailbreak' }, { id: 'jailbreak:composite' }],
       },
     });
   });
@@ -323,7 +320,7 @@ describe('redteamConfigSchema', () => {
               numTests: 3,
             })),
         ].sort((a, b) => a.id.localeCompare(b.id)),
-        strategies: [{ id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+        strategies: [{ id: 'basic' }, { id: 'jailbreak' }, { id: 'jailbreak:composite' }],
       },
     });
     expect(RedteamConfigSchema.safeParse(input)?.data?.plugins).toHaveLength(
@@ -347,7 +344,7 @@ describe('redteamConfigSchema', () => {
             .filter((category) => !['harmful:hate', 'harmful:violent-crime'].includes(category))
             .map((category) => ({ id: category, numTests: 3 })),
         ]),
-        strategies: [{ id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+        strategies: [{ id: 'basic' }, { id: 'jailbreak' }, { id: 'jailbreak:composite' }],
       },
     });
   });
@@ -365,7 +362,7 @@ describe('redteamConfigSchema', () => {
           { id: 'harmful:hate', numTests: 10 },
           { id: 'harmful:violent-crime', numTests: 3 },
         ]),
-        strategies: [{ id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+        strategies: [{ id: 'basic' }, { id: 'jailbreak' }, { id: 'jailbreak:composite' }],
       },
     });
   });
@@ -442,7 +439,7 @@ describe('redteamConfigSchema', () => {
           { id: 'overreliance', numTests: undefined },
           { id: 'politics', numTests: undefined },
         ],
-        strategies: [{ id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+        strategies: [{ id: 'basic' }, { id: 'jailbreak' }, { id: 'jailbreak:composite' }],
       },
     });
   });
@@ -527,7 +524,7 @@ describe('redteamConfigSchema', () => {
             .filter((category) => category !== 'harmful:hate')
             .map((category) => ({ id: category, numTests: 2 })),
         ].sort((a, b) => a.id.localeCompare(b.id)),
-        strategies: [{ id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+        strategies: [{ id: 'basic' }, { id: 'jailbreak' }, { id: 'jailbreak:composite' }],
       },
     });
     expect(RedteamConfigSchema.safeParse(input)?.data?.plugins).toHaveLength(
@@ -764,8 +761,17 @@ describe('redteamConfigSchema', () => {
       const result = RedteamConfigSchema.safeParse(input);
       expect(result.success).toBe(true);
       expect(result.data?.strategies).toEqual(
-        expect.arrayContaining([{ id: 'jailbreak:composite' }, { id: 'jailbreak' }]),
+        expect.arrayContaining([
+          { id: 'basic' },
+          { id: 'jailbreak' },
+          { id: 'jailbreak:composite' },
+          { id: 'prompt-injection' },
+        ]),
       );
+      // Ensure no duplicates
+      const strategies = result.data!.strategies!;
+      const strategyIds = new Set(strategies.map((s) => (typeof s === 'string' ? s : s.id)));
+      expect(strategies).toHaveLength(strategyIds.size);
     });
 
     it('should expand strategies for "owasp:llm:01" alias', () => {
@@ -776,8 +782,17 @@ describe('redteamConfigSchema', () => {
       const result = RedteamConfigSchema.safeParse(input);
       expect(result.success).toBe(true);
       expect(result.data?.strategies).toEqual(
-        expect.arrayContaining([{ id: 'jailbreak:composite' }, { id: 'jailbreak' }]),
+        expect.arrayContaining([
+          { id: 'basic' },
+          { id: 'jailbreak' },
+          { id: 'jailbreak:composite' },
+          { id: 'prompt-injection' },
+        ]),
       );
+      // Ensure no duplicates
+      const strategies = result.data!.strategies!;
+      const strategyIds = new Set(strategies.map((s) => (typeof s === 'string' ? s : s.id)));
+      expect(strategies).toHaveLength(strategyIds.size);
     });
 
     it('should not duplicate strategies when using multiple aliased names', () => {
@@ -788,8 +803,17 @@ describe('redteamConfigSchema', () => {
       const result = RedteamConfigSchema.safeParse(input);
       expect(result.success).toBe(true);
       expect(result.data?.strategies).toEqual(
-        expect.arrayContaining([{ id: 'jailbreak:composite' }, { id: 'jailbreak' }]),
+        expect.arrayContaining([
+          { id: 'basic' },
+          { id: 'jailbreak' },
+          { id: 'jailbreak:composite' },
+          { id: 'prompt-injection' },
+        ]),
       );
+      // Ensure no duplicates
+      const strategies = result.data!.strategies!;
+      const strategyIds = new Set(strategies.map((s) => (typeof s === 'string' ? s : s.id)));
+      expect(strategies).toHaveLength(strategyIds.size);
     });
   });
 });
@@ -1009,7 +1033,7 @@ describe('RedteamConfigSchema transform', () => {
 
     expect(result).toEqual({
       plugins: [{ id: 'harmful:hate', numTests: 5 }],
-      strategies: [{ id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+      strategies: [{ id: 'basic' }, { id: 'jailbreak' }, { id: 'jailbreak:composite' }],
       delay: 1000,
       entities: ['ACME Corp', 'John Doe'],
       injectVar: 'system',
@@ -1030,7 +1054,7 @@ describe('RedteamConfigSchema transform', () => {
 
     expect(result).toEqual({
       plugins: [{ id: 'harmful:hate', numTests: 5 }],
-      strategies: [{ id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+      strategies: [{ id: 'basic' }, { id: 'jailbreak' }, { id: 'jailbreak:composite' }],
       numTests: 5,
     });
 
@@ -1054,7 +1078,7 @@ describe('RedteamConfigSchema transform', () => {
 
     expect(result).toEqual({
       plugins: [{ id: 'harmful:hate', numTests: 3 }],
-      strategies: [{ id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+      strategies: [{ id: 'basic' }, { id: 'jailbreak' }, { id: 'jailbreak:composite' }],
       entities: ['Company X', 'Jane Smith', 'Acme Industries'],
       numTests: 3,
     });
@@ -1071,7 +1095,7 @@ describe('RedteamConfigSchema transform', () => {
 
     expect(result).toEqual({
       plugins: [{ id: 'harmful:hate', numTests: 3 }],
-      strategies: [{ id: 'jailbreak' }, { id: 'jailbreak:composite' }],
+      strategies: [{ id: 'basic' }, { id: 'jailbreak' }, { id: 'jailbreak:composite' }],
       entities: [],
       numTests: 3,
     });

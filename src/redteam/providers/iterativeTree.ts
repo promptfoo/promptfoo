@@ -24,6 +24,7 @@ import type {
   AtomicTestCase,
   CallApiContextParams,
   CallApiOptionsParams,
+  GuardrailResponse,
   NunjucksFilterMap,
   Prompt,
   TokenUsage,
@@ -36,6 +37,7 @@ import { shouldGenerateRemote } from '../remoteGeneration';
 import { PENALIZED_PHRASES } from './constants';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
 import { getTargetResponse, redteamProviderManager } from './shared';
+import type { BaseRedteamMetadata, BaseRedteamResponse } from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -123,12 +125,14 @@ export async function evaluateResponse(
   if (judgeResp.error) {
     throw new Error(`Error from redteam (judge) provider: ${judgeResp.error}`);
   }
-  invariant(typeof judgeResp.output === 'string', 'Expected output to be a string');
 
-  const parsed = extractFirstJsonObject<{
-    currentResponse: { rating: number; explanation: string };
-    previousBestResponse: { rating: number; explanation: string };
-  }>(judgeResp.output);
+  const parsed =
+    typeof judgeResp.output === 'string'
+      ? extractFirstJsonObject<{
+          currentResponse: { rating: number; explanation: string };
+          previousBestResponse: { rating: number; explanation: string };
+        }>(judgeResp.output)
+      : judgeResp.output;
 
   let currentScore = parsed.currentResponse.rating;
 
@@ -169,12 +173,12 @@ export async function getNewPrompt(
   if (redteamResp.error) {
     throw new Error(`Error from redteam provider: ${redteamResp.error}`);
   }
-  invariant(
-    typeof redteamResp.output === 'string',
-    `Expected output to be a string, but got response: ${JSON.stringify(redteamResp)}`,
-  );
+  const retObj =
+    typeof redteamResp.output === 'string'
+      ? extractFirstJsonObject<{ improvement: string; prompt: string }>(redteamResp.output)
+      : redteamResp.output;
   return {
-    ...extractFirstJsonObject<{ improvement: string; prompt: string }>(redteamResp.output),
+    ...retObj,
     tokenUsage: redteamResp.tokenUsage,
   };
 }
@@ -216,8 +220,11 @@ export async function checkIfOnTopic(
   if (isOnTopicResp.error) {
     throw new Error(`Error from redteam (onTopic) provider: ${isOnTopicResp.error}`);
   }
-  invariant(typeof isOnTopicResp.output === 'string', 'Expected output to be a string');
-  const { onTopic } = extractFirstJsonObject<{ onTopic: boolean }>(isOnTopicResp.output);
+
+  const { onTopic } =
+    typeof isOnTopicResp.output === 'string'
+      ? extractFirstJsonObject<{ onTopic: boolean }>(isOnTopicResp.output)
+      : isOnTopicResp.output;
   logger.debug(`[IterativeTree] Parsed onTopic value: ${JSON.stringify(onTopic)}`);
   invariant(typeof onTopic === 'boolean', 'Expected onTopic to be a boolean');
   return {
@@ -364,6 +371,25 @@ export interface TreeSearchOutput {
   improvement?: string;
   wasSelected: boolean;
   graderPassed?: boolean;
+  guardrails?: GuardrailResponse;
+}
+
+/**
+ * Represents metadata for the iterative tree search process.
+ */
+export interface TreeIterativeMetadata extends BaseRedteamMetadata {
+  highestScore: number;
+  redteamFinalPrompt?: string;
+  stopReason: 'TARGET_SCORE' | 'MAX_ATTEMPTS' | 'MAX_DEPTH' | 'NO_IMPROVEMENT' | 'GRADER_FAILED';
+  attempts: number;
+  redteamTreeHistory: TreeSearchOutput[];
+}
+
+/**
+ * Represents the complete response from a red team conversation.
+ */
+export interface RedteamTreeResponse extends BaseRedteamResponse {
+  metadata: TreeIterativeMetadata;
 }
 
 /**
@@ -391,22 +417,7 @@ export async function runRedteamConversation({
   targetProvider: ApiProvider;
   test?: AtomicTestCase;
   vars: Record<string, string | object>;
-}): Promise<{
-  output: string;
-  metadata: {
-    highestScore: number;
-    redteamFinalPrompt?: string;
-    stoppingReason:
-      | 'TARGET_SCORE'
-      | 'MAX_ATTEMPTS'
-      | 'MAX_DEPTH'
-      | 'NO_IMPROVEMENT'
-      | 'GRADER_FAILED';
-    attempts: number;
-    treeOutputs: string;
-  };
-  tokenUsage?: TokenUsage;
-}> {
+}): Promise<RedteamTreeResponse> {
   const nunjucks = getNunjucksEngine();
   const goal: string = vars[injectVar] as string;
 
@@ -612,17 +623,20 @@ export async function runRedteamConversation({
             prompt: targetPrompt,
             score,
             wasSelected: false,
+            guardrails: targetResponse.guardrails,
           });
           return {
             output: targetResponse.output,
             metadata: {
               highestScore: maxScore,
               redteamFinalPrompt: bestNode.prompt,
-              stoppingReason,
+              messages: treeOutputs as Record<string, any>[],
               attempts,
-              treeOutputs: JSON.stringify(treeOutputs, null, 2),
+              redteamTreeHistory: treeOutputs,
+              stopReason: stoppingReason,
             },
             tokenUsage: totalTokenUsage,
+            guardrails: targetResponse.guardrails,
           };
         }
 
@@ -640,17 +654,20 @@ export async function runRedteamConversation({
             depth,
             parentId: node.id,
             wasSelected: false,
+            guardrails: targetResponse.guardrails,
           });
           return {
             output: bestResponse,
             metadata: {
               highestScore: maxScore,
               redteamFinalPrompt: bestNode.prompt,
-              stoppingReason,
+              messages: treeOutputs as Record<string, any>[],
               attempts,
-              treeOutputs: JSON.stringify(treeOutputs, null, 2),
+              redteamTreeHistory: treeOutputs,
+              stopReason: stoppingReason,
             },
             tokenUsage: totalTokenUsage,
+            guardrails: targetResponse.guardrails,
           };
         }
 
@@ -669,17 +686,20 @@ export async function runRedteamConversation({
             prompt: targetPrompt,
             score,
             wasSelected: false,
+            guardrails: targetResponse.guardrails,
           });
           return {
             output: bestResponse,
             metadata: {
               highestScore: maxScore,
               redteamFinalPrompt: bestNode.prompt,
-              stoppingReason,
+              messages: treeOutputs as Record<string, any>[],
               attempts,
-              treeOutputs: JSON.stringify(treeOutputs, null, 2),
+              redteamTreeHistory: treeOutputs,
+              stopReason: stoppingReason,
             },
             tokenUsage: totalTokenUsage,
+            guardrails: targetResponse.guardrails,
           };
         }
 
@@ -705,6 +725,7 @@ export async function runRedteamConversation({
           prompt: targetPrompt,
           score,
           wasSelected: true,
+          guardrails: targetResponse.guardrails,
         });
       }
     }
@@ -758,17 +779,20 @@ export async function runRedteamConversation({
     depth: MAX_DEPTH - 1,
     parentId: bestNode.id,
     wasSelected: false,
+    guardrails: finalTargetResponse.guardrails,
   });
   return {
     output: bestResponse,
     metadata: {
       highestScore: maxScore,
       redteamFinalPrompt: bestNode.prompt,
-      stoppingReason,
+      messages: treeOutputs as Record<string, any>[],
       attempts,
-      treeOutputs: JSON.stringify(treeOutputs, null, 2),
+      redteamTreeHistory: treeOutputs,
+      stopReason: stoppingReason,
     },
     tokenUsage: totalTokenUsage,
+    guardrails: finalTargetResponse.guardrails,
   };
 }
 
@@ -808,7 +832,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
     prompt: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
-  ): Promise<{ output: string; metadata: { redteamFinalPrompt?: string } }> {
+  ): Promise<RedteamTreeResponse> {
     logger.debug(`[IterativeTree] callApi context: ${safeJsonStringify(context)}`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');

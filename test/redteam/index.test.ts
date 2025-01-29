@@ -6,11 +6,12 @@ import { loadApiProvider } from '../../src/providers';
 import { HARM_PLUGINS, PII_PLUGINS } from '../../src/redteam/constants';
 import { extractEntities } from '../../src/redteam/extraction/entities';
 import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
-import { synthesize, resolvePluginConfig } from '../../src/redteam/index';
+import { synthesize, resolvePluginConfig, calculateTotalTests } from '../../src/redteam/index';
 import { Plugins } from '../../src/redteam/plugins';
 import { shouldGenerateRemote, getRemoteHealthUrl } from '../../src/redteam/remoteGeneration';
 import { Strategies } from '../../src/redteam/strategies';
 import { validateStrategies } from '../../src/redteam/strategies';
+import { DEFAULT_LANGUAGES } from '../../src/redteam/strategies/multilingual';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 
 jest.mock('cli-progress');
@@ -470,6 +471,89 @@ describe('resolvePluginConfig', () => {
       yaml: yamlContent,
       json: jsonContent,
       txt: txtContent,
+    });
+  });
+});
+
+describe('calculateTotalTests', () => {
+  const mockPlugins = [
+    { id: 'plugin1', numTests: 2 },
+    { id: 'plugin2', numTests: 3 },
+  ];
+
+  it('should calculate basic test counts with no strategies', () => {
+    const result = calculateTotalTests(mockPlugins, []);
+    expect(result).toEqual({
+      totalTests: 5, // 2 + 3 from plugins
+      totalPluginTests: 5,
+      effectiveStrategyCount: 0,
+      multilingualStrategy: undefined,
+      includeBasicTests: true,
+    });
+  });
+
+  it('should handle basic strategy when enabled', () => {
+    const strategies = [{ id: 'basic', config: { enabled: true } }];
+    const result = calculateTotalTests(mockPlugins, strategies);
+    expect(result).toEqual({
+      totalTests: 5, // (2 + 3) * 1 strategy
+      totalPluginTests: 5,
+      effectiveStrategyCount: 1,
+      multilingualStrategy: undefined,
+      includeBasicTests: true,
+    });
+  });
+
+  it('should handle basic strategy when disabled', () => {
+    const strategies = [{ id: 'basic', config: { enabled: false } }];
+    const result = calculateTotalTests(mockPlugins, strategies);
+    expect(result).toEqual({
+      totalTests: 0, // No tests because basic is disabled and it's the only strategy
+      totalPluginTests: 5,
+      effectiveStrategyCount: 0,
+      multilingualStrategy: undefined,
+      includeBasicTests: false,
+    });
+  });
+
+  it('should handle multilingual strategy with default languages', () => {
+    const strategies = [{ id: 'multilingual' }];
+    const result = calculateTotalTests(mockPlugins, strategies);
+    expect(result).toEqual({
+      totalTests: 5 * DEFAULT_LANGUAGES.length, // (2 + 3) * number of default languages
+      totalPluginTests: 5,
+      effectiveStrategyCount: 1,
+      multilingualStrategy: strategies[0],
+      includeBasicTests: true,
+    });
+  });
+
+  it('should handle multilingual strategy with custom languages', () => {
+    const strategies = [
+      { id: 'multilingual', config: { languages: { en: true, es: true, fr: true } } },
+    ];
+    const result = calculateTotalTests(mockPlugins, strategies);
+    expect(result).toEqual({
+      totalTests: 15, // (2 + 3) * 3 languages
+      totalPluginTests: 5,
+      effectiveStrategyCount: 1,
+      multilingualStrategy: strategies[0],
+      includeBasicTests: true,
+    });
+  });
+
+  it('should handle combination of basic and multilingual strategies', () => {
+    const strategies = [
+      { id: 'basic', config: { enabled: true } },
+      { id: 'multilingual', config: { languages: { en: true, es: true } } },
+    ];
+    const result = calculateTotalTests(mockPlugins, strategies);
+    expect(result).toEqual({
+      totalTests: 20, // (2 + 3) * 2 strategies * 2 languages
+      totalPluginTests: 5,
+      effectiveStrategyCount: 2,
+      multilingualStrategy: strategies[1],
+      includeBasicTests: true,
     });
   });
 });

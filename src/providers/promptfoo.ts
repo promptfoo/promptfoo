@@ -69,7 +69,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
           },
           body: JSON.stringify(body),
         },
-        60000,
+        580000,
         2,
       );
 
@@ -129,7 +129,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
     };
 
     try {
-      const { data } = await fetchWithCache(
+      const { data, status, statusText } = await fetchWithCache(
         getRemoteGenerationUrl(),
         {
           method: 'POST',
@@ -144,6 +144,9 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       const { result, tokenUsage } = data;
 
       if (!result) {
+        logger.error(
+          `Error from promptfoo completion provider. Status: ${status} ${statusText} ${JSON.stringify(data)} `,
+        );
         return {
           error: 'LLM did not return a result, likely refusal',
         };

@@ -166,6 +166,7 @@ describe('Plugins', () => {
             purpose: 'test',
             task: 'contracts',
             version: VERSION,
+            email: null,
           }),
         }),
         expect.any(Number),

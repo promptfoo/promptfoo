@@ -9,6 +9,7 @@ import * as path from 'path';
 import { parse as parsePath } from 'path';
 import { testCaseFromCsvRow } from './csv';
 import { getEnvBool, getEnvString } from './envars';
+import { importModule } from './esm';
 import { fetchCsvFromGoogleSheet } from './googleSheets';
 import { fetchHuggingFaceDataset } from './integrations/huggingfaceDatasets';
 import logger from './logger';
@@ -96,6 +97,11 @@ export async function readStandaloneTestsFile(
       feature: 'yaml tests file',
     });
     rows = yaml.load(fs.readFileSync(resolvedVarsPath, 'utf-8')) as unknown as any;
+  } else if (fileExtension === 'js' || fileExtension === 'ts' || fileExtension === 'mjs') {
+    telemetry.recordAndSendOnce('feature_used', {
+      feature: 'js tests file',
+    });
+    return await importModule(resolvedVarsPath);
   }
 
   return rows.map((row, idx) => {
@@ -214,6 +220,13 @@ export async function readTests(
       } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
         testCases = yaml.load(fs.readFileSync(testFile, 'utf-8')) as TestCase[];
         testCases = await _deref(testCases, testFile);
+      } else if (testFile.endsWith('.jsonl')) {
+        const fileContent = fs.readFileSync(testFile, 'utf-8');
+        testCases = fileContent
+          .split('\n')
+          .filter((line) => line.trim())
+          .map((line) => JSON.parse(line));
+        testCases = await _deref(testCases, testFile);
       } else if (testFile.endsWith('.json')) {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         testCases = await _deref(require(testFile), testFile);
@@ -238,7 +251,7 @@ export async function readTests(
       // Points to a tests file with multiple test cases
       return loadTestsFromGlob(tests);
     } else {
-      // Points to a tests.csv or Google Sheet
+      // Points to a tests.{csv,json,yaml,yml,js} or Google Sheet
       return readStandaloneTestsFile(tests, basePath);
     }
   } else if (Array.isArray(tests)) {
@@ -410,8 +423,8 @@ export async function synthesize({
   const output = typeof resp.output === 'string' ? resp.output : JSON.stringify(resp.output);
   const respObjects = extractJsonObjects(output);
   invariant(
-    respObjects.length === 1,
-    `Expected exactly one JSON object in the response for personas, got ${respObjects.length}`,
+    respObjects.length >= 1,
+    `Expected at least one JSON object in the response for personas, got ${respObjects.length}`,
   );
   const personas = (respObjects[0] as { personas: string[] }).personas;
   logger.debug(
@@ -463,8 +476,8 @@ export async function synthesize({
     const personaResponseObjects = extractJsonObjects(personaResponse.output as string);
 
     invariant(
-      personaResponseObjects.length === 1,
-      `Expected exactly one JSON object in the response for persona ${persona}, got ${personaResponseObjects.length}`,
+      personaResponseObjects.length >= 1,
+      `Expected at least one JSON object in the response for persona ${persona}, got ${personaResponseObjects.length}`,
     );
     const parsed = personaResponseObjects[0] as { vars: VarMapping[] };
     logger.debug(`Received ${parsed.vars.length} test cases`);

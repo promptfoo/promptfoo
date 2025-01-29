@@ -121,10 +121,13 @@ const categories = {
 /**
  * Formats the test count for display.
  * @param numTests - The number of tests.
+ * @param strategy - Whether the test count is for a strategy.
  * @returns A formatted string representing the test count.
  */
-const formatTestCount = (numTests: number): string =>
-  numTests === 1 ? '1 test' : `${numTests} tests`;
+const formatTestCount = (numTests: number, strategy: boolean): string =>
+  numTests === 1
+    ? `1 test${strategy ? ' additional' : ''}`
+    : `${numTests} tests${strategy ? ' additional' : ''}`;
 
 /**
  * Checks if a plugin matches any of the strategy's target plugins
@@ -139,11 +142,7 @@ function pluginMatchesStrategyTargets(
   if (STRATEGY_EXEMPT_PLUGINS.includes(pluginId as StrategyExemptPlugin)) {
     return false;
   }
-  if (
-    pluginId === 'intent' &&
-    isProviderOptions(testCase.provider) &&
-    testCase.provider?.id === 'sequence'
-  ) {
+  if (isProviderOptions(testCase.provider) && testCase.provider?.id === 'sequence') {
     // Sequence providers are verbatim and strategies don't apply
     return false;
   }
@@ -264,6 +263,51 @@ export function getTestCount(
 }
 
 /**
+ * Calculates the total number of tests to be generated based on plugins and strategies.
+ * @param plugins - The array of plugins to generate tests for
+ * @param strategies - The array of strategies to apply
+ * @returns Object containing total tests and intermediate calculations
+ */
+export function calculateTotalTests(
+  plugins: SynthesizeOptions['plugins'],
+  strategies: RedteamStrategyObject[],
+): {
+  effectiveStrategyCount: number;
+  includeBasicTests: boolean;
+  multilingualStrategy: RedteamStrategyObject | undefined;
+  totalPluginTests: number;
+  totalTests: number;
+} {
+  const multilingualStrategy = strategies.find((s) => s.id === 'multilingual');
+  const numLanguages = multilingualStrategy
+    ? Object.keys(multilingualStrategy?.config?.languages ?? {}).length || DEFAULT_LANGUAGES.length
+    : 1;
+
+  const basicStrategy = strategies.find((s) => s.id === 'basic');
+  const basicStrategyExists = basicStrategy !== undefined;
+  const includeBasicTests = basicStrategy?.config?.enabled ?? true;
+
+  const effectiveStrategyCount =
+    basicStrategyExists && !includeBasicTests ? strategies.length - 1 : strategies.length;
+
+  const totalPluginTests = plugins.reduce((sum, p) => sum + (p.numTests || 0), 0);
+
+  // When there are no strategies, we should just return the total plugin tests
+  const totalTests =
+    strategies.length === 0
+      ? totalPluginTests
+      : totalPluginTests * effectiveStrategyCount * numLanguages;
+
+  return {
+    effectiveStrategyCount,
+    includeBasicTests,
+    multilingualStrategy,
+    totalPluginTests,
+    totalTests,
+  };
+}
+
+/**
  * Synthesizes test cases based on provided options.
  * @param options - The options for test case synthesis.
  * @returns A promise that resolves to an object containing the purpose, entities, and test cases.
@@ -284,6 +328,7 @@ export async function synthesize({
   purpose: string;
   entities: string[];
   testCases: TestCaseWithPlugin[];
+  injectVar: string;
 }> {
   // Add abort check helper
   const checkAbort = () => {
@@ -306,12 +351,13 @@ export async function synthesize({
 
   const redteamProvider = await redteamProviderManager.getProvider({ provider });
 
-  // We need to know how many languages we're generating for
-  // We generate multilingual attacks for all of our test cases so it's plugins * strategies * languages
-  const multilingualStrategy = strategies.find((s) => s.id === 'multilingual');
-  const numLanguages = multilingualStrategy
-    ? Object.keys(multilingualStrategy?.config?.languages ?? {}).length || DEFAULT_LANGUAGES.length
-    : 1;
+  const {
+    effectiveStrategyCount,
+    includeBasicTests,
+    multilingualStrategy,
+    totalPluginTests,
+    totalTests,
+  } = calculateTotalTests(plugins, strategies);
 
   logger.info(
     `Synthesizing test cases for ${prompts.length} ${
@@ -320,21 +366,20 @@ export async function synthesize({
       plugins
         .map(
           (p) =>
-            `${p.id} (${formatTestCount(p.numTests)})${p.config ? ` (${JSON.stringify(p.config)})` : ''}`,
+            `${p.id} (${formatTestCount(p.numTests, false)})${p.config ? ` (${JSON.stringify(p.config)})` : ''}`,
         )
         .sort()
         .join('\n'),
     )}\n`,
   );
   if (strategies.length > 0) {
-    const totalPluginTests = plugins.reduce((sum, p) => sum + (p.numTests || 0), 0);
-
     logger.info(
       `Using strategies:\n\n${chalk.yellow(
         strategies
+          .filter((s) => s.id !== 'basic')
           .map((s) => {
             const testCount = getTestCount(s, totalPluginTests, strategies);
-            return `${s.id} (${formatTestCount(testCount)})`;
+            return `${s.id} (${formatTestCount(testCount, true)})`;
           })
           .sort()
           .join('\n'),
@@ -342,21 +387,12 @@ export async function synthesize({
     );
   }
 
-  // Find if basic strategy is disabled
-  const basicStrategy = strategies.find((s) => s.id === 'basic');
-  const includeBasicTests = basicStrategy?.config?.enabled ?? true;
-
-  const totalPluginTests = plugins.reduce((sum, p) => sum + (p.numTests || 0), 0);
-
-  const totalTests =
-    totalPluginTests * (strategies.length + (includeBasicTests ? 1 : -1)) * numLanguages;
-
   logger.info(
     chalk.bold(`Test Generation Summary:`) +
       `\n• Total tests: ${chalk.cyan(totalTests)}` +
       `\n• Plugin tests: ${chalk.cyan(totalPluginTests)}` +
       `\n• Plugins: ${chalk.cyan(plugins.length)}` +
-      `\n• Strategies: ${chalk.cyan(includeBasicTests ? strategies.length : strategies.length - 1)}` +
+      `\n• Strategies: ${chalk.cyan(effectiveStrategyCount)}` +
       `\n• Max concurrency: ${chalk.cyan(maxConcurrency)}\n` +
       (delay ? `• Delay: ${chalk.cyan(delay)}\n` : ''),
   );
@@ -492,6 +528,7 @@ export async function synthesize({
   const pluginResults: Record<string, { requested: number; generated: number }> = {};
   const testCases: TestCaseWithPlugin[] = [];
   await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
+    // Check for abort signal before generating tests
     checkAbort();
 
     if (showProgressBar) {
@@ -514,6 +551,7 @@ export async function synthesize({
           ...resolvePluginConfig(plugin.config),
         },
       });
+
       if (!Array.isArray(pluginTests) || pluginTests.length === 0) {
         logger.warn(`Failed to generate tests for ${plugin.id}`);
         pluginTests = [];
@@ -571,7 +609,8 @@ export async function synthesize({
   // After generating plugin test cases but before applying strategies:
   const pluginTestCases = testCases;
 
-  // Apply non-basic, non-multilingual strategies
+  // Check for abort signal or apply non-basic, non-multilingual strategies
+  checkAbort();
   const { testCases: strategyTestCases, strategyResults } = await applyStrategies(
     pluginTestCases,
     strategies.filter((s) => s.id !== 'basic' && s.id !== 'multilingual'),
@@ -581,7 +620,8 @@ export async function synthesize({
   // Combine test cases based on basic strategy setting
   const finalTestCases = [...(includeBasicTests ? pluginTestCases : []), ...strategyTestCases];
 
-  // Then apply multilingual strategy to all test cases
+  // Check for abort signal or apply multilingual strategy to all test cases
+  checkAbort();
   if (multilingualStrategy) {
     const { testCases: multiLingualTestCases, strategyResults: multiLingualResults } =
       await applyStrategies(finalTestCases, [multilingualStrategy], injectVar);
@@ -598,5 +638,5 @@ export async function synthesize({
 
   logger.info(generateReport(pluginResults, strategyResults));
 
-  return { purpose, entities, testCases: finalTestCases };
+  return { purpose, entities, testCases: finalTestCases, injectVar };
 }

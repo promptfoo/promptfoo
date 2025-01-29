@@ -69,7 +69,7 @@ Supported parameters include:
 | `functions`             | Allows you to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`.                                                     |
 | `functionToolCallbacks` | A map of function tool names to function callbacks. Each callback should accept a string and return a string or a `Promise<string>`.                                                  |
 | `headers`               | Additional headers to include in the request.                                                                                                                                         |
-| `max_tokens`            | Controls the maximum length of the output in tokens.                                                                                                                                  |
+| `max_tokens`            | Controls the maximum length of the output in tokens. Not valid for o1 models.                                                                                                         |
 | `organization`          | Your OpenAI organization key.                                                                                                                                                         |
 | `passthrough`           | Additional parameters to pass through to the API.                                                                                                                                     |
 | `presence_penalty`      | Applies a penalty to new tokens (tokens that haven't appeared in the input), making them less likely to appear in the output.                                                         |
@@ -80,6 +80,8 @@ Supported parameters include:
 | `tool_choice`           | Controls whether the AI should use a tool. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                             |
 | `tools`                 | Allows you to define custom tools. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                                     |
 | `top_p`                 | Controls the nucleus sampling, a method that helps control the randomness of the AI's output.                                                                                         |
+| `max_completion_tokens` | Maximum number of tokens to generate for o1 models.                                                                                                                                   |
+| `reasoning_effort`      | Allows you to control how long the o1 model thinks before answering, 'low', 'medium' or 'high'.                                                                                       |
 
 Here are the type declarations of `config` parameters:
 
@@ -88,6 +90,8 @@ interface OpenAiConfig {
   // Completion parameters
   temperature?: number;
   max_tokens?: number;
+  max_completion_tokens?: number;
+  reasoning_effort?: 'low' | 'medium' | 'high';
   top_p?: number;
   frequency_penalty?: number;
   presence_penalty?: number;
@@ -213,7 +217,12 @@ OpenAI tools and functions are supported. See [OpenAI tools example](https://git
 
 ### Using tools
 
-To set `tools` on an OpenAI provider, use the provider's `config` key. Add your function definitions under this key.
+To set `tools` on an OpenAI provider, use the provider's `config` key. The model may return tool calls in two formats:
+
+1. An array of tool calls: `[{type: 'function', function: {...}}]`
+2. A message with tool calls: `{content: '...', tool_calls: [{type: 'function', function: {...}}]}`
+
+Tools can be defined inline or loaded from an external file:
 
 ```yaml
 prompts:
@@ -222,6 +231,9 @@ providers:
   - id: openai:chat:gpt-4o-mini
     // highlight-start
     config:
+      # Load tools from external file
+      tools: file://./weather_tools.yaml
+      # Or define inline
       tools: [
         {
         "type": "function",
@@ -523,6 +535,7 @@ The following properties can be overwritten in provider config:
 - `thread.messages` - A list of message objects that the thread is created with.
 - `temperature` - Temperature for the model
 - `toolChoice` - Controls whether the AI should use a tool
+- `tool_resources` - Tool resources to include in the thread - see [Assistant v2 tool resources](https://platform.openai.com/docs/assistants/migration)
 - `attachments` - File attachments to include in messages - see [Assistant v2 attachments](https://platform.openai.com/docs/assistants/migration)
 
 Here's an example of a more detailed config:

@@ -1,3 +1,4 @@
+import { fetchWithProxy } from './fetch';
 import logger from './logger';
 import type { CsvRow } from './types';
 
@@ -10,14 +11,13 @@ export async function checkGoogleSheetAccess(url: string) {
       return { public: false, status: response.status };
     }
   } catch (error) {
-    logger.error('Error checking sheet access:', error);
+    logger.error(`Error checking sheet access: ${error}`);
     return { public: false };
   }
 }
 
 export async function fetchCsvFromGoogleSheetUnauthenticated(url: string): Promise<CsvRow[]> {
   const { parse: parseCsv } = await import('csv-parse/sync');
-  const { fetchWithProxy } = await import('./fetch');
 
   const gid = new URL(url).searchParams.get('gid');
   const csvUrl = `${url.replace(/\/edit.*$/, '/export')}?format=csv${gid ? `&gid=${gid}` : ''}`;

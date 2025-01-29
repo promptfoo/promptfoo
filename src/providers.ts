@@ -6,10 +6,6 @@ import path from 'path';
 import cliState from './cliState';
 import { importModule } from './esm';
 import logger from './logger';
-import {
-  AdalineGatewayChatProvider,
-  AdalineGatewayEmbeddingProvider,
-} from './providers/adaline.gateway';
 import { AI21ChatCompletionProvider } from './providers/ai21';
 import { AnthropicCompletionProvider, AnthropicMessagesProvider } from './providers/anthropic';
 import {
@@ -21,10 +17,12 @@ import {
 import { BAMChatProvider, BAMEmbeddingProvider } from './providers/bam';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './providers/bedrock';
 import { BrowserProvider } from './providers/browser';
+import { ClouderaAiChatCompletionProvider } from './providers/cloudera';
 import * as CloudflareAiProviders from './providers/cloudflare-ai';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './providers/cohere';
 import { FalImageGenerationProvider } from './providers/fal';
 import { GolangProvider } from './providers/golangCompletion';
+import { GoogleChatProvider } from './providers/google';
 import { GroqProvider } from './providers/groq';
 import { HttpProvider } from './providers/http';
 import {
@@ -34,6 +32,7 @@ import {
   HuggingfaceTextGenerationProvider,
   HuggingfaceTokenExtractionProvider,
 } from './providers/huggingface';
+import { JfrogMlChatCompletionProvider } from './providers/jfrog';
 import { LlamaProvider } from './providers/llama';
 import {
   LocalAiCompletionProvider,
@@ -56,7 +55,6 @@ import {
   OpenAiModerationProvider,
 } from './providers/openai';
 import { parsePackageProvider } from './providers/packageParser';
-import { PalmChatProvider } from './providers/palm';
 import { PortkeyChatCompletionProvider } from './providers/portkey';
 import { PythonProvider } from './providers/pythonCompletion';
 import {
@@ -128,6 +126,12 @@ export async function loadApiProvider(
       id: () => 'echo',
       callApi: async (input: string) => ({ output: input }),
     };
+  } else if (providerPath.startsWith('cloudera:')) {
+    const modelName = providerPath.split(':')[1];
+    ret = new ClouderaAiChatCompletionProvider(modelName, {
+      ...providerOptions,
+      config: providerOptions.config || {},
+    });
   } else if (providerPath.startsWith('exec:')) {
     // Load script module
     const scriptPath = providerPath.split(':')[1];
@@ -186,7 +190,7 @@ export async function loadApiProvider(
       ret = new AzureCompletionProvider(deploymentName, providerOptions);
     } else {
       throw new Error(
-        `Unknown Azure OpenAI model type: ${modelType}. Use one of the following providers: azureopenai:chat:<model name>, azureopenai:assistant:<assistant id>, azureopenai:completion:<model name>`,
+        `Unknown Azure model type: ${modelType}. Use one of the following providers: azure:chat:<model name>, azure:assistant:<assistant id>, azure:completion:<model name>`,
       );
     }
   } else if (providerPath.startsWith('openrouter:')) {
@@ -198,6 +202,19 @@ export async function loadApiProvider(
         ...providerOptions.config,
         apiBaseUrl: 'https://openrouter.ai/api/v1',
         apiKeyEnvar: 'OPENROUTER_API_KEY',
+        passthrough: {
+          // Pass through OpenRouter-specific options
+          // https://openrouter.ai/docs/requests
+          ...(providerOptions.config.transforms && {
+            transforms: providerOptions.config.transforms,
+          }),
+          ...(providerOptions.config.models && { models: providerOptions.config.models }),
+          ...(providerOptions.config.route && { route: providerOptions.config.route }),
+          ...(providerOptions.config.provider && { provider: providerOptions.config.provider }),
+          ...(providerOptions.config.passthrough && {
+            passthrough: providerOptions.config.passthrough,
+          }),
+        },
       },
     });
   } else if (providerPath.startsWith('github:')) {
@@ -209,6 +226,39 @@ export async function loadApiProvider(
         ...providerOptions.config,
         apiBaseUrl: 'https://models.inference.ai.azure.com',
         apiKeyEnvar: 'GITHUB_TOKEN',
+      },
+    });
+  } else if (providerPath.startsWith('perplexity:')) {
+    const splits = providerPath.split(':');
+    const modelName = splits.slice(1).join(':');
+    ret = new OpenAiChatCompletionProvider(modelName, {
+      ...providerOptions,
+      config: {
+        ...providerOptions.config,
+        apiBaseUrl: 'https://api.perplexity.ai',
+        apiKeyEnvar: 'PERPLEXITY_API_KEY',
+      },
+    });
+  } else if (providerPath.startsWith('hyperbolic:')) {
+    const splits = providerPath.split(':');
+    const modelName = splits.slice(1).join(':');
+    ret = new OpenAiChatCompletionProvider(modelName, {
+      ...providerOptions,
+      config: {
+        ...providerOptions.config,
+        apiBaseUrl: 'https://api.hyperbolic.xyz/v1',
+        apiKeyEnvar: 'HYPERBOLIC_API_KEY',
+      },
+    });
+  } else if (providerPath.startsWith('deepseek:')) {
+    const splits = providerPath.split(':');
+    const modelName = splits.slice(1).join(':') || 'deepseek-chat';
+    ret = new OpenAiChatCompletionProvider(modelName, {
+      ...providerOptions,
+      config: {
+        ...providerOptions.config,
+        apiBaseUrl: 'https://api.deepseek.com/v1',
+        apiKeyEnvar: 'DEEPSEEK_API_KEY',
       },
     });
   } else if (providerPath.startsWith('f5')) {
@@ -384,9 +434,9 @@ export async function loadApiProvider(
       const modelName = splits.slice(1).join(':');
       ret = new OllamaCompletionProvider(modelName, providerOptions);
     }
-  } else if (providerPath.startsWith('palm:') || providerPath.startsWith('google:')) {
+  } else if (providerPath.startsWith('google:') || providerPath.startsWith('palm:')) {
     const modelName = providerPath.split(':')[1];
-    ret = new PalmChatProvider(modelName, providerOptions);
+    ret = new GoogleChatProvider(modelName, providerOptions);
   } else if (providerPath.startsWith('vertex:')) {
     const splits = providerPath.split(':');
     const firstPart = splits[1];
@@ -447,7 +497,9 @@ export async function loadApiProvider(
     const providerName = splits[1];
     const modelType = splits[2];
     const modelName = splits[3];
-
+    const { AdalineGatewayChatProvider, AdalineGatewayEmbeddingProvider } = await import(
+      './providers/adaline.gateway'
+    );
     if (modelType === 'embedding' || modelType === 'embeddings') {
       ret = new AdalineGatewayEmbeddingProvider(providerName, modelName, providerOptions);
     } else {
@@ -516,6 +568,10 @@ export async function loadApiProvider(
 
     const CustomApiProvider = await importModule(modulePath);
     ret = new CustomApiProvider(options);
+  } else if (providerPath.startsWith('jfrog:') || providerPath.startsWith('qwak:')) {
+    const splits = providerPath.split(':');
+    const modelName = splits.slice(1).join(':');
+    ret = new JfrogMlChatCompletionProvider(modelName, providerOptions);
   } else {
     logger.error(dedent`
       Could not identify provider: ${chalk.bold(providerPath)}.
@@ -606,6 +662,7 @@ export default {
   AzureChatCompletionProvider,
   AzureCompletionProvider,
   AzureEmbeddingProvider,
+  ClouderaAiChatCompletionProvider,
 
   // Backwards compatibility for Azure rename 2024-11-09 / 0.96.0
   AzureOpenAiAssistantProvider: AzureAssistantProvider,
@@ -631,7 +688,7 @@ export default {
   OllamaEmbeddingProvider,
   OllamaCompletionProvider,
   OllamaChatProvider,
-  PalmChatProvider,
+  GoogleChatProvider,
   PortkeyChatCompletionProvider,
   PythonProvider,
   ScriptCompletionProvider,

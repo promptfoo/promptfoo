@@ -1,18 +1,14 @@
 import compression from 'compression';
 import cors from 'cors';
-import debounce from 'debounce';
-import dedent from 'dedent';
 import type { Request, Response } from 'express';
 import express from 'express';
-import type { Stats } from 'fs';
-import fs from 'fs';
 import http from 'node:http';
 import path from 'node:path';
 import { Server as SocketIOServer } from 'socket.io';
 import { fromError } from 'zod-validation-error';
 import { createPublicUrl } from '../commands/share';
 import { VERSION, DEFAULT_PORT } from '../constants';
-import { getDbSignalPath } from '../database';
+import { setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
 import logger from '../logger';
@@ -190,7 +186,7 @@ export function createApp() {
   return app;
 }
 
-export function startServer(
+export async function startServer(
   port = DEFAULT_PORT,
   browserBehavior = BrowserBehavior.ASK,
   filterDescription?: string,
@@ -204,18 +200,16 @@ export function startServer(
     },
   });
 
-  runDbMigrations().then(() => {
-    logger.info('Migrated results from file system to database');
-  });
+  await runDbMigrations();
 
-  const watchFilePath = getDbSignalPath();
-  const watcher = debounce(async (curr: Stats, prev: Stats) => {
-    if (curr.mtime !== prev.mtime) {
-      io.emit('update', await getLatestEval(filterDescription));
+  setupSignalWatcher(async () => {
+    const latestEval = await getLatestEval(filterDescription);
+    if ((latestEval?.results.results.length || 0) > 0) {
+      logger.info(`Emitting update with eval ID: ${latestEval?.config?.description || 'unknown'}`);
+      io.emit('update', latestEval);
       allPrompts = null;
     }
-  }, 250);
-  fs.watchFile(watchFilePath, watcher);
+  });
 
   io.on('connection', async (socket) => {
     socket.emit('init', await getLatestEval(filterDescription));
@@ -232,12 +226,7 @@ export function startServer(
     .on('error', (error: NodeJS.ErrnoException) => {
       if (error.code === 'EADDRINUSE') {
         logger.error(
-          dedent`Port ${port} is already in use. Do you have another Promptfoo instance running?
-
-          To resolve this:
-            1. Check if another promptfoo instance is running (try 'ps aux | grep promptfoo')
-            2. Kill the process using the port: 'lsof -i :${port}' then 'kill <PID>'
-            3. Or specify a different port with --port <number>`,
+          `Port ${port} is already in use. Do you have another Promptfoo instance running?`,
         );
         process.exit(1);
       } else {

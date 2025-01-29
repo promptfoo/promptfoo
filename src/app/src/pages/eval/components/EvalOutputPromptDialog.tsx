@@ -16,15 +16,9 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TextareaAutosize from '@mui/material/TextareaAutosize';
 import Typography from '@mui/material/Typography';
+import { ellipsize } from '../../../../../utils/text';
 import ChatMessages, { type Message } from './ChatMessages';
 import type { GradingResult } from './types';
-
-function ellipsize(value: string, maxLength: number) {
-  if (value.length <= maxLength) {
-    return value;
-  }
-  return value.slice(0, maxLength) + '...';
-}
 
 function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[] }) {
   const [expandedValues, setExpandedValues] = useState<{ [key: number]: boolean }>({});
@@ -133,7 +127,7 @@ export default function EvalOutputPromptDialog({
     const lastClick = expandedMetadata[key]?.lastClickTime || 0;
     const isDoubleClick = now - lastClick < 300; // 300ms threshold
 
-    setExpandedMetadata((prev) => ({
+    setExpandedMetadata((prev: ExpandedMetadataState) => ({
       ...prev,
       [key]: {
         expanded: isDoubleClick ? false : true,
@@ -233,6 +227,33 @@ export default function EvalOutputPromptDialog({
                 </TableBody>
               </Table>
             </TableContainer>
+          </Box>
+        )}
+        {(metadata?.redteamHistory || metadata?.redteamTreeHistory) && (
+          <Box mt={2} mb={3}>
+            <ChatMessages
+              title="Attempts"
+              messages={(metadata?.redteamHistory ?? metadata?.redteamTreeHistory ?? [])
+                .filter((entry: any) => entry?.prompt && entry?.output)
+                .flatMap(
+                  (entry: {
+                    prompt: string;
+                    output: string;
+                    score?: number;
+                    isOnTopic?: boolean;
+                    graderPassed?: boolean;
+                  }) => [
+                    {
+                      role: 'user' as const,
+                      content: entry.prompt,
+                    },
+                    {
+                      role: 'assistant' as const,
+                      content: entry.output,
+                    },
+                  ],
+                )}
+            />
           </Box>
         )}
       </DialogContent>

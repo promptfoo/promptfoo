@@ -66,7 +66,7 @@ async function fetchDataset(
 
     return testCases;
   } catch (error) {
-    logger.error('[CyberSecEval] Error fetching dataset:', error);
+    logger.error(`[CyberSecEval] Error fetching dataset: ${error}`);
     return [];
   }
 }

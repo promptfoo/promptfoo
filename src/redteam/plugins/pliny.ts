@@ -21,11 +21,13 @@ async function fetchAndParseUrl(url: string): Promise<string[]> {
     const response = await fetchWithProxy(url);
     const text = await response.text();
 
-    // Split by headers and filter out empty strings
-    const sections = text.split(/^#\s+.*$/m).filter(Boolean);
+    // Split by headers (h1-h3) and filter out empty strings
+    const sections = text.split(/^#{1,4}\s+.*$/m).filter(Boolean);
 
-    // Trim each section and filter out empty ones
-    return sections.map((section) => section.trim()).filter(Boolean);
+    return sections
+      .map((section) => section.trim())
+      .filter(Boolean)
+      .filter((section) => section.includes('\n'));
   } catch (error) {
     console.error(`Error fetching ${url}:`, error);
     return [];

@@ -12,7 +12,7 @@ import nunjucks from 'nunjucks';
 import * as path from 'path';
 import cliState from '../cliState';
 import { TERMINAL_MAX_WIDTH } from '../constants';
-import { getDbSignalPath, getDb } from '../database';
+import { getDb } from '../database';
 import {
   datasetsTable,
   evalsTable,
@@ -31,6 +31,7 @@ import logger from '../logger';
 import Eval, { createEvalId, getSummaryOfLatestEvals } from '../models/eval';
 import type EvalResult from '../models/evalResult';
 import { generateIdFromPrompt } from '../models/prompt';
+import type { Vars } from '../types';
 import {
   type EvalWithMetadata,
   type EvaluateResult,
@@ -352,15 +353,6 @@ export async function writeResultsToDatabase(
 
   logger.debug(`Awaiting ${promises.length} promises to database...`);
   await Promise.all(promises);
-
-  // "touch" db signal path
-  const filePath = getDbSignalPath();
-  try {
-    const now = new Date();
-    fs.utimesSync(filePath, now, now);
-  } catch {
-    fs.closeSync(fs.openSync(filePath, 'w'));
-  }
 
   return evalId;
 }
@@ -969,10 +961,7 @@ export function providerToIdentifier(provider: TestCase['provider']): string | u
   return undefined;
 }
 
-export function varsMatch(
-  vars1: Record<string, string | string[] | object> | undefined,
-  vars2: Record<string, string | string[] | object> | undefined,
-) {
+export function varsMatch(vars1: Vars | undefined, vars2: Vars | undefined) {
   return deepEqual(vars1, vars2);
 }
 

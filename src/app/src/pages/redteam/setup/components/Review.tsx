@@ -29,10 +29,11 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import { strategyDisplayNames } from '@promptfoo/redteam/constants';
+import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
 import type { RedteamPlugin } from '@promptfoo/redteam/types';
 import type { Job } from '@promptfoo/types';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
-import { generateOrderedYaml, getUnifiedConfig } from '../utils/yamlHelpers';
+import { generateOrderedYaml } from '../utils/yamlHelpers';
 import { LogViewer } from './LogViewer';
 
 interface PolicyPlugin {
@@ -67,6 +68,10 @@ export default function Review() {
   const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     updateConfig('description', event.target.value);
   };
+
+  useEffect(() => {
+    recordEvent('webui_page_view', { page: 'redteam_config_review' });
+  }, []);
 
   const handleSaveYaml = () => {
     const blob = new Blob([yamlContent], { type: 'text/yaml' });
@@ -172,6 +177,13 @@ export default function Review() {
       clearInterval(pollInterval);
       setPollInterval(null);
     }
+
+    recordEvent('feature_used', {
+      feature: 'redteam_config_run',
+      numPlugins: config.plugins.length,
+      numStrategies: config.strategies.length,
+      targetType: config.target.id,
+    });
 
     setIsRunning(true);
     setLogs([]);

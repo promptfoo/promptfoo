@@ -1,4 +1,6 @@
+import crypto from 'crypto';
 import dedent from 'dedent';
+import fs from 'fs';
 import path from 'path';
 import { fetchWithCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
@@ -8,10 +10,13 @@ import {
   determineRequestBody,
   HttpProvider,
   processJsonBody,
+  createSessionParser,
+  createValidateStatus,
 } from '../../src/providers/http';
 import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared';
 import { maybeLoadFromExternalFile } from '../../src/util';
 
+jest.mock('../../src/globalConfig/globalConfig');
 jest.mock('../../src/cache', () => ({
   ...jest.requireActual('../../src/cache'),
   fetchWithCache: jest.fn(),
@@ -631,14 +636,14 @@ describe('HttpProvider', () => {
   });
 
   describe('getHeaders', () => {
-    it('should combine default headers with config headers', () => {
+    it('should combine default headers with config headers', async () => {
       const provider = new HttpProvider(mockUrl, {
         config: {
           headers: { 'X-Custom': '{{ prompt }}' },
           body: 'test',
         },
       });
-      const result = provider['getHeaders'](
+      const result = await provider.getHeaders(
         { 'content-type': 'application/json' },
         { prompt: 'test' },
       );
@@ -648,14 +653,14 @@ describe('HttpProvider', () => {
       });
     });
 
-    it('should render template strings in headers', () => {
+    it('should render template strings in headers', async () => {
       const provider = new HttpProvider(mockUrl, {
         config: {
           headers: { 'X-Custom': '{{ prompt | upper }}' },
           body: 'test',
         },
       });
-      const result = provider['getHeaders']({}, { prompt: 'test' });
+      const result = await provider.getHeaders({}, { prompt: 'test' });
       expect(result).toEqual({
         'x-custom': 'TEST',
       });
@@ -1101,6 +1106,37 @@ describe('createTransformRequest', () => {
     });
   });
 
+  it('should handle errors in function-based transform', async () => {
+    const errorFn = () => {
+      throw new Error('Transform function error');
+    };
+    const transform = await createTransformRequest(errorFn);
+    await expect(async () => {
+      await transform('test');
+    }).rejects.toThrow('Error in request transform function: Transform function error');
+  });
+
+  it('should handle errors in file-based transform', async () => {
+    const mockErrorFn = jest.fn(() => {
+      throw new Error('File transform error');
+    });
+    jest.mocked(importModule).mockResolvedValueOnce(mockErrorFn);
+
+    const transform = await createTransformRequest('file://error-transform.js');
+    await expect(async () => {
+      await transform('test');
+    }).rejects.toThrow(
+      'Error in request transform function from error-transform.js: File transform error',
+    );
+  });
+
+  it('should handle errors in string template transform', async () => {
+    const transform = await createTransformRequest('return badVariable.nonexistent');
+    await expect(async () => {
+      await transform('test');
+    }).rejects.toThrow('Error in request transform string template: badVariable is not defined');
+  });
+
   it('should handle function-based request transform', async () => {
     jest.clearAllMocks();
 
@@ -1140,6 +1176,27 @@ describe('createTransformRequest', () => {
   it('should throw error for unsupported transform type', async () => {
     await expect(createTransformRequest(123 as any)).rejects.toThrow(
       'Unsupported request transform type: number',
+    );
+  });
+
+  it('should include filename in error for file-based transform errors', async () => {
+    const mockErrorFn = jest.fn(() => {
+      throw new Error('File error');
+    });
+    jest.mocked(importModule).mockResolvedValueOnce(mockErrorFn);
+
+    const transform = await createTransformRequest('file://specific-file.js');
+    await expect(async () => {
+      await transform('test');
+    }).rejects.toThrow('Error in request transform function from specific-file.js: File error');
+  });
+
+  it('should handle errors in string template rendering', async () => {
+    const transform = await createTransformRequest('{{ nonexistent | invalid }}');
+    await expect(async () => {
+      await transform('test');
+    }).rejects.toThrow(
+      'Error in request transform string template: (unknown path)\n  Error: filter not found: invalid',
     );
   });
 });
@@ -1351,7 +1408,7 @@ describe('request transformation', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ key: 'value', transformed: 'test' }),
       },
-      expect.any(Number),
+      REQUEST_TIMEOUT_MS,
       'text',
       undefined,
       undefined,
@@ -1493,17 +1550,21 @@ describe('session handling', () => {
 
     const result = await provider.callApi('test');
     expect(result.sessionId).toBe('test-session');
-    expect(sessionParser).toHaveBeenCalledWith({ headers: mockResponse.headers });
+    expect(sessionParser).toHaveBeenCalledWith({
+      headers: mockResponse.headers,
+      body: { result: 'success' },
+    });
   });
 });
 
 describe('error handling', () => {
-  it('should throw error for non-200 responses', async () => {
+  it('should throw error for responses that fail validateStatus check', async () => {
     const provider = new HttpProvider('http://test.com', {
       config: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: { key: '{{ prompt }}' },
+        validateStatus: 'status >= 200 && status < 300', // Only accept 2xx responses
       },
     });
 
@@ -1552,6 +1613,7 @@ describe('error handling', () => {
           GET /api/data HTTP/1.1
           Host: example.com
         `,
+        validateStatus: (status: number) => status < 500,
       },
     });
 
@@ -1566,5 +1628,821 @@ describe('error handling', () => {
     await expect(provider.callApi('test')).rejects.toThrow(
       'HTTP call failed with status 500 Internal Server Error: Error occurred',
     );
+  });
+});
+
+describe('validateStatus', () => {
+  describe('default behavior', () => {
+    it('should accept all status codes when validateStatus is not provided', async () => {
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          method: 'POST',
+          body: { key: 'value' },
+        },
+      });
+
+      // Test various status codes
+      const testCases = [
+        { status: 200, statusText: 'OK' },
+        { status: 400, statusText: 'Bad Request' },
+        { status: 500, statusText: 'Server Error' },
+      ];
+
+      for (const { status, statusText } of testCases) {
+        const mockResponse = {
+          data: JSON.stringify({ result: 'success' }),
+          status,
+          statusText,
+          cached: false,
+        };
+        jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+        const result = await provider.callApi('test');
+        expect(result.output).toEqual({ result: 'success' });
+      }
+    });
+  });
+
+  describe('string-based validators', () => {
+    it('should handle expression format', async () => {
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          method: 'POST',
+          body: { key: 'value' },
+          validateStatus: 'status >= 200 && status < 300',
+        },
+      });
+
+      // Test successful case
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 201,
+        statusText: 'Created',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test');
+      expect(result.output).toEqual({ result: 'success' });
+
+      // Test failure case
+      const errorResponse = {
+        data: 'Error message',
+        status: 400,
+        statusText: 'Bad Request',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
+
+      await expect(provider.callApi('test')).rejects.toThrow(
+        'HTTP call failed with status 400 Bad Request: Error message',
+      );
+    });
+
+    it('should handle arrow function format with parameter', async () => {
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          method: 'POST',
+          body: { key: 'value' },
+          validateStatus: '(s) => s < 500',
+        },
+      });
+
+      // Test accepting 4xx status
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 404,
+        statusText: 'Not Found',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test');
+      expect(result.output).toEqual({ result: 'success' });
+
+      // Test rejecting 5xx status
+      const errorResponse = {
+        data: 'Error message',
+        status: 500,
+        statusText: 'Server Error',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
+
+      await expect(provider.callApi('test')).rejects.toThrow(
+        'HTTP call failed with status 500 Server Error: Error message',
+      );
+    });
+
+    it('should handle arrow function format without parameter', async () => {
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          method: 'POST',
+          body: { key: 'value' },
+          validateStatus: '() => true',
+        },
+      });
+
+      // Test accepting all status codes
+      const responses = [
+        { status: 200, statusText: 'OK' },
+        { status: 404, statusText: 'Not Found' },
+        { status: 500, statusText: 'Server Error' },
+      ];
+
+      for (const { status, statusText } of responses) {
+        const mockResponse = {
+          data: JSON.stringify({ result: 'success' }),
+          status,
+          statusText,
+          cached: false,
+        };
+        jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+        const result = await provider.callApi('test');
+        expect(result.output).toEqual({ result: 'success' });
+      }
+    });
+
+    it('should handle regular function format', async () => {
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          method: 'POST',
+          body: { key: 'value' },
+          validateStatus: 'function(status) { return status < 500; }',
+        },
+      });
+
+      // Test accepting 4xx status
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 404,
+        statusText: 'Not Found',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test');
+      expect(result.output).toEqual({ result: 'success' });
+
+      // Test rejecting 5xx status
+      const errorResponse = {
+        data: 'Error message',
+        status: 500,
+        statusText: 'Server Error',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
+
+      await expect(provider.callApi('test')).rejects.toThrow(
+        'HTTP call failed with status 500 Server Error: Error message',
+      );
+    });
+  });
+
+  describe('error handling', () => {
+    it('should handle malformed string expressions', async () => {
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          method: 'POST',
+          body: { key: 'value' },
+          validateStatus: 'invalid[syntax',
+        },
+      });
+
+      const mockResponse = {
+        data: 'response',
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      await expect(provider.callApi('test')).rejects.toThrow('Invalid status validator expression');
+    });
+
+    it('should throw error for malformed file-based validator', async () => {
+      jest.mocked(importModule).mockRejectedValueOnce(new Error('Module not found'));
+
+      await expect(createValidateStatus('file://invalid-validator.js')).rejects.toThrow(
+        /Status validator malformed/,
+      );
+    });
+
+    it('should throw error for unsupported validator type', async () => {
+      await expect(createValidateStatus(123 as any)).rejects.toThrow(
+        'Unsupported status validator type: number',
+      );
+    });
+  });
+
+  describe('file-based validators', () => {
+    it('should handle file-based validateStatus', async () => {
+      const mockValidator = jest.fn((status) => status < 500);
+      jest.mocked(importModule).mockResolvedValueOnce(mockValidator);
+
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          method: 'POST',
+          body: { key: 'value' },
+          validateStatus: 'file://validator.js',
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 404,
+        statusText: 'Not Found',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test');
+      expect(result.output).toEqual({ result: 'success' });
+      expect(importModule).toHaveBeenCalledWith(
+        path.resolve('/mock/base/path', 'validator.js'),
+        undefined,
+      );
+      expect(mockValidator).toHaveBeenCalledWith(404);
+    });
+
+    it('should handle file-based validateStatus with specific function', async () => {
+      const mockValidator = jest.fn((status) => status < 500);
+      jest.mocked(importModule).mockResolvedValueOnce(mockValidator);
+
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          method: 'POST',
+          body: { key: 'value' },
+          validateStatus: 'file://validator.js:validateStatus',
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 404,
+        statusText: 'Not Found',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test');
+      expect(result.output).toEqual({ result: 'success' });
+      expect(importModule).toHaveBeenCalledWith(
+        path.resolve('/mock/base/path', 'validator.js'),
+        'validateStatus',
+      );
+      expect(mockValidator).toHaveBeenCalledWith(404);
+    });
+  });
+});
+
+describe('session parser', () => {
+  it('should handle string-based session parser', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'GET',
+        sessionParser: 'data.headers["x-session-id"]',
+      },
+    });
+
+    const mockResponse = {
+      data: 'response',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+      headers: { 'x-session-id': 'test-session' },
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.sessionId).toBe('test-session');
+  });
+
+  it('should throw error for unsupported session parser type', async () => {
+    await expect(createSessionParser(123 as any)).rejects.toThrow(
+      'Unsupported response transform type: number',
+    );
+  });
+});
+
+describe('transform response error handling', () => {
+  it('should handle errors in response transform function', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'GET',
+        transformResponse: () => {
+          throw new Error('Transform failed');
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: 'response',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await expect(provider.callApi('test')).rejects.toThrow('Transform failed');
+  });
+
+  it('should handle errors in string-based transform', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'GET',
+        transformResponse: 'invalid.syntax[',
+      },
+    });
+
+    const mockResponse = {
+      data: 'response',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await expect(provider.callApi('test')).rejects.toThrow('Failed to transform response');
+  });
+});
+
+describe('transform request error handling', () => {
+  it('should handle errors in string-based request transform', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        transformRequest: 'invalid.syntax[',
+      },
+    });
+
+    await expect(provider.callApi('test')).rejects.toThrow('Unexpected token');
+  });
+
+  it('should throw error for malformed file-based request transform', async () => {
+    jest.mocked(importModule).mockRejectedValueOnce(new Error('Module not found'));
+
+    await expect(createTransformRequest('file://invalid-transform.js')).rejects.toThrow(
+      'Module not found',
+    );
+  });
+});
+
+describe('status validator error handling', () => {
+  it('should throw error for invalid status validator expression', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'GET',
+        validateStatus: 'invalid syntax[',
+      },
+    });
+
+    const mockResponse = {
+      data: 'response',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await expect(provider.callApi('test')).rejects.toThrow('Invalid status validator expression');
+  });
+
+  it('should throw error for malformed file-based validator', async () => {
+    jest.mocked(importModule).mockRejectedValueOnce(new Error('Module not found'));
+
+    await expect(createValidateStatus('file://invalid-validator.js')).rejects.toThrow(
+      /Status validator malformed/,
+    );
+  });
+
+  it('should throw error for unsupported validator type', async () => {
+    await expect(createValidateStatus(123 as any)).rejects.toThrow(
+      'Unsupported status validator type: number',
+    );
+  });
+});
+
+describe('string-based validators', () => {
+  it('should handle expression format', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        validateStatus: 'status >= 200 && status < 300',
+      },
+    });
+
+    // Test successful case
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 201,
+      statusText: 'Created',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.output).toEqual({ result: 'success' });
+
+    // Test failure case
+    const errorResponse = {
+      data: 'Error message',
+      status: 400,
+      statusText: 'Bad Request',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
+
+    await expect(provider.callApi('test')).rejects.toThrow(
+      'HTTP call failed with status 400 Bad Request: Error message',
+    );
+  });
+
+  it('should handle arrow function format with parameter', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        validateStatus: '(s) => s < 500',
+      },
+    });
+
+    // Test accepting 4xx status
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 404,
+      statusText: 'Not Found',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.output).toEqual({ result: 'success' });
+
+    // Test rejecting 5xx status
+    const errorResponse = {
+      data: 'Error message',
+      status: 500,
+      statusText: 'Server Error',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
+
+    await expect(provider.callApi('test')).rejects.toThrow(
+      'HTTP call failed with status 500 Server Error: Error message',
+    );
+  });
+
+  it('should handle arrow function format without parameter', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        validateStatus: '() => true',
+      },
+    });
+
+    // Test accepting all status codes
+    const responses = [
+      { status: 200, statusText: 'OK' },
+      { status: 404, statusText: 'Not Found' },
+      { status: 500, statusText: 'Server Error' },
+    ];
+
+    for (const { status, statusText } of responses) {
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status,
+        statusText,
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test');
+      expect(result.output).toEqual({ result: 'success' });
+    }
+  });
+
+  it('should handle regular function format', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        validateStatus: 'function(status) { return status < 500; }',
+      },
+    });
+
+    // Test accepting 4xx status
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 404,
+      statusText: 'Not Found',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.output).toEqual({ result: 'success' });
+
+    // Test rejecting 5xx status
+    const errorResponse = {
+      data: 'Error message',
+      status: 500,
+      statusText: 'Server Error',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
+
+    await expect(provider.callApi('test')).rejects.toThrow(
+      'HTTP call failed with status 500 Server Error: Error message',
+    );
+  });
+
+  it('should handle malformed string expressions', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        validateStatus: 'invalid[syntax',
+      },
+    });
+
+    const mockResponse = {
+      data: 'response',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await expect(provider.callApi('test')).rejects.toThrow('Invalid status validator expression');
+  });
+});
+
+describe('RSA signature authentication', () => {
+  let mockPrivateKey: string;
+  let mockSign: jest.SpyInstance;
+  let mockUpdate: jest.SpyInstance;
+  let mockEnd: jest.SpyInstance;
+
+  beforeEach(() => {
+    mockPrivateKey = '-----BEGIN PRIVATE KEY-----\nMOCK_KEY\n-----END PRIVATE KEY-----';
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(mockPrivateKey);
+
+    mockUpdate = jest.fn();
+    mockEnd = jest.fn();
+    mockSign = jest.fn().mockReturnValue(Buffer.from('mocksignature'));
+
+    const mockSignObject = {
+      update: mockUpdate,
+      end: mockEnd,
+      sign: mockSign,
+    };
+
+    jest.spyOn(crypto, 'createSign').mockReturnValue(mockSignObject as any);
+    jest.spyOn(Date, 'now').mockReturnValue(1000); // Mock timestamp
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('should generate and include signature in vars', async () => {
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        signatureAuth: {
+          privateKeyPath: '/path/to/key.pem',
+          signatureValidityMs: 300000, // 5 minutes
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test');
+
+    // Verify signature generation with specific data
+    expect(fs.readFileSync).toHaveBeenCalledWith('/path/to/key.pem', 'utf8');
+    expect(crypto.createSign).toHaveBeenCalledWith('SHA256');
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+    expect(mockEnd).toHaveBeenCalledTimes(1);
+    expect(mockSign).toHaveBeenCalledWith(mockPrivateKey);
+  });
+
+  it('should reuse cached signature when within validity period', async () => {
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        signatureAuth: {
+          privateKeyPath: '/path/to/key.pem',
+          signatureValidityMs: 300000,
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    // First call should generate signature
+    await provider.callApi('test');
+    expect(crypto.createSign).toHaveBeenCalledTimes(1);
+
+    // Second call within validity period should reuse signature
+    jest.spyOn(Date, 'now').mockReturnValue(2000); // Still within validity period
+    await provider.callApi('test');
+    expect(crypto.createSign).toHaveBeenCalledTimes(1); // Should not be called again
+  });
+
+  it('should regenerate signature when expired', async () => {
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        signatureAuth: {
+          privateKeyPath: '/path/to/key.pem',
+          signatureValidityMs: 300000,
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    // First call should generate signature
+    await provider.callApi('test');
+    expect(crypto.createSign).toHaveBeenCalledTimes(1);
+
+    // Second call after validity period should regenerate signature
+    jest.spyOn(Date, 'now').mockReturnValue(301000); // After validity period
+    await provider.callApi('test');
+    expect(crypto.createSign).toHaveBeenCalledTimes(2); // Should be called again
+  });
+
+  it('should use custom signature data template', async () => {
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        signatureAuth: {
+          privateKeyPath: '/path/to/key.pem',
+          signatureValidityMs: 300000,
+          signatureDataTemplate: 'custom-{{signatureTimestamp}}',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test');
+
+    // Verify signature generation with custom template
+    expect(crypto.createSign).toHaveBeenCalledWith('SHA256');
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+    expect(mockUpdate).toHaveBeenCalledWith('custom-1000'); // Custom template
+    expect(mockEnd).toHaveBeenCalledTimes(1);
+    expect(mockSign).toHaveBeenCalledWith(mockPrivateKey);
+  });
+
+  it('should support using privateKey directly instead of privateKeyPath', async () => {
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        signatureAuth: {
+          privateKey: mockPrivateKey,
+          signatureValidityMs: 300000,
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test');
+
+    // Verify signature generation using privateKey directly
+    expect(fs.readFileSync).not.toHaveBeenCalled(); // Should not read from file
+    expect(crypto.createSign).toHaveBeenCalledWith('SHA256');
+    expect(mockSign).toHaveBeenCalledWith(mockPrivateKey);
+  });
+});
+
+describe('createSessionParser', () => {
+  it('should return empty string when no parser is provided', async () => {
+    const parser = await createSessionParser(undefined);
+    const result = parser({ headers: {}, body: {} });
+    expect(result).toBe('');
+  });
+
+  it('should handle function parser', async () => {
+    const functionParser = ({ headers }: { headers: Record<string, string> }) =>
+      headers['session-id'];
+    const parser = await createSessionParser(functionParser);
+    const result = parser({ headers: { 'session-id': 'test-session' } });
+    expect(result).toBe('test-session');
+  });
+
+  it('should handle header path expression', async () => {
+    const parser = await createSessionParser('data.headers["x-session-id"]');
+    const result = parser({
+      headers: { 'x-session-id': 'test-session' },
+      body: {},
+    });
+    expect(result).toBe('test-session');
+  });
+
+  it('should handle body path expression', async () => {
+    const parser = await createSessionParser('data.body.session.id');
+    const result = parser({
+      headers: {},
+      body: { session: { id: 'test-session' } },
+    });
+    expect(result).toBe('test-session');
+  });
+
+  it('should handle file:// parser', async () => {
+    const mockParser = jest.fn(({ headers }) => headers['session-id']);
+    jest.mocked(importModule).mockResolvedValueOnce(mockParser);
+
+    const parser = await createSessionParser('file://session-parser.js');
+    const result = parser({ headers: { 'session-id': 'test-session' } });
+
+    expect(result).toBe('test-session');
+    expect(importModule).toHaveBeenCalledWith(
+      path.resolve('/mock/base/path', 'session-parser.js'),
+      undefined,
+    );
+  });
+
+  it('should handle file:// parser with specific function', async () => {
+    const mockParser = jest.fn(({ body }) => body.sessionId);
+    jest.mocked(importModule).mockResolvedValueOnce(mockParser);
+
+    const parser = await createSessionParser('file://session-parser.js:parseSession');
+    const result = parser({ headers: {}, body: { sessionId: 'test-session' } });
+
+    expect(result).toBe('test-session');
+    expect(importModule).toHaveBeenCalledWith(
+      path.resolve('/mock/base/path', 'session-parser.js'),
+      'parseSession',
+    );
+  });
+
+  it('should throw error for malformed file:// parser', async () => {
+    jest.mocked(importModule).mockResolvedValueOnce({});
+
+    await expect(createSessionParser('file://invalid-parser.js')).rejects.toThrow(
+      /Response transform malformed/,
+    );
+  });
+
+  it('should handle complex body path expression', async () => {
+    const parser = await createSessionParser('data.body.data.attributes.session.id');
+    const result = parser({
+      headers: {},
+      body: {
+        data: {
+          attributes: {
+            session: {
+              id: 'test-session',
+            },
+          },
+        },
+      },
+    });
+    expect(result).toBe('test-session');
   });
 });
