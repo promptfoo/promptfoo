@@ -4,21 +4,23 @@ import invariant from '../util/invariant';
 export const handleContains = ({
   assertion,
   renderedValue,
+  valueFromScript,
   outputString,
   inverse,
 }: AssertionParams): GradingResult => {
-  invariant(renderedValue, '"contains" assertion type must have a string or number value');
+  const value = valueFromScript ?? renderedValue;
+  invariant(value, '"contains" assertion type must have a string or number value');
   invariant(
-    typeof renderedValue === 'string' || typeof renderedValue === 'number',
+    typeof value === 'string' || typeof value === 'number',
     '"contains" assertion type must have a string or number value',
   );
-  const pass = outputString.includes(String(renderedValue)) !== inverse;
+  const pass = outputString.includes(String(value)) !== inverse;
   return {
     pass,
     score: pass ? 1 : 0,
     reason: pass
       ? 'Assertion passed'
-      : `Expected output to ${inverse ? 'not ' : ''}contain "${renderedValue}"`,
+      : `Expected output to ${inverse ? 'not ' : ''}contain "${value}"`,
     assertion,
   };
 };
@@ -26,21 +28,23 @@ export const handleContains = ({
 export const handleIContains = ({
   assertion,
   renderedValue,
+  valueFromScript,
   outputString,
   inverse,
 }: AssertionParams): GradingResult => {
-  invariant(renderedValue, '"icontains" assertion type must have a string or number value');
+  const value = valueFromScript ?? renderedValue;
+  invariant(value, '"icontains" assertion type must have a string or number value');
   invariant(
-    typeof renderedValue === 'string' || typeof renderedValue === 'number',
+    typeof value === 'string' || typeof value === 'number',
     '"icontains" assertion type must have a string or number value',
   );
-  const pass = outputString.toLowerCase().includes(String(renderedValue).toLowerCase()) !== inverse;
+  const pass = outputString.toLowerCase().includes(String(value).toLowerCase()) !== inverse;
   return {
     pass,
     score: pass ? 1 : 0,
     reason: pass
       ? 'Assertion passed'
-      : `Expected output to ${inverse ? 'not ' : ''}contain "${renderedValue}"`,
+      : `Expected output to ${inverse ? 'not ' : ''}contain "${value}"`,
     assertion,
   };
 };
@@ -48,25 +52,25 @@ export const handleIContains = ({
 export const handleContainsAny = ({
   assertion,
   renderedValue,
+  valueFromScript,
   outputString,
   inverse,
 }: AssertionParams): GradingResult => {
-  invariant(renderedValue, '"contains-any" assertion type must have a value');
-  if (typeof renderedValue === 'string') {
+  let value = valueFromScript ?? renderedValue;
+  invariant(value, '"contains-any" assertion type must have a value');
+  if (typeof value === 'string') {
     // Handle quoted values and escaped commas
-    renderedValue =
-      renderedValue
-        .match(/(".*?"|[^,]+)(?=\s*,|\s*$)/g)
-        ?.map((v) => v.trim().replace(/^"|"$/g, '')) ?? [];
+    value =
+      value.match(/(".*?"|[^,]+)(?=\s*,|\s*$)/g)?.map((v) => v.trim().replace(/^"|"$/g, '')) ?? [];
   }
-  invariant(Array.isArray(renderedValue), '"contains-any" assertion type must have an array value');
-  const pass = renderedValue.some((value) => outputString.includes(String(value))) !== inverse;
+  invariant(Array.isArray(value), '"contains-any" assertion type must have an array value');
+  const pass = value.some((v) => outputString.includes(String(v))) !== inverse;
   return {
     pass,
     score: pass ? 1 : 0,
     reason: pass
       ? 'Assertion passed'
-      : `Expected output to ${inverse ? 'not ' : ''}contain one of "${renderedValue.join(', ')}"`,
+      : `Expected output to ${inverse ? 'not ' : ''}contain one of "${value.join(', ')}"`,
     assertion,
   };
 };
@@ -74,27 +78,24 @@ export const handleContainsAny = ({
 export const handleIContainsAny = ({
   assertion,
   renderedValue,
+  valueFromScript,
   outputString,
   inverse,
 }: AssertionParams): GradingResult => {
-  invariant(renderedValue, '"icontains-any" assertion type must have a value');
-  if (typeof renderedValue === 'string') {
-    renderedValue = renderedValue.split(',').map((v) => v.trim());
+  let value = valueFromScript ?? renderedValue;
+  invariant(value, '"icontains-any" assertion type must have a value');
+  if (typeof value === 'string') {
+    value = value.split(',').map((v) => v.trim());
   }
-  invariant(
-    Array.isArray(renderedValue),
-    '"icontains-any" assertion type must have an array value',
-  );
+  invariant(Array.isArray(value), '"icontains-any" assertion type must have an array value');
   const pass =
-    renderedValue.some((value) =>
-      outputString.toLowerCase().includes(String(value).toLowerCase()),
-    ) !== inverse;
+    value.some((v) => outputString.toLowerCase().includes(String(v).toLowerCase())) !== inverse;
   return {
     pass,
     score: pass ? 1 : 0,
     reason: pass
       ? 'Assertion passed'
-      : `Expected output to ${inverse ? 'not ' : ''}contain one of "${renderedValue.join(', ')}"`,
+      : `Expected output to ${inverse ? 'not ' : ''}contain one of "${value.join(', ')}"`,
     assertion,
   };
 };
@@ -102,22 +103,24 @@ export const handleIContainsAny = ({
 export const handleContainsAll = ({
   assertion,
   renderedValue,
+  valueFromScript,
   outputString,
   inverse,
 }: AssertionParams): GradingResult => {
-  invariant(renderedValue, '"contains-all" assertion type must have a value');
-  if (typeof renderedValue === 'string') {
-    renderedValue = renderedValue.split(',').map((v) => v.trim());
+  let value = valueFromScript ?? renderedValue;
+  invariant(value, '"contains-all" assertion type must have a value');
+  if (typeof value === 'string') {
+    value = value.split(',').map((v) => v.trim());
   }
-  invariant(Array.isArray(renderedValue), '"contains-all" assertion type must have an array value');
-  const missingStrings = renderedValue.filter((value) => !outputString.includes(String(value)));
+  invariant(Array.isArray(value), '"contains-all" assertion type must have an array value');
+  const missingStrings = value.filter((v) => !outputString.includes(String(v)));
   const pass = (missingStrings.length === 0) !== inverse;
   return {
     pass,
     score: pass ? 1 : 0,
     reason: pass
       ? 'Assertion passed'
-      : `Expected output to ${inverse ? 'not ' : ''}contain all of [${renderedValue.join(', ')}]. Missing: [${missingStrings.join(', ')}]`,
+      : `Expected output to ${inverse ? 'not ' : ''}contain all of [${value.join(', ')}]. Missing: [${missingStrings.join(', ')}]`,
     assertion,
   };
 };
@@ -125,19 +128,18 @@ export const handleContainsAll = ({
 export const handleIContainsAll = ({
   assertion,
   renderedValue,
+  valueFromScript,
   outputString,
   inverse,
 }: AssertionParams): GradingResult => {
-  invariant(renderedValue, '"icontains-all" assertion type must have a value');
-  if (typeof renderedValue === 'string') {
-    renderedValue = renderedValue.split(',').map((v) => v.trim());
+  let value = valueFromScript ?? renderedValue;
+  invariant(value, '"icontains-all" assertion type must have a value');
+  if (typeof value === 'string') {
+    value = value.split(',').map((v) => v.trim());
   }
-  invariant(
-    Array.isArray(renderedValue),
-    '"icontains-all" assertion type must have an array value',
-  );
-  const missingStrings = renderedValue.filter(
-    (value) => !outputString.toLowerCase().includes(String(value).toLowerCase()),
+  invariant(Array.isArray(value), '"icontains-all" assertion type must have an array value');
+  const missingStrings = value.filter(
+    (v) => !outputString.toLowerCase().includes(String(v).toLowerCase()),
   );
   const pass = (missingStrings.length === 0) !== inverse;
   return {
@@ -145,7 +147,7 @@ export const handleIContainsAll = ({
     score: pass ? 1 : 0,
     reason: pass
       ? 'Assertion passed'
-      : `Expected output to ${inverse ? 'not ' : ''}contain all of [${renderedValue.join(', ')}]. Missing: [${missingStrings.join(', ')}]`,
+      : `Expected output to ${inverse ? 'not ' : ''}contain all of [${value.join(', ')}]. Missing: [${missingStrings.join(', ')}]`,
     assertion,
   };
 };
