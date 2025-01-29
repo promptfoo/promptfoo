@@ -2,68 +2,37 @@
 sidebar_position: 4
 ---
 
-# External Tests
+# Test Configuration Guide
 
-promptfoo supports multiple ways to load test cases from external sources, making it easy to evaluate your LLMs at scale. Choose the approach that best fits your workflow:
+promptfoo provides multiple ways to configure and organize your test cases, from simple direct configuration to external data sources. This guide will help you choose and implement the best testing approach for your needs.
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+## Overview
 
-# Direct test cases in config
-tests:
-  - vars:
-      input: "What is the capital of France?"
-      expected: "Paris"
-      temperature: 0.7  # Provider options are supported
-  - vars:
-      input: "What is 2+2?"
-      expected: "4"
-      assert:  # Explicit assertions are supported
-        - type: equals
-          value: "4"
+Test cases in promptfoo can be configured through:
 
-# Load from CSV file
-tests: file://tests.csv
+- Direct configuration in your YAML file
+- External files (CSV, JSON, YAML, etc.)
+- Spreadsheets (Google Sheets)
+- Public datasets (HuggingFace)
+- Programmatic generation (JavaScript/TypeScript)
 
-# Load from Google Sheets
-tests: https://docs.google.com/spreadsheets/d/your-sheet-id/edit
+## Quick Reference
 
-# Load from HuggingFace dataset
-tests: huggingface://datasets/cais/mmlu?split=test&subset=mathematics
+| Method      | Best For                | Setup Required                | Version Control |
+| ----------- | ----------------------- | ----------------------------- | --------------- |
+| Direct YAML | Quick tests, prototypes | None                          | ✅              |
+| CSV/Sheets  | Team collaboration      | Google auth for sheets        | ⚠️              |
+| HuggingFace | Benchmarking            | HF token for private datasets | ✅              |
+| Local Files | Development, CI/CD      | None                          | ✅              |
 
-# Load from YAML file
-tests: file://tests.yaml
-
-# Load from JSON file
-tests: file://tests.json
-
-# Load from JSONL file
-tests: file://tests.jsonl
-
-# Load from TypeScript file
-tests: file://tests.ts
-
-# Load from JavaScript file
-tests: file://tests.js
-
-# Load from multiple sources
-tests:
-  - file://regression/*.yaml  # Glob patterns supported
-  - file://accuracy/*.json    # JSON files supported
-  - file://edge-cases.ts      # TypeScript/JavaScript supported
-```
-
-## Available Dataset Sources
+## Basic Configuration
 
 ### Direct Test Cases
 
-The simplest way to specify test cases is directly in your configuration file.
+The simplest way to get started is defining tests directly in your configuration file:
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-
-prompts: file://prompt.txt
-providers: openai:gpt-4o
 
 tests:
   # Basic test case
@@ -74,82 +43,65 @@ tests:
       - type: equals
         value: 'Paris'
 
-  # Test case with multiple assertions
+  # Test with multiple assertions
   - vars:
       input: 'List three colors'
-      expected: 'red, blue, green'
     assert:
       - type: contains-any
         value: ['red', 'blue', 'green']
       - type: length
         value: 3
 
-  # Test case with description and metadata
+  # Test with metadata
   - description: 'Test basic arithmetic'
     vars:
       input: 'What is 2+2?'
       expected: '4'
-    assert:
-      - type: contains
-        value: '4'
     metadata:
       category: 'math'
       difficulty: 'easy'
 ```
 
-### [CSV and Spreadsheets](/docs/configuration/tests/csv)
+## External Data Sources
 
-Perfect for:
+### CSV and Spreadsheets
 
-- Collaborating with non-technical team members
-- Quick iteration on test cases
-- Simple data organization
-- Integration with existing spreadsheet workflows
+Perfect for team collaboration and quick iterations. CSV files support special columns for enhanced functionality:
 
-### [HuggingFace Datasets](/docs/configuration/tests/huggingface)
+```csv title="tests.csv"
+input,expected,__description
+"What is 2+2?","4","Basic arithmetic"
+"List colors","red blue green","Color listing test"
+```
 
-Ideal for:
+[Learn more about CSV configuration →](/docs/configuration/tests/csv)
 
-- Evaluating against established benchmarks
-- Testing across multiple languages
-- Accessing large-scale evaluation datasets
-- Standardized testing with popular datasets like MMLU, ARC, and GSM8K
+### HuggingFace Datasets
+
+Access established benchmarks and standardized testing datasets:
+
+```yaml title="promptfooconfig.yaml"
+tests: huggingface://datasets/cais/mmlu?split=test&subset=mathematics
+```
+
+[Learn more about HuggingFace integration →](/docs/configuration/tests/huggingface)
 
 ### Local Files
 
-Great for:
-
-- Version-controlled test suites
-- Custom test case organization
-- Local development and testing
-- CI/CD integration
-
 #### YAML Files
 
-YAML is the default format for test cases. It supports all promptfoo features and provides a clean, readable syntax:
-
-```yaml
-# tests.yaml
+```yaml title="tests.yaml"
 - vars:
     input: 'What is the capital of France?'
     expected: 'Paris'
   assert:
     - type: equals
       value: 'Paris'
-
-- vars:
-    input: 'What is 2+2?'
-    expected: '4'
-  assert:
-    - type: contains
-      value: '4'
 ```
 
-#### JSON Files
+#### JSON/JSONL Files
 
-JSON files offer a more strict format and are great for programmatically generated test cases:
-
-```json
+```json title="tests.json"
 {
   "tests": [
     {
@@ -170,10 +122,7 @@ JSON files offer a more strict format and are great for programmatically generat
 
 #### JavaScript/TypeScript Files
 
-JS/TS files allow you to programmatically generate test cases and take advantage of type checking:
-
-```typescript
-// tests.ts
+```typescript title="tests.ts"
 import { TestCase } from 'promptfoo';
 
 export const tests: TestCase[] = [
@@ -192,130 +141,79 @@ export const tests: TestCase[] = [
 ];
 ```
 
-```javascript
-// tests.js
-module.exports = [
-  {
-    vars: {
-      input: 'What is the capital of France?',
-      expected: 'Paris',
-    },
-    assert: [
-      {
-        type: 'equals',
-        value: 'Paris',
-      },
-    ],
-  },
-];
-```
-
-## Best Practices
-
-1. **Start Small**: Begin with a manageable subset of test cases
-2. **Mix and Match**: Combine different dataset sources for comprehensive testing
-3. **Version Control**: Keep your test cases in version control when possible
-4. **Cache Results**: Enable caching to speed up repeated evaluations
-5. **Document Tests**: Use description fields to explain test case purposes
-6. **Organize Tests**: Group related test cases using tags or separate files
-7. **Use Types**: For TypeScript files, leverage type checking to catch errors early
-8. **Modular Organization**: Split large test suites into multiple files by category
-
-## Examples
+## Advanced Configuration
 
 ### Combining Multiple Sources
 
-```yaml
-prompts:
-  - file://prompt.txt
+Mix different test sources for comprehensive testing:
 
-providers:
-  - openai:gpt-4
-
+```yaml title="promptfooconfig.yaml"
 tests:
-  # Load regression tests from CSV
-  - file://regression_tests.csv
+  # Regression tests from CSV
+  - file://regression/*.csv
 
-  # Load benchmark tests from HuggingFace
+  # Benchmark tests
   - huggingface://datasets/cais/mmlu?split=test&limit=100
 
-  # Load YAML test suites
+  # Custom test suites
   - file://tests/accuracy/*.yaml
-
-  # Load TypeScript test cases
   - file://tests/edge-cases.ts
-
-  # Include manual test cases
-  - vars:
-      input: 'Test prompt'
-      expected: 'Expected output'
 ```
 
-### Using Dataset-Specific Features
+### Test Organization
 
-```yaml
-tests:
-  # CSV with special columns
-  - file://tests.csv # Uses expected_output, expected_contains columns
+Structure your tests using:
 
-  # HuggingFace with configuration
-  - huggingface://datasets/gsm8k?split=test&limit=50 # Uses question/answer fields
+1. **Directories** - Group related test files
+2. **Metadata** - Tag tests with categories
+3. **Descriptions** - Document test purposes
+4. **File types** - Separate different kinds of tests
 
-  # YAML with advanced assertions
-  - file://tests.yaml # Uses full assertion syntax
+## Best Practices
 
-defaultTest:
-  assert:
-    - type: similar
-      threshold: 0.7
-```
+1. **Version Control**
+
+   - Keep test files in version control
+   - Use meaningful file names and directory structure
+   - Document test case purposes
+
+2. **Test Management**
+
+   - Start with small test sets
+   - Incrementally add test cases
+   - Use descriptive test names
+   - Include edge cases
+
+3. **Performance**
+
+   - Enable caching for repeated evaluations
+   - Use appropriate file formats for your use case
+   - Split large test suites into multiple files
+
+4. **Collaboration**
+   - Document test case purposes
+   - Use CSV/Sheets for non-technical team members
+   - Maintain consistent formatting
+
+## Troubleshooting
+
+Common issues and solutions:
+
+1. **File Loading Issues**
+
+   - Verify file paths are relative to config location
+   - Check file permissions
+   - Validate JSON/YAML syntax
+
+2. **Test Execution Problems**
+   - Enable debug logging
+   - Verify variable substitution
+   - Check assertion syntax
 
 ## Related Resources
 
 - [Configuration Guide](/docs/configuration/guide)
 - [CSV Dataset Guide](/docs/configuration/tests/csv)
-- [HuggingFace Dataset Guide](/docs/configuration/tests/huggingface)
+- [HuggingFace Integration](/docs/configuration/tests/huggingface)
 - [Google Sheets Integration](/docs/configuration/tests/google-sheets)
 - [Configuration Reference](/docs/configuration/reference)
-
-## Dataset Types Overview
-
-| Type        | Best For                | Key Features                        | Setup Required                 |
-| ----------- | ----------------------- | ----------------------------------- | ------------------------------ |
-| Direct      | Quick tests, prototypes | Immediate feedback, simple          | None                           |
-| CSV/Sheets  | Team collaboration      | Easy editing, sharing               | Google auth for private sheets |
-| HuggingFace | Benchmarking            | Standard datasets, multilingual     | HF token for private datasets  |
-| Local Files | Version control         | Git integration, TypeScript support | None                           |
-
-## Integration Examples
-
-### Combining Dataset Types
-
-```yaml
-tests:
-  # Regression tests from CSV
-  - file://regression_tests.csv
-
-  # Benchmark from HuggingFace
-  - huggingface://datasets/cais/mmlu?split=test&limit=100
-
-  # Custom tests with explicit assertions
-  - vars:
-      input: 'Test prompt'
-      expected: 'Expected output'
-      assert:
-        - type: similar
-          threshold: 0.7
-```
-
-### Using Provider Options
-
-```yaml
-defaultTest:
-  options:
-    temperature: 0.7
-    max_tokens: 100
-  assert:
-    - type: similar
-      threshold: 0.8
-```
