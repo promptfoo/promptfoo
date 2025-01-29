@@ -2,13 +2,15 @@
 sidebar_position: 4
 ---
 
-# Datasets
+# External Tests
 
-promptfoo supports multiple ways to load test cases from datasets, making it easy to evaluate your LLMs at scale. Choose the approach that best fits your workflow:
+promptfoo supports multiple ways to load test cases from external sources, making it easy to evaluate your LLMs at scale. Choose the approach that best fits your workflow:
 
 ## Quick Start
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
 # Direct test cases in config
 tests:
   - vars:
@@ -34,6 +36,18 @@ tests: huggingface://datasets/cais/mmlu?split=test&subset=mathematics
 # Load from YAML file
 tests: file://tests.yaml
 
+# Load from JSON file
+tests: file://tests.json
+
+# Load from JSONL file
+tests: file://tests.jsonl
+
+# Load from TypeScript file
+tests: file://tests.ts
+
+# Load from JavaScript file
+tests: file://tests.js
+
 # Load from multiple sources
 tests:
   - file://regression/*.yaml  # Glob patterns supported
@@ -45,11 +59,13 @@ tests:
 
 ### Direct Test Cases
 
-The simplest way to specify test cases is directly in your configuration file:
+The simplest way to specify test cases is directly in your configuration file.
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
 prompts: file://prompt.txt
-providers: openai:gpt-4
+providers: openai:gpt-4o
 
 tests:
   # Basic test case
@@ -82,13 +98,6 @@ tests:
       category: 'math'
       difficulty: 'easy'
 ```
-
-This approach is great for:
-
-- Quick prototyping
-- Simple test suites
-- Getting started with promptfoo
-- Sharing complete examples
 
 ### [CSV and Spreadsheets](/docs/configuration/tests/csv)
 
