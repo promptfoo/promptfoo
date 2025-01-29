@@ -526,7 +526,7 @@ export default function RedTeamSetupPage() {
 
   // --- JSX ---
   return (
-    <Root className="redteam-page">
+    <Root>
       <Content>
         <OuterSidebarContainer>
           <InnerSidebarContainer>
