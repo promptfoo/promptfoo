@@ -1,3 +1,4 @@
+import { parse as csvParse } from 'csv-parse/sync';
 import { fetchWithTimeout } from '../../fetch';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
@@ -10,43 +11,14 @@ const DATASET_URL =
   'https://raw.githubusercontent.com/centerforaisafety/HarmBench/main/data/behavior_datasets/harmbench_behaviors_text_all.csv';
 
 interface HarmbenchTextInput {
-  behavior: string;
-  contextString?: string; // Optional since it may not always be present
+  Behavior: string;
+  ContextString?: string; // Optional since it may not always be present
 }
 
 type HarmbenchTextVars = Record<string, string>;
 
 interface HarmbenchTextTestCase extends TestCase {
   vars: HarmbenchTextVars;
-}
-
-async function parseCsvLine(
-  line: string,
-  behaviorIndex: number,
-  contextIndex: number,
-): Promise<HarmbenchTextInput | null> {
-  // Simple CSV parsing - split on commas but respect quotes
-  const matches = line.match(/(?:^|,)("(?:[^"]|"")*"|[^,]*)/g);
-  if (!matches) return null;
-
-  // Clean up the matches by removing leading commas and quotes
-  const cleanMatches = matches.map(
-    (m) =>
-      m
-        .replace(/^,/, '') // Remove leading comma
-        .replace(/^"(.*)"$/, '$1') // Remove surrounding quotes
-        .replace(/""/g, '"'), // Replace double quotes with single quotes
-  );
-
-  const behavior = cleanMatches[behaviorIndex];
-  const contextString = contextIndex !== -1 ? cleanMatches[contextIndex] : undefined;
-
-  if (!behavior) return null;
-
-  return {
-    behavior,
-    ...(contextString ? { contextString } : {}),
-  };
 }
 
 export async function fetchDataset(limit: number): Promise<HarmbenchTextTestCase[]> {
@@ -57,57 +29,23 @@ export async function fetchDataset(limit: number): Promise<HarmbenchTextTestCase
     }
 
     const text = await response.text();
-    const lines = text.split('\n');
 
-    // Parse header row to find column indices
-    const headerLine = lines[0];
-    const headerMatches = headerLine.match(/(?:^|,)("(?:[^"]|"")*"|[^,]*)/g);
-    if (!headerMatches) {
-      throw new Error('[HarmbenchText] Failed to parse CSV header');
-    }
+    // Use csvParse to parse the CSV data
+    const records = csvParse(text, { columns: true });
 
-    // Clean and find column indices
-    const headers = headerMatches.map((h) =>
-      h
-        .replace(/^,/, '')
-        .replace(/^"(.*)"$/, '$1')
-        .replace(/""/g, '"')
-        .toLowerCase()
-        .trim(),
-    );
+    logger.debug(`[HarmbenchText] Parsed ${records.length} entries from CSV`);
 
-    const behaviorIndex = headers.findIndex((h) => h.includes('behavior'));
-    const contextIndex = headers.findIndex((h) => h.includes('context') && h.includes('string'));
-
-    if (behaviorIndex === -1) {
-      throw new Error('[HarmbenchText] Could not find Behavior column in CSV');
-    }
-
-    logger.debug(
-      `[HarmbenchText] Found columns - Behavior: ${behaviorIndex}, ContextString: ${contextIndex}`,
-    );
-
-    const data: HarmbenchTextInput[] = [];
-    // Start from index 1 to skip header
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (line) {
-        const parsed = await parseCsvLine(line, behaviorIndex, contextIndex);
-        if (parsed) {
-          data.push(parsed);
-        }
-      }
-    }
-
-    logger.debug(`[HarmbenchText] Parsed ${data.length} entries from CSV`);
+    records.map((record: HarmbenchTextInput) => {
+      logger.warn(JSON.stringify(record));
+    });
 
     // Convert the raw data to test cases and shuffle them
-    const testCases = data
+    const testCases = records
       .map(
-        (input): HarmbenchTextTestCase => ({
+        (record: HarmbenchTextInput): HarmbenchTextTestCase => ({
           vars: {
-            behavior: input.behavior,
-            ...(input.contextString ? { contextString: input.contextString } : {}),
+            behavior: record.Behavior,
+            contextString: record.ContextString || '',
           },
         }),
       )
