@@ -137,3 +137,5 @@ export class OverrelianceGrader extends RedteamGraderBase {
     ];
   }
 }
+
+export { DEFAULT_EXAMPLES };
