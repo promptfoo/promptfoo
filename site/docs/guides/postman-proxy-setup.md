@@ -2,37 +2,13 @@
 sidebar_position: 1
 ---
 
-# Use Your Team's Postman Collections with promptfoo
+# Using Postman as a Proxy
 
-Postman can act as a proxy server for promptfoo, intercepting and inspecting all your LLM API calls. This means you can use any endpoint configured in your team's Postman collections - including complex auth flows, environment variables, and pre-request scripts - without copying configurations into promptfoo. Instead of setting up new API credentials or writing custom providers, just point promptfoo at your existing Postman setup.
-
-## Why Use Postman Collections?
-
-Teams often configure complex API authentication in Postman collections, including:
-
-- API keys in environment variables
-- Bearer tokens with automatic refresh
-- OAuth 2.0 flows with client credentials
-- AWS Signature v4 authentication
-- Custom authentication schemes
-- Pre-request scripts for dynamic auth
-- Mutual TLS (mTLS) certificates
-- Multiple authentication methods chained together
-
-Rather than recreating these configurations in promptfoo or writing a custom provider, you can reuse your team's existing Postman collection. This is especially useful when:
-
-- You have complex authentication flows
-- Your team maintains API configurations centrally
-- You need to handle multiple environments (staging, production)
-- You're using enterprise authentication methods
-
-## Why Use a Proxy?
-
-When working with LLMs, seeing the actual API traffic is invaluable. Postman's proxy lets you watch your prompts and completions in real-time, debug rate limits, and track costs. If your team already uses Postman collections, you can even reuse existing API configurations without copying credentials around.
+Use Postman as a proxy server for promptfoo to leverage your team's existing API configurations without writing custom providers or storing your secrets in promptfoo. Rather than copying credentials or writing custom code, just point promptfoo at your Postman proxy and use your existing setup.
 
 ## Setup Guide
 
-First, make sure you have the Postman desktop app installed (proxy features aren't available in the web version), promptfoo (`npm install -g promptfoo`), and your LLM API keys ready.
+First, make sure you have the [Postman desktop app installed](https://www.postman.com/downloads/) (proxy features aren't available in the web version), promptfoo (`npm install -g promptfoo`), and your LLM API keys ready.
 
 ### Setting Up Postman's Proxy
 
@@ -79,7 +55,7 @@ For Linux:
 
 ### Configuring promptfoo
 
-Now we'll tell promptfoo to use Postman's proxy. You have three options:
+Now we'll tell promptfoo to use Postman's proxy. You have two options:
 
 **Option 1: Environment Variables** (Recommended for testing)
 Add to your shell or `.env` file:
@@ -98,15 +74,6 @@ NODE_TLS_REJECT_UNAUTHORIZED=0
 ```bash
 # Use Postman's certificate
 export PROMPTFOO_CA_CERT_PATH=/path/to/postman/certificate.crt
-```
-
-**Option 3: Per-Provider Configuration**
-In your promptfooconfig.yaml:
-
-```yaml
-providers:
-  - openai:gpt-4:
-      proxy: http://127.0.0.1:8080
 ```
 
 ### Using Team Collections
