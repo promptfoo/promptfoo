@@ -4,66 +4,124 @@ sidebar_position: 2
 
 # CSV Tests
 
-Loading test cases from CSV files is a simple and effective way to manage your prompts and test data. Whether you're using local files or Google Sheets, promptfoo makes it easy to evaluate your LLMs using spreadsheet data.
+CSV files provide a simple, spreadsheet-based way to manage your prompt test cases. This format is particularly useful for:
+
+- Non-technical team members
+- Large-scale test management
+- Collaborative test development
+- Integration with existing data workflows
 
 ## Quick Start
 
-```yaml
-# Load from a local CSV file
-tests: file://tests.csv
+### Basic Setup
 
-# Or directly from Google Sheets
+1. Create a CSV file with your test cases:
+
+```csv title="tests.csv"
+input,expected_output
+"What is 2+2?","4"
+"List three colors","red, blue, green"
+```
+
+2. Reference it in your config:
+
+```yaml title="promptfooconfig.yaml"
+tests: file://tests.csv
+```
+
+### Alternative Sources
+
+```yaml
+# Load from Google Sheets
 tests: https://docs.google.com/spreadsheets/d/your-sheet-id/edit
 
-# Or combine with other sources
+# Combine with other sources
 tests:
-  - file://tests.csv
+  - file://regression_tests.csv
+  - file://accuracy_tests.csv
   - huggingface://datasets/cais/mmlu
-  - vars:
-      input: "Direct test case"
-      expected: "Expected output"
 ```
 
 :::tip
-See the [Datasets Overview](/docs/configuration/datasets) for all available data sources and the [Google Sheets guide](/docs/configuration/tests/google-sheets) for detailed spreadsheet setup.
+See the [Google Sheets guide](/docs/configuration/tests/google-sheets) for detailed spreadsheet setup instructions.
 :::
 
-## CSV Format
+## CSV Format Details
 
-Your CSV file should have headers that match the variables you want to use in your prompts:
+### Basic Structure
 
-```csv
-input,expected_output,temperature,max_tokens
-"Summarize this:","A concise summary",0.7,150
-"Translate to Spanish:","Hola mundo",0.5,100
+- Use UTF-8 encoding
+- First row must contain column headers
+- Column names become variables in your prompts
+- Supports both comma (,) and tab delimiters
+- Handles quoted values for multi-line text
+
+```csv title="Example with various data types"
+input,context,expected_output,temperature,max_tokens
+"Summarize this:","Long text here...","A concise summary",0.7,150
+"Multi-line
+prompt","Additional
+context","Expected
+result",0.5,100
 ```
 
-### Supported Columns
+### Column Types
 
-| Column Type      | Description                          | Example                                |
-| ---------------- | ------------------------------------ | -------------------------------------- |
-| Variables        | Any column name becomes a variable   | `input`, `context`, `language`         |
-| Provider Options | Columns matching provider parameters | `temperature`, `max_tokens`            |
-| Assertions       | Special columns for expected outputs | `expected_output`, `expected_contains` |
-| Metadata         | Additional test information          | `description`, `tags`                  |
+#### Required Columns
 
-### Special Columns
+At least one of these must be present:
 
-Some column names have special meaning:
+- Any variable used in your prompts (e.g., `input`, `context`)
+- Any assertion column (e.g., `expected_output`, `expected_contains`)
 
-- `expected_output`: Used for exact match assertions
-- `expected_contains`: Checks if output contains this text
-- `expected_regex`: Matches output against a regex pattern
-- `expected_similarity`: Used with similarity assertions
-- `assert`: JSON-formatted assertion objects
-- `description`: Test case description
-- `tags`: Comma-separated test tags
+#### Special Assertion Columns
 
-## Example Configurations
+| Column Name           | Description                  | Example                  |
+| --------------------- | ---------------------------- | ------------------------ |
+| `expected_output`     | Exact match assertion        | `"The answer is 42"`     |
+| `expected_contains`   | Substring match              | `"must include this"`    |
+| `expected_regex`      | Regular expression match     | `"\\d+ items found"`     |
+| `expected_similarity` | Semantic similarity check    | `"Similar meaning text"` |
+| `expected_json`       | JSON structure validation    | `{"key": "value"}`       |
+| `assert`              | Custom JSON assertion object | `[{"type": "contains"}]` |
+
+For multiple assertions, use numbered columns:
+
+```csv
+input,expected_output1,expected_output2,expected_contains1
+"Query","First check","Second check","Must contain"
+```
+
+#### Provider Configuration Columns
+
+Any column matching a provider parameter will be used for configuration:
+
+| Column              | Description       | Example |
+| ------------------- | ----------------- | ------- |
+| `temperature`       | Model temperature | `0.7`   |
+| `max_tokens`        | Maximum tokens    | `150`   |
+| `top_p`             | Top-p sampling    | `0.95`  |
+| `frequency_penalty` | Frequency penalty | `0.5`   |
+| `presence_penalty`  | Presence penalty  | `0.5`   |
+
+#### Metadata Columns
+
+Special `__` prefixed columns for test metadata:
+
+| Column          | Description          | Example              |
+| --------------- | -------------------- | -------------------- |
+| `__description` | Test description     | `"Tests basic math"` |
+| `__prefix`      | Prepended to prompt  | `"Context: "`        |
+| `__suffix`      | Appended to prompt   | `" Answer:"`         |
+| `__metric`      | Default metric       | `"similarity"`       |
+| `__threshold`   | Assertion threshold  | `0.8`                |
+| `__tags`        | Comma-separated tags | `"regression,math"`  |
+
+## Examples
 
 ### Basic Testing
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   - |
     Write a {{tone}} message about {{topic}}
@@ -75,91 +133,117 @@ providers:
 tests: file://marketing_tests.csv
 ```
 
-marketing_tests.csv:
-
-```csv
-topic,tone,length,expected_contains
-"new product launch","professional",50,"introducing our new"
-"holiday sale","festive",30,"season's greetings"
-"customer feedback","sincere",40,"thank you for your feedback"
+```csv title="marketing_tests.csv"
+topic,tone,length,expected_contains,__description
+"new product","professional",50,"introducing our new","Product launch email"
+"holiday sale","festive",30,"season's greetings","Holiday promotion"
+"feedback","sincere",40,"thank you","Customer response"
 ```
 
 ### Advanced Assertions
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   - '{{input}}'
-
-providers:
-  - openai:gpt-4
-
 tests: file://advanced_tests.csv
-
-defaultTest:
-  assert:
-    - type: similar
-      threshold: 0.7
 ```
 
-advanced_tests.csv:
+```csv title="advanced_tests.csv"
+input,expected_output,assert,__threshold
+"Summarize: The cat sat on the mat","A cat was sitting on a mat","[{""type"": ""similar""}, {""type"": ""length"", ""max"": 50}]",0.8
+```
+
+### Multi-line Text
+
+For prompts or expected outputs containing multiple lines:
 
 ```csv
-input,expected_output,assert
-"Summarize: The cat sat on the mat","A cat was sitting on a mat","[{""type"": ""similar"", ""value"": ""{{expected_output}}"", ""threshold"": 0.8}, {""type"": ""length"", ""max"": 50}]"
-```
-
-### Provider Configuration
-
-```yaml
-prompts:
-  - '{{prompt}}'
-
-tests: file://provider_tests.csv
-```
-
-provider_tests.csv:
-
-```csv
-prompt,temperature,max_tokens,top_p
-"Write creatively:","0.9",150,0.95
-"Write precisely:","0.2",100,0.5
+input,expected_output
+"Write a poem
+about cats","First line
+Second line
+Third line"
 ```
 
 ## Best Practices
 
-1. **Use Headers**: Always include clear column headers that match your prompt variables
-2. **Validate CSV**: Ensure your CSV is properly formatted and encoded (UTF-8 recommended)
-3. **Start Small**: Begin with a few test cases to validate your setup
-4. **Use Descriptions**: Add a description column to document test case purposes
-5. **Group Related Tests**: Use tags to organize and filter test cases
-6. **Version Control**: Keep your CSV files in version control alongside your configs
-7. **Handle Special Characters**: Properly escape quotes and commas in CSV values
+### File Organization
 
-## Related Resources
+1. **Separate Concerns**
 
-- [Loading from HuggingFace Datasets](/docs/configuration/tests/huggingface)
-- [Google Sheets Integration](/docs/integrations/google-sheets)
-- [Configuration Guide](/docs/configuration/guide)
+   - Split different test types into separate files
+   - Use clear, descriptive filenames
+   - Group related tests together
+
+2. **Version Control**
+   - Keep CSV files in version control
+   - Use consistent formatting
+   - Include header comments
+
+### Data Quality
+
+1. **Validation**
+
+   - Verify column names match prompt variables
+   - Check for proper CSV formatting
+   - Validate assertion syntax
+   - Test with small datasets first
+
+2. **Maintenance**
+   - Document test purposes
+   - Use consistent naming conventions
+   - Regular cleanup of obsolete tests
+   - Keep test cases focused and atomic
+
+### Collaboration
+
+1. **Documentation**
+
+   - Use `__description` for each test
+   - Add comments for complex assertions
+   - Document expected behaviors
+   - Include example outputs
+
+2. **Workflow**
+   - Use Google Sheets for team editing
+   - Export to CSV for version control
+   - Regular review and updates
+   - Clear ownership and responsibilities
 
 ## Troubleshooting
 
 ### Common Issues
 
-#### CSV Parsing Errors
+1. **CSV Parsing Errors**
 
-- Check for proper CSV formatting
-- Ensure columns match expected names
-- Verify character encoding (use UTF-8)
-- Properly escape special characters
+   - Ensure UTF-8 encoding
+   - Check for proper escaping of quotes and commas
+   - Verify no hidden characters
+   - Validate CSV format with a tool
 
-#### Google Sheets Access
+2. **Variable Reference Errors**
 
-- Verify sheet permissions (must be accessible)
-- Check sheet ID is correct
-- Ensure proper authentication if using private sheets
+   - Column names must exactly match prompt variables
+   - Check for case sensitivity
+   - Avoid spaces in column names
+   - Verify all required columns exist
 
-#### Variable References
+3. **Google Sheets Integration**
+   - Sheet must be accessible
+   - Correct sheet ID in URL
+   - Proper authentication for private sheets
+   - Correct sheet name/range
 
-- Confirm column headers match prompt variables
-- Check for case sensitivity
-- Verify no spaces in column headers
+### Debug Tips
+
+- Use `promptfoo eval --debug` for detailed logs
+- Validate CSV with external tools
+- Test with minimal examples first
+- Check file permissions
+
+## Related Resources
+
+- [Configuration Guide](/docs/configuration/guide)
+- [Google Sheets Integration](/docs/configuration/tests/google-sheets)
+- [Test Configuration Overview](/docs/configuration/tests)
+- [Assertion Types](/docs/configuration/expected-outputs)
