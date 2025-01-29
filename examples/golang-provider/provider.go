@@ -1,23 +1,46 @@
 package main
 
 import (
-	"github.com/mdangelo/promptfoo/examples/golang-provider/internal/openai"
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/sashabaranov/go-openai"
 )
 
 var client *openai.Client
 
 func init() {
-	client = openai.NewClient()
+	client = openai.NewClient(os.Getenv("OPENAI_API_KEY"))
 }
 
 func CallApi(prompt string, options map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
-	output, err := client.GenerateCompletion(prompt)
+	// Get config values
+	// someOption := options["config"].(map[string]interface{})["someOption"].(string)
+
+	resp, err := client.CreateChatCompletion(
+		context.Background(),
+		openai.ChatCompletionRequest{
+			Model: openai.GPT4,
+			Messages: []openai.ChatCompletionMessage{
+				{
+					Role:    openai.ChatMessageRoleSystem,
+					Content: "You are a marketer working for a startup called Acme.",
+				},
+				{
+					Role:    openai.ChatMessageRoleUser,
+					Content: prompt,
+				},
+			},
+		},
+	)
+
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ChatCompletion error: %v", err)
 	}
 
 	return map[string]interface{}{
-		"output": output,
+		"output": resp.Choices[0].Message.Content,
 	}, nil
 }
 
