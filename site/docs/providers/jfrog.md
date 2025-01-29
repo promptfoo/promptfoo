@@ -6,7 +6,7 @@ sidebar_label: JFrog ML
 
 The JFrog ML provider (formerly known as Qwak) allows you to interact with JFrog ML's LLM Model Library using the OpenAI protocol. It supports chat completion models hosted on JFrog ML's infrastructure.
 
-## Configuration
+## Setup
 
 To use the JFrog ML provider, you'll need:
 
@@ -24,7 +24,7 @@ export QWAK_TOKEN="your-token-here"
 
 Here's a basic example of how to use the JFrog ML provider:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: jfrog:llama_3_8b_instruct
     config:
@@ -34,7 +34,7 @@ providers:
 
 You can also use the legacy `qwak:` prefix:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: qwak:llama_3_8b_instruct
 ```
@@ -49,7 +49,7 @@ The JFrog ML provider supports all the standard [OpenAI configuration options](/
 
 Example with full configuration:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: jfrog:llama_3_8b_instruct
     config:
@@ -68,9 +68,10 @@ providers:
 
 The following environment variables are supported:
 
-| Variable     | Description                                      |
-| ------------ | ------------------------------------------------ |
-| `QWAK_TOKEN` | The authentication token for JFrog ML API access |
+| Variable      | Description                                      |
+| ------------- | ------------------------------------------------ |
+| `JFROG_TOKEN` | The authentication token for JFrog ML API access |
+| `QWAK_TOKEN`  | Legacy token variable (still supported)          |
 
 ## API Compatibility
 
@@ -82,13 +83,16 @@ The JFrog ML provider is built on top of the OpenAI protocol, which means it sup
 
 Example chat conversation:
 
-```yaml
+```yaml title="prompts.yaml"
+- role: system
+  content: 'You are a helpful assistant.'
+- role: user
+  content: '{{user_input}}'
+```
+
+```yaml title="promptfooconfig.yaml"
 prompts:
-  - messages:
-      - role: system
-        content: 'You are a helpful assistant.'
-      - role: user
-        content: '{{user_input}}'
+  - file://prompts.yaml
 
 providers:
   - id: jfrog:llama_3_8b_instruct
