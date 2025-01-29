@@ -3,7 +3,7 @@ import yaml from 'js-yaml';
 import path from 'path';
 import { loadApiProvider, loadApiProviders } from '../src/providers';
 import { HttpProvider } from '../src/providers/http';
-import { OpenAiChatCompletionProvider } from '../src/providers/openai';
+import { OpenAiChatCompletionProvider, OpenAiEmbeddingProvider } from '../src/providers/openai';
 import { PythonProvider } from '../src/providers/pythonCompletion';
 import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
 import { WebSocketProvider } from '../src/providers/websocket';
@@ -55,9 +55,42 @@ describe('loadApiProvider', () => {
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', expect.any(Object));
   });
 
+  it('should load file provider from json', async () => {
+    const jsonContent: ProviderOptions = {
+      id: 'openai:chat:gpt-4',
+      config: {
+        apiKey: 'test-key',
+      },
+    };
+    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(jsonContent));
+
+    const provider = await loadApiProvider('file://test.json', {
+      basePath: '/test',
+    });
+
+    expect(fs.readFileSync).toHaveBeenCalledWith(path.join('/test', 'test.json'), 'utf8');
+    expect(provider).toBeDefined();
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', expect.any(Object));
+  });
+
   it('should load OpenAI chat provider', async () => {
     const provider = await loadApiProvider('openai:chat:gpt-4');
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', expect.any(Object));
+    expect(provider).toBeDefined();
+  });
+
+  it('should load OpenAI chat provider with default model', async () => {
+    const provider = await loadApiProvider('openai:chat');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4o-mini', expect.any(Object));
+    expect(provider).toBeDefined();
+  });
+
+  it('should load OpenAI embedding provider', async () => {
+    const provider = await loadApiProvider('openai:embedding');
+    expect(OpenAiEmbeddingProvider).toHaveBeenCalledWith(
+      'text-embedding-3-large',
+      expect.any(Object),
+    );
     expect(provider).toBeDefined();
   });
 
@@ -103,6 +136,12 @@ describe('loadApiProvider', () => {
     expect(provider).toBeDefined();
   });
 
+  it('should load HTTPS provider', async () => {
+    const provider = await loadApiProvider('https://test.com');
+    expect(HttpProvider).toHaveBeenCalledWith('https://test.com', expect.any(Object));
+    expect(provider).toBeDefined();
+  });
+
   it('should load WebSocket provider', async () => {
     const provider = await loadApiProvider('ws://test.com');
     expect(WebSocketProvider).toHaveBeenCalledWith('ws://test.com', expect.any(Object));
@@ -118,6 +157,30 @@ describe('loadApiProvider', () => {
   it('should load Python provider', async () => {
     const provider = await loadApiProvider('python:test.py');
     expect(PythonProvider).toHaveBeenCalledWith('test.py', expect.any(Object));
+    expect(provider).toBeDefined();
+  });
+
+  it('should load Python provider from file path', async () => {
+    const provider = await loadApiProvider('file://test.py');
+    expect(PythonProvider).toHaveBeenCalledWith('test.py', expect.any(Object));
+    expect(provider).toBeDefined();
+  });
+
+  it('should handle unidentified provider', async () => {
+    const _mockProvider = {
+      id: () => 'unknown',
+      callApi: async () => ({ output: '' }),
+    };
+    jest.mocked(process.exit).mockImplementation(() => {
+      throw new Error('Process exit');
+    });
+
+    await expect(loadApiProvider('unknown:provider')).rejects.toThrow('Process exit');
+    expect(process.exit).toHaveBeenCalledWith(1);
+  });
+
+  it('should load JFrog ML provider', async () => {
+    const provider = await loadApiProvider('jfrog:test-model');
     expect(provider).toBeDefined();
   });
 });
@@ -148,6 +211,14 @@ describe('loadApiProviders', () => {
     await expect(providers[0].callApi('test')).resolves.toEqual({ output: 'test' });
   });
 
+  it('should load provider from function with label', async () => {
+    const customFunction = async (prompt: string) => ({ output: prompt });
+    customFunction.label = 'custom-label';
+    const providers = await loadApiProviders([customFunction]);
+    expect(providers).toHaveLength(1);
+    expect(providers[0].id()).toBe('custom-label');
+  });
+
   it('should load provider from options object', async () => {
     const options: ProviderOptions = {
       id: 'openai:chat:gpt-4',
@@ -156,6 +227,20 @@ describe('loadApiProviders', () => {
       },
     };
     const providers = await loadApiProviders([options]);
+    expect(providers).toHaveLength(1);
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', expect.any(Object));
+  });
+
+  it('should load provider from options map', async () => {
+    const providers = await loadApiProviders([
+      {
+        'openai:chat:gpt-4': {
+          config: {
+            apiKey: 'test-key',
+          },
+        },
+      },
+    ]);
     expect(providers).toHaveLength(1);
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', expect.any(Object));
   });
