@@ -9,20 +9,14 @@ import { RedteamPluginBase, RedteamGraderBase } from './base';
 export const PLUGIN_ID = 'promptfoo:redteam:harmbench';
 
 const DATASET_URL =
-  'https://raw.githubusercontent.com/centerforaisafety/HarmBench/main/data/behavior_datasets/harmbench_behaviors_text_all.csv';
+  'https://raw.githubusercontent.com/centerforaisafety/HarmBench/c0423b952435fcc8467108d8f25962dbae5b7de2/data/behavior_datasets/extra_behavior_datasets/adv_training_behaviors.csv';
 
 interface HarmbenchInput {
   Behavior: string;
   ContextString?: string; // Optional since it may not always be present
 }
 
-type HarmbenchVars = Record<string, string>;
-
-interface HarmbenchTestCase extends TestCase {
-  vars: HarmbenchVars;
-}
-
-export async function fetchDataset(limit: number): Promise<HarmbenchTestCase[]> {
+export async function fetchDataset(limit: number): Promise<TestCase[]> {
   try {
     const response = await fetchWithTimeout(DATASET_URL, {}, REQUEST_TIMEOUT_MS);
     if (!response.ok) {
@@ -39,7 +33,7 @@ export async function fetchDataset(limit: number): Promise<HarmbenchTestCase[]> 
     // Convert the raw data to test cases and shuffle them
     const testCases = records
       .map(
-        (record: HarmbenchInput): HarmbenchTestCase => ({
+        (record: HarmbenchInput): TestCase => ({
           vars: {
             behavior: record.Behavior,
             contextString: record.ContextString || '',
@@ -56,7 +50,9 @@ export async function fetchDataset(limit: number): Promise<HarmbenchTestCase[]> 
 
     return testCases;
   } catch (error) {
-    logger.error(`[harmbench] Error fetching dataset: ${error}`);
+    logger.error(
+      `[harmbench] Error fetching dataset: [harmbench] No test cases generated: ${error}`,
+    );
     return [];
   }
 }
@@ -70,17 +66,23 @@ export class HarmbenchPlugin extends RedteamPluginBase {
   async generateTests(n: number, delayMs = 0): Promise<TestCase[]> {
     const testCases = await fetchDataset(n);
 
-    return testCases.map((test) => ({
-      vars: {
-        [this.injectVar]:
-          test.vars.behavior +
-          (test.vars.contextString ? `\n\nContext: ${test.vars.contextString}` : ''),
-      },
-      assert: this.getAssertions(test.vars.behavior),
-      metadata: {
-        harmbenchBehavior: test.vars.behavior,
-      },
-    }));
+    return testCases.map(
+      (test: TestCase): TestCase => ({
+        vars: {
+          [this.injectVar]: dedent`
+          ${test?.vars?.behavior || ''}
+
+          Context: ${test?.vars?.contextString || ''}
+        `,
+        },
+        assert: this.getAssertions(
+          typeof test?.vars?.behavior === 'string' ? test?.vars?.behavior : '',
+        ),
+        metadata: {
+          harmbenchBehavior: test?.vars?.behavior,
+        },
+      }),
+    );
   }
 
   protected getAssertions(prompt: string): Assertion[] {

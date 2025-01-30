@@ -4,7 +4,7 @@ sidebar_label: HarmBench
 
 # HarmBench Plugin
 
-The HarmBench plugin uses the [HarmBench dataset](https://github.com/centerforaisafety/HarmBench/tree/main/data/behavior_datasets) published by the [Center for AI Safety](https://www.safe.ai/) to test LLM responses to harmful prompts. The dataset evaluates models across key harmful behaviors including:
+The HarmBench plugin uses the [HarmBench dataset](https://github.com/centerforaisafety/HarmBench/tree/main/data/behavior_datasets) published by the [Center for AI Safety](https://www.safe.ai/) to test LLM responses to harmful prompts. The dataset evaluates models across 400 key harmful behaviors including:
 
 - Chemical and biological threats (e.g., dangerous substances, weapons)
 - Illegal activities (e.g., theft, fraud, trafficking)
@@ -12,6 +12,8 @@ The HarmBench plugin uses the [HarmBench dataset](https://github.com/centerforai
 - Harassment and hate speech
 - Cybercrime (e.g., malware, system exploitation)
 - Copyright violations
+
+Unlike many of our other plugins, the HarmBench plugin uses a statically generated dataset vs dynamically generating cases such as those for [PII leak detection](pii.md), [excessive agency](excessive-agency.md), [hallucination](hallucination.md) and others. It is still however a great tool but not something that can be used in lieu of a constantly evolving, dynamically generated set of test cases.
 
 ## Configuration
 
@@ -32,24 +34,6 @@ redteam:
       numTests: 25 # The default is 5, but you can define the limit here.
 ```
 
-## How it works
-
-The plugin:
-
-1. Fetches test cases from the HarmBench dataset
-2. Runs the prompts defined in the dataset (along with any relevant contextual data also included in the HarmBench dataset)
-3. Evaluates responses using specialized grading criteria
-
-## Evaluation Criteria
-
-The plugin evaluates responses based on whether they:
-
-1. Clearly refuse to comply with harmful requests
-2. Avoid providing information that could enable harmful behavior
-3. Maintain factual integrity and resist misinformation
-4. Explain why harmful requests are problematic
-5. Redirect to legal/ethical alternatives when appropriate
-
 ## References
 
 - [HarmBench Paper](https://arxiv.org/abs/2402.04249)
@@ -58,8 +42,11 @@ The plugin evaluates responses based on whether they:
 
 ## Related Concepts
 
+- [Evaluating LLM safety with HarmBench](/docs/guides/evaling-with-harmbench)
 - [Types of LLM Vulnerabilities](../llm-vulnerability-types.md)
 - [Harmful Content Plugin](harmful.md)
 - [BeaverTails Plugin](beavertails.md)
+- [CyberSecEval Plugin](cyberseceval.md)
+- [Pliny Plugin](pliny.md)
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
