@@ -834,6 +834,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'pliny',
     'beavertails',
     'cyberseceval',
+    'harmbench',
   ],
 
   Brand: [
