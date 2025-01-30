@@ -6,27 +6,27 @@ import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { Assertion, TestCase } from '../../types';
 import { RedteamPluginBase, RedteamGraderBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:harmbenchtext';
+export const PLUGIN_ID = 'promptfoo:redteam:harmbench';
 
 const DATASET_URL =
   'https://raw.githubusercontent.com/centerforaisafety/HarmBench/main/data/behavior_datasets/harmbench_behaviors_text_all.csv';
 
-interface HarmbenchTextInput {
+interface HarmbenchInput {
   Behavior: string;
   ContextString?: string; // Optional since it may not always be present
 }
 
-type HarmbenchTextVars = Record<string, string>;
+type HarmbenchVars = Record<string, string>;
 
-interface HarmbenchTextTestCase extends TestCase {
-  vars: HarmbenchTextVars;
+interface HarmbenchTestCase extends TestCase {
+  vars: HarmbenchVars;
 }
 
-export async function fetchDataset(limit: number): Promise<HarmbenchTextTestCase[]> {
+export async function fetchDataset(limit: number): Promise<HarmbenchTestCase[]> {
   try {
     const response = await fetchWithTimeout(DATASET_URL, {}, REQUEST_TIMEOUT_MS);
     if (!response.ok) {
-      throw new Error(`[harmbenchtext] HTTP status: ${response.status} ${response.statusText}`);
+      throw new Error(`[harmbench] HTTP status: ${response.status} ${response.statusText}`);
     }
 
     const text = await response.text();
@@ -34,12 +34,12 @@ export async function fetchDataset(limit: number): Promise<HarmbenchTextTestCase
     // Use csvParse to parse the CSV data
     const records = csvParse(text, { columns: true });
 
-    logger.debug(`[harmbenchtext] Parsed ${records.length} entries from CSV`);
+    logger.debug(`[harmbench] Parsed ${records.length} entries from CSV`);
 
     // Convert the raw data to test cases and shuffle them
     const testCases = records
       .map(
-        (record: HarmbenchTextInput): HarmbenchTextTestCase => ({
+        (record: HarmbenchInput): HarmbenchTestCase => ({
           vars: {
             behavior: record.Behavior,
             contextString: record.ContextString || '',
@@ -49,20 +49,20 @@ export async function fetchDataset(limit: number): Promise<HarmbenchTextTestCase
       .sort(() => Math.random() - 0.5) // Shuffle the array
       .slice(0, limit); // Take the first n items after shuffling
 
-    logger.debug(`[harmbenchtext] Generated ${testCases.length} test cases`);
+    logger.debug(`[harmbench] Generated ${testCases.length} test cases`);
     if (testCases.length === 0) {
-      throw new Error(`[harmbenchtext] No test cases generated`);
+      throw new Error(`[harmbench] No test cases generated`);
     }
 
     return testCases;
   } catch (error) {
-    logger.error(`[harmbenchtext] Error fetching dataset: ${error}`);
+    logger.error(`[harmbench] Error fetching dataset: ${error}`);
     return [];
   }
 }
 
 // Stub for the plugin class
-export class HarmbenchTextPlugin extends RedteamPluginBase {
+export class HarmbenchPlugin extends RedteamPluginBase {
   async getTemplate(): Promise<string> {
     throw new Error('Not implemented');
   }
@@ -87,13 +87,13 @@ export class HarmbenchTextPlugin extends RedteamPluginBase {
     return [
       {
         type: PLUGIN_ID,
-        metric: 'HarmbenchText',
+        metric: 'Harmbench',
       },
     ];
   }
 }
 
-export class HarmbenchTextGrader extends RedteamGraderBase {
+export class HarmbenchGrader extends RedteamGraderBase {
   id = PLUGIN_ID;
   rubric = dedent`
     You are a llm-as-a-judge grader for the HarmBench dataset.
