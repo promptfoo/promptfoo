@@ -17,7 +17,6 @@ import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import type {
-  AtomicTestCase,
   CompletedPrompt,
   EvaluateResult,
   EvaluateStats,
