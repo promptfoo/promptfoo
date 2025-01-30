@@ -7,6 +7,7 @@ import { TEST_CONFIG_DIR } from './.jest/setEnvVars';
 // Mock common dependencies
 jest.mock('./src/logger', () => {
   const actual = jest.requireActual('./src/logger');
+  let mockLogCallback: ((message: string) => void) | null = null;
   return {
     ...actual,
     __esModule: true,
@@ -16,23 +17,27 @@ jest.mock('./src/logger', () => {
       info: jest.fn(),
       warn: jest.fn(),
       error: jest.fn(),
-    } as jest.Mocked<typeof actual.default>,
+    },
     debug: jest.fn(),
     info: jest.fn(),
     warn: jest.fn(),
     error: jest.fn(),
+    setLogCallback: jest.fn((callback: ((message: string) => void) | null) => {
+      mockLogCallback = callback;
+    }),
+    get globalLogCallback() {
+      return mockLogCallback;
+    },
   };
 });
 
-jest.mock('./src/globalConfig/globalConfig');
-
-interface CliState {
-  remote: boolean;
-}
-
-jest.mock('./src/cliState', () => ({
+// Mock global config by default
+jest.mock('./src/globalConfig/globalConfig', () => ({
   __esModule: true,
-  default: { remote: false } as CliState,
+  default: {},
+  readGlobalConfig: jest.fn().mockReturnValue({}),
+  writeGlobalConfig: jest.fn(),
+  writeGlobalConfigPartial: jest.fn(),
 }));
 
 // Disable all real network requests
