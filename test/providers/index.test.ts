@@ -35,6 +35,7 @@ import {
   OpenAiAssistantProvider,
   OpenAiCompletionProvider,
   OpenAiChatCompletionProvider,
+  OpenAiEmbeddingProvider,
 } from '../../src/providers/openai';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import {
@@ -1196,5 +1197,136 @@ describe('loadApiProvider', () => {
     await expect(loadApiProvider('adaline:invalid')).rejects.toThrow(
       "Invalid adaline provider path: adaline:invalid. path format should be 'adaline:<provider_name>:<model_type>:<model_name>' eg. 'adaline:openai:chat:gpt-4o'",
     );
+  });
+
+  it('loadApiProvider with dashscope', async () => {
+    const provider = await loadApiProvider('dashscope:qwen-plus');
+    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(provider.id()).toBe('qwen-plus');
+    expect(provider.config.apiBaseUrl).toBe(
+      'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+    );
+    expect(provider.config.apiKeyEnvar).toBe('DASHSCOPE_API_KEY');
+  });
+
+  it('loadApiProvider with dashscope:chat', async () => {
+    const provider = await loadApiProvider('dashscope:chat:qwen-max');
+    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(provider.id()).toBe('qwen-max');
+    expect(provider.config.apiBaseUrl).toBe(
+      'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+    );
+    expect(provider.config.apiKeyEnvar).toBe('DASHSCOPE_API_KEY');
+  });
+
+  it('loadApiProvider with dashscope:vl', async () => {
+    const provider = await loadApiProvider('dashscope:vl:qwen-vl-max');
+    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(provider.id()).toBe('qwen-vl-max');
+    expect(provider.config.apiBaseUrl).toBe(
+      'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+    );
+    expect(provider.config.apiKeyEnvar).toBe('DASHSCOPE_API_KEY');
+  });
+
+  it('loadApiProvider with alibaba', async () => {
+    const provider = await loadApiProvider('alibaba:qwen-plus');
+    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(provider.id()).toBe('qwen-plus');
+    expect(provider.config.apiBaseUrl).toBe(
+      'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+    );
+    expect(provider.config.apiKeyEnvar).toBe('ALICLOUD_API_KEY');
+  });
+
+  it('loadApiProvider with alibaba aliases', async () => {
+    const aliases = ['alicloud:', 'aliyun:', 'dashscope:'];
+    for (const alias of aliases) {
+      const provider = await loadApiProvider(`${alias}qwen-plus`);
+      expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+      expect(provider.id()).toBe('qwen-plus');
+      expect(provider.config.apiBaseUrl).toBe(
+        'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+      );
+      expect(provider.config.apiKeyEnvar).toBe('ALICLOUD_API_KEY');
+    }
+  });
+
+  it('loadApiProvider with alibaba:chat', async () => {
+    const provider = await loadApiProvider('alibaba:chat:qwen-max');
+    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(provider.id()).toBe('qwen-max');
+    expect(provider.config.apiBaseUrl).toBe(
+      'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+    );
+    expect(provider.config.apiKeyEnvar).toBe('ALICLOUD_API_KEY');
+  });
+
+  it('loadApiProvider with alibaba:vl', async () => {
+    const provider = await loadApiProvider('alibaba:vl:qwen-vl-max');
+    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(provider.id()).toBe('qwen-vl-max');
+    expect(provider.config.apiBaseUrl).toBe(
+      'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+    );
+    expect(provider.config.apiKeyEnvar).toBe('ALICLOUD_API_KEY');
+  });
+
+  it('loadApiProvider with alibaba unknown model', async () => {
+    const provider = await loadApiProvider('alibaba:unknown-model');
+    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(provider.id()).toBe('unknown-model');
+    expect(provider.config.apiBaseUrl).toBe(
+      'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+    );
+    expect(provider.config.apiKeyEnvar).toBe('ALICLOUD_API_KEY');
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Unknown Alibaba Cloud model'),
+    );
+  });
+
+  it('loadApiProvider with alibaba qwen2.5 models', async () => {
+    const models = ['qwen2.5-72b-instruct', 'qwen2.5-vl-72b-instruct', 'qwen2.5-7b-instruct-1m'];
+    for (const model of models) {
+      const provider = await loadApiProvider(`alibaba:${model}`);
+      expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+      expect(provider.id()).toBe(model);
+      expect(provider.config.apiBaseUrl).toBe(
+        'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+      );
+      expect(provider.config.apiKeyEnvar).toBe('ALICLOUD_API_KEY');
+    }
+  });
+
+  it('loadApiProvider with alibaba embedding', async () => {
+    const provider = await loadApiProvider('alibaba:embedding:text-embedding-v3');
+    expect(provider).toBeInstanceOf(OpenAiEmbeddingProvider);
+    expect(provider.id()).toBe('text-embedding-v3');
+    expect(provider.config.apiBaseUrl).toBe(
+      'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+    );
+    expect(provider.config.apiKeyEnvar).toBe('ALICLOUD_API_KEY');
+  });
+
+  it('loadApiProvider with alibaba model series', async () => {
+    const modelSeries = {
+      flagship: ['qwen-max', 'qwen-max-2025-01-25', 'qwen-plus', 'qwen-turbo'],
+      visual: ['qwen-vl-max', 'qwen-vl-plus'],
+      qwen25: ['qwen2.5-72b-instruct', 'qwen2.5-14b-instruct'],
+      qwen2: ['qwen2-72b-instruct', 'qwen2-57b-a14b-instruct'],
+      qwen15: ['qwen1.5-110b-chat', 'qwen1.5-7b-chat'],
+    };
+
+    for (const [_series, models] of Object.entries(modelSeries)) {
+      for (const model of models) {
+        const provider = await loadApiProvider(`alibaba:${model}`);
+        expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+        expect(provider.id()).toBe(model);
+        expect(provider.config.apiBaseUrl).toBe(
+          'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+        );
+        expect(provider.config.apiKeyEnvar).toBe('ALICLOUD_API_KEY');
+      }
+    }
   });
 });

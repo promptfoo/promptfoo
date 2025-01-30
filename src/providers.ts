@@ -7,6 +7,7 @@ import cliState from './cliState';
 import { importModule } from './esm';
 import logger from './logger';
 import { AI21ChatCompletionProvider } from './providers/ai21';
+import { createAlibabaProvider } from './providers/alibaba';
 import { AnthropicCompletionProvider, AnthropicMessagesProvider } from './providers/anthropic';
 import {
   AzureAssistantProvider,
@@ -572,6 +573,16 @@ export async function loadApiProvider(
     const splits = providerPath.split(':');
     const modelName = splits.slice(1).join(':');
     ret = new JfrogMlChatCompletionProvider(modelName, providerOptions);
+  } else if (
+    providerPath.startsWith('alibaba:') ||
+    providerPath.startsWith('alicloud:') ||
+    providerPath.startsWith('aliyun:') ||
+    providerPath.startsWith('dashscope:')
+  ) {
+    ret = createAlibabaProvider(providerPath, {
+      config: providerOptions,
+      env: context.env,
+    });
   } else {
     logger.error(dedent`
       Could not identify provider: ${chalk.bold(providerPath)}.
