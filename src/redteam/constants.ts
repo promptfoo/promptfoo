@@ -1053,7 +1053,9 @@ export const strategyDisplayNames: Record<Strategy, string> = {
 };
 
 export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
-  Default: 'Promptfoo recommended',
+  RAG: 'Recommended plugins plus additional tests for RAG specific scenarios like access control',
+  Recommended: 'A broad set of plugins recommended by Promptfoo',
+  'Minimal Test': 'Minimal set of plugins to validate your setup',
   NIST: 'NIST AI Risk Management Framework',
   'OWASP LLM': 'OWASP LLM Top 10',
   'OWASP API': 'OWASP API Top 10',
