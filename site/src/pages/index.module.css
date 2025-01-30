@@ -8,6 +8,8 @@
     transparent 35%
   );
   min-height: 100vh;
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 
 [data-theme='dark'] :global(.homepage-wrapper) {
@@ -146,20 +148,67 @@
 }
 
 @media screen and (max-width: 768px) {
+  .heroBanner {
+    padding: 1rem;
+    width: 100%;
+    overflow-x: hidden;
+  }
+
+  .heroBanner h1 {
+    font-size: 2.5rem;
+    margin: 2rem 0;
+  }
+
+  .walkthroughContainer {
+    flex-direction: column;
+    width: 100%;
+    margin: 2rem auto;
+    padding: 0;
+  }
+
   .walkthroughContent {
     flex-direction: column;
+    width: 100%;
+    padding: 0 1rem;
   }
 
   .walkthroughDescription,
   .walkthroughImageContainer {
     width: 100%;
     padding: 0;
-    margin-bottom: 1rem;
   }
 
-  .walkthroughDescription {
-    padding-right: 0;
-    margin-bottom: 1rem;
+  .actionOrientedSection {
+    padding: 2rem 1rem;
+    width: auto;
+    max-width: 100%;
+    border-radius: 0;
+    margin: 0;
+  }
+
+  .asSeenOnSection {
+    padding: 3rem 1rem;
+  }
+
+  .asSeenOnGrid {
+    width: auto;
+    margin: 0 1rem;
+  }
+
+  .ctaSection {
+    padding: 4rem 1rem;
+    margin: 2rem 0;
+  }
+
+  .buttons {
+    flex-direction: column;
+    width: auto;
+    padding: 0;
+  }
+
+  .buttons a {
+    width: 100%;
+    margin: 0.5rem 0;
   }
 }
 
@@ -198,7 +247,9 @@
   background-color: #f4f4f4;
   text-align: center;
   border-radius: 12px;
-  min-width: min(100%, 1440px);
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
 }
 
 .actionOrientedSection h2 {
@@ -219,16 +270,23 @@
 .ctaSection {
   background-color: var(--ifm-background-surface-color);
   text-align: center;
-  padding: 6rem 0;
-  /*
-  background-color: #f8f9fa;
-  */
-  margin: 4rem 0;
+  padding: 6rem 2rem;
+  margin: 4rem auto;
+  max-width: 800px;
 }
 
 .ctaSection h2 {
   font-size: 2rem;
   margin-bottom: 2rem;
+  padding: 0 1rem;
+}
+
+.buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 0 1rem;
 }
 
 @media screen and (max-width: 768px) {
@@ -267,11 +325,29 @@
   }
 
   .ctaSection {
-    padding: 4rem 0;
+    padding: 3rem 1rem;
+    margin: 2rem 1rem;
   }
 
-  .ctaSection h3 {
-    font-size: 1.5rem;
+  .ctaSection h2 {
+    font-size: 1.75rem;
+    margin-bottom: 1.5rem;
+    padding: 0;
+    line-height: 1.3;
+  }
+
+  .buttons {
+    flex-direction: column;
+    gap: 0.75rem;
+    width: 100%;
+    padding: 0;
+  }
+
+  .buttons a {
+    width: 100%;
+    max-width: 300px;
+    margin: 0;
+    display: block;
   }
 }
 

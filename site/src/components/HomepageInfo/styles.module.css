@@ -91,25 +91,104 @@
 }
 
 @media (max-width: 768px) {
+  .infoContainer {
+    margin: 2rem 0 3rem 0;
+    padding: 0 1rem;
+  }
+
+  .infoContainer h2 {
+    font-size: 1.75rem;
+    line-height: 1.3;
+    margin-bottom: 1.5rem;
+    padding: 0 1rem;
+  }
+
   .configToWebview {
     flex-direction: column;
-    gap: 2rem;
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+    padding: 0;
   }
 
   .codeExample,
   .webviewExample {
     max-width: 100%;
-    padding: 1.25rem;
-  }
-
-  [data-theme='dark'] .codeExample,
-  [data-theme='dark'] .webviewExample {
-    backdrop-filter: none;
-    background: rgba(22, 27, 34, 0.95);
-  }
-
-  [data-theme='dark'] .configToWebview {
     padding: 1rem;
+  }
+
+  .featureTitle {
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+  }
+
+  .featureTitle svg {
+    font-size: 1.25rem;
+    margin-right: 0.5rem;
+  }
+
+  .exampleTabs {
+    margin: 1.5rem auto 1rem;
+    padding: 0.375rem;
+    width: auto;
+    min-width: 280px;
+    max-width: 95%;
+  }
+
+  .exampleTab {
+    padding: 0.75rem 1rem;
+    font-size: 0.95rem;
+    flex: 1;
+    text-align: center;
+  }
+
+  .codeBlock {
+    font-size: 0.85rem;
+  }
+
+  .resultImage {
+    border-radius: var(--border-radius-sm);
+  }
+}
+
+@media (max-width: 480px) {
+  .exampleTabs {
+    flex-direction: column;
+    gap: 0.5rem;
+    background: none;
+    padding: 0.5rem;
+    margin: 1rem auto;
+    width: 90%;
+    border: none;
+  }
+
+  .exampleTab {
+    width: 100%;
+    padding: 0.875rem;
+    background: rgba(0, 0, 0, 0.04);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    border-radius: 6px;
+    margin: 0;
+    min-height: 48px;
+  }
+
+  .exampleTabActive {
+    background: var(--blue-primary);
+    color: white;
+    border: none;
+    box-shadow: 0 2px 8px rgba(24, 144, 255, 0.25);
+  }
+
+  [data-theme='dark'] .exampleTab {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  [data-theme='dark'] .exampleTabActive {
+    background: var(--blue-primary);
+    color: white;
+    border: none;
+    box-shadow: 0 2px 12px rgba(24, 144, 255, 0.35);
   }
 }
 
@@ -117,12 +196,14 @@
   display: flex;
   justify-content: center;
   gap: 0.5rem;
-  margin: 2.5rem 0 2rem;
+  margin: 2.5rem auto 2rem;
   padding: 0.375rem;
-  background: rgba(0, 0, 0, 0.03);
-  border-radius: var(--border-radius-pill);
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 8px;
   width: fit-content;
   margin-inline: auto;
+  max-width: 90%;
+  border: 1px solid rgba(0, 0, 0, 0.06);
 }
 
 .exampleTab {
@@ -133,111 +214,46 @@
   font-weight: 500;
   cursor: pointer;
   transition: all var(--transition-duration) var(--transition-timing);
-  border-radius: var(--border-radius-pill);
-  color: #666;
+  border-radius: 6px;
+  color: rgba(0, 0, 0, 0.65);
   position: relative;
   white-space: nowrap;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.exampleTab:hover:not(.exampleTabActive) {
+  background: rgba(0, 0, 0, 0.03);
+  color: rgba(0, 0, 0, 0.85);
 }
 
 .exampleTabActive {
-  background: white;
-  color: var(--blue-primary);
-  box-shadow: var(--shadow-sm);
-}
-
-[data-theme='dark'] {
-  --shadow-sm: 0 2px 8px rgba(24, 144, 255, 0.2);
-  --shadow-md: 0 4px 24px rgba(0, 0, 0, 0.2);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.25);
+  background: var(--blue-primary);
+  color: white;
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.25);
+  font-weight: 500;
 }
 
 [data-theme='dark'] .exampleTabs {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(8px);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 [data-theme='dark'] .exampleTab {
   color: rgba(255, 255, 255, 0.65);
 }
 
-[data-theme='dark'] .exampleTabActive {
-  background: rgba(24, 144, 255, 0.1);
-  color: var(--blue-hover);
-  box-shadow:
-    var(--shadow-sm),
-    inset 0 0 0 1px rgba(64, 169, 255, 0.2);
-}
-
-[data-theme='dark'] .codeExample,
-[data-theme='dark'] .webviewExample {
-  background: rgba(22, 27, 34, 0.8);
-  border: 1px solid rgba(99, 99, 99, 0.15);
-  backdrop-filter: blur(10px);
-  box-shadow: var(--shadow-md);
-}
-
-[data-theme='dark'] .codeExample {
-  background: rgba(13, 17, 23, 0.8);
-}
-
-[data-theme='dark'] .codeExample:hover,
-[data-theme='dark'] .webviewExample:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
-  border-color: rgba(99, 99, 99, 0.25);
-}
-
-[data-theme='dark'] .featureTitle {
-  color: rgba(255, 255, 255, 0.95);
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-[data-theme='dark'] .featureTitle svg {
-  color: #40a9ff;
-  filter: drop-shadow(0 2px 8px rgba(64, 169, 255, 0.3));
-}
-
-[data-theme='dark'] .resultImage {
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(99, 99, 99, 0.2);
-  filter: brightness(0.95) contrast(1.05);
-  transition: all 0.3s ease;
-}
-
-[data-theme='dark'] .resultImage:hover {
-  filter: brightness(1) contrast(1.05);
-  transform: scale(1.01);
-}
-
-[data-theme='dark'] .codeBlock {
-  background: rgba(13, 17, 23, 0.6) !important;
-  border: 1px solid rgba(99, 99, 99, 0.15);
-}
-
-[data-theme='dark'] .exampleTabs {
-  border-bottom-color: rgba(99, 99, 99, 0.2);
-  background: rgba(30, 30, 30, 0.3);
-  border-radius: 8px 8px 0 0;
-  padding: 0.5rem;
-}
-
-[data-theme='dark'] .exampleTab {
-  color: #a0a0a0;
-  border-radius: 6px;
-  padding: 0.75rem 1.25rem;
-  transition: all 0.2s ease;
-}
-
-[data-theme='dark'] .exampleTabActive {
-  background: rgba(64, 169, 255, 0.1);
-  border-bottom: 2px solid #40a9ff;
-  color: #40a9ff;
-  font-weight: 500;
-}
-
 [data-theme='dark'] .exampleTab:hover:not(.exampleTabActive) {
-  color: #40a9ff;
-  background: rgba(64, 169, 255, 0.05);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+[data-theme='dark'] .exampleTabActive {
+  background: var(--blue-primary);
+  color: white;
+  box-shadow: 0 2px 12px rgba(24, 144, 255, 0.35);
 }
 
 @media (max-width: 768px) {
