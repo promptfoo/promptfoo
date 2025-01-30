@@ -18,6 +18,7 @@ import { addLeetspeak } from './leetspeak';
 import { addLikertTestCases } from './likert';
 import { addMathPrompt } from './mathPrompt';
 import { addMultilingual } from './multilingual';
+import { addPandamonium } from './pandamonium';
 import { addInjections } from './promptInjections';
 import { addRot13 } from './rot13';
 import { addCompositeTestCases } from './singleTurnComposite';
@@ -181,6 +182,15 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding Hex encoding to ${testCases.length} test cases`);
       const newTestCases = addHexEncoding(testCases, injectVar);
       logger.debug(`Added ${newTestCases.length} Hex encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'pandamonium',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding pandamonium runs to ${testCases.length} test cases`);
+      const newTestCases = await addPandamonium(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} Pandamonium test cases`);
       return newTestCases;
     },
   },

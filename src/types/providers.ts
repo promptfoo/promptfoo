@@ -1,5 +1,6 @@
 import type winston from 'winston';
 import type { EnvOverrides } from './env';
+import type { EvaluateResult } from './index';
 import type { Prompt } from './prompts';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
 
@@ -112,6 +113,7 @@ export interface ProviderResponse {
   isRefusal?: boolean;
   sessionId?: string;
   guardrails?: GuardrailResponse;
+  additionalResults?: EvaluateResult[];
 }
 
 export interface ProviderEmbeddingResponse {

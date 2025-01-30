@@ -268,6 +268,7 @@ export interface EvaluateTableRow {
   outputs: EvaluateTableOutput[];
   vars: string[];
   test: AtomicTestCase;
+  testIdx: number;
 }
 
 export interface EvaluateTable {
