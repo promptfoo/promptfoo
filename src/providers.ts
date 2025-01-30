@@ -7,7 +7,7 @@ import cliState from './cliState';
 import { importModule } from './esm';
 import logger from './logger';
 import { AI21ChatCompletionProvider } from './providers/ai21';
-import { createAlibabaProvider } from './providers/alibaba';
+import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './providers/alibaba';
 import { AnthropicCompletionProvider, AnthropicMessagesProvider } from './providers/anthropic';
 import {
   AzureAssistantProvider,
@@ -579,10 +579,15 @@ export async function loadApiProvider(
     providerPath.startsWith('aliyun:') ||
     providerPath.startsWith('dashscope:')
   ) {
-    ret = createAlibabaProvider(providerPath, {
-      config: providerOptions,
-      env: context.env,
-    });
+    const splits = providerPath.split(':');
+    const modelType = splits[1];
+    const modelName = splits.slice(2).join(':');
+
+    if (modelType === 'embedding' || modelType === 'embeddings') {
+      ret = new AlibabaEmbeddingProvider(modelName || modelType, providerOptions);
+    } else {
+      ret = new AlibabaChatCompletionProvider(modelName || modelType, providerOptions);
+    }
   } else {
     logger.error(dedent`
       Could not identify provider: ${chalk.bold(providerPath)}.

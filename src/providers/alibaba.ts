@@ -1,5 +1,4 @@
-import type { ApiProvider, ProviderOptions } from '../types';
-import type { EnvOverrides } from '../types/env';
+import type { ProviderOptions } from '../types';
 import { OpenAiChatCompletionProvider, OpenAiEmbeddingProvider } from './openai';
 
 const KNOWN_MODELS = new Set([
@@ -42,36 +41,40 @@ const KNOWN_MODELS = new Set([
 
 const API_BASE_URL = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1';
 
-export function createAlibabaProvider(
-  providerPath: string,
-  options: {
-    config?: ProviderOptions;
-    id?: string;
-    env?: EnvOverrides;
-  } = {},
-): ApiProvider {
-  const [, modelType, ...modelParts] = providerPath.split(':');
-  const modelName = modelParts.join(':');
+export class AlibabaChatCompletionProvider extends OpenAiChatCompletionProvider {
+  constructor(modelName: string, options: ProviderOptions = {}) {
+    if (!modelName || !KNOWN_MODELS.has(modelName)) {
+      throw new Error(
+        `Invalid Alibaba Cloud model: ${modelName}. Available models: ${Array.from(KNOWN_MODELS).join(', ')}`,
+      );
+    }
 
-  const alibabaConfig = {
-    ...options,
-    config: {
-      ...options.config,
-      apiBaseUrl: API_BASE_URL,
-      apiKeyEnvar: 'DASHSCOPE_API_KEY',
-    },
-  };
-
-  const finalModelName = modelName || modelType;
-  if (!finalModelName || !KNOWN_MODELS.has(finalModelName)) {
-    throw new Error(
-      `Invalid Alibaba Cloud model: ${finalModelName}. Available models: ${Array.from(KNOWN_MODELS).join(', ')}`,
-    );
+    super(modelName, {
+      ...options,
+      config: {
+        ...options.config,
+        apiBaseUrl: API_BASE_URL,
+        apiKeyEnvar: 'DASHSCOPE_API_KEY',
+      },
+    });
   }
+}
 
-  if (finalModelName.startsWith('text-embedding')) {
-    return new OpenAiEmbeddingProvider(finalModelName, alibabaConfig);
+export class AlibabaEmbeddingProvider extends OpenAiEmbeddingProvider {
+  constructor(modelName: string, options: ProviderOptions = {}) {
+    if (!modelName || !KNOWN_MODELS.has(modelName)) {
+      throw new Error(
+        `Invalid Alibaba Cloud model: ${modelName}. Available models: ${Array.from(KNOWN_MODELS).join(', ')}`,
+      );
+    }
+
+    super(modelName, {
+      ...options,
+      config: {
+        ...options.config,
+        apiBaseUrl: API_BASE_URL,
+        apiKeyEnvar: 'DASHSCOPE_API_KEY',
+      },
+    });
   }
-
-  return new OpenAiChatCompletionProvider(finalModelName, alibabaConfig);
 }
