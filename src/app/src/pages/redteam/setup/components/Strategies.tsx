@@ -95,8 +95,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
   useEffect(() => {
     const target = { ...config.target };
-    target.config = target.config || { stateful: isStatefulValue };
-    target.config.stateful = isStatefulValue;
+    target.config = { ...target.config, stateful: isStatefulValue };
     updateConfig('target', target);
   }, [isStatefulValue]);
 
