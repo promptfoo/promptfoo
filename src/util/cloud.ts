@@ -33,7 +33,7 @@ export async function getConfigFromCloud(id: string) {
 
 export async function targetApiBuildDate(): Promise<Date | null> {
   try {
-    const response = await makeRequest('/version', 'GET');
+    const response = await makeRequest('version', 'GET');
 
     const data = await response.json();
 
