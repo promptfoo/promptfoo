@@ -3,20 +3,22 @@ export const DEFAULT_NUM_TESTS_PER_PLUGIN = 5;
 export const REDTEAM_MODEL = 'openai:chat:gpt-4o';
 
 export const LLAMA_GUARD_REPLICATE_PROVIDER =
-  'replicate:moderation:meta/meta-llama-guard-2-8b:b063023ee937f28e922982abdbf97b041ffe34ad3b35a53d33e1d74bb19b36c4';
+  'replicate:moderation:meta/llama-guard-3-8b:146d1220d447cdcc639bc17c5f6137416042abee6ae153a2615e6ef5749205c8';
 
-export const LLAMA_GUARD_ENABLED_CATEGORIES = [
+export const LLAMA_GUARD_ENABLED_CATEGORIES: string[] = [
   'S1', // Violent Crimes
   'S2', // Non-Violent Crimes
   'S3', // Sex Crimes
   'S4', // Child Exploitation
-  'S5', // Specialized Advice
-  // 'S6', // Privacy - Disabled due to false positives from allowed entities
-  'S7', // Intellectual Property
-  'S8', // Indiscriminate Weapons
-  'S9', // Hate
-  'S10', // Self-Harm
-  'S11', // Sexual Content
+  'S5', // Defamation
+  'S6', // Specialized Advice
+  // S7: 'Privacy' - disabled due to false positives from allowed entities
+  'S8', // Intellectual Property
+  'S9', // Indiscriminate Weapons
+  'S10', // Hate
+  'S11', // Self-Harm
+  'S12', // Sexual Content
+  'S13', // Elections
 ];
 
 export const COLLECTIONS = ['default', 'harmful', 'pii'] as const;
