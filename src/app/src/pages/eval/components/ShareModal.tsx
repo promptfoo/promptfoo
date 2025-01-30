@@ -19,6 +19,7 @@ interface ShareModalProps {
 const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, shareUrl }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [copied, setCopied] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(true);
 
   const handleCopyClick = () => {
     if (inputRef.current) {
@@ -31,6 +32,11 @@ const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, shareUrl }) => {
   const handleClose = () => {
     onClose();
     setCopied(false);
+    setShowConfirmation(true);
+  };
+
+  const handleConfirm = () => {
+    setShowConfirmation(false);
   };
 
   return (
@@ -39,30 +45,55 @@ const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, shareUrl }) => {
       onClose={handleClose}
       PaperProps={{ style: { minWidth: 'min(660px, 100%)' } }}
     >
-      <DialogTitle>Your eval is ready to share</DialogTitle>
-      <DialogContent>
-        <TextField
-          inputRef={inputRef}
-          value={shareUrl}
-          fullWidth
-          InputProps={{
-            readOnly: true,
-            endAdornment: (
-              <IconButton onClick={handleCopyClick}>
-                {copied ? <CheckIcon /> : <FileCopyIcon />}
-              </IconButton>
-            ),
-          }}
-        />
-        <DialogContentText sx={{ fontSize: '0.75rem' }}>
-          Shared URLs are deleted after 2 weeks.
-        </DialogContentText>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={handleClose} color="primary">
-          Close
-        </Button>
-      </DialogActions>
+      {showConfirmation ? (
+        <>
+          <DialogTitle>Share Evaluation</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              You are about to generate a publicly accessible link for this evaluation. Anyone with
+              this link will be able to view your evaluation results.
+              <br />
+              <br />
+              Would you like to proceed?
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleClose} color="primary">
+              Cancel
+            </Button>
+            <Button onClick={handleConfirm} color="primary" variant="contained">
+              Generate Share Link
+            </Button>
+          </DialogActions>
+        </>
+      ) : (
+        <>
+          <DialogTitle>Your eval is ready to share</DialogTitle>
+          <DialogContent>
+            <TextField
+              inputRef={inputRef}
+              value={shareUrl}
+              fullWidth
+              InputProps={{
+                readOnly: true,
+                endAdornment: (
+                  <IconButton onClick={handleCopyClick}>
+                    {copied ? <CheckIcon /> : <FileCopyIcon />}
+                  </IconButton>
+                ),
+              }}
+            />
+            <DialogContentText sx={{ fontSize: '0.75rem' }}>
+              Shared URLs are deleted after 2 weeks.
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleClose} color="primary">
+              Close
+            </Button>
+          </DialogActions>
+        </>
+      )}
     </Dialog>
   );
 };
