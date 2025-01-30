@@ -3,41 +3,8 @@ import { rm } from 'fs/promises';
 import nock from 'nock';
 import { TEST_CONFIG_DIR } from './.jest/setEnvVars';
 
-// Mock common dependencies
-jest.mock('./src/logger', () => {
-  const actual = jest.requireActual('./src/logger');
-  let mockLogCallback: ((message: string) => void) | null = null;
-  return {
-    ...actual,
-    __esModule: true,
-    default: {
-      ...actual.default,
-      debug: jest.fn(),
-      info: jest.fn(),
-      warn: jest.fn(),
-      error: jest.fn(),
-    },
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    setLogCallback: jest.fn((callback: ((message: string) => void) | null) => {
-      mockLogCallback = callback;
-    }),
-    get globalLogCallback() {
-      return mockLogCallback;
-    },
-  };
-});
-
-// Mock global config by default
-jest.mock('./src/globalConfig/globalConfig', () => ({
-  __esModule: true,
-  default: {},
-  readGlobalConfig: jest.fn().mockReturnValue({}),
-  writeGlobalConfig: jest.fn(),
-  writeGlobalConfigPartial: jest.fn(),
-}));
+jest.mock('./src/logger');
+jest.mock('./src/globalConfig/globalConfig');
 
 // Configure nock
 beforeAll(() => {
