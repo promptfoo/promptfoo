@@ -71,6 +71,50 @@ describe('testCaseFromCsvRow', () => {
     );
     expect(logger.warn).toHaveBeenCalledTimes(1);
   });
+
+  it('should handle metadata fields correctly', () => {
+    const row: CsvRow = {
+      '__metadata:tags': 'tag1,tag2',
+      '__metadata:categories[]': 'cat1\\,with comma,cat2',
+      '__metadata:priority': 'high',
+      var1: 'value1',
+    };
+
+    const expectedTestCase: TestCase = {
+      vars: {
+        var1: 'value1',
+      },
+      assert: [],
+      options: {},
+      metadata: {
+        tags: 'tag1,tag2',
+        categories: ['cat1,with comma', 'cat2'],
+        priority: 'high',
+      },
+    };
+
+    const result = testCaseFromCsvRow(row);
+    expect(result).toEqual(expectedTestCase);
+  });
+
+  it('should handle empty metadata values', () => {
+    const row: CsvRow = {
+      '__metadata:empty[]': '',
+      '__metadata:blank': '  ',
+      var1: 'value1',
+    };
+
+    const expectedTestCase: TestCase = {
+      vars: {
+        var1: 'value1',
+      },
+      assert: [],
+      options: {},
+    };
+
+    const result = testCaseFromCsvRow(row);
+    expect(result).toEqual(expectedTestCase);
+  });
 });
 
 describe('assertionFromString', () => {
