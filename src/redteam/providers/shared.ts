@@ -8,7 +8,6 @@ import {
   type GuardrailResponse,
   isApiProvider,
   isProviderOptions,
-  type ProviderResponse,
   type RedteamFileConfig,
   type TokenUsage,
 } from '../../types';

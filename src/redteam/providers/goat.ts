@@ -19,7 +19,7 @@ import { sleep } from '../../util/time';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import type { Message } from './shared';
 import { getLastMessageContent, messagesToRedteamHistory } from './shared';
-import type { BaseRedteamMetadata, ProviderResponse } from './shared';
+import type { BaseRedteamMetadata } from './shared';
 
 /**
  * Represents metadata for the GOAT conversation process.
