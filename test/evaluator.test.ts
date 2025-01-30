@@ -1,11 +1,11 @@
 import { randomUUID } from 'crypto';
 import glob from 'glob';
-import { evaluate, generateVarCombinations, isAllowedPrompt } from '../src/evaluator';
+import { evaluate, generateVarCombinations, isAllowedPrompt, runEval } from '../src/evaluator';
 import { runExtensionHook } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
 import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
-import type { ApiProvider, TestSuite, Prompt } from '../src/types';
+import { type ApiProvider, type TestSuite, type Prompt, ResultFailureReason } from '../src/types';
 import { sleep } from '../src/util/time';
 
 jest.mock('proxy-agent', () => ({
@@ -1962,5 +1962,237 @@ describe('isAllowedPrompt', () => {
   // TODO: What should the expected behavior of this test be?
   it('should return false if allowedPrompts is an empty array', () => {
     expect(isAllowedPrompt(prompt1, [])).toBe(false);
+  });
+});
+
+describe('runEval', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  const mockProvider: ApiProvider = {
+    id: jest.fn().mockReturnValue('test-provider'),
+    callApi: jest.fn().mockResolvedValue({
+      output: 'Test output',
+      tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+    }),
+  };
+
+  const defaultOptions = {
+    delay: 0,
+    testIdx: 0,
+    promptIdx: 0,
+    repeatIndex: 0,
+    isRedteam: false,
+  };
+
+  it('should handle basic prompt evaluation', async () => {
+    const result = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {},
+      conversations: {},
+      registers: {},
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.response?.output).toBe('Test output');
+    expect(result.prompt.label).toBe('test-label');
+    expect(mockProvider.callApi).toHaveBeenCalledWith(
+      'Test prompt',
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('should handle conversation history', async () => {
+    const conversations = {} as Record<string, any>;
+
+    const result = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'Hello {{_conversation[0].output}}', label: 'test-label' },
+      test: {},
+      conversations,
+      registers: {},
+    });
+
+    expect(result.success).toBe(true);
+    expect(conversations).toHaveProperty('test-provider:undefined');
+    expect(conversations['test-provider:undefined']).toHaveLength(1);
+    expect(conversations['test-provider:undefined'][0]).toEqual({
+      prompt: 'Hello ',
+      input: 'Hello ',
+      output: 'Test output',
+    });
+  });
+
+  it('should handle conversation with custom ID', async () => {
+    const conversations = {};
+
+    const result = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'Hello {{_conversation[0].output}}', label: 'test-label', id: 'custom-id' },
+      test: { metadata: { conversationId: 'conv1' } },
+      conversations,
+      registers: {},
+    });
+
+    expect(result.success).toBe(true);
+    expect(conversations).toHaveProperty('test-provider:custom-id:conv1');
+  });
+
+  it('should handle registers', async () => {
+    const registers = { savedValue: 'stored data' };
+
+    const result = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'Using {{savedValue}}', label: 'test-label' },
+      test: {},
+      conversations: {},
+      registers,
+    });
+
+    expect(result.success).toBe(true);
+    expect(mockProvider.callApi).toHaveBeenCalledWith(
+      'Using stored data',
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('should store output in register when specified', async () => {
+    const registers = {};
+
+    const result = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: { options: { storeOutputAs: 'myOutput' } },
+      conversations: {},
+      registers,
+    });
+
+    expect(result.success).toBe(true);
+    expect(registers).toHaveProperty('myOutput', 'Test output');
+  });
+
+  it('should handle provider errors', async () => {
+    const errorProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('error-provider'),
+      callApi: jest.fn().mockRejectedValue(new Error('API Error')),
+    };
+
+    const result = await runEval({
+      ...defaultOptions,
+      provider: errorProvider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {},
+      conversations: {},
+      registers: {},
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('API Error');
+    expect(result.failureReason).toBe(ResultFailureReason.ERROR);
+  });
+
+  it('should handle null output differently for red team tests', async () => {
+    const nullOutputProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('null-provider'),
+      callApi: jest.fn().mockResolvedValue({
+        output: null,
+        tokenUsage: { total: 5, prompt: 5, completion: 0, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    // Regular test
+    const regularResult = await runEval({
+      ...defaultOptions,
+      provider: nullOutputProvider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {},
+      conversations: {},
+      registers: {},
+      isRedteam: false,
+    });
+
+    expect(regularResult.success).toBe(false);
+    expect(regularResult.error).toBe('No output');
+
+    // Red team test
+    const redTeamResult = await runEval({
+      ...defaultOptions,
+      provider: nullOutputProvider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {},
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(redTeamResult.success).toBe(true);
+    expect(redTeamResult.error).toBeUndefined();
+  });
+
+  it('should apply transforms in correct order', async () => {
+    const providerWithTransform: ApiProvider = {
+      id: jest.fn().mockReturnValue('transform-provider'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'original',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+      transform: 'output + "-provider"',
+    };
+
+    const result = await runEval({
+      ...defaultOptions,
+      provider: providerWithTransform,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {
+        options: { transform: 'output + "-test"' },
+      },
+      conversations: {},
+      registers: {},
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.response?.output).toBe('original-provider-test');
+  });
+
+  it('should accumulate token usage correctly', async () => {
+    const result = await runEval({
+      ...defaultOptions,
+
+      provider: mockProvider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {
+        assert: [
+          {
+            type: 'llm-rubric',
+            value: 'Test output',
+          },
+        ],
+        options: { provider: mockGradingApiProviderPasses },
+      },
+      conversations: {},
+      registers: {},
+    });
+
+    expect(result.tokenUsage).toEqual({
+      total: 20, // 10 from provider + 5 from assertion
+      prompt: 10, // 5 from provider + 5 from assertion
+      completion: 10, // 5 from provider + 5 from assertion
+      cached: 0,
+      numRequests: 2, // 1 from provider + 1 from assertion
+      completionDetails: {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
+    });
   });
 });
