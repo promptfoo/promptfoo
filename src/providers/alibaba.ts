@@ -5,14 +5,23 @@ import { OpenAiChatCompletionProvider, OpenAiEmbeddingProvider } from './openai'
 const KNOWN_MODELS = new Set([
   // Flagship models
   'qwen-max',
+  'qwen-max-latest',
   'qwen-max-2025-01-25',
-  'qwen-max-0125',
   'qwen-plus',
+  'qwen-plus-latest',
+  'qwen-plus-2025-01-25',
   'qwen-turbo',
+  'qwen-turbo-latest',
+  'qwen-turbo-2024-11-01',
   // Visual models
   'qwen-vl-max',
   'qwen-vl-plus',
+  'qwen2.5-vl-72b-instruct',
+  'qwen2.5-vl-7b-instruct',
+  'qwen2.5-vl-3b-instruct',
   // Qwen 2.5 models
+  'qwen2.5-7b-instruct-1m',
+  'qwen2.5-14b-instruct-1m',
   'qwen2.5-72b-instruct',
   'qwen2.5-32b-instruct',
   'qwen2.5-14b-instruct',
@@ -49,7 +58,7 @@ export function createAlibabaProvider(
     config: {
       ...options.config,
       apiBaseUrl: API_BASE_URL,
-      apiKeyEnvar: 'ALICLOUD_API_KEY',
+      apiKeyEnvar: 'DASHSCOPE_API_KEY',
     },
   };
 
