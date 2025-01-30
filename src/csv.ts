@@ -212,3 +212,10 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
   };
 }
+
+export {
+  DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD,
+  _assertionRegex,
+  getAssertionRegex,
+  uniqueErrorMessages,
+};
