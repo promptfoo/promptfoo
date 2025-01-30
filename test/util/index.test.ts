@@ -244,7 +244,7 @@ describe('util', () => {
         },
       ];
       const eval_ = new Eval({});
-      eval_.addResult(results[0], {});
+      await eval_.addResult(results[0]);
 
       const shareableUrl = null;
       await writeOutput(outputPath, eval_, shareableUrl);

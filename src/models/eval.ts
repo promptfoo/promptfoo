@@ -347,8 +347,8 @@ export default class Eval {
     return convertResultsToTable(await this.toResultsFile());
   }
 
-  async addResult(result: EvaluateResult, test: AtomicTestCase) {
-    const newResult = await EvalResult.createFromEvaluateResult(this.id, result, test, {
+  async addResult(result: EvaluateResult) {
+    const newResult = await EvalResult.createFromEvaluateResult(this.id, result, {
       persist: this.persisted,
     });
     if (!this.persisted) {
