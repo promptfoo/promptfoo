@@ -28,6 +28,7 @@ import type {
   NunjucksFilterMap,
   Prompt,
   TokenUsage,
+  ProviderResponse,
 } from '../../types';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
@@ -37,7 +38,7 @@ import { shouldGenerateRemote } from '../remoteGeneration';
 import { PENALIZED_PHRASES } from './constants';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
 import { getTargetResponse, redteamProviderManager } from './shared';
-import type { BaseRedteamMetadata, BaseRedteamResponse } from './shared';
+import type { BaseRedteamMetadata } from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -388,7 +389,7 @@ export interface TreeIterativeMetadata extends BaseRedteamMetadata {
 /**
  * Represents the complete response from a red team conversation.
  */
-export interface RedteamTreeResponse extends BaseRedteamResponse {
+export interface RedteamTreeResponse extends ProviderResponse {
   metadata: TreeIterativeMetadata;
 }
 
