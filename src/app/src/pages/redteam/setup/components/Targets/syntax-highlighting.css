@@ -1,0 +1,81 @@
+/* Dark mode syntax highlighting */
+.dark-syntax {
+  color: #e0e0e0;
+}
+
+.dark-syntax .token.comment,
+.dark-syntax .token.prolog,
+.dark-syntax .token.doctype,
+.dark-syntax .token.cdata {
+  color: #666;
+}
+
+.dark-syntax .token.property,
+.dark-syntax .token.tag,
+.dark-syntax .token.boolean,
+.dark-syntax .token.number,
+.dark-syntax .token.constant,
+.dark-syntax .token.symbol {
+  color: #7ec699;
+}
+
+.dark-syntax .token.selector,
+.dark-syntax .token.string,
+.dark-syntax .token.char,
+.dark-syntax .token.builtin {
+  color: #98c379;
+}
+
+.dark-syntax .token.operator,
+.dark-syntax .token.entity,
+.dark-syntax .token.url,
+.dark-syntax .token.variable {
+  color: #61afef;
+}
+
+.dark-syntax .token.atrule,
+.dark-syntax .token.attr-value,
+.dark-syntax .token.keyword {
+  color: #c678dd;
+}
+
+.dark-syntax .token.function {
+  color: #e06c75;
+}
+
+.dark-syntax .token.regex,
+.dark-syntax .token.important {
+  color: #f2c88c;
+}
+
+.dark-syntax .token.important,
+.dark-syntax .token.bold {
+  font-weight: bold;
+}
+
+.dark-syntax .token.italic {
+  font-style: italic;
+}
+
+/* Remove all backgrounds from tokens */
+.token {
+  background: none !important;
+  text-shadow: none !important;
+}
+
+/* HTTP specific tokens */
+.dark-syntax .token.method {
+  color: #e06c75;
+}
+
+.dark-syntax .token.header {
+  color: #61afef;
+}
+
+.dark-syntax .token.path {
+  color: #98c379;
+}
+
+.dark-syntax .token.host {
+  color: #7ec699;
+}
