@@ -447,8 +447,6 @@ export default function RedTeamSetupPage() {
         target = ProviderOptionsSchema.parse({
           id: targetType ? targetType.value : customTargetOption.value,
           label: target,
-          // By default, assume that the target is stateless
-          config: { stateful: false },
         });
       }
 
