@@ -18,11 +18,6 @@ interface MockSpreadsheets {
   batchUpdate: jest.Mock;
 }
 
-jest.mock('../src/logger', () => ({
-  debug: jest.fn(),
-  error: jest.fn(),
-}));
-
 jest.mock('../src/fetch', () => ({
   fetchWithProxy: jest.fn(),
 }));

@@ -6,12 +6,6 @@ import { shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { addMultilingual } from '../../../src/redteam/strategies/multilingual';
 import type { AtomicTestCase } from '../../../src/types';
 
-jest.mock('../../../src/logger', () => ({
-  debug: jest.fn(),
-  error: jest.fn(),
-  level: 'info',
-}));
-
 jest.mock('../../../src/redteam/remoteGeneration', () => ({
   getRemoteGenerationUrl: jest.fn().mockReturnValue('http://test.url'),
   shouldGenerateRemote: jest.fn().mockReturnValue(false),

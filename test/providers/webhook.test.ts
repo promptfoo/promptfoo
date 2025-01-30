@@ -2,7 +2,6 @@ import { fetchWithCache } from '../../src/cache';
 import { WebhookProvider } from '../../src/providers/webhook';
 
 jest.mock('../../src/cache');
-jest.mock('../../src/logger');
 
 describe('WebhookProvider', () => {
   beforeEach(() => {

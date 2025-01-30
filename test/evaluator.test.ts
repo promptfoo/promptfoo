@@ -16,8 +16,6 @@ jest.mock('glob', () => ({
 }));
 
 jest.mock('../src/esm');
-jest.mock('../src/logger');
-jest.mock('../src/globalConfig/globalConfig');
 jest.mock('../src/evaluatorHelpers', () => ({
   ...jest.requireActual('../src/evaluatorHelpers'),
   runExtensionHook: jest.fn(),

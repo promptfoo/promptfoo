@@ -7,7 +7,6 @@ import type { TestCase } from '../../../src/types';
 
 jest.mock('../../../src/cache');
 jest.mock('../../../src/globalConfig/accounts');
-jest.mock('../../../src/logger');
 jest.mock('../../../src/redteam/remoteGeneration');
 jest.mock('cli-progress');
 

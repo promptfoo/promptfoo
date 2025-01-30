@@ -90,12 +90,6 @@ jest.mock('glob', () => ({
 jest.mock('../../src/database', () => ({
   getDb: jest.fn(),
 }));
-jest.mock('../../src/logger', () => ({
-  error: jest.fn(),
-  debug: jest.fn(),
-  info: jest.fn(),
-  warn: jest.fn(),
-}));
 
 jest.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: jest.fn().mockReturnValue(false),

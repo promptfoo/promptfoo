@@ -13,7 +13,6 @@ jest.mock('../../src/cache', () => ({
 }));
 
 jest.mock('../../src/util');
-jest.mock('../../src/logger');
 
 describe('Mistral', () => {
   beforeEach(() => {

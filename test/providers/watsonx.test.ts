@@ -44,12 +44,6 @@ jest.mock('../../src/cache', () => ({
   })),
 }));
 
-jest.mock('../../src/logger', () => ({
-  debug: jest.fn(),
-  error: jest.fn(),
-  info: jest.fn(),
-}));
-
 jest.mock('../../src/envars', () => ({
   getEnvString: jest.fn(),
   getEnvInt: jest.fn(),
