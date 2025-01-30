@@ -20,6 +20,7 @@ import type { ProviderResponse, ProviderTestResponse } from '@promptfoo/types';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import type { ProviderOptions } from '../../types';
 import Prompts from '../Prompts';
+import { predefinedTargets, customTargetOption } from '../constants';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
@@ -31,19 +32,6 @@ interface TargetsProps {
   onBack: () => void;
   setupModalOpen: boolean;
 }
-
-const predefinedTargets = [
-  { value: '', label: 'Select a target' },
-  { value: 'http', label: 'HTTP/HTTPS Endpoint' },
-  { value: 'websocket', label: 'WebSocket Endpoint' },
-  { value: 'browser', label: 'Web Browser Automation' },
-  { value: 'openai:gpt-4o-mini', label: 'OpenAI GPT-4o Mini' },
-  { value: 'openai:gpt-4o', label: 'OpenAI GPT-4o' },
-  { value: 'claude-3-5-sonnet-latest', label: 'Anthropic Claude 3.5 Sonnet' },
-  { value: 'vertex:gemini-pro', label: 'Google Vertex AI Gemini Pro' },
-];
-
-const customTargetOption = { value: 'custom', label: 'Custom Target' };
 
 const selectOptions = [...predefinedTargets, customTargetOption];
 
