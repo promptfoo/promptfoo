@@ -480,9 +480,9 @@ export async function synthesize({
       `Expected at least one JSON object in the response for persona ${persona}, got ${personaResponseObjects.length}`,
     );
     const parsed = personaResponseObjects[0] as { vars: VarMapping[] };
-    logger.debug(`Received ${parsed.vars.length} test cases`);
+    logger.debug(`Received ${parsed.vars?.length} test cases`);
     if (progressBar) {
-      progressBar.increment(parsed.vars.length);
+      progressBar.increment(parsed.vars?.length);
     }
     return parsed.vars || [];
   };
