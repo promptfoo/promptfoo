@@ -1,6 +1,5 @@
 /* eslint-disable jest/require-top-level-describe */
 import { rm } from 'fs/promises';
-import type { IncomingMessage } from 'http';
 import nock from 'nock';
 import { TEST_CONFIG_DIR } from './.jest/setEnvVars';
 
@@ -40,17 +39,22 @@ jest.mock('./src/globalConfig/globalConfig', () => ({
   writeGlobalConfigPartial: jest.fn(),
 }));
 
-// Disable all real network requests
-nock.disableNetConnect();
-nock.enableNetConnect('127.0.0.1');
-
-nock.emitter.on('no match', (req: IncomingMessage) => {
-  if (!req.headers?.host?.includes('127.0.0.1') && !req.headers?.host?.includes('localhost')) {
-    console.error(`Unexpected HTTP request: ${req.method} ${req.url}`);
-  }
+// Configure nock
+beforeAll(() => {
+  // Disable all real network requests
+  nock.disableNetConnect();
+  // Allow localhost connections for tests
+  nock.enableNetConnect((host) => {
+    return host.includes('127.0.0.1') || host.includes('localhost');
+  });
 });
 
 afterAll(async () => {
+  // Clean up nock
+  nock.cleanAll();
+  nock.enableNetConnect();
+
+  // Clean up test directory
   try {
     await rm(TEST_CONFIG_DIR, { recursive: true });
   } catch {

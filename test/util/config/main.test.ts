@@ -13,9 +13,6 @@ import {
 jest.mock('os');
 jest.mock('fs');
 jest.mock('js-yaml');
-jest.mock('../../../src/logger', () => ({
-  warn: jest.fn(),
-}));
 
 describe('config', () => {
   const mockHomedir = '/mock/home';

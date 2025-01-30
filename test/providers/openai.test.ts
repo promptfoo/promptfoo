@@ -11,7 +11,6 @@ import {
 } from '../../src/providers/openai';
 
 jest.mock('../../src/cache');
-jest.mock('../../src/globalConfig/globalConfig');
 
 const mockFetchWithCache = jest.mocked(fetchWithCache);
 

@@ -6,11 +6,6 @@ import {
 } from '../../src/providers/defaults';
 import type { ApiProvider } from '../../src/types';
 
-// Mock logger to avoid console output during tests
-jest.mock('../../src/logger', () => ({
-  debug: jest.fn(),
-}));
-
 class MockProvider implements ApiProvider {
   private providerId: string;
 

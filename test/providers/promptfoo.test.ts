@@ -22,7 +22,6 @@ jest.mock('../../src/globalConfig/cloud', () => ({
     }
   },
 }));
-jest.mock('../../src/globalConfig/globalConfig');
 
 describe('PromptfooHarmfulCompletionProvider', () => {
   beforeEach(() => {

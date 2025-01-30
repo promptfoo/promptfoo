@@ -3,7 +3,6 @@ import { fetchAllDatasets } from '../../../src/redteam/plugins/beavertails';
 import type { TestCase } from '../../../src/types';
 
 jest.mock('../../../src/integrations/huggingfaceDatasets');
-jest.mock('../../../src/globalConfig/globalConfig');
 
 describe('fetchAllDatasets', () => {
   beforeEach(() => {

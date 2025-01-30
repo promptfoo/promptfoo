@@ -6,7 +6,6 @@ import Eval from '../src/models/eval';
 import { readProviderPromptMap } from '../src/prompts';
 import { writeOutput, writeMultipleOutputs } from '../src/util';
 
-jest.mock('../src/globalConfig/globalConfig');
 jest.mock('../src/cache');
 jest.mock('../src/database', () => ({
   getDb: jest

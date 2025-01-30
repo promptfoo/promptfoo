@@ -13,7 +13,6 @@ import logger from '../../src/logger';
 import telemetry from '../../src/telemetry';
 
 jest.mock('@inquirer/input');
-jest.mock('../../src/globalConfig/globalConfig');
 jest.mock('../../src/envars');
 jest.mock('../../src/fetch');
 jest.mock('../../src/telemetry');

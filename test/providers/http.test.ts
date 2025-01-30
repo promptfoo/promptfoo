@@ -16,7 +16,6 @@ import {
 import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared';
 import { maybeLoadFromExternalFile } from '../../src/util';
 
-jest.mock('../../src/globalConfig/globalConfig');
 jest.mock('../../src/cache', () => ({
   ...jest.requireActual('../../src/cache'),
   fetchWithCache: jest.fn(),
