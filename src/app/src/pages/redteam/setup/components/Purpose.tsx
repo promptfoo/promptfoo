@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import { Alert, FormControlLabel, Switch } from '@mui/material';
@@ -12,7 +12,7 @@ import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { alpha } from '@mui/material/styles';
+import { alpha, useTheme } from '@mui/material/styles';
 import { EXAMPLE_CONFIG, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 
 interface PromptsProps {
@@ -20,6 +20,7 @@ interface PromptsProps {
 }
 
 export default function Purpose({ onNext }: PromptsProps) {
+  const theme = useTheme();
   const { config, updateApplicationDefinition, setFullConfig } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
@@ -293,9 +294,9 @@ export default function Purpose({ onNext }: PromptsProps) {
               onClick={onNext}
               disabled={!isPurposePresent}
               sx={{
-                backgroundColor: '#3498db',
-                '&:hover': { backgroundColor: '#2980b9' },
-                '&:disabled': { backgroundColor: '#bdc3c7' },
+                backgroundColor: theme.palette.primary.main,
+                '&:hover': { backgroundColor: theme.palette.primary.dark },
+                '&:disabled': { backgroundColor: theme.palette.action.disabledBackground },
                 px: 4,
                 py: 1,
               }}
