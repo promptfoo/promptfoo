@@ -190,6 +190,7 @@ const sidebars = {
             'red-team/plugins/contracts',
             'red-team/plugins/cyberseceval',
             'red-team/plugins/harmful',
+            'red-team/plugins/harmbench',
             'red-team/plugins/pliny',
             'red-team/plugins/politics',
             'red-team/plugins/religion',
