@@ -193,18 +193,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
   const presets: { name: string; plugins: Set<Plugin> | ReadonlySet<Plugin> }[] = [
     { name: 'Recommended', plugins: DEFAULT_PLUGINS },
-    { name: 'Minimal Test', plugins: new Set(['harmful:hate', 'harmful:privacy']) },
+    { name: 'Minimal Test', plugins: new Set(['harmful:hate', 'harmful:self-harm']) },
     {
       name: 'RAG',
-      plugins: new Set([
-        ...DEFAULT_PLUGINS,
-        'bola',
-        'bfla',
-        'rbac',
-        'sql-injection',
-        'ascii-smuggling',
-        'cross-session-leak',
-      ]),
+      plugins: new Set([...DEFAULT_PLUGINS, 'bola', 'bfla', 'rbac']),
     },
     {
       name: 'NIST',
