@@ -97,6 +97,7 @@ export const ADDITIONAL_PLUGINS = [
   'cyberseceval',
   'debug-access',
   'divergent-repetition',
+  'harmbench',
   'imitation',
   'indirect-prompt-injection',
   'overreliance',
@@ -109,7 +110,6 @@ export const ADDITIONAL_PLUGINS = [
   'sql-injection',
   'ssrf',
   'system-prompt-override',
-  'harmbench',
 ] as const;
 export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
