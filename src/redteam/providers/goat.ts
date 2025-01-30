@@ -17,9 +17,9 @@ import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import type { BaseRedteamMetadata } from '../types';
 import type { Message } from './shared';
 import { getLastMessageContent, messagesToRedteamHistory } from './shared';
-import type { BaseRedteamMetadata } from './shared';
 
 /**
  * Represents metadata for the GOAT conversation process.

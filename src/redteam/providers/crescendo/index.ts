@@ -20,9 +20,9 @@ import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
 import { shouldGenerateRemote } from '../../remoteGeneration';
+import type { BaseRedteamMetadata } from '../../types';
 import { isBasicRefusal } from '../../util';
 import type { Message } from '../shared';
-import type { BaseRedteamMetadata } from '../shared';
 import {
   getLastMessageContent,
   getTargetResponse,
