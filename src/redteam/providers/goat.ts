@@ -17,9 +17,9 @@ import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import type { BaseRedteamMetadata } from '../types';
 import type { Message } from './shared';
 import { getLastMessageContent, messagesToRedteamHistory } from './shared';
-import type { BaseRedteamMetadata, BaseRedteamResponse } from './shared';
 
 /**
  * Represents metadata for the GOAT conversation process.
@@ -32,7 +32,7 @@ export interface GoatMetadata extends BaseRedteamMetadata {
 /**
  * Represents the complete response from a GOAT conversation.
  */
-export interface GoatResponse extends BaseRedteamResponse {
+export interface GoatResponse extends ProviderResponse {
   metadata: GoatMetadata;
 }
 

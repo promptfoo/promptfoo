@@ -123,6 +123,13 @@ export const OutputConfigSchema = z.object({
 
 export type OutputConfig = z.infer<typeof OutputConfigSchema>;
 
+export type EvalConversations = Record<
+  string,
+  { prompt: string | object; input: string; output: string | object }[]
+>;
+
+export type EvalRegisters = Record<string, string | object>;
+
 export interface RunEvalOptions {
   provider: ApiProvider;
   prompt: Prompt;
@@ -130,11 +137,15 @@ export interface RunEvalOptions {
 
   test: AtomicTestCase;
   nunjucksFilters?: NunjucksFilterMap;
-  evaluateOptions: EvaluateOptions;
+  evaluateOptions?: EvaluateOptions;
 
   testIdx: number;
   promptIdx: number;
   repeatIndex: number;
+
+  conversations?: EvalConversations;
+  registers?: EvalRegisters;
+  isRedteam: boolean;
 }
 
 const EvaluateOptionsSchema = z.object({
@@ -231,6 +242,7 @@ export interface EvaluateResult {
   namedScores: Record<string, number>;
   cost?: number;
   metadata?: Record<string, any>;
+  tokenUsage?: Required<TokenUsage>;
 }
 
 export interface EvaluateTableOutput {
