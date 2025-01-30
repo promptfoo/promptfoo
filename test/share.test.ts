@@ -7,7 +7,6 @@ import { cloudCanAcceptChunkedResults } from '../src/util/cloud';
 
 const mockFetch = jest.fn();
 
-jest.mock('../src/logger');
 jest.mock('../src/globalConfig/cloud');
 jest.mock('../src/fetch', () => ({
   fetchWithProxy: jest.fn().mockImplementation((...args) => mockFetch(...args)),

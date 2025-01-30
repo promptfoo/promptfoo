@@ -20,7 +20,6 @@ jest.mock('../src/providers/openai');
 jest.mock('../src/providers/pythonCompletion');
 jest.mock('../src/providers/scriptCompletion');
 jest.mock('../src/providers/websocket');
-jest.mock('../src/logger');
 
 describe('loadApiProvider', () => {
   beforeEach(() => {

@@ -17,7 +17,6 @@ jest.mock('../../src/globalConfig/globalConfig');
 jest.mock('../../src/envars');
 jest.mock('../../src/fetch');
 jest.mock('../../src/telemetry');
-jest.mock('../../src/logger');
 
 describe('accounts', () => {
   beforeEach(() => {

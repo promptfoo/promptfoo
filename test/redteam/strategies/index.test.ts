@@ -6,7 +6,6 @@ import { validateStrategies, loadStrategy } from '../../../src/redteam/strategie
 import type { RedteamStrategyObject } from '../../../src/types';
 
 jest.mock('../../../src/globalConfig/globalConfig');
-jest.mock('../../../src/logger');
 jest.mock('../../../src/cliState');
 jest.mock('../../../src/esm', () => ({
   importModule: jest.fn(),

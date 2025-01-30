@@ -17,8 +17,6 @@ jest.mock('../../src/providers/vertexUtil', () => ({
   getGoogleClient: jest.fn(),
 }));
 
-jest.mock('../../src/logger');
-
 describe('VertexChatProvider.callGeminiApi', () => {
   let provider: VertexChatProvider;
 

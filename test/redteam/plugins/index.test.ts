@@ -17,7 +17,6 @@ jest.mock('../../../src/cliState', () => ({
   default: { remote: false },
 }));
 jest.mock('../../../src/globalConfig/globalConfig');
-jest.mock('../../../src/logger');
 jest.mock('../../../src/redteam/remoteGeneration', () => ({
   getRemoteGenerationUrl: jest.fn().mockReturnValue('http://test-url'),
   neverGenerateRemote: jest.fn().mockReturnValue(false),

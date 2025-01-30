@@ -50,8 +50,6 @@ jest.mock('../../src/cliState', () => ({
   basePath: '/mock/base/path',
 }));
 
-jest.mock('../../src/logger');
-
 describe('HttpProvider', () => {
   const mockUrl = 'http://example.com/api';
   let provider: HttpProvider;

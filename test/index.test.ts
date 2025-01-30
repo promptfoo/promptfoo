@@ -30,7 +30,6 @@ jest.mock('../src/prompts', () => {
 });
 jest.mock('../src/telemetry');
 jest.mock('../src/util');
-jest.mock('../src/logger');
 
 describe('index.ts exports', () => {
   const expectedNamedExports = [

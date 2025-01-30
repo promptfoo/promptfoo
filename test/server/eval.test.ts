@@ -7,7 +7,6 @@ import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
 
 jest.mock('../../src/globalConfig/globalConfig');
-jest.mock('../../src/logger');
 
 describe('eval routes', () => {
   const app = createApp();

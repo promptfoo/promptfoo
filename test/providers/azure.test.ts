@@ -9,7 +9,6 @@ import { HuggingfaceTextGenerationProvider } from '../../src/providers/huggingfa
 import { OpenAiCompletionProvider } from '../../src/providers/openai';
 import type { TestCase, TestSuite } from '../../src/types';
 
-jest.mock('../../src/logger');
 jest.mock('../../src/cache', () => ({
   fetchWithCache: jest.fn(),
 }));
