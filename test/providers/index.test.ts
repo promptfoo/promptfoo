@@ -35,6 +35,7 @@ import {
   OpenAiAssistantProvider,
   OpenAiCompletionProvider,
   OpenAiChatCompletionProvider,
+  OpenAiEmbeddingProvider,
 } from '../../src/providers/openai';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import {
@@ -1189,6 +1190,40 @@ describe('loadApiProvider', () => {
   it('should throw error for invalid adaline provider path', async () => {
     await expect(loadApiProvider('adaline:invalid')).rejects.toThrow(
       "Invalid adaline provider path: adaline:invalid. path format should be 'adaline:<provider_name>:<model_type>:<model_name>' eg. 'adaline:openai:chat:gpt-4o'",
+    );
+  });
+
+  it.each([
+    ['dashscope:chat:qwen-max', 'qwen-max'],
+    ['dashscope:vl:qwen-vl-max', 'qwen-vl-max'],
+    ['alibaba:qwen-plus', 'qwen-plus'],
+    ['alibaba:chat:qwen-max', 'qwen-max'],
+    ['alibaba:vl:qwen-vl-max', 'qwen-vl-max'],
+    ['alicloud:qwen-plus', 'qwen-plus'],
+    ['aliyun:qwen-plus', 'qwen-plus'],
+  ])('loadApiProvider with %s', async (providerId, expectedModelId) => {
+    const provider = await loadApiProvider(providerId);
+    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(provider.id()).toBe(expectedModelId);
+    expect(provider.config.apiBaseUrl).toBe(
+      'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+    );
+    expect(provider.config.apiKeyEnvar).toBe('DASHSCOPE_API_KEY');
+  });
+
+  it('loadApiProvider with alibaba embedding', async () => {
+    const provider = await loadApiProvider('alibaba:embedding:text-embedding-v3');
+    expect(provider).toBeInstanceOf(OpenAiEmbeddingProvider);
+    expect(provider.id()).toBe('text-embedding-v3');
+    expect(provider.config.apiBaseUrl).toBe(
+      'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+    );
+    expect(provider.config.apiKeyEnvar).toBe('DASHSCOPE_API_KEY');
+  });
+
+  it('loadApiProvider with alibaba unknown model', async () => {
+    await expect(loadApiProvider('alibaba:unknown-model')).rejects.toThrow(
+      'Invalid Alibaba Cloud model: unknown-model',
     );
   });
 });
