@@ -742,7 +742,7 @@ class Evaluator {
       }
 
       try {
-        await this.evalRecord.addResult(row, evalStep.test);
+        await this.evalRecord.addResult(row);
       } catch (error) {
         logger.error(`Error saving result: ${error} ${safeJsonStringify(row)}`);
       }
