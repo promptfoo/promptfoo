@@ -6,8 +6,6 @@ import { deleteAllEvals } from '../../src/util';
 import results_v3 from './v3evalToShare.json';
 import results_v4 from './v4evalToShare.json';
 
-jest.mock('../../src/logger');
-
 describe('share', () => {
   let app: ReturnType<typeof createApp>;
 

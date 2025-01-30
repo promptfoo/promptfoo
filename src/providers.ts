@@ -7,6 +7,7 @@ import cliState from './cliState';
 import { importModule } from './esm';
 import logger from './logger';
 import { AI21ChatCompletionProvider } from './providers/ai21';
+import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './providers/alibaba';
 import { AnthropicCompletionProvider, AnthropicMessagesProvider } from './providers/anthropic';
 import {
   AzureAssistantProvider,
@@ -32,6 +33,7 @@ import {
   HuggingfaceTextGenerationProvider,
   HuggingfaceTokenExtractionProvider,
 } from './providers/huggingface';
+import { JfrogMlChatCompletionProvider } from './providers/jfrog';
 import { LlamaProvider } from './providers/llama';
 import {
   LocalAiCompletionProvider,
@@ -210,6 +212,9 @@ export async function loadApiProvider(
           ...(providerOptions.config.models && { models: providerOptions.config.models }),
           ...(providerOptions.config.route && { route: providerOptions.config.route }),
           ...(providerOptions.config.provider && { provider: providerOptions.config.provider }),
+          ...(providerOptions.config.passthrough && {
+            passthrough: providerOptions.config.passthrough,
+          }),
         },
       },
     });
@@ -564,6 +569,25 @@ export async function loadApiProvider(
 
     const CustomApiProvider = await importModule(modulePath);
     ret = new CustomApiProvider(options);
+  } else if (providerPath.startsWith('jfrog:') || providerPath.startsWith('qwak:')) {
+    const splits = providerPath.split(':');
+    const modelName = splits.slice(1).join(':');
+    ret = new JfrogMlChatCompletionProvider(modelName, providerOptions);
+  } else if (
+    providerPath.startsWith('alibaba:') ||
+    providerPath.startsWith('alicloud:') ||
+    providerPath.startsWith('aliyun:') ||
+    providerPath.startsWith('dashscope:')
+  ) {
+    const splits = providerPath.split(':');
+    const modelType = splits[1];
+    const modelName = splits.slice(2).join(':');
+
+    if (modelType === 'embedding' || modelType === 'embeddings') {
+      ret = new AlibabaEmbeddingProvider(modelName || modelType, providerOptions);
+    } else {
+      ret = new AlibabaChatCompletionProvider(modelName || modelType, providerOptions);
+    }
   } else {
     logger.error(dedent`
       Could not identify provider: ${chalk.bold(providerPath)}.

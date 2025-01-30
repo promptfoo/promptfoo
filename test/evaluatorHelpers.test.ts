@@ -37,7 +37,6 @@ jest.mock('../src/esm');
 jest.mock('../src/database', () => ({
   getDb: jest.fn(),
 }));
-jest.mock('../src/logger');
 jest.mock('../src/util/transform', () => ({
   transform: jest.fn(),
 }));

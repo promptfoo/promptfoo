@@ -25,7 +25,7 @@ export CDP_TOKEN=your-token-here
 
 Here's a basic example of how to use the Cloudera provider:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: cloudera:your-model-name
     config:
@@ -82,13 +82,9 @@ The Cloudera provider is built on top of the OpenAI protocol, which means it sup
 
 Example chat conversation:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
-  - messages:
-      - role: system
-        content: 'You are a helpful assistant.'
-      - role: user
-        content: '{{user_input}}'
+  - 'You are a helpful assistant. Answer the following question: {{user_input}}'
 
 providers:
   - id: cloudera:llama-3-1

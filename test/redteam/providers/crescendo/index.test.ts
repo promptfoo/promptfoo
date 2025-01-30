@@ -2,8 +2,6 @@ import { MemorySystem, CrescendoProvider } from '../../../../src/redteam/provide
 import { redteamProviderManager } from '../../../../src/redteam/providers/shared';
 import type { Message } from '../../../../src/redteam/providers/shared';
 
-jest.mock('../../../../src/logger');
-
 describe('MemorySystem', () => {
   let memorySystem: MemorySystem;
 

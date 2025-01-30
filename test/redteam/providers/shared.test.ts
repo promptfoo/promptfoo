@@ -21,7 +21,6 @@ import type {
 } from '../../../src/types';
 import { sleep } from '../../../src/util/time';
 
-jest.mock('../../../src/logger');
 jest.mock('../../../src/util/time');
 jest.mock('../../../src/cliState', () => ({
   __esModule: true,

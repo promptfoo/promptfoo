@@ -10,7 +10,6 @@ import {
 } from '../../src/redteam/remoteGeneration';
 
 jest.mock('../../src/envars');
-jest.mock('../../src/globalConfig/globalConfig');
 jest.mock('../../src/envars');
 jest.mock('../../src/cliState', () => ({
   remote: undefined,

@@ -196,23 +196,3 @@ export function checkPenalizedPhrases(output: string): boolean {
 
   return hasPartialMatch || hasExactMatch;
 }
-
-/**
- * Base metadata interface shared by all redteam providers
- */
-export interface BaseRedteamMetadata {
-  redteamFinalPrompt?: string;
-  messages: Record<string, any>[];
-  stopReason: string;
-  redteamHistory?: { prompt: string; output: string }[];
-}
-
-/**
- * Base response interface shared by all redteam providers
- */
-export interface BaseRedteamResponse {
-  output: string;
-  metadata: BaseRedteamMetadata;
-  tokenUsage: TokenUsage;
-  guardrails?: GuardrailResponse;
-}

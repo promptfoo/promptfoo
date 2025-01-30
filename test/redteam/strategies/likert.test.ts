@@ -9,7 +9,6 @@ import type { TestCase } from '../../../src/types';
 jest.mock('cli-progress');
 jest.mock('../../../src/cache');
 jest.mock('../../../src/globalConfig/accounts');
-jest.mock('../../../src/logger');
 jest.mock('../../../src/redteam/remoteGeneration');
 
 describe('likert strategy', () => {

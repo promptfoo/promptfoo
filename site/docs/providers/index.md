@@ -38,6 +38,7 @@ providers:
 | [Hyperbolic](./hyperbolic.md)                       | OpenAI-compatible Llama 3 provider         | `hyperbolic:meta-llama/Meta-Llama-3-70B-Instruct` |
 | [Hugging Face](./huggingface.md)                    | Access thousands of models                 | `huggingface:text-generation:gpt2`                |
 | [IBM BAM](./ibm-bam.md)                             | IBM's foundation models                    | `bam:chat:ibm/granite-13b-chat-v2`                |
+| [JFrog ML](./jfrog.md)                              | JFrog's LLM Model Library                  | `jfrog:llama_3_8b_instruct`                       |
 | [LiteLLM](./litellm.md)                             | Unified interface for multiple providers   | Compatible with OpenAI syntax                     |
 | [Mistral AI](./mistral.md)                          | Mistral's language models                  | `mistral:open-mistral-nemo`                       |
 | [OpenLLM](./openllm.md)                             | BentoML's model serving framework          | Compatible with OpenAI syntax                     |

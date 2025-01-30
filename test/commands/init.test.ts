@@ -32,7 +32,6 @@ jest.mock('../../src/commands/init', () => {
 jest.mock('fs/promises');
 jest.mock('path');
 jest.mock('../../src/constants');
-jest.mock('../../src/logger');
 jest.mock('../../src/onboarding');
 jest.mock('../../src/telemetry');
 jest.mock('@inquirer/confirm');

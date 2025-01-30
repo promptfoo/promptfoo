@@ -6,8 +6,6 @@ jest.mock('../../src/cache', () => ({
   fetchWithCache: jest.fn(),
 }));
 
-jest.mock('../../src/logger');
-
 jest.mock('../../src/providers/vertexUtil', () => ({
   maybeCoerceToGeminiFormat: jest.fn(),
 }));

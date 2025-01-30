@@ -11,12 +11,6 @@ import {
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import type { ApiProvider } from '../../../src/types';
 
-jest.mock('../../../src/logger', () => ({
-  error: jest.fn(),
-  warn: jest.fn(),
-  debug: jest.fn(),
-}));
-
 jest.mock('../../../src/cache', () => ({
   fetchWithCache: jest.fn(),
 }));
@@ -24,7 +18,6 @@ jest.mock('../../../src/cache', () => ({
 jest.mock('../../../src/redteam/remoteGeneration', () => ({
   getRemoteGenerationUrl: jest.fn().mockReturnValue('https://api.promptfoo.app/task'),
 }));
-jest.mock('../../../src/globalConfig/globalConfig');
 
 describe('fetchRemoteGeneration', () => {
   beforeAll(() => {
