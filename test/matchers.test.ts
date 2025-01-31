@@ -43,7 +43,6 @@ jest.mock('../src/database', () => ({
   }),
 }));
 jest.mock('../src/esm');
-jest.mock('../src/logger');
 jest.mock('../src/cliState');
 jest.mock('../src/remoteGrading', () => ({
   doRemoteGrading: jest.fn(),

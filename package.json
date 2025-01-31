@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.103.16",
+  "version": "0.103.18",
   "license": "MIT",
   "type": "commonjs",
   "repository": {
@@ -156,7 +156,6 @@
     "supertest": "^7.0.0",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.22.0",
     "zod-to-json-schema": "^3.24.1"
@@ -205,6 +204,7 @@
     "rfdc": "^1.4.1",
     "semver": "^7.6.3",
     "socket.io": "^4.8.1",
+    "tsx": "^4.19.2",
     "undici": "^6.21.1",
     "uuid": "^10.0.0",
     "winston": "^3.17.0",

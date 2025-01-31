@@ -13,15 +13,16 @@ import type {
   Prompt,
   RedteamFileConfig,
   TokenUsage,
+  ProviderResponse,
 } from '../../../types';
 import invariant from '../../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
 import { shouldGenerateRemote } from '../../remoteGeneration';
+import type { BaseRedteamMetadata } from '../../types';
 import { isBasicRefusal } from '../../util';
 import type { Message } from '../shared';
-import type { BaseRedteamMetadata, BaseRedteamResponse } from '../shared';
 import {
   getLastMessageContent,
   getTargetResponse,
@@ -48,7 +49,7 @@ export interface CrescendoMetadata extends BaseRedteamMetadata {
 /**
  * Represents the complete response from a Crescendo conversation.
  */
-export interface CrescendoResponse extends BaseRedteamResponse {
+export interface CrescendoResponse extends ProviderResponse {
   metadata: CrescendoMetadata;
 }
 

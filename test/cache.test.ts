@@ -7,11 +7,6 @@ import {
   isCacheEnabled,
 } from '../src/cache';
 
-jest.mock('../src/logger', () => ({
-  debug: jest.fn(),
-  info: jest.fn(),
-}));
-
 jest.mock('../src/util/config/manage', () => ({
   getConfigDirectoryPath: jest.fn().mockReturnValue('/mock/config/path'),
 }));

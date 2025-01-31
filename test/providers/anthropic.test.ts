@@ -13,7 +13,6 @@ import {
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
-jest.mock('../../src/logger');
 
 describe('Anthropic', () => {
   afterEach(async () => {

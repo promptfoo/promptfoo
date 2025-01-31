@@ -4,7 +4,6 @@ import { fetchHuggingFaceDataset } from '../../src/integrations/huggingfaceDatas
 jest.mock('../../src/fetch', () => ({
   fetchWithProxy: jest.fn(),
 }));
-jest.mock('../../src/logger');
 
 describe('huggingfaceDatasets', () => {
   beforeEach(() => {
