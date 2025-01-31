@@ -83,7 +83,7 @@ jobs:
 
       - name: Check Dependency Versions
         run: |
-          npm exec check-dependency-version-consistency
+          npx check-dependency-version-consistency
 
       - name: Check for circular dependencies
         run: |
