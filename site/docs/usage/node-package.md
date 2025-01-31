@@ -16,7 +16,7 @@ import { evaluate } from 'promptfoo';
 
 const results = await evaluate({
   prompts: ['Translate to French: {{text}}'],
-  providers: ['openai:gpt-4'],
+  providers: ['openai:gpt-4-turbo-preview'],
   tests: [{ vars: { text: 'Hello world' } }],
 });
 ```
@@ -60,12 +60,14 @@ Load and configure LLM providers:
 import { providers } from 'promptfoo';
 
 // Single provider
-const openai = await providers.loadApiProvider('openai:gpt-4');
+const openai = await providers.loadApiProvider('openai:gpt-4-turbo-preview');
 
 // Multiple providers
 const allProviders = await providers.loadApiProviders([
-  'openai:gpt-4',
-  'anthropic:claude-2',
+  'openai:gpt-4o-mini',
+  'anthropic:claude-3-5-sonnet',
+  'meta:llama-3.3-8b',
+  'google:gemini-2.0-flash',
   // Custom provider
   async (prompt) => ({ output: 'Custom response' }),
 ]);
@@ -219,7 +221,7 @@ import promptfoo from 'promptfoo';
 const results = await promptfoo.evaluate(
   {
     prompts: ['Rephrase this in French: {{body}}', 'Rephrase this like a pirate: {{body}}'],
-    providers: ['openai:gpt-4o-mini'],
+    providers: ['openai:gpt-4o-mini', 'anthropic:claude-3-5-sonnet'],
     tests: [
       {
         vars: {
@@ -238,10 +240,10 @@ const results = await promptfoo.evaluate(
         ],
       },
     ],
-    writeLatestResults: true, // write results to disk so they can be viewed in web viewer
+    writeLatestResults: true,
   },
   {
-    maxConcurrency: 2, // Limit concurrent API calls
+    maxConcurrency: 2,
   },
 );
 
@@ -258,18 +260,16 @@ console.log(`Token usage: ${results.stats.tokenUsage.total} tokens`);
 import promptfoo from 'promptfoo';
 
 const results = await promptfoo.evaluate({
-  // Dynamic prompts using functions
   prompts: [
     'Rephrase this in French: {{body}}',
     (vars) => {
       return `Rephrase this like a pirate: ${vars.body}`;
     },
   ],
-  // Multiple provider types
   providers: [
     'openai:gpt-4o-mini',
+    'anthropic:claude-3-5-sonnet',
     (prompt, context) => {
-      // Custom provider implementation
       console.log(`Prompt: ${prompt}, vars: ${JSON.stringify(context.vars)}`);
       return {
         output: '<LLM output>',
@@ -381,7 +381,7 @@ import { evaluate, type TestSuiteConfiguration, type EvaluateOptions } from 'pro
 
 const config: TestSuiteConfiguration = {
   prompts: ['Translate to {{language}}: {{text}}'],
-  providers: ['openai:gpt-4'],
+  providers: ['openai:gpt-4o-mini', 'anthropic:claude-3-5-sonnet'],
   tests: [
     {
       vars: {
@@ -462,14 +462,12 @@ const customAssertion: Assertion = {
 // Full configuration with types
 const config: TestSuiteConfiguration = {
   prompts: [
-    // Static prompt
     'Generate a {{length}} word story about {{topic}}',
-    // Function prompt with type safety
     (vars: Record<string, unknown>) => {
       return `Tell me a ${vars.length} word story about ${vars.topic}`;
     },
   ],
-  providers: ['openai:gpt-4', customProvider],
+  providers: ['openai:gpt-4o-mini', 'anthropic:claude-3-5-sonnet', customProvider],
   tests: [
     {
       vars: {

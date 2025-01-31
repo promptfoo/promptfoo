@@ -351,12 +351,12 @@ EvaluateTable is an object that represents the results of the evaluation in a ta
 ```typescript
 interface EvaluateTable {
   head: {
-    prompts: Prompt[];
-    vars: string[];
+    prompts: Prompt[]; // List of prompts used in evaluation
+    vars: string[]; // Variable names used across test cases
   };
   body: {
-    outputs: EvaluateTableOutput[];
-    vars: string[];
+    outputs: EvaluateTableOutput[]; // Results for each prompt/test combination
+    vars: string[]; // Values for variables in this test case
   }[];
 }
 ```
@@ -367,13 +367,13 @@ EvaluateTableOutput is an object that represents the output of a single evaluati
 
 ```typescript
 interface EvaluateTableOutput {
-  pass: boolean;
-  score: number;
-  text: string;
-  prompt: string;
-  latencyMs: number;
-  tokenUsage?: Partial<TokenUsage>;
-  gradingResult?: GradingResult;
+  pass: boolean; // Whether all assertions passed
+  score: number; // Overall score (0-1)
+  text: string; // The actual output text
+  prompt: string; // The prompt that generated this output
+  latencyMs: number; // How long the evaluation took
+  tokenUsage?: Partial<TokenUsage>; // Token usage details if available
+  gradingResult?: GradingResult; // Detailed grading information
 }
 ```
 
@@ -384,21 +384,21 @@ The latest version is 3. It removed the table and added in a new prompts propert
 
 ```typescript
 interface EvaluateSummaryV3 {
-  version: 3;
-  timestamp: string; // ISO 8601 datetime
-  results: EvaluateResult[];
-  prompts: CompletedPrompt[];
-  stats: EvaluateStats;
+  version: 3; // Version identifier
+  timestamp: string; // ISO 8601 datetime of evaluation
+  results: EvaluateResult[]; // Individual evaluation results
+  prompts: CompletedPrompt[]; // Completed prompts with metrics
+  stats: EvaluateStats; // Overall evaluation statistics
 }
 ```
 
 ```typescript
 interface EvaluateSummaryV2 {
-  version: 2;
-  timestamp: string; // ISO 8601 datetime
-  results: EvaluateResult[];
-  table: EvaluateTable;
-  stats: EvaluateStats;
+  version: 2; // Version identifier
+  timestamp: string; // ISO 8601 datetime of evaluation
+  results: EvaluateResult[]; // Individual evaluation results
+  table: EvaluateTable; // Results in tabular format
+  stats: EvaluateStats; // Overall evaluation statistics
 }
 ```
 
@@ -408,9 +408,10 @@ EvaluateStats is an object that includes statistics about the evaluation. It inc
 
 ```typescript
 interface EvaluateStats {
-  successes: number;
-  failures: number;
-  tokenUsage: Required<TokenUsage>;
+  successes: number; // Number of passing tests
+  failures: number; // Number of failing tests
+  errors: number; // Number of errors encountered
+  tokenUsage: Required<TokenUsage>; // Total token usage across all tests
 }
 ```
 
@@ -420,65 +421,140 @@ EvaluateResult roughly corresponds to a single "cell" in the grid comparison vie
 
 ```typescript
 interface EvaluateResult {
-  provider: Pick<ProviderOptions, 'id'>;
-  prompt: Prompt;
-  vars: Record<string, string | object>;
-  response?: ProviderResponse;
-  error?: string;
-  success: boolean;
-  score: number;
-  latencyMs: number;
-  gradingResult?: GradingResult;
+  id?: string; // Unique identifier for this result
+  description?: string; // Optional description of this evaluation
+  promptIdx: number; // Index of the prompt in the test suite
+  testIdx: number; // Index of the test case
+  testCase: AtomicTestCase; // The test case that was evaluated
+  promptId: string; // Identifier for the prompt
+  provider: Pick<ProviderOptions, 'id' | 'label'>; // Provider that generated this result
+  prompt: Prompt; // The prompt that was used
+  vars: Record<string, string | object>; // Variables used in the prompt
+  response?: ProviderResponse; // Raw response from the provider
+  error?: string | null; // Error message if the evaluation failed
+  failureReason: ResultFailureReason; // Why the test failed (if it did)
+  success: boolean; // Whether all assertions passed
+  score: number; // Overall score (0-1)
+  latencyMs: number; // How long the evaluation took
+  gradingResult?: GradingResult | null; // Detailed grading information
+  namedScores: Record<string, number>; // Named metrics from assertions
+  cost?: number; // Cost of the API call (if applicable)
+  metadata?: Record<string, any>; // Additional metadata
+  tokenUsage?: Required<TokenUsage>; // Token usage details
 }
 ```
 
-### GradingResult
+### ResultFailureReason
 
-GradingResult is an object that represents the result of grading a test case. It includes whether the test case passed, the score, the reason for the result, the tokens used, and the results of any component assertions.
+```typescript
+enum ResultFailureReason {
+  NONE = 0, // The test passed, or we don't know exactly why it failed
+  ASSERT = 1, // The test failed because an assertion rejected it
+  ERROR = 2, // Test failed due to some other error (API failure, etc)
+}
+```
+
+### Job Status
+
+```typescript
+interface Job {
+  evalId: string | null; // Unique identifier for this evaluation job
+  status: 'in-progress' | 'complete' | 'error'; // Current job status
+  progress: number; // Number of completed evaluations
+  total: number; // Total number of evaluations to run
+  result: EvaluateSummaryV3 | EvaluateSummaryV2 | null; // Results if complete
+  logs: string[]; // Log messages from the evaluation
+}
+```
+
+### Suggestion Types
+
+```typescript
+interface ResultSuggestion {
+  type: string; // Type of suggestion
+  action:
+    | 'replace-prompt' // Suggested action to take:
+    | 'pre-filter' // - Modify prompt
+    | 'post-filter' // - Add pre-processing filter
+    | 'note'; // - Add post-processing filter
+  // - Just a note/comment
+  value: string; // The actual suggestion content
+}
+```
+
+### Provider Response
+
+```typescript
+interface ProviderResponse {
+  cached?: boolean; // Whether this was a cached response
+  cost?: number; // Cost of this API call
+  error?: string; // Error message if the call failed
+  logProbs?: number[]; // Log probabilities for tokens
+  metadata?: {
+    redteamFinalPrompt?: string; // Final prompt after red team modifications
+    [key: string]: any; // Additional metadata
+  };
+  raw?: string | any; // Raw response from the provider
+  output?: string | any; // Processed output
+  tokenUsage?: TokenUsage; // Token usage for this call
+  isRefusal?: boolean; // Whether the model refused to respond
+  sessionId?: string; // Session identifier if applicable
+  guardrails?: GuardrailResponse; // Safety check results
+}
+```
+
+### Grading Result
 
 ```typescript
 interface GradingResult {
-  pass: boolean;                        # did test pass?
-  score: number;                        # score between 0 and 1
-  reason: string;                       # plaintext reason for outcome
-  tokensUsed?: TokenUsage;              # tokens consumed by the test
-  componentResults?: GradingResult[];   # if this is a composite score, it can have nested results
-  assertion: Assertion | null;          # source of assertion
-  latencyMs?: number;                   # latency of LLM call
+  pass: boolean; // Whether the test passed
+  score: number; // Score between 0 and 1
+  reason: string; // Human-readable explanation
+  namedScores?: Record<string, number>; // Named metrics from this result
+  tokensUsed?: TokenUsage; // Token usage for this grading
+  componentResults?: GradingResult[]; // Results of sub-assertions
+  assertion?: Assertion | null; // The assertion that was evaluated
+  comment?: string; // Optional user/evaluator comment
+  suggestions?: ResultSuggestion[]; // Suggested improvements
+  metadata?: {
+    pluginId?: string; // ID of plugin that generated this result
+    strategyId?: string; // ID of strategy used
+    [key: string]: any; // Additional metadata
+  };
 }
 ```
 
 ### CompletedPrompt
 
-CompletedPrompt is an object that represents a prompt that has been evaluated. It includes the raw prompt, the provider, metrics, and other information.
+CompletedPrompt represents a prompt that has been fully evaluated, including its metrics and results.
 
 ```typescript
 interface CompletedPrompt {
-  id?: string;
-  raw: string;
-  label: string;
-  function?: PromptFunction;
+  id?: string; // Unique identifier
+  raw: string; // The actual prompt text
+  label: string; // Display name for the prompt
+  function?: PromptFunction; // Optional function for dynamic prompts
 
-  // These config options are merged into the provider config.
+  // These config options are merged into the provider config
   config?: any;
-  provider: string;
+  provider: string; // The provider that handled this prompt
   metrics?: {
-    score: number;
-    testPassCount: number;
-    testFailCount: number;
-    assertPassCount: number;
-    assertFailCount: number;
-    totalLatencyMs: number;
-    tokenUsage: TokenUsage;
-    namedScores: Record<string, number>;
-    namedScoresCount: Record<string, number>;
+    score: number; // Overall score (0-1)
+    testPassCount: number; // Number of passing tests
+    testFailCount: number; // Number of failing tests
+    assertPassCount: number; // Number of passing assertions
+    assertFailCount: number; // Number of failing assertions
+    totalLatencyMs: number; // Total execution time
+    tokenUsage: TokenUsage; // Token usage stats
+    namedScores: Record<string, number>; // Named metric scores
+    namedScoresCount: Record<string, number>; // Count of each metric
     redteam?: {
-      pluginPassCount: Record<string, number>;
-      pluginFailCount: Record<string, number>;
-      strategyPassCount: Record<string, number>;
-      strategyFailCount: Record<string, number>;
+      pluginPassCount: Record<string, number>; // Passing plugin tests
+      pluginFailCount: Record<string, number>; // Failing plugin tests
+      strategyPassCount: Record<string, number>; // Passing strategy tests
+      strategyFailCount: Record<string, number>; // Failing strategy tests
     };
-    cost: number;
+    cost: number; // Total cost of API calls
   };
 }
 ```
