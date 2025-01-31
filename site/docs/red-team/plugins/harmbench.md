@@ -42,7 +42,6 @@ redteam:
 
 ## Related Concepts
 
-- [Evaluating LLM safety with HarmBench](/docs/guides/evaling-with-harmbench)
 - [Types of LLM Vulnerabilities](../llm-vulnerability-types.md)
 - [Harmful Content Plugin](harmful.md)
 - [BeaverTails Plugin](beavertails.md)
