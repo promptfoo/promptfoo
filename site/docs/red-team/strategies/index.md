@@ -24,10 +24,6 @@ Strategies are applied during redteam generation and can significantly increase 
 
 ## Strategy Categories
 
-### Regression Strategies
-
-Regression strategies help maintain security over time by learning from past failures. For example, the `retry` strategy automatically incorporates previously failed test cases into your test suite, creating a form of regression testing for LLM behaviors.
-
 ### Static Strategies
 
 Transform inputs using predefined patterns to bypass security controls. These are deterministic transformations that don't require another LLM to act as an attacker. Static strategies are low-resource usage, but they are also easy to detect and often patched in the foundation models. For example, the `base64` strategy encodes inputs as base64 to bypass guardrails and other content filters. `prompt-injection` wraps the payload in a prompt injection such as `ignore previous instructions and {{original_adversarial_input}}`.
@@ -46,6 +42,10 @@ By default, dynamic strategies like `jailbreak` and `jailbreak:composite` will:
 ### Multi-turn Strategies
 
 Multi-turn strategies also use an attacker agent to coerce the target model into generating harmful outputs. These strategies are particularly effective against stateful applications where they can convince the target model to act against its purpose over time. You should run these strategies if you are testing a multi-turn application (such as a chatbot). Multi-turn strategies are more resource intensive than single-turn strategies, but they have the highest success rates.
+
+### Regression Strategies
+
+Regression strategies help maintain security over time by learning from past failures. For example, the `retry` strategy automatically incorporates previously failed test cases into your test suite, creating a form of regression testing for LLM behaviors.
 
 :::note
 All single-turn strategies can be applied to multi-turn applications, but multi-turn strategies require a stateful application.
@@ -72,7 +72,6 @@ Single-turn applications process each request independently, creating distinct s
 ```yaml
 redteam:
   strategies:
-    - retry # Learn from past failures
     - jailbreak
     - jailbreak:composite
 ```
@@ -95,7 +94,6 @@ Multi-turn applications maintain conversation state, introducing additional atta
 ```yaml
 redteam:
   strategies:
-    - retry # Learn from past failures
     - goat
     - crescendo
 ```
