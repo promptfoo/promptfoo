@@ -31,7 +31,6 @@ jest.mock('undici', () => {
   };
 });
 
-jest.mock('../src/logger');
 jest.mock('../src/envars', () => ({
   getEnvString: jest.fn().mockImplementation((key: string, defaultValue: string = '') => ''),
   getEnvBool: jest.fn().mockImplementation((key: string, defaultValue: boolean = false) => false),

@@ -46,7 +46,6 @@ jest.mock('fs', () => ({
   mkdirSync: jest.fn(),
 }));
 
-jest.mock('../../src/logger');
 jest.mock('../../src/esm');
 
 jest.mock('../../src/googleSheets', () => ({

@@ -350,18 +350,34 @@ export async function matchesClassification(
   };
 }
 
+function loadRubricPrompt(
+  rubricPrompt: string | object | undefined,
+  defaultPrompt: string,
+): string {
+  if (!rubricPrompt) {
+    return defaultPrompt;
+  }
+
+  // Load from external file if needed
+  rubricPrompt = maybeLoadFromExternalFile(rubricPrompt);
+
+  // Stringify if it's an object
+  if (typeof rubricPrompt === 'object') {
+    rubricPrompt = JSON.stringify(rubricPrompt);
+  }
+
+  invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
+  return rubricPrompt;
+}
+
 export function renderLlmRubricPrompt(
   rubric: string,
   llmOutput: string,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
 ) {
-  let rubricPrompt = grading?.rubricPrompt || DEFAULT_GRADING_PROMPT;
+  const rubricPrompt = loadRubricPrompt(grading?.rubricPrompt, DEFAULT_GRADING_PROMPT);
 
-  // Load from external file if the rubricPrompt starts with 'file://'
-  rubricPrompt = maybeLoadFromExternalFile(rubricPrompt);
-
-  invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
   return nunjucks.renderString(rubricPrompt, {
     output: JSON.stringify(llmOutput).slice(1, -1),
     rubric: JSON.stringify(rubric).slice(1, -1),
@@ -451,8 +467,7 @@ export async function matchesFactuality(
     );
   }
 
-  const rubricPrompt = grading?.rubricPrompt || OPENAI_FACTUALITY_PROMPT;
-  invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
+  const rubricPrompt = loadRubricPrompt(grading?.rubricPrompt, OPENAI_FACTUALITY_PROMPT);
   const prompt = nunjucks.renderString(rubricPrompt, {
     input: JSON.stringify(input).slice(1, -1),
     ideal: JSON.stringify(expected).slice(1, -1),
@@ -552,8 +567,7 @@ export async function matchesClosedQa(
     );
   }
 
-  const rubricPrompt = grading?.rubricPrompt || OPENAI_CLOSED_QA_PROMPT;
-  invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
+  const rubricPrompt = loadRubricPrompt(grading?.rubricPrompt, OPENAI_CLOSED_QA_PROMPT);
   const prompt = nunjucks.renderString(rubricPrompt, {
     input: JSON.stringify(input).slice(1, -1),
     criteria: JSON.stringify(expected).slice(1, -1),
@@ -729,8 +743,7 @@ export async function matchesAnswerRelevance(
   const candidateQuestions: string[] = [];
   for (let i = 0; i < 3; i++) {
     // TODO(ian): Parallelize
-    const rubricPrompt = grading?.rubricPrompt || ANSWER_RELEVANCY_GENERATE;
-    invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
+    const rubricPrompt = loadRubricPrompt(grading?.rubricPrompt, ANSWER_RELEVANCY_GENERATE);
     const promptText = nunjucks.renderString(rubricPrompt, {
       answer: JSON.stringify(output).slice(1, -1),
     });
@@ -847,8 +860,7 @@ export async function matchesContextRecall(
     'context recall check',
   );
 
-  const rubricPrompt = grading?.rubricPrompt || CONTEXT_RECALL;
-  invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
+  const rubricPrompt = loadRubricPrompt(grading?.rubricPrompt, CONTEXT_RECALL);
   const promptText = nunjucks.renderString(rubricPrompt, {
     context: JSON.stringify(context).slice(1, -1),
     groundTruth: JSON.stringify(groundTruth).slice(1, -1),
@@ -901,8 +913,7 @@ export async function matchesContextRelevance(
     'context relevance check',
   );
 
-  const rubricPrompt = grading?.rubricPrompt || CONTEXT_RELEVANCE;
-  invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
+  const rubricPrompt = loadRubricPrompt(grading?.rubricPrompt, CONTEXT_RELEVANCE);
   const promptText = nunjucks.renderString(rubricPrompt, {
     context: JSON.stringify(context).slice(1, -1),
     query: JSON.stringify(question).slice(1, -1),
@@ -1046,8 +1057,7 @@ export async function matchesSelectBest(
     'select-best check',
   );
 
-  const rubricPrompt = grading?.rubricPrompt || SELECT_BEST_PROMPT;
-  invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
+  const rubricPrompt = loadRubricPrompt(grading?.rubricPrompt, SELECT_BEST_PROMPT);
   const promptText = nunjucks.renderString(rubricPrompt, {
     criteria: JSON.stringify(criteria).slice(1, -1),
     outputs: outputs.map((output) => JSON.stringify(output).slice(1, -1)),

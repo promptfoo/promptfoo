@@ -9,8 +9,6 @@ import type {
   ProviderResponse,
 } from '../../../src/types';
 
-jest.mock('../../../src/logger');
-
 describe('RedteamGoatProvider', () => {
   let mockFetch: jest.Mock;
 

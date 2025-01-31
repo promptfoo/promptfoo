@@ -57,17 +57,6 @@ jest.mock('../../../src/testCases', () => {
   };
 });
 
-jest.mock('../../../src/logger', () => ({
-  default: {
-    debug: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-  },
-  debug: jest.fn(),
-  warn: jest.fn(),
-  error: jest.fn(),
-}));
-
 describe('combineConfigs', () => {
   beforeEach(() => {
     jest.clearAllMocks();

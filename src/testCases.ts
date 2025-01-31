@@ -479,7 +479,7 @@ export async function synthesize({
       personaResponseObjects.length >= 1,
       `Expected at least one JSON object in the response for persona ${persona}, got ${personaResponseObjects.length}`,
     );
-
+    
     // Try to parse the response in different formats
     // FIXME(ian): Remove all this and replace with structured output and/or better prompt.
     const parsed = personaResponseObjects[0] as { vars?: VarMapping[] } | VarMapping[] | VarMapping;

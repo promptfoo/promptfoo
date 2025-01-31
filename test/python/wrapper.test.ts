@@ -3,7 +3,6 @@ import { runPython, state, validatePythonPath } from '../../src/python/pythonUti
 import { runPythonCode } from '../../src/python/wrapper';
 
 jest.mock('../../src/esm');
-jest.mock('../../src/logger');
 jest.mock('python-shell');
 jest.mock('fs', () => ({
   writeFileSync: jest.fn(),

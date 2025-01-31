@@ -202,11 +202,15 @@ export async function createTransformResponse(
     return (data, text, context) => {
       try {
         const trimmedParser = parser.trim();
+        // Check if it's a function expression (either arrow or regular)
+        const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedParser);
         const transformFn = new Function(
           'json',
           'text',
           'context',
-          `try { return (${trimmedParser}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
+          isFunctionExpression
+            ? `try { return (${trimmedParser})(json, text, context); } catch(e) { throw new Error('Transform failed: ' + e.message); }`
+            : `try { return (${trimmedParser}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
         );
         let resp: ProviderResponse | string;
         if (context) {
