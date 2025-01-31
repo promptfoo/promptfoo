@@ -26,7 +26,7 @@ export type Collection = (typeof COLLECTIONS)[number];
 
 export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
   // MLCommons harm categories
-  // https://llama.meta.com/docs/model-cards-and-prompt-formats/meta-llama-guard-2/
+  // https://www.llama.com/docs/model-cards-and-prompt-formats/llama-guard-3/
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:hate': 'Hate',
   'harmful:indiscriminate-weapons': 'Indiscriminate Weapons',
@@ -501,7 +501,7 @@ export const FRAMEWORK_COMPLIANCE_IDS = [
 ] as const;
 export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
 
-export const DEFAULT_STRATEGIES = ['basic', 'jailbreak', 'jailbreak:composite'] as const;
+export const DEFAULT_STRATEGIES = ['basic', 'jailbreak', 'jailbreak:composite', 'retry'] as const;
 export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 
 export const MULTI_TURN_STRATEGIES = ['crescendo', 'goat'] as const;
@@ -532,6 +532,8 @@ export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   default: 'Standard security testing plugins',
+  retry:
+    'Automatically incorporates previously failed test cases to build a regression testing suite',
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
   base64: 'Tests handling of Base64-encoded malicious payloads',
   basic: 'Original plugin tests without any additional strategies or optimizations',
@@ -619,6 +621,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'jailbreak:likert': 'Likert Scale Jailbreak',
   beavertails: 'BeaverTails Dataset',
   'best-of-n': 'Best-of-N',
+  retry: 'Regression Testing',
   bfla: 'Function-Level Authorization Bypass',
   bola: 'Object-Level Authorization Bypass',
   competitors: 'Competitors',
@@ -728,14 +731,14 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'harmful:chemical-biological-weapons': Severity.High,
   'harmful:child-exploitation': Severity.Critical,
   'harmful:copyright-violations': Severity.Low,
-  'harmful:cybercrime:malicious-code': Severity.Low,
   'harmful:cybercrime': Severity.Low,
+  'harmful:cybercrime:malicious-code': Severity.Low,
   'harmful:graphic-content': Severity.Medium,
   'harmful:harassment-bullying': Severity.Low,
   'harmful:hate': Severity.Critical,
   'harmful:illegal-activities': Severity.Medium,
-  'harmful:illegal-drugs:meth': Severity.Low,
   'harmful:illegal-drugs': Severity.Medium,
+  'harmful:illegal-drugs:meth': Severity.Low,
   'harmful:indiscriminate-weapons': Severity.Medium,
   'harmful:insults': Severity.Low,
   'harmful:intellectual-property': Severity.Medium,
@@ -1031,6 +1034,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
   'math-prompt': 'Tests resilience against mathematical notation-based attacks',
   multilingual: 'Evaluates cross-language attack vector handling',
   'prompt-injection': 'Tests direct prompt injection vulnerability detection',
+  retry: 'Automatically incorporates previously failed test cases to prevent regression',
   rot13: 'Assesses handling of ROT13-encoded malicious payloads',
 };
 
@@ -1051,6 +1055,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'math-prompt': 'Mathematical Encoding',
   multilingual: 'Multilingual Encoding',
   'prompt-injection': 'Prompt Injection',
+  retry: 'Regression Testing',
   rot13: 'ROT13 Encoding',
 };
 
