@@ -58,30 +58,13 @@ async function getFailedTestCases(pluginId: string, targetLabel: string): Promis
     const testCases = results
       .map((r) => {
         try {
-          const testCase: TestCase =
-            typeof r.testCase === 'string' ? JSON.parse(r.testCase) : r.testCase;
-
-          const { options: _options, ...rest } = testCase;
-          const { strategyConfig: _strategyConfig, ...restMetadata } = rest.metadata || {};
-
-          return {
-            ...rest,
-            metadata: {
-              ...restMetadata,
-              originalEvalId: r.evalId,
-              strategyConfig: undefined,
-            },
-            assert: testCase.assert?.map((assertion) => ({
-              ...assertion,
-              metric: assertion.metric?.split('/')[0],
-            })),
-          } as TestCase;
+          return typeof r.testCase === 'string' ? JSON.parse(r.testCase) : r.testCase;
         } catch (e) {
           logger.debug(`Failed to parse test case: ${e}`);
           return null;
         }
       })
-      .filter((tc): tc is NonNullable<typeof tc> => tc !== null);
+      .filter((tc): tc is TestCase => tc !== null);
 
     const unique = deduplicateTests(testCases);
     logger.debug(
@@ -141,3 +124,5 @@ export async function addRetryTestCases(
   logger.debug(`Added ${deduped.length} unique retry test cases`);
   return deduped;
 }
+
+export { deduplicateTests, getFailedTestCases };
