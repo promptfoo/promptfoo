@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import CheckIcon from '@mui/icons-material/Check';
 import FileCopyIcon from '@mui/icons-material/FileCopy';
 import Button from '@mui/material/Button';
@@ -19,7 +19,13 @@ interface ShareModalProps {
 const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, shareUrl }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [copied, setCopied] = useState(false);
-  const [showConfirmation, setShowConfirmation] = useState(true);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+
+  useEffect(() => {
+    // Check if the URL is using the public domain
+    const isPublicDomain = shareUrl.includes('app.promptfoo.dev');
+    setShowConfirmation(isPublicDomain);
+  }, [shareUrl]);
 
   const handleCopyClick = () => {
     if (inputRef.current) {
@@ -32,7 +38,6 @@ const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, shareUrl }) => {
   const handleClose = () => {
     onClose();
     setCopied(false);
-    setShowConfirmation(true);
   };
 
   const handleConfirm = () => {
@@ -84,7 +89,9 @@ const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, shareUrl }) => {
               }}
             />
             <DialogContentText sx={{ fontSize: '0.75rem' }}>
-              Shared URLs are deleted after 2 weeks.
+              {shareUrl.includes('api.promptfoo.dev')
+                ? 'Shared URLs are deleted after 2 weeks.'
+                : 'This URL is accessible to users with access to your organization.'}
             </DialogContentText>
           </DialogContent>
           <DialogActions>
