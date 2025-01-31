@@ -42,7 +42,7 @@ For basic usage without configuration:
 ```yaml
 redteam:
   strategies:
-    - id: 'retry'
+    - id: retry
 ```
 
 ## Example
@@ -52,11 +52,11 @@ If you have a test suite with:
 ```yaml
 redteam:
   plugins:
-    - id: 'harmful:hate'
+    - id: harmful:hate
       numTests: 5
   strategies:
-    - id: 'retry'
-    - id: 'multilingual'
+    - id: retry
+    - id: multilingual
 ```
 
 And previously some hate speech tests failed, the retry strategy will:
@@ -76,10 +76,7 @@ And previously some hate speech tests failed, the retry strategy will:
 The retry strategy currently uses only your local database. Cloud sharing of retry test cases across teams is coming soon.
 :::
 
-## Related Concepts
+## See Also
 
-- [Best-of-N Strategy](best-of-n.md)
-- [Basic Strategy](basic.md)
+- [Strategies Overview](/docs/red-team/strategies)
 - [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)
-
-For a comprehensive overview of all available strategies, visit our [Strategies Overview](/docs/red-team/strategies) page.
