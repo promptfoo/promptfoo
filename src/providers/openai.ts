@@ -22,6 +22,7 @@ import { sleep } from '../util/time';
 import { ellipsize } from '../utils/text';
 import type { OpenAiFunction, OpenAiTool } from './openaiUtil';
 import { calculateCost, REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
+import type { Metadata } from 'openai/resources/shared';
 
 // see https://platform.openai.com/docs/models
 export const OPENAI_CHAT_MODELS = [
@@ -736,7 +737,7 @@ type OpenAiAssistantOptions = OpenAiSharedOptions & {
     OpenAI.FunctionDefinition['name'],
     (arg: string) => Promise<string>
   >;
-  metadata?: object[];
+  metadata?: Metadata;
   temperature?: number;
   toolChoice?:
     | 'none'
@@ -807,7 +808,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     };
 
     logger.debug(`Calling OpenAI API, creating thread run: ${JSON.stringify(body)}`);
-    let run;
+    let run: OpenAI.Beta.Threads.Run;
     try {
       run = await openai.beta.threads.createAndRun(body);
     } catch (err) {
@@ -816,15 +817,18 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
 
     logger.debug(`\tOpenAI thread run API response: ${JSON.stringify(run)}`);
 
-    while (
-      run.status === 'in_progress' ||
-      run.status === 'queued' ||
-      run.status === 'requires_action'
-    ) {
-      if (run.status === 'requires_action') {
-        const requiredAction: OpenAI.Beta.Threads.Runs.Run.RequiredAction | null =
-          run.required_action;
+    while (true) {
+      const currentRun = await openai.beta.threads.runs.retrieve(run.thread_id, run.id);
+      
+      if (currentRun.status === 'completed') {
+        run = currentRun;
+        break;
+      }
+      
+      if (currentRun.status === 'requires_action') {
+        const requiredAction = currentRun.required_action;
         if (requiredAction === null || requiredAction.type !== 'submit_tool_outputs') {
+          run = currentRun;
           break;
         }
         const functionCallsWithCallbacks: OpenAI.Beta.Threads.Runs.RequiredActionFunctionToolCall[] =
@@ -835,6 +839,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
             );
           });
         if (functionCallsWithCallbacks.length === 0) {
+          run = currentRun;
           break;
         }
         logger.debug(
@@ -847,22 +852,22 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
             logger.debug(
               `Calling functionToolCallbacks[${toolCall.function.name}]('${toolCall.function.arguments}')`,
             );
-            const result = await this.assistantConfig.functionToolCallbacks![
+            const functionResult = await this.assistantConfig.functionToolCallbacks![
               toolCall.function.name
             ](toolCall.function.arguments);
             return {
               tool_call_id: toolCall.id,
-              output: result,
+              output: functionResult,
             };
           }),
         );
         logger.debug(
-          `Calling OpenAI API, submitting tool outputs for ${run.thread_id}: ${JSON.stringify(
+          `Calling OpenAI API, submitting tool outputs for ${currentRun.thread_id}: ${JSON.stringify(
             toolOutputs,
           )}`,
         );
         try {
-          run = await openai.beta.threads.runs.submitToolOutputs(run.thread_id, run.id, {
+          run = await openai.beta.threads.runs.submitToolOutputs(currentRun.thread_id, currentRun.id, {
             tool_outputs: toolOutputs,
           });
         } catch (err) {
@@ -871,15 +876,12 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
         continue;
       }
 
-      await sleep(1000);
-
-      logger.debug(`Calling OpenAI API, getting thread run ${run.id} status`);
-      try {
-        run = await openai.beta.threads.runs.retrieve(run.thread_id, run.id);
-      } catch (err) {
-        return failApiCall(err);
+      if (currentRun.status === 'failed' || currentRun.status === 'cancelled' || currentRun.status === 'expired') {
+        run = currentRun;
+        break;
       }
-      logger.debug(`\tOpenAI thread run API response: ${JSON.stringify(run)}`);
+
+      await sleep(1000);
     }
 
     if (run.status !== 'completed' && run.status !== 'requires_action') {
