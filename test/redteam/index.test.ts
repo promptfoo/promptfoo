@@ -15,7 +15,6 @@ import { DEFAULT_LANGUAGES } from '../../src/redteam/strategies/multilingual';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 
 jest.mock('cli-progress');
-jest.mock('../../src/logger');
 jest.mock('../../src/providers');
 jest.mock('../../src/redteam/extraction/entities');
 jest.mock('../../src/redteam/extraction/purpose');

@@ -48,107 +48,101 @@ export default class EvalFactory {
         },
       },
     ]);
-    await eval_.addResult(
-      {
-        description: 'test-description',
-        promptIdx: 0,
-        testIdx: 0,
-        testCase: { vars: { state: 'colorado' }, assert: [{ type: 'contains', value: 'Denver' }] },
-        promptId: 'test-prompt',
-        provider: { id: 'test-provider', label: 'test-label' },
-        prompt: {
-          raw: 'What is the capital of {{state}}?',
-          label: 'What is the capital of {{state}}?',
-        },
-        vars: { state: 'colorado' },
-        response: {
-          output: 'denver',
-          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
-        },
-        error: null,
-        failureReason: ResultFailureReason.NONE,
-        success: true,
+    await eval_.addResult({
+      description: 'test-description',
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: { vars: { state: 'colorado' }, assert: [{ type: 'contains', value: 'Denver' }] },
+      promptId: 'test-prompt',
+      provider: { id: 'test-provider', label: 'test-label' },
+      prompt: {
+        raw: 'What is the capital of {{state}}?',
+        label: 'What is the capital of {{state}}?',
+      },
+      vars: { state: 'colorado' },
+      response: {
+        output: 'denver',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      },
+      error: null,
+      failureReason: ResultFailureReason.NONE,
+      success: true,
+      score: 1,
+      latencyMs: 100,
+      gradingResult: {
+        pass: true,
         score: 1,
-        latencyMs: 100,
-        gradingResult: {
-          pass: true,
-          score: 1,
-          reason: 'Expected output "denver" to equal "Denver"',
-          namedScores: {},
-          tokensUsed: { total: 10, prompt: 5, completion: 5, cached: 0 },
-
-          componentResults: [
-            {
-              pass: true,
-              score: 1,
-              reason: 'Expected output "denver" to equal "Denver"',
-              assertion: {
-                type: 'equals',
-                value: 'denver',
-              },
-            },
-          ],
-          assertion: null,
-        },
-
+        reason: 'Expected output "denver" to equal "Denver"',
         namedScores: {},
-        cost: 0.007,
-        metadata: {},
+        tokensUsed: { total: 10, prompt: 5, completion: 5, cached: 0 },
+
+        componentResults: [
+          {
+            pass: true,
+            score: 1,
+            reason: 'Expected output "denver" to equal "Denver"',
+            assertion: {
+              type: 'equals',
+              value: 'denver',
+            },
+          },
+        ],
+        assertion: null,
       },
-      { vars: { state: 'colorado' }, assert: [{ type: 'contains', value: 'Denver' }] },
-    );
-    await eval_.addResult(
-      {
-        description: 'test-description',
-        promptIdx: 0,
-        testIdx: 1,
-        testCase: {
-          vars: { state: 'california' },
-          assert: [{ type: 'contains', value: 'Sacramento' }],
-        },
-        promptId: 'test-prompt',
-        provider: { id: 'test-provider', label: 'test-label' },
-        prompt: {
-          raw: 'What is the capital of {{state}}?',
-          label: 'What is the capital of {{state}}?',
-        },
+
+      namedScores: {},
+      cost: 0.007,
+      metadata: {},
+    });
+    await eval_.addResult({
+      description: 'test-description',
+      promptIdx: 0,
+      testIdx: 1,
+      testCase: {
         vars: { state: 'california' },
-        response: {
-          output: 'san francisco',
-          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
-        },
-        error: null,
-        failureReason: ResultFailureReason.NONE,
-        success: false,
-        score: 0,
-        latencyMs: 100,
-        gradingResult: {
-          pass: false,
-          score: 0,
-          reason: 'Expected output "san francisco" to equal "Sacramento"',
-          namedScores: {},
-          tokensUsed: { total: 10, prompt: 5, completion: 5, cached: 0 },
-
-          componentResults: [
-            {
-              pass: false,
-              score: 0,
-              reason: 'Expected output "san francisco" to equal "Sacramento"',
-              assertion: {
-                type: 'equals',
-                value: 'denver',
-              },
-            },
-          ],
-          assertion: null,
-        },
-
-        namedScores: {},
-        cost: 0.007,
-        metadata: {},
+        assert: [{ type: 'contains', value: 'Sacramento' }],
       },
-      { vars: { state: 'california' }, assert: [{ type: 'contains', value: 'Sacramento' }] },
-    );
+      promptId: 'test-prompt',
+      provider: { id: 'test-provider', label: 'test-label' },
+      prompt: {
+        raw: 'What is the capital of {{state}}?',
+        label: 'What is the capital of {{state}}?',
+      },
+      vars: { state: 'california' },
+      response: {
+        output: 'san francisco',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      },
+      error: null,
+      failureReason: ResultFailureReason.NONE,
+      success: false,
+      score: 0,
+      latencyMs: 100,
+      gradingResult: {
+        pass: false,
+        score: 0,
+        reason: 'Expected output "san francisco" to equal "Sacramento"',
+        namedScores: {},
+        tokensUsed: { total: 10, prompt: 5, completion: 5, cached: 0 },
+
+        componentResults: [
+          {
+            pass: false,
+            score: 0,
+            reason: 'Expected output "san francisco" to equal "Sacramento"',
+            assertion: {
+              type: 'equals',
+              value: 'denver',
+            },
+          },
+        ],
+        assertion: null,
+      },
+
+      namedScores: {},
+      cost: 0.007,
+      metadata: {},
+    });
 
     return eval_;
   }

@@ -37,12 +37,6 @@ jest.mock('../../src/cache', () => ({
   isCacheEnabled: jest.fn(),
 }));
 
-jest.mock('../../src/logger', () => ({
-  debug: jest.fn(),
-  warn: jest.fn(),
-  error: jest.fn(),
-}));
-
 class TestBedrockProvider extends AwsBedrockGenericProvider {
   modelName = 'test-model';
 

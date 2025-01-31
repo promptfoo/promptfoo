@@ -5,8 +5,6 @@ import logger from '../../../src/logger';
 import { validateStrategies, loadStrategy } from '../../../src/redteam/strategies';
 import type { RedteamStrategyObject } from '../../../src/types';
 
-jest.mock('../../../src/globalConfig/globalConfig');
-jest.mock('../../../src/logger');
 jest.mock('../../../src/cliState');
 jest.mock('../../../src/esm', () => ({
   importModule: jest.fn(),

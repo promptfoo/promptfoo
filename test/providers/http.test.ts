@@ -5,18 +5,17 @@ import path from 'path';
 import { fetchWithCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
 import {
+  createSessionParser,
   createTransformRequest,
   createTransformResponse,
+  createValidateStatus,
   determineRequestBody,
   HttpProvider,
   processJsonBody,
-  createSessionParser,
-  createValidateStatus,
 } from '../../src/providers/http';
 import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared';
 import { maybeLoadFromExternalFile } from '../../src/util';
 
-jest.mock('../../src/globalConfig/globalConfig');
 jest.mock('../../src/cache', () => ({
   ...jest.requireActual('../../src/cache'),
   fetchWithCache: jest.fn(),
@@ -49,8 +48,6 @@ jest.mock('../../src/esm', () => ({
 jest.mock('../../src/cliState', () => ({
   basePath: '/mock/base/path',
 }));
-
-jest.mock('../../src/logger');
 
 describe('HttpProvider', () => {
   const mockUrl = 'http://example.com/api';
@@ -1965,6 +1962,131 @@ describe('transform response error handling', () => {
     jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await expect(provider.callApi('test')).rejects.toThrow('Failed to transform response');
+  });
+});
+
+describe('arrow function parsing in transformResponse', () => {
+  it('should handle arrow function with explicit body', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'GET',
+        transformResponse: '(json, text) => { return json.data }',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ data: 'test value' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.output).toBe('test value');
+  });
+
+  it('should handle regular function with explicit body', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'GET',
+        transformResponse: 'function(json, text) { return json.data }',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ data: 'test value' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.output).toBe('test value');
+  });
+
+  it('should handle arrow function with implicit return', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'GET',
+        transformResponse: '(json) => json.data',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ data: 'test value' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.output).toBe('test value');
+  });
+
+  it('should handle arrow function with context parameter', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'GET',
+        transformResponse: '(json, text, context) => context.response.status',
+      },
+    });
+
+    const mockResponse = {
+      data: 'response',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.output).toBe(200);
+  });
+
+  it('should handle simple expression without function', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'GET',
+        transformResponse: 'json.data',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ data: 'test value' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.output).toBe('test value');
+  });
+
+  it('should handle multiline arrow function', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'GET',
+        transformResponse: `(json, text) => {
+          const value = json.data;
+          return value.toUpperCase();
+        }`,
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ data: 'test value' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.output).toBe('TEST VALUE');
   });
 });
 
