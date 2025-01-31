@@ -199,8 +199,9 @@ export function failApiCall(err: any) {
   if (err instanceof OpenAI.APIError) {
     const errorType = err.error?.type || err.type || 'unknown';
     const errorMessage = err.error?.message || err.message || 'Unknown error';
+    const statusCode = err.status ? ` ${err.status}` : '';
     return {
-      error: `API error: ${errorType} ${errorMessage}`,
+      error: `API error: ${errorType}${statusCode} ${errorMessage}`,
     };
   }
   return {

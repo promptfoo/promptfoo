@@ -43,7 +43,7 @@ describe('OpenAI Provider', () => {
 
       const result = failApiCall(error);
       expect(result).toEqual({
-        error: `API error: invalid_request_error Bad request`,
+        error: `API error: invalid_request_error 400 Bad request`,
       });
     });
 
