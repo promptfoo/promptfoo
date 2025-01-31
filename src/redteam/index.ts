@@ -652,8 +652,8 @@ export async function synthesize({
   if (retryStrategy) {
     logger.debug('Applying retry strategy first');
     retryStrategy.config = {
-      ...retryStrategy.config,
       targetLabels,
+      ...retryStrategy.config,
     };
     const { testCases: retryTestCases, strategyResults: retryResults } = await applyStrategies(
       pluginTestCases,
