@@ -215,6 +215,7 @@ describe('doGenerateRedteam', () => {
       plugins: expect.any(Array),
       prompts: expect.any(Array),
       strategies: expect.any(Array),
+      targetLabels: [],
     });
     expect(writePromptfooConfig).toHaveBeenCalledWith(
       expect.objectContaining({

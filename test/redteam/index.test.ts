@@ -559,16 +559,55 @@ describe('calculateTotalTests', () => {
 
   it('should handle combination of basic and multilingual strategies', () => {
     const strategies = [
-      { id: 'basic', config: { enabled: true } },
+      { id: 'basic' },
       { id: 'multilingual', config: { languages: { en: true, es: true } } },
     ];
     const result = calculateTotalTests(mockPlugins, strategies);
     expect(result).toEqual({
-      totalTests: 20, // (2 + 3) * 2 strategies * 2 languages
+      totalTests: 10, // 5 tests * 2 languages
       totalPluginTests: 5,
       effectiveStrategyCount: 2,
-      multilingualStrategy: strategies[1],
       includeBasicTests: true,
+      multilingualStrategy: strategies[1],
+    });
+  });
+
+  it('should handle retry strategy with default numTests', () => {
+    const strategies = [{ id: 'retry' }];
+    const result = calculateTotalTests(mockPlugins, strategies);
+    expect(result).toEqual({
+      totalTests: 10, // Original 5 tests + 5 retry tests
+      totalPluginTests: 5,
+      effectiveStrategyCount: 1,
+      includeBasicTests: true,
+      multilingualStrategy: undefined,
+    });
+  });
+
+  it('should handle retry strategy with custom numTests', () => {
+    const strategies = [{ id: 'retry', config: { numTests: 3 } }];
+    const result = calculateTotalTests(mockPlugins, strategies);
+    expect(result).toEqual({
+      totalTests: 8, // Original 5 tests + 3 retry tests
+      totalPluginTests: 5,
+      effectiveStrategyCount: 1,
+      includeBasicTests: true,
+      multilingualStrategy: undefined,
+    });
+  });
+
+  it('should handle retry strategy combined with other strategies', () => {
+    const strategies = [
+      { id: 'retry' },
+      { id: 'multilingual', config: { languages: { en: true, es: true } } },
+    ];
+    const result = calculateTotalTests(mockPlugins, strategies);
+    expect(result).toEqual({
+      totalTests: 20, // (Original 5 + 5 retry tests) * 2 languages
+      totalPluginTests: 5,
+      effectiveStrategyCount: 2,
+      includeBasicTests: true,
+      multilingualStrategy: strategies[1],
     });
   });
 });

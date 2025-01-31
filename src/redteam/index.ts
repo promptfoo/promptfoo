@@ -253,15 +253,15 @@ export function getTestCount(
     return 0; // Return 0 tests if basic strategy is disabled
   }
   if (strategy.id === 'multilingual') {
-    return (
-      totalPluginTests *
-      (Math.max(strategies.length, 1) *
-        (Object.keys(strategy.config?.languages ?? {}).length || DEFAULT_LANGUAGES.length))
-    );
+    const numLanguages =
+      Object.keys(strategy.config?.languages ?? {}).length || DEFAULT_LANGUAGES.length;
+    return totalPluginTests * numLanguages;
   }
   if (strategy.id === 'retry') {
-    // Retry strategy adds retry test cases on top of original test cases
-    return totalPluginTests * 2;
+    // For retry strategy, use configured numTests if provided, otherwise add same number as original tests
+    const configuredNumTests = strategy.config?.numTests as number | undefined;
+    const additionalTests = configuredNumTests ?? totalPluginTests;
+    return totalPluginTests + additionalTests;
   }
   return totalPluginTests; // Default case
 }
@@ -283,8 +283,9 @@ export function calculateTotalTests(
   totalTests: number;
 } {
   const multilingualStrategy = strategies.find((s) => s.id === 'multilingual');
-
+  const retryStrategy = strategies.find((s) => s.id === 'retry');
   const basicStrategy = strategies.find((s) => s.id === 'basic');
+
   const basicStrategyExists = basicStrategy !== undefined;
   const includeBasicTests = basicStrategy?.config?.enabled ?? true;
 
@@ -293,24 +294,39 @@ export function calculateTotalTests(
 
   const totalPluginTests = plugins.reduce((sum, p) => sum + (p.numTests || 0), 0);
 
-  // When there are no strategies, we should just return the total plugin tests
-  if (strategies.length === 0) {
+  // When there are no strategies, or only a disabled basic strategy
+  if (
+    strategies.length === 0 ||
+    (strategies.length === 1 && basicStrategyExists && !includeBasicTests)
+  ) {
     return {
       effectiveStrategyCount: 0,
-      includeBasicTests: true,
+      includeBasicTests: strategies.length === 0 ? true : includeBasicTests,
       multilingualStrategy: undefined,
       totalPluginTests,
-      totalTests: totalPluginTests,
+      totalTests: includeBasicTests ? totalPluginTests : 0,
     };
   }
 
-  // Calculate total tests by applying each strategy's test count
-  let totalTests = totalPluginTests;
+  // Start with base test count
+  let totalTests = includeBasicTests ? totalPluginTests : 0;
+
+  // Apply retry strategy first if present
+  if (retryStrategy) {
+    totalTests = getTestCount(retryStrategy, totalTests, strategies);
+  }
+
+  // Apply other non-multilingual strategies
   for (const strategy of strategies) {
-    if (strategy.id === 'basic' && !includeBasicTests) {
+    if (['basic', 'multilingual', 'retry'].includes(strategy.id)) {
       continue;
     }
     totalTests = getTestCount(strategy, totalTests, strategies);
+  }
+
+  // Apply multilingual strategy last if present
+  if (multilingualStrategy) {
+    totalTests = getTestCount(multilingualStrategy, totalTests, strategies);
   }
 
   return {
