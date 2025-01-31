@@ -1,5 +1,6 @@
 import type { Cache } from 'cache-manager';
 import OpenAI from 'openai';
+import type { Metadata } from 'openai/resources/shared';
 import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
 import { getEnvString, getEnvFloat, getEnvInt } from '../envars';
 import logger from '../logger';
@@ -22,7 +23,6 @@ import { sleep } from '../util/time';
 import { ellipsize } from '../utils/text';
 import type { OpenAiFunction, OpenAiTool } from './openaiUtil';
 import { calculateCost, REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
-import type { Metadata } from 'openai/resources/shared';
 
 // see https://platform.openai.com/docs/models
 export const OPENAI_CHAT_MODELS = [
@@ -819,12 +819,12 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
 
     while (true) {
       const currentRun = await openai.beta.threads.runs.retrieve(run.thread_id, run.id);
-      
+
       if (currentRun.status === 'completed') {
         run = currentRun;
         break;
       }
-      
+
       if (currentRun.status === 'requires_action') {
         const requiredAction = currentRun.required_action;
         if (requiredAction === null || requiredAction.type !== 'submit_tool_outputs') {
@@ -867,16 +867,24 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
           )}`,
         );
         try {
-          run = await openai.beta.threads.runs.submitToolOutputs(currentRun.thread_id, currentRun.id, {
-            tool_outputs: toolOutputs,
-          });
+          run = await openai.beta.threads.runs.submitToolOutputs(
+            currentRun.thread_id,
+            currentRun.id,
+            {
+              tool_outputs: toolOutputs,
+            },
+          );
         } catch (err) {
           return failApiCall(err);
         }
         continue;
       }
 
-      if (currentRun.status === 'failed' || currentRun.status === 'cancelled' || currentRun.status === 'expired') {
+      if (
+        currentRun.status === 'failed' ||
+        currentRun.status === 'cancelled' ||
+        currentRun.status === 'expired'
+      ) {
         run = currentRun;
         break;
       }
