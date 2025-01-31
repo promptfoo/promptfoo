@@ -6,12 +6,12 @@ import type { TestCase, TestCaseWithPlugin } from '../../types';
 import { isApiProvider } from '../../types/providers';
 import invariant from '../../util/invariant';
 
-async function getFailedTestCases(pluginId: string, targetModel: string): Promise<TestCase[]> {
+async function getFailedTestCases(pluginId: string, targetLabel: string): Promise<TestCase[]> {
   const db = getDb();
   const conditions = [
     eq(evalResultsTable.success, false),
     sql`json_extract(metadata, '$.pluginId') = ${pluginId}`,
-    sql`json_extract(provider, '$.id') = ${targetModel}`,
+    sql`json_extract(provider, '$.label') = ${targetLabel}`,
   ];
 
   const results = await db
@@ -42,19 +42,19 @@ export async function addRetryTestCases(
 ): Promise<TestCase[]> {
   logger.debug('Adding retry test cases from previous failures');
 
-  // Get target model from config
-  let targetModel: string | undefined;
+  // Get target label from config
+  let targetLabel: string | undefined;
   if (config.provider) {
     if (typeof config.provider === 'string') {
-      targetModel = config.provider;
+      targetLabel = config.provider;
     } else if (isApiProvider(config.provider)) {
-      targetModel = config.provider.id();
+      targetLabel = config.provider.label;
     }
   }
 
   invariant(
-    targetModel,
-    'No target model found in config. The retry strategy requires a target model to be specified.',
+    targetLabel,
+    'No target label found in config. The retry strategy requires a target label to be specified.',
   );
 
   // Group test cases by plugin ID
@@ -74,9 +74,9 @@ export async function addRetryTestCases(
   // For each plugin, get its failed test cases
   const retryTestCases: TestCase[] = [];
   for (const [pluginId, tests] of testsByPlugin.entries()) {
-    const failedTests = await getFailedTestCases(pluginId, targetModel);
+    const failedTests = await getFailedTestCases(pluginId, targetLabel);
     logger.debug(
-      `Found ${failedTests.length} failed test cases for plugin ${pluginId} and model ${targetModel}`,
+      `Found ${failedTests.length} failed test cases for plugin ${pluginId} and target ${targetLabel}`,
     );
 
     // Combine current and failed tests, deduplicate, and take up to the configured number
