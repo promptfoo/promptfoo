@@ -497,3 +497,11 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     </Box>
   );
 }
+
+export {
+  availableStrategies,
+  getStrategyId,
+  CONFIGURABLE_STRATEGIES,
+  singleTurnStrategies,
+  multiTurnStrategies,
+};
