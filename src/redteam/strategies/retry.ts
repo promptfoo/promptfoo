@@ -141,3 +141,5 @@ export async function addRetryTestCases(
   logger.debug(`Added ${deduped.length} unique retry test cases`);
   return deduped;
 }
+
+export { deduplicateTests };
