@@ -2,6 +2,8 @@
 sidebar_label: Evaluating LLM safety with HarmBench
 ---
 
+# Evaluating LLM safety with HarmBench
+
 Recent research has shown that even the most advanced LLMs remain vulnerable to adversarial attacks. For example, a 2024 study by Stanford researchers found that GPT-4 could be jailbroken with a 67% success rate using carefully crafted prompts, while Claude 2 showed similar vulnerabilities at 69% [according to their analysis of 600 attack attempts](https://arxiv.org/abs/2402.09154). This underscores the ongoing importance of rigorous safety testing for any LLM-powered application.
 
 To help define a systematic way to assess potential risks and vulnerabilities in LLM systems, prominent industry experts created [HarmBench](https://arxiv.org/abs/2402.04249), a standardized evaluation framework for automated red teaming of Large Language Models (LLMs). The work is a collaboration between researchers at UC Berkeley, Google DeepMind, and the Center for AI Safety.
