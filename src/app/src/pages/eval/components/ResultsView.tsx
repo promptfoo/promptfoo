@@ -367,7 +367,7 @@ export default function ResultsView({
   };
 
   return (
-    <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
+    <div style={{ marginLeft: '1rem', marginRight: '1rem', marginTop: '1rem' }}>
       <ResponsiveStack
         direction="row"
         mb={3}
