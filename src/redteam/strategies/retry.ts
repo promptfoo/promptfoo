@@ -10,51 +10,91 @@ async function getFailedTestCases(pluginId: string, targetLabel: string): Promis
   const db = getDb();
 
   try {
-    // First, let's check what we have in the database
-    const sampleResults = await db
+    logger.warn('Step 1: Finding failed test cases from target...');
+    // First find all failed test cases from this target
+    const targetResults = await db
       .select()
       .from(evalResultsTable)
-      .where(eq(evalResultsTable.success, 0 as any))
+      .where(
+        and(
+          eq(evalResultsTable.success, 0 as any),
+          sql`json_valid(provider)`,
+          sql`json_extract(provider, '$.label') = ${targetLabel}`,
+        ),
+      )
+      .orderBy(evalResultsTable.createdAt)
       .limit(1);
 
-    if (sampleResults.length > 0) {
-      logger.warn('Sample database record:');
-      logger.warn(
-        JSON.stringify(
-          {
-            metadata: sampleResults[0].metadata,
-            provider: sampleResults[0].provider,
-            success: sampleResults[0].success,
-            testCase: sampleResults[0].testCase,
-          },
-          null,
-          2,
-        ),
-      );
+    logger.warn(`Found ${targetResults.length} results for target`);
+
+    if (targetResults.length === 0) {
+      logger.warn(`No failed test cases found for target ${targetLabel}`);
+      // Let's check if we have any records with this target label at all
+      const anyTargetResults = await db
+        .select()
+        .from(evalResultsTable)
+        .where(sql`json_extract(provider, '$.label') = ${targetLabel}`)
+        .limit(1);
+
+      if (anyTargetResults.length > 0) {
+        logger.warn('Found records with this target label, but none failed');
+        const provider =
+          typeof anyTargetResults[0].provider === 'string'
+            ? JSON.parse(anyTargetResults[0].provider)
+            : anyTargetResults[0].provider;
+        logger.warn(`Sample provider info: ${JSON.stringify(provider, null, 2)}`);
+      } else {
+        logger.warn('No records found with this target label at all');
+
+        // Let's check what provider labels we do have
+        const sampleProviders = await db
+          .select()
+          .from(evalResultsTable)
+          .where(sql`json_valid(provider)`)
+          .limit(5);
+
+        if (sampleProviders.length > 0) {
+          logger.warn('Available provider labels:');
+          sampleProviders.forEach((r) => {
+            const provider = typeof r.provider === 'string' ? JSON.parse(r.provider) : r.provider;
+            logger.warn(`- ${provider.label || '(empty label)'} (${provider.id})`);
+          });
+        }
+      }
+      return [];
     }
 
-    // Now try our actual query
-    const query = and(
-      eq(evalResultsTable.success, 0 as any),
-      sql`json_valid(test_case)`,
-      // Look for pluginId in both metadata and test_case.metadata
-      sql`(
-        (json_valid(metadata) AND json_extract(metadata, '$.pluginId') = ${pluginId})
-        OR
-        (json_extract(test_case, '$.metadata.pluginId') = ${pluginId})
-      )`,
-      // Look for label in both provider.label and test_case.provider.label
-      sql`(
-        (json_valid(provider) AND json_extract(provider, '$.label') = ${targetLabel})
-        OR
-        (json_extract(test_case, '$.provider.label') = ${targetLabel})
-      )`,
+    // Log a sample target result
+    logger.warn('Sample target result:');
+    const sampleProvider =
+      typeof targetResults[0].provider === 'string'
+        ? JSON.parse(targetResults[0].provider)
+        : targetResults[0].provider;
+    logger.warn(
+      JSON.stringify(
+        {
+          provider: sampleProvider,
+          success: targetResults[0].success,
+        },
+        null,
+        2,
+      ),
     );
 
+    logger.warn('Step 2: Finding failed test cases from target and plugin...');
+    // Now find all failed test cases from this target and plugin
     const results = await db
       .select()
       .from(evalResultsTable)
-      .where(query)
+      .where(
+        and(
+          eq(evalResultsTable.success, 0 as any),
+          sql`json_valid(provider)`,
+          sql`json_extract(provider, '$.label') = ${targetLabel}`,
+          sql`json_valid(test_case)`,
+          sql`json_extract(test_case, '$.metadata.pluginId') = ${pluginId}`,
+        ),
+      )
       .orderBy(evalResultsTable.createdAt)
       .limit(100);
 
@@ -62,64 +102,81 @@ async function getFailedTestCases(pluginId: string, targetLabel: string): Promis
       `Found ${results.length} failed test cases for plugin ${pluginId} and target ${targetLabel}`,
     );
 
-    // Log all results for debugging
+    // Log the first matching result
     if (results.length > 0) {
       logger.warn('First matching result:');
+      const firstProvider =
+        typeof results[0].provider === 'string'
+          ? JSON.parse(results[0].provider)
+          : results[0].provider;
+      const firstTestCase =
+        typeof results[0].testCase === 'string'
+          ? JSON.parse(results[0].testCase)
+          : results[0].testCase;
       logger.warn(
         JSON.stringify(
           {
-            metadata: results[0].metadata,
-            provider: results[0].provider,
+            provider: firstProvider,
+            testCase: firstTestCase,
             success: results[0].success,
-            testCase: results[0].testCase,
           },
           null,
           2,
         ),
       );
     } else {
-      // If no results, let's check if we have any failed test cases with this pluginId
-      const pluginResults = await db
+      // If we found target results but no plugin results, let's check the test cases
+      logger.warn('Examining test cases to debug why no matches were found...');
+      const sampleTestCases = await db
         .select()
         .from(evalResultsTable)
         .where(
           and(
             eq(evalResultsTable.success, 0 as any),
+            sql`json_valid(provider)`,
+            sql`json_extract(provider, '$.label') = ${targetLabel}`,
             sql`json_valid(test_case)`,
-            sql`(
-              (json_valid(metadata) AND json_extract(metadata, '$.pluginId') = ${pluginId})
-              OR
-              (json_extract(test_case, '$.metadata.pluginId') = ${pluginId})
-            )`,
           ),
         )
-        .limit(1);
+        .limit(3);
 
-      if (pluginResults.length > 0) {
-        logger.warn(
-          `Found records with pluginId ${pluginId} but no matching target label. Sample record:`,
-        );
-        logger.warn(
-          JSON.stringify(
-            {
-              metadata: pluginResults[0].metadata,
-              provider: pluginResults[0].provider,
-              testCase: pluginResults[0].testCase,
-            },
-            null,
-            2,
-          ),
-        );
-      } else {
-        logger.warn(`No records found with pluginId ${pluginId}`);
+      if (sampleTestCases.length > 0) {
+        logger.warn('Sample test cases from target:');
+        sampleTestCases.forEach((tc, i) => {
+          const testCase = typeof tc.testCase === 'string' ? JSON.parse(tc.testCase) : tc.testCase;
+          const provider = typeof tc.provider === 'string' ? JSON.parse(tc.provider) : tc.provider;
+          logger.warn(
+            `Test case ${i + 1}: ${JSON.stringify(
+              {
+                provider,
+                testCase,
+                metadata: testCase.metadata,
+              },
+              null,
+              2,
+            )}`,
+          );
+        });
       }
     }
 
     // Parse test cases from results
+    logger.warn('Step 3: Parsing test cases...');
     const testCases = results
       .map((r) => {
         try {
-          return typeof r.testCase === 'string' ? JSON.parse(r.testCase) : r.testCase;
+          const parsed = typeof r.testCase === 'string' ? JSON.parse(r.testCase) : r.testCase;
+          logger.warn(
+            `Successfully parsed test case: ${JSON.stringify(
+              {
+                pluginId: parsed.metadata?.pluginId,
+                vars: parsed.vars,
+              },
+              null,
+              2,
+            )}`,
+          );
+          return parsed;
         } catch (e) {
           logger.error(`Failed to parse test case: ${e}`);
           return null;
@@ -186,18 +243,14 @@ export async function addRetryTestCases(
       logger.debug(
         `Found ${failedTests.length} failed test cases for plugin ${pluginId} and target ${targetLabel}`,
       );
-
-      // Combine current and failed tests, deduplicate, and take up to the configured number
-      const combined = [...tests, ...failedTests];
-      const deduped = deduplicateTests(combined);
-
       // Use configured numTests if available, otherwise use original test count
       const maxTests = typeof config.numTests === 'number' ? config.numTests : tests.length;
-      const selected = deduped.slice(0, maxTests);
+      const selected = failedTests.slice(0, maxTests);
 
       retryTestCases.push(...selected);
     }
   }
   logger.debug(`Added ${retryTestCases.length} retry test cases`);
-  return retryTestCases;
+  const deduped = deduplicateTests(retryTestCases);
+  return deduped;
 }
