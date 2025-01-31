@@ -40,6 +40,11 @@ describe('OpenAI Provider', () => {
         writable: true,
         configurable: true,
       });
+      Object.defineProperty(error, 'status', {
+        value: 400,
+        writable: true,
+        configurable: true,
+      });
 
       const result = failApiCall(error);
       expect(result).toEqual({
@@ -783,7 +788,6 @@ describe('OpenAI Provider', () => {
 
     beforeEach(() => {
       jest.clearAllMocks();
-      // Create a new mock client for each test
       mockClient = {
         beta: {
           threads: {
@@ -801,7 +805,6 @@ describe('OpenAI Provider', () => {
           },
         },
       };
-      // Update the OpenAI mock implementation for this test
       jest.mocked(OpenAI).mockImplementation(function (this: any) {
         Object.assign(this, mockClient);
         return this;
