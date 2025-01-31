@@ -9,7 +9,6 @@ import type { ApiProvider } from '../../../src/types';
 
 jest.mock('fs');
 jest.mock('python-shell');
-jest.mock('../../../src/logger');
 jest.mock('../../../src/python/pythonUtils');
 
 describe('pythonPromptFunction', () => {

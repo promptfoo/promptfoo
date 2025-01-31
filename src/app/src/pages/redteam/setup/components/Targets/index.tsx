@@ -492,7 +492,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         sx={{
           display: 'flex',
           justifyContent: 'space-between',
-          alignItems: 'center',
+          gap: 2,
           mt: 4,
           width: '100%',
           position: 'relative',
@@ -519,10 +519,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
           variant="outlined"
           startIcon={<KeyboardArrowLeftIcon />}
           onClick={onBack}
-          sx={{
-            px: 4,
-            py: 1,
-          }}
+          sx={{ px: 4, py: 1 }}
         >
           Back
         </Button>
@@ -530,7 +527,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
           variant="contained"
           onClick={onNext}
           endIcon={<KeyboardArrowRightIcon />}
-          disabled={missingFields.length > 0 /*|| (testingEnabled && !hasTestedTarget)*/}
+          disabled={missingFields.length > 0}
           sx={{
             backgroundColor: theme.palette.primary.main,
             '&:hover': { backgroundColor: theme.palette.primary.dark },
