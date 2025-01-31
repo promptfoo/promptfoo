@@ -259,6 +259,10 @@ export function getTestCount(
         (Object.keys(strategy.config?.languages ?? {}).length || DEFAULT_LANGUAGES.length))
     );
   }
+  if (strategy.id === 'retry') {
+    // Retry strategy adds retry test cases on top of original test cases
+    return totalPluginTests * 2;
+  }
   return totalPluginTests; // Default case
 }
 
@@ -279,9 +283,6 @@ export function calculateTotalTests(
   totalTests: number;
 } {
   const multilingualStrategy = strategies.find((s) => s.id === 'multilingual');
-  const numLanguages = multilingualStrategy
-    ? Object.keys(multilingualStrategy?.config?.languages ?? {}).length || DEFAULT_LANGUAGES.length
-    : 1;
 
   const basicStrategy = strategies.find((s) => s.id === 'basic');
   const basicStrategyExists = basicStrategy !== undefined;
@@ -293,10 +294,24 @@ export function calculateTotalTests(
   const totalPluginTests = plugins.reduce((sum, p) => sum + (p.numTests || 0), 0);
 
   // When there are no strategies, we should just return the total plugin tests
-  const totalTests =
-    strategies.length === 0
-      ? totalPluginTests
-      : totalPluginTests * effectiveStrategyCount * numLanguages;
+  if (strategies.length === 0) {
+    return {
+      effectiveStrategyCount: 0,
+      includeBasicTests: true,
+      multilingualStrategy: undefined,
+      totalPluginTests,
+      totalTests: totalPluginTests,
+    };
+  }
+
+  // Calculate total tests by applying each strategy's test count
+  let totalTests = totalPluginTests;
+  for (const strategy of strategies) {
+    if (strategy.id === 'basic' && !includeBasicTests) {
+      continue;
+    }
+    totalTests = getTestCount(strategy, totalTests, strategies);
+  }
 
   return {
     effectiveStrategyCount,
@@ -313,6 +328,8 @@ export function calculateTotalTests(
  * @returns A promise that resolves to an object containing the purpose, entities, and test cases.
  */
 export async function synthesize({
+  abortSignal,
+  delay,
   entities: entitiesOverride,
   injectVar,
   language,
@@ -322,8 +339,7 @@ export async function synthesize({
   provider,
   purpose: purposeOverride,
   strategies,
-  delay,
-  abortSignal,
+  targetLabels,
 }: SynthesizeOptions): Promise<{
   purpose: string;
   entities: string[];
@@ -378,7 +394,10 @@ export async function synthesize({
         strategies
           .filter((s) => s.id !== 'basic')
           .map((s) => {
-            const testCount = getTestCount(s, totalPluginTests, strategies);
+            const testCount =
+              s.id === 'retry'
+                ? totalPluginTests // For retry, show additional test count
+                : getTestCount(s, totalPluginTests, strategies);
             return `${s.id} (${formatTestCount(testCount, true)})`;
           })
           .sort()
@@ -616,6 +635,10 @@ export async function synthesize({
   const retryStrategy = strategies.find((s) => s.id === 'retry');
   if (retryStrategy) {
     logger.debug('Applying retry strategy first');
+    retryStrategy.config = {
+      ...retryStrategy.config,
+      targetLabels,
+    };
     const { testCases: retryTestCases, strategyResults: retryResults } = await applyStrategies(
       pluginTestCases,
       [retryStrategy],

@@ -78,6 +78,7 @@ describe('synthesize', () => {
         prompts: ['Test prompt'],
         purpose: 'Custom purpose',
         strategies: [],
+        targetLabels: ['test-provider'],
       });
 
       expect(result).toEqual(
@@ -97,6 +98,7 @@ describe('synthesize', () => {
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [],
+        targetLabels: ['test-provider'],
       });
 
       expect(extractEntities).toHaveBeenCalledWith(expect.any(Object), ['Test prompt']);
@@ -111,6 +113,7 @@ describe('synthesize', () => {
           plugins: [{ id: 'test-plugin', numTests: 1 }],
           prompts: [] as unknown as [string, ...string[]],
           strategies: [],
+          targetLabels: ['test-provider'],
         }),
       ).rejects.toThrow('Prompts array cannot be empty');
     });
@@ -122,6 +125,7 @@ describe('synthesize', () => {
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Prompt 1', 'Prompt 2', 'Prompt 3'],
         strategies: [],
+        targetLabels: ['test-provider'],
       });
 
       expect(extractSystemPurpose).toHaveBeenCalledWith(expect.any(Object), [
@@ -152,6 +156,7 @@ describe('synthesize', () => {
         prompts: ['Test prompt'],
         provider: customProvider,
         strategies: [],
+        targetLabels: ['custom-provider'],
       });
 
       expect(loadApiProvider).not.toHaveBeenCalled();
@@ -173,6 +178,7 @@ describe('synthesize', () => {
         ],
         prompts: ['Test prompt'],
         strategies: [],
+        targetLabels: ['test-provider'],
       });
 
       expect(mockPluginAction).toHaveBeenCalledTimes(2);
@@ -191,6 +197,7 @@ describe('synthesize', () => {
         plugins: [{ id: 'unregistered-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [],
+        targetLabels: ['test-provider'],
       });
 
       expect(logger.warn).toHaveBeenCalledWith(
@@ -211,6 +218,7 @@ describe('synthesize', () => {
         ],
         prompts: ['Test prompt'],
         strategies: [],
+        targetLabels: ['test-provider'],
       });
 
       const expectedTestCaseCount = (Object.keys(HARM_PLUGINS).length + PII_PLUGINS.length) * 1; // Each plugin is called once
@@ -232,6 +240,7 @@ describe('synthesize', () => {
         plugins: [{ id: 'test-plugin', numTests: 2 }],
         prompts: ['Test prompt'],
         strategies: [{ id: 'mockStrategy' }],
+        targetLabels: ['test-provider'],
       });
 
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Test Generation Report:'));
@@ -251,6 +260,7 @@ describe('synthesize', () => {
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [],
+        targetLabels: ['test-provider'],
       });
 
       expect(cliProgress.SingleBar).not.toHaveBeenCalled();
@@ -277,6 +287,7 @@ describe('synthesize', () => {
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [],
+        targetLabels: ['test-provider'],
       });
 
       expect(shouldGenerateRemote).toHaveBeenCalledWith();
@@ -293,6 +304,7 @@ describe('synthesize', () => {
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [],
+        targetLabels: ['test-provider'],
       });
 
       expect(shouldGenerateRemote).toHaveBeenCalledWith();
@@ -313,6 +325,7 @@ describe('synthesize', () => {
           plugins: [{ id: 'test-plugin', numTests: 1 }],
           prompts: ['Test prompt'],
           strategies: [],
+          targetLabels: ['test-provider'],
         }),
       ).rejects.toThrow('Unable to proceed with test generation: API is not accessible');
     });
@@ -326,6 +339,7 @@ describe('synthesize', () => {
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [],
+        targetLabels: ['test-provider'],
       });
 
       expect(shouldGenerateRemote).toHaveBeenCalledWith();
@@ -360,6 +374,7 @@ describe('synthesize', () => {
       provider: mockProvider,
       language: 'en',
       numTests: 1,
+      targetLabels: ['test-provider'],
     });
 
     expect(resultEnabled.testCases.length).toBeGreaterThan(0);
@@ -373,6 +388,7 @@ describe('synthesize', () => {
       provider: mockProvider,
       language: 'en',
       numTests: 1,
+      targetLabels: ['test-provider'],
     });
 
     expect(resultDisabled.testCases).toHaveLength(0);
