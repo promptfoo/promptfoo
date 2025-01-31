@@ -42,15 +42,15 @@ export const OPENAI_CHAT_MODELS = [
   ...['o1-mini', 'o1-mini-2024-09-12'].map((model) => ({
     id: model,
     cost: {
-      input: 1.1 / 1e6,
-      output: 4.4 / 1e6,
+      input: 3 / 1e6,
+      output: 12 / 1e6,
     },
   })),
   ...['o3-mini', 'o3-mini-2024-09-12'].map((model) => ({
     id: model,
     cost: {
-      input: 0.15 / 1e6,
-      output: 0.6 / 1e6,
+      input: 1.1 / 1e6,
+      output: 4.4 / 1e6,
     },
   })),
   ...['gpt-4o', 'gpt-4o-2024-11-20', 'gpt-4o-2024-08-06'].map((model) => ({
