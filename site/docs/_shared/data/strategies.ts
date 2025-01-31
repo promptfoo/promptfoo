@@ -211,6 +211,6 @@ export const strategies: Strategy[] = [
     cost: 'Low',
     asrIncrease: '50-70%',
     link: '/docs/red-team/strategies/retry/',
-    recommended: true,
+    recommended: false,
   },
 ];
