@@ -103,3 +103,8 @@ export interface LocalPluginConfig {
     [key: string]: string | string[] | undefined;
   };
 }
+
+export interface RedteamUITarget {
+  value: string;
+  label: string;
+}

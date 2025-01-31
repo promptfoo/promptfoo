@@ -10,6 +10,7 @@ import { DebugAccessGrader } from './plugins/debugAccess';
 import { DivergentRepetitionGrader } from './plugins/divergentRepetition';
 import { ExcessiveAgencyGrader } from './plugins/excessiveAgency';
 import { HallucinationGrader } from './plugins/hallucination';
+import { HarmbenchGrader } from './plugins/harmbench';
 import {
   ChildExploitationGrader,
   CopyrightViolationGrader,
@@ -61,6 +62,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:divergent-repetition': new DivergentRepetitionGrader(),
   'promptfoo:redteam:excessive-agency': new ExcessiveAgencyGrader(),
   'promptfoo:redteam:hallucination': new HallucinationGrader(),
+  'promptfoo:redteam:harmbench': new HarmbenchGrader(),
   'promptfoo:redteam:harmful:chemical-biological-weapons': new HarmfulGrader(),
   'promptfoo:redteam:harmful:child-exploitation': new ChildExploitationGrader(),
   'promptfoo:redteam:harmful:copyright-violations': new CopyrightViolationGrader(),

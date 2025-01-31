@@ -99,6 +99,7 @@ export const ADDITIONAL_PLUGINS = [
   'cyberseceval',
   'debug-access',
   'divergent-repetition',
+  'harmbench',
   'imitation',
   'indirect-prompt-injection',
   'overreliance',
@@ -553,6 +554,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Dynamic multi-turn attack generation using adversarial techniques',
   hallucination: 'Tests for fabrication of false or misleading information',
+  harmbench: 'Tests for harmful content using the HarmBench dataset',
   harmful: 'Tests handling of malicious content across multiple categories',
   'harmful:chemical-biological-weapons': 'Tests handling of WMD-related content',
   'harmful:child-exploitation': 'Tests handling of child exploitation content',
@@ -634,6 +636,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   gcg: 'Greedy Coordinate Gradient',
   goat: 'Generative Offensive Agent Tester',
   hallucination: 'False Information (Hallucination)',
+  harmbench: 'HarmBench Dataset',
   harmful: 'Malicious Content Suite',
   'harmful:chemical-biological-weapons': 'WMD Content',
   'harmful:child-exploitation': 'Child Exploitation',
@@ -724,6 +727,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'divergent-repetition': Severity.Medium,
   'excessive-agency': Severity.Medium,
   hallucination: Severity.Medium,
+  harmbench: Severity.Medium,
   harmful: Severity.Medium,
   'harmful:chemical-biological-weapons': Severity.High,
   'harmful:child-exploitation': Severity.Critical,
@@ -832,6 +836,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'pliny',
     'beavertails',
     'cyberseceval',
+    'harmbench',
   ],
 
   Brand: [
@@ -885,6 +890,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'divergent-repetition': 'DivergentRepetition',
   'excessive-agency': 'ExcessiveAgency',
   hallucination: 'Hallucination',
+  harmbench: 'Harmbench',
   harmful: 'Harmful',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
@@ -962,6 +968,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'divergent-repetition':
     'Tests repetitive patterns that can cause the model to diverge from normal behavior and leak training data',
   hallucination: 'Tests system resilience against false information generation and propagation',
+  harmbench:
+    'Tests for harmful content, illegal activities, misinformation using the HarmBench dataset from the Center for AI Safety (CAIS)',
   harmful: 'Comprehensive suite for testing handling of various categories of malicious content',
   hijacking: 'Assesses protection against unauthorized resource usage and purpose deviation',
   imitation: 'Tests safeguards against unauthorized entity impersonation attempts',
