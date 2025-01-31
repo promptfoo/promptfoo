@@ -46,6 +46,13 @@ export const OPENAI_CHAT_MODELS = [
       output: 12 / 1e6,
     },
   })),
+  ...['o3-mini', 'o3-mini-2025-01-31'].map((model) => ({
+    id: model,
+    cost: {
+      input: 1.1 / 1e6,
+      output: 4.4 / 1e6,
+    },
+  })),
   ...['gpt-4o', 'gpt-4o-2024-11-20', 'gpt-4o-2024-08-06'].map((model) => ({
     id: model,
     cost: {
@@ -429,6 +436,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       ...(stop ? { stop } : {}),
       ...(this.config.passthrough || {}),
     };
+
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
     let data,
       cached = false;
@@ -510,18 +518,18 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
-    // NOTE: Special handling for o1 models which do not support max_tokens and temperature
-    const isO1Model = this.modelName.startsWith('o1');
-    const maxCompletionTokens = isO1Model
+    // NOTE: Special handling for o1 and o3 models which do not support max_tokens and temperature
+    const isO1orO3Model = this.modelName.startsWith('o1') || this.modelName.startsWith('o3');
+    const maxCompletionTokens = isO1orO3Model
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
-    const maxTokens = isO1Model
+    const maxTokens = isO1orO3Model
       ? undefined
       : (config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024));
-    const temperature = isO1Model
+    const temperature = isO1orO3Model
       ? undefined
       : (config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0));
-    const reasoningEffort = isO1Model
+    const reasoningEffort = isO1orO3Model
       ? renderVarsInObject(config.reasoning_effort, context?.vars)
       : undefined;
 
