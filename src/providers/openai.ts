@@ -1,5 +1,6 @@
 import type { Cache } from 'cache-manager';
 import OpenAI from 'openai';
+import type { Metadata } from 'openai/resources/shared';
 import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
 import { getEnvString, getEnvFloat, getEnvInt } from '../envars';
 import logger from '../logger';
@@ -196,8 +197,11 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
 
 export function failApiCall(err: any) {
   if (err instanceof OpenAI.APIError) {
+    const errorType = err.error?.type || err.type || 'unknown';
+    const errorMessage = err.error?.message || err.message || 'Unknown error';
+    const statusCode = err.status ? ` ${err.status}` : '';
     return {
-      error: `API error: ${err.type} ${err.message}`,
+      error: `API error: ${errorType}${statusCode} ${errorMessage}`,
     };
   }
   return {
@@ -736,7 +740,7 @@ type OpenAiAssistantOptions = OpenAiSharedOptions & {
     OpenAI.FunctionDefinition['name'],
     (arg: string) => Promise<string>
   >;
-  metadata?: object[];
+  metadata?: Metadata;
   temperature?: number;
   toolChoice?:
     | 'none'
@@ -807,7 +811,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     };
 
     logger.debug(`Calling OpenAI API, creating thread run: ${JSON.stringify(body)}`);
-    let run;
+    let run: OpenAI.Beta.Threads.Run;
     try {
       run = await openai.beta.threads.createAndRun(body);
     } catch (err) {
@@ -816,15 +820,18 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
 
     logger.debug(`\tOpenAI thread run API response: ${JSON.stringify(run)}`);
 
-    while (
-      run.status === 'in_progress' ||
-      run.status === 'queued' ||
-      run.status === 'requires_action'
-    ) {
-      if (run.status === 'requires_action') {
-        const requiredAction: OpenAI.Beta.Threads.Runs.Run.RequiredAction | null =
-          run.required_action;
+    while (true) {
+      const currentRun = await openai.beta.threads.runs.retrieve(run.thread_id, run.id);
+
+      if (currentRun.status === 'completed') {
+        run = currentRun;
+        break;
+      }
+
+      if (currentRun.status === 'requires_action') {
+        const requiredAction = currentRun.required_action;
         if (requiredAction === null || requiredAction.type !== 'submit_tool_outputs') {
+          run = currentRun;
           break;
         }
         const functionCallsWithCallbacks: OpenAI.Beta.Threads.Runs.RequiredActionFunctionToolCall[] =
@@ -835,6 +842,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
             );
           });
         if (functionCallsWithCallbacks.length === 0) {
+          run = currentRun;
           break;
         }
         logger.debug(
@@ -847,39 +855,44 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
             logger.debug(
               `Calling functionToolCallbacks[${toolCall.function.name}]('${toolCall.function.arguments}')`,
             );
-            const result = await this.assistantConfig.functionToolCallbacks![
+            const functionResult = await this.assistantConfig.functionToolCallbacks![
               toolCall.function.name
             ](toolCall.function.arguments);
             return {
               tool_call_id: toolCall.id,
-              output: result,
+              output: functionResult,
             };
           }),
         );
         logger.debug(
-          `Calling OpenAI API, submitting tool outputs for ${run.thread_id}: ${JSON.stringify(
+          `Calling OpenAI API, submitting tool outputs for ${currentRun.thread_id}: ${JSON.stringify(
             toolOutputs,
           )}`,
         );
         try {
-          run = await openai.beta.threads.runs.submitToolOutputs(run.thread_id, run.id, {
-            tool_outputs: toolOutputs,
-          });
+          run = await openai.beta.threads.runs.submitToolOutputs(
+            currentRun.thread_id,
+            currentRun.id,
+            {
+              tool_outputs: toolOutputs,
+            },
+          );
         } catch (err) {
           return failApiCall(err);
         }
         continue;
       }
 
-      await sleep(1000);
-
-      logger.debug(`Calling OpenAI API, getting thread run ${run.id} status`);
-      try {
-        run = await openai.beta.threads.runs.retrieve(run.thread_id, run.id);
-      } catch (err) {
-        return failApiCall(err);
+      if (
+        currentRun.status === 'failed' ||
+        currentRun.status === 'cancelled' ||
+        currentRun.status === 'expired'
+      ) {
+        run = currentRun;
+        break;
       }
-      logger.debug(`\tOpenAI thread run API response: ${JSON.stringify(run)}`);
+
+      await sleep(1000);
     }
 
     if (run.status !== 'completed' && run.status !== 'requires_action') {
