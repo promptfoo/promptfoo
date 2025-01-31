@@ -249,21 +249,27 @@ export function getTestCount(
   totalPluginTests: number,
   strategies: RedteamStrategyObject[],
 ): number {
-  if (strategy.id === 'basic' && !strategy.config?.enabled) {
-    return 0; // Return 0 tests if basic strategy is disabled
+  // Basic strategy either keeps original count or removes all tests
+  if (strategy.id === 'basic') {
+    return strategy.config?.enabled === false ? 0 : totalPluginTests;
   }
+
+  // Multilingual strategy doubles the total count
   if (strategy.id === 'multilingual') {
     const numLanguages =
       Object.keys(strategy.config?.languages ?? {}).length || DEFAULT_LANGUAGES.length;
     return totalPluginTests * numLanguages;
   }
+
+  // Retry strategy doubles the plugin tests
   if (strategy.id === 'retry') {
-    // For retry strategy, use configured numTests if provided, otherwise add same number as original tests
     const configuredNumTests = strategy.config?.numTests as number | undefined;
     const additionalTests = configuredNumTests ?? totalPluginTests;
     return totalPluginTests + additionalTests;
   }
-  return totalPluginTests; // Default case
+
+  // All other strategies add the same number as plugin tests
+  return totalPluginTests * 2;
 }
 
 /**
@@ -308,7 +314,7 @@ export function calculateTotalTests(
     };
   }
 
-  // Start with base test count
+  // Start with base test count from basic strategy
   let totalTests = includeBasicTests ? totalPluginTests : 0;
 
   // Apply retry strategy first if present
@@ -316,12 +322,12 @@ export function calculateTotalTests(
     totalTests = getTestCount(retryStrategy, totalTests, strategies);
   }
 
-  // Apply other non-multilingual strategies
+  // Apply other non-basic, non-multilingual, non-retry strategies
   for (const strategy of strategies) {
     if (['basic', 'multilingual', 'retry'].includes(strategy.id)) {
       continue;
     }
-    totalTests = getTestCount(strategy, totalTests, strategies);
+    totalTests = getTestCount(strategy, totalPluginTests, strategies);
   }
 
   // Apply multilingual strategy last if present

@@ -610,4 +610,17 @@ describe('calculateTotalTests', () => {
       multilingualStrategy: strategies[1],
     });
   });
+
+  it('should correctly calculate total tests for multiple plugins with jailbreak strategy', () => {
+    const plugins = Array(10).fill({ numTests: 5 }); // 10 plugins with 5 tests each
+    const strategies = [{ id: 'jailbreak' }];
+    const result = calculateTotalTests(plugins, strategies);
+    expect(result).toEqual({
+      totalTests: 100, // 50 plugin tests + 50 jailbreak tests
+      totalPluginTests: 50, // 10 plugins * 5 tests each
+      effectiveStrategyCount: 1,
+      includeBasicTests: true,
+      multilingualStrategy: undefined,
+    });
+  });
 });
