@@ -3,138 +3,219 @@ sidebar_position: 20
 sidebar_label: Node package
 ---
 
-# Using the node package
+# Node Package
 
-## Installation
-
-promptfoo is available as a node package [on npm](https://www.npmjs.com/package/promptfoo):
+## Quick Start
 
 ```sh
 npm install promptfoo
 ```
 
-## Usage
-
-Use `promptfoo` as a library in your project by importing the `evaluate` function:
-
 ```ts
-import promptfoo from 'promptfoo';
+import { evaluate } from 'promptfoo';
 
-const results = await promptfoo.evaluate(testSuite, options);
+const results = await evaluate({
+  prompts: ['Translate to French: {{text}}'],
+  providers: ['openai:gpt-4'],
+  tests: [{ vars: { text: 'Hello world' } }],
+});
 ```
 
-The evaluate function takes the following parameters:
+## Package Requirements
 
-- `testSuite`: the Javascript equivalent of the promptfooconfig.yaml as a [`TestSuiteConfiguration` object](/docs/configuration/reference#testsuiteconfiguration).
+- Node.js v18.0.0+
+- Provider API keys (e.g., `OPENAI_API_KEY`)
+- Optional provider dependencies installed automatically
 
-- `options`: misc options related to how the test harness runs, as an [`EvaluateOptions` object](/docs/configuration/reference#evaluateoptions).
+## Core Concepts
 
-The results of the evaluation are returned as an [`EvaluateSummary` object](/docs/configuration/reference#evaluatesummary).
+### Evaluation
 
-### Provider functions
+The main functionality for testing LLM prompts:
 
-A `ProviderFunction` is a Javascript function that implements an LLM API call. It takes a prompt string and a context. It returns the LLM response or an error. See [`ProviderFunction` type](/docs/configuration/reference#providerfunction).
+```ts
+import { evaluate } from 'promptfoo';
 
-### Assertion functions
+// Using a config file
+const results = await evaluate({
+  configPath: './promptfooconfig.yaml',
+  maxConcurrency: 2,
+});
 
-An `Assertion` can take an `AssertionFunction` as its `value`. `AssertionFunction` parameters:
+// Or using inline configuration
+const results = await evaluate({
+  prompts: ['...'],
+  providers: ['...'],
+  tests: [{...}],
+});
+```
 
-- `output`: the LLM output
-- `testCase`: the test case
-- `assertion`: the assertion object
+See: [Configuration Reference](/docs/configuration/reference#testsuiteconfiguration)
 
-<details>
-<summary>Type definition</summary>
-```typescript
-type AssertionFunction = (
-  output: string,
-  testCase: AtomicTestCase,
-  assertion: Assertion,
-) => Promise<GradingResult>;
+### Providers
 
-interface GradingResult {
-// Whether the test passed or failed
-pass: boolean;
+Load and configure LLM providers:
 
-// Test score, typically between 0 and 1
-score: number;
+```ts
+import { providers } from 'promptfoo';
 
-// Plain text reason for the result
-reason: string;
+// Single provider
+const openai = await providers.loadApiProvider('openai:gpt-4');
 
-// Map of labeled metrics to values
-namedScores?: Record<string, number>;
+// Multiple providers
+const allProviders = await providers.loadApiProviders([
+  'openai:gpt-4',
+  'anthropic:claude-2',
+  // Custom provider
+  async (prompt) => ({ output: 'Custom response' }),
+]);
+```
 
-// Record of tokens usage for this assertion
-tokensUsed?: Partial<{
-total: number;
-prompt: number;
-completion: number;
-cached?: number;
-}>;
+### Assertions
 
-// List of results for each component of the assertion
-componentResults?: GradingResult[];
+Validate LLM outputs:
 
-// The assertion that was evaluated
-assertion: Assertion | null;
-}
+```ts
+import { assertions } from 'promptfoo';
 
-````
-</details>
+const testCase = {
+  assert: [
+    // Basic assertions
+    { type: 'contains', value: 'expected text' },
+    { type: 'regex', value: /pattern/ },
 
-For more info on different assertion types, see [assertions & metrics](/docs/configuration/expected-outputs/).
+    // Advanced assertions
+    {
+      type: 'javascript',
+      value: assertions.similarity('reference text', 0.8),
+    },
+    {
+      type: 'javascript',
+      value: assertions.contains(['required', 'words']),
+    },
+  ],
+};
+```
 
-### Fetch Utilities
+See: [Assertions & Metrics](/docs/configuration/expected-outputs/)
 
-promptfoo exports a cached fetch utility via its cache namespace that handles proxies, SSL certificates, caching, and rate limiting:
+### Caching
+
+Optimize API usage with built-in caching:
 
 ```ts
 import { cache } from 'promptfoo';
 
-// Make a request with caching
+// Cache control
+cache.enableCache();
+cache.disableCache();
+await cache.clearCache();
+
+// HTTP requests with caching
 const response = await cache.fetchWithCache(
   'https://api.example.com/data',
-  {
-    headers: { 'Content-Type': 'application/json' }
-  },
-  5000,           // timeout in ms
-  'json',         // response format ('json' or 'text')
-  false,          // whether to bust the cache
-  3               // optional number of retries
+  { headers: { ... } },
+  5000,  // timeout
+  'json' // format
 );
-
-// Response includes cache status
-console.log(response.cached);  // boolean indicating if response was from cache
-console.log(response.data);    // the response data
-console.log(response.status);  // HTTP status code
-console.log(response.headers); // Response headers
 ```
 
-The utility supports:
-- Response caching with configurable TTL
-- Proxy configuration via `HTTP_PROXY`/`HTTPS_PROXY` environment variables
-- Custom SSL certificates via `PROMPTFOO_CA_CERT_PATH`
-- SSL verification toggle via `PROMPTFOO_INSECURE_SSL`
-- Rate limit handling with exponential backoff
-- Request timeouts
-- Automatic retry on failures
+Configuration via environment:
 
-Cache behavior can be configured via environment variables:
-- `PROMPTFOO_CACHE_ENABLED`: Enable/disable caching (default: true)
-- `PROMPTFOO_CACHE_TYPE`: 'memory' or 'disk' (default: 'disk')
-- `PROMPTFOO_CACHE_PATH`: Custom cache directory path
-- `PROMPTFOO_CACHE_TTL`: Cache TTL in seconds (default: 14 days)
+- `PROMPTFOO_CACHE_ENABLED`: true/false (default: true)
+- `PROMPTFOO_CACHE_TYPE`: 'memory'/'disk' (default: 'disk')
+- `PROMPTFOO_CACHE_TTL`: seconds (default: 14 days)
+- `PROMPTFOO_CACHE_PATH`: custom cache location
 
-For more details on proxy and SSL configuration, see the [FAQ](/docs/faq).
+## Advanced Usage
 
-## Example
+### Error Handling
 
-`promptfoo` exports an `evaluate` function that you can use to run prompt evaluations.
+```ts
+try {
+  const results = await evaluate({...});
+} catch (error) {
+  if (error instanceof ProviderError) {
+    // Handle LLM API errors
+  } else if (error instanceof ValidationError) {
+    // Handle configuration errors
+  } else if (error instanceof AssertionError) {
+    // Handle assertion failures
+  }
+}
+```
 
-```js
+### Custom Provider Implementation
+
+```ts
+const customProvider = await providers.loadApiProvider(async (prompt, context) => {
+  // Access test variables
+  const vars = context.vars;
+
+  // Custom LLM implementation
+  const response = await yourLLM.generate(prompt);
+
+  return {
+    output: response.text,
+    tokenUsage: {
+      total: response.usage.total_tokens,
+      prompt: response.usage.prompt_tokens,
+      completion: response.usage.completion_tokens,
+    },
+  };
+});
+```
+
+### Custom Assertions
+
+```ts
+const customAssertion = {
+  type: 'javascript',
+  value: async (output, testCase, assertion) => {
+    const pass = // your logic
+    return {
+      pass,
+      score: pass ? 1 : 0,
+      reason: 'Explanation of result',
+    };
+  },
+};
+```
+
+## Package Details
+
+### Module System
+
+```ts
+// CommonJS
+const { evaluate } = require('promptfoo');
+
+// ESM
+import { evaluate } from 'promptfoo';
+
+// TypeScript
+import type {
+  TestSuiteConfiguration,
+  EvaluateOptions,
+  EvaluateSummary
+} from 'promptfoo';
+```
+
+### Build Information
+
+- Full TypeScript support with declarations
+- Source maps included
+- CommonJS format
+- Both `require`/`import` supported
+
+## Complete Examples
+
+### Basic Evaluation
+
+```ts
 import promptfoo from 'promptfoo';
 
+// Basic evaluation with multiple prompts and test cases
 const results = await promptfoo.evaluate(
   {
     prompts: ['Rephrase this in French: {{body}}', 'Rephrase this like a pirate: {{body}}'],
@@ -149,77 +230,88 @@ const results = await promptfoo.evaluate(
         vars: {
           body: "I'm hungry",
         },
+        assert: [
+          {
+            type: 'javascript',
+            value: promptfoo.assertions.contains(["J'ai faim"]),
+          },
+        ],
       },
     ],
     writeLatestResults: true, // write results to disk so they can be viewed in web viewer
   },
   {
-    maxConcurrency: 2,
+    maxConcurrency: 2, // Limit concurrent API calls
   },
 );
 
-console.log(results);
-````
-
-This code imports the `promptfoo` library, defines the evaluation options, and then calls the `evaluate` function with these options.
-
-You can also supply functions as `prompts`, `providers`, or `asserts`:
-
-```js
-import promptfoo from 'promptfoo';
-
-(async () => {
-  const results = await promptfoo.evaluate({
-    prompts: [
-      'Rephrase this in French: {{body}}',
-      (vars) => {
-        return `Rephrase this like a pirate: ${vars.body}`;
-      },
-    ],
-    providers: [
-      'openai:gpt-4o-mini',
-      (prompt, context) => {
-        // Call LLM here...
-        console.log(`Prompt: ${prompt}, vars: ${JSON.stringify(context.vars)}`);
-        return {
-          output: '<LLM output>',
-        };
-      },
-    ],
-    tests: [
-      {
-        vars: {
-          body: 'Hello world',
-        },
-      },
-      {
-        vars: {
-          body: "I'm hungry",
-        },
-        assert: [
-          {
-            type: 'javascript',
-            value: (output) => {
-              const pass = output.includes("J'ai faim");
-              return {
-                pass,
-                score: pass ? 1.0 : 0.0,
-                reason: pass ? 'Output contained substring' : 'Output did not contain substring',
-              };
-            },
-          },
-        ],
-      },
-    ],
-  });
-  console.log('RESULTS:');
-  console.log(results);
-})();
+// Access evaluation results
+console.log(
+  `Success rate: ${results.stats.successes}/${results.stats.successes + results.stats.failures}`,
+);
+console.log(`Token usage: ${results.stats.tokenUsage.total} tokens`);
 ```
 
-There's a full example on Github [here](https://github.com/promptfoo/promptfoo/tree/main/examples/node-package).
+### Advanced Usage with Functions
 
-Here's the example output in JSON format:
+```ts
+import promptfoo from 'promptfoo';
+
+const results = await promptfoo.evaluate({
+  // Dynamic prompts using functions
+  prompts: [
+    'Rephrase this in French: {{body}}',
+    (vars) => {
+      return `Rephrase this like a pirate: ${vars.body}`;
+    },
+  ],
+  // Multiple provider types
+  providers: [
+    'openai:gpt-4o-mini',
+    (prompt, context) => {
+      // Custom provider implementation
+      console.log(`Prompt: ${prompt}, vars: ${JSON.stringify(context.vars)}`);
+      return {
+        output: '<LLM output>',
+        tokenUsage: {
+          total: 10,
+          prompt: 5,
+          completion: 5,
+        },
+      };
+    },
+  ],
+  tests: [
+    {
+      vars: {
+        body: 'Hello world',
+      },
+    },
+    {
+      vars: {
+        body: "I'm hungry",
+      },
+      assert: [
+        {
+          type: 'javascript',
+          value: (output) => {
+            const pass = output.includes("J'ai faim");
+            return {
+              pass,
+              score: pass ? 1.0 : 0.0,
+              reason: pass ? 'Output contained substring' : 'Output did not contain substring',
+            };
+          },
+        },
+      ],
+    },
+  ],
+});
+```
+
+### Example Output
+
+The evaluation results include detailed information about each test:
 
 ```json
 {
@@ -243,7 +335,7 @@ Here's the example output in JSON format:
     },
     {
       "prompt": {
-        "raw": "Rephrase this in French: I&#39;m hungry",
+        "raw": "Rephrase this in French: I'm hungry",
         "display": "Rephrase this in French: {{body}}"
       },
       "vars": {
@@ -258,7 +350,6 @@ Here's the example output in JSON format:
         }
       }
     }
-    // ...
   ],
   "stats": {
     "successes": 4,
@@ -280,3 +371,131 @@ Here's the example output in JSON format:
   ]
 }
 ```
+
+### TypeScript Examples
+
+#### Basic TypeScript Usage
+
+```typescript
+import { evaluate, type TestSuiteConfiguration, type EvaluateOptions } from 'promptfoo';
+
+const config: TestSuiteConfiguration = {
+  prompts: ['Translate to {{language}}: {{text}}'],
+  providers: ['openai:gpt-4'],
+  tests: [
+    {
+      vars: {
+        language: 'French',
+        text: 'Hello world',
+      },
+      assert: [
+        {
+          type: 'contains',
+          value: 'Bonjour',
+        },
+      ],
+    },
+  ],
+};
+
+const options: EvaluateOptions = {
+  maxConcurrency: 2,
+  showProgressBar: true,
+};
+
+// Results are fully typed
+const results = await evaluate(config, options);
+console.log(`Passed tests: ${results.stats.successes}`);
+```
+
+#### Advanced TypeScript with Custom Types
+
+```typescript
+import {
+  type TestSuiteConfiguration,
+  type ProviderFunction,
+  type AtomicTestCase,
+  type Assertion,
+  type GradingResult,
+  assertions,
+} from 'promptfoo';
+
+// Custom provider with type safety
+const customProvider: ProviderFunction = async (prompt: string, context) => {
+  const response = await fetch('https://api.your-llm.com', {
+    method: 'POST',
+    body: JSON.stringify({ prompt, context }),
+  });
+
+  const data = await response.json();
+  return {
+    output: data.text,
+    tokenUsage: {
+      total: data.usage.total_tokens,
+      prompt: data.usage.prompt_tokens,
+      completion: data.usage.completion_tokens,
+    },
+  };
+};
+
+// Custom assertion with type safety
+const customAssertion: Assertion = {
+  type: 'javascript',
+  value: async (
+    output: string,
+    testCase: AtomicTestCase,
+    assertion: Assertion,
+  ): Promise<GradingResult> => {
+    const expectedLength = testCase.vars?.expectedLength as number;
+    const pass = output.length === expectedLength;
+
+    return {
+      pass,
+      score: pass ? 1 : 0,
+      reason: pass
+        ? `Output length ${output.length} matches expected length`
+        : `Output length ${output.length} does not match expected length ${expectedLength}`,
+    };
+  },
+};
+
+// Full configuration with types
+const config: TestSuiteConfiguration = {
+  prompts: [
+    // Static prompt
+    'Generate a {{length}} word story about {{topic}}',
+    // Function prompt with type safety
+    (vars: Record<string, unknown>) => {
+      return `Tell me a ${vars.length} word story about ${vars.topic}`;
+    },
+  ],
+  providers: ['openai:gpt-4', customProvider],
+  tests: [
+    {
+      vars: {
+        length: 50,
+        topic: 'space exploration',
+        expectedLength: 50,
+      },
+      assert: [
+        customAssertion,
+        {
+          type: 'javascript',
+          value: assertions.contains(['space', 'explore']),
+        },
+      ],
+    },
+  ],
+};
+
+const results = await evaluate(config);
+```
+
+For more examples, check out our [examples repository](https://github.com/promptfoo/promptfoo/tree/main/examples/node-package).
+
+## Related
+
+- [Configuration Reference](/docs/configuration/reference)
+- [Assertions & Metrics](/docs/configuration/expected-outputs/)
+- [LLM Red Teaming Guide](/docs/guides/llm-redteaming)
+- [FAQ](/docs/faq)
