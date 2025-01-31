@@ -85,6 +85,49 @@ assertion: Assertion | null;
 
 For more info on different assertion types, see [assertions & metrics](/docs/configuration/expected-outputs/).
 
+### Fetch Utilities
+
+promptfoo exports a cached fetch utility via its cache namespace that handles proxies, SSL certificates, caching, and rate limiting:
+
+```ts
+import { cache } from 'promptfoo';
+
+// Make a request with caching
+const response = await cache.fetchWithCache(
+  'https://api.example.com/data',
+  {
+    headers: { 'Content-Type': 'application/json' }
+  },
+  5000,           // timeout in ms
+  'json',         // response format ('json' or 'text')
+  false,          // whether to bust the cache
+  3               // optional number of retries
+);
+
+// Response includes cache status
+console.log(response.cached);  // boolean indicating if response was from cache
+console.log(response.data);    // the response data
+console.log(response.status);  // HTTP status code
+console.log(response.headers); // Response headers
+```
+
+The utility supports:
+- Response caching with configurable TTL
+- Proxy configuration via `HTTP_PROXY`/`HTTPS_PROXY` environment variables
+- Custom SSL certificates via `PROMPTFOO_CA_CERT_PATH`
+- SSL verification toggle via `PROMPTFOO_INSECURE_SSL`
+- Rate limit handling with exponential backoff
+- Request timeouts
+- Automatic retry on failures
+
+Cache behavior can be configured via environment variables:
+- `PROMPTFOO_CACHE_ENABLED`: Enable/disable caching (default: true)
+- `PROMPTFOO_CACHE_TYPE`: 'memory' or 'disk' (default: 'disk')
+- `PROMPTFOO_CACHE_PATH`: Custom cache directory path
+- `PROMPTFOO_CACHE_TTL`: Cache TTL in seconds (default: 14 days)
+
+For more details on proxy and SSL configuration, see the [FAQ](/docs/faq).
+
 ## Example
 
 `promptfoo` exports an `evaluate` function that you can use to run prompt evaluations.
