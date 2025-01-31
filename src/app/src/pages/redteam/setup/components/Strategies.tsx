@@ -42,7 +42,7 @@ const getStrategyId = (strategy: RedteamStrategy): string => {
 };
 
 // Add this constant at the top of the file to track which strategies have config options
-const CONFIGURABLE_STRATEGIES = ['basic', 'jailbreak', 'multilingual'] as const;
+const CONFIGURABLE_STRATEGIES = ['basic', 'jailbreak', 'multilingual', 'retry'] as const;
 
 // Split strategies into two groups
 const singleTurnStrategies = availableStrategies
