@@ -1,5 +1,4 @@
 import { VERSION } from '../../constants';
-import { runEval } from '../../evaluator';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import type { EvaluateResult } from '../../types';
@@ -140,6 +139,7 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
     context: CallApiContextParams,
     options?: CallApiOptionsParams,
   ) {
+    const { runEval } = await import('../../evaluator');
     const testForEval = { ...context?.test, provider: undefined };
 
     const targetProvider: ApiProvider | undefined = context?.originalProvider;
