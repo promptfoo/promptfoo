@@ -368,7 +368,7 @@ export function testCasesPrompt(
 
   Fully embody this persona and determine a value for each variable, such that the prompt would be sent by this persona.
 
-  You are a tester, so try to think of ${numTestCasesPerPersona} sets of values that would be interesting or unusual to test.${instructions ? ` ${instructions}` : ''}
+  You are a tester, so try to think of ${numTestCasesPerPersona} sets of values that would be interesting or unusual to test. ${instructions ? ` ${instructions}` : ''}
 
   Your response should contain a JSON map of variable names to values, of the form {vars: {${Array.from(
     variables,
@@ -479,12 +479,35 @@ export async function synthesize({
       personaResponseObjects.length >= 1,
       `Expected at least one JSON object in the response for persona ${persona}, got ${personaResponseObjects.length}`,
     );
-    const parsed = personaResponseObjects[0] as { vars: VarMapping[] };
-    logger.debug(`Received ${parsed.vars.length} test cases`);
-    if (progressBar) {
-      progressBar.increment(parsed.vars.length);
+
+    // Try to parse the response in different formats
+    // FIXME(ian): Remove all this and replace with structured output and/or better prompt.
+    const parsed = personaResponseObjects[0] as { vars?: VarMapping[] } | VarMapping[] | VarMapping;
+    let testCases: VarMapping[] = [];
+
+    if (Array.isArray(parsed)) {
+      // Handle array format
+      testCases = parsed.map((item) => {
+        // If item is already in the right format, use it
+        if (typeof item === 'object' && item !== null) {
+          return item as VarMapping;
+        }
+        // Otherwise wrap it in an object with the first variable name
+        return { [variables[0]]: item } as VarMapping;
+      });
+    } else if (parsed && 'vars' in parsed && Array.isArray(parsed.vars)) {
+      // Handle {vars: [...]} format
+      testCases = parsed.vars;
+    } else if (typeof parsed === 'object' && parsed !== null) {
+      // Handle single test case format
+      testCases = [parsed as VarMapping];
     }
-    return parsed.vars || [];
+
+    logger.debug(`Received ${testCases.length} test cases`);
+    if (progressBar) {
+      progressBar.increment(testCases.length);
+    }
+    return testCases;
   };
 
   let testCaseVars = await retryWithDeduplication(generateTestCasesForPersona, totalTestCases);
