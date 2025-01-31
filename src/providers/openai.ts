@@ -197,8 +197,10 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
 
 export function failApiCall(err: any) {
   if (err instanceof OpenAI.APIError) {
+    const errorType = err.error?.type || err.type || 'unknown';
+    const errorMessage = err.error?.message || err.message || 'Unknown error';
     return {
-      error: `API error: ${err.type} ${err.message}`,
+      error: `API error: ${errorType} ${errorMessage}`,
     };
   }
   return {
