@@ -46,7 +46,7 @@ export const OPENAI_CHAT_MODELS = [
       output: 12 / 1e6,
     },
   })),
-  ...['o3-mini', 'o3-mini-2024-09-12'].map((model) => ({
+  ...['o3-mini', 'o3-mini-2025-01-31'].map((model) => ({
     id: model,
     cost: {
       input: 1.1 / 1e6,
