@@ -3,18 +3,21 @@ import { getDb } from '../../database';
 import { evalResultsTable } from '../../database/tables';
 import logger from '../../logger';
 import type { TestCase, TestCaseWithPlugin } from '../../types';
+import { isApiProvider } from '../../types/providers';
+import invariant from '../../util/invariant';
 
-async function getFailedTestCases(pluginId: string): Promise<TestCase[]> {
+async function getFailedTestCases(pluginId: string, targetModel: string): Promise<TestCase[]> {
   const db = getDb();
+  const conditions = [
+    eq(evalResultsTable.success, false),
+    sql`json_extract(metadata, '$.pluginId') = ${pluginId}`,
+    sql`json_extract(provider, '$.id') = ${targetModel}`,
+  ];
+
   const results = await db
     .select()
     .from(evalResultsTable)
-    .where(
-      and(
-        eq(evalResultsTable.success, false),
-        sql`json_extract(metadata, '$.pluginId') = ${pluginId}`,
-      ),
-    )
+    .where(and(...conditions))
     .limit(100); // Reasonable limit to avoid performance issues
 
   return results.map((r) => r.testCase);
@@ -39,6 +42,21 @@ export async function addRetryTestCases(
 ): Promise<TestCase[]> {
   logger.debug('Adding retry test cases from previous failures');
 
+  // Get target model from config
+  let targetModel: string | undefined;
+  if (config.provider) {
+    if (typeof config.provider === 'string') {
+      targetModel = config.provider;
+    } else if (isApiProvider(config.provider)) {
+      targetModel = config.provider.id();
+    }
+  }
+
+  invariant(
+    targetModel,
+    'No target model found in config. The retry strategy requires a target model to be specified.',
+  );
+
   // Group test cases by plugin ID
   const testsByPlugin = new Map<string, TestCaseWithPlugin[]>();
   for (const test of testCases) {
@@ -56,8 +74,10 @@ export async function addRetryTestCases(
   // For each plugin, get its failed test cases
   const retryTestCases: TestCase[] = [];
   for (const [pluginId, tests] of testsByPlugin.entries()) {
-    const failedTests = await getFailedTestCases(pluginId);
-    logger.debug(`Found ${failedTests.length} failed test cases for plugin ${pluginId}`);
+    const failedTests = await getFailedTestCases(pluginId, targetModel);
+    logger.debug(
+      `Found ${failedTests.length} failed test cases for plugin ${pluginId} and model ${targetModel}`,
+    );
 
     // Combine current and failed tests, deduplicate, and take up to the configured number
     const combined = [...tests, ...failedTests];

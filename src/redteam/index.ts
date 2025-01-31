@@ -630,7 +630,7 @@ export async function synthesize({
   const { testCases: strategyTestCases, strategyResults: otherStrategyResults } =
     await applyStrategies(
       pluginTestCases,
-      strategies.filter((s) => s.id !== 'basic' && s.id !== 'multilingual' && s.id !== 'retry'),
+      strategies.filter((s) => !['basic', 'multilingual', 'retry'].includes(s.id)),
       injectVar,
     );
 
