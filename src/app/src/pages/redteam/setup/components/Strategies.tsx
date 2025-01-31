@@ -207,6 +207,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
                 p: 2,
                 height: '100%',
                 borderRadius: 2,
+                position: 'relative',
                 border: (theme) =>
                   selectedStrategies.some((s) => getStrategyId(s) === strategy.id)
                     ? `1px solid ${theme.palette.primary.main}`
@@ -224,16 +225,44 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
                 },
               }}
             >
+              {selectedStrategies.some((s) => getStrategyId(s) === strategy.id) &&
+                CONFIGURABLE_STRATEGIES.includes(
+                  strategy.id as (typeof CONFIGURABLE_STRATEGIES)[number],
+                ) && (
+                  <IconButton
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleConfigClick(strategy.id);
+                    }}
+                    sx={{
+                      position: 'absolute',
+                      top: 8,
+                      right: 8,
+                      opacity: 0.6,
+                      '&:hover': {
+                        opacity: 1,
+                        backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
+                      },
+                    }}
+                  >
+                    <SettingsOutlinedIcon fontSize="small" />
+                  </IconButton>
+                )}
               <Box
                 sx={{
                   display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start',
                   width: '100%',
                 }}
               >
                 <FormControlLabel
-                  sx={{ flex: 1 }}
+                  sx={{
+                    flex: 1,
+                    marginRight: 0,
+                    '& .MuiFormControlLabel-label': {
+                      width: '100%',
+                    },
+                  }}
                   control={
                     <Checkbox
                       checked={selectedStrategies.some((s) => getStrategyId(s) === strategy.id)}
@@ -242,9 +271,25 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
                     />
                   }
                   label={
-                    <Box>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography variant="subtitle1">{strategy.name}</Typography>
+                    <Box sx={{ width: '100%' }}>
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                          flexWrap: 'wrap',
+                          pr: 1,
+                        }}
+                      >
+                        <Typography
+                          variant="subtitle1"
+                          sx={{
+                            minWidth: 0,
+                            flexShrink: 1,
+                          }}
+                        >
+                          {strategy.name}
+                        </Typography>
                         {DEFAULT_STRATEGIES.includes(
                           strategy.id as (typeof DEFAULT_STRATEGIES)[number],
                         ) && <Chip label="Recommended" size="small" color="default" />}
@@ -272,28 +317,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
                     </Box>
                   }
                 />
-                {selectedStrategies.some((s) => getStrategyId(s) === strategy.id) &&
-                  CONFIGURABLE_STRATEGIES.includes(
-                    strategy.id as (typeof CONFIGURABLE_STRATEGIES)[number],
-                  ) && (
-                    <IconButton
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleConfigClick(strategy.id);
-                      }}
-                      sx={{
-                        ml: 1,
-                        opacity: 0.6,
-                        '&:hover': {
-                          opacity: 1,
-                          backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
-                        },
-                      }}
-                    >
-                      <SettingsOutlinedIcon fontSize="small" />
-                    </IconButton>
-                  )}
               </Box>
             </Paper>
           </Grid>
@@ -312,6 +335,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
                 p: 2,
                 height: '100%',
                 borderRadius: 2,
+                position: 'relative',
                 border: (theme) =>
                   selectedStrategies.some((s) => getStrategyId(s) === strategy.id)
                     ? `1px solid ${theme.palette.primary.main}`
@@ -329,16 +353,44 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
                 },
               }}
             >
+              {selectedStrategies.some((s) => getStrategyId(s) === strategy.id) &&
+                CONFIGURABLE_STRATEGIES.includes(
+                  strategy.id as (typeof CONFIGURABLE_STRATEGIES)[number],
+                ) && (
+                  <IconButton
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleConfigClick(strategy.id);
+                    }}
+                    sx={{
+                      position: 'absolute',
+                      top: 8,
+                      right: 8,
+                      opacity: 0.6,
+                      '&:hover': {
+                        opacity: 1,
+                        backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
+                      },
+                    }}
+                  >
+                    <SettingsOutlinedIcon fontSize="small" />
+                  </IconButton>
+                )}
               <Box
                 sx={{
                   display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start',
                   width: '100%',
                 }}
               >
                 <FormControlLabel
-                  sx={{ flex: 1 }}
+                  sx={{
+                    flex: 1,
+                    marginRight: 0,
+                    '& .MuiFormControlLabel-label': {
+                      width: '100%',
+                    },
+                  }}
                   control={
                     <Checkbox
                       checked={selectedStrategies.some((s) => getStrategyId(s) === strategy.id)}
@@ -347,9 +399,25 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
                     />
                   }
                   label={
-                    <Box>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography variant="subtitle1">{strategy.name}</Typography>
+                    <Box sx={{ width: '100%' }}>
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                          flexWrap: 'wrap',
+                          pr: 1,
+                        }}
+                      >
+                        <Typography
+                          variant="subtitle1"
+                          sx={{
+                            minWidth: 0,
+                            flexShrink: 1,
+                          }}
+                        >
+                          {strategy.name}
+                        </Typography>
                         {DEFAULT_STRATEGIES.includes(
                           strategy.id as (typeof DEFAULT_STRATEGIES)[number],
                         ) && <Chip label="Recommended" size="small" color="default" />}
@@ -377,28 +445,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
                     </Box>
                   }
                 />
-                {selectedStrategies.some((s) => getStrategyId(s) === strategy.id) &&
-                  CONFIGURABLE_STRATEGIES.includes(
-                    strategy.id as (typeof CONFIGURABLE_STRATEGIES)[number],
-                  ) && (
-                    <IconButton
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleConfigClick(strategy.id);
-                      }}
-                      sx={{
-                        ml: 1,
-                        opacity: 0.6,
-                        '&:hover': {
-                          opacity: 1,
-                          backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
-                        },
-                      }}
-                    >
-                      <SettingsOutlinedIcon fontSize="small" />
-                    </IconButton>
-                  )}
               </Box>
             </Paper>
           </Grid>
