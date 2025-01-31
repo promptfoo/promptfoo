@@ -7,6 +7,7 @@ const categoryOrder: (typeof strategies)[number]['category'][] = [
   'Static (Single-Turn)',
   'Dynamic (Single-Turn)',
   'Multi-turn',
+  'Regression',
   'Custom',
 ];
 

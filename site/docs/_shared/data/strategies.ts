@@ -202,7 +202,7 @@ export const strategies: Strategy[] = [
     link: '/docs/red-team/strategies/rot13/',
   },
   {
-    category: 'Static (Single-Turn)',
+    category: 'Regression',
     strategy: 'retry',
     displayName: 'Retry',
     description: 'Historical failure testing',
