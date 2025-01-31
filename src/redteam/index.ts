@@ -126,8 +126,8 @@ const categories = {
  */
 const formatTestCount = (numTests: number, strategy: boolean): string =>
   numTests === 1
-    ? `1 test${strategy ? ' additional' : ''}`
-    : `${numTests} tests${strategy ? ' additional' : ''}`;
+    ? `1 ${strategy ? 'additional' : ''} test`
+    : `${numTests} ${strategy ? 'additional' : ''} tests`;
 
 /**
  * Checks if a plugin matches any of the strategy's target plugins
@@ -416,10 +416,7 @@ export async function synthesize({
         strategies
           .filter((s) => s.id !== 'basic')
           .map((s) => {
-            const testCount =
-              s.id === 'retry'
-                ? totalPluginTests // For retry, show additional test count
-                : getTestCount(s, totalPluginTests, strategies);
+            const testCount = getTestCount(s, totalPluginTests, strategies);
             return `${s.id} (${formatTestCount(testCount, true)})`;
           })
           .sort()
