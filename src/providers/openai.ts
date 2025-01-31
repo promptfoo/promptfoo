@@ -436,6 +436,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       ...(stop ? { stop } : {}),
       ...(this.config.passthrough || {}),
     };
+
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
     let data,
       cached = false;
@@ -518,17 +519,17 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
     // NOTE: Special handling for o1 models which do not support max_tokens and temperature
-    const isO1Model = this.modelName.startsWith('o1');
-    const maxCompletionTokens = isO1Model
+    const isO1orO3Model = this.modelName.startsWith('o1') || this.modelName.startsWith('o3');
+    const maxCompletionTokens = isO1orO3Model
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
-    const maxTokens = isO1Model
+    const maxTokens = isO1orO3Model
       ? undefined
       : (config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024));
-    const temperature = isO1Model
+    const temperature = isO1orO3Model
       ? undefined
       : (config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0));
-    const reasoningEffort = isO1Model
+    const reasoningEffort = isO1orO3Model
       ? renderVarsInObject(config.reasoning_effort, context?.vars)
       : undefined;
 
