@@ -5,7 +5,6 @@ import logger from '../src/logger';
 jest.mock('../package.json', () => ({
   engines: { node: '>=18.0.1' },
 }));
-jest.mock('../src/logger');
 
 const setNodeVersion = (version: string) => {
   Object.defineProperty(process, 'version', {

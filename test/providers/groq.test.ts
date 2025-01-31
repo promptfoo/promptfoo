@@ -14,7 +14,6 @@ jest.mock('groq-sdk', () => {
     })),
   };
 });
-jest.mock('../../src/logger');
 jest.mock('../../src/util', () => ({
   maybeLoadFromExternalFile: jest.fn(),
   renderVarsInObject: jest.fn(),

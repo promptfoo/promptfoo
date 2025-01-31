@@ -8,10 +8,7 @@ jest.mock('child_process');
 jest.mock('../../src/cache');
 jest.mock('fs');
 jest.mock('path');
-jest.mock('../../src/logger', () => ({
-  debug: jest.fn(),
-  error: jest.fn(),
-}));
+
 jest.mock('../../src/util', () => {
   const actual = jest.requireActual('../../src/util');
   return {

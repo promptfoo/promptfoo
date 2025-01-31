@@ -4,7 +4,6 @@ import logger from '../../../src/logger';
 import { processYamlFile } from '../../../src/prompts/processors/yaml';
 
 jest.mock('fs');
-jest.mock('../../../src/logger');
 
 describe('processYamlFile', () => {
   const mockReadFileSync = jest.mocked(fs.readFileSync);

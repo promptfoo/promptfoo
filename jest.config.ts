@@ -8,7 +8,7 @@ const config: Config = {
   extensionsToTreatAsEsm: ['.ts'],
   modulePathIgnorePatterns: ['<rootDir>/dist', '<rootDir>/examples', '<rootDir>/node_modules'],
   setupFiles: ['<rootDir>/.jest/setEnvVars.js'],
-  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   testPathIgnorePatterns: [
     '.*\\.test\\.tsx$',
     '.*\\.integration\\.test\\.ts$',

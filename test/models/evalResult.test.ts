@@ -53,11 +53,7 @@ describe('EvalResult', () => {
   describe('createFromEvaluateResult', () => {
     it('should create and persist an EvalResult', async () => {
       const evalId = 'test-eval-id';
-      const result = await EvalResult.createFromEvaluateResult(
-        evalId,
-        mockEvaluateResult,
-        mockTestCase,
-      );
+      const result = await EvalResult.createFromEvaluateResult(evalId, mockEvaluateResult);
 
       expect(result).toBeInstanceOf(EvalResult);
       expect(result.evalId).toBe(evalId);
@@ -72,12 +68,9 @@ describe('EvalResult', () => {
 
     it('should create without persisting when persist option is false', async () => {
       const evalId = 'test-eval-id';
-      const result = await EvalResult.createFromEvaluateResult(
-        evalId,
-        mockEvaluateResult,
-        mockTestCase,
-        { persist: false },
-      );
+      const result = await EvalResult.createFromEvaluateResult(evalId, mockEvaluateResult, {
+        persist: false,
+      });
 
       expect(result).toBeInstanceOf(EvalResult);
       expect(result.persisted).toBe(false);
@@ -112,11 +105,8 @@ describe('EvalResult', () => {
         evalId,
         {
           ...mockEvaluateResult,
-          provider: serializedProvider, // Use pre-serialized provider
-        },
-        {
-          ...testCaseWithCircular,
-          provider: serializedProvider, // Use pre-serialized provider
+          provider: serializedProvider, // Use pre-serialized provider,
+          testCase: testCaseWithCircular,
         },
         { persist: true },
       );
@@ -163,8 +153,9 @@ describe('EvalResult', () => {
         {
           ...mockEvaluateResult,
           provider: providerWithNestedData,
+          testCase: testCaseWithNestedData,
         },
-        testCaseWithNestedData,
+
         { persist: true },
       );
 
@@ -183,23 +174,17 @@ describe('EvalResult', () => {
       const evalId = 'test-eval-id-multiple';
 
       // Create multiple results
-      await EvalResult.createFromEvaluateResult(
-        evalId,
-        {
-          ...mockEvaluateResult,
-          testIdx: 0,
-        },
-        mockTestCase,
-      );
+      await EvalResult.createFromEvaluateResult(evalId, {
+        ...mockEvaluateResult,
+        testIdx: 0,
+        testCase: mockTestCase,
+      });
 
-      await EvalResult.createFromEvaluateResult(
-        evalId,
-        {
-          ...mockEvaluateResult,
-          testIdx: 1,
-        },
-        mockTestCase,
-      );
+      await EvalResult.createFromEvaluateResult(evalId, {
+        ...mockEvaluateResult,
+        testIdx: 1,
+        testCase: mockTestCase,
+      });
 
       const results = await EvalResult.findManyByEvalId(evalId);
       expect(results).toHaveLength(2);
@@ -210,23 +195,17 @@ describe('EvalResult', () => {
     it('should filter by testIdx when provided', async () => {
       const evalId = 'test-eval-id-filter';
 
-      await EvalResult.createFromEvaluateResult(
-        evalId,
-        {
-          ...mockEvaluateResult,
-          testIdx: 0,
-        },
-        mockTestCase,
-      );
+      await EvalResult.createFromEvaluateResult(evalId, {
+        ...mockEvaluateResult,
+        testIdx: 0,
+        testCase: mockTestCase,
+      });
 
-      await EvalResult.createFromEvaluateResult(
-        evalId,
-        {
-          ...mockEvaluateResult,
-          testIdx: 1,
-        },
-        mockTestCase,
-      );
+      await EvalResult.createFromEvaluateResult(evalId, {
+        ...mockEvaluateResult,
+        testIdx: 1,
+        testCase: mockTestCase,
+      });
 
       const results = await EvalResult.findManyByEvalId(evalId, { testIdx: 0 });
       expect(results).toHaveLength(1);
@@ -260,11 +239,7 @@ describe('EvalResult', () => {
     });
 
     it('should update existing results', async () => {
-      const result = await EvalResult.createFromEvaluateResult(
-        'test-eval-id',
-        mockEvaluateResult,
-        mockTestCase,
-      );
+      const result = await EvalResult.createFromEvaluateResult('test-eval-id', mockEvaluateResult);
 
       result.score = 0.5;
       await result.save();
@@ -276,11 +251,7 @@ describe('EvalResult', () => {
 
   describe('toEvaluateResult', () => {
     it('should convert EvalResult to EvaluateResult format', async () => {
-      const result = await EvalResult.createFromEvaluateResult(
-        'test-eval-id',
-        mockEvaluateResult,
-        mockTestCase,
-      );
+      const result = await EvalResult.createFromEvaluateResult('test-eval-id', mockEvaluateResult);
 
       const evaluateResult = result.toEvaluateResult();
 

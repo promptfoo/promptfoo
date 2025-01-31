@@ -5,7 +5,6 @@ import { BrowserBehavior } from '../../src/util/server';
 import { checkServerRunning, openBrowser } from '../../src/util/server';
 
 jest.mock('opener');
-jest.mock('../../src/logger');
 jest.mock('readline');
 
 const mockFetch = jest.fn();

@@ -38,7 +38,6 @@ jest.mock('../../src/esm', () => {
     importModule: jest.fn(actual.importModule),
   };
 });
-jest.mock('../../src/logger');
 jest.mock('../../src/python/wrapper');
 jest.mock('../../src/prompts/utils', () => {
   const actual = jest.requireActual('../../src/prompts/utils');

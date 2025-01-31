@@ -150,3 +150,13 @@ export interface SavedRedteamConfig {
   entities: string[];
   defaultTest?: TestCase;
 }
+
+/**
+ * Base metadata interface shared by all redteam providers
+ */
+export interface BaseRedteamMetadata {
+  redteamFinalPrompt?: string;
+  messages: Record<string, any>[];
+  stopReason: string;
+  redteamHistory?: { prompt: string; output: string }[];
+}

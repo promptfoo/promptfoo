@@ -25,7 +25,6 @@ jest.mock('../../src/esm', () => ({
     return mockModule;
   }),
 }));
-jest.mock('../../src/logger');
 
 describe('isPackagePath', () => {
   it('should return true for package paths', () => {
