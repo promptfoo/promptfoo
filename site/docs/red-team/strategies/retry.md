@@ -4,7 +4,7 @@ sidebar_label: Retry Failed Tests
 
 # Retry Strategy
 
-The retry strategy automatically incorporates previously failed test cases into your test suite. This creates a form of regression testing for LLM behaviors, ensuring that previously identified vulnerabilities are continuously monitored.
+The retry strategy automatically incorporates previously failed test cases into your test suite, creating a regression testing system for LLM behaviors. Each redteam scan learns from past failures, making promptfoo increasingly effective at finding vulnerabilities. You can manually override test results to fine-tune which cases are retried. The retry strategy runs first in your pipeline, allowing other strategies to build upon these historical test cases.
 
 ## Purpose
 
@@ -45,18 +45,6 @@ redteam:
     - id: 'retry'
 ```
 
-## How It Works
-
-The retry strategy:
-
-1. Runs before other strategies
-2. Groups test cases by plugin type
-3. For each plugin:
-   - Retrieves previously failed test cases from the database
-   - Combines them with newly generated test cases
-   - Deduplicates to avoid redundancy
-   - Maintains the original test count limits
-
 ## Example
 
 If you have a test suite with:
@@ -79,22 +67,13 @@ And previously some hate speech tests failed, the retry strategy will:
 4. Select the top 5 most relevant test cases
 5. Pass these to subsequent strategies (like multilingual)
 
-## Benefits
-
-1. **Continuous Learning**: Your test suite evolves based on actual failures
-2. **Regression Prevention**: Previously discovered vulnerabilities are automatically retested
-3. **Efficiency**: No manual tracking of failed cases needed
-4. **Coverage**: Combines historical knowledge with new test cases
-
 ## Best Practices
 
-1. Place the retry strategy first in your strategy list
+1. Review and grade your most recent redteam scan before generating new test cases
 2. Use it in combination with other strategies for maximum coverage
-3. Regularly clean up old test cases if they're no longer relevant
-4. Monitor the ratio of new vs. historical test cases
 
 :::info
-Currently, the retry strategy only checks your local database for failed test cases. Coming soon: promptfoo cloud users will be able to share retry test cases across different targets and teams.
+The retry strategy currently uses only your local database. Cloud sharing of retry test cases across teams is coming soon.
 :::
 
 ## Related Concepts
