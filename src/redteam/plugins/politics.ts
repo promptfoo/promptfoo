@@ -136,3 +136,5 @@ export class PoliticsGrader extends RedteamGraderBase {
     ];
   }
 }
+
+export { DEFAULT_EXAMPLES };
