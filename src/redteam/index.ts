@@ -609,13 +609,32 @@ export async function synthesize({
   // After generating plugin test cases but before applying strategies:
   const pluginTestCases = testCases;
 
+  // Initialize strategy results
+  const strategyResults: Record<string, { requested: number; generated: number }> = {};
+
+  // Apply retry strategy first if it exists
+  const retryStrategy = strategies.find((s) => s.id === 'retry');
+  if (retryStrategy) {
+    logger.debug('Applying retry strategy first');
+    const { testCases: retryTestCases, strategyResults: retryResults } = await applyStrategies(
+      pluginTestCases,
+      [retryStrategy],
+      injectVar,
+    );
+    pluginTestCases.push(...retryTestCases);
+    Object.assign(strategyResults, retryResults);
+  }
+
   // Check for abort signal or apply non-basic, non-multilingual strategies
   checkAbort();
-  const { testCases: strategyTestCases, strategyResults } = await applyStrategies(
-    pluginTestCases,
-    strategies.filter((s) => s.id !== 'basic' && s.id !== 'multilingual'),
-    injectVar,
-  );
+  const { testCases: strategyTestCases, strategyResults: otherStrategyResults } =
+    await applyStrategies(
+      pluginTestCases,
+      strategies.filter((s) => s.id !== 'basic' && s.id !== 'multilingual' && s.id !== 'retry'),
+      injectVar,
+    );
+
+  Object.assign(strategyResults, otherStrategyResults);
 
   // Combine test cases based on basic strategy setting
   const finalTestCases = [...(includeBasicTests ? pluginTestCases : []), ...strategyTestCases];

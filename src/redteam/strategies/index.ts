@@ -18,6 +18,7 @@ import { addLikertTestCases } from './likert';
 import { addMathPrompt } from './mathPrompt';
 import { addMultilingual } from './multilingual';
 import { addInjections } from './promptInjections';
+import { addRetryTestCases } from './retry';
 import { addRot13 } from './rot13';
 import { addCompositeTestCases } from './singleTurnComposite';
 
@@ -171,6 +172,15 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding GCG test cases to ${testCases.length} test cases`);
       const newTestCases = await addGcgTestCases(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} GCG test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'retry',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding retry test cases to ${testCases.length} test cases`);
+      const newTestCases = await addRetryTestCases(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} retry test cases`);
       return newTestCases;
     },
   },
