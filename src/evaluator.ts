@@ -16,6 +16,7 @@ import logger from './logger';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureUtil';
+import type RedteamPandamoniumProvider from './redteam/providers/pandamonium';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import type { EvalConversations, EvalRegisters, TokenUsage, Vars } from './types';
@@ -111,6 +112,7 @@ export async function runEval({
   conversations, //
   registers,
   isRedteam,
+  allTests,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
   // Use the original prompt to set the label, not renderedPrompt
   const promptLabel = prompt.label;
@@ -168,6 +170,16 @@ export async function runEval({
 
     if (test.providerOutput) {
       response.output = test.providerOutput;
+    } else if (
+      typeof test.provider === 'object' &&
+      typeof test.provider.id === 'function' &&
+      test.provider.id() === 'promptfoo:redteam:pandamonium'
+    ) {
+      return await (test.provider as RedteamPandamoniumProvider).runPandamonium(
+        provider,
+        test,
+        allTests || [],
+      );
     } else {
       response = await ((test.provider as ApiProvider) || provider).callApi(
         renderedPrompt,
@@ -190,10 +202,6 @@ export async function runEval({
           includeLogProbs: test.assert?.some((a) => a.type === 'perplexity'),
         },
       );
-    }
-
-    if (response.resultsList && response.resultsList.length > 0) {
-      return response.resultsList;
     }
     const endTime = Date.now();
     latencyMs = endTime - startTime;
@@ -667,6 +675,7 @@ class Evaluator {
                 conversations: this.conversations,
                 registers: this.registers,
                 isRedteam: this.testSuite.redteam != null,
+                allTests: runEvalOptions,
               });
               promptIdx++;
             }

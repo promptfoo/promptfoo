@@ -2,15 +2,13 @@ import { z } from 'zod';
 import { getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
-import type { EvaluateResult } from '../../types';
+import type { AtomicTestCase, EvaluateResult, RunEvalOptions, TestSuite } from '../../types';
 import type {
   ApiProvider,
   CallApiContextParams,
-  CallApiOptionsParams,
   ProviderOptions,
   ProviderResponse,
 } from '../../types/providers';
-import { globalContext } from '../../util/globalContext';
 import invariant from '../../util/invariant';
 import { type HarmPlugin, HARM_PLUGINS } from '../constants';
 import { neverGenerateRemote } from '../remoteGeneration';
@@ -88,26 +86,21 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
     this.maxTurns = options.maxTurns || 1000;
   }
 
-  async callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
-    if (context == null) {
-      throw Error('context is null');
-    }
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    throw new Error('Pandamonium is not a real provider. Call runPandamonium instead.');
+  }
 
+  async runPandamonium(
+    targetProvider: ApiProvider,
+    test: AtomicTestCase,
+    allTests: RunEvalOptions[],
+  ): Promise<EvaluateResult[]> {
     const results: EvaluateResult[] = [];
-    const targetProvider: ApiProvider | undefined = context?.originalProvider;
-    invariant(targetProvider, 'Expected originalProvider to be set');
 
     let runId: string | undefined = undefined;
     this.log(`Starting pandamonium, hold on tight`, 'info');
 
-    const runEvalOptions = globalContext.getRunEvalOptions();
-    invariant(runEvalOptions, 'Expected run eval options to be set');
-
-    const testCases = runEvalOptions.reduce(
+    const testCases = allTests.reduce(
       (acc, t) => {
         const pluginId = t.test.metadata?.pluginId;
         invariant(t.test.vars, 'Expected test vars to be set');
@@ -171,7 +164,7 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
         this.log(`Received ${data.testCases.length} test cases`, 'debug');
 
         // Call target with the test cases
-        const result = await this.callTarget(parsedData.testCases, context, options);
+        const result = await this.callTarget(parsedData.testCases, test, targetProvider);
 
         if (!result?.length) {
           this.log(`No result from target provider, continuing`, 'info');
@@ -203,33 +196,23 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
         }
       }
 
-      return {
-        resultsList: results,
-      };
+      return results;
     } catch (err) {
       this.log(`Error during pandamonium run: ${err}`, 'error');
     }
 
     this.log(`Epic Panda fail, no jailbreak found after ${results.length} probes. :(`, 'info');
-    return {
-      output: undefined,
-      metadata: {},
-      tokenUsage: undefined,
-      guardrails: undefined,
-      resultsList: results,
-    };
+    return results;
   }
 
   async callTarget(
     tests: { pluginId: string; prompt: string; program: string }[],
-    context: CallApiContextParams,
-    options?: CallApiOptionsParams,
+    test: AtomicTestCase,
+    targetProvider: ApiProvider,
   ) {
     const { runEval } = await import('../../evaluator');
-    const testForEval = { ...context?.test, provider: undefined };
+    const testForEval = { ...test, provider: undefined };
 
-    const targetProvider: ApiProvider | undefined = context?.originalProvider;
-    invariant(targetProvider, 'Expected originalProvider to be set');
     const results: { result: EvaluateResult; program: string; pluginId: string }[] = [];
     let i = 0;
     for (const test of tests) {
