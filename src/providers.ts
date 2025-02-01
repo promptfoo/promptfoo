@@ -34,21 +34,21 @@ import {
 } from './providers/huggingface';
 import { LlamaProvider } from './providers/llama';
 import {
-  LocalAiCompletionProvider,
   LocalAiChatProvider,
+  LocalAiCompletionProvider,
   LocalAiEmbeddingProvider,
 } from './providers/localai';
 import { ManualInputProvider } from './providers/manualInput';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './providers/mistral';
 import {
-  OllamaEmbeddingProvider,
-  OllamaCompletionProvider,
   OllamaChatProvider,
+  OllamaCompletionProvider,
+  OllamaEmbeddingProvider,
 } from './providers/ollama';
 import {
   OpenAiAssistantProvider,
-  OpenAiCompletionProvider,
   OpenAiChatCompletionProvider,
+  OpenAiCompletionProvider,
   OpenAiEmbeddingProvider,
   OpenAiImageProvider,
   OpenAiModerationProvider,
@@ -71,6 +71,7 @@ import { WatsonXProvider } from './providers/watsonx';
 import { WebhookProvider } from './providers/webhook';
 import { WebSocketProvider } from './providers/websocket';
 import { createXAIProvider } from './providers/xai';
+import RedteamAutoDanProvider from './redteam/providers/autodan';
 import RedteamBestOfNProvider from './redteam/providers/bestOfN';
 import RedteamCrescendoProvider from './redteam/providers/crescendo';
 import RedteamGoatProvider from './redteam/providers/goat';
@@ -532,6 +533,8 @@ export async function loadApiProvider(
     ret = new RedteamImageIterativeProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:redteam:iterative:tree') {
     ret = new RedteamIterativeTreeProvider(providerOptions.config);
+  } else if (providerPath === 'promptfoo:redteam:autodan') {
+    ret = new RedteamAutoDanProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:simulated-user') {
     ret = new SimulatedUser(providerOptions);
   } else if (providerPath === 'sequence') {
