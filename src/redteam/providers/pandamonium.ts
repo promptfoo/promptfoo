@@ -15,6 +15,7 @@ import { type HarmPlugin, HARM_PLUGINS } from '../constants';
 import { neverGenerateRemote } from '../remoteGeneration';
 
 const CURRENT_VERSION = 1;
+const TIMEOUT = 120000;
 const StartResponseSchema = z.object({
   id: z.string(),
   iteration: z.number(),
@@ -124,14 +125,18 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
 
     // Start the run
     try {
-      const startResponse = await fetchWithRetries(`${this.baseUrl}/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          testCases,
-          email: getUserEmail(),
-        }),
-      });
+      const startResponse = await fetchWithRetries(
+        `${this.baseUrl}/start`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            testCases,
+            email: getUserEmail(),
+          }),
+        },
+        TIMEOUT,
+      );
       const startData = await startResponse.json();
       const parsedStartData = StartResponseSchema.parse(startData);
       if (parsedStartData.version !== CURRENT_VERSION) {
@@ -145,14 +150,18 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
         this.log(`Starting iteration ${turn}`, 'debug');
 
         // Get next iteration
-        const nextResponse = await fetchWithRetries(`${this.baseUrl}/next`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: runId,
-            email: getUserEmail(),
-          }),
-        });
+        const nextResponse = await fetchWithRetries(
+          `${this.baseUrl}/next`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: runId,
+              email: getUserEmail(),
+            }),
+          },
+          TIMEOUT,
+        );
 
         const data = await nextResponse.json();
         const parsedData = NextResponseSchema.parse(data);
@@ -184,16 +193,20 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
           );
 
           // Report success
-          await fetchWithRetries(`${this.baseUrl}/success`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              id: runId,
-              pluginId: successfulResult.pluginId,
-              h4rm3lProgram: successfulResult.program,
-              email: getUserEmail(),
-            }),
-          });
+          await fetchWithRetries(
+            `${this.baseUrl}/success`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                id: runId,
+                pluginId: successfulResult.pluginId,
+                h4rm3lProgram: successfulResult.program,
+                email: getUserEmail(),
+              }),
+            },
+            TIMEOUT,
+          );
         }
       }
 
