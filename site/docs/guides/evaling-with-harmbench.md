@@ -6,18 +6,15 @@ sidebar_label: Evaluating LLM safety with HarmBench
 
 Recent research has shown that even the most advanced LLMs remain vulnerable to adversarial attacks. Recent reports from security researchers have documented threat actors exploiting these vulnerabilities to generate malware variants and evade detection systems [[1]](https://unit42.paloaltonetworks.com/using-llms-obfuscate-malicious-javascript/)[[2]](https://www.proofpoint.com/uk/blog/threat-insight/security-brief-ta547-targets-german-organizations-rhadamanthys-stealer)[[3]](https://unit42.paloaltonetworks.com/jailbreaking-deepseek-three-techniques/), highlighting the importance of robust safety testing for any LLM-powered application.
 
-A study from early 2024 study by Stanford researchers found that GPT-4 could be jailbroken with a 67% success rate using carefully crafted prompts, while Claude 2 showed similar vulnerabilities at 69% [according to their analysis of attack attempts](https://arxiv.org/abs/2402.09154).
-
 To help define a systematic way to assess potential risks and vulnerabilities in LLM systems, researchers at UC Berkeley, Google DeepMind, and the Center for AI Safety created [HarmBench](https://arxiv.org/abs/2402.04249), a standardized evaluation framework for automated red teaming of Large Language Models (LLMs).
 
 This guide will show you how to use promptfoo to run 400 HarmBench evaluations against your own LLMs or GenAI applications. Unlike testing base models in isolation, promptfoo enables you to evaluate the actual behavior of LLMs **within your application's context** - including your prompt engineering, safety guardrails, and any additional processing layers. This is important for several reasons:
 
-- Safety properties of base models may not transfer to your specific use case
-- Your application's prompt engineering and context can significantly impact model behavior
-- Custom guardrails and post-processing need to be evaluated end-to-end
-- Different deployment configurations may affect safety characteristics
+- Safety properties of base models may not transfer to your specific use case.
+- Your application's prompt engineering and context can significantly impact model behavior. Even refusal-trained LLMs operating outside of a chat context can still easily be [jailbroken](https://arxiv.org/abs/2410.13886).
+- The application may have its own logic, rules, or filters that, when combined with the LLM's output, can lead to unintended consequences or harmful outputs.
 
-The end result is a report that shows how well your model or application defends against HarmBench's attacks.
+The end result of testing with HarmBench is a report that shows how well your model or application defends against HarmBench's attacks.
 
 ![harmbench evaluation results](/img/docs/harmbench-results.png)
 
@@ -104,15 +101,11 @@ targets:
 
 While HarmBench provides valuable insights through its static dataset, it's most effective when combined with other red teaming approaches. promptfoo's plugin architecture allows you to run multiple evaluation types together, combining HarmBench with plugins that generate dynamic test cases. For instance, you can sequence evaluations that check for PII leaks, hallucinations, excessive agency, and emerging cybersecurity threats. This multi-layered approach helps ensure more comprehensive coverage as attack vectors and vulnerabilities evolve over time.
 
-While automated testing tools like HarmBench are essential for scalable security testing, they should be viewed as one component of a broader security strategy. Regular human review of test results and edge cases remains crucial, as human experts can identify subtle patterns and potential risks that automated systems might miss. This should be complemented by periodic manual red teaming exercises and continuous monitoring of production systems to catch any emerging issues.
-
-Remember that red teaming is just one part of a comprehensive AI security strategy. Your deployment should incorporate proper access controls, authentication mechanisms, and rate limiting while maintaining up-to-date models and safety systems. Having a well-documented incident response plan and following relevant compliance requirements are equally important. Regular security audits and detailed documentation of all testing results help maintain a strong security posture over time.
-
 For more information, see:
 
 - [HarmBench paper](https://arxiv.org/abs/2402.04249)
 - [HarmBench GitHub repository](https://github.com/centerforaisafety/HarmBench)
-- [Evaluating LLM safety with HarmBench](/docs/guides/evaling-with-harmbench)
-- [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)
+- [HarmBench Propmtfoo plugin](/docs/red-team/plugins/harmbench)
 - [Promptfoo red teaming guide](/docs/red-team/quickstart)
+- [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)
 - [CybersecEval](/blog/cyberseceval)
