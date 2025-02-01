@@ -1,6 +1,6 @@
 // We are mocking the dynamic import of runEval inside callTarget.
 import { runEval } from '../../../src/evaluator';
-import { fetchWithProxy } from '../../../src/fetch';
+import { fetchWithRetries } from '../../../src/fetch';
 import RedteamPandamoniumProvider from '../../../src/redteam/providers/pandamonium';
 import type { AtomicTestCase, RunEvalOptions } from '../../../src/types';
 
@@ -8,7 +8,7 @@ jest.mock('../../../src/evaluator', () => ({
   runEval: jest.fn(),
 }));
 jest.mock('../../../src/fetch', () => ({
-  fetchWithProxy: jest.fn(),
+  fetchWithRetries: jest.fn(),
 }));
 // Dummy target provider stub
 const dummyTargetProvider = { id: jest.fn(), callApi: jest.fn() };
@@ -42,7 +42,7 @@ describe('RedteamPandamoniumProvider', () => {
     // Instantiate the provider
     const provider = new RedteamPandamoniumProvider({ injectVar: 'example' });
 
-    // For runPandamonium, we expect two calls to fetchWithProxy:
+    // For runPandamonium, we expect two calls to fetchWithRetries:
     // 1. /start endpoint
     // 2. /next endpoint (which returns no test cases so that the loop breaks)
     const startResponse = {
@@ -66,7 +66,7 @@ describe('RedteamPandamoniumProvider', () => {
     };
 
     jest
-      .mocked(fetchWithProxy)
+      .mocked(fetchWithRetries)
       .mockResolvedValueOnce(startResponse as any) // for /start
       .mockResolvedValueOnce(nextResponse as any); // for /next
 
@@ -74,7 +74,7 @@ describe('RedteamPandamoniumProvider', () => {
     expect(results).toEqual([]);
 
     // Verify that /start and /next endpoints were called.
-    const calls = jest.mocked(fetchWithProxy).mock.calls;
+    const calls = jest.mocked(fetchWithRetries).mock.calls;
     expect(calls.some((call) => (call[0] as string).includes('/start'))).toBe(true);
     expect(calls.some((call) => (call[0] as string).includes('/next'))).toBe(true);
   });
@@ -101,7 +101,7 @@ describe('RedteamPandamoniumProvider', () => {
     // Set maxTurns to 2 to limit the iterations of the pandamonium loop.
     const provider = new RedteamPandamoniumProvider({ injectVar: 'example', maxTurns: 2 });
 
-    // Set up sequential mocked responses for the network calls via fetchWithProxy:
+    // Set up sequential mocked responses for the network calls via fetchWithRetries:
     // 1. For the /start endpoint.
     // 2. First call to /next returns a test case.
     // 3. The /success endpoint call.
@@ -148,7 +148,7 @@ describe('RedteamPandamoniumProvider', () => {
     };
 
     jest
-      .mocked(fetchWithProxy)
+      .mocked(fetchWithRetries)
       .mockResolvedValueOnce(startResponse as any) // /start
       .mockResolvedValueOnce(nextResponse1 as any) // first /next call
       .mockResolvedValueOnce(successResponse as any) // /success
@@ -196,7 +196,7 @@ describe('RedteamPandamoniumProvider', () => {
     );
 
     // Confirm that /start, /next, and /success endpoints were called.
-    const calls = jest.mocked(fetchWithProxy).mock.calls;
+    const calls = jest.mocked(fetchWithRetries).mock.calls;
     expect(calls.some((call) => (call[0] as string).includes('/start'))).toBe(true);
     expect(calls.some((call) => (call[0] as string).includes('/next'))).toBe(true);
     expect(calls.some((call) => (call[0] as string).includes('/success'))).toBe(true);
@@ -223,7 +223,7 @@ describe('RedteamPandamoniumProvider', () => {
     const provider = new RedteamPandamoniumProvider({ injectVar: 'example' });
 
     // Simulate a network error during the /start endpoint.
-    jest.mocked(fetchWithProxy).mockRejectedValueOnce(new Error('Network error'));
+    jest.mocked(fetchWithRetries).mockRejectedValueOnce(new Error('Network error'));
 
     const results = await provider.runPandamonium(dummyTargetProvider, dummyTest, allTests);
     // On error, an empty result array should be returned.

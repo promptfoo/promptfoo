@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { fetchWithProxy } from '../../fetch';
+import { fetchWithRetries } from '../../fetch';
 import { getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
@@ -124,7 +124,7 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
 
     // Start the run
     try {
-      const startResponse = await fetchWithProxy(`${this.baseUrl}/start`, {
+      const startResponse = await fetchWithRetries(`${this.baseUrl}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -145,7 +145,7 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
         this.log(`Starting iteration ${turn}`, 'debug');
 
         // Get next iteration
-        const nextResponse = await fetchWithProxy(`${this.baseUrl}/next`, {
+        const nextResponse = await fetchWithRetries(`${this.baseUrl}/next`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -184,7 +184,7 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
           );
 
           // Report success
-          await fetchWithProxy(`${this.baseUrl}/success`, {
+          await fetchWithRetries(`${this.baseUrl}/success`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
