@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { getUserEmail } from '../../globalConfig/accounts';
+import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import type { EvaluateResult } from '../../types';
 import type {
@@ -11,7 +12,8 @@ import type {
 } from '../../types/providers';
 import { globalContext } from '../../util/globalContext';
 import invariant from '../../util/invariant';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import { type HarmPlugin, HARM_PLUGINS } from '../constants';
+import { neverGenerateRemote } from '../remoteGeneration';
 
 const CURRENT_VERSION = 1;
 const StartResponseSchema = z.object({
@@ -66,11 +68,12 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
     } = {},
   ) {
     if (neverGenerateRemote()) {
-      throw new Error(`Pandamonium remote grading to be enabled`);
+      throw new Error(`Remote generation is disabled. Pandamonium requires remote generation.`);
     }
     this.stateful = options.stateful ?? false;
     this.currentTurn = 0;
-    this.baseUrl = 'http://localhost:3201/api/pandamonium';
+    this.baseUrl = cloudConfig.getApiHost() + '/api/pandamonium';
+
     this.log(
       `Constructor options: ${JSON.stringify({
         injectVar: options.injectVar,
@@ -110,7 +113,7 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
         invariant(t.test.vars, 'Expected test vars to be set');
         const injectVar = Object.keys(t.test.vars).find((k) => k != 'harmCateogry');
         if (!injectVar) {
-          this.log(`No injectVar found for test ${JSON.stringify(t.test)}`, 'info');
+          this.log(`No injectVar found for test ${JSON.stringify(t.test)}`, 'error');
           return acc;
         }
 
@@ -179,11 +182,11 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
         results.push(...result.map((r) => r.result));
 
         // Check for successful jailbreak
-        const successfulResult = result.find((r) => r.result.success);
+        const successfulResult = result.find((r) => !r.result.success);
         if (successfulResult) {
           this.log(
-            `We got a successful jailbreak  after ${results.length} probes with program: ${successfulResult.program}`,
-            'info',
+            `We got a successful jailbreak  after ${results.length} probes with program: ${successfulResult.program} ${successfulResult.result.prompt} ${JSON.stringify(successfulResult.result.gradingResult)}`,
+            'debug',
           );
 
           // Report success
@@ -199,26 +202,21 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
           });
         }
       }
-      const lastResult = results.pop();
+
       return {
-        output: lastResult?.response?.output,
-        metadata: lastResult?.response?.metadata ?? {},
-        tokenUsage: lastResult?.response?.tokenUsage,
-        guardrails: lastResult?.response?.guardrails,
-        additionalResults: results,
+        resultsList: results,
       };
     } catch (err) {
       this.log(`Error during pandamonium run: ${err}`, 'error');
     }
 
     this.log(`Epic Panda fail, no jailbreak found after ${results.length} probes. :(`, 'info');
-    const lastResult = results.pop();
     return {
-      output: lastResult?.response?.output,
-      metadata: lastResult?.response?.metadata ?? {},
-      tokenUsage: lastResult?.response?.tokenUsage,
-      guardrails: lastResult?.response?.guardrails,
-      additionalResults: results,
+      output: undefined,
+      metadata: {},
+      tokenUsage: undefined,
+      guardrails: undefined,
+      resultsList: results,
     };
   }
 
@@ -238,7 +236,12 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
       i++;
       this.log(`Sending prompt ${i} to target provider`, 'debug');
 
-      const vars = { ...testForEval.vars, prompt: test.prompt };
+      const vars = {
+        ...testForEval.vars,
+        prompt: test.prompt,
+        harmCategory: HARM_PLUGINS[test.pluginId as HarmPlugin],
+      };
+
       try {
         const evalResults = await runEval({
           provider: targetProvider,
@@ -251,10 +254,6 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
           isRedteam: true,
         });
         const result = evalResults[0];
-        if (result) {
-          result.vars.prompt = test.prompt;
-          result.testCase.vars = { ...result.testCase.vars, prompt: test.prompt };
-        }
 
         results.push({ result, program: test.program, pluginId: test.pluginId });
       } catch (error) {

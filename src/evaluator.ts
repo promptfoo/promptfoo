@@ -192,8 +192,9 @@ export async function runEval({
       );
     }
 
-    const additionalResults: EvaluateResult[] = response.additionalResults || [];
-    delete response.additionalResults;
+    if (response.resultsList && response.resultsList.length > 0) {
+      return response.resultsList;
+    }
     const endTime = Date.now();
     latencyMs = endTime - startTime;
 
@@ -321,7 +322,7 @@ export async function runEval({
       registers[test.options.storeOutputAs] = ret.response.output;
     }
 
-    return [ret, ...additionalResults];
+    return [ret];
   } catch (err) {
     return [
       {

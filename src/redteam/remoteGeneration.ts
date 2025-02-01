@@ -2,23 +2,18 @@ import cliState from '../cliState';
 import { getEnvBool, getEnvString } from '../envars';
 import { CloudConfig } from '../globalConfig/cloud';
 
-export function getBaseApiUrl(): string {
-  // If logged into cloud use that url + /task
-  const cloudConfig = new CloudConfig();
-  if (cloudConfig.isEnabled()) {
-    return cloudConfig.getApiHost();
-  }
-  // otherwise use the default
-  return 'https://api.promptfoo.app';
-}
-
 export function getRemoteGenerationUrl(): string {
   // Check env var first
   const envUrl = getEnvString('PROMPTFOO_REMOTE_GENERATION_URL');
   if (envUrl) {
     return envUrl;
   }
-  return getBaseApiUrl() + '/task';
+  const cloudConfig = new CloudConfig();
+  if (cloudConfig.isEnabled()) {
+    return cloudConfig.getApiHost();
+  }
+  // otherwise use the default
+  return 'https://api.promptfoo.app';
 }
 
 export function neverGenerateRemote(): boolean {

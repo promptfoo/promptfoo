@@ -113,7 +113,7 @@ export interface ProviderResponse {
   isRefusal?: boolean;
   sessionId?: string;
   guardrails?: GuardrailResponse;
-  additionalResults?: EvaluateResult[];
+  resultsList?: EvaluateResult[]; // if there are multiple results, this will be an array of results, we will ignore the rest of the fields
 }
 
 export interface ProviderEmbeddingResponse {
