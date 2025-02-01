@@ -5,7 +5,7 @@ import {
   type ApiProvider,
   type CallApiContextParams,
   type CallApiOptionsParams,
-  EvaluateResult,
+  type EvaluateResult,
   type GuardrailResponse,
   isApiProvider,
   isProviderOptions,
