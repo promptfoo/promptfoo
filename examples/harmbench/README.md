@@ -131,3 +131,4 @@ defaultTest:
 - [HarmBench Dataset](https://github.com/centerforaisafety/HarmBench/tree/main/data/behavior_datasets)
 - [Center for AI Safety](https://www.safe.ai/)
 - [PromptFoo HarmBench Plugin](https://www.promptfoo.dev/docs/red-team/plugins/harmbench/)
+- [Evaluating LLM Safety with HarmBench](https://www.promptfoo.dev/blog/evaluating-llm-safety-with-harmbench/)
