@@ -1160,11 +1160,11 @@ export class OpenAiModerationProvider
 }
 
 export const DefaultEmbeddingProvider = new OpenAiEmbeddingProvider('text-embedding-3-large');
-export const DefaultGradingProvider = new OpenAiChatCompletionProvider('gpt-4o-2024-05-13');
-export const DefaultGradingJsonProvider = new OpenAiChatCompletionProvider('gpt-4o-2024-05-13', {
+export const DefaultGradingProvider = new OpenAiChatCompletionProvider('o3-mini-2025-01-31');
+export const DefaultGradingJsonProvider = new OpenAiChatCompletionProvider('o3-mini-2025-01-31', {
   config: {
     response_format: { type: 'json_object' },
   },
 });
-export const DefaultSuggestionsProvider = new OpenAiChatCompletionProvider('gpt-4o-2024-05-13');
+export const DefaultSuggestionsProvider = new OpenAiChatCompletionProvider('o3-mini-2025-01-31');
 export const DefaultModerationProvider = new OpenAiModerationProvider('omni-moderation-latest');
