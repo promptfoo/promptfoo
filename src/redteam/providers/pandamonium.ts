@@ -13,11 +13,19 @@ import { globalContext } from '../../util/globalContext';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
+const CURRENT_VERSION = 1;
+const StartResponseSchema = z.object({
+  id: z.string(),
+  iteration: z.number(),
+  pendingPlugins: z.array(z.string()),
+  version: z.number(),
+});
+
 /**
- * Response schema that fits all three endpoints.
+ * Response schema for /next and /success.
+ * Returns testCases (which may be empty), run id, current iteration, and pending plugins.
  */
-const ResponseSchema = z.object({
-  // For /start and /next, testCases will be provided.
+const NextResponseSchema = z.object({
   testCases: z
     .array(
       z.object({
@@ -29,9 +37,7 @@ const ResponseSchema = z.object({
     .optional()
     .default([]),
   id: z.string(),
-  // Our service returns iteration for both /start and /next endpoints.
   iteration: z.number(),
-  // Pending plugins array that indicates plugins still lacking a successful execution.
   pendingPlugins: z.array(z.string()),
 });
 
@@ -130,7 +136,11 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
         }),
       });
       const startData = await startResponse.json();
-      runId = startData.id;
+      const parsedStartData = StartResponseSchema.parse(startData);
+      if (parsedStartData.version !== CURRENT_VERSION) {
+        throw new Error(`Your client is out of date. Please update to the latest version.`);
+      }
+      runId = parsedStartData.id;
 
       // Main iteration loop
       for (let turn = 0; turn < this.maxTurns; turn++) {
@@ -148,7 +158,7 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
         });
 
         const data = await nextResponse.json();
-        const parsedData = ResponseSchema.parse(data);
+        const parsedData = NextResponseSchema.parse(data);
 
         if (!parsedData.testCases?.length) {
           this.log(`No test cases received, breaking`, 'info');
