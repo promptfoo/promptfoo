@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
-import type { AtomicTestCase, EvaluateResult, RunEvalOptions, TestSuite } from '../../types';
+import type { AtomicTestCase, EvaluateResult, RunEvalOptions } from '../../types';
 import type {
   ApiProvider,
   CallApiContextParams,
