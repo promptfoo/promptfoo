@@ -8,12 +8,13 @@ export function getRemoteGenerationUrl(): string {
   if (envUrl) {
     return envUrl;
   }
+  // If logged into cloud use that url + /task
   const cloudConfig = new CloudConfig();
   if (cloudConfig.isEnabled()) {
-    return cloudConfig.getApiHost();
+    return cloudConfig.getApiHost() + '/task';
   }
   // otherwise use the default
-  return 'https://api.promptfoo.app';
+  return 'https://api.promptfoo.app/task';
 }
 
 export function neverGenerateRemote(): boolean {

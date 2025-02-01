@@ -34,7 +34,6 @@ import {
   type TestSuite,
 } from './types';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
-import { globalContext } from './util/globalContext';
 import invariant from './util/invariant';
 import { safeJsonStringify } from './util/json';
 import { sleep } from './util/time';
@@ -923,7 +922,7 @@ class Evaluator {
         concurrentRunEvalOptions.push(evalOption);
       }
     }
-    globalContext.setRunEvalOptions(runEvalOptions);
+
     if (serialRunEvalOptions.length > 0) {
       // Run serial evaluations first
       logger.info(`Running ${serialRunEvalOptions.length} serial evaluations...`);
