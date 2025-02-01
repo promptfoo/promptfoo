@@ -5,18 +5,26 @@ export function addPandamonium(
   injectVar: string,
   config: Record<string, any>,
 ): TestCase[] {
-  return testCases.map((testCase) => ({
-    ...testCase,
-    provider: {
-      id: 'promptfoo:redteam:pandamonium',
-      config: {
-        injectVar,
-        ...config,
+  const plugins = new Set(testCases.map((testCase) => testCase.metadata?.pluginId));
+
+  return [
+    {
+      ...testCases[0],
+      provider: {
+        id: 'promptfoo:redteam:pandamonium',
+        config: {
+          injectVar,
+          ...config,
+        },
       },
+      metadata: {
+        ...testCases[0].metadata,
+        pluginIds: Array.from(plugins),
+      },
+      assert: testCases[0].assert?.map((assertion) => ({
+        ...assertion,
+        metric: `${assertion.metric}/Pandamonium`,
+      })),
     },
-    assert: testCase.assert?.map((assertion) => ({
-      ...assertion,
-      metric: `${assertion.metric}/Pandamonium`,
-    })),
-  }));
+  ];
 }

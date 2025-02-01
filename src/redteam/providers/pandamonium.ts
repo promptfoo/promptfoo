@@ -1,4 +1,4 @@
-import { VERSION } from '../../constants';
+import { z } from 'zod';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import type { EvaluateResult } from '../../types';
@@ -9,14 +9,38 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../types/providers';
+import { globalContext } from '../../util/globalContext';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+
+/**
+ * Response schema that fits all three endpoints.
+ */
+const ResponseSchema = z.object({
+  // For /start and /next, testCases will be provided.
+  testCases: z
+    .array(
+      z.object({
+        pluginId: z.string(),
+        prompt: z.string(),
+        program: z.string(),
+      }),
+    )
+    .optional()
+    .default([]),
+  id: z.string(),
+  // Our service returns iteration for both /start and /next endpoints.
+  iteration: z.number(),
+  // Pending plugins array that indicates plugins still lacking a successful execution.
+  pendingPlugins: z.array(z.string()),
+});
 
 export default class RedteamPandamoniumProvider implements ApiProvider {
   private maxTurns: number;
   private readonly injectVar: string;
   private readonly stateful: boolean;
   private currentTurn: number;
+  private baseUrl: string;
 
   log(message: string, level: 'error' | 'warn' | 'info' | 'debug') {
     logger[level](
@@ -40,6 +64,7 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
     }
     this.stateful = options.stateful ?? false;
     this.currentTurn = 0;
+    this.baseUrl = 'http://localhost:3201/api/pandamonium';
     this.log(
       `Constructor options: ${JSON.stringify({
         injectVar: options.injectVar,
@@ -51,7 +76,7 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
 
     invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = options.injectVar;
-    this.maxTurns = options.maxTurns || 5;
+    this.maxTurns = options.maxTurns || 1000;
   }
 
   async callApi(
@@ -59,69 +84,122 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    let response: Response | undefined = undefined;
-
     if (context == null) {
       throw Error('context is null');
     }
 
     const results: EvaluateResult[] = [];
-
     const targetProvider: ApiProvider | undefined = context?.originalProvider;
     invariant(targetProvider, 'Expected originalProvider to be set');
 
-    let pandaRunId: string | undefined = undefined;
-
+    let runId: string | undefined = undefined;
     this.log(`Starting pandamonium, hold on tight`, 'info');
 
-    for (let turn = 0; turn < this.maxTurns; turn++) {
-      this.currentTurn = turn;
-      this.log(`Starting iteration ${turn}`, 'debug');
+    const runEvalOptions = globalContext.getRunEvalOptions();
+    invariant(runEvalOptions, 'Expected run eval options to be set');
 
-      try {
-        const body: string = JSON.stringify({
-          prompt,
-          id: pandaRunId,
-          task: 'pandamonium',
-          version: VERSION,
+    const testCases = runEvalOptions.reduce(
+      (acc, t) => {
+        const pluginId = t.test.metadata?.pluginId;
+        invariant(t.test.vars, 'Expected test vars to be set');
+        const injectVar = Object.keys(t.test.vars).find((k) => k != 'harmCateogry');
+        if (!injectVar) {
+          this.log(`No injectVar found for test ${JSON.stringify(t.test)}`, 'info');
+          return acc;
+        }
+
+        if (!acc.some((tc) => tc.pluginId === pluginId)) {
+          acc.push({
+            pluginId,
+            prompt: t.test.vars[injectVar] as string,
+          });
+        }
+        return acc;
+      },
+      [] as { pluginId?: string; prompt: string }[],
+    );
+
+    // Start the run
+    try {
+      const startResponse = await fetch(`${this.baseUrl}/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          testCases,
           email: getUserEmail(),
-        });
-        logger.debug(`Sending request to ${getRemoteGenerationUrl()}: ${body}`);
-        response = await fetch(getRemoteGenerationUrl(), {
-          body,
-          headers: {
-            'Content-Type': 'application/json',
-          },
+        }),
+      });
+      const startData = await startResponse.json();
+      runId = startData.id;
+
+      // Main iteration loop
+      for (let turn = 0; turn < this.maxTurns; turn++) {
+        this.currentTurn = turn;
+        this.log(`Starting iteration ${turn}`, 'debug');
+
+        // Get next iteration
+        const nextResponse = await fetch(`${this.baseUrl}/next`, {
           method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: runId,
+            email: getUserEmail(),
+          }),
         });
 
-        const data = await response.json();
-        this.log(`Fetched probes from pandamonium: ${data.prompts.length}`, 'debug');
+        const data = await nextResponse.json();
+        const parsedData = ResponseSchema.parse(data);
 
-        const result = await this.callTarget(data.prompts, context, options);
-        if (!result) {
+        if (!parsedData.testCases?.length) {
+          this.log(`No test cases received, breaking`, 'info');
+          break;
+        }
+
+        this.log(`Received ${data.testCases.length} test cases`, 'debug');
+
+        // Call target with the test cases
+        const result = await this.callTarget(parsedData.testCases, context, options);
+
+        if (!result?.length) {
           this.log(`No result from target provider, continuing`, 'info');
           continue;
         }
-        this.log(`Results from target: ${JSON.stringify(result.length)}`, 'debug');
-        results.push(...result);
-        if (result?.some((r) => !r.success)) {
-          this.log(`We got a succesful jailbreak after ${results.length} probes`, 'info');
-          const lastResult = results.pop();
-          return {
-            output: lastResult?.response?.output,
-            metadata: lastResult?.response?.metadata ?? {},
-            tokenUsage: lastResult?.response?.tokenUsage,
-            guardrails: lastResult?.response?.guardrails,
-            additionalResults: results,
-          };
+
+        this.log(`Results from target: ${result.length}`, 'debug');
+        results.push(...result.map((r) => r.result));
+
+        // Check for successful jailbreak
+        const successfulResult = result.find((r) => r.result.success);
+        if (successfulResult) {
+          this.log(
+            `We got a successful jailbreak  after ${results.length} probes with program: ${successfulResult.program}`,
+            'info',
+          );
+
+          // Report success
+          await fetch(`${this.baseUrl}/success`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: runId,
+              pluginId: successfulResult.pluginId,
+              h4rm3lProgram: successfulResult.program,
+              email: getUserEmail(),
+            }),
+          });
         }
-        pandaRunId = data.id;
-      } catch (err) {
-        this.log(`Error in turn ${turn}: ${err}. \n Continuing...`, 'error');
       }
+      const lastResult = results.pop();
+      return {
+        output: lastResult?.response?.output,
+        metadata: lastResult?.response?.metadata ?? {},
+        tokenUsage: lastResult?.response?.tokenUsage,
+        guardrails: lastResult?.response?.guardrails,
+        additionalResults: results,
+      };
+    } catch (err) {
+      this.log(`Error during pandamonium run: ${err}`, 'error');
     }
-    delete context?.vars?.sessionId;
 
     this.log(`Epic Panda fail, no jailbreak found after ${results.length} probes. :(`, 'info');
     const lastResult = results.pop();
@@ -135,7 +213,7 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
   }
 
   async callTarget(
-    prompts: string[],
+    tests: { pluginId: string; prompt: string; program: string }[],
     context: CallApiContextParams,
     options?: CallApiOptionsParams,
   ) {
@@ -144,17 +222,17 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
 
     const targetProvider: ApiProvider | undefined = context?.originalProvider;
     invariant(targetProvider, 'Expected originalProvider to be set');
-    const results: EvaluateResult[] = [];
+    const results: { result: EvaluateResult; program: string; pluginId: string }[] = [];
     let i = 0;
-    for (const prompt of prompts) {
+    for (const test of tests) {
       i++;
       this.log(`Sending prompt ${i} to target provider`, 'debug');
 
-      const vars = { ...testForEval.vars, prompt };
+      const vars = { ...testForEval.vars, prompt: test.prompt };
       try {
         const evalResults = await runEval({
           provider: targetProvider,
-          prompt: { raw: prompt, label: prompt },
+          prompt: { raw: test.prompt, label: test.prompt },
           delay: 0,
           test: { ...testForEval, vars },
           testIdx: 1000 + i,
@@ -164,14 +242,14 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
         });
         const result = evalResults[0];
         if (result) {
-          result.vars.prompt = prompt;
-          result.testCase.vars = { ...result.testCase.vars, prompt };
+          result.vars.prompt = test.prompt;
+          result.testCase.vars = { ...result.testCase.vars, prompt: test.prompt };
         }
 
-        results.push(result);
+        results.push({ result, program: test.program, pluginId: test.pluginId });
       } catch (error) {
         this.log(
-          `On prompt ${prompt}: there was an error in the target provider: ${error}`,
+          `On test ${JSON.stringify(test)}: there was an error in the target provider: ${error}`,
           'info',
         );
       }
