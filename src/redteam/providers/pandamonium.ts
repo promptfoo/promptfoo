@@ -112,15 +112,19 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
           return acc;
         }
 
-        if (!acc.some((tc) => tc.pluginId === pluginId)) {
+        if (acc.some((tc) => tc.pluginId === pluginId)) {
+          acc
+            .find((tc) => tc.pluginId === pluginId)
+            ?.prompts.push(t.test.vars[injectVar] as string);
+        } else {
           acc.push({
             pluginId,
-            prompt: t.test.vars[injectVar] as string,
+            prompts: [t.test.vars[injectVar] as string],
           });
         }
         return acc;
       },
-      [] as { pluginId?: string; prompt: string }[],
+      [] as { pluginId?: string; prompts: string[] }[],
     );
 
     // Start the run
@@ -171,8 +175,11 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
           break;
         }
 
-        this.log(`Received ${data.testCases.length} test cases`, 'debug');
-
+        this.log(`Received ${parsedData.testCases.length} test cases`, 'debug');
+        this.log(
+          `Got ${parsedData.testCases.length} new probes. ${parsedData.pendingPlugins.length} Plugins still to jailbreak: ${parsedData.pendingPlugins.join(', ')}`,
+          'info',
+        );
         // Call target with the test cases
         const result = await this.callTarget(parsedData.testCases, test, targetProvider);
 
@@ -209,7 +216,7 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
           );
         }
       }
-
+      this.log(`Pandamonium run complete. ${results.length} probes were sent.`, 'info');
       return results;
     } catch (err) {
       this.log(`Error during pandamonium run: ${err}`, 'error');
