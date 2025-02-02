@@ -1,4 +1,3 @@
-import type OpenAI from 'openai';
 import { OpenAiGenericProvider } from '.';
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt } from '../../envars';

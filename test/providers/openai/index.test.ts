@@ -1,7 +1,7 @@
-import { OpenAiCompletionProvider } from 'src/providers/openai/completion';
 import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import { OpenAiGenericProvider } from '../../../src/providers/openai';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import { OpenAiCompletionProvider } from '../../../src/providers/openai/completion';
 import { OpenAiEmbeddingProvider } from '../../../src/providers/openai/embedding';
 import { calculateOpenAICost } from '../../../src/providers/openai/util';
 
