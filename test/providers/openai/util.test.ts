@@ -1,5 +1,9 @@
 import OpenAI from 'openai';
-import { failApiCall, getTokenUsage } from '../../../src/providers/openai/util';
+import {
+  calculateOpenAICost,
+  failApiCall,
+  getTokenUsage,
+} from '../../../src/providers/openai/util';
 
 jest.mock('../../../src/cache');
 
@@ -73,5 +77,18 @@ describe('getTokenUsage', () => {
     const data = {};
     const result = getTokenUsage(data, false);
     expect(result).toEqual({});
+  });
+});
+
+describe('calculateOpenAICost', () => {
+  it('should calculate cost correctly', () => {
+    const cost = calculateOpenAICost('gpt-4', {}, 100, 50);
+    expect(cost).toBeDefined();
+    expect(typeof cost).toBe('number');
+  });
+
+  it('should handle unknown models', () => {
+    const cost = calculateOpenAICost('unknown-model', {}, 100, 50);
+    expect(cost).toBeUndefined();
   });
 });
