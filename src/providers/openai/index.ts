@@ -6,7 +6,7 @@ import type {
   ProviderResponse,
 } from '../../types';
 import type { EnvOverrides } from '../../types/env';
-import type { OpenAiSharedOptions } from './types';
+import type { OpenAiSharedOptions, OpenAiModelsResponse } from './types';
 
 export class OpenAiGenericProvider implements ApiProvider {
   modelName: string;
@@ -67,12 +67,41 @@ export class OpenAiGenericProvider implements ApiProvider {
     return (
       this.config.apiKey ||
       (this.config?.apiKeyEnvar
-        ? process.env[this.config.apiKeyEnvar] ||
+        ? getEnvString(this.config.apiKeyEnvar as keyof EnvOverrides) ||
           this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.OPENAI_API_KEY ||
       getEnvString('OPENAI_API_KEY')
     );
+  }
+
+  async getAvailableModels(): Promise<OpenAiModelsResponse> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('OpenAI API key is required');
+    }
+
+    const organization = this.getOrganization();
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${apiKey}`,
+      ...this.config.headers,
+    };
+
+    if (organization) {
+      headers['OpenAI-Organization'] = organization;
+    }
+
+    const response = await fetch(`${this.getApiUrl()}/models`, {
+      method: 'GET',
+      headers,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => null);
+      throw new Error(`Failed to fetch models: ${error?.error?.message || response.statusText}`);
+    }
+
+    return response.json();
   }
 
   // @ts-ignore: Params are not used in this implementation

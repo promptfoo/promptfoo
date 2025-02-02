@@ -53,3 +53,15 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
     (arg: string) => Promise<string>
   >;
 };
+
+export interface OpenAiModel {
+  id: string;
+  object: string;
+  created: number;
+  owned_by: string;
+}
+
+export interface OpenAiModelsResponse {
+  object: string;
+  data: OpenAiModel[];
+}
