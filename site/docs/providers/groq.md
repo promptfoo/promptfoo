@@ -19,7 +19,7 @@ Alternatively, you can specify the `apiKey` in the provider configuration (see b
 
 ## Configuration
 
-Specify the Groq provider in your test configuration:
+Configure the Groq provider in your promptfoo configuration file:
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -76,8 +76,6 @@ Note: Preview models are intended for evaluation purposes only and should not be
 - **llama-3.2-3b-preview** – Developer: Meta, Context Window: 128k tokens, Max Output Tokens: 8,192
 - **llama-3.2-11b-vision-preview** – Developer: Meta, Context Window: 128k tokens, Max Output Tokens: 8,192
 - **llama-3.2-90b-vision-preview** – Developer: Meta, Context Window: 128k tokens, Max Output Tokens: 8,192
-
-Deprecated models are models that are no longer supported or will be phased out in future releases.
 
 ## Tool Use (Function Calling)
 

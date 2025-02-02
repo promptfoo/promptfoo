@@ -5,8 +5,6 @@ type GroqCompletionOptions = OpenAiCompletionOptions & {
   systemPrompt?: string;
   parallel_tool_calls?: boolean | null;
   reasoning_format?: string | null;
-  service_tier?: string | null;
-  user?: string | null;
 };
 
 type GroqProviderOptions = ProviderOptions & {
@@ -19,13 +17,13 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
   }
 
   protected isReasoningModel(): boolean {
-    // Groq's reasoning models include deepseek models and any others they may add
-    return this.modelName.includes('deepseek') || super.isReasoningModel();
+    // Groq's reasoning models include deepseek-r1 models and any others they may add
+    return this.modelName.includes('deepseek-r1') || super.isReasoningModel();
   }
 
   protected supportsTemperature(): boolean {
     // Groq's deepseek models support temperature, even though they're reasoning models
-    if (this.modelName.includes('deepseek')) {
+    if (this.modelName.includes('deepseek-r1')) {
       return true;
     }
     return super.supportsTemperature();
