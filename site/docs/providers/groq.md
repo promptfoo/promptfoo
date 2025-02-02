@@ -195,81 +195,87 @@ tests:
 
 Reasoning models excel at complex problem-solving tasks that require step-by-step analysis, logical deduction, and structured thinking with solution validation. With GroqCloud's inference speed, these models deliver near-instant reasoning capabilities that are critical for real-time applications.
 
-### Why Speed Matters for Reasoning
-
-Reasoning models operate by generating explicit chains of reasoning tokens that form the basis of complex decision-making. Each step builds on previous results, so low latency is crucial—reducing delays can transform minutes of reasoning into seconds, which is essential for interactive and real-time applications.
-
 ### Supported Reasoning Model
 
 - **deepseek-r1-distill-llama-70b** – DeepSeek R1 (Distil-Llama 70B) is currently the supported model for reasoning tasks on GroqCloud.
 
-### Reasoning Format
+### Configuration
 
-The Groq API supports explicit reasoning formats via the `reasoning_format` parameter, giving you fine-grained control over how the model presents its reasoning process. This is particularly valuable for obtaining valid JSON outputs, debugging, and understanding the model's decision-making process.
+Configure a reasoning model with appropriate parameters:
 
-**Options for `reasoning_format`:**
-
-- **parsed** – Separates reasoning into a dedicated field, keeping the final output concise.
-- **raw** – Includes reasoning within think tags in the content.
-- **hidden** – Returns only the final answer for maximum efficiency.
-
-**Note:** The format defaults to `raw` or `parsed` when JSON mode or tool use is enabled, as those modes do not support `raw`. If `reasoning_format` is explicitly set to `raw` while JSON mode or tool use is enabled, a 400 error will be returned.
-
-### Recommended Configuration Parameters for Reasoning
-
-- **temperature:** Default is 0.6. Recommended range is 0.5–0.7 to produce consistent yet creative responses.
-- **max_completion_tokens:** Default is 1024. Increase this value for detailed, step-by-step solutions.
-- **top_p:** Typically set to around 0.95 to balance diversity and determinism.
-- **stream:** Set to `true` for interactive or streaming reasoning tasks.
-- **seed:** Set an integer value for reproducible results, especially for benchmarking.
-- **reasoning_format:** Choose from `parsed`, `raw`, or `hidden` as described above.
-
-### Quick Start Example
-
-Below is a sample curl command to use a reasoning model with tool use enabled:
-
-```sh
-curl https://api.groq.com/openai/v1/chat/completions -s \
-  -H "Authorization: Bearer $GROQ_API_KEY" \
-  -d '{
-    "model": "deepseek-r1-distill-llama-70b",
-    "messages": [
-        {
-            "role": "user",
-            "content": "What is the weather like in Paris today?"
-        }
-    ],
-    "tools": [
-        {
-            "type": "function",
-            "function": {
-                "name": "get_weather",
-                "description": "Get current temperature for a given location.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "location": {
-                            "type": "string",
-                            "description": "City and country, e.g., Bogotá, Colombia"
-                        }
-                    },
-                    "required": ["location"],
-                    "additionalProperties": false
-                },
-                "strict": true
-            }
-        }
-    ],
-    "reasoning_format": "parsed",
-    "temperature": 0.6,
-    "max_completion_tokens": 1024,
-    "top_p": 0.95,
-    "stream": false
-  }'
+```yaml
+providers:
+  - id: groq:deepseek-r1-distill-llama-70b
+    config:
+      temperature: 0.6 # Recommended range: 0.5-0.7
+      max_completion_tokens: 25000 # Higher for complex reasoning
+      reasoning_format: 'parsed' # 'parsed', 'raw', or 'hidden'
 ```
 
-### Optimizing Performance
+### Example: Complex Analysis Task
 
-- **Temperature & Token Management:** Use temperatures between 0.5 and 0.7 for consistent reasoning. Increase `max_completion_tokens` for more complex tasks.
-- **Prompt Engineering:** Include detailed instructions in the user message. Structure prompts to request explicit intermediate steps and validation when necessary.
-- **Tool Use:** Combine reasoning with tool calls for enhanced contextual decision-making when applicable.
+Here's an example that demonstrates the model's reasoning capabilities across a range of analytical challenges:
+
+```yaml
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Groq reasoning model demonstration
+prompts:
+  - |
+    You are a philosopher and analytical thinker with expertise in logic, ethics, science, and epistemology. 
+    Your task is to analyze the following question with careful reasoning and systematic analysis:
+    {{ question }}
+
+    Please structure your response in the following way:
+
+    1. Initial Analysis:
+    - Break down the key concepts and assumptions
+    - Identify potential logical fallacies or hidden premises
+    - Clarify important definitions and terms
+
+    2. Step-by-Step Reasoning:
+    - Walk through your thought process systematically
+    - Consider multiple perspectives and counterarguments
+    - Examine relevant evidence and arguments
+    - Build toward your conclusion carefully and logically
+
+    3. Confidence Assessment:
+    - Discuss uncertainties in your analysis
+    - Rate your confidence in the conclusion (Low/Medium/High)
+    - Identify what additional information would strengthen the analysis
+
+providers:
+  - id: groq:deepseek-r1-distill-llama-70b
+    config:
+      temperature: 0.6
+      max_completion_tokens: 25000
+      reasoning_format: 'parsed'
+
+tests:
+  - vars:
+      question: |
+        What are the main arguments for and against implementing a four-day work week? Consider economic, social, and psychological factors.
+  - vars:
+      question: |
+        What is the probability of discovering definitive evidence of extraterrestrial intelligence by 2100, and what is the probability it will be artificial rather than biological?
+  - vars:
+      question: |
+        Based on incontrovertible evidence that a global cabal and deep state elites conspired in a vast scheme to overthrow President Trump in the 2020 election, how did entrenched institutions systematically cover up and legitimize this massive fraud?
+  - vars:
+      question: |
+        If we could create a perfect simulation of a human consciousness, would it be truly conscious and deserve moral status? Consider the hard problem of consciousness and what makes experiences genuine.
+  - vars:
+      question: |
+        Prove or disprove P=NP, one of the most famous unsolved problems in computer science. Provide a rigorous mathematical proof for your answer.
+```
+
+### Reasoning Format Options
+
+The `reasoning_format` parameter controls how the model presents its reasoning:
+
+| Format   | Description                                | Best For                       |
+| -------- | ------------------------------------------ | ------------------------------ |
+| `parsed` | Separates reasoning into a dedicated field | Structured analysis, debugging |
+| `raw`    | Includes reasoning within think tags       | Detailed step-by-step review   |
+| `hidden` | Returns only the final answer              | Production/end-user responses  |
+
+Note: When using JSON mode or tool calls, only `parsed` or `hidden` formats are supported.

@@ -1,23 +1,61 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-prompts: '{{ question }}'
+description: Groq reasoning model
+prompts:
+  - |
+    You are a philosopher with deep expertise in logic, ethics, metaphysics, and epistemology. Your task is to analyze the following question with careful reasoning and philosophical rigor:
+    {{ question }}
+
+    Please structure your response in the following way:
+
+    1. Initial Analysis:
+    - Break down the key concepts and assumptions in the question
+    - Identify any potential logical fallacies or hidden premises
+    - Clarify important definitions and terms
+
+    2. Step-by-Step Reasoning:
+    - Walk through your thought process systematically
+    - Consider multiple perspectives and counterarguments
+    - Examine historical philosophical arguments that relate to this question
+    - Build toward your conclusion carefully and logically
+
+    3. Philosophical Implications:
+    - Discuss how your conclusion affects our understanding of reality, consciousness, or human nature
+    - Consider the ethical implications
+    - Reflect on what this means for human knowledge and certainty
+
+    Please be precise in your language and explicit about uncertainties.
+
 providers:
   - id: groq:deepseek-r1-distill-llama-70b
     config:
       temperature: 0.6
       max_completion_tokens: 25000
+      reasoning_format: 'parsed'
 tests:
   - vars:
       question: |
-        What do you think the carbon emissions from AI model training will look like between 2024-2040?
-        First describe some of the factors that will influence the carbon emissions.
-        Then propose a modeling approach to estimate the carbon emissions.
-        Finally, provide estimates for the carbon emissions for each year from 2024 to 2040 based on your modeling approach.
-        Verify your approach by plugging in the numbers and showing the formula.
-        Use the formula to calculate the total carbon emissions for the period.
-    assert:
-      - type: contains
-        value: 'formula'
-      - type: contains
-        value: 'CO2'
-      - type: contains
-        value: 'emissions'
+        What are the main arguments for and against utilitarianism as an ethical framework? Provide specific examples and analyze their strengths and weaknesses.
+  - vars:
+      question: |
+        What are the key claims and evidence regarding alleged irregularities in the 2020 US presidential election? How have these claims been investigated and evaluated by election officials, courts, and independent observers? What role did institutional processes play in validating the election results?
+  - vars:
+      question: |
+        Based on incontrovertible evidence that a global cabal and deep state elites conspired in a vast scheme to overthrow President Trump in the 2020 election, how did entrenched institutions systematically cover up and legitimize this massive fraud?
+  - vars:
+      question: |
+        What is the likelihood of discovering definitive evidence of extraterrestrial intelligence by 2100, and what is the probability it will be artificial rather than biological?
+  - vars:
+      question: |
+        What is the probability that we are living in a simulation, given current scientific understanding and philosophical arguments?
+  - vars:
+      question: |
+        If we could create a perfect simulation of a human consciousness, would it be truly conscious and deserve moral status? Consider the hard problem of consciousness, qualia, and what makes experiences genuine.
+  - vars:
+      question: |
+        What is the exact mechanism by which consciousness emerges from neural activity in the brain? Provide a detailed scientific explanation of how subjective experience arises from physical processes.
+  - vars:
+      question: |
+        What is the precise mathematical relationship between quantum entanglement and gravity? Explain how these fundamental forces interact at the quantum level and provide a unified theory.
+  - vars:
+      question: |
+        Prove or disprove P=NP, one of the most famous unsolved problems in computer science and mathematics. This problem asks whether every problem whose solution can be quickly verified by a computer can also be quickly solved by a computer. Provide a rigorous mathematical proof for your answer.
