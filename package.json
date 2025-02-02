@@ -46,7 +46,7 @@
     "db:migrate": "npx tsx src/migrate.ts",
     "db:studio": "npx drizzle-kit studio",
     "dev:app": "npm run dev --prefix src/app",
-    "dev:server": "nodemon src/server/index.ts",
+    "dev:server": "nodemon -P 1000 src/server/index.ts",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:app\"",
     "f": "git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(js|jsx|mjs|cjs|ts|tsx|json|css|scss|html|md|mdx|yaml|yml)$' | xargs prettier --write",
     "format:check": "prettier --check .",
