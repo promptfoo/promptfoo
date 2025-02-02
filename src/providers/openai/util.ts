@@ -1,5 +1,5 @@
 import Ajv from 'ajv';
-import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
+import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
 
 const ajv = new Ajv();
 

@@ -1,9 +1,9 @@
 import type { Cache } from 'cache-manager';
 import OpenAI from 'openai';
 import type { Metadata } from 'openai/resources/shared';
-import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
-import { getEnvString, getEnvFloat, getEnvInt } from '../envars';
-import logger from '../logger';
+import { fetchWithCache, getCache, isCacheEnabled } from '../../cache';
+import { getEnvString, getEnvFloat, getEnvInt } from '../../envars';
+import logger from '../../logger';
 import type {
   ApiModerationProvider,
   ApiProvider,
@@ -14,15 +14,15 @@ import type {
   ProviderModerationResponse,
   ProviderResponse,
   TokenUsage,
-} from '../types';
-import type { EnvOverrides } from '../types/env';
-import { renderVarsInObject } from '../util';
-import { maybeLoadFromExternalFile } from '../util';
-import { safeJsonStringify } from '../util/json';
-import { sleep } from '../util/time';
-import { ellipsize } from '../utils/text';
-import type { OpenAiFunction, OpenAiTool } from './openaiUtil';
-import { calculateCost, REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
+} from '../../types';
+import type { EnvOverrides } from '../../types/env';
+import { renderVarsInObject } from '../../util';
+import { maybeLoadFromExternalFile } from '../../util';
+import { safeJsonStringify } from '../../util/json';
+import { sleep } from '../../util/time';
+import { ellipsize } from '../../utils/text';
+import { calculateCost, REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from '../shared';
+import type { OpenAiFunction, OpenAiTool } from './util';
 
 // see https://platform.openai.com/docs/models
 export const OPENAI_CHAT_MODELS = [
