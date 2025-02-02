@@ -22,7 +22,7 @@ async function getAvailableModels(options?: {
     return modelsCachePromise;
   }
 
-  const provider = new OpenAiGenericProvider(GPT4_MODEL, options);
+  const provider = new OpenAiGenericProvider(GPT4o_MODEL, options);
 
   modelsCachePromise = provider
     .getAvailableModels()
