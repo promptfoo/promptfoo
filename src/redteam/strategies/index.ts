@@ -12,6 +12,7 @@ import { addCitationTestCases } from './citation';
 import { addCrescendo } from './crescendo';
 import { addGcgTestCases } from './gcg';
 import { addGoatTestCases } from './goat';
+import { addHexEncoding } from './hex';
 import { addIterativeJailbreaks } from './iterative';
 import { addLeetspeak } from './leetspeak';
 import { addLikertTestCases } from './likert';
@@ -171,6 +172,15 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding GCG test cases to ${testCases.length} test cases`);
       const newTestCases = await addGcgTestCases(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} GCG test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'hex',
+    action: async (testCases, injectVar) => {
+      logger.debug(`Adding Hex encoding to ${testCases.length} test cases`);
+      const newTestCases = addHexEncoding(testCases, injectVar);
+      logger.debug(`Added ${newTestCases.length} Hex encoded test cases`);
       return newTestCases;
     },
   },
