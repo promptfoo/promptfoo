@@ -6,8 +6,6 @@ type GroqCompletionOptions = OpenAiCompletionOptions & {
   parallel_tool_calls?: boolean | null;
   reasoning_format?: string | null;
   service_tier?: string | null;
-  stream?: boolean | null;
-  stream_options?: object | null;
   user?: string | null;
 };
 

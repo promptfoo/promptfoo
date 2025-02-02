@@ -514,7 +514,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   }
 
   protected supportsTemperature(): boolean {
-    // OpenAI's o1 and o3 models don't support temperature
+    // OpenAI's o1 and o3 models don't support temperature but some 3rd
+    // party reasoning models do.
     return !this.isReasoningModel();
   }
 
@@ -531,7 +532,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
-    // NOTE: Special handling for reasoning models
     const isReasoningModel = this.isReasoningModel();
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
@@ -539,6 +539,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const maxTokens = isReasoningModel
       ? undefined
       : (config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024));
+
     const temperature = this.supportsTemperature()
       ? (config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0))
       : undefined;

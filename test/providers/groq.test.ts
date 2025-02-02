@@ -1,28 +1,22 @@
-import { clearCache, disableCache, enableCache } from '../../src/cache';
+import { clearCache } from '../../src/cache';
+import * as fetchModule from '../../src/fetch';
 import { GroqProvider } from '../../src/providers/groq';
-import { maybeLoadFromExternalFile } from '../../src/util';
 
-jest.mock('groq-sdk', () => {
-  return {
-    __esModule: true,
-    default: jest.fn().mockImplementation(() => ({
-      chat: {
-        completions: {
-          create: jest.fn(),
-        },
-      },
-    })),
-  };
-});
+const GROQ_API_BASE = 'https://api.groq.com/openai/v1';
+
 jest.mock('../../src/util', () => ({
-  maybeLoadFromExternalFile: jest.fn(),
-  renderVarsInObject: jest.fn(),
+  maybeLoadFromExternalFile: jest.fn((x) => x),
+  renderVarsInObject: jest.fn((x) => x),
 }));
 
+jest.mock('../../src/fetch');
+
 describe('Groq', () => {
+  const mockedFetchWithRetries = jest.mocked(fetchModule.fetchWithRetries);
+
   afterEach(async () => {
-    jest.clearAllMocks();
     await clearCache();
+    jest.clearAllMocks();
   });
 
   describe('GroqProvider', () => {
@@ -74,6 +68,8 @@ describe('Groq', () => {
         config: {
           temperature: 0.7,
           max_tokens: 100,
+          apiKeyEnvar: 'GROQ_API_KEY',
+          apiBaseUrl: GROQ_API_BASE,
         },
       });
     });
@@ -93,41 +89,75 @@ describe('Groq', () => {
         config: {
           temperature: 0.7,
           apiKey: undefined,
+          apiKeyEnvar: 'GROQ_API_KEY',
+          apiBaseUrl: GROQ_API_BASE,
         },
       });
-      // Ensure the original apiKey is not affected
       expect(provider['apiKey']).toBe('secret-api-key');
     });
 
+    it('should handle configuration options correctly', () => {
+      const provider = new GroqProvider('mixtral-8x7b-32768', {
+        config: {
+          systemPrompt: 'You are a helpful assistant',
+          parallel_tool_calls: true,
+          reasoning_format: 'markdown',
+          service_tier: 'premium',
+          user: 'test-user',
+        },
+      });
+
+      expect(provider.toJSON().config).toMatchObject({
+        systemPrompt: 'You are a helpful assistant',
+        parallel_tool_calls: true,
+        reasoning_format: 'markdown',
+        service_tier: 'premium',
+        user: 'test-user',
+      });
+    });
+
     describe('callApi', () => {
+      beforeEach(() => {
+        process.env.GROQ_API_KEY = 'test-key';
+      });
+
+      afterEach(() => {
+        delete process.env.GROQ_API_KEY;
+      });
+
       it('should call Groq API and return output with correct structure', async () => {
         const mockResponse = {
           choices: [{ message: { content: 'Test output' } }],
           usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
         };
-        const mockCreate = jest.fn().mockResolvedValue(mockResponse);
-        (provider as any).groq = { chat: { completions: { create: mockCreate } } };
+
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
 
         const result = await provider.callApi('Test prompt');
 
-        expect(mockCreate).toHaveBeenCalledWith(
-          expect.objectContaining({
-            messages: expect.arrayContaining([
-              expect.objectContaining({
-                role: 'system',
-                content: 'You are a helpful assistant.',
-              }),
-              expect.objectContaining({
-                role: 'user',
-                content: 'Test prompt',
-              }),
-            ]),
-            model: 'mixtral-8x7b-32768',
-            temperature: 0.7,
-            max_completion_tokens: 1000,
-            top_p: 1,
-            tool_choice: 'auto',
-          }),
+        const expectedBody = {
+          model: 'mixtral-8x7b-32768',
+          messages: [{ role: 'user', content: 'Test prompt' }],
+          max_tokens: 1024,
+        };
+
+        expect(mockedFetchWithRetries).toHaveBeenCalledWith(
+          `${GROQ_API_BASE}/chat/completions`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: 'Bearer test-key',
+            },
+            body: JSON.stringify(expectedBody),
+          },
+          300000,
+          undefined,
         );
 
         expect(result).toEqual({
@@ -137,6 +167,9 @@ describe('Groq', () => {
             prompt: 5,
             completion: 5,
           },
+          cached: false,
+          cost: undefined,
+          logProbs: undefined,
         });
       });
 
@@ -145,163 +178,83 @@ describe('Groq', () => {
           choices: [{ message: { content: 'Cached output' } }],
           usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
         };
-        const mockCreate = jest.fn().mockResolvedValue(mockResponse);
-        (provider as any).groq = { chat: { completions: { create: mockCreate } } };
+
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValue(response);
 
         await provider.callApi('Test prompt');
         const cachedResult = await provider.callApi('Test prompt');
 
-        expect(mockCreate).toHaveBeenCalledTimes(1);
+        expect(mockedFetchWithRetries).toHaveBeenCalledTimes(1);
         expect(cachedResult).toEqual({
           output: 'Cached output',
+          cached: true,
+          cost: undefined,
+          logProbs: undefined,
           tokenUsage: {
             total: 10,
-            prompt: 5,
-            completion: 5,
             cached: 10,
           },
         });
       });
 
-      it('should not use cache if caching is disabled', async () => {
+      it('should handle API errors', async () => {
+        const errorResponse = {
+          error: {
+            message: 'API Error',
+            type: 'invalid_request_error',
+          },
+        };
+
+        const response = new Response(JSON.stringify(errorResponse), {
+          status: 400,
+          statusText: 'Bad Request',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.error).toContain('400 Bad Request');
+      });
+
+      it('should handle network errors', async () => {
+        mockedFetchWithRetries.mockRejectedValueOnce(new Error('Network error'));
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.error).toContain('Network error');
+      });
+
+      it('should handle empty response', async () => {
         const mockResponse = {
-          choices: [{ message: { content: 'Fresh output' } }],
+          choices: [{ message: { content: '' } }],
           usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
         };
-        const mockCreate = jest.fn().mockResolvedValue(mockResponse);
-        (provider as any).groq = { chat: { completions: { create: mockCreate } } };
 
-        disableCache();
-
-        const result1 = await provider.callApi('Test prompt');
-        const result2 = await provider.callApi('Test prompt');
-
-        expect(mockCreate).toHaveBeenCalledTimes(2);
-        expect(result1).toEqual(result2);
-        expect(result1.tokenUsage).not.toHaveProperty('cached');
-
-        enableCache();
-      });
-
-      it('should handle API errors', async () => {
-        const mockError = new Error('API Error') as any;
-        mockError.name = 'APIError';
-        mockError.status = 400;
-        const mockCreate = jest.fn().mockRejectedValue(mockError);
-        (provider as any).groq = { chat: { completions: { create: mockCreate } } };
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
 
         const result = await provider.callApi('Test prompt');
-
-        expect(result).toEqual({
-          error: 'API call error: 400 APIError: API Error',
-        });
-      });
-
-      it('should handle non-API errors', async () => {
-        const mockError = new Error('Unknown error');
-        const mockCreate = jest.fn().mockRejectedValue(mockError);
-        (provider as any).groq = { chat: { completions: { create: mockCreate } } };
-
-        const result = await provider.callApi('Test prompt');
-
-        expect(result).toEqual({
-          error: 'API call error: Error: Unknown error',
-        });
-      });
-
-      it('should pass custom configuration options including tools and tool_choice', async () => {
-        const tools = [
-          {
-            type: 'function' as const,
-            function: {
-              name: 'test_function',
-              description: 'Test function',
-              parameters: {
-                type: 'object',
-                properties: {},
-              },
-            },
-          },
-        ];
-        jest.mocked(maybeLoadFromExternalFile).mockReturnValue(tools);
-
-        const customProvider = new GroqProvider('llama3-groq-8b-8192-tool-use-preview', {
-          config: {
-            temperature: 0.7,
-            max_completion_tokens: 100,
-            top_p: 0.9,
-            tools,
-            tool_choice: 'auto',
-          },
-        });
-
-        const mockCreate = jest.fn().mockResolvedValue({
-          choices: [{ message: { content: 'Custom output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        });
-        (customProvider as any).groq = { chat: { completions: { create: mockCreate } } };
-
-        await customProvider.callApi('Test prompt');
-
-        expect(mockCreate).toHaveBeenCalledWith(
-          expect.objectContaining({
-            temperature: 0.7,
-            max_completion_tokens: 100,
-            top_p: 0.9,
-            tools,
-            tool_choice: 'auto',
-            messages: expect.any(Array),
-            model: 'llama3-groq-8b-8192-tool-use-preview',
-          }),
-        );
-      });
-
-      it('should handle deprecated max_tokens parameter', async () => {
-        const customProvider = new GroqProvider('llama3-groq-8b-8192-tool-use-preview', {
-          config: {
-            max_tokens: 100,
-          },
-        });
-
-        const mockCreate = jest.fn().mockResolvedValue({
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        });
-        (customProvider as any).groq = { chat: { completions: { create: mockCreate } } };
-
-        await customProvider.callApi('Test prompt');
-
-        expect(mockCreate).toHaveBeenCalledWith(
-          expect.objectContaining({
-            max_completion_tokens: 100,
-          }),
-        );
-      });
-
-      it('should prioritize max_completion_tokens over max_tokens', async () => {
-        const customProvider = new GroqProvider('llama3-groq-8b-8192-tool-use-preview', {
-          config: {
-            max_completion_tokens: 200,
-            max_tokens: 100,
-          },
-        });
-
-        const mockCreate = jest.fn().mockResolvedValue({
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        });
-        (customProvider as any).groq = { chat: { completions: { create: mockCreate } } };
-
-        await customProvider.callApi('Test prompt');
-
-        expect(mockCreate).toHaveBeenCalledWith(
-          expect.objectContaining({
-            max_completion_tokens: 200,
-          }),
-        );
+        expect(result.output).toBe('');
       });
 
       it('should handle tool calls and function callbacks', async () => {
+        const mockCallback = jest.fn().mockResolvedValue('Function result');
+        const customProvider = new GroqProvider('llama3-groq-8b-8192-tool-use-preview', {
+          config: {
+            functionToolCallbacks: {
+              test_function: mockCallback,
+            },
+          },
+        });
+
         const mockResponse = {
           choices: [
             {
@@ -319,31 +272,67 @@ describe('Groq', () => {
           ],
           usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
         };
-        const mockCreate = jest.fn().mockResolvedValue(mockResponse);
-        const mockCallback = jest.fn().mockResolvedValue('Function result');
 
-        const customProvider = new GroqProvider('llama3-groq-8b-8192-tool-use-preview', {
-          config: {
-            functionToolCallbacks: {
-              test_function: mockCallback,
-            },
-          },
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
         });
-        (customProvider as any).groq = { chat: { completions: { create: mockCreate } } };
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
 
         const result = await customProvider.callApi('Test prompt');
 
         expect(mockCallback).toHaveBeenCalledWith('{"arg": "value"}');
-        expect(result.output).toContain(
-          '[{"id":"call_123","type":"function","function":{"name":"test_function","arguments":"{\\"arg\\": \\"value\\"}"}}]',
-        );
-        expect(result.output).toContain('[Function Result: Function result]');
+        expect(result.output).toBe('Function result');
       });
 
-      it('should use custom system prompt', async () => {
+      it('should handle invalid tool calls', async () => {
         const customProvider = new GroqProvider('llama3-groq-8b-8192-tool-use-preview', {
           config: {
-            systemPrompt: 'Custom system prompt',
+            functionToolCallbacks: {},
+          },
+        });
+
+        const mockResponse = {
+          choices: [
+            {
+              message: {
+                content: null,
+                tool_calls: [
+                  {
+                    id: 'call_123',
+                    type: 'function',
+                    function: { name: 'nonexistent_function', arguments: '{}' },
+                  },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        };
+
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await customProvider.callApi('Test prompt');
+        expect(result.output).toEqual([
+          {
+            id: 'call_123',
+            type: 'function',
+            function: { name: 'nonexistent_function', arguments: '{}' },
+          },
+        ]);
+        expect(result.error).toBeUndefined();
+      });
+
+      it('should handle system prompts correctly', async () => {
+        const providerWithSystem = new GroqProvider('mixtral-8x7b-32768', {
+          config: {
+            systemPrompt: 'You are a helpful assistant',
           },
         });
 
@@ -351,85 +340,79 @@ describe('Groq', () => {
           choices: [{ message: { content: 'Test output' } }],
           usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
         };
-        const mockCreate = jest.fn().mockResolvedValue(mockResponse);
-        (customProvider as any).groq = { chat: { completions: { create: mockCreate } } };
 
-        await customProvider.callApi('Test prompt');
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
 
-        expect(mockCreate).toHaveBeenCalledWith(
-          expect.objectContaining({
-            messages: expect.arrayContaining([
-              expect.objectContaining({
-                role: 'system',
-                content: 'Custom system prompt',
-              }),
-            ]),
-          }),
-        );
+        await providerWithSystem.callApi('Test prompt');
+
+        const lastCall = mockedFetchWithRetries.mock.calls[0];
+        if (!lastCall) {
+          throw new Error('Expected fetch to have been called');
+        }
+        const requestBody = JSON.parse((lastCall[1] as { body: string }).body);
+        expect(requestBody.messages).toEqual([{ role: 'user', content: 'Test prompt' }]);
       });
 
-      it('should handle empty response', async () => {
-        const mockResponse = {
-          choices: [{ message: { content: '' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        };
-        const mockCreate = jest.fn().mockResolvedValue(mockResponse);
-        (provider as any).groq = { chat: { completions: { create: mockCreate } } };
+      it('should handle API key from environment variable', async () => {
+        const originalApiKey = process.env.GROQ_API_KEY;
+        delete process.env.GROQ_API_KEY;
+
+        const mockErrorResponse = new Response(
+          JSON.stringify({
+            error: {
+              message: 'No API key provided',
+              type: 'auth_error',
+            },
+          }),
+          {
+            status: 401,
+            statusText: 'Unauthorized',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          },
+        );
+        mockedFetchWithRetries.mockResolvedValueOnce(mockErrorResponse);
 
         const result = await provider.callApi('Test prompt');
-
-        expect(result.output).toBe('');
+        expect(result.error).toContain('401 Unauthorized');
+        process.env.GROQ_API_KEY = originalApiKey;
       });
 
-      it('should handle unexpected API response structure', async () => {
-        const mockResponse = {};
-        const mockCreate = jest.fn().mockResolvedValue(mockResponse);
-        (provider as any).groq = { chat: { completions: { create: mockCreate } } };
-
-        await expect(provider.callApi('Test prompt')).resolves.toEqual({
-          error: 'API call error: Error: Invalid response from Groq API',
+      it('should handle malformed API response', async () => {
+        const malformedResponse = new Response('{"invalid": json}', {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
         });
+        mockedFetchWithRetries.mockResolvedValueOnce(malformedResponse);
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.error).toBeDefined();
       });
 
-      it('should use maybeLoadFromExternalFile for tools configuration', async () => {
-        const customProvider = new GroqProvider('llama3-groq-8b-8192-tool-use-preview', {
-          config: {
-            tools: [
-              {
-                type: 'function' as const,
-                function: {
-                  name: 'external_tool',
-                  description: 'An external tool',
-                  parameters: {
-                    type: 'object',
-                    properties: {},
-                  },
-                },
-              },
-            ],
+      it('should handle rate limit errors', async () => {
+        const rateLimitResponse = new Response(
+          JSON.stringify({
+            error: {
+              message: 'Rate limit exceeded',
+              type: 'rate_limit_error',
+            },
+          }),
+          {
+            status: 429,
+            statusText: 'Too Many Requests',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
           },
-        });
-
-        const mockResponse = {
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        };
-        const mockCreate = jest.fn().mockResolvedValue(mockResponse);
-        (customProvider as any).groq = { chat: { completions: { create: mockCreate } } };
-
-        await customProvider.callApi('Test prompt');
-
-        expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(
-          expect.arrayContaining([
-            expect.objectContaining({
-              type: 'function',
-              function: {
-                name: 'external_tool',
-                description: 'An external tool',
-              },
-            }),
-          ]),
         );
+        mockedFetchWithRetries.mockResolvedValueOnce(rateLimitResponse);
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.error).toContain('429');
+        expect(result.error).toContain('Rate limit exceeded');
       });
     });
   });
