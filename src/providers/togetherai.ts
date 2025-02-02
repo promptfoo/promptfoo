@@ -1,10 +1,8 @@
 import type { ApiProvider, ProviderOptions } from '../types';
 import type { EnvOverrides } from '../types/env';
-import {
-  OpenAiChatCompletionProvider,
-  OpenAiCompletionProvider,
-  OpenAiEmbeddingProvider,
-} from './openai';
+import { OpenAiChatCompletionProvider } from './openai/chat';
+import { OpenAiCompletionProvider } from './openai/completion';
+import { OpenAiEmbeddingProvider } from './openai/embedding';
 
 export function createTogetherAiProvider(
   providerPath: string,

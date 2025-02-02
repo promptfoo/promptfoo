@@ -1,4 +1,4 @@
-import type { OpenAiChatCompletionProvider } from '../providers/openai';
+import type { OpenAiChatCompletionProvider } from '../providers/openai/chat';
 import { validateFunctionCall } from '../providers/openai/util';
 import type { AssertionParams } from '../types';
 import type { GradingResult } from '../types';

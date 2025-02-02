@@ -1,5 +1,5 @@
 import type { ProviderOptions } from '../types/providers';
-import { OpenAiChatCompletionProvider, type OpenAiCompletionOptions } from './openai';
+import { OpenAiChatCompletionProvider, type OpenAiCompletionOptions } from './openai/chat';
 
 type ClouderaAiCompletionOptions = OpenAiCompletionOptions & {
   domain?: string;

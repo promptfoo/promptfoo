@@ -1,6 +1,6 @@
 import cliState from '../../cliState';
 import logger from '../../logger';
-import { OpenAiChatCompletionProvider } from '../../providers/openai';
+import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import {
   type ApiProvider,
   type CallApiContextParams,

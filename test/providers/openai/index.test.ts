@@ -1,11 +1,9 @@
+import { OpenAiCompletionProvider } from 'src/providers/openai/completion';
 import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
-import {
-  calculateOpenAICost,
-  OpenAiChatCompletionProvider,
-  OpenAiCompletionProvider,
-  OpenAiEmbeddingProvider,
-  OpenAiGenericProvider,
-} from '../../../src/providers/openai';
+import { OpenAiGenericProvider } from '../../../src/providers/openai';
+import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import { OpenAiEmbeddingProvider } from '../../../src/providers/openai/embedding';
+import { calculateOpenAICost } from '../../../src/providers/openai/util';
 
 jest.mock('../../../src/cache');
 

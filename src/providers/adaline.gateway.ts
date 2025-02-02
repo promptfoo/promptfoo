@@ -38,12 +38,9 @@ import { AnthropicMessagesProvider, calculateAnthropicCost } from './anthropic';
 import { AzureChatCompletionProvider, AzureEmbeddingProvider, calculateAzureCost } from './azure';
 import { GoogleChatProvider } from './google';
 import { GroqProvider } from './groq';
-import {
-  OpenAiChatCompletionProvider,
-  OpenAiEmbeddingProvider,
-  calculateOpenAICost,
-  type OpenAiCompletionOptions,
-} from './openai';
+import { OpenAiChatCompletionProvider, type OpenAiCompletionOptions } from './openai/chat';
+import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { calculateOpenAICost } from './openai/util';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 import { VertexChatProvider, VertexEmbeddingProvider } from './vertex';
 import { getGoogleClient } from './vertexUtil';
