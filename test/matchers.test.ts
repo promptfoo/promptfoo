@@ -19,12 +19,10 @@ import {
 } from '../src/matchers';
 import { ANSWER_RELEVANCY_GENERATE, CONTEXT_RECALL, CONTEXT_RELEVANCE } from '../src/prompts';
 import { HuggingfaceTextClassificationProvider } from '../src/providers/huggingface';
-import {
-  OpenAiChatCompletionProvider,
-  OpenAiEmbeddingProvider,
-  OpenAiModerationProvider,
-} from '../src/providers/openai';
-import { DefaultEmbeddingProvider, DefaultGradingProvider } from '../src/providers/openai';
+import { OpenAiChatCompletionProvider } from '../src/providers/openai/chat';
+import { DefaultEmbeddingProvider, DefaultGradingProvider } from '../src/providers/openai/defaults';
+import { OpenAiEmbeddingProvider } from '../src/providers/openai/embedding';
+import { OpenAiModerationProvider } from '../src/providers/openai/moderation';
 import { ReplicateModerationProvider } from '../src/providers/replicate';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from '../src/redteam/constants';
 import * as remoteGrading from '../src/remoteGrading';

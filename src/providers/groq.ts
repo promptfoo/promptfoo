@@ -1,5 +1,6 @@
 import type { ProviderOptions } from '../types/providers';
-import { OpenAiChatCompletionProvider, type OpenAiCompletionOptions } from './openai';
+import { OpenAiChatCompletionProvider } from './openai/chat';
+import type { OpenAiCompletionOptions } from './openai/types';
 
 type GroqCompletionOptions = OpenAiCompletionOptions & {
   systemPrompt?: string;

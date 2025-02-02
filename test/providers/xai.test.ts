@@ -1,4 +1,4 @@
-import { OpenAiChatCompletionProvider } from '../../src/providers/openai';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { createXAIProvider } from '../../src/providers/xai';
 import type { ProviderOptions } from '../../src/types/providers';
 

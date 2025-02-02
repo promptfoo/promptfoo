@@ -4,11 +4,11 @@ import * as path from 'path';
 import { runAssertion, runAssertions } from '../../src/assertions';
 import { validateXml, containsXml } from '../../src/assertions/xml';
 import { fetchWithRetries } from '../../src/fetch';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import {
   DefaultGradingJsonProvider,
   DefaultEmbeddingProvider,
-  OpenAiChatCompletionProvider,
-} from '../../src/providers/openai';
+} from '../../src/providers/openai/defaults';
 import { ReplicateModerationProvider } from '../../src/providers/replicate';
 import type {
   Assertion,
