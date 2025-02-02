@@ -51,10 +51,10 @@ import {
   OpenAiCompletionProvider,
   OpenAiChatCompletionProvider,
   OpenAiEmbeddingProvider,
-  OpenAiImageProvider,
   OpenAiModerationProvider,
 } from './providers/openai';
 import { OpenAiAssistantProvider } from './providers/openai/assistant';
+import { OpenAiImageProvider } from './providers/openai/image';
 import { parsePackageProvider } from './providers/packageParser';
 import { PortkeyChatCompletionProvider } from './providers/portkey';
 import { PythonProvider } from './providers/pythonCompletion';

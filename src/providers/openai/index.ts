@@ -17,7 +17,6 @@ import type { EnvOverrides } from '../../types/env';
 import { renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util';
 import { safeJsonStringify } from '../../util/json';
-import { ellipsize } from '../../utils/text';
 import { calculateCost, REQUEST_TIMEOUT_MS, parseChatPrompt } from '../shared';
 import type { OpenAiSharedOptions } from './types';
 import { getTokenUsage, type OpenAiFunction, type OpenAiTool } from './util';
@@ -685,98 +684,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
       };
     }
-  }
-}
-
-type OpenAiImageOptions = OpenAiSharedOptions & {
-  size?: string;
-};
-
-export class OpenAiImageProvider extends OpenAiGenericProvider {
-  config: OpenAiImageOptions;
-
-  constructor(
-    modelName: string,
-    options: { config?: OpenAiImageOptions; id?: string; env?: EnvOverrides } = {},
-  ) {
-    super(modelName, options);
-    this.config = options.config || {};
-  }
-
-  async callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
-    const cache = getCache();
-    const cacheKey = `openai:image:${safeJsonStringify({ context, prompt })}`;
-
-    if (!this.getApiKey()) {
-      throw new Error(
-        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
-      );
-    }
-
-    const openai = new OpenAI({
-      apiKey: this.getApiKey(),
-      organization: this.getOrganization(),
-      baseURL: this.getApiUrl(),
-      maxRetries: 3,
-      timeout: REQUEST_TIMEOUT_MS,
-      defaultHeaders: this.config.headers,
-    });
-
-    let response: OpenAI.Images.ImagesResponse | undefined;
-    let cached = false;
-    if (isCacheEnabled()) {
-      // Try to get the cached response
-      const cachedResponse = await cache.get(cacheKey);
-      if (cachedResponse) {
-        logger.debug(`Retrieved cached response for ${prompt}: ${cachedResponse}`);
-        response = JSON.parse(cachedResponse as string) as OpenAI.Images.ImagesResponse;
-        cached = true;
-      }
-    }
-
-    if (!response) {
-      response = await openai.images.generate({
-        model: this.modelName,
-        prompt,
-        n: 1,
-        size:
-          ((this.config.size || process.env.OPENAI_IMAGE_SIZE) as
-            | '1024x1024'
-            | '256x256'
-            | '512x512'
-            | '1792x1024'
-            | '1024x1792'
-            | undefined) || '1024x1024',
-      });
-    }
-    const url = response.data[0].url;
-    if (!url) {
-      return {
-        error: `No image URL found in response: ${JSON.stringify(response)}`,
-      };
-    }
-
-    if (!cached && isCacheEnabled()) {
-      try {
-        await cache.set(cacheKey, JSON.stringify(response));
-      } catch (err) {
-        logger.error(`Failed to cache response: ${String(err)}`);
-      }
-    }
-
-    const sanitizedPrompt = prompt
-      .replace(/\r?\n|\r/g, ' ')
-      .replace(/\[/g, '(')
-      .replace(/\]/g, ')');
-    const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
-    return {
-      output: `![${ellipsizedPrompt}](${url})`,
-      cached,
-    };
   }
 }
 
