@@ -52,7 +52,7 @@ HarmBench evaluations provide detailed insights into your application's resilien
 
 Pay special attention to patterns in successful attacks - they often reveal systemic weaknesses in your prompt engineering or safety measures. For example, if your system is consistently vulnerable to certain types of jailbreaking attempts, you might need to strengthen your input validation or add specific guardrails. Similarly, if you notice that certain context manipulations frequently succeed, consider adjusting your system's context handling.
 
-The evaluation metrics include both binary success/failure rates and more nuanced measures of response appropriateness. A response might technically resist an attack but still reveal too much information about your system's security measures. Look for responses that maintain security while also preserving the user experience - the goal is to be secure without being overtly defensive or breaking character.
+While HarmBench evaluation metrics return binary success/failure rates, a response might technically resist an attack but still reveal too much information about your system's security measures. Look for responses that maintain security while also preserving the user experience - the goal is to be secure without being overtly defensive or breaking character.
 
 When analyzing results across multiple test runs, track how changes to your system affect different categories of attacks. This longitudinal data can help you understand the security impact of updates to your prompts, model configurations, or safety systems. Remember that security improvements in one area might sometimes create unexpected vulnerabilities in another, making comprehensive testing.
 
