@@ -923,8 +923,3 @@ export const DefaultGradingJsonProvider = new OpenAiChatCompletionProvider('gpt-
 });
 export const DefaultSuggestionsProvider = new OpenAiChatCompletionProvider('gpt-4o-2024-05-13');
 export const DefaultModerationProvider = new OpenAiModerationProvider('omni-moderation-latest');
-
-export { OpenAiAssistantProvider } from './assistant';
-export type { OpenAiAssistantOptions } from './assistant';
-export type { OpenAiSharedOptions } from './types';
-export type { OpenAiFunction, OpenAiTool } from './util';
