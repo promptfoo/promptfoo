@@ -10,6 +10,11 @@ interface AutoDanRemoteResponse {
   selectedStrategy: string;
   prompt: string;
   rationale: string;
+  tokenUsage: {
+    prompt: number;
+    completion: number;
+    total: number;
+  };
 }
 
 interface AutoDanRemoteRequest {
@@ -48,7 +53,7 @@ export async function getNextAutoDanAttack({
 
     logger.debug(`Sending AutoDan remote request: ${JSON.stringify(payload)}`);
 
-    const { data } = await fetchWithCache(
+    const response = await fetchWithCache(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
@@ -58,17 +63,25 @@ export async function getNextAutoDanAttack({
         body: JSON.stringify(payload),
       },
       REQUEST_TIMEOUT_MS,
-      'json'
+      'json',
     );
 
-    if (!data || !data.result) {
+    console.log('response', response);
+
+    const data = response.data;
+
+    if (!data || !data.prompt) {
       throw new Error('Invalid response from remote generation service');
     }
 
-    const result = data.result as AutoDanRemoteResponse;
-    logger.debug(`Got AutoDan remote response: ${JSON.stringify(result)}`);
+    logger.debug(`Got AutoDan remote response: ${JSON.stringify(data)}`);
 
-    return result;
+    return {
+      prompt: data.prompt,
+      selectedStrategy: data.selectedStrategy,
+      rationale: data.rationale,
+      tokenUsage: data.tokenUsage,
+    };
   } catch (error) {
     throw new Error(`Failed to get next AutoDan attack: ${error}`);
   }

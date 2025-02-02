@@ -509,6 +509,7 @@ export const AGENTIC_STRATEGIES = ['crescendo', 'goat', 'jailbreak', 'jailbreak:
 export type AgenticStrategy = (typeof AGENTIC_STRATEGIES)[number];
 
 export const ADDITIONAL_STRATEGIES = [
+  'autodan',
   'prompt-injection',
   'base64',
   'citation',
@@ -529,6 +530,7 @@ export const ALL_STRATEGIES = ['default', ...DEFAULT_STRATEGIES, ...ADDITIONAL_S
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
+  autodan: 'Tests LLM safety using AutoDAN attack methodology',
   default: 'Standard security testing plugins',
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
   base64: 'Tests handling of Base64-encoded malicious payloads',
@@ -611,6 +613,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
 
 // These names are displayed in risk cards and in the table
 export const displayNameOverrides: Record<Plugin | Strategy, string> = {
+  autodan: 'AutoDAN Attack',
   'ascii-smuggling': 'ASCII Smuggling',
   base64: 'Base64 Payload Encoding',
   basic: 'Baseline Testing',
@@ -1013,6 +1016,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
+  autodan: 'Implements AutoDAN attack methodology to test LLM safety boundaries',
   base64: 'Tests detection and handling of Base64-encoded malicious payloads',
   basic: 'Equivalent to no strategy. Always included. Can be disabled in configuration.',
   'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
@@ -1033,6 +1037,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
 };
 
 export const strategyDisplayNames: Record<Strategy, string> = {
+  autodan: 'AutoDAN',
   base64: 'Base64 Encoding',
   basic: 'Basic',
   'best-of-n': 'Best-of-N',

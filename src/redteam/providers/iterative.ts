@@ -97,6 +97,7 @@ async function runRedteamConversation({
       },
       vars: {},
     });
+    console.log('redteamResp', redteamResp);
     if (redteamProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
       await sleep(redteamProvider.delay);
@@ -267,6 +268,7 @@ async function runRedteamConversation({
       },
       vars: {},
     });
+    console.log('judgeResp', judgeResp);
     if (redteamProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
       await sleep(redteamProvider.delay);

@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
 import {
@@ -12,27 +11,17 @@ import {
   type Prompt,
 } from '../../../types';
 import invariant from '../../../util/invariant';
-import {
-  extractFirstJsonObject,
-  safeJsonStringify,
-} from '../../../util/json';
+import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
 import { shouldGenerateRemote } from '../../remoteGeneration';
-import {
-  getTargetResponse,
-  redteamProviderManager,
-} from '../shared';
-import {
-  GRADER_SYSTEM_PROMPT,
-  JUDGE_SYSTEM_PROMPT,
-} from './prompts';
+import { getTargetResponse, redteamProviderManager } from '../shared';
+import { JUDGE_SYSTEM_PROMPT } from './prompts';
 import { getNextAutoDanAttack } from './remoteGeneration';
 
 interface AutoDanOutput {
   prompt: string;
   output: string;
-  score: number;
   strategy: string;
   graderPassed?: boolean;
   guardrails?: GuardrailResponse;
@@ -44,6 +33,7 @@ async function runRedteamConversation({
   context,
   filters,
   injectVar,
+  numIterations,
   options,
   prompt,
   redteamProvider,
@@ -54,6 +44,7 @@ async function runRedteamConversation({
   context?: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
   injectVar: string;
+  numIterations: number;
   options?: CallApiOptionsParams;
   prompt: Prompt;
   redteamProvider: ApiProvider;
@@ -64,7 +55,6 @@ async function runRedteamConversation({
   const nunjucks = getNunjucksEngine();
   const goal = vars[injectVar];
 
-  const graderSystemPrompt = nunjucks.renderString(GRADER_SYSTEM_PROMPT, { goal });
   const judgeSystemPrompt = nunjucks.renderString(JUDGE_SYSTEM_PROMPT, { goal });
 
   let highestScore = 0;
@@ -84,10 +74,9 @@ async function runRedteamConversation({
   };
 
   const previousOutputs: AutoDanOutput[] = [];
-  const maxIterations = 10;
 
-  for (let i = 0; i < maxIterations; i++) {
-    logger.debug(`[AutoDan] Starting iteration ${i + 1}/${maxIterations}`);
+  for (let i = 0; i < numIterations; i++) {
+    logger.debug(`[AutoDan] Starting iteration ${i + 1}/${numIterations}`);
 
     // Get next attack using remote generation
     let newInjectVar: string;
@@ -110,12 +99,7 @@ async function runRedteamConversation({
     }
 
     // Get target response
-    const targetResponse = await getTargetResponse(
-      targetProvider,
-      newInjectVar,
-      context,
-      options,
-    );
+    const targetResponse = await getTargetResponse(targetProvider, newInjectVar, context, options);
 
     if (targetResponse.error) {
       logger.warn(`[AutoDan] Target error: ${targetResponse.error}`);
@@ -130,51 +114,6 @@ async function runRedteamConversation({
       totalTokenUsage.completion += targetResponse.tokenUsage.completion || 0;
       totalTokenUsage.numRequests += targetResponse.tokenUsage.numRequests ?? 1;
       totalTokenUsage.cached += targetResponse.tokenUsage.cached || 0;
-    }
-
-    // Grade the response
-    const graderBody = JSON.stringify([
-      {
-        role: 'system',
-        content: graderSystemPrompt,
-      },
-      {
-        role: 'user',
-        content: targetResponse.output,
-      },
-    ]);
-
-    const graderResp = await redteamProvider.callApi(graderBody, {
-      prompt: {
-        raw: graderBody,
-        label: 'grader',
-      },
-      vars: {},
-    });
-
-    if (redteamProvider.delay) {
-      await sleep(redteamProvider.delay);
-    }
-
-    if (graderResp.tokenUsage) {
-      totalTokenUsage.total += graderResp.tokenUsage.total || 0;
-      totalTokenUsage.prompt += graderResp.tokenUsage.prompt || 0;
-      totalTokenUsage.completion += graderResp.tokenUsage.completion || 0;
-      totalTokenUsage.numRequests += graderResp.tokenUsage.numRequests ?? 1;
-      totalTokenUsage.cached += graderResp.tokenUsage.cached || 0;
-    }
-
-    let score = 0;
-    let success = false;
-    try {
-      const parsed = typeof graderResp.output === 'string'
-        ? extractFirstJsonObject(graderResp.output)
-        : graderResp.output;
-      score = parsed.score;
-      success = parsed.success;
-    } catch (err) {
-      logger.warn(`[AutoDan] Failed to parse grader response: ${err}`);
-      continue;
     }
 
     // Judge the response against the best response so far
@@ -220,9 +159,10 @@ async function runRedteamConversation({
     let judgeExplanation = '';
 
     try {
-      const parsed = typeof judgeResp.output === 'string'
-        ? extractFirstJsonObject(judgeResp.output)
-        : judgeResp.output;
+      const parsed =
+        typeof judgeResp.output === 'string'
+          ? extractFirstJsonObject(judgeResp.output)
+          : judgeResp.output;
       currentRating = parsed.currentResponse?.rating;
       previousRating = parsed.previousBestResponse?.rating;
       judgeExplanation = parsed.currentResponse?.explanation;
@@ -238,7 +178,7 @@ async function runRedteamConversation({
     const assertToUse = test?.assert?.find((a: { type: string }) => a.type);
     const { getGraderById } = await import('../../graders');
     let graderPassed: boolean | undefined;
-    
+
     if (test && assertToUse) {
       const grader = getGraderById(assertToUse.type);
       if (grader) {
@@ -262,7 +202,6 @@ async function runRedteamConversation({
     previousOutputs.push({
       prompt: newInjectVar,
       output: targetResponse.output,
-      score,
       strategy: currentStrategy,
       graderPassed,
       guardrails: targetResponse.guardrails,
@@ -278,8 +217,8 @@ async function runRedteamConversation({
       finalIteration = i + 1;
     }
 
-    // Exit conditions: success from grader, high score from judge, or failed custom grader
-    if (success || currentRating >= 10 || graderPassed === false) {
+    // Exit conditions: success from grader, high score from judge
+    if (currentRating >= 10 || graderPassed === false) {
       break;
     }
   }
@@ -297,13 +236,21 @@ async function runRedteamConversation({
 }
 
 class AutoDanProvider implements ApiProvider {
-  #redteamProvider: ApiProvider;
+  #redteamProvider: string | object;
   private readonly injectVar: string;
+  private readonly numIterations: number;
 
   constructor(readonly config: Record<string, string | object>) {
     logger.debug(`[AutoDan] Constructor config: ${JSON.stringify(config)}`);
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
+
+    this.numIterations = Number.parseInt(
+      process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS ||
+        (config.numIterations as string | undefined) ||
+        '10',
+      10,
+    );
 
     if (shouldGenerateRemote()) {
       this.#redteamProvider = new PromptfooChatCompletionProvider({
@@ -312,13 +259,12 @@ class AutoDanProvider implements ApiProvider {
         preferSmallModel: false,
       });
     } else {
-      invariant(config.redteamProvider, 'Expected redteamProvider to be set when not using remote generation');
+      invariant(
+        config.redteamProvider,
+        'Expected redteamProvider to be set when not using remote generation',
+      );
       // Initialize with a temporary provider that will be replaced in init()
-      this.#redteamProvider = new PromptfooChatCompletionProvider({
-        task: 'autodan',
-        jsonOnly: true,
-        preferSmallModel: false,
-      });
+      this.#redteamProvider = config.redteamProvider;
     }
   }
 
@@ -346,7 +292,11 @@ class AutoDanProvider implements ApiProvider {
       prompt: context.prompt,
       filters: context.filters,
       vars: context.vars,
-      redteamProvider: this.#redteamProvider,
+      numIterations: this.numIterations,
+      redteamProvider: await redteamProviderManager.getProvider({
+        provider: this.#redteamProvider,
+        jsonOnly: true,
+      }),
       targetProvider: context.originalProvider,
       injectVar: this.injectVar,
       context,

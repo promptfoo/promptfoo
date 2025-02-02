@@ -129,6 +129,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
     };
 
     try {
+      console.log('body', body);
       const { data, status, statusText } = await fetchWithCache(
         getRemoteGenerationUrl(),
         {

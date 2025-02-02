@@ -5,6 +5,7 @@ import { CloudConfig } from '../globalConfig/cloud';
 export function getRemoteGenerationUrl(): string {
   // Check env var first
   const envUrl = getEnvString('PROMPTFOO_REMOTE_GENERATION_URL');
+  console.log('envUrl from getRemoteGenerationUrl', envUrl);
   if (envUrl) {
     return envUrl;
   }

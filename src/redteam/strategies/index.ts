@@ -6,6 +6,7 @@ import { importModule } from '../../esm';
 import logger from '../../logger';
 import type { RedteamStrategyObject, TestCase, TestCaseWithPlugin } from '../../types';
 import { isJavascriptFile } from '../../util/file';
+import { addAutoDan } from './autodan';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
 import { addCitationTestCases } from './citation';
@@ -31,6 +32,15 @@ export interface Strategy {
 }
 
 export const Strategies: Strategy[] = [
+  {
+    id: 'autodan',
+    action: async (testCases: TestCase[], injectVar: string, config?: Record<string, any>) => {
+      logger.debug(`Adding AutoDan to ${testCases.length} test cases`);
+      const newTestCases = await addAutoDan(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} AutoDan test cases`);
+      return newTestCases;
+    },
+  },
   {
     id: 'basic',
     action: async (testCases: TestCase[], injectVar: string, config?: Record<string, any>) => {
