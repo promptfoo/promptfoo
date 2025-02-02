@@ -3,8 +3,8 @@ import OpenAI from 'openai';
 import type { TokenUsage } from '../../types';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
 import { safeJsonStringify } from '../../util/json';
+import type { ProviderConfig } from '../shared';
 import { calculateCost } from '../shared';
-import type { OpenAiSharedOptions } from './types';
 
 const ajv = new Ajv();
 
@@ -128,7 +128,7 @@ export const OPENAI_COMPLETION_MODELS = [
 
 export function calculateOpenAICost(
   modelName: string,
-  config: OpenAiSharedOptions,
+  config: ProviderConfig,
   promptTokens?: number,
   completionTokens?: number,
 ): number | undefined {
