@@ -8,14 +8,17 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
+import Tab from '@mui/material/Tab';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
+import Tabs from '@mui/material/Tabs';
 import TextareaAutosize from '@mui/material/TextareaAutosize';
 import Typography from '@mui/material/Typography';
+import { quote } from 'shell-quote';
 import { ellipsize } from '../../../../../utils/text';
 import ChatMessages, { type Message } from './ChatMessages';
 import type { GradingResult } from './types';
@@ -91,6 +94,75 @@ interface ExpandedMetadataState {
   };
 }
 
+function generateCurlCommand(config: any, prompt: string): string {
+  const url = new URL(config.url);
+  const method = config.method || 'POST';
+  const headers = config.headers || {};
+  let body = config.body;
+
+  // Replace {{prompt}} in the body
+  if (body) {
+    if (typeof body === 'string') {
+      body = body.replace(/{{prompt}}/g, prompt);
+    } else if (typeof body === 'object') {
+      const bodyStr = JSON.stringify(body);
+      body = JSON.parse(bodyStr.replace(/"{{prompt}}"/g, JSON.stringify(prompt)));
+    }
+  }
+
+  const args = ['curl', '-X', method];
+
+  // Add headers
+  Object.entries(headers).forEach(([key, value]) => {
+    const processedValue = String(value).replace(/{{prompt}}/g, prompt);
+    args.push('-H', `${key}: ${processedValue}`);
+  });
+
+  // Add body
+  if (body !== undefined && body !== null) {
+    const bodyStr = typeof body === 'string' ? body : JSON.stringify(body);
+    args.push('-d', bodyStr);
+  }
+
+  args.push(url.toString());
+  return quote(args);
+}
+
+function generateRawHttpRequest(config: any, prompt: string): string {
+  const url = new URL(config.url);
+  const method = config.method || 'POST';
+  const headers = config.headers || {};
+  let body = config.body;
+
+  // Replace {{prompt}} in the body
+  if (body) {
+    if (typeof body === 'string') {
+      body = body.replace(/{{prompt}}/g, prompt);
+    } else if (typeof body === 'object') {
+      const bodyStr = JSON.stringify(body);
+      body = JSON.parse(bodyStr.replace(/"{{prompt}}"/g, JSON.stringify(prompt)));
+    }
+  }
+
+  // Build the raw HTTP request
+  let request = `${method} ${url.pathname}${url.search} HTTP/1.1\n`;
+  request += `Host: ${url.host}\n`;
+
+  // Add headers
+  Object.entries(headers).forEach(([key, value]) => {
+    const processedValue = String(value).replace(/{{prompt}}/g, prompt);
+    request += `${key}: ${processedValue}\n`;
+  });
+
+  // Add body
+  if (body !== undefined && body !== null) {
+    const bodyStr = typeof body === 'string' ? body : JSON.stringify(body, null, 2);
+    request += `\n${bodyStr}`;
+  }
+
+  return request;
+}
+
 interface EvalOutputPromptDialogProps {
   open: boolean;
   onClose: () => void;
@@ -99,6 +171,8 @@ interface EvalOutputPromptDialogProps {
   output?: string;
   gradingResults?: GradingResult[];
   metadata?: Record<string, any>;
+  target?: any;
+  isRedteamHttp?: boolean;
 }
 
 export default function EvalOutputPromptDialog({
@@ -109,17 +183,25 @@ export default function EvalOutputPromptDialog({
   output,
   gradingResults,
   metadata,
+  target,
+  isRedteamHttp,
 }: EvalOutputPromptDialogProps) {
   const [copied, setCopied] = useState(false);
   const [expandedMetadata, setExpandedMetadata] = useState<ExpandedMetadataState>({});
+  const [curlCopied, setCurlCopied] = useState(false);
+  const [rawRequestCopied, setRawRequestCopied] = useState(false);
+  const [requestTab, setRequestTab] = useState(0);
 
   useEffect(() => {
     setCopied(false);
+    setCurlCopied(false);
+    setRawRequestCopied(false);
   }, [prompt]);
 
-  const copyToClipboard = async (text: string) => {
+  const copyToClipboard = async (text: string, setCopyState: (copied: boolean) => void) => {
     await navigator.clipboard.writeText(text);
-    setCopied(true);
+    setCopyState(true);
+    setTimeout(() => setCopyState(false), 2000);
   };
 
   const handleMetadataClick = (key: string) => {
@@ -156,7 +238,7 @@ export default function EvalOutputPromptDialog({
             maxRows={20}
           />
           <IconButton
-            onClick={() => copyToClipboard(prompt)}
+            onClick={() => copyToClipboard(prompt, setCopied)}
             style={{ position: 'absolute', right: '10px', top: '10px' }}
           >
             {copied ? <CheckIcon /> : <ContentCopyIcon />}
@@ -254,6 +336,53 @@ export default function EvalOutputPromptDialog({
                   ],
                 )}
             />
+          </Box>
+        )}
+        {isRedteamHttp && target && (
+          <Box my={2}>
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+              <Typography variant="subtitle1">HTTP Request</Typography>
+            </Box>
+            <Tabs
+              value={requestTab}
+              onChange={(_, newValue) => setRequestTab(newValue)}
+              sx={{ mb: 2 }}
+            >
+              <Tab label="Raw" />
+              <Tab label="cURL" />
+            </Tabs>
+            {requestTab === 0 && (
+              <Box position="relative">
+                <IconButton
+                  onClick={() => copyToClipboard(generateRawHttpRequest(target.config, prompt), setRawRequestCopied)}
+                  sx={{ position: 'absolute', right: 1, top: 1 }}
+                >
+                  {rawRequestCopied ? <CheckIcon /> : <ContentCopyIcon />}
+                </IconButton>
+                <TextareaAutosize
+                  readOnly
+                  value={generateRawHttpRequest(target.config, prompt)}
+                  style={{ width: '100%', padding: '0.75rem', fontFamily: 'monospace' }}
+                  maxRows={20}
+                />
+              </Box>
+            )}
+            {requestTab === 1 && (
+              <Box position="relative">
+                <IconButton
+                  onClick={() => copyToClipboard(generateCurlCommand(target.config, prompt), setCurlCopied)}
+                  sx={{ position: 'absolute', right: 1, top: 1 }}
+                >
+                  {curlCopied ? <CheckIcon /> : <ContentCopyIcon />}
+                </IconButton>
+                <TextareaAutosize
+                  readOnly
+                  value={generateCurlCommand(target.config, prompt)}
+                  style={{ width: '100%', padding: '0.75rem', fontFamily: 'monospace' }}
+                  maxRows={20}
+                />
+              </Box>
+            )}
           </Box>
         )}
       </DialogContent>
