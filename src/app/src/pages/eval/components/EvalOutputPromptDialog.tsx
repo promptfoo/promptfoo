@@ -354,7 +354,12 @@ export default function EvalOutputPromptDialog({
             {requestTab === 0 && (
               <Box position="relative">
                 <IconButton
-                  onClick={() => copyToClipboard(generateRawHttpRequest(target.config, prompt), setRawRequestCopied)}
+                  onClick={() =>
+                    copyToClipboard(
+                      generateRawHttpRequest(target.config, prompt),
+                      setRawRequestCopied,
+                    )
+                  }
                   sx={{ position: 'absolute', right: 1, top: 1 }}
                 >
                   {rawRequestCopied ? <CheckIcon /> : <ContentCopyIcon />}
@@ -370,7 +375,9 @@ export default function EvalOutputPromptDialog({
             {requestTab === 1 && (
               <Box position="relative">
                 <IconButton
-                  onClick={() => copyToClipboard(generateCurlCommand(target.config, prompt), setCurlCopied)}
+                  onClick={() =>
+                    copyToClipboard(generateCurlCommand(target.config, prompt), setCurlCopied)
+                  }
                   sx={{ position: 'absolute', right: 1, top: 1 }}
                 >
                   {curlCopied ? <CheckIcon /> : <ContentCopyIcon />}
