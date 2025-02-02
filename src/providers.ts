@@ -48,13 +48,13 @@ import {
   OllamaChatProvider,
 } from './providers/ollama';
 import {
-  OpenAiAssistantProvider,
   OpenAiCompletionProvider,
   OpenAiChatCompletionProvider,
   OpenAiEmbeddingProvider,
   OpenAiImageProvider,
   OpenAiModerationProvider,
 } from './providers/openai';
+import { OpenAiAssistantProvider } from './providers/openai/assistant';
 import { parsePackageProvider } from './providers/packageParser';
 import { PortkeyChatCompletionProvider } from './providers/portkey';
 import { PythonProvider } from './providers/pythonCompletion';

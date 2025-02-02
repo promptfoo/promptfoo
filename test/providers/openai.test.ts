@@ -4,12 +4,12 @@ import {
   calculateOpenAICost,
   failApiCall,
   getTokenUsage,
-  OpenAiAssistantProvider,
   OpenAiChatCompletionProvider,
   OpenAiCompletionProvider,
   OpenAiEmbeddingProvider,
   OpenAiGenericProvider,
 } from '../../src/providers/openai';
+import { OpenAiAssistantProvider } from '../../src/providers/openai/assistant';
 
 jest.mock('../../src/cache');
 

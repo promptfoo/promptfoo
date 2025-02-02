@@ -3,11 +3,8 @@ import { MODEL_GRADED_ASSERTION_TYPES } from '../assertions';
 import logger from '../logger';
 import type { TestCase, TestSuite } from '../types';
 import { AzureChatCompletionProvider, AzureCompletionProvider } from './azure';
-import {
-  OpenAiAssistantProvider,
-  OpenAiChatCompletionProvider,
-  OpenAiCompletionProvider,
-} from './openai';
+import { OpenAiChatCompletionProvider, OpenAiCompletionProvider } from './openai';
+import { OpenAiAssistantProvider } from './openai/assistant';
 
 export function maybeEmitAzureOpenAiWarning(testSuite: TestSuite, tests: TestCase[]) {
   const hasAzure = testSuite.providers.some(

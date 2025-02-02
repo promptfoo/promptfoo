@@ -32,11 +32,11 @@ import {
   OllamaEmbeddingProvider,
 } from '../../src/providers/ollama';
 import {
-  OpenAiAssistantProvider,
   OpenAiCompletionProvider,
   OpenAiChatCompletionProvider,
   OpenAiEmbeddingProvider,
 } from '../../src/providers/openai';
+import { OpenAiAssistantProvider } from '../../src/providers/openai/assistant';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import {
   ReplicateImageProvider,
