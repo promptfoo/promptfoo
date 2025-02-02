@@ -2,8 +2,6 @@ import OpenAI from 'openai';
 import { disableCache, enableCache } from '../../../src/cache';
 import { OpenAiAssistantProvider } from '../../../src/providers/openai/assistant';
 
-jest.mock('../../../src/cache');
-
 jest.mock('openai');
 
 describe('OpenAI Provider', () => {

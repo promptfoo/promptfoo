@@ -1,18 +1,6 @@
-import { disableCache, enableCache } from '../../../src/cache';
 import { OpenAiGenericProvider } from '../../../src/providers/openai';
 
-jest.mock('../../../src/cache');
-
 describe('OpenAI Provider', () => {
-  beforeEach(() => {
-    jest.resetAllMocks();
-    disableCache();
-  });
-
-  afterEach(() => {
-    enableCache();
-  });
-
   describe('OpenAiGenericProvider', () => {
     const provider = new OpenAiGenericProvider('test-model', {
       config: {
