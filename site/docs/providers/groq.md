@@ -1,6 +1,8 @@
 # Groq
 
-The [Groq API](https://wow.groq.com) is integrated into promptfoo using the Groq SDK, providing a native experience for using Groq models in your evaluations. Groq offers high-performance inference for various large language models.
+[Groq](https://wow.groq.com) is an extremely fast inference API compatible with all the options provided by Promptfoo's [OpenAI provider](/docs/providers/openai/). See openai specific documentation for configuration details.
+
+Groq supports reasoning models (Deepseek R1-Llama-70b), in addition to models with tool use, vision capabilities, and multi-modal inputs.
 
 ## Setup
 
@@ -59,15 +61,13 @@ GroqCloud currently supports the following models:
 
 ### Production Models
 
-Note: Production models are intended for use in your production environments. They meet or exceed our high standards for speed and quality.
-
-- **gemma2-9b-it** – Developer: Google, Context Window: 8,192 tokens
 - **llama-3.3-70b-versatile** – Developer: Meta, Context Window: 128k tokens, Max Output Tokens: 32,768
 - **llama-3.1-8b-instant** – Developer: Meta, Context Window: 128k tokens, Max Output Tokens: 8,192
 - **llama-guard-3-8b** – Developer: Meta, Context Window: 8,192 tokens
 - **llama3-70b-8192** – Developer: Meta, Context Window: 8,192 tokens
 - **llama3-8b-8192** – Developer: Meta, Context Window: 8,192 tokens
 - **mixtral-8x7b-32768** – Developer: Mistral, Context Window: 32,768 tokens
+- **gemma2-9b-it** – Developer: Google, Context Window: 8,192 tokens
 
 ### Preview Models
 
@@ -142,7 +142,7 @@ For complex tools or ambiguous queries, use the `llama-3.3-70b-versatile` model.
 
 ## Vision
 
-Groq API offers fast inference and low latency for multimodal models with vision capabilities. With promptfoo's Groq Provider, you can integrate vision models to analyze and interpret visual data from images.
+Groq API offers fast inference and low latency for multi-modal models with vision capabilities. With promptfoo's Groq Provider, you can integrate vision models to analyze and interpret visual data from images.
 
 ### Supported Vision Models
 
@@ -162,49 +162,34 @@ Promptfoo supports the following vision models available on GroqCloud:
 
 To use vision models with promptfoo, specify the vision model ID in your provider configuration. For example:
 
-```yaml
+And include the image in an openai compatible format.
+
+```yaml title="openai-compatible-prompt-format.yaml"
+- role: user
+  content:
+    - type: text
+      text: '{{question}}'
+    - type: image_url
+      image_url:
+        url: '{{url}}'
+```
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+prompts: file://openai-compatible-prompt-format.yaml
 providers:
   - id: groq:llama-3.2-90b-vision-preview
     config:
       temperature: 1
       max_completion_tokens: 1024
-      response_format:
-        type: json_object
+tests:
+  - vars:
+      question: 'What do you see in the image?'
+      url: https://upload.wikimedia.org/wikipedia/commons/thumb/b/b6/Felis_catus-cat_on_snow.jpg/1024px-Felis_catus-cat_on_snow.jpg
+    assert:
+      - type: contains
+        value: 'cat'
 ```
-
-### Example: Image Input via URL
-
-Below is a sample curl command that uses a vision model with tool use enabled:
-
-```sh
-curl https://api.groq.com/openai/v1/chat/completions -s \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $GROQ_API_KEY" \
-  -d '{
-    "model": "llama-3.2-11b-vision-preview",
-    "messages": [
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "Describe what you see in this image."},
-                {"type": "image_url", "image_url": {"url": "https://example.com/image.jpg"}}
-            ]
-        }
-    ],
-    "tool_choice": "auto"
-  }'
-```
-
-### Use Cases and Next Steps
-
-Vision models can power various applications, such as:
-
-- **Accessibility:** Auto-generating image descriptions for visually impaired users.
-- **E-commerce:** Creating product descriptions from image data.
-- **Multilingual Analysis:** Generating image insights in multiple languages.
-- **Interactive Visual Conversations:** Enabling multi-turn conversations around images.
-
-Explore our Groq API Cookbook on GitHub for additional examples and tutorials on image moderation and multimodal processing.
 
 ## Reasoning
 

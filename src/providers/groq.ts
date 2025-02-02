@@ -1,9 +1,7 @@
-import { OpenAiChatCompletionProvider } from './openai';
-import type { ApiProvider, CallApiContextParams, CallApiOptionsParams } from '../types';
-import type { EnvOverrides } from '../types/env';
-import type { OpenAiCompletionOptions } from './openai';
+import type { ProviderOptions } from '../types/providers';
+import { OpenAiChatCompletionProvider, type OpenAiCompletionOptions } from './openai';
 
-export interface GroqCompletionOptions extends OpenAiCompletionOptions {
+type GroqCompletionOptions = OpenAiCompletionOptions & {
   systemPrompt?: string;
   parallel_tool_calls?: boolean | null;
   reasoning_format?: string | null;
@@ -11,22 +9,39 @@ export interface GroqCompletionOptions extends OpenAiCompletionOptions {
   stream?: boolean | null;
   stream_options?: object | null;
   user?: string | null;
-}
+};
 
-export class GroqProvider extends OpenAiChatCompletionProvider implements ApiProvider {
-  public config: GroqCompletionOptions;
-  apiKey?: string;
+type GroqProviderOptions = ProviderOptions & {
+  config?: GroqCompletionOptions;
+};
 
-  constructor(modelName: string, options: { config?: GroqCompletionOptions; id?: string; env?: EnvOverrides } = {}) {
-    const config = options.config || {};
-    const apiKey = config.apiKey || (options.env && options.env.GROQ_API_KEY) || process.env.GROQ_API_KEY;
-    if (apiKey) {
-      config.apiKey = apiKey;
+export class GroqProvider extends OpenAiChatCompletionProvider {
+  protected get apiKey(): string | undefined {
+    return this.config?.apiKey;
+  }
+
+  protected isReasoningModel(): boolean {
+    // Groq's reasoning models include deepseek models and any others they may add
+    return this.modelName.includes('deepseek') || super.isReasoningModel();
+  }
+
+  protected supportsTemperature(): boolean {
+    // Groq's deepseek models support temperature, even though they're reasoning models
+    if (this.modelName.includes('deepseek')) {
+      return true;
     }
-    // Pass the configuration to the OpenAiChatCompletionProvider
-    super(modelName, { config, id: options.id, env: options.env });
-    this.config = config;
-    this.apiKey = apiKey;
+    return super.supportsTemperature();
+  }
+
+  constructor(modelName: string, providerOptions: GroqProviderOptions) {
+    super(modelName, {
+      ...providerOptions,
+      config: {
+        ...providerOptions.config,
+        apiKeyEnvar: 'GROQ_API_KEY',
+        apiBaseUrl: 'https://api.groq.com/openai/v1',
+      },
+    });
   }
 
   id(): string {
@@ -43,8 +58,8 @@ export class GroqProvider extends OpenAiChatCompletionProvider implements ApiPro
       model: this.modelName,
       config: {
         ...this.config,
-        ...(this.apiKey && { apiKey: undefined })
-      }
+        ...(this.apiKey && { apiKey: undefined }),
+      },
     };
   }
 }

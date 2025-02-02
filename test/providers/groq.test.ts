@@ -26,10 +26,10 @@ describe('Groq', () => {
   });
 
   describe('GroqProvider', () => {
-    const provider = new GroqProvider('mixtral-8x7b-32768');
+    const provider = new GroqProvider('mixtral-8x7b-32768', {});
 
     it('should initialize with correct model name', () => {
-      expect(provider.getModelName()).toBe('mixtral-8x7b-32768');
+      expect(provider.modelName).toBe('mixtral-8x7b-32768');
     });
 
     it('should return correct id', () => {
@@ -190,14 +190,19 @@ describe('Groq', () => {
       });
 
       it('should pass custom configuration options including tools and tool_choice', async () => {
-        const tools: {
-          type: 'function';
-          function: {
-            name: string;
-            description?: string | undefined;
-            parameters?: Record<string, any> | undefined;
-          };
-        }[] = [{ type: 'function', function: { name: 'test_function' } }];
+        const tools = [
+          {
+            type: 'function' as const,
+            function: {
+              name: 'test_function',
+              description: 'Test function',
+              parameters: {
+                type: 'object',
+                properties: {},
+              },
+            },
+          },
+        ];
         jest.mocked(maybeLoadFromExternalFile).mockReturnValue(tools);
 
         const customProvider = new GroqProvider('llama3-groq-8b-8192-tool-use-preview', {
@@ -371,10 +376,14 @@ describe('Groq', () => {
           config: {
             tools: [
               {
-                type: 'function',
+                type: 'function' as const,
                 function: {
                   name: 'external_tool',
                   description: 'An external tool',
+                  parameters: {
+                    type: 'object',
+                    properties: {},
+                  },
                 },
               },
             ],

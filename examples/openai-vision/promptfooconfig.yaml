@@ -1,16 +1,23 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-prompts:
-  - file://prompt.json
+prompts: '{{ question }}'
 providers:
-  - openai:chat:gpt-4o
-
+  - id: groq:deepseek-r1-distill-llama-70b
+    config:
+      temperature: 0.6
+      max_completion_tokens: 25000
 tests:
   - vars:
-      question: 'What do you see?'
-      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg'
-    options:
-      transformVars: |
-        return { ...vars, image_markdown: `![image](${vars.url})` }
+      question: |
+        What do you think the carbon emissions from AI model training will look like between 2024-2040?
+        First describe some of the factors that will influence the carbon emissions.
+        Then propose a modeling approach to estimate the carbon emissions.
+        Finally, provide estimates for the carbon emissions for each year from 2024 to 2040 based on your modeling approach.
+        Verify your approach by plugging in the numbers and showing the formula.
+        Use the formula to calculate the total carbon emissions for the period.
     assert:
       - type: contains
-        value: 'boardwalk'
+        value: 'formula'
+      - type: contains
+        value: 'CO2'
+      - type: contains
+        value: 'emissions'
