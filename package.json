@@ -133,6 +133,7 @@
     "@types/opener": "^1.4.3",
     "@types/pdf-parse": "^1.1.4",
     "@types/semver": "^7.5.8",
+    "@types/shell-quote": "^1.7.5",
     "@types/supertest": "^6.0.2",
     "@types/uuid": "^10.0.0",
     "check-dependency-version-consistency": "^5.0.0",
