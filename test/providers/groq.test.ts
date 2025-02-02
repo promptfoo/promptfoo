@@ -40,6 +40,26 @@ describe('Groq', () => {
       expect(provider.toString()).toBe('[Groq Provider mixtral-8x7b-32768]');
     });
 
+    it('should identify reasoning models correctly', () => {
+      const regularProvider = new GroqProvider('mixtral-8x7b-32768', {});
+      const deepseekProvider = new GroqProvider('deepseek-r1-distill-llama-70b', {});
+      const o1Provider = new GroqProvider('o1-mini', {});
+
+      expect(regularProvider['isReasoningModel']()).toBe(false);
+      expect(deepseekProvider['isReasoningModel']()).toBe(true);
+      expect(o1Provider['isReasoningModel']()).toBe(true);
+    });
+
+    it('should handle temperature support correctly', () => {
+      const regularProvider = new GroqProvider('mixtral-8x7b-32768', {});
+      const deepseekProvider = new GroqProvider('deepseek-r1-distill-llama-70b', {});
+      const o1Provider = new GroqProvider('o1-mini', {});
+
+      expect(regularProvider['supportsTemperature']()).toBe(true);
+      expect(deepseekProvider['supportsTemperature']()).toBe(true);
+      expect(o1Provider['supportsTemperature']()).toBe(false);
+    });
+
     it('should serialize to JSON correctly without API key', () => {
       const provider = new GroqProvider('mixtral-8x7b-32768', {
         config: {
@@ -76,7 +96,7 @@ describe('Groq', () => {
         },
       });
       // Ensure the original apiKey is not affected
-      expect(provider.getApiKey()).toBe('secret-api-key');
+      expect(provider['apiKey']).toBe('secret-api-key');
     });
 
     describe('callApi', () => {
