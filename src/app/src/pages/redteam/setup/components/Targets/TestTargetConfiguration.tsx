@@ -273,14 +273,29 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                           }}
                         />
                         <label htmlFor="private-key-upload">
-                          <Button variant="contained" component="span" startIcon={<VpnKeyIcon />}>
-                            Upload Key File
+                          <Button
+                            variant="outlined"
+                            component="span"
+                            startIcon={<VpnKeyIcon />}
+                            color={
+                              selectedTarget.config.signatureAuth?.privateKey
+                                ? 'primary'
+                                : 'warning'
+                            }
+                          >
+                            {selectedTarget.config.signatureAuth?.privateKey
+                              ? 'Change Key File'
+                              : 'Upload Key File (Required)'}
                           </Button>
                         </label>
                         {selectedTarget.config.signatureAuth?.privateKey ? (
                           <>
-                            <Typography variant="caption" color="textSecondary" sx={{ ml: 1 }}>
-                              Key file loaded
+                            <Typography
+                              variant="caption"
+                              color="success.main"
+                              sx={{ ml: 1, display: 'inline-flex', alignItems: 'center' }}
+                            >
+                              Key file loaded successfully
                             </Typography>
                             <IconButton
                               size="small"
@@ -297,8 +312,9 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                             </IconButton>
                           </>
                         ) : (
-                          <Typography variant="caption" color="textSecondary" sx={{ ml: 1 }}>
-                            RSA private key in PEM format (e.g., "-----BEGIN PRIVATE KEY-----")
+                          <Typography variant="caption" color="warning.main" sx={{ ml: 1 }}>
+                            Upload an RSA private key in PEM format (e.g., "-----BEGIN PRIVATE
+                            KEY-----")
                           </Typography>
                         )}
                       </Box>
