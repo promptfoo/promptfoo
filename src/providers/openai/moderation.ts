@@ -104,5 +104,3 @@ export class OpenAiModerationProvider
     }
   }
 }
-
-export const DefaultModerationProvider = new OpenAiModerationProvider('omni-moderation-latest');

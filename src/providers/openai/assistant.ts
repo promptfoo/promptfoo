@@ -1,6 +1,5 @@
 import OpenAI from 'openai';
 import type { Metadata } from 'openai/resources/shared';
-import type { OpenAiSharedOptions } from '.';
 import { OpenAiGenericProvider } from '.';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
@@ -9,6 +8,7 @@ import { renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util';
 import { sleep } from '../../util/time';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from '../shared';
+import type { OpenAiSharedOptions } from './types';
 import { failApiCall, getTokenUsage } from './util';
 
 export type OpenAiAssistantOptions = OpenAiSharedOptions & {
