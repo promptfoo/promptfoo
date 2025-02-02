@@ -1,3 +1,4 @@
+import async from 'async';
 import { z } from 'zod';
 import { fetchWithRetries } from '../../fetch';
 import { getUserEmail } from '../../globalConfig/accounts';
@@ -11,7 +12,6 @@ import type {
   ProviderResponse,
 } from '../../types/providers';
 import invariant from '../../util/invariant';
-import { type HarmPlugin, HARM_PLUGINS } from '../constants';
 import { neverGenerateRemote } from '../remoteGeneration';
 
 const CURRENT_VERSION = 1;
@@ -23,21 +23,21 @@ const StartResponseSchema = z.object({
   version: z.number(),
 });
 
+const PandamoniumTestSchema = z.object({
+  pluginId: z.string(),
+  prompt: z.string(),
+  program: z.string(),
+  testIdx: z.number(),
+});
+
+type PandamoniumTest = z.infer<typeof PandamoniumTestSchema>;
+
 /**
  * Response schema for /next and /success.
  * Returns testCases (which may be empty), run id, current iteration, and pending plugins.
  */
 const NextResponseSchema = z.object({
-  testCases: z
-    .array(
-      z.object({
-        pluginId: z.string(),
-        prompt: z.string(),
-        program: z.string(),
-      }),
-    )
-    .optional()
-    .default([]),
+  testCases: z.array(PandamoniumTestSchema).optional().default([]),
   id: z.string(),
   iteration: z.number(),
   pendingPlugins: z.array(z.string()),
@@ -49,7 +49,7 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
   private readonly stateful: boolean;
   private currentTurn: number;
   private baseUrl: string;
-
+  private currentTestIdx: number;
   log(message: string, level: 'error' | 'warn' | 'info' | 'debug') {
     logger[level](
       `[panda] ${this.currentTurn ? `[Iteration ${this.currentTurn}]` : ''} - ${message}`,
@@ -73,7 +73,7 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
     this.stateful = options.stateful ?? false;
     this.currentTurn = 0;
     this.baseUrl = cloudConfig.getApiHost() + '/api/pandamonium';
-
+    this.currentTestIdx = 0;
     this.log(
       `Constructor options: ${JSON.stringify({
         injectVar: options.injectVar,
@@ -85,7 +85,7 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
 
     invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = options.injectVar;
-    this.maxTurns = options.maxTurns || 1000;
+    this.maxTurns = options.maxTurns || 500;
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
@@ -98,12 +98,15 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
     allTests: RunEvalOptions[],
   ): Promise<EvaluateResult[]> {
     const results: EvaluateResult[] = [];
-
+    this.currentTestIdx = Math.max(...allTests.map((t) => t.testIdx));
     let runId: string | undefined = undefined;
     this.log(`Starting pandamonium, hold on tight`, 'info');
 
     const testCases = allTests.reduce(
       (acc, t) => {
+        if (t.test.metadata?.strategyId) {
+          return acc;
+        }
         const pluginId = t.test.metadata?.pluginId;
         invariant(t.test.vars, 'Expected test vars to be set');
         const injectVar = Object.keys(t.test.vars).find((k) => k != 'harmCateogry');
@@ -115,16 +118,16 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
         if (acc.some((tc) => tc.pluginId === pluginId)) {
           acc
             .find((tc) => tc.pluginId === pluginId)
-            ?.prompts.push(t.test.vars[injectVar] as string);
+            ?.prompts.push({ prompt: t.test.vars[injectVar] as string, testIdx: t.testIdx });
         } else {
           acc.push({
             pluginId,
-            prompts: [t.test.vars[injectVar] as string],
+            prompts: [{ prompt: t.test.vars[injectVar] as string, testIdx: t.testIdx }],
           });
         }
         return acc;
       },
-      [] as { pluginId?: string; prompts: string[] }[],
+      [] as { pluginId?: string; prompts: { prompt: string; testIdx: number }[] }[],
     );
 
     // Start the run
@@ -149,7 +152,7 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
       runId = parsedStartData.id;
 
       // Main iteration loop
-      for (let turn = 0; turn < this.maxTurns; turn++) {
+      for (let turn = 0; turn < 2; turn++) {
         this.currentTurn = turn;
         this.log(`Starting iteration ${turn}`, 'debug');
 
@@ -181,7 +184,7 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
           'info',
         );
         // Call target with the test cases
-        const result = await this.callTarget(parsedData.testCases, test, targetProvider);
+        const result = await this.callTarget(parsedData.testCases, targetProvider, allTests);
 
         if (!result?.length) {
           this.log(`No result from target provider, continuing`, 'info');
@@ -227,32 +230,45 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
   }
 
   async callTarget(
-    tests: { pluginId: string; prompt: string; program: string }[],
-    test: AtomicTestCase,
+    tests: PandamoniumTest[],
     targetProvider: ApiProvider,
+    allTests: RunEvalOptions[],
   ) {
     const { runEval } = await import('../../evaluator');
-    const testForEval = { ...test, provider: undefined };
 
     const results: { result: EvaluateResult; program: string; pluginId: string }[] = [];
     let i = 0;
-    for (const test of tests) {
+    await async.forEachOfLimit(tests, 10, async (test, index) => {
       i++;
       this.log(`Sending prompt ${i} to target provider`, 'debug');
+      const originalTest = allTests.find((t) => t.testIdx === test.testIdx);
 
       const vars = {
-        ...testForEval.vars,
+        ...originalTest?.test.vars,
         prompt: test.prompt,
-        harmCategory: HARM_PLUGINS[test.pluginId as HarmPlugin],
       };
+      const testForEval = {
+        ...JSON.parse(JSON.stringify(originalTest?.test)),
+        provider: undefined,
+      };
+      if (Array.isArray(testForEval.assert)) {
+        testForEval.assert = [...testForEval.assert].map((a) => ({
+          ...a,
+          metric: `${a.metric}/Pandamonium`,
+        }));
+      }
 
+      testForEval.metadata = {
+        ...testForEval.metadata,
+        strategyId: 'pandamonium',
+      };
       try {
         const evalResults = await runEval({
           provider: targetProvider,
           prompt: { raw: test.prompt, label: test.prompt },
           delay: 0,
           test: { ...testForEval, vars },
-          testIdx: 1000 + i,
+          testIdx: this.currentTestIdx++,
           promptIdx: 0,
           repeatIndex: 0,
           isRedteam: true,
@@ -266,7 +282,7 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
           'info',
         );
       }
-    }
+    });
     return results;
   }
 }

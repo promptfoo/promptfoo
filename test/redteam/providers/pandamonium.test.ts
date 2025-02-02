@@ -111,7 +111,7 @@ describe('RedteamPandamoniumProvider', () => {
       json: async () => ({
         id: 'run123',
         iteration: 0,
-        pendingPlugins: [],
+        pendingPlugins: ['dummyPlugin'],
         version: 1,
       }),
     };
@@ -127,6 +127,7 @@ describe('RedteamPandamoniumProvider', () => {
             pluginId: 'dummyPlugin',
             prompt: 'dummy prompt',
             program: 'dummy program',
+            testIdx: 0,
           },
         ],
       }),
