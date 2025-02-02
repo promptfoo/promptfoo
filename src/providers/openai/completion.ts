@@ -7,11 +7,7 @@ import type { EnvOverrides } from '../../types/env';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import type { OpenAiCompletionOptions } from './types';
 import { calculateOpenAICost } from './util';
-import {
-  formatOpenAiError,
-  getTokenUsage,
-  OPENAI_COMPLETION_MODELS,
-} from './util';
+import { formatOpenAiError, getTokenUsage, OPENAI_COMPLETION_MODELS } from './util';
 
 export class OpenAiCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_COMPLETION_MODELS = OPENAI_COMPLETION_MODELS;
