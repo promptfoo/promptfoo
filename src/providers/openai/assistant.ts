@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import type { Metadata } from 'openai/resources/shared';
+import type { OpenAiSharedOptions } from '.';
 import { OpenAiGenericProvider } from '.';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
@@ -10,7 +11,7 @@ import { sleep } from '../../util/time';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from '../shared';
 import { failApiCall, getTokenUsage } from './util';
 
-export type OpenAiAssistantOptions = {
+export type OpenAiAssistantOptions = OpenAiSharedOptions & {
   modelName?: string;
   instructions?: string;
   tools?: OpenAI.Beta.Threads.ThreadCreateAndRunParams['tools'];
@@ -32,13 +33,6 @@ export type OpenAiAssistantOptions = {
     | { type: 'file_search' };
   attachments?: OpenAI.Beta.Threads.Message.Attachment[];
   tool_resources?: OpenAI.Beta.Threads.ThreadCreateAndRunParams['tool_resources'];
-  apiKey?: string;
-  apiKeyEnvar?: string;
-  apiHost?: string;
-  apiBaseUrl?: string;
-  organization?: string;
-  cost?: number;
-  headers?: { [key: string]: string };
 };
 
 export class OpenAiAssistantProvider extends OpenAiGenericProvider {

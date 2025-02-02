@@ -12,7 +12,6 @@ import type {
   ProviderEmbeddingResponse,
   ProviderModerationResponse,
   ProviderResponse,
-  TokenUsage,
 } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import { renderVarsInObject } from '../../util';
@@ -21,7 +20,7 @@ import { safeJsonStringify } from '../../util/json';
 import { ellipsize } from '../../utils/text';
 import { calculateCost, REQUEST_TIMEOUT_MS, parseChatPrompt } from '../shared';
 import type { OpenAiSharedOptions } from './types';
-import type { OpenAiFunction, OpenAiTool } from './util';
+import { getTokenUsage, type OpenAiFunction, type OpenAiTool } from './util';
 
 // see https://platform.openai.com/docs/models
 export const OPENAI_CHAT_MODELS = [
@@ -183,44 +182,6 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
     (arg: string) => Promise<string>
   >;
 };
-
-export function failApiCall(err: any) {
-  if (err instanceof OpenAI.APIError) {
-    const errorType = err.error?.type || err.type || 'unknown';
-    const errorMessage = err.error?.message || err.message || 'Unknown error';
-    const statusCode = err.status ? ` ${err.status}` : '';
-    return {
-      error: `API error: ${errorType}${statusCode} ${errorMessage}`,
-    };
-  }
-  return {
-    error: `API error: ${String(err)}`,
-  };
-}
-
-export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
-  if (data.usage) {
-    if (cached) {
-      return { cached: data.usage.total_tokens, total: data.usage.total_tokens };
-    } else {
-      return {
-        total: data.usage.total_tokens,
-        prompt: data.usage.prompt_tokens || 0,
-        completion: data.usage.completion_tokens || 0,
-        ...(data.usage.completion_tokens_details
-          ? {
-              completionDetails: {
-                reasoning: data.usage.completion_tokens_details.reasoning_tokens,
-                acceptedPrediction: data.usage.completion_tokens_details.accepted_prediction_tokens,
-                rejectedPrediction: data.usage.completion_tokens_details.rejected_prediction_tokens,
-              },
-            }
-          : {}),
-      };
-    }
-  }
-  return {};
-}
 
 export class OpenAiGenericProvider implements ApiProvider {
   modelName: string;
