@@ -2,7 +2,7 @@ import { OpenAiChatCompletionProvider } from './chat';
 import { OpenAiGenericProvider } from './index';
 import type { OpenAiSharedOptions, OpenAiModelsResponse } from './types';
 
-const GPT4_MODEL = 'gpt-4o-2024-05-13';
+const GPT4o_MODEL = 'gpt-4o-2024-05-13';
 const O3_MINI_MODEL = 'o3-mini';
 
 let modelsCache: OpenAiModelsResponse | null = null;
@@ -46,10 +46,10 @@ export async function getBestGradingModel(options?: {
   try {
     const models = await getAvailableModels(options);
     const isO3MiniAvailable = models.data.some((model) => model.id === O3_MINI_MODEL);
-    return isO3MiniAvailable ? O3_MINI_MODEL : GPT4_MODEL;
+    return isO3MiniAvailable ? O3_MINI_MODEL : GPT4o_MODEL;
   } catch {
-    // If we can't fetch models (e.g., no API key), default to GPT-4
-    return GPT4_MODEL;
+    // If we can't fetch models (e.g., no API key), default to GPT-4o
+    return GPT4o_MODEL;
   }
 }
 
