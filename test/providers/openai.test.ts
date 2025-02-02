@@ -758,6 +758,128 @@ describe('OpenAI Provider', () => {
 
       enableCache();
     });
+
+    it('should identify reasoning models correctly', () => {
+      const regularProvider = new OpenAiChatCompletionProvider('gpt-4');
+      const o1Provider = new OpenAiChatCompletionProvider('o1-mini');
+      const o3Provider = new OpenAiChatCompletionProvider('o3-mini');
+      const o1PreviewProvider = new OpenAiChatCompletionProvider('o1-preview');
+
+      expect(regularProvider['isReasoningModel']()).toBe(false);
+      expect(o1Provider['isReasoningModel']()).toBe(true);
+      expect(o3Provider['isReasoningModel']()).toBe(true);
+      expect(o1PreviewProvider['isReasoningModel']()).toBe(true);
+    });
+
+    it('should handle temperature support correctly', () => {
+      const regularProvider = new OpenAiChatCompletionProvider('gpt-4');
+      const o1Provider = new OpenAiChatCompletionProvider('o1-mini');
+      const o3Provider = new OpenAiChatCompletionProvider('o3-mini');
+      const o1PreviewProvider = new OpenAiChatCompletionProvider('o1-preview');
+
+      expect(regularProvider['supportsTemperature']()).toBe(true);
+      expect(o1Provider['supportsTemperature']()).toBe(false);
+      expect(o3Provider['supportsTemperature']()).toBe(false);
+      expect(o1PreviewProvider['supportsTemperature']()).toBe(false);
+    });
+
+    it('should respect temperature settings based on model type', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      // Test regular model with temperature
+      const regularProvider = new OpenAiChatCompletionProvider('gpt-4', {
+        config: { temperature: 0.7 },
+      });
+      await regularProvider.callApi('Test prompt');
+      const regularCall = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const regularBody = JSON.parse(regularCall[1].body);
+      expect(regularBody.temperature).toBe(0.7);
+
+      // Test O1 model (should omit temperature)
+      mockFetchWithCache.mockClear();
+      const o1Provider = new OpenAiChatCompletionProvider('o1-mini', {
+        config: { temperature: 0.7 },
+      });
+      await o1Provider.callApi('Test prompt');
+      const o1Call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const o1Body = JSON.parse(o1Call[1].body);
+      expect(o1Body.temperature).toBeUndefined();
+    });
+
+    it('should handle max tokens settings based on model type', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      // Test regular model with max_tokens
+      const regularProvider = new OpenAiChatCompletionProvider('gpt-4', {
+        config: { max_tokens: 100 },
+      });
+      await regularProvider.callApi('Test prompt');
+      const regularCall = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const regularBody = JSON.parse(regularCall[1].body);
+      expect(regularBody.max_tokens).toBe(100);
+      expect(regularBody.max_completion_tokens).toBeUndefined();
+
+      // Test O1 model with max_completion_tokens
+      mockFetchWithCache.mockClear();
+      const o1Provider = new OpenAiChatCompletionProvider('o1-mini', {
+        config: { max_completion_tokens: 200 },
+      });
+      await o1Provider.callApi('Test prompt');
+      const o1Call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const o1Body = JSON.parse(o1Call[1].body);
+      expect(o1Body.max_tokens).toBeUndefined();
+      expect(o1Body.max_completion_tokens).toBe(200);
+    });
+
+    it('should handle reasoning_effort for reasoning models', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      // Test O1 model with reasoning_effort
+      const o1Provider = new OpenAiChatCompletionProvider('o1-mini', {
+        config: { reasoning_effort: 'high' } as any,
+      });
+      await o1Provider.callApi('Test prompt');
+      const o1Call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const o1Body = JSON.parse(o1Call[1].body);
+      expect(o1Body.reasoning_effort).toBe('high');
+
+      // Test regular model (should not include reasoning_effort)
+      mockFetchWithCache.mockClear();
+      const regularProvider = new OpenAiChatCompletionProvider('gpt-4', {
+        config: { reasoning_effort: 'high' } as any,
+      });
+      await regularProvider.callApi('Test prompt');
+      const regularCall = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const regularBody = JSON.parse(regularCall[1].body);
+      expect(regularBody.reasoning_effort).toBeUndefined();
+    });
   });
 
   describe('OpenAiCompletionProvider', () => {
