@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: "Humanity's Last Exam Benchmark"
+
+prompts:
+  - |
+    You are an expert test taker. Please solve the following question step by step.
+    
+    Question: {{question}}
+    
+    {{#if choices}}
+    Options:
+    A) {{choices.[0]}}
+    B) {{choices.[1]}}
+    C) {{choices.[2]}}
+    D) {{choices.[3]}}
+    {{/if}}
+    
+    Think through this step by step, then provide your final answer.
+    {{#if choices}}Format your final answer as "Therefore, the answer is A/B/C/D."{{/if}}
+
+providers:
+  # Add your preferred models here
+  - openai:gpt-4
+  - anthropic:claude-3-opus
+  - deepseek:deepseek-coder
+  
+defaultTest:
+  assert:
+    # Enforce step-by-step reasoning
+    - type: llm-rubric
+      value: Response must include clear step-by-step reasoning
+    # Set reasonable timeout
+    - type: latency
+      threshold: 60000
+    # Verify answer format for multiple choice
+    - type: regex
+      value: "Therefore, the answer is [ABCD]\\."
+      
+tests:
+  # Load HLE dataset from Hugging Face
+  - huggingface://datasets/cais/hle?split=test&limit=100 
