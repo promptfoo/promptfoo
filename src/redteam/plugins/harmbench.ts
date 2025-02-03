@@ -9,7 +9,7 @@ import { RedteamPluginBase, RedteamGraderBase } from './base';
 export const PLUGIN_ID = 'promptfoo:redteam:harmbench';
 
 const DATASET_URL =
-  'https://raw.githubusercontent.com/centerforaisafety/HarmBench/c0423b952435fcc8467108d8f25962dbae5b7de2/data/behavior_datasets/extra_behavior_datasets/adv_training_behaviors.csv';
+  'https://raw.githubusercontent.com/centerforaisafety/HarmBench/c0423b952435fcc8467108d8f25962dbae5b7de2/data/behavior_datasets/harmbench_behaviors_text_all.csv';
 
 interface HarmbenchInput {
   Behavior: string;
