@@ -19,8 +19,7 @@ import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
-import type {
-  PLUGIN_PRESET_DESCRIPTIONS} from '@promptfoo/redteam/constants';
+import type { PLUGIN_PRESET_DESCRIPTIONS } from '@promptfoo/redteam/constants';
 import {
   HARM_PLUGINS,
   DEFAULT_PLUGINS,
