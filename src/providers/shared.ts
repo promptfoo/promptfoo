@@ -16,7 +16,7 @@ interface ProviderModel {
   cost?: ModelCost;
 }
 
-interface ProviderConfig {
+export interface ProviderConfig {
   cost?: number;
 }
 

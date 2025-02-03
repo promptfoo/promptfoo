@@ -265,6 +265,21 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
                             }}
                           />
                         )}
+                        {strategy.id === 'pandamonium' && (
+                          <Chip
+                            label="Experimental"
+                            size="small"
+                            sx={{
+                              backgroundColor: (theme) =>
+                                theme.palette.mode === 'dark'
+                                  ? alpha(theme.palette.error.main, 0.1)
+                                  : alpha(theme.palette.error.main, 0.1),
+                              color: 'error.main',
+                              borderColor: 'error.main',
+                              border: 1,
+                            }}
+                          />
+                        )}
                       </Box>
                       <Typography variant="body2" color="text.secondary">
                         {strategy.description}

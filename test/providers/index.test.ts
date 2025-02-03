@@ -31,12 +31,10 @@ import {
   OllamaCompletionProvider,
   OllamaEmbeddingProvider,
 } from '../../src/providers/ollama';
-import {
-  OpenAiAssistantProvider,
-  OpenAiCompletionProvider,
-  OpenAiChatCompletionProvider,
-  OpenAiEmbeddingProvider,
-} from '../../src/providers/openai';
+import { OpenAiAssistantProvider } from '../../src/providers/openai/assistant';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
+import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import {
   ReplicateImageProvider,

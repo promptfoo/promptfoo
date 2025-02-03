@@ -148,6 +148,17 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Static (Single-Turn)',
+    strategy: 'hex',
+    displayName: 'Hex',
+    description: 'Hex encoding bypass',
+    longDescription:
+      'Tests detection and handling of hex-encoded malicious payloads to bypass content filters',
+    cost: 'Low',
+    asrIncrease: '20-30%',
+    link: '/docs/red-team/strategies/hex/',
+  },
+  {
+    category: 'Static (Single-Turn)',
     strategy: 'basic',
     displayName: 'Basic',
     description: 'Plugin-generated test cases',

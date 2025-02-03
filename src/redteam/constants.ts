@@ -508,7 +508,13 @@ export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 export const MULTI_TURN_STRATEGIES = ['crescendo', 'goat'] as const;
 export type MultiTurnStrategy = (typeof MULTI_TURN_STRATEGIES)[number];
 
-export const AGENTIC_STRATEGIES = ['crescendo', 'goat', 'jailbreak', 'jailbreak:tree'] as const;
+export const AGENTIC_STRATEGIES = [
+  'crescendo',
+  'goat',
+  'jailbreak',
+  'jailbreak:tree',
+  'pandamonium',
+] as const;
 export type AgenticStrategy = (typeof AGENTIC_STRATEGIES)[number];
 
 export const ADDITIONAL_STRATEGIES = [
@@ -518,6 +524,7 @@ export const ADDITIONAL_STRATEGIES = [
   'crescendo',
   'gcg',
   'goat',
+  'hex',
   'jailbreak:tree',
   'jailbreak:likert',
   'leetspeak',
@@ -525,6 +532,7 @@ export const ADDITIONAL_STRATEGIES = [
   'multilingual',
   'rot13',
   'best-of-n',
+  'pandamonium',
 ] as const;
 export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
 
@@ -532,6 +540,8 @@ export const ALL_STRATEGIES = ['default', ...DEFAULT_STRATEGIES, ...ADDITIONAL_S
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
+  pandamonium:
+    "[Experimental] Promptfoo's blackbox jailbreak. The latest and greatest jailbreak techniques, expertly tuned and crafted by Promptfoo's AI team.",
   default: 'Standard security testing plugins',
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
   base64: 'Tests handling of Base64-encoded malicious payloads',
@@ -582,6 +592,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'harmful:illegal-drugs:meth': 'Tests handling of methamphetamine-related content',
   'harmful:cybercrime:malicious-code': 'Tests creation of malicious code',
   'harmful:weapons:ied': 'Tests handling of Improvised Explosive Devices',
+  hex: 'Tests handling of hex-encoded malicious payloads',
   hijacking: 'Tests for unauthorized resource usage and purpose deviation',
   imitation: 'Tests for unauthorized impersonation of entities',
   'indirect-prompt-injection': 'Tests for injection vulnerabilities via untrusted variables',
@@ -615,6 +626,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
 
 // These names are displayed in risk cards and in the table
 export const displayNameOverrides: Record<Plugin | Strategy, string> = {
+  pandamonium: '[Experimental] Pandamonium',
   'ascii-smuggling': 'ASCII Smuggling',
   base64: 'Base64 Payload Encoding',
   basic: 'Baseline Testing',
@@ -664,6 +676,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'harmful:unsafe-practices': 'Dangerous Activity Content',
   'harmful:violent-crime': 'Violent Crime Content',
   'harmful:weapons:ied': 'Improvised Explosive Devices',
+  hex: 'Hex Encoding',
   hijacking: 'Resource Hijacking',
   imitation: 'Entity Impersonation',
   'indirect-prompt-injection': 'Indirect Prompt Injection',
@@ -1023,6 +1036,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
+  pandamonium:
+    "Promptfoo's exclusive dynamic jailbreak strategy currently in development. Note: This is an expensive jailbreak strategy with no limit on probes.",
   base64: 'Tests detection and handling of Base64-encoded malicious payloads',
   basic: 'Equivalent to no strategy. Always included. Can be disabled in configuration.',
   'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
@@ -1031,6 +1046,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
   default: 'Applies standard security testing methodology',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Deploys dynamic attack generation using advanced adversarial techniques',
+  hex: 'Tests detection and handling of hex-encoded malicious payloads',
   jailbreak: 'Optimizes single-turn attacks to bypass security controls',
   'jailbreak:composite': 'Chains multiple attack vectors for enhanced effectiveness',
   'jailbreak:likert': 'Uses Likert scale-based prompts to bypass content filters',
@@ -1043,6 +1059,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
 };
 
 export const strategyDisplayNames: Record<Strategy, string> = {
+  pandamonium: 'Pandamonium',
   base64: 'Base64 Encoding',
   basic: 'Basic',
   'best-of-n': 'Best-of-N',
@@ -1051,6 +1068,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   default: 'Basic',
   gcg: 'Greedy Coordinate Gradient',
   goat: 'Generative Offensive Agent Tester',
+  hex: 'Hex Encoding',
   'jailbreak:composite': 'Composite Jailbreaks',
   'jailbreak:likert': 'Likert Scale Jailbreak',
   'jailbreak:tree': 'Tree-based Optimization',

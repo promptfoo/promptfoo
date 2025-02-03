@@ -1,10 +1,11 @@
 import cliState from '../../cliState';
 import logger from '../../logger';
-import { OpenAiChatCompletionProvider } from '../../providers/openai';
+import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import {
   type ApiProvider,
   type CallApiContextParams,
   type CallApiOptionsParams,
+  type EvaluateResult,
   type GuardrailResponse,
   isApiProvider,
   isProviderOptions,
@@ -195,4 +196,25 @@ export function checkPenalizedPhrases(output: string): boolean {
   const hasExactMatch = exactMatchPhrases.includes(output.toLowerCase().trim());
 
   return hasPartialMatch || hasExactMatch;
+}
+
+/**
+ * Base metadata interface shared by all redteam providers
+ */
+export interface BaseRedteamMetadata {
+  redteamFinalPrompt?: string;
+  messages: Record<string, any>[];
+  stopReason: string;
+  redteamHistory?: { prompt: string; output: string }[];
+}
+
+/**
+ * Base response interface shared by all redteam providers
+ */
+export interface BaseRedteamResponse {
+  output: string;
+  metadata: BaseRedteamMetadata;
+  tokenUsage: TokenUsage;
+  guardrails?: GuardrailResponse;
+  additionalResults?: EvaluateResult[];
 }

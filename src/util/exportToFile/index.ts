@@ -97,6 +97,7 @@ export function convertTestResultsToTableRow(
           .flat()
       : [],
     test: results[0].testCase,
+    testIdx: results[0].testIdx,
   };
 
   for (const result of results) {

@@ -12,11 +12,13 @@ import { addCitationTestCases } from './citation';
 import { addCrescendo } from './crescendo';
 import { addGcgTestCases } from './gcg';
 import { addGoatTestCases } from './goat';
+import { addHexEncoding } from './hex';
 import { addIterativeJailbreaks } from './iterative';
 import { addLeetspeak } from './leetspeak';
 import { addLikertTestCases } from './likert';
 import { addMathPrompt } from './mathPrompt';
 import { addMultilingual } from './multilingual';
+import { addPandamonium } from './pandamonium';
 import { addInjections } from './promptInjections';
 import { addRot13 } from './rot13';
 import { addCompositeTestCases } from './singleTurnComposite';
@@ -171,6 +173,24 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding GCG test cases to ${testCases.length} test cases`);
       const newTestCases = await addGcgTestCases(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} GCG test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'hex',
+    action: async (testCases, injectVar) => {
+      logger.debug(`Adding Hex encoding to ${testCases.length} test cases`);
+      const newTestCases = addHexEncoding(testCases, injectVar);
+      logger.debug(`Added ${newTestCases.length} Hex encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'pandamonium',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding pandamonium runs to ${testCases.length} test cases`);
+      const newTestCases = await addPandamonium(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} Pandamonium test cases`);
       return newTestCases;
     },
   },
