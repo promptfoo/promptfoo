@@ -27,6 +27,8 @@ import {
   OWASP_LLM_TOP_10_MAPPING,
   OWASP_API_TOP_10_MAPPING,
   MITRE_ATLAS_MAPPING,
+  FOUNDATION_PLUGINS,
+  PLUGIN_PRESET_DESCRIPTIONS,
   displayNameOverrides,
   subCategoryDescriptions,
   categoryAliases,
@@ -192,11 +194,21 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   }, [searchTerm]);
 
   const presets: { name: string; plugins: Set<Plugin> | ReadonlySet<Plugin> }[] = [
-    { name: 'Recommended', plugins: DEFAULT_PLUGINS },
-    { name: 'Minimal Test', plugins: new Set(['harmful:hate', 'harmful:self-harm']) },
+    {
+      name: 'Recommended',
+      plugins: DEFAULT_PLUGINS,
+    },
+    {
+      name: 'Minimal Test',
+      plugins: new Set(['harmful:hate', 'harmful:self-harm']),
+    },
     {
       name: 'RAG',
       plugins: new Set([...DEFAULT_PLUGINS, 'bola', 'bfla', 'rbac']),
+    },
+    {
+      name: 'Foundation Model Safety',
+      plugins: new Set(FOUNDATION_PLUGINS),
     },
     {
       name: 'NIST',
@@ -545,6 +557,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                   >
                     <PresetCard
                       name={preset.name}
+                      description={PLUGIN_PRESET_DESCRIPTIONS[preset.name]}
                       isSelected={isSelected}
                       onClick={() => handlePresetSelect(preset)}
                     />

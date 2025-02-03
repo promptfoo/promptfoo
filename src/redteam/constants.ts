@@ -21,7 +21,49 @@ export const LLAMA_GUARD_ENABLED_CATEGORIES: string[] = [
   'S13', // Elections
 ];
 
-export const COLLECTIONS = ['default', 'harmful', 'pii'] as const;
+export const FOUNDATION_PLUGINS = [
+  'ascii-smuggling',
+  'beavertails',
+  'contracts',
+  'cyberseceval',
+  'divergent-repetition',
+  'excessive-agency',
+  'hallucination',
+  'harmful:chemical-biological-weapons',
+  'harmful:child-exploitation',
+  'harmful:copyright-violations',
+  'harmful:cybercrime',
+  'harmful:cybercrime:malicious-code',
+  'harmful:graphic-content',
+  'harmful:harassment-bullying',
+  'harmful:hate',
+  'harmful:illegal-activities',
+  'harmful:illegal-drugs',
+  'harmful:illegal-drugs:meth',
+  'harmful:indiscriminate-weapons',
+  'harmful:insults',
+  'harmful:intellectual-property',
+  'harmful:misinformation-disinformation',
+  'harmful:non-violent-crime',
+  'harmful:profanity',
+  'harmful:radicalization',
+  'harmful:self-harm',
+  'harmful:sex-crime',
+  'harmful:sexual-content',
+  'harmful:specialized-advice',
+  'harmful:unsafe-practices',
+  'harmful:violent-crime',
+  'harmful:weapons:ied',
+  'hijacking',
+  'imitation',
+  'overreliance',
+  'pii:direct',
+  'pliny',
+  'politics',
+  'religion',
+] as const;
+
+export const COLLECTIONS = ['default', 'foundation', 'harmful', 'pii'] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 
 export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
@@ -561,6 +603,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests for training data leaks through repetitive pattern exploitation that causes model divergence',
   'jailbreak:likert': 'Uses Likert scale-based prompts to bypass content filters',
   'excessive-agency': 'Tests for unauthorized actions beyond defined system boundaries',
+  foundation: 'Tests for foundation model safety and security',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Dynamic multi-turn attack generation using adversarial techniques',
   hallucination: 'Tests for fabrication of false or misleading information',
@@ -706,6 +749,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'sql-injection': 'SQL Injection',
   ssrf: 'SSRF Vulnerability',
   'system-prompt-override': 'System Prompt Override',
+  foundation: 'Foundation Model Safety',
 };
 
 export enum Severity {
@@ -739,6 +783,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   default: Severity.Low,
   'divergent-repetition': Severity.Medium,
   'excessive-agency': Severity.Medium,
+  foundation: Severity.Medium,
   hallucination: Severity.Medium,
   harmbench: Severity.Medium,
   harmful: Severity.Medium,
@@ -902,6 +947,7 @@ export const categoryAliases: Record<Plugin, string> = {
   default: 'Default',
   'divergent-repetition': 'DivergentRepetition',
   'excessive-agency': 'ExcessiveAgency',
+  foundation: 'Foundation',
   hallucination: 'Hallucination',
   harmbench: 'Harmbench',
   harmful: 'Harmful',
@@ -1033,6 +1079,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'harmful:unsafe-practices': 'Tests handling of dangerous activity instructions',
   'harmful:violent-crime': 'Tests handling of violent crime content',
   cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
+  foundation: 'Comprehensive testing suite for foundation model safety and security',
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
@@ -1084,6 +1131,8 @@ export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   RAG: 'Recommended plugins plus additional tests for RAG specific scenarios like access control',
   Recommended: 'A broad set of plugins recommended by Promptfoo',
   'Minimal Test': 'Minimal set of plugins to validate your setup',
+  'Foundation Model Safety':
+    'Comprehensive testing suite for evaluating foundation models against jailbreaking, prompt injection, content safety, and hallucination risks',
   NIST: 'NIST AI Risk Management Framework',
   'OWASP LLM': 'OWASP LLM Top 10',
   'OWASP API': 'OWASP API Top 10',
