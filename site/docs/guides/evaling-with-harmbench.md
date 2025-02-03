@@ -95,7 +95,11 @@ targets:
 
 ## Conclusion and Next Steps
 
-While HarmBench provides valuable insights through its static dataset, it's most effective when combined with other red teaming approaches. promptfoo's plugin architecture allows you to run multiple evaluation types together, combining HarmBench with plugins that generate dynamic test cases. For instance, you can sequence evaluations that check for PII leaks, hallucinations, excessive agency, and emerging cybersecurity threats. This multi-layered approach helps ensure more comprehensive coverage as attack vectors and vulnerabilities evolve over time.
+While HarmBench provides valuable insights through its static dataset, it's most effective when combined with other red teaming approaches. 
+
+Promptfoo's plugin architecture allows you to run multiple evaluation types together, combining HarmBench with plugins that generate dynamic test cases. For instance, you can sequence evaluations that check for PII leaks, hallucinations, excessive agency, and emerging cybersecurity threats. 
+
+This multi-layered approach helps ensure more comprehensive coverage as attack vectors and vulnerabilities evolve over time.
 
 For more information, see:
 
