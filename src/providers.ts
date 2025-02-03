@@ -77,6 +77,7 @@ import RedteamGoatProvider from './redteam/providers/goat';
 import RedteamIterativeProvider from './redteam/providers/iterative';
 import RedteamImageIterativeProvider from './redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from './redteam/providers/iterativeTree';
+import RedteamPandamoniumProvider from './redteam/providers/pandamonium';
 import type { LoadApiProviderContext, TestSuiteConfig } from './types';
 import type { EnvOverrides } from './types/env';
 import type { ApiProvider, ProviderOptions, ProviderOptionsMap } from './types/providers';
@@ -535,6 +536,8 @@ export async function loadApiProvider(
     ret = new RedteamImageIterativeProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:redteam:iterative:tree') {
     ret = new RedteamIterativeTreeProvider(providerOptions.config);
+  } else if (providerPath === 'promptfoo:redteam:pandamonium') {
+    ret = new RedteamPandamoniumProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:simulated-user') {
     ret = new SimulatedUser(providerOptions);
   } else if (providerPath === 'sequence') {

@@ -16,6 +16,7 @@ import logger from './logger';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureUtil';
+import type RedteamPandamoniumProvider from './redteam/providers/pandamonium';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import type { EvalConversations, EvalRegisters, TokenUsage, Vars } from './types';
@@ -110,7 +111,9 @@ export async function runEval({
   conversations, //
   registers,
   isRedteam,
-}: RunEvalOptions): Promise<EvaluateResult> {
+  allTests,
+  concurrency,
+}: RunEvalOptions): Promise<EvaluateResult[]> {
   // Use the original prompt to set the label, not renderedPrompt
   const promptLabel = prompt.label;
 
@@ -167,6 +170,17 @@ export async function runEval({
 
     if (test.providerOutput) {
       response.output = test.providerOutput;
+    } else if (
+      typeof test.provider === 'object' &&
+      typeof test.provider.id === 'function' &&
+      test.provider.id() === 'promptfoo:redteam:pandamonium'
+    ) {
+      return await (test.provider as RedteamPandamoniumProvider).runPandamonium(
+        provider,
+        test,
+        allTests || [],
+        concurrency,
+      );
     } else {
       response = await ((test.provider as ApiProvider) || provider).callApi(
         renderedPrompt,
@@ -317,21 +331,23 @@ export async function runEval({
       registers[test.options.storeOutputAs] = ret.response.output;
     }
 
-    return ret;
+    return [ret];
   } catch (err) {
-    return {
-      ...setup,
-      error: String(err) + '\n\n' + (err as Error).stack,
-      success: false,
-      failureReason: ResultFailureReason.ERROR,
-      score: 0,
-      namedScores: {},
-      latencyMs,
-      promptIdx,
-      testIdx,
-      testCase: test,
-      promptId: prompt.id || '',
-    };
+    return [
+      {
+        ...setup,
+        error: String(err) + '\n\n' + (err as Error).stack,
+        success: false,
+        failureReason: ResultFailureReason.ERROR,
+        score: 0,
+        namedScores: {},
+        latencyMs,
+        promptIdx,
+        testIdx,
+        testCase: test,
+        promptId: prompt.id || '',
+      },
+    ];
   }
 }
 
@@ -408,6 +424,7 @@ class Evaluator {
 
   async evaluate(): Promise<Eval> {
     const { testSuite, options } = this;
+
     const checkAbort = () => {
       if (options.abortSignal?.aborted) {
         throw new Error('Operation cancelled');
@@ -604,6 +621,7 @@ class Evaluator {
     // Set up eval cases
     const runEvalOptions: RunEvalOptions[] = [];
     let testIdx = 0;
+    let concurrency = options.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
     for (let index = 0; index < tests.length; index++) {
       const testCase = tests[index];
       invariant(
@@ -659,6 +677,8 @@ class Evaluator {
                 conversations: this.conversations,
                 registers: this.registers,
                 isRedteam: this.testSuite.redteam != null,
+                allTests: runEvalOptions,
+                concurrency,
               });
               promptIdx++;
             }
@@ -668,7 +688,7 @@ class Evaluator {
       }
     }
     // Determine run parameters
-    let concurrency = options.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
+
     if (concurrency > 1) {
       const usesConversation = prompts.some((p) => p.raw.includes('_conversation'));
       const usesStoreOutputAs = tests.some((t) => t.options?.storeOutputAs);
@@ -695,131 +715,132 @@ class Evaluator {
         test: evalStep.test,
       });
 
-      const row = await runEval(evalStep);
-
-      // capture metrics
-      if (row.success) {
-        this.stats.successes++;
-      } else if (row.failureReason === ResultFailureReason.ERROR) {
-        this.stats.errors++;
-      } else {
-        this.stats.failures++;
-      }
-
-      if (row.tokenUsage) {
-        this.stats.tokenUsage.total += row.tokenUsage.total || 0;
-        this.stats.tokenUsage.prompt += row.tokenUsage.prompt || 0;
-        this.stats.tokenUsage.completion += row.tokenUsage.completion || 0;
-        this.stats.tokenUsage.cached += row.tokenUsage.cached || 0;
-        this.stats.tokenUsage.numRequests += row.tokenUsage.numRequests || 1;
-        if (row.tokenUsage.completionDetails) {
-          this.stats.tokenUsage.completionDetails.reasoning! +=
-            row.tokenUsage.completionDetails.reasoning || 0;
-          this.stats.tokenUsage.completionDetails.acceptedPrediction! +=
-            row.tokenUsage.completionDetails.acceptedPrediction || 0;
-          this.stats.tokenUsage.completionDetails.rejectedPrediction! +=
-            row.tokenUsage.completionDetails.rejectedPrediction || 0;
-        }
-      }
-
-      if (evalStep.test.assert?.some((a) => a.type === 'select-best')) {
-        rowsWithSelectBestAssertion.add(row.testIdx);
-      }
-      for (const assert of evalStep.test.assert || []) {
-        if (assert.type) {
-          assertionTypes.add(assert.type);
-        }
-      }
-
-      numComplete++;
-      if (options.progressCallback) {
-        options.progressCallback(
-          this.evalRecord.results.length,
-          runEvalOptions.length,
-          index,
-          evalStep,
-        );
-      }
-
-      try {
-        await this.evalRecord.addResult(row);
-      } catch (error) {
-        logger.error(`Error saving result: ${error} ${safeJsonStringify(row)}`);
-      }
-
-      for (const writer of this.fileWriters) {
-        await writer.write(row);
-      }
-
-      const { promptIdx } = row;
-      const metrics = prompts[promptIdx].metrics;
-      invariant(metrics, 'Expected prompt.metrics to be set');
-      metrics.score += row.score;
-      for (const [key, value] of Object.entries(row.namedScores)) {
-        metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
-        metrics.namedScoresCount[key] = (metrics.namedScoresCount[key] || 0) + 1;
-      }
-
-      if (testSuite.derivedMetrics) {
-        const math = await import('mathjs'); // TODO: move this
-        for (const metric of testSuite.derivedMetrics) {
-          if (metrics.namedScores[metric.name] === undefined) {
-            metrics.namedScores[metric.name] = 0;
-          }
-          try {
-            if (typeof metric.value === 'function') {
-              metrics.namedScores[metric.name] = metric.value(metrics.namedScores, evalStep);
-            } else {
-              const evaluatedValue = math.evaluate(metric.value, metrics.namedScores);
-              metrics.namedScores[metric.name] = evaluatedValue;
-            }
-          } catch (error) {
-            logger.debug(
-              `Could not evaluate derived metric '${metric.name}': ${(error as Error).message}`,
-            );
-          }
-        }
-      }
-      metrics.testPassCount += row.success ? 1 : 0;
-      if (!row.success) {
-        if (row.failureReason === ResultFailureReason.ERROR) {
-          metrics.testErrorCount += 1;
+      const rows = await runEval(evalStep);
+      for (const row of rows) {
+        // capture metrics
+        if (row.success) {
+          this.stats.successes++;
+        } else if (row.failureReason === ResultFailureReason.ERROR) {
+          this.stats.errors++;
         } else {
-          metrics.testFailCount += 1;
+          this.stats.failures++;
         }
-      }
-      metrics.assertPassCount +=
-        row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
-      metrics.assertFailCount +=
-        row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
-      metrics.totalLatencyMs += row.latencyMs || 0;
-      metrics.tokenUsage.cached =
-        (metrics.tokenUsage.cached || 0) + (row.response?.tokenUsage?.cached || 0);
-      metrics.tokenUsage.completion =
-        (metrics.tokenUsage.completion || 0) + (row.response?.tokenUsage?.completion || 0);
-      metrics.tokenUsage.prompt =
-        (metrics.tokenUsage.prompt || 0) + (row.response?.tokenUsage?.prompt || 0);
-      metrics.tokenUsage.total =
-        (metrics.tokenUsage.total || 0) + (row.response?.tokenUsage?.total || 0);
-      metrics.tokenUsage.numRequests =
-        (metrics.tokenUsage.numRequests || 0) + (row.response?.tokenUsage?.numRequests || 1);
-      metrics.tokenUsage.completionDetails = {
-        reasoning:
-          (metrics.tokenUsage.completionDetails?.reasoning || 0) +
-          (row.response?.tokenUsage?.completionDetails?.reasoning || 0),
-        acceptedPrediction:
-          (metrics.tokenUsage.completionDetails?.acceptedPrediction || 0) +
-          (row.response?.tokenUsage?.completionDetails?.acceptedPrediction || 0),
-        rejectedPrediction:
-          (metrics.tokenUsage.completionDetails?.rejectedPrediction || 0) +
-          (row.response?.tokenUsage?.completionDetails?.rejectedPrediction || 0),
-      };
-      metrics.cost += row.cost || 0;
 
-      await runExtensionHook(testSuite.extensions, 'afterEach', {
-        test: evalStep.test,
-        result: row,
-      });
+        if (row.tokenUsage) {
+          this.stats.tokenUsage.total += row.tokenUsage.total || 0;
+          this.stats.tokenUsage.prompt += row.tokenUsage.prompt || 0;
+          this.stats.tokenUsage.completion += row.tokenUsage.completion || 0;
+          this.stats.tokenUsage.cached += row.tokenUsage.cached || 0;
+          this.stats.tokenUsage.numRequests += row.tokenUsage.numRequests || 1;
+          if (row.tokenUsage.completionDetails) {
+            this.stats.tokenUsage.completionDetails.reasoning! +=
+              row.tokenUsage.completionDetails.reasoning || 0;
+            this.stats.tokenUsage.completionDetails.acceptedPrediction! +=
+              row.tokenUsage.completionDetails.acceptedPrediction || 0;
+            this.stats.tokenUsage.completionDetails.rejectedPrediction! +=
+              row.tokenUsage.completionDetails.rejectedPrediction || 0;
+          }
+        }
+
+        if (evalStep.test.assert?.some((a) => a.type === 'select-best')) {
+          rowsWithSelectBestAssertion.add(row.testIdx);
+        }
+        for (const assert of evalStep.test.assert || []) {
+          if (assert.type) {
+            assertionTypes.add(assert.type);
+          }
+        }
+
+        numComplete++;
+        if (options.progressCallback) {
+          options.progressCallback(
+            this.evalRecord.results.length,
+            runEvalOptions.length,
+            index,
+            evalStep,
+          );
+        }
+
+        try {
+          await this.evalRecord.addResult(row);
+        } catch (error) {
+          logger.error(`Error saving result: ${error} ${safeJsonStringify(row)}`);
+        }
+
+        for (const writer of this.fileWriters) {
+          await writer.write(row);
+        }
+
+        const { promptIdx } = row;
+        const metrics = prompts[promptIdx].metrics;
+        invariant(metrics, 'Expected prompt.metrics to be set');
+        metrics.score += row.score;
+        for (const [key, value] of Object.entries(row.namedScores)) {
+          metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
+          metrics.namedScoresCount[key] = (metrics.namedScoresCount[key] || 0) + 1;
+        }
+
+        if (testSuite.derivedMetrics) {
+          const math = await import('mathjs'); // TODO: move this
+          for (const metric of testSuite.derivedMetrics) {
+            if (metrics.namedScores[metric.name] === undefined) {
+              metrics.namedScores[metric.name] = 0;
+            }
+            try {
+              if (typeof metric.value === 'function') {
+                metrics.namedScores[metric.name] = metric.value(metrics.namedScores, evalStep);
+              } else {
+                const evaluatedValue = math.evaluate(metric.value, metrics.namedScores);
+                metrics.namedScores[metric.name] = evaluatedValue;
+              }
+            } catch (error) {
+              logger.debug(
+                `Could not evaluate derived metric '${metric.name}': ${(error as Error).message}`,
+              );
+            }
+          }
+        }
+        metrics.testPassCount += row.success ? 1 : 0;
+        if (!row.success) {
+          if (row.failureReason === ResultFailureReason.ERROR) {
+            metrics.testErrorCount += 1;
+          } else {
+            metrics.testFailCount += 1;
+          }
+        }
+        metrics.assertPassCount +=
+          row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
+        metrics.assertFailCount +=
+          row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
+        metrics.totalLatencyMs += row.latencyMs || 0;
+        metrics.tokenUsage.cached =
+          (metrics.tokenUsage.cached || 0) + (row.response?.tokenUsage?.cached || 0);
+        metrics.tokenUsage.completion =
+          (metrics.tokenUsage.completion || 0) + (row.response?.tokenUsage?.completion || 0);
+        metrics.tokenUsage.prompt =
+          (metrics.tokenUsage.prompt || 0) + (row.response?.tokenUsage?.prompt || 0);
+        metrics.tokenUsage.total =
+          (metrics.tokenUsage.total || 0) + (row.response?.tokenUsage?.total || 0);
+        metrics.tokenUsage.numRequests =
+          (metrics.tokenUsage.numRequests || 0) + (row.response?.tokenUsage?.numRequests || 1);
+        metrics.tokenUsage.completionDetails = {
+          reasoning:
+            (metrics.tokenUsage.completionDetails?.reasoning || 0) +
+            (row.response?.tokenUsage?.completionDetails?.reasoning || 0),
+          acceptedPrediction:
+            (metrics.tokenUsage.completionDetails?.acceptedPrediction || 0) +
+            (row.response?.tokenUsage?.completionDetails?.acceptedPrediction || 0),
+          rejectedPrediction:
+            (metrics.tokenUsage.completionDetails?.rejectedPrediction || 0) +
+            (row.response?.tokenUsage?.completionDetails?.rejectedPrediction || 0),
+        };
+        metrics.cost += row.cost || 0;
+
+        await runExtensionHook(testSuite.extensions, 'afterEach', {
+          test: evalStep.test,
+          result: row,
+        });
+      }
     };
 
     // Set up main progress bars
