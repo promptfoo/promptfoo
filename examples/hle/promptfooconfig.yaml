@@ -2,43 +2,11 @@
 description: Humanity's Last Exam (HLE) Benchmark
 
 prompts:
-  - |
-    You are an expert test taker. Answer the following question step by step.
-
-    Question ID: {{ id }}
-    Question: {{ question }}
-
-    {% if image %}
-    Image: {{ image }}
-    {% endif %}
-
-    {% if choices %}
-    Options:
-    A) {{ choices[0] }}
-    B) {{ choices[1] }}
-    C) {{ choices[2] }}
-    D) {{ choices[3] }}
-    {% endif %}
-
-    Question Type: {{ answer_type }}
-    Subject: {{ raw_subject }}
-    Category: {{ category }}
-
-    {% if answer_type == "exactMatch" %}
-    Your response should be in the following format:
-    Explanation: {your detailed step-by-step explanation}
-    Exact Answer: {your succinct, final answer}
-    Confidence: {your confidence score between 0% and 100% for your answer}
-    {% else %}
-    Your response should be in the following format:
-    Explanation: {your detailed step-by-step explanation}
-    Answer: {your chosen answer A/B/C/D}
-    Confidence: {your confidence score between 0% and 100% for your answer}
-    {% endif %}
+  - file://prompt.js
 
 providers:
   - openai:o3-mini
-  - deepseek:deepseek-reasoner
+  # - deepseek:deepseek-reasoner
 
 defaultTest:
   assert:
@@ -46,15 +14,15 @@ defaultTest:
       value: |
         Judge whether the following [response] to [question] is correct or not based on the precise and unambiguous [correct_answer] below.
 
-        [question]: {{ vars.question }}
+        [question]: {{ question }}
 
-        [response]: {{ response }}
+        [response]: {{ output }}
 
         Your judgement must be in the format and criteria specified below:
 
         extracted_final_answer: The final exact answer extracted from the [response]. Put the extracted answer as 'None' if there is no exact, final answer to extract from the response.
 
-        [correct_answer]: {{ vars.answer }}
+        [correct_answer]: {{ answer }}
 
         reasoning: Explain why the extracted_final_answer is correct or incorrect based on [correct_answer], focusing only on if there are meaningful differences between [correct_answer] and the extracted_final_answer. Do not comment on any background to the problem, do not attempt to solve the problem, do not argue for any answer different than [correct_answer], focus only on whether the answers match.
 

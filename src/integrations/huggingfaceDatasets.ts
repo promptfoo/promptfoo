@@ -1,8 +1,12 @@
+import crypto from 'crypto';
 import dedent from 'dedent';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { getEnvString } from '../envars';
 import { fetchWithProxy } from '../fetch';
 import logger from '../logger';
 import type { TestCase } from '../types';
-import { getEnvString } from '../envars';
 
 interface HuggingFaceResponse {
   num_rows_total: number;
@@ -17,6 +21,16 @@ interface HuggingFaceResponse {
   rows: Array<{
     row: Record<string, string>;
   }>;
+}
+
+function getTempDatasetPath(owner: string, repo: string, split: string): string {
+  const hash = crypto
+    .createHash('sha256')
+    .update(`${owner}/${repo}/${split}`)
+    .digest('hex')
+    .slice(0, 8);
+
+  return path.join(os.tmpdir(), `promptfoo-dataset-${hash}.json`);
 }
 
 function parseDatasetPath(path: string): {
@@ -53,20 +67,37 @@ export async function fetchHuggingFaceDataset(
   datasetPath: string,
   limit?: number,
 ): Promise<TestCase[]> {
-  const baseUrl = 'https://datasets-server.huggingface.co/rows';
   const { owner, repo, queryParams } = parseDatasetPath(datasetPath);
+  const split = queryParams.get('split') || 'test';
 
+  // Check temp cache first
+  const tempPath = getTempDatasetPath(owner, repo, split);
+  if (fs.existsSync(tempPath)) {
+    try {
+      logger.debug(`[Huggingface Dataset] Using cached dataset from ${tempPath}`);
+      const cached = (JSON.parse(fs.readFileSync(tempPath, 'utf8')) as TestCase[]).map((test) => {
+        return Object.fromEntries(
+          Object.entries(test).map(([key, value]) => [key, value === null ? undefined : value]),
+        ) as TestCase;
+      });
+      logger.warn(`[Huggingface Dataset] First row: ${JSON.stringify(cached[0], null, 2)}`);
+      return limit ? cached.slice(0, limit) : cached;
+    } catch (error) {
+      logger.warn(`[Huggingface Dataset] Error reading cache file: ${error}. Fetching fresh data.`);
+      // Continue to fetch fresh data
+    }
+  }
+
+  const baseUrl = 'https://datasets-server.huggingface.co/rows';
   logger.info(`[Huggingface Dataset] Fetching dataset: ${owner}/${repo} ...`);
 
   // Get HuggingFace token from environment
   const hfToken = getEnvString('HUGGING_FACE_HUB_TOKEN');
-  if (!hfToken) {
-    throw new Error('[Huggingface Dataset] HUGGING_FACE_HUB_TOKEN environment variable is required');
+  const headers: Record<string, string> = {};
+  if (hfToken) {
+    logger.debug('[Huggingface Dataset] Using token for authentication');
+    headers.Authorization = `Bearer ${hfToken}`;
   }
-
-  const headers = {
-    'Authorization': `Bearer ${hfToken}`
-  };
 
   const tests: TestCase[] = [];
   let offset = 0;
@@ -102,7 +133,7 @@ export async function fetchHuggingFaceDataset(
     const data = (await response.json()) as HuggingFaceResponse;
     if (!data.rows) {
       logger.error(
-        `[Huggingface Dataset] No rows found in dataset: ${owner}/${repo}?${requestParams.toString()}`
+        `[Huggingface Dataset] No rows found in dataset: ${owner}/${repo}?${requestParams.toString()}`,
       );
       logger.error(`[Huggingface Dataset] Full response: ${JSON.stringify(data, null, 2)}`);
       throw new Error('[Huggingface Dataset] No rows found in dataset');
@@ -122,7 +153,12 @@ export async function fetchHuggingFaceDataset(
     }
 
     // Convert HuggingFace rows to test cases
+    let shown = false;
     for (const { row } of data.rows) {
+      if (!shown) {
+        logger.warn(`[Huggingface Dataset] First row: ${JSON.stringify(row, null, 2)}`);
+        shown = true;
+      }
       const test: TestCase = {
         vars: {
           ...row,
@@ -149,8 +185,16 @@ export async function fetchHuggingFaceDataset(
     logger.debug(`[Huggingface Dataset] Fetching next page starting at offset ${offset}`);
   }
 
+  // Cache the full dataset in temp file
+  try {
+    fs.writeFileSync(tempPath, JSON.stringify(tests));
+    logger.debug(`[Huggingface Dataset] Cached dataset to ${tempPath}`);
+  } catch (error) {
+    logger.warn(`[Huggingface Dataset] Failed to cache dataset: ${error}`);
+  }
+
   // If user specified a limit, ensure we don't return more than that
-  const finalTests = userLimit ? tests.slice(0, userLimit) : tests;
+  const finalTests = userLimit ? tests.slice(0, limit) : tests;
 
   logger.debug(`[Huggingface Dataset] Successfully loaded ${finalTests.length} test cases`);
   return finalTests;
