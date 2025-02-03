@@ -45,6 +45,7 @@ export async function getBestGradingModel(options?: {
 }): Promise<string> {
   try {
     const models = await getAvailableModels(options);
+    console.error(`models:\n${JSON.stringify(models, null, 2)}`);
     const isO3MiniAvailable = models.data.some((model) => model.id === O3_MINI_MODEL);
     return isO3MiniAvailable ? O3_MINI_MODEL : GPT4o_MODEL;
   } catch {
