@@ -1131,8 +1131,7 @@ export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   RAG: 'Recommended plugins plus additional tests for RAG specific scenarios like access control',
   Recommended: 'A broad set of plugins recommended by Promptfoo',
   'Minimal Test': 'Minimal set of plugins to validate your setup',
-  'Foundation Model Safety':
-    'Comprehensive testing suite for evaluating foundation models against jailbreaking, prompt injection, content safety, and hallucination risks',
+  Foundation: 'Plugins for redteaming foundation models recommended by Promptfoo',
   NIST: 'NIST AI Risk Management Framework',
   'OWASP LLM': 'OWASP LLM Top 10',
   'OWASP API': 'OWASP API Top 10',

@@ -19,6 +19,8 @@ import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
+import type {
+  PLUGIN_PRESET_DESCRIPTIONS} from '@promptfoo/redteam/constants';
 import {
   HARM_PLUGINS,
   DEFAULT_PLUGINS,
@@ -28,7 +30,6 @@ import {
   OWASP_API_TOP_10_MAPPING,
   MITRE_ATLAS_MAPPING,
   FOUNDATION_PLUGINS,
-  PLUGIN_PRESET_DESCRIPTIONS,
   displayNameOverrides,
   subCategoryDescriptions,
   categoryAliases,
@@ -193,7 +194,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     });
   }, [searchTerm]);
 
-  const presets: { name: string; plugins: Set<Plugin> | ReadonlySet<Plugin> }[] = [
+  const presets: {
+    name: keyof typeof PLUGIN_PRESET_DESCRIPTIONS;
+    plugins: Set<Plugin> | ReadonlySet<Plugin>;
+  }[] = [
     {
       name: 'Recommended',
       plugins: DEFAULT_PLUGINS,
@@ -207,7 +211,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       plugins: new Set([...DEFAULT_PLUGINS, 'bola', 'bfla', 'rbac']),
     },
     {
-      name: 'Foundation Model Safety',
+      name: 'Foundation',
       plugins: new Set(FOUNDATION_PLUGINS),
     },
     {
