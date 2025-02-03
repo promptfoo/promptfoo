@@ -36,65 +36,77 @@ HLE raises the bar for AI testing with:
 
 2. Create `promptfooconfig.yaml`:
 
+   The following configuration is adapted from the [official HLE eval code](https://github.com/centerforaisafety/hle):
+
    ```yaml
    description: "Humanity's Last Exam Benchmark"
 
    prompts:
      - |
-       You are an expert test taker. Please solve the following question step by step.
+       You are an expert test taker. Answer the following question step by step.
 
-       Question ID: {{id}}
-       Question: {{question}}
+       Question ID: {{ id }}
+       Question: {{ question }}
 
-       {{#if image}}
-       Image: {{image}}
-       {{/if}}
+       {% if image %}
+       Image: {{ image }}
+       {% endif %}
 
-       {{#if choices}}
+       {% if choices %}
        Options:
-       A) {{choices.[0]}}
-       B) {{choices.[1]}}
-       C) {{choices.[2]}}
-       D) {{choices.[3]}}
-       {{/if}}
+       A) {{ choices[0] }}
+       B) {{ choices[1] }}
+       C) {{ choices[2] }}
+       D) {{ choices[3] }}
+       {% endif %}
 
-       Question Type: {{answer_type}}
-       Subject: {{raw_subject}}
-       Category: {{category}}
+       Question Type: {{ answer_type }}
+       Subject: {{ raw_subject }}
+       Category: {{ category }}
 
-       Think through this step by step, then provide your final answer.
-       {{#if choices}}Format your final answer as "Therefore, the answer is A/B/C/D."{{/if}}
-       {{#if answer_type "exactMatch"}}Format your final answer exactly as requested in the question.{{/if}}
+       {% if answer_type == "exactMatch" %}
+       Your response should be in the following format:
+       Explanation: {your detailed step-by-step explanation}
+       Exact Answer: {your succinct, final answer}
+       Confidence: {your confidence score between 0% and 100% for your answer}
+       {% else %}
+       Your response should be in the following format:
+       Explanation: {your detailed step-by-step explanation}
+       Answer: {your chosen answer A/B/C/D}
+       Confidence: {your confidence score between 0% and 100% for your answer}
+       {% endif %}
 
    providers:
-     - openai:gpt-4
-     - anthropic:claude-3-opus
-     - deepseek:deepseek-coder
+     - openai:o3-mini
+     - deepseek:deepseek-r1
 
    defaultTest:
      assert:
        - type: llm-rubric
          value: |
-           Response must demonstrate:
-           1. Clear step-by-step reasoning showing expert-level understanding
-           2. Proper application of domain-specific principles
-           3. Precise calculations or logical deductions where applicable
-           4. Unambiguous final answer in the required format
-           5. No reliance on simple internet lookup or pattern matching
+           Judge whether the following [response] to [question] is correct or not based on the precise and unambiguous [correct_answer] below.
+
+           [question]: {{ vars.question }}
+
+           [response]: {{ response }}
+
+           Your judgement must be in the format and criteria specified below:
+
+           extracted_final_answer: The final exact answer extracted from the [response]. Put the extracted answer as 'None' if there is no exact, final answer to extract from the response.
+
+           [correct_answer]: {{ vars.answer }}
+
+           reasoning: Explain why the extracted_final_answer is correct or incorrect based on [correct_answer], focusing only on if there are meaningful differences between [correct_answer] and the extracted_final_answer. Do not comment on any background to the problem, do not attempt to solve the problem, do not argue for any answer different than [correct_answer], focus only on whether the answers match.
+
+           correct: Answer 'yes' if extracted_final_answer matches the [correct_answer] given above, or is within a small margin of error for numerical problems. Answer 'no' otherwise, i.e. if there if there is any inconsistency, ambiguity, non-equivalency, or if the extracted answer is incorrect.
+
+           confidence: The extracted confidence score between 0% and 100% from [response]. Put 100 if there is no confidence score available.
 
        - type: latency
          threshold: 60000
-
-       - type: javascript
-         value: |
-           // Validate answer format based on question type
-           if (vars.answer_type === "multipleChoice") {
-             return response.match(/Therefore, the answer is [A-D]\./);
-           }
-           if (vars.answer_type === "exactMatch") {
-             return response.includes(vars.answer);
-           }
-           return true;
+   tests:
+     # Load HLE dataset from Hugging Face
+     - huggingface://datasets/cais/hle?split=test&limit=100
    ```
 
 3. Set up your API keys:
