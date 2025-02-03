@@ -112,6 +112,7 @@ export async function runEval({
   registers,
   isRedteam,
   allTests,
+  concurrency,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
   // Use the original prompt to set the label, not renderedPrompt
   const promptLabel = prompt.label;
@@ -178,6 +179,7 @@ export async function runEval({
         provider,
         test,
         allTests || [],
+        concurrency,
       );
     } else {
       response = await ((test.provider as ApiProvider) || provider).callApi(
@@ -619,6 +621,7 @@ class Evaluator {
     // Set up eval cases
     const runEvalOptions: RunEvalOptions[] = [];
     let testIdx = 0;
+    let concurrency = options.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
     for (let index = 0; index < tests.length; index++) {
       const testCase = tests[index];
       invariant(
@@ -675,6 +678,7 @@ class Evaluator {
                 registers: this.registers,
                 isRedteam: this.testSuite.redteam != null,
                 allTests: runEvalOptions,
+                concurrency,
               });
               promptIdx++;
             }
@@ -684,7 +688,7 @@ class Evaluator {
       }
     }
     // Determine run parameters
-    let concurrency = options.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
+
     if (concurrency > 1) {
       const usesConversation = prompts.some((p) => p.raw.includes('_conversation'));
       const usesStoreOutputAs = tests.some((t) => t.options?.storeOutputAs);

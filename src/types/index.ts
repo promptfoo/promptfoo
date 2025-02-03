@@ -149,6 +149,7 @@ export interface RunEvalOptions {
 
   // Used by pandamonium, this should never be passed to callApi, it could be a massive object that will break the stack
   allTests?: RunEvalOptions[];
+  concurrency?: number;
 }
 
 const EvaluateOptionsSchema = z.object({

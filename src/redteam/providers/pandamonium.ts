@@ -110,6 +110,7 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
     targetProvider: ApiProvider,
     test: AtomicTestCase,
     allTests: RunEvalOptions[],
+    concurrency: number = 4,
   ): Promise<EvaluateResult[]> {
     const results: EvaluateResult[] = [];
     this.currentTestIdx = Math.max(...allTests.map((t) => t.testIdx));
@@ -149,6 +150,7 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
           nextData.testCases,
           targetProvider,
           allTests,
+          concurrency,
         );
 
         if (!evalResults || evalResults.length === 0) {
@@ -159,7 +161,7 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
         this.log(`Results from target: ${evalResults.length}`, 'debug');
         results.push(...evalResults.map((r) => r.result));
 
-        // Check for a successful jailbreak (here we assume a jailbreak is indicated by a false "success" flag).
+        // Check for a successful jailbreak
         const successfulResult = evalResults.find((r) => !r.result.success);
         if (successfulResult) {
           this.log(
@@ -258,11 +260,12 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
     tests: PandamoniumTest[],
     targetProvider: ApiProvider,
     allTests: RunEvalOptions[],
+    concurrency: number,
   ): Promise<Array<{ result: EvaluateResult; program: string; pluginId: string }>> {
     const results: Array<{ result: EvaluateResult; program: string; pluginId: string }> = [];
     let promptCounter = 0;
 
-    await async.forEachOfLimit(tests, 4, async (test, _index) => {
+    await async.forEachOfLimit(tests, concurrency, async (test, _index) => {
       promptCounter++;
       this.log(`Sending prompt ${promptCounter}/${tests.length} to target provider`, 'debug');
       const evaluation = await this.evaluateSingleTest(test, targetProvider, allTests);
