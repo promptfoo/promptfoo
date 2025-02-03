@@ -1,15 +1,17 @@
 ---
 date: 2025-02-01
-image: /img/blog/hle/hero.png
+image: /img/blog/deepseek/deepseek_panda.png
 ---
 
 # Benchmarking LLMs Against Humanity's Last Exam
 
-[Humanity's Last Exam (HLE)](https://arxiv.org/abs/2501.14249) is a groundbreaking benchmark designed to be the final frontier of closed-ended academic testing. With over 3,000 expert-crafted questions spanning 100+ subjects, it represents the pinnacle of human knowledge assessment.
+Today, OpenAI announced DeepResearch, doubling their performance on Humanity's Last Exam (HLE) from 13.3% with O3-mini to an impressive 26.6%. This breakthrough highlights the rapid advancement of AI capabilities in tackling expert-level knowledge assessments.
 
-Today, we'll show you how to run this benchmark against any LLM using promptfoo, complete with automatic grading and detailed performance analysis.
+[Humanity's Last Exam (HLE)](https://arxiv.org/abs/2501.14249) is a groundbreaking benchmark designed to be the final frontier of closed-ended academic testing. Developed by nearly 1,000 subject matter experts across 500+ institutions in 50+ countries, it represents the pinnacle of human knowledge assessment with over 3,000 expert-crafted questions spanning 100+ subjects.
 
-![Humanity's Last Exam Benchmark Results](/img/blog/hle/results.png)
+In this article, we'll show you how to run this challenging benchmark against any LLM using promptfoo, including O3-mini, DeepSeek-R1, and other state-of-the-art models. We'll walk through the setup, evaluation process, and how to analyze the results.
+
+![Humanity's Last Exam Benchmark Results](/img/blog/deepseek/deepseek_panda.png)
 
 <!-- truncate -->
 
@@ -17,9 +19,21 @@ Today, we'll show you how to run this benchmark against any LLM using promptfoo,
 
 While models achieve >90% accuracy on traditional benchmarks like MMLU, HLE pushes the boundaries with:
 
-- Questions from nearly 1,000 subject matter experts across 500+ institutions
-- Multi-modal challenges combining text, math, and visual reasoning
-- Unprecedented difficulty level (current SOTA: 13% accuracy)
+- **Expert-Level Difficulty**: Questions crafted by professors, researchers, and graduate degree holders
+- **Multi-Modal Challenges**: 10% of questions combine text with visual elements
+- **Diverse Question Types**: Both multiple-choice (20%) and exact-match (80%) formats
+- **Rigorous Review Process**: Multi-stage expert review ensuring question quality and difficulty
+- **Current SOTA Performance**: With OpenAI's latest DeepResearch announcement, state-of-the-art performance has jumped to 26.6%, while most models achieve 3-13% accuracy
+
+## Question Requirements
+
+Each HLE question adheres to strict criteria:
+
+1. **Difficulty**: Graduate/PhD level or highly specific domain knowledge
+2. **Precision**: Unambiguous, objectively correct answers
+3. **Originality**: Not derivable from simple internet searches
+4. **Verification**: Questions tested against frontier LLMs to ensure difficulty
+5. **Expert Review**: Two-stage review process by subject matter experts
 
 ## Setting Up the Evaluation
 
@@ -32,7 +46,12 @@ prompts:
   - |
     You are an expert test taker. Please solve the following question step by step.
     
+    Question ID: {{id}}
     Question: {{question}}
+    
+    {{#if image}}
+    Image: {{image}}
+    {{/if}}
     
     {{#if choices}}
     Options:
@@ -42,30 +61,43 @@ prompts:
     D) {{choices.[3]}}
     {{/if}}
     
+    Question Type: {{answer_type}}
+    Subject: {{raw_subject}}
+    Category: {{category}}
+    
     Think through this step by step, then provide your final answer.
     {{#if choices}}Format your final answer as "Therefore, the answer is A/B/C/D."{{/if}}
+    {{#if answer_type "exactMatch"}}Format your final answer exactly as requested in the question.{{/if}}
 
 providers:
-  # Add your preferred models here
   - openai:gpt-4
   - anthropic:claude-3-opus
   - deepseek:deepseek-coder
   
 defaultTest:
   assert:
-    # Enforce step-by-step reasoning
     - type: llm-rubric
-      value: Response must include clear step-by-step reasoning
-    # Set reasonable timeout
+      value: |
+        Response must demonstrate:
+        1. Clear step-by-step reasoning showing expert-level understanding
+        2. Proper application of domain-specific principles and terminology
+        3. Precise calculations or logical deductions where applicable
+        4. Unambiguous final answer in the required format
+        5. No reliance on simple internet lookup or pattern matching
+    
     - type: latency
       threshold: 60000
-    # Verify answer format for multiple choice
-    - type: regex
-      value: "Therefore, the answer is [ABCD]\\."
       
-tests:
-  # Load HLE dataset from Hugging Face
-  - huggingface://datasets/cais/hle?split=test&limit=100
+    - type: javascript
+      value: |
+        // Validate answer format based on question type
+        if (vars.answer_type === "multipleChoice") {
+          return response.match(/Therefore, the answer is [A-D]\./);
+        }
+        if (vars.answer_type === "exactMatch") {
+          return response.includes(vars.answer);
+        }
+        return true;
 ```
 
 ## Running the Evaluation
@@ -93,39 +125,101 @@ tests:
 
 ## Understanding the Results
 
-The evaluation provides rich insights into model performance:
+The evaluation provides insights aligned with the HLE paper's metrics:
 
-- Overall accuracy across subjects
-- Reasoning quality assessment
-- Response time analysis
-- Confidence calibration
-- Subject-specific performance breakdowns
+- **Overall Accuracy**: Current SOTA models achieve 3-9% accuracy
+- **Calibration Analysis**: Models often show high confidence despite incorrect answers
+- **Token Usage**: Analysis of completion tokens across different subjects
+- **Subject Performance**: Breakdown across mathematics, sciences, humanities, etc.
+- **Response Quality**: Assessment of reasoning steps and domain expertise
 
-[INSERT SCREENSHOT OF RESULTS DASHBOARD]
+## Key Subject Areas
+
+HLE covers a broad range of subjects including:
+
+- Mathematics and Applied Mathematics
+- Physics and Engineering
+- Computer Science and AI
+- Chemistry and Biochemistry
+- Biology and Medicine
+- Linguistics and Humanities
+- Social Sciences and Law
+- Arts and Classical Studies
+
+### Example Questions
+
+To illustrate the expert-level difficulty of HLE questions, here are two examples:
+
+#### Linguistics Example
+```
+Question ID: LING-472
+Question: In a newly documented creole language, analyze the following sentence structure:
+"mi-go taso-fala blong-haus" (meaning: "I went to the house")
+
+Identify the linguistic features present, considering:
+a) The placement of articles and modals as prefixes
+b) The verb-final word order pattern
+c) The presence of split ergativity
+
+Explain how these features interact and what this suggests about the language's substrate influences.
+
+Answer Type: exactMatch
+Subject: Linguistics
+Category: Language Typology
+```
+
+#### Medical Science Example
+```
+Question ID: MED-891
+Question: Compare and contrast the viral vector technologies used in the following approved hemophilia gene therapies:
+
+1. ROCTAVIAN (valoctocogene roxaparvovec-rvox)
+2. HEMGENIX (etranacogene dezaparvovec-drlb)
+3. LENMELDY (atidarsagene autotemcel)
+
+Analyze their:
+a) Vector serotype selection
+b) Transgene design differences
+c) Impact on Factor VIII/IX expression
+d) Safety profiles based on clinical trials
+
+Provide a detailed technical assessment of why these specific design choices were made.
+
+Answer Type: exactMatch
+Subject: Medical Science
+Category: Gene Therapy
+```
+
+These examples demonstrate the benchmark's emphasis on:
+1. Expert-level domain knowledge
+2. Integration of multiple technical concepts
+3. Analysis rather than mere recall
+4. Current, real-world applications
+5. Precise, unambiguous evaluation criteria
 
 ## Customizing the Evaluation
 
 You can modify the configuration to:
 
-1. Test specific subjects:
+1. Focus on specific subjects:
    ```yaml
    tests:
      - huggingface://datasets/cais/hle?split=test&subject=quantum_mechanics
    ```
 
-2. Adjust grading criteria:
+2. Adjust validation criteria:
    ```yaml
    defaultTest:
      assert:
        - type: llm-rubric
          value: |
            Response must:
-           1. Show clear mathematical reasoning
-           2. Cite relevant principles/theorems
-           3. Arrive at a precise answer
+           1. Show graduate-level understanding
+           2. Apply domain-specific principles
+           3. Provide precise, unambiguous answers
    ```
 
-3. Compare different prompting strategies:
+3. Test different prompting strategies:
    ```yaml
    prompts:
      - file://prompts/zero-shot.txt
@@ -133,16 +227,14 @@ You can modify the configuration to:
      - file://prompts/few-shot.txt
    ```
 
-## What's Next?
+## Future Implications
 
-As models improve, we expect to see rapid progress on HLE scores. You can:
+The HLE paper suggests several key implications:
 
-1. Track your model's progress over time
-2. Compare different model versions
-3. Experiment with prompt engineering
-4. Contribute to the benchmark
-
-The full evaluation code is available in our [examples repository](https://github.com/promptfoo/promptfoo/tree/main/examples/hle).
+1. **Benchmark Longevity**: Designed to remain challenging even as models improve
+2. **Progress Tracking**: Clear measure of advancement toward expert-level capabilities
+3. **Capability Assessment**: Helps inform AI development and governance decisions
+4. **Research Direction**: Identifies areas needing improvement in model capabilities
 
 ## Additional Resources
 
@@ -158,4 +250,4 @@ The full evaluation code is available in our [examples repository](https://githu
 npx promptfoo@latest init --example hle
 ```
 
-[INSERT CTA BUTTONS/LINKS] 
+[Get Started with promptfoo](https://promptfoo.dev/docs/getting-started) | [View HLE Dataset](https://huggingface.co/datasets/cais/hle) 
