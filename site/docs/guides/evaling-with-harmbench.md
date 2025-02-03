@@ -26,7 +26,7 @@ targets:
     label: OpenAI GPT-4o-mini
 redteam:
   plugins:
-    - id: harmbench # Tests for harmful content using the HarmBench dataset
+    - id: harmbench
       numTests: 400
 ```
 
