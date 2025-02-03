@@ -40,6 +40,8 @@ import { getNunjucksEngine } from './util/templates';
 
 const nunjucks = getNunjucksEngine(undefined, false, true);
 
+export * from './external/matchers';
+
 function cosineSimilarity(vecA: number[], vecB: number[]) {
   if (vecA.length !== vecB.length) {
     throw new Error('Vectors must be of equal length');
@@ -166,7 +168,10 @@ export async function getAndCheckProvider(
   return matchedProvider;
 }
 
-function fail(reason: string, tokensUsed?: Partial<TokenUsage>): Omit<GradingResult, 'assertion'> {
+export function fail(
+  reason: string,
+  tokensUsed?: Partial<TokenUsage>,
+): Omit<GradingResult, 'assertion'> {
   return {
     pass: false,
     score: 0,

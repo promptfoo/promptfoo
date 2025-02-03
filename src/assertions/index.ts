@@ -18,6 +18,7 @@ import {
   matchesModeration,
   matchesSelectBest,
   matchesSimilarity,
+  matchesConversationRelevance,
 } from '../matchers';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
@@ -450,4 +451,5 @@ export default {
   matchesContextFaithfulness,
   matchesComparisonBoolean: matchesSelectBest,
   matchesModeration,
+  matchesConversationRelevance,
 };
