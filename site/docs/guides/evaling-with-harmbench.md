@@ -56,16 +56,6 @@ You can see an example of the results below as well as the full results of a sam
 
 By providing some additional context to OpenAI (from our application), you can observe how our internal application is able to resist attacks that the vanilla model is not able to. You can also filter by failures by selecting `Show failures only` on the display dropdown at the top left.
 
-## Understanding the results
-
-HarmBench evaluations provide detailed insights into your application's resilience against various attack vectors. Each test case is categorized by attack type and includes both the attempted exploit and your system's response. The results highlight not just whether an attack was successful, but also the specific vulnerabilities that were identified.
-
-Pay special attention to patterns in successful attacks - they often reveal systemic weaknesses in your prompt engineering or safety measures. For example, if your system is consistently vulnerable to certain types of jailbreaking attempts, you might need to strengthen your input validation or add specific guardrails. Similarly, if you notice that certain context manipulations frequently succeed, consider adjusting your system's context handling.
-
-While HarmBench evaluation metrics return binary success/failure rates, a response might technically resist an attack but still reveal too much information about your system's security measures. Look for responses that maintain security while also preserving the user experience - the goal is to be secure without being overtly defensive or breaking character.
-
-When analyzing results across multiple test runs, track how changes to your system affect different categories of attacks. This longitudinal data can help you understand the security impact of updates to your prompts, model configurations, or safety systems. Remember that security improvements in one area might sometimes create unexpected vulnerabilities in another, necessitating periodic and comprehensive testing.
-
 ## Testing different targets
 
 Promptfoo has built-in support for a wide variety of models such as those from OpenAI, Anthropic, Hugging Face, Deepseek, Ollama and more.
