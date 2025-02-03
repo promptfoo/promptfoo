@@ -1,5 +1,7 @@
 // These metrics are ported from DeepEval.
 // https://docs.confident-ai.com/docs/metrics-conversation-relevancy. See APACHE_LICENSE for license.
+import dedent from 'dedent';
+import logger from 'src/logger';
 import { getAndCheckProvider, fail } from '../../matchers';
 import { getDefaultProviders } from '../../providers/defaults';
 import type { GradingConfig, GradingResult } from '../../types';
@@ -7,6 +9,11 @@ import invariant from '../../util/invariant';
 import { getNunjucksEngine } from '../../util/templates';
 
 const nunjucks = getNunjucksEngine(undefined, false, true);
+
+export interface Message {
+  input: string;
+  output: string | object;
+}
 
 function fromVars(vars?: Record<string, string | object>) {
   if (!vars) {
@@ -25,8 +32,26 @@ function fromVars(vars?: Record<string, string | object>) {
   return ret;
 }
 
+function parseJsonResponse(output: string): any {
+  // First try direct JSON parse
+  try {
+    return JSON.parse(output);
+  } catch (e) {
+    // Try to extract JSON from markdown code block if present
+    const match = output.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
+    if (match) {
+      try {
+        return JSON.parse(match[1]);
+      } catch (e) {
+        throw new Error(`Failed to parse JSON from markdown: ${e}`);
+      }
+    }
+    throw new Error(`Failed to parse response as JSON: ${e}`);
+  }
+}
+
 export async function matchesConversationRelevance(
-  messages: { input: string; actualOutput: string }[],
+  messages: Message[],
   threshold: number,
   vars?: Record<string, string | object>,
   grading?: GradingConfig,
@@ -48,16 +73,18 @@ export async function matchesConversationRelevance(
   // Generate verdict using LLM
   const rubricPrompt =
     grading?.rubricPrompt ||
-    `Based on the given list of message exchanges between a user and an LLM, generate a JSON object to indicate whether the LAST \`actualOutput\` is relevant to the LAST \`input\` in messages. The JSON will have 2 fields: 'verdict' and 'reason'.
-  The 'verdict' key should STRICTLY be either 'yes' or 'no', which states whether the last \`actual output\` is relevant to the last \`input\`. 
+    dedent`Based on the given list of message exchanges between a user and an LLM, generate a JSON object to indicate whether the LAST \`output\` is relevant to the LAST \`input\` in messages. The JSON will have 2 fields: 'verdict' and 'reason'.
+  The 'verdict' key should STRICTLY be either 'yes' or 'no', which states whether the last \`output\` is relevant to the last \`input\`. 
   Provide a 'reason' ONLY if the answer is 'no'. 
   You MUST USE the previous messages (if any) provided in the list of messages to make an informed judgement on relevancy.
+  
   **
-  IMPORTANT: Please make sure to only return in JSON format.
-  You MUST ONLY provide a verdict for the LAST message on the list but MUST USE context from the previous messages.
-  You DON'T have to provide a reason if the answer is 'yes'.
-  ONLY provide a 'no' answer if the LLM response is COMPLETELY irrelevant to the message input.
-  Vague LLM responses to vague inputs, such as greetings DOES NOT count as irrelevancies!
+  IMPORTANT: 
+  - Please make sure to only return in JSON format.
+  - You MUST ONLY provide a verdict for the LAST message on the list but MUST USE context from the previous messages.
+  - You DON'T have to provide a reason if the answer is 'yes'.
+  - ONLY provide a 'no' answer if the LLM response is COMPLETELY irrelevant to the message input.
+  - Vague LLM responses to vague inputs, such as greetings DOES NOT count as irrelevant to the conversation.
   **
   Messages:
   ${JSON.stringify(messages, null, 2)}
@@ -83,7 +110,8 @@ export async function matchesConversationRelevance(
   );
 
   try {
-    const result = JSON.parse(resp.output);
+    console.warn(`resp.output: ${resp.output}`);
+    const result = parseJsonResponse(resp.output);
     const pass = result.verdict === 'yes';
     const score = pass ? 1 : 0;
 

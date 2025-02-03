@@ -40,8 +40,6 @@ import { getNunjucksEngine } from './util/templates';
 
 const nunjucks = getNunjucksEngine(undefined, false, true);
 
-export * from './external/matchers';
-
 function cosineSimilarity(vecA: number[], vecB: number[]) {
   if (vecA.length !== vecB.length) {
     throw new Error('Vectors must be of equal length');

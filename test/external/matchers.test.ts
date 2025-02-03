@@ -37,7 +37,7 @@ describe('matchesConversationRelevance', () => {
     const messages = [
       {
         input: 'What is the capital of France?',
-        actualOutput: 'The capital of France is Paris.',
+        output: 'The capital of France is Paris.',
       },
     ];
 
@@ -78,7 +78,7 @@ describe('matchesConversationRelevance', () => {
     const messages = [
       {
         input: 'What is the capital of France?',
-        actualOutput: 'The weather is nice today.',
+        output: 'The weather is nice today.',
       },
     ];
 
@@ -92,11 +92,11 @@ describe('matchesConversationRelevance', () => {
     const messages = [
       {
         input: 'What is the capital of France?',
-        actualOutput: 'The capital of France is Paris.',
+        output: 'The capital of France is Paris.',
       },
       {
         input: 'What is its population?',
-        actualOutput: 'Paris has a population of about 2.2 million people.',
+        output: 'Paris has a population of about 2.2 million people.',
       },
     ];
 
@@ -153,7 +153,7 @@ describe('matchesConversationRelevance', () => {
     const messages = [
       {
         input: 'What is the capital of France?',
-        actualOutput: 'Paris',
+        output: 'Paris',
       },
     ];
 
@@ -191,7 +191,7 @@ describe('matchesConversationRelevance', () => {
     const messages = [
       {
         input: 'What is the capital of France?',
-        actualOutput: 'Paris',
+        output: 'Paris',
       },
     ];
 
@@ -225,7 +225,7 @@ describe('matchesConversationRelevance', () => {
     const messages = [
       {
         input: 'What is the capital of France?',
-        actualOutput: 'Paris',
+        output: 'Paris',
       },
     ];
     const customRubric = 'Custom rubric template with {{messages}}';
@@ -260,7 +260,7 @@ describe('matchesConversationRelevance', () => {
     const messages = [
       {
         input: 'What is the capital of {{country}}?',
-        actualOutput: '{{capital}}',
+        output: '{{capital}}',
       },
     ];
 
@@ -273,5 +273,37 @@ describe('matchesConversationRelevance', () => {
     const prompt = mockProvider.callApi.mock.calls[0][0];
     expect(prompt).toContain('What is the capital of France?');
     expect(prompt).toContain('Paris');
+  });
+
+  it('should handle markdown-formatted JSON responses', async () => {
+    const mockProvider = {
+      id: () => 'mock-provider',
+      callApi: jest.fn().mockResolvedValue({
+        output: '```json\n{"verdict": "yes"}\n```',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+    };
+
+    jest.mocked(getDefaultProviders).mockResolvedValue({
+      datasetGenerationProvider: mockProvider,
+      embeddingProvider: mockProvider,
+      gradingJsonProvider: mockProvider,
+      gradingProvider: mockProvider,
+      llmRubricProvider: mockProvider,
+      moderationProvider: mockProvider,
+      suggestionsProvider: mockProvider,
+      synthesizeProvider: mockProvider,
+    });
+
+    const messages = [
+      {
+        input: 'What is the capital of France?',
+        output: 'Paris',
+      },
+    ];
+
+    const result = await matchesConversationRelevance(messages, 0.5);
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
   });
 });

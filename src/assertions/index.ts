@@ -5,6 +5,8 @@ import path from 'path';
 import cliState from '../cliState';
 import { getEnvInt } from '../envars';
 import { importModule } from '../esm';
+import { handleConversationRelevance } from '../external/assertions';
+import { matchesConversationRelevance } from '../external/matchers';
 import logger from '../logger';
 import {
   matchesAnswerRelevance,
@@ -18,7 +20,6 @@ import {
   matchesModeration,
   matchesSelectBest,
   matchesSimilarity,
-  matchesConversationRelevance,
 } from '../matchers';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
@@ -285,6 +286,7 @@ export async function runAssertion({
     similar: handleSimilar,
     'starts-with': handleStartsWith,
     webhook: handleWebhook,
+    'conversation-relevance': handleConversationRelevance,
   };
 
   const handler = assertionHandlers[baseType as keyof typeof assertionHandlers];

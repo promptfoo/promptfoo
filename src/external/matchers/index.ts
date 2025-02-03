@@ -1,1 +1,1 @@
-export { matchesConversationRelevance } from './relevance';
+export { matchesConversationRelevance, Message } from './relevance';
