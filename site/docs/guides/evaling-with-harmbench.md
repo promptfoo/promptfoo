@@ -8,7 +8,9 @@ Recent research has shown that even the most advanced LLMs [remain vulnerable](h
 
 To help define a systematic way to assess potential risks and vulnerabilities in LLM systems, researchers at UC Berkeley, Google DeepMind, and the Center for AI Safety created [HarmBench](https://arxiv.org/abs/2402.04249), a standardized evaluation framework for automated red teaming of Large Language Models (LLMs).
 
-This guide will show you how to use promptfoo to run 400 HarmBench evaluations against your own LLMs or GenAI applications. Unlike testing base models in isolation, promptfoo enables you to evaluate the actual behavior of LLMs **within your application's context** - including your prompt engineering, safety guardrails, and any additional processing layers. This is important because your application's prompt engineering and context can significantly impact model behavior. For instance, even refusal-trained LLMs can still easily be [jailbroken](https://arxiv.org/abs/2410.13886) when operating as an agent in a web browser.
+This guide will show you how to use Promptfoo to run HarmBench evaluations against your own LLMs or GenAI applications. Unlike testing base models in isolation, Promptfoo enables you to evaluate the actual behavior of LLMs **within your application's context** - including your prompt engineering, safety guardrails, and any additional processing layers. 
+
+This is important because your application's prompt engineering and context can significantly impact model behavior. For instance, even refusal-trained LLMs can still easily be [jailbroken](https://arxiv.org/abs/2410.13886) when operating as an agent in a web browser.
 
 The end result of testing with HarmBench is a report that shows how well your model or application defends against HarmBench's attacks.
 
