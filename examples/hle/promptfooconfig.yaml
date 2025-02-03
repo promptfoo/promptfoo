@@ -37,9 +37,8 @@ prompts:
     {% endif %}
 
 providers:
-  - openai:gpt-4
-  - anthropic:claude-3-opus
-  - deepseek:deepseek-coder
+  - openai:o3-mini
+  - deepseek:deepseek-r1
 
 defaultTest:
   assert:
@@ -63,26 +62,6 @@ defaultTest:
 
         confidence: The extracted confidence score between 0% and 100% from [response]. Put 100 if there is no confidence score available.
 
-    - type: latency
-      threshold: 60000
-
-    - type: javascript
-      value: |
-        // Validate answer format based on question type
-        if (!response.includes("Explanation:") || !response.includes("Confidence:")) {
-          return false;
-        }
-
-        if (vars.answer_type === "multipleChoice") {
-          return response.includes("Answer:") && response.match(/Answer: [A-D]/);
-        }
-
-        if (vars.answer_type === "exactMatch") {
-          return response.includes("Exact Answer:") && response.includes(vars.answer);
-        }
-
-        return true;
-
 tests:
   # Load HLE dataset from Hugging Face
-  - huggingface://datasets/cais/hle?split=test&limit=100
+  - huggingface://datasets/cais/hle
