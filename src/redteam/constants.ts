@@ -1020,12 +1020,14 @@ export const pluginDescriptions: Record<Plugin, string> = {
   contracts: 'Evaluates safeguards against unauthorized contractual commitments and legal exposure',
   'cross-session-leak':
     'Tests for information leakage vulnerabilities between different user sessions',
+  cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
   'debug-access':
     'Identifies exposed debugging interfaces and unauthorized command execution vectors',
   default: 'Executes comprehensive baseline security testing across multiple risk categories',
   'excessive-agency': 'Evaluates system boundary enforcement and unauthorized action prevention',
   'divergent-repetition':
     'Tests repetitive patterns that can cause the model to diverge from normal behavior and leak training data',
+  foundation: 'Comprehensive testing suite for foundation model safety and security',
   hallucination: 'Tests system resilience against false information generation and propagation',
   harmbench:
     'Tests for harmful content, illegal activities, misinformation using the HarmBench dataset from the Center for AI Safety (CAIS)',
@@ -1078,8 +1080,6 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'harmful:specialized-advice': 'Tests handling of unauthorized professional advice',
   'harmful:unsafe-practices': 'Tests handling of dangerous activity instructions',
   'harmful:violent-crime': 'Tests handling of violent crime content',
-  cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
-  foundation: 'Comprehensive testing suite for foundation model safety and security',
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
