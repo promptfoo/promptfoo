@@ -32,6 +32,7 @@ import {
   categoryAliases,
   type Plugin,
   riskCategories,
+  PLUGIN_PRESET_DESCRIPTIONS,
 } from '@promptfoo/redteam/constants';
 import { useDebounce } from 'use-debounce';
 import { useRedTeamConfig, useRecentlyUsedPlugins } from '../hooks/useRedTeamConfig';
@@ -545,6 +546,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                   >
                     <PresetCard
                       name={preset.name}
+                      description={PLUGIN_PRESET_DESCRIPTIONS[preset.name] || ''}
                       isSelected={isSelected}
                       onClick={() => handlePresetSelect(preset)}
                     />

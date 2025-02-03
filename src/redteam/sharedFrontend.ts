@@ -1,5 +1,5 @@
 // This file is imported by the frontend and shouldn't use native dependencies.
-import type { TestCase, UnifiedConfig } from '../types';
+import type { UnifiedConfig } from '../types';
 import {
   MULTI_TURN_STRATEGIES,
   type Plugin,
@@ -31,11 +31,24 @@ export function getRiskCategorySeverityMap(
 export function getUnifiedConfig(
   config: SavedRedteamConfig,
 ): UnifiedConfig & { redteam: NonNullable<UnifiedConfig['redteam']> } {
+  // Remove UI specific configs from target
+  const target = { ...config.target, config: { ...config.target.config } };
+  delete target.config.sessionSource;
+  delete target.config.stateful;
+
+  const defaultTest = {
+    ...(config.defaultTest ?? {}),
+    options: {
+      ...(config.defaultTest?.options ?? {}),
+      transformVars: '{ ...vars, sessionId: context.uuid }',
+    },
+  };
+
   return {
     description: config.description,
-    targets: [config.target],
+    targets: [target],
     prompts: config.prompts,
-    defaultTest: config.defaultTest as TestCase,
+    defaultTest,
     redteam: {
       purpose: config.purpose,
       numTests: config.numTests,

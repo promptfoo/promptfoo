@@ -26,6 +26,7 @@ export interface Config {
 export interface ProviderOptions {
   id: string;
   label?: string;
+  delay?: number;
   config: {
     // Custom provider config can have anything
     [key: string]: any;
@@ -52,6 +53,7 @@ export interface ProviderOptions {
         }>
       | string;
     stateful?: boolean;
+    sessionSource?: 'client' | 'server';
   };
 }
 

@@ -2,27 +2,27 @@ import React from 'react';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
-import { PLUGIN_PRESET_DESCRIPTIONS } from '@promptfoo/redteam/constants';
 
 interface PresetCardProps {
   name: string;
+  description: string;
   isSelected: boolean;
   onClick: () => void;
 }
 
-export default function PresetCard({ name, isSelected, onClick }: PresetCardProps) {
+export default function PresetCard({ name, description, isSelected, onClick }: PresetCardProps) {
   return (
     <Paper
+      elevation={2}
       onClick={onClick}
       sx={{
-        p: 3,
+        p: 2.5,
         height: '100%',
-        minHeight: 120,
         cursor: 'pointer',
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
+        alignItems: 'flex-start',
+        justifyContent: 'flex-start',
         position: 'relative',
         overflow: 'hidden',
         transition: 'all 0.2s ease-in-out',
@@ -48,9 +48,9 @@ export default function PresetCard({ name, isSelected, onClick }: PresetCardProp
         variant="h6"
         sx={{
           fontWeight: 500,
-          textAlign: 'center',
           color: isSelected ? 'primary.main' : 'text.primary',
           transition: 'color 0.2s ease-in-out',
+          mb: 1.5,
         }}
       >
         {name}
@@ -60,12 +60,11 @@ export default function PresetCard({ name, isSelected, onClick }: PresetCardProp
         variant="body2"
         color="text.secondary"
         sx={{
-          mt: 1,
-          textAlign: 'center',
           opacity: 0.8,
+          lineHeight: 1.5,
         }}
       >
-        {PLUGIN_PRESET_DESCRIPTIONS[name] || ''}
+        {description}
       </Typography>
     </Paper>
   );
