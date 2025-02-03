@@ -4,18 +4,19 @@ import logger from '../logger';
 import type { TestCase } from '../types';
 import { getEnvString } from '../envars';
 
-interface HuggingFaceParquetResponse {
-  parquet_files: Array<{
-    dataset: string;
-    config: string;
-    split: string;
-    url: string;
-    filename: string;
-    size: number;
+interface HuggingFaceResponse {
+  num_rows_total: number;
+  num_rows_per_page: number;
+  features: Array<{
+    name: string;
+    type: {
+      dtype: string;
+      _type: string;
+    };
   }>;
-  pending: string[];
-  failed: string[];
-  partial: boolean;
+  rows: Array<{
+    row: Record<string, string>;
+  }>;
 }
 
 function parseDatasetPath(path: string): {
@@ -27,9 +28,10 @@ function parseDatasetPath(path: string): {
   const [pathPart, queryPart] = path.replace('huggingface://datasets/', '').split('?');
   const [owner, repo] = pathPart.split('/');
 
-  // Start with minimal required parameters
+  // Start with default parameters
   const defaultParams = new URLSearchParams({
     split: 'test',
+    config: 'default',
   });
 
   // Parse user query parameters
@@ -51,13 +53,10 @@ export async function fetchHuggingFaceDataset(
   datasetPath: string,
   limit?: number,
 ): Promise<TestCase[]> {
-  const baseUrl = 'https://datasets-server.huggingface.co/parquet';
+  const baseUrl = 'https://datasets-server.huggingface.co/rows';
   const { owner, repo, queryParams } = parseDatasetPath(datasetPath);
 
   logger.info(`[Huggingface Dataset] Fetching dataset: ${owner}/${repo} ...`);
-
-  const url = `${baseUrl}?dataset=${encodeURIComponent(`${owner}/${repo}`)}&${queryParams.toString()}`;
-  logger.debug(`[Huggingface Dataset] Fetching from ${url}`);
 
   // Get HuggingFace token from environment
   const hfToken = getEnvString('HUGGING_FACE_HUB_TOKEN');
@@ -69,43 +68,90 @@ export async function fetchHuggingFaceDataset(
     'Authorization': `Bearer ${hfToken}`
   };
 
-  const response = await fetchWithProxy(url, { headers });
-  if (!response.ok) {
-    const responseText = await response.text();
-    const error = dedent`
-      [Huggingface Dataset] Failed to fetch dataset:
-      Status: ${response.status} ${response.statusText}
-      URL: ${url}
-      Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()), null, 2)}
-      Response body: ${responseText}`;
-    logger.error(error);
-    throw new Error(error);
-  }
+  const tests: TestCase[] = [];
+  let offset = 0;
+  const pageSize = 100; // Number of rows per request
+  const queryParamLimit = queryParams.get('limit');
+  const userLimit = limit ?? (queryParamLimit ? Number.parseInt(queryParamLimit, 10) : undefined);
 
-  const data = (await response.json()) as HuggingFaceParquetResponse;
-  
-  if (!data.parquet_files?.length) {
-    logger.error(
-      `[Huggingface Dataset] No parquet files found in dataset: ${owner}/${repo}?${queryParams.toString()}`
+  while (true) {
+    // Create a new URLSearchParams for this request
+    const requestParams = new URLSearchParams(queryParams);
+    requestParams.set('offset', offset.toString());
+    requestParams.set(
+      'length',
+      Math.min(pageSize, userLimit ? userLimit - offset : pageSize).toString(),
     );
-    logger.error(`[Huggingface Dataset] Full response: ${JSON.stringify(data, null, 2)}`);
-    throw new Error('[Huggingface Dataset] No parquet files found in dataset');
+
+    const url = `${baseUrl}?dataset=${encodeURIComponent(`${owner}/${repo}`)}&${requestParams.toString()}`;
+    logger.debug(`[Huggingface Dataset] Fetching page from ${url}`);
+
+    const response = await fetchWithProxy(url, { headers });
+    if (!response.ok) {
+      const responseText = await response.text();
+      const error = dedent`
+        [Huggingface Dataset] Failed to fetch dataset:
+        Status: ${response.status} ${response.statusText}
+        URL: ${url}
+        Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()), null, 2)}
+        Response body: ${responseText}`;
+      logger.error(error);
+      throw new Error(error);
+    }
+
+    const data = (await response.json()) as HuggingFaceResponse;
+    if (!data.rows) {
+      logger.error(
+        `[Huggingface Dataset] No rows found in dataset: ${owner}/${repo}?${requestParams.toString()}`
+      );
+      logger.error(`[Huggingface Dataset] Full response: ${JSON.stringify(data, null, 2)}`);
+      throw new Error('[Huggingface Dataset] No rows found in dataset');
+    }
+
+    logger.debug(
+      `[Huggingface Dataset] Received ${data.rows.length} rows (total: ${data.num_rows_total})`,
+    );
+
+    if (offset === 0) {
+      // Log schema information on first request
+      logger.debug(`[Huggingface Dataset] Dataset features: ${JSON.stringify(data.features)}`);
+      logger.debug(
+        dedent`[Huggingface Dataset] Using query parameters:
+        ${Object.fromEntries(queryParams)}`,
+      );
+    }
+
+    // Convert HuggingFace rows to test cases
+    for (const { row } of data.rows) {
+      const test: TestCase = {
+        vars: {
+          ...row,
+        },
+      };
+      tests.push(test);
+    }
+
+    logger.debug(`[Huggingface Dataset] Processed ${tests.length} total test cases so far`);
+
+    // Check if we've reached user's limit or end of dataset
+    if (userLimit && tests.length >= userLimit) {
+      logger.debug(`[Huggingface Dataset] Reached user-specified limit of ${userLimit}`);
+      break;
+    }
+
+    // Check if we've fetched all rows
+    if (offset + data.rows.length >= data.num_rows_total) {
+      logger.debug('[Huggingface Dataset] Finished fetching all rows');
+      break;
+    }
+
+    offset += data.rows.length;
+    logger.debug(`[Huggingface Dataset] Fetching next page starting at offset ${offset}`);
   }
 
-  // Download the first parquet file
-  const parquetUrl = data.parquet_files[0].url;
-  logger.debug(`[Huggingface Dataset] Downloading parquet file from ${parquetUrl}`);
+  // If user specified a limit, ensure we don't return more than that
+  const finalTests = userLimit ? tests.slice(0, userLimit) : tests;
 
-  const parquetResponse = await fetchWithProxy(parquetUrl, { headers });
-  if (!parquetResponse.ok) {
-    const error = `[Huggingface Dataset] Failed to fetch parquet file: ${parquetResponse.statusText}`;
-    logger.error(error);
-    throw new Error(error);
-  }
-
-  // TODO: We need to add parquet-wasm as a dependency and parse the buffer
-  // For now, throw an error with instructions
-  throw new Error(
-    '[Huggingface Dataset] Parquet parsing not yet implemented. Please add parquet-wasm as a dependency and implement parsing.'
-  );
+  logger.debug(`[Huggingface Dataset] Successfully loaded ${finalTests.length} test cases`);
+  return finalTests;
 }

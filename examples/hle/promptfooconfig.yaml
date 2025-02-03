@@ -38,7 +38,7 @@ prompts:
 
 providers:
   - openai:o3-mini
-  - deepseek:deepseek-r1
+  - deepseek:deepseek-reasoner
 
 defaultTest:
   assert:
