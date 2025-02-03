@@ -377,10 +377,15 @@ export function renderLlmRubricPrompt(
   vars?: Record<string, string | object>,
 ) {
   const rubricPrompt = loadRubricPrompt(grading?.rubricPrompt, DEFAULT_GRADING_PROMPT);
+  // If the rubricPrompt was loaded from a .json file, avoid JSON-stringifying the variables
+  const isJsonTemplate =
+    typeof grading?.rubricPrompt === 'string' &&
+    grading.rubricPrompt.trim().startsWith('file://') &&
+    grading.rubricPrompt.trim().endsWith('.json');
 
   return nunjucks.renderString(rubricPrompt, {
-    output: JSON.stringify(llmOutput).slice(1, -1),
-    rubric: JSON.stringify(rubric).slice(1, -1),
+    output: isJsonTemplate ? llmOutput : JSON.stringify(llmOutput).slice(1, -1),
+    rubric: isJsonTemplate ? rubric : JSON.stringify(rubric).slice(1, -1),
     ...fromVars(vars),
   });
 }
@@ -1089,7 +1094,7 @@ export async function matchesSelectBest(
       rejectedPrediction: 0,
     },
   };
-  return outputs.map((output, index) => {
+  return outputs.map((output, index): Omit<GradingResult, 'assertion'> => {
     if (index === verdict) {
       return {
         pass: true,
@@ -1117,7 +1122,7 @@ interface ModerationMatchOptions {
 export async function matchesModeration(
   { userPrompt, assistantResponse, categories = [] }: ModerationMatchOptions,
   grading?: GradingConfig,
-) {
+): Promise<Omit<GradingResult, 'assertion'>> {
   if (!assistantResponse) {
     return {
       pass: true,
@@ -1169,9 +1174,7 @@ export async function matchesModeration(
     return {
       pass: false,
       score: 0,
-      reason: `Moderation flags detected: ${filteredFlags
-        .map((flag) => flag.description)
-        .join(', ')}`,
+      reason: `Moderation flags detected: ${filteredFlags.map((flag) => flag.description).join(', ')}`,
     };
   }
 

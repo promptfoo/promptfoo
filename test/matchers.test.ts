@@ -470,6 +470,47 @@ describe('matchesLlmRubric', () => {
 
     expect(grading.provider.callApi).not.toHaveBeenCalled();
   });
+
+  it('should render JSON rubric prompt without extra stringification for .json templates', async () => {
+    const rubric = 'Evaluate summary correctness';
+    const llmOutput = 'Some output';
+    // This is the content of a .json file with a nunjucks template
+    const mockRubricContent = `[ {
+  "role": "system",
+  "content": "Evaluate the summary for factual correctness"
+}, {
+  "role": "user",
+  "content": "Your Task: {{ rubric }}. Output: {{ output }}." 
+} ]`;
+
+    const grading: GradingConfig = {
+      rubricPrompt: 'file://rubric.json',
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValueOnce({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
+          tokenUsage: {
+            total: 0,
+            prompt: 0,
+            completion: 0,
+            cached: 0,
+            completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+          },
+        }),
+      },
+    };
+
+    // Mock file system functions to simulate external file loading for rubric.json
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(fs.readFileSync).mockReturnValue(mockRubricContent);
+
+    await matchesLlmRubric(rubric, llmOutput, grading);
+
+    // Verify that the rendered prompt sent to callApi includes the raw values without extra quotes
+    expect(grading.provider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining(`Your Task: ${rubric}. Output: ${llmOutput}.`),
+    );
+  });
 });
 
 describe('matchesFactuality', () => {
