@@ -1,11 +1,11 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: |
   Humanity's Last Exam (HLE) Benchmark
-  
+
   A multi-modal benchmark at the frontier of human knowledge, designed to be the final 
   closed-ended academic benchmark with broad subject coverage. HLE consists of 3,000 
   questions across dozens of subjects, developed globally by subject-matter experts.
-  
+
   Features:
   - Multiple-choice and exact-match questions for automated grading
   - Multi-modal questions with text and images
@@ -16,14 +16,14 @@ description: |
 prompts:
   - |
     You are an expert test taker. Please solve the following question step by step.
-    
+
     Question ID: {{id}}
     Question: {{question}}
-    
+
     {{#if image}}
     Image: {{image}}
     {{/if}}
-    
+
     {{#if choices}}
     Options:
     A) {{choices.[0]}}
@@ -31,11 +31,11 @@ prompts:
     C) {{choices.[2]}}
     D) {{choices.[3]}}
     {{/if}}
-    
+
     Question Type: {{answer_type}}
     Subject: {{raw_subject}}
     Category: {{category}}
-    
+
     Think through this step by step, then provide your final answer.
     {{#if choices}}Format your final answer as "Therefore, the answer is A/B/C/D."{{/if}}
     {{#if answer_type "exactMatch"}}Format your final answer exactly as requested in the question.{{/if}}
@@ -43,7 +43,7 @@ prompts:
 providers:
   # Add your preferred models here
   - openai:gpt-4
-  
+
 defaultTest:
   assert:
     - type: llm-rubric
@@ -54,10 +54,10 @@ defaultTest:
         3. Precise calculations or logical deductions where applicable
         4. Unambiguous final answer in the required format
         5. No reliance on simple internet lookup or pattern matching
-    
+
     - type: latency
       threshold: 60000
-      
+
     - type: javascript
       value: |
         // Validate answer format based on question type
@@ -68,7 +68,7 @@ defaultTest:
           return response.includes(vars.answer);
         }
         return true;
-        
+
     - type: javascript
       value: |
         // Special handling for different domains
@@ -82,4 +82,4 @@ defaultTest:
 
 tests:
   # Load HLE dataset from Hugging Face
-  - huggingface://datasets/cais/hle?split=test&limit=100 
+  - huggingface://datasets/cais/hle?split=test&limit=100

@@ -103,4 +103,4 @@ You can modify the test by editing `promptfooconfig.yaml`:
 
 - [HLE Paper](https://arxiv.org/abs/2501.14249)
 - [HLE Dataset](https://huggingface.co/datasets/cais/hle)
-- [promptfoo Documentation](https://promptfoo.dev/docs/getting-started) 
+- [promptfoo Documentation](https://promptfoo.dev/docs/getting-started)
