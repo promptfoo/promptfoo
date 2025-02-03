@@ -1,1 +1,1 @@
-export { handleConversationRelevance } from './relevance';
+export { handleConversationRelevance } from './deepeval';

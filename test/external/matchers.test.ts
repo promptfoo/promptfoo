@@ -1,4 +1,4 @@
-import { matchesConversationRelevance } from '../../src/external/matchers/relevance';
+import { matchesConversationRelevance } from '../../src/external/matchers/deepeval';
 import { getDefaultProviders } from '../../src/providers/defaults';
 
 // Mock the text provider
