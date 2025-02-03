@@ -89,7 +89,6 @@ redteam:
    - id: jailbreak:likert  # Jailbreak technique published by Anthropic and Stanford
    - id: prompt-injection  # Tests for direct prompt injection vulnerabilities
    - id: best-of-n  # Jailbreak technique published by Anthropic and Stanford
-sharing: false
 ```
 
 You can configure the strategies to be as limited or expansive in scope. Static strategies transform inputs using predefined patterns. For example, when selecting the base64 strategy with the probe: `ignore previous instructions` would be converted into `aWdub3JlIHByZXZpb3VzIGluc3RydWN0aW9ucw==`
