@@ -24,8 +24,6 @@ description: RedTeam evaluation of OpenAI GPT-4o-mini
 targets:
   - id: openai:gpt-4o-mini
     label: OpenAI GPT-4o-mini
-prompts:
-  - '{{prompt}}'
 redteam:
   plugins:
     - id: harmbench # Tests for harmful content using the HarmBench dataset
