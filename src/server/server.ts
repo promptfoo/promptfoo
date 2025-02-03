@@ -6,11 +6,10 @@ import http from 'node:http';
 import path from 'node:path';
 import { Server as SocketIOServer } from 'socket.io';
 import { fromError } from 'zod-validation-error';
-import { createPublicUrl } from '../commands/share';
-import { DEFAULT_PORT, DEFAULT_SHARE_VIEW_BASE_URL, VERSION } from '../constants';
+import { createPublicUrl, determineShareDomain } from '../commands/share';
+import { DEFAULT_PORT, VERSION } from '../constants';
 import { setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
-import { cloudConfig } from '../globalConfig/cloud';
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
@@ -125,10 +124,8 @@ export function createApp() {
   });
 
   app.get('/api/results/share/check-domain', async (req: Request, res: Response): Promise<void> => {
-    console.log(`check-domain request: ${JSON.stringify(req.query)}`);
     const id = String(req.query.id);
     if (!id) {
-      console.log('Missing id parameter in check-domain request');
       res.status(400).json({ error: 'Missing id parameter' });
       return;
     }
@@ -140,26 +137,7 @@ export function createApp() {
       return;
     }
 
-    // Determine if this would be a public share based on:
-    // 1. Whether user is logged into cloud
-    // 2. Whether there's a custom sharing configuration
-    const sharing = eval_.config.sharing;
-    console.log(
-      `Share config: isCloudEnabled=${cloudConfig.isEnabled()}, sharing=${JSON.stringify(sharing)}, evalId=${id}`,
-    );
-
-    const isPublicShare =
-      !cloudConfig.isEnabled() && (!sharing || sharing === true || !('appBaseUrl' in sharing));
-
-    const domain = isPublicShare
-      ? DEFAULT_SHARE_VIEW_BASE_URL
-      : cloudConfig.isEnabled()
-        ? cloudConfig.getAppUrl()
-        : typeof sharing === 'object' && sharing.appBaseUrl
-          ? sharing.appBaseUrl
-          : 'your-org-domain';
-
-    logger.debug(`Share domain determined: domain=${domain}, isPublic=${isPublicShare}`);
+    const { domain } = determineShareDomain(eval_);
     res.json({ domain });
   });
 

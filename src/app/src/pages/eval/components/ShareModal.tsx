@@ -33,11 +33,8 @@ const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, evalId, onShare 
       }
 
       try {
-        console.log('check-domain request:', `/results/share/check-domain?id=${evalId}`);
         const response = await callApi(`/results/share/check-domain?id=${evalId}`);
-        console.log('check-domain response:', response);
         const data = await response.json();
-        console.log('check-domain response:', data);
 
         if (response.ok) {
           // Only show confirmation for public domain shares
