@@ -603,7 +603,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests for training data leaks through repetitive pattern exploitation that causes model divergence',
   'jailbreak:likert': 'Uses Likert scale-based prompts to bypass content filters',
   'excessive-agency': 'Tests for unauthorized actions beyond defined system boundaries',
-  foundation: 'Tests for foundation model safety and security',
+  foundation: 'Tests a collection of plugins designed to run against foundation models',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Dynamic multi-turn attack generation using adversarial techniques',
   hallucination: 'Tests for fabrication of false or misleading information',
@@ -688,6 +688,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   default: 'Standard Security Suite',
   'divergent-repetition': 'Divergent Repetition',
   'excessive-agency': 'Excessive Agency',
+  foundation: 'Foundation Model Plugin Collection',
   gcg: 'Greedy Coordinate Gradient',
   goat: 'Generative Offensive Agent Tester',
   hallucination: 'False Information (Hallucination)',
@@ -749,7 +750,6 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'sql-injection': 'SQL Injection',
   ssrf: 'SSRF Vulnerability',
   'system-prompt-override': 'System Prompt Override',
-  foundation: 'Foundation Model Safety',
 };
 
 export enum Severity {
@@ -1027,7 +1027,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'excessive-agency': 'Evaluates system boundary enforcement and unauthorized action prevention',
   'divergent-repetition':
     'Tests repetitive patterns that can cause the model to diverge from normal behavior and leak training data',
-  foundation: 'Comprehensive testing suite for foundation model safety and security',
+  foundation: 'Tests a collection of plugins designed to run against foundation models',
   hallucination: 'Tests system resilience against false information generation and propagation',
   harmbench:
     'Tests for harmful content, illegal activities, misinformation using the HarmBench dataset from the Center for AI Safety (CAIS)',
