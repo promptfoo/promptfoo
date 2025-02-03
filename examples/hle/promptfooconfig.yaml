@@ -32,4 +32,4 @@ defaultTest:
 
 tests:
   # Load HLE dataset from Hugging Face with debug query
-  - huggingface://datasets/cais/hle?sql=SELECT category, answer, answer_type, question, rationale FROM dataset WHERE image IS NULL OR image = ''
+  - huggingface://datasets/cais/hle?sql=SELECT category, answer_type, question, answer FROM dataset WHERE image IS NULL OR image = ''

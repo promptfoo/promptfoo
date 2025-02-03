@@ -96,15 +96,6 @@ function createDatabase(
   const createTableSql = `CREATE TABLE dataset (${columnDefs})`;
   logger.debug(`[Huggingface Dataset] Creating table with SQL: ${createTableSql}`);
   db.exec(createTableSql);
-
-  // Create an index on commonly queried columns
-  features.forEach((feature) => {
-    if (feature.name === 'type' || feature.name === 'image') {
-      const createIndexSql = `CREATE INDEX IF NOT EXISTS idx_${feature.name} ON dataset ("${feature.name}")`;
-      db.exec(createIndexSql);
-    }
-  });
-
   return db;
 }
 
