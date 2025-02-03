@@ -1128,13 +1128,13 @@ export const strategyDisplayNames: Record<Strategy, string> = {
 };
 
 export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
+  Custom: 'Choose your own plugins',
+  Foundation: 'Plugins for redteaming foundation models recommended by Promptfoo',
+  'Minimal Test': 'Minimal set of plugins to validate your setup',
+  MITRE: 'MITRE ATLAS framework',
+  NIST: 'NIST AI Risk Management Framework',
+  'OWASP API': 'OWASP API Top 10',
+  'OWASP LLM': 'OWASP LLM Top 10',
   RAG: 'Recommended plugins plus additional tests for RAG specific scenarios like access control',
   Recommended: 'A broad set of plugins recommended by Promptfoo',
-  'Minimal Test': 'Minimal set of plugins to validate your setup',
-  Foundation: 'Plugins for redteaming foundation models recommended by Promptfoo',
-  NIST: 'NIST AI Risk Management Framework',
-  'OWASP LLM': 'OWASP LLM Top 10',
-  'OWASP API': 'OWASP API Top 10',
-  MITRE: 'MITRE ATLAS framework',
-  Custom: 'Choose your own plugins',
 } as const;
