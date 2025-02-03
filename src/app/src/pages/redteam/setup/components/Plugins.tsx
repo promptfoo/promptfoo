@@ -19,6 +19,7 @@ import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
+import type { PLUGIN_PRESET_DESCRIPTIONS } from '@promptfoo/redteam/constants';
 import {
   HARM_PLUGINS,
   DEFAULT_PLUGINS,
@@ -27,6 +28,7 @@ import {
   OWASP_LLM_TOP_10_MAPPING,
   OWASP_API_TOP_10_MAPPING,
   MITRE_ATLAS_MAPPING,
+  FOUNDATION_PLUGINS,
   displayNameOverrides,
   subCategoryDescriptions,
   categoryAliases,
@@ -191,12 +193,25 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     });
   }, [searchTerm]);
 
-  const presets: { name: string; plugins: Set<Plugin> | ReadonlySet<Plugin> }[] = [
-    { name: 'Recommended', plugins: DEFAULT_PLUGINS },
-    { name: 'Minimal Test', plugins: new Set(['harmful:hate', 'harmful:self-harm']) },
+  const presets: {
+    name: keyof typeof PLUGIN_PRESET_DESCRIPTIONS;
+    plugins: Set<Plugin> | ReadonlySet<Plugin>;
+  }[] = [
+    {
+      name: 'Recommended',
+      plugins: DEFAULT_PLUGINS,
+    },
+    {
+      name: 'Minimal Test',
+      plugins: new Set(['harmful:hate', 'harmful:self-harm']),
+    },
     {
       name: 'RAG',
       plugins: new Set([...DEFAULT_PLUGINS, 'bola', 'bfla', 'rbac']),
+    },
+    {
+      name: 'Foundation',
+      plugins: new Set(FOUNDATION_PLUGINS),
     },
     {
       name: 'NIST',
