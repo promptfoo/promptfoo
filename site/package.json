@@ -4,7 +4,7 @@
   "license": "MIT",
   "scripts": {
     "docusaurus": "docusaurus",
-    "start": "NODE_ENV=development docusaurus start",
+    "start": "NODE_ENV=development docusaurus start --port 3100",
     "build": "docusaurus build",
     "swizzle": "docusaurus swizzle",
     "deploy": "docusaurus deploy",
