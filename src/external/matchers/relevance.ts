@@ -1,7 +1,6 @@
 // These metrics are ported from DeepEval.
 // https://docs.confident-ai.com/docs/metrics-conversation-relevancy. See APACHE_LICENSE for license.
 import dedent from 'dedent';
-import logger from 'src/logger';
 import { getAndCheckProvider, fail } from '../../matchers';
 import { getDefaultProviders } from '../../providers/defaults';
 import type { GradingConfig, GradingResult } from '../../types';
@@ -110,7 +109,6 @@ export async function matchesConversationRelevance(
   );
 
   try {
-    console.warn(`resp.output: ${resp.output}`);
     const result = parseJsonResponse(resp.output);
     const pass = result.verdict === 'yes';
     const score = pass ? 1 : 0;

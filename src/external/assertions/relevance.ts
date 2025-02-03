@@ -1,6 +1,5 @@
 // These assertions are ported from DeepEval.
 // https://docs.confident-ai.com/docs/metrics-conversation-relevancy. See APACHE_LICENSE for license.
-import logger from 'src/logger';
 import type { AssertionParams, GradingResult } from '../../types';
 import invariant from '../../util/invariant';
 import { matchesConversationRelevance } from '../matchers';
@@ -16,9 +15,6 @@ export const handleConversationRelevance = async ({
   if (test.vars?._conversation) {
     messages = test.vars?._conversation as Message[];
   } else {
-    console.warn(`outputString: ${JSON.stringify(outputString, null, 2)}`);
-    console.warn(`assertion: ${JSON.stringify(assertion)}`);
-    console.warn(`test: ${JSON.stringify(test)}`);
     invariant(
       typeof outputString === 'string',
       'conversational-relevance assertion type must have a string value',
