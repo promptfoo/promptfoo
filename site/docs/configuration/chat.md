@@ -29,7 +29,8 @@ Most providers support full "multishot" chat conversations, including multiple a
 
 One way to do this, if you are using the OpenAI format, is by creating a list of `{role, content}` objects. Here's an example:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://prompt.json
 
@@ -51,7 +52,7 @@ tests:
 
 Then the prompt itself is just a JSON dump of `messages`:
 
-```liquid title=prompt.json
+```liquid title="prompt.json"
 {{ messages | dump }}
 ```
 
@@ -70,7 +71,7 @@ tests:
 
 This simplifies the config, but we need to work some magic in the prompt template:
 
-```liquid title=prompt.json
+```liquid title="prompt.json"
 [
 {% for message in messages %}
   {% set outer_loop = loop %}
@@ -111,7 +112,7 @@ tests:
 
 In the prompt template, we construct the conversation history followed by a user message containing the `question`:
 
-```liquid title=prompt.json
+```liquid title="prompt.json"
 [
   {
     "role": "system",

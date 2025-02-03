@@ -221,7 +221,7 @@ You can override the grading provider in several ways:
 
 1. For all test cases using `defaultTest`:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 defaultTest:
   options:
     provider: anthropic:messages:claude-3-5-sonnet-20241022

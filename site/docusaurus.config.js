@@ -345,6 +345,10 @@ const config = {
             from: '/docs/providers/palm',
             to: '/docs/providers/google',
           },
+          {
+            from: '/docs',
+            to: '/docs/intro',
+          },
         ],
       },
     ],

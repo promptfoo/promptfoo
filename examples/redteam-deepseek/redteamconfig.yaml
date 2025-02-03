@@ -1,6 +1,9 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
-description: 'Deepseek Censorship Redteam'
+description: 'DeepSeek Sensitive Topics Red Team'
+
+prompts:
+  - '{{prompt}}'
 
 providers:
   - id: 'openrouter:deepseek/deepseek-r1'

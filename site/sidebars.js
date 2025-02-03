@@ -29,12 +29,6 @@ const sidebars = {
       type: 'doc',
       id: 'getting-started',
     },
-    /*
-    {
-      type: 'doc',
-      id: 'key-concepts',
-    },
-    */
     {
       type: 'doc',
       id: 'cloud/index',
@@ -44,13 +38,30 @@ const sidebars = {
       label: 'Configuration',
       link: {
         type: 'generated-index',
+        description:
+          'Learn how to configure promptfoo for your LLM evaluation needs. This section covers everything from basic setup to advanced features like test cases, scenarios, and caching.',
       },
       items: [
         { type: 'doc', id: 'configuration/guide' },
         { type: 'doc', id: 'configuration/reference' },
-        { type: 'doc', id: 'configuration/parameters' },
-        { type: 'doc', id: 'configuration/chat' },
-        { type: 'doc', id: 'configuration/datasets' },
+        { type: 'doc', id: 'configuration/parameters', label: 'Prompts and Outputs' },
+        { type: 'doc', id: 'configuration/chat', label: 'Chat Threads' },
+        { type: 'doc', id: 'configuration/datasets', label: 'Dataset Generation' },
+        {
+          type: 'category',
+          label: 'Tests',
+          collapsed: true,
+          link: {
+            type: 'doc',
+            id: 'configuration/tests/index',
+          },
+          items: [
+            { type: 'doc', id: 'configuration/tests/index', label: 'Overview' },
+            { type: 'doc', id: 'configuration/tests/csv' },
+            { type: 'doc', id: 'configuration/tests/google-sheets' },
+            { type: 'doc', id: 'configuration/tests/huggingface' },
+          ],
+        },
         { type: 'doc', id: 'configuration/scenarios' },
         { type: 'doc', id: 'configuration/caching' },
         { type: 'doc', id: 'configuration/telemetry' },

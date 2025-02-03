@@ -94,7 +94,7 @@ Edit the `promptfooconfig.yaml` file to define your comparison.
 
 Now, let's put it all together in the final configuration:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 description: 'GPT 4o vs o1 comparison'
 prompts:
   - 'Solve this riddle: {{riddle}}'
