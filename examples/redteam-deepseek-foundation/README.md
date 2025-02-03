@@ -1,17 +1,25 @@
-To get started, set your OPENROUTER_API_KEY environment variable.
+# DeepSeek Red Team Example
 
-This command will run the eval specified in `promptfooconfig.yaml`:
+This example demonstrates how to run a red team evaluation using Promptfoo against DeepSeek-R1 and GPT-4o-mini. The repository includes several key files:
 
-```
-promptfoo eval
-```
+- `promptfooconfig.yaml`: Contains the evaluation configuration.
 
-Afterwards, you can view the results by running `promptfoo view`
+Follow these steps to get started:
 
-To run a red team, edit `redteamconfig.yaml` and then run:
+1. Set your `OPENROUTER_API_KEY` and `OPENAI_API_KEY` environment variables.
 
-```
-promptfoo redteam run -c redteamconfig.yaml
-```
+2. Run the redteam defined in `promptfooconfig.yaml` by executing:
 
-Read more here: https://www.promptfoo.dev/blog/deepseek-redteam/
+   ```sh
+   promptfoo redteam run
+   ```
+
+3. View the redteam results:
+
+   ```sh
+   promptfoo redteam report
+   ```
+
+**Note:** If you prefer not to use the OpenRouter DeepSeek configuration, you can switch to the official DeepSeek provider. Simply update your configuration to follow the guidelines in [DeepSeek Documentation](https://promptfoo.dev/docs/providers/deepseek) (also referenced as @deepseek.md).
+
+For more details on our DeepSeek red team process and security analysis, refer to the [DeepSeek Red Team Blog Post](https://www.promptfoo.dev/blog/deepseek-redteam/).
