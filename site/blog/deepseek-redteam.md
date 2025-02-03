@@ -32,7 +32,7 @@ Promptfoo provides plugins and strategies that directly assess these vulnerabili
 
 Here's an example red team configuration that covers foundation model vulnerabilities: 
 ```yaml
-description: DeepSeek Red Team
+description: DeepSeek R1 vs GPT-4o Red Team
 targets:
  - id: openrouter:deepseek/deepseek-r1
    label: 'deepseek-r1'
