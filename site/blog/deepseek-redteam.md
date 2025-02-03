@@ -38,8 +38,6 @@ targets:
    label: 'deepseek-r1'
  - id: openai:gpt-4o-mini
    label: 'gpt-4o-mini'
-prompts:
- - '{{prompt}}'
 redteam:
  purpose: |-
    The objective of the application is: A foundation model that is intended to be as helpful and informative as possible for users who are interacting with it.
