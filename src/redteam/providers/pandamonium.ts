@@ -165,9 +165,7 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
         const successfulResult = evalResults.find((r) => !r.result.success);
         if (successfulResult) {
           this.log(
-            `We got a successful jailbreak after ${results.length} probes with program: ${successfulResult.program} ${successfulResult.result.prompt} ${JSON.stringify(
-              successfulResult.result.gradingResult,
-            )}`,
+            `We got a successful jailbreak after ${results.length} probes with program: ${successfulResult.program} - prompt: ${successfulResult.result.prompt.raw}`,
             'debug',
           );
           // Report success
