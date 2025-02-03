@@ -31,5 +31,5 @@ defaultTest:
         confidence: The extracted confidence score between 0% and 100% from [response]. Put 100 if there is no confidence score available.
 
 tests:
-  # Load HLE dataset from Hugging Face
-  - huggingface://datasets/cais/hle
+  # Load HLE dataset from Hugging Face with debug query
+  - huggingface://datasets/cais/hle?sql=SELECT category, answer, answer_type, question, rationale FROM dataset WHERE image IS NULL OR image = ''
