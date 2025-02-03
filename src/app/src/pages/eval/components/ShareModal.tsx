@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { callApi } from '@app/utils/api';
 import CheckIcon from '@mui/icons-material/Check';
 import FileCopyIcon from '@mui/icons-material/FileCopy';
 import Button from '@mui/material/Button';
@@ -13,19 +14,45 @@ import TextField from '@mui/material/TextField';
 interface ShareModalProps {
   open: boolean;
   onClose: () => void;
-  shareUrl: string;
+  evalId: string;
+  onShare: (id: string) => Promise<string>;
 }
 
-const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, shareUrl }) => {
+const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, evalId, onShare }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [copied, setCopied] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Check if the URL is using the public domain
-    const isPublicDomain = shareUrl.includes('app.promptfoo.dev');
-    setShowConfirmation(isPublicDomain);
-  }, [shareUrl]);
+    const checkDomain = async () => {
+      if (!open || !evalId) {
+        return;
+      }
+
+      try {
+        console.log('check-domain request:', `/results/share/check-domain?id=${evalId}`);
+        const response = await callApi(`/results/share/check-domain?id=${evalId}`);
+        console.log('check-domain response:', response);
+        const data = await response.json();
+        console.log('check-domain response:', data);
+
+        if (response.ok) {
+          // Only show confirmation for public domain shares
+          setShowConfirmation(data.domain.includes('app.promptfoo.dev'));
+        } else {
+          setError(data.error || 'Failed to check share domain');
+        }
+      } catch (error) {
+        console.error('Failed to check share domain:', error);
+        setError('Failed to check share domain');
+      }
+    };
+
+    checkDomain();
+  }, [open, evalId]);
 
   const handleCopyClick = () => {
     if (inputRef.current) {
@@ -38,11 +65,60 @@ const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, shareUrl }) => {
   const handleClose = () => {
     onClose();
     setCopied(false);
+    setShareUrl('');
+    setError(null);
   };
 
-  const handleConfirm = () => {
-    setShowConfirmation(false);
+  const handleConfirm = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const url = await onShare(evalId);
+      setShareUrl(url);
+      setShowConfirmation(false);
+    } catch (error) {
+      console.error('Failed to generate share URL:', error);
+      setError('Failed to generate share URL');
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  // If there's no confirmation needed, generate the URL immediately
+  useEffect(() => {
+    const generateUrl = async () => {
+      if (open && !showConfirmation && !shareUrl && !error) {
+        setIsLoading(true);
+        try {
+          const url = await onShare(evalId);
+          setShareUrl(url);
+        } catch (error) {
+          console.error('Failed to generate share URL:', error);
+          setError('Failed to generate share URL');
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    generateUrl();
+  }, [open, showConfirmation, shareUrl, evalId, error]);
+
+  if (error) {
+    return (
+      <Dialog open={open} onClose={handleClose}>
+        <DialogTitle>Error</DialogTitle>
+        <DialogContent>
+          <DialogContentText color="error">{error}</DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleClose} color="primary">
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog
@@ -66,12 +142,17 @@ const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, shareUrl }) => {
             <Button onClick={handleClose} color="primary">
               Cancel
             </Button>
-            <Button onClick={handleConfirm} color="primary" variant="contained">
-              Generate Share Link
+            <Button
+              onClick={handleConfirm}
+              color="primary"
+              variant="contained"
+              disabled={isLoading}
+            >
+              {isLoading ? 'Generating...' : 'Generate Share Link'}
             </Button>
           </DialogActions>
         </>
-      ) : (
+      ) : shareUrl ? (
         <>
           <DialogTitle>Your eval is ready to share</DialogTitle>
           <DialogContent>
@@ -100,6 +181,10 @@ const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, shareUrl }) => {
             </Button>
           </DialogActions>
         </>
+      ) : (
+        <DialogContent>
+          <DialogContentText>Generating share link...</DialogContentText>
+        </DialogContent>
       )}
     </Dialog>
   );

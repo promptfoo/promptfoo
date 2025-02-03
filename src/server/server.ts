@@ -7,30 +7,29 @@ import path from 'node:path';
 import { Server as SocketIOServer } from 'socket.io';
 import { fromError } from 'zod-validation-error';
 import { createPublicUrl } from '../commands/share';
-import { VERSION, DEFAULT_PORT } from '../constants';
+import { DEFAULT_PORT, DEFAULT_SHARE_VIEW_BASE_URL, VERSION } from '../constants';
 import { setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
+import { cloudConfig } from '../globalConfig/cloud';
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
 import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
-import telemetry from '../telemetry';
-import { TelemetryEventSchema } from '../telemetry';
+import telemetry, { TelemetryEventSchema } from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCases';
 import {
+  getLatestEval,
   getPrompts,
   getPromptsForTestCasesHash,
+  getStandaloneEvals,
+  getTestCases,
   listPreviousResults,
   readResult,
-  getTestCases,
-  getLatestEval,
-  getStandaloneEvals,
 } from '../util';
 import { checkRemoteHealth } from '../util/apiHealth';
 import invariant from '../util/invariant';
-import { BrowserBehavior } from '../util/server';
-import { openBrowser } from '../util/server';
+import { BrowserBehavior, openBrowser } from '../util/server';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
 import { providersRouter } from './routes/providers';
@@ -125,19 +124,66 @@ export function createApp() {
     res.json({ data: await getTestCases() });
   });
 
-  // This is used by ResultsView.tsx to share an eval with another promptfoo instance
+  app.get('/api/results/share/check-domain', async (req: Request, res: Response): Promise<void> => {
+    console.log(`check-domain request: ${JSON.stringify(req.query)}`);
+    const id = String(req.query.id);
+    if (!id) {
+      console.log('Missing id parameter in check-domain request');
+      res.status(400).json({ error: 'Missing id parameter' });
+      return;
+    }
+
+    const eval_ = await Eval.findById(id);
+    if (!eval_) {
+      logger.warn(`Eval not found for id: ${id}`);
+      res.status(404).json({ error: 'Eval not found' });
+      return;
+    }
+
+    // Determine if this would be a public share based on:
+    // 1. Whether user is logged into cloud
+    // 2. Whether there's a custom sharing configuration
+    const sharing = eval_.config.sharing;
+    console.log(
+      `Share config: isCloudEnabled=${cloudConfig.isEnabled()}, sharing=${JSON.stringify(sharing)}, evalId=${id}`,
+    );
+
+    const isPublicShare =
+      !cloudConfig.isEnabled() && (!sharing || sharing === true || !('appBaseUrl' in sharing));
+
+    const domain = isPublicShare
+      ? DEFAULT_SHARE_VIEW_BASE_URL
+      : cloudConfig.isEnabled()
+        ? cloudConfig.getAppUrl()
+        : typeof sharing === 'object' && sharing.appBaseUrl
+          ? sharing.appBaseUrl
+          : 'your-org-domain';
+
+    logger.debug(`Share domain determined: domain=${domain}, isPublic=${isPublicShare}`);
+    res.json({ domain });
+  });
+
   app.post('/api/results/share', async (req: Request, res: Response): Promise<void> => {
+    logger.debug(`Share request body: ${JSON.stringify(req.body)}`);
     const { id } = req.body;
 
     const result = await readResult(id);
     if (!result) {
+      logger.warn(`Result not found for id: ${id}`);
       res.status(404).json({ error: 'Eval not found' });
       return;
     }
     const eval_ = await Eval.findById(id);
     invariant(eval_, 'Eval not found');
-    const url = await createPublicUrl(eval_, true);
-    res.json({ url });
+
+    try {
+      const url = await createPublicUrl(eval_, true);
+      logger.debug(`Generated share URL: ${url}`);
+      res.json({ url });
+    } catch (error) {
+      logger.error(`Failed to generate share URL: ${error}`);
+      res.status(500).json({ error: 'Failed to generate share URL' });
+    }
   });
 
   app.post('/api/dataset/generate', async (req: Request, res: Response): Promise<void> => {

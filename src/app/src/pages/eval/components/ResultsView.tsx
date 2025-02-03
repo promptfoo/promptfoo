@@ -22,8 +22,8 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import type { SelectChangeEvent } from '@mui/material/Select';
-import Stack from '@mui/material/Stack';
 import type { StackProps } from '@mui/material/Stack';
+import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import { styled } from '@mui/material/styles';
@@ -117,7 +117,6 @@ export default function ResultsView({
   };
 
   const [shareModalOpen, setShareModalOpen] = React.useState(false);
-  const [shareUrl, setShareUrl] = React.useState('');
   const [shareLoading, setShareLoading] = React.useState(false);
 
   // State for anchor element
@@ -138,29 +137,37 @@ export default function ResultsView({
   const handleShareButtonClick = async () => {
     if (IS_RUNNING_LOCALLY) {
       setShareLoading(true);
-      try {
-        const response = await callApi('/results/share', {
-          method: 'POST',
-          body: JSON.stringify({ id: currentEvalId }),
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
-        const { url } = await response.json();
-        if (response.ok) {
-          setShareUrl(url);
-          setShareModalOpen(true);
-        } else {
-          alert('Sorry, something went wrong.');
-        }
-      } catch {
-        alert('Sorry, something went wrong.');
-      } finally {
-        setShareLoading(false);
-      }
-    } else {
-      setShareUrl(`${window.location.host}/eval/?evalId=${currentEvalId}`);
       setShareModalOpen(true);
+    } else {
+      // For non-local instances, just show the modal
+      setShareModalOpen(true);
+    }
+  };
+
+  const handleShare = async (id: string): Promise<string> => {
+    try {
+      if (!IS_RUNNING_LOCALLY) {
+        // For non-local instances, just return the URL directly
+        return `${window.location.host}/eval/?evalId=${id}`;
+      }
+
+      const response = await callApi('/results/share', {
+        method: 'POST',
+        body: JSON.stringify({ id }),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!response.ok) {
+        throw new Error('Failed to generate share URL');
+      }
+      const { url } = await response.json();
+      return url;
+    } catch (error) {
+      console.error('Failed to generate share URL:', error);
+      throw error;
+    } finally {
+      setShareLoading(false);
     }
   };
 
@@ -558,7 +565,8 @@ export default function ResultsView({
       <ShareModal
         open={shareModalOpen}
         onClose={() => setShareModalOpen(false)}
-        shareUrl={shareUrl}
+        evalId={currentEvalId}
+        onShare={handleShare}
       />
       <SettingsModal open={viewSettingsModalOpen} onClose={() => setViewSettingsModalOpen(false)} />
       <EvalSelectorKeyboardShortcut
