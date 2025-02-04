@@ -1,5 +1,5 @@
 // This file is imported by the frontend and shouldn't use native dependencies.
-import type { UnifiedConfig } from '../types';
+import type { UnifiedConfig, Vars } from '../types';
 import {
   MULTI_TURN_STRATEGIES,
   type Plugin,
@@ -42,6 +42,7 @@ export function getUnifiedConfig(
       ...(config.defaultTest?.options ?? {}),
       transformVars: '{ ...vars, sessionId: context.uuid }',
     },
+    vars: config.defaultTest?.vars as Record<string, Vars>,
   };
 
   return {
