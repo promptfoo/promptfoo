@@ -38,7 +38,7 @@ export function getFinalTest(test: TestCase, assertion: Assertion) {
 export async function loadFromJavaScriptFile(
   filePath: string,
   functionName: string | undefined,
-  args: any[]
+  args: any[],
 ): Promise<any> {
   const requiredModule = await importModule(filePath, functionName);
   if (functionName && typeof requiredModule[functionName] === 'function') {
@@ -74,3 +74,5 @@ export function coerceString(value: string | object): string {
   }
   return JSON.stringify(value);
 }
+
+export { clone };
