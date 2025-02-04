@@ -19,16 +19,16 @@ import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
-import type { PLUGIN_PRESET_DESCRIPTIONS } from '@promptfoo/redteam/constants';
 import {
-  HARM_PLUGINS,
-  DEFAULT_PLUGINS,
   ALL_PLUGINS,
+  DEFAULT_PLUGINS,
+  FOUNDATION_PLUGINS,
+  HARM_PLUGINS,
+  MITRE_ATLAS_MAPPING,
   NIST_AI_RMF_MAPPING,
   OWASP_LLM_TOP_10_MAPPING,
   OWASP_API_TOP_10_MAPPING,
-  MITRE_ATLAS_MAPPING,
-  FOUNDATION_PLUGINS,
+  PLUGIN_PRESET_DESCRIPTIONS,
   displayNameOverrides,
   subCategoryDescriptions,
   categoryAliases,
