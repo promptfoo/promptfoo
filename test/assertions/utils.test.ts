@@ -1,12 +1,21 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { processFileReference, getFinalTest, coerceString } from '../../src/assertions/utils';
+import {
+  processFileReference,
+  getFinalTest,
+  coerceString,
+  loadFromJavaScriptFile,
+} from '../../src/assertions/utils';
 import cliState from '../../src/cliState';
+import { importModule } from '../../src/esm';
 import type { TestCase, Assertion, ApiProvider } from '../../src/types';
 
 jest.mock('fs');
 jest.mock('path');
 jest.mock('../../src/cliState');
+jest.mock('../../src/esm', () => ({
+  importModule: jest.fn(),
+}));
 
 describe('processFileReference', () => {
   beforeEach(() => {
@@ -207,5 +216,57 @@ describe('getFinalTest', () => {
     const result = getFinalTest(testCase, assertion);
     expect(result.provider).toBe(directProvider);
     expect(result.options?.provider).toBe(assertionProvider);
+  });
+});
+
+describe('loadFromJavaScriptFile', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+  });
+
+  it('should call named function when functionName is provided', async () => {
+    const mockFn = jest.fn().mockReturnValue('result');
+    jest.mocked(importModule).mockResolvedValue({ testFn: mockFn });
+
+    const result = await loadFromJavaScriptFile('/test.js', 'testFn', ['arg1', 'arg2']);
+
+    expect(result).toBe('result');
+    expect(mockFn).toHaveBeenCalledWith('arg1', 'arg2');
+  });
+
+  it('should call default function when no functionName provided', async () => {
+    const mockFn = jest.fn().mockReturnValue('result');
+    jest.mocked(importModule).mockResolvedValue(mockFn);
+
+    const result = await loadFromJavaScriptFile('/test.js', undefined, ['arg1']);
+
+    expect(result).toBe('result');
+    expect(mockFn).toHaveBeenCalledWith('arg1');
+  });
+
+  it('should call default export function when available', async () => {
+    const mockFn = jest.fn().mockReturnValue('result');
+    jest.mocked(importModule).mockResolvedValue({ default: mockFn });
+
+    const result = await loadFromJavaScriptFile('/test.js', undefined, ['arg1']);
+
+    expect(result).toBe('result');
+    expect(mockFn).toHaveBeenCalledWith('arg1');
+  });
+
+  it('should throw error when module does not export a function', async () => {
+    jest.mocked(importModule).mockResolvedValue({ notAFunction: 'value' });
+
+    await expect(loadFromJavaScriptFile('/test.js', undefined, [])).rejects.toThrow(
+      'Assertion malformed',
+    );
+  });
+
+  it('should throw error when named function does not exist', async () => {
+    jest.mocked(importModule).mockResolvedValue({ otherFn: () => {} });
+
+    await expect(loadFromJavaScriptFile('/test.js', 'nonExistentFn', [])).rejects.toThrow(
+      'Assertion malformed',
+    );
   });
 });
