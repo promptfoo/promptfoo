@@ -1,8 +1,9 @@
 import dedent from 'dedent';
+import path from 'path';
+import { loadFromJavaScriptFile } from './assertions/utils';
 import cliState from './cliState';
 import { getEnvString } from './envars';
 import logger from './logger';
-import path from 'path';
 import {
   ANSWER_RELEVANCY_GENERATE,
   SELECT_BEST_PROMPT,
@@ -35,11 +36,10 @@ import type {
   ApiModerationProvider,
 } from './types';
 import { maybeLoadFromExternalFile } from './util';
+import { isJavascriptFile } from './util/file';
 import invariant from './util/invariant';
 import { extractJsonObjects } from './util/json';
 import { getNunjucksEngine } from './util/templates';
-import { isJavascriptFile } from './util/file';
-import { loadFromJavaScriptFile } from './assertions/utils';
 
 const nunjucks = getNunjucksEngine(undefined, false, true);
 
@@ -361,22 +361,17 @@ async function loadRubricPrompt(
     return defaultPrompt;
   }
 
-  if (typeof rubricPrompt === 'string' && rubricPrompt.startsWith('file://')) {
+  if (
+    typeof rubricPrompt === 'string' &&
+    rubricPrompt.startsWith('file://') &&
+    isJavascriptFile(rubricPrompt)
+  ) {
     const basePath = cliState.basePath || '';
-    const fileRef = rubricPrompt.slice('file://'.length);
-    let filePath = fileRef;
-    let functionName: string | undefined;
+    let filePath = rubricPrompt.slice('file://'.length);
 
-    if (fileRef.includes(':')) {
-      const [pathPart, funcPart] = fileRef.split(':');
-      filePath = pathPart;
-      functionName = funcPart;
-    }
-
-    filePath = path.resolve(basePath, filePath);
-    if (isJavascriptFile(filePath)) {
-      rubricPrompt = loadFromJavaScriptFile(filePath, functionName, []);
-    }
+    const [pathPart, functionName] = filePath.split(':');
+    filePath = path.resolve(basePath, pathPart);
+    rubricPrompt = await loadFromJavaScriptFile(filePath, functionName, []);
   } else {
     // Load from external file if needed
     rubricPrompt = maybeLoadFromExternalFile(rubricPrompt);
