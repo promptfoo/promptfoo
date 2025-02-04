@@ -5,6 +5,8 @@ import invariant from '../../util/invariant';
 import { matchesConversationRelevance } from '../matchers';
 import type { Message } from '../matchers';
 
+const DEFAULT_WINDOW_SIZE = 5;
+
 export const handleConversationRelevance = async ({
   assertion,
   outputString,
@@ -28,7 +30,8 @@ export const handleConversationRelevance = async ({
     ];
   }
 
-  const windowSize = assertion.config?.windowSize || 5;
+  const windowSize = assertion.config?.windowSize || DEFAULT_WINDOW_SIZE;
+  const threshold = assertion.threshold || 0;
   let relevantCount = 0;
   let totalWindows = 0;
   let failureReason: string | undefined;
@@ -38,7 +41,7 @@ export const handleConversationRelevance = async ({
     const windowMessages = messages.slice(i, i + windowSize);
     const result = await matchesConversationRelevance(
       windowMessages,
-      assertion.threshold || 0,
+      threshold,
       test.vars,
       test.options,
     );
@@ -53,12 +56,7 @@ export const handleConversationRelevance = async ({
 
   // If we don't have enough messages for a window, evaluate the entire conversation
   if (totalWindows === 0) {
-    const result = await matchesConversationRelevance(
-      messages,
-      assertion.threshold || 0,
-      test.vars,
-      test.options,
-    );
+    const result = await matchesConversationRelevance(messages, threshold, test.vars, test.options);
     // Update totalWindows to the number of messages such that the
     // final score is always less than or equal to 1.0
 
@@ -68,7 +66,6 @@ export const handleConversationRelevance = async ({
       failureReason = result.reason;
     }
   }
-  const threshold = assertion.threshold || 0;
 
   const score = relevantCount / totalWindows;
   const pass = score >= threshold - Number.EPSILON;

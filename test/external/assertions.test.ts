@@ -107,18 +107,26 @@ describe('handleConversationRelevance', () => {
         output: 'Given the sunny weather, you might want to wear light clothes.',
       },
       { input: 'Thanks!', output: "You're welcome! Enjoy the sunshine!" },
-      { input: 'What is 2+2?', output: 'The capital of France is Paris.' },
+      { input: 'What is 2+2?', output: 'The capital of France is Paris.' }, // Irrelevant response
     ];
+
+    // Create a smart mock provider that only fails for the math/Paris response
+    const smartMockProvider: ApiProvider = {
+      id: () => 'mock',
+      callApi: async (prompt: string) => ({
+        output: JSON.stringify({
+          verdict: prompt.includes('2+2') ? 'no' : 'yes',
+          ...(prompt.includes('2+2') && {
+            reason:
+              'The response about Paris is completely unrelated to the mathematical question about 2+2',
+          }),
+        }),
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+    };
 
     const params: AssertionParams = {
       ...defaultParams,
-      context: {
-        ...defaultParams.context,
-        provider: createMockProvider(
-          'no',
-          'The response about Paris is completely unrelated to the mathematical question about 2+2',
-        ),
-      },
       assertion: {
         type: 'conversation-relevance',
         threshold: 0.8,
@@ -132,7 +140,7 @@ describe('handleConversationRelevance', () => {
           _conversation: conversation,
         },
         options: {
-          provider: createMockProvider('yes'),
+          provider: smartMockProvider,
         },
       },
     };
