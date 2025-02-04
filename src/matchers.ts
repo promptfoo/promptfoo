@@ -169,7 +169,10 @@ export async function getAndCheckProvider(
   return matchedProvider;
 }
 
-function fail(reason: string, tokensUsed?: Partial<TokenUsage>): Omit<GradingResult, 'assertion'> {
+export function fail(
+  reason: string,
+  tokensUsed?: Partial<TokenUsage>,
+): Omit<GradingResult, 'assertion'> {
   return {
     pass: false,
     score: 0,
