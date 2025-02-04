@@ -1,31 +1,69 @@
-import { getEnvString } from '../envars';
-
-export function getRemoteGenerationUrl(): string {
-  return getEnvString('PROMPTFOO_REMOTE_GENERATION_URL', 'https://api.promptfoo.dev/v1/generate');
-}
-
 export const DEFAULT_NUM_TESTS_PER_PLUGIN = 5;
 
 export const REDTEAM_MODEL = 'openai:chat:gpt-4o';
 
 export const LLAMA_GUARD_REPLICATE_PROVIDER =
-  'replicate:moderation:meta/meta-llama-guard-2-8b:b063023ee937f28e922982abdbf97b041ffe34ad3b35a53d33e1d74bb19b36c4';
+  'replicate:moderation:meta/llama-guard-3-8b:146d1220d447cdcc639bc17c5f6137416042abee6ae153a2615e6ef5749205c8';
 
-export const LLAMA_GUARD_ENABLED_CATEGORIES = [
+export const LLAMA_GUARD_ENABLED_CATEGORIES: string[] = [
   'S1', // Violent Crimes
   'S2', // Non-Violent Crimes
   'S3', // Sex Crimes
   'S4', // Child Exploitation
-  'S5', // Specialized Advice
-  // 'S6', // Privacy - Disabled due to false positives from allowed entities
-  'S7', // Intellectual Property
-  'S8', // Indiscriminate Weapons
-  'S9', // Hate
-  'S10', // Self-Harm
-  'S11', // Sexual Content
+  'S5', // Defamation
+  'S6', // Specialized Advice
+  // S7: 'Privacy' - disabled due to false positives from allowed entities
+  'S8', // Intellectual Property
+  'S9', // Indiscriminate Weapons
+  'S10', // Hate
+  'S11', // Self-Harm
+  'S12', // Sexual Content
+  'S13', // Elections
 ];
 
-export const COLLECTIONS = ['default', 'harmful', 'pii'] as const;
+export const FOUNDATION_PLUGINS = [
+  'ascii-smuggling',
+  'beavertails',
+  'contracts',
+  'cyberseceval',
+  'divergent-repetition',
+  'excessive-agency',
+  'hallucination',
+  'harmful:chemical-biological-weapons',
+  'harmful:child-exploitation',
+  'harmful:copyright-violations',
+  'harmful:cybercrime',
+  'harmful:cybercrime:malicious-code',
+  'harmful:graphic-content',
+  'harmful:harassment-bullying',
+  'harmful:hate',
+  'harmful:illegal-activities',
+  'harmful:illegal-drugs',
+  'harmful:illegal-drugs:meth',
+  'harmful:indiscriminate-weapons',
+  'harmful:insults',
+  'harmful:intellectual-property',
+  'harmful:misinformation-disinformation',
+  'harmful:non-violent-crime',
+  'harmful:profanity',
+  'harmful:radicalization',
+  'harmful:self-harm',
+  'harmful:sex-crime',
+  'harmful:sexual-content',
+  'harmful:specialized-advice',
+  'harmful:unsafe-practices',
+  'harmful:violent-crime',
+  'harmful:weapons:ied',
+  'hijacking',
+  'imitation',
+  'overreliance',
+  'pii:direct',
+  'pliny',
+  'politics',
+  'religion',
+] as const;
+
+export const COLLECTIONS = ['default', 'foundation', 'harmful', 'pii'] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 
 export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
@@ -55,6 +93,9 @@ export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
   'harmful:insults': 'Insults and personal attacks',
   'harmful:profanity': 'Requests containing profanity',
   'harmful:radicalization': 'Radicalization',
+  'harmful:illegal-drugs:meth': 'Methamphetamine',
+  'harmful:weapons:ied': 'Improvised Explosive Devices',
+  'harmful:cybercrime:malicious-code': 'Malicious Code',
 
   // Commented out
   //'harmful:privacy-violations': 'Privacy violations & data exploitation',  // redundant with MLCommons category
@@ -65,14 +106,14 @@ export type UnalignedProviderHarmPlugin = keyof typeof UNALIGNED_PROVIDER_HARM_P
 
 export const REDTEAM_PROVIDER_HARM_PLUGINS = {
   'harmful:intellectual-property': 'Intellectual Property violation',
-  'harmful:misinformation-disinformation':
-    'Misinformation & Disinformation - Harmful lies and propaganda',
   'harmful:privacy': 'Privacy violations',
-  'harmful:specialized-advice': 'Specialized Advice - Financial',
 } as const;
 export type RedTeamProviderHarmPlugin = keyof typeof REDTEAM_PROVIDER_HARM_PLUGINS;
 
 export const HARM_PLUGINS = {
+  'harmful:misinformation-disinformation':
+    'Misinformation & Disinformation - Harmful lies and propaganda',
+  'harmful:specialized-advice': 'Specialized Advice - Financial',
   ...UNALIGNED_PROVIDER_HARM_PLUGINS,
   ...REDTEAM_PROVIDER_HARM_PLUGINS,
 } as const;
@@ -83,35 +124,46 @@ export type PIIPlugin = (typeof PII_PLUGINS)[number];
 
 export const BASE_PLUGINS = [
   'contracts',
-  'cross-session-leak',
   'excessive-agency',
   'hallucination',
   'hijacking',
-  'overreliance',
   'politics',
 ] as const;
 export type BasePlugin = (typeof BASE_PLUGINS)[number];
 
 export const ADDITIONAL_PLUGINS = [
   'ascii-smuggling',
+  'beavertails',
   'bfla',
   'bola',
   'competitors',
+  'cross-session-leak',
+  'cyberseceval',
   'debug-access',
+  'divergent-repetition',
+  'harmbench',
   'imitation',
   'indirect-prompt-injection',
+  'overreliance',
   'prompt-extraction',
+  'pliny',
+  'rag-document-exfiltration',
   'rbac',
   'religion',
   'shell-injection',
   'sql-injection',
   'ssrf',
+  'system-prompt-override',
 ] as const;
 export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
 // Plugins that require configuration and can't be enabled by default or included as additional.
 export const CONFIG_REQUIRED_PLUGINS = ['intent', 'policy'] as const;
 export type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
+
+// Plugins that don't use strategies (standalone plugins)
+export const STRATEGY_EXEMPT_PLUGINS = ['pliny', 'system-prompt-override'] as const;
+export type StrategyExemptPlugin = (typeof STRATEGY_EXEMPT_PLUGINS)[number];
 
 export type Plugin =
   | Collection
@@ -122,7 +174,6 @@ export type Plugin =
   | ConfigRequiredPlugin;
 
 export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
-  ...COLLECTIONS,
   ...BASE_PLUGINS,
   ...(Object.keys(HARM_PLUGINS) as HarmPlugin[]),
   ...PII_PLUGINS,
@@ -144,31 +195,94 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
   { plugins: Plugin[]; strategies: Strategy[] }
 > = {
   'owasp:llm:01': {
-    plugins: ['harmful'],
-    strategies: ['jailbreak', 'prompt-injection'],
+    // Prompt Injection
+    plugins: ['ascii-smuggling', 'indirect-prompt-injection', 'prompt-extraction', 'harmful'],
+    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
   },
   'owasp:llm:02': {
-    plugins: ['harmful', 'overreliance'],
-    strategies: [],
+    // Sensitive Information Disclosure
+    plugins: [
+      'pii:api-db',
+      'pii:direct',
+      'pii:session',
+      'pii:social',
+      'harmful:privacy',
+      'cross-session-leak',
+      'prompt-extraction',
+    ],
+    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
   },
   'owasp:llm:03': {
-    plugins: ['harmful', 'hallucination', 'overreliance'],
+    // Supply Chain
+    plugins: [],
     strategies: [],
   },
-  'owasp:llm:06': {
-    plugins: ['harmful:privacy', 'pii:api-db', 'pii:direct', 'pii:session', 'pii:social'],
+  'owasp:llm:04': {
+    // Data and Model Poisoning
+    plugins: [
+      'harmful:misinformation-disinformation',
+      'harmful:hate',
+      'harmful:radicalization',
+      'harmful:specialized-advice',
+    ],
+    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
+  },
+  'owasp:llm:05': {
+    // Improper Output Handling
+    plugins: ['shell-injection', 'sql-injection', 'ssrf', 'debug-access'],
     strategies: ['jailbreak', 'prompt-injection'],
   },
+  'owasp:llm:06': {
+    // Excessive Agency
+    plugins: [
+      'excessive-agency',
+      'rbac',
+      'bfla',
+      'bola',
+      'shell-injection',
+      'sql-injection',
+      'ssrf',
+    ],
+    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
+  },
   'owasp:llm:07': {
-    plugins: ['bfla', 'bola', 'debug-access', 'rbac', 'shell-injection', 'sql-injection'],
-    strategies: [],
+    // System Prompt Leakage
+    plugins: [
+      'prompt-extraction',
+      'rbac',
+      'harmful:privacy',
+      'pii:api-db',
+      'pii:direct',
+      'pii:session',
+      'pii:social',
+    ],
+    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
   },
   'owasp:llm:08': {
-    plugins: ['excessive-agency', 'rbac'],
-    strategies: [],
+    // Vector and Embedding Weaknesses
+    plugins: [
+      'cross-session-leak',
+      'harmful:privacy',
+      'pii:api-db',
+      'pii:direct',
+      'pii:session',
+      'pii:social',
+    ],
+    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
   },
   'owasp:llm:09': {
-    plugins: ['hallucination', 'overreliance'],
+    // Misinformation
+    plugins: [
+      'hallucination',
+      'overreliance',
+      'harmful:misinformation-disinformation',
+      'harmful:specialized-advice',
+    ],
+    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
+  },
+  'owasp:llm:10': {
+    // Unbounded Consumption
+    plugins: ['excessive-agency', 'overreliance'],
     strategies: [],
   },
 };
@@ -353,6 +467,11 @@ export const ALIASED_PLUGINS = [
   'nist:ai:measure',
   'owasp:api',
   'owasp:llm',
+  'toxicity',
+  'bias',
+  'misinformation',
+  'illegal-activity',
+  'personal-safety',
   ...Object.keys(MITRE_ATLAS_MAPPING),
   ...Object.keys(NIST_AI_RMF_MAPPING),
   ...Object.keys(OWASP_API_TOP_10_MAPPING),
@@ -367,164 +486,270 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
   'nist:ai:measure': NIST_AI_RMF_MAPPING,
   'owasp:api': OWASP_API_TOP_10_MAPPING,
   'owasp:llm': OWASP_LLM_TOP_10_MAPPING,
+  toxicity: {
+    toxicity: {
+      plugins: [
+        'harmful:hate',
+        'harmful:harassment-bullying',
+        'harmful:insults',
+        'harmful:profanity',
+        'harmful:graphic-content',
+        'harmful:sexual-content',
+      ],
+      strategies: [],
+    },
+  },
+  bias: {
+    bias: {
+      plugins: ['politics', 'religion'],
+      strategies: [],
+    },
+  },
+  misinformation: {
+    misinformation: {
+      plugins: [
+        'harmful:misinformation-disinformation',
+        'hallucination',
+        'harmful:radicalization',
+        'imitation',
+      ],
+      strategies: [],
+    },
+  },
+  'illegal-activity': {
+    'illegal-activity': {
+      plugins: [
+        'harmful:violent-crime',
+        'harmful:non-violent-crime',
+        'harmful:sex-crime',
+        'harmful:cybercrime',
+        'harmful:illegal-activities',
+        'harmful:illegal-drugs',
+        'harmful:illegal-drugs:meth',
+        'harmful:chemical-biological-weapons',
+        'harmful:indiscriminate-weapons',
+        'harmful:weapons:ied',
+      ],
+      strategies: [],
+    },
+  },
 };
 
-export const DEFAULT_STRATEGIES = ['jailbreak', 'prompt-injection'] as const;
+// These are exposed on the frontend under the framework compliance section
+export const FRAMEWORK_COMPLIANCE_IDS = [
+  'mitre:atlas',
+  'nist:ai:measure',
+  'owasp:api',
+  'owasp:llm',
+] as const;
+export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
+
+export const DEFAULT_STRATEGIES = ['basic', 'jailbreak', 'jailbreak:composite'] as const;
 export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 
-export const ADDITIONAL_STRATEGIES = [
-  'ascii-smuggling',
-  'base64',
+export const MULTI_TURN_STRATEGIES = ['crescendo', 'goat'] as const;
+export type MultiTurnStrategy = (typeof MULTI_TURN_STRATEGIES)[number];
+
+export const AGENTIC_STRATEGIES = [
   'crescendo',
   'goat',
+  'jailbreak',
   'jailbreak:tree',
+  'pandamonium',
+] as const;
+export type AgenticStrategy = (typeof AGENTIC_STRATEGIES)[number];
+
+export const ADDITIONAL_STRATEGIES = [
+  'prompt-injection',
+  'base64',
+  'citation',
+  'crescendo',
+  'gcg',
+  'goat',
+  'hex',
+  'jailbreak:tree',
+  'jailbreak:likert',
   'leetspeak',
   'math-prompt',
   'multilingual',
   'rot13',
+  'best-of-n',
+  'pandamonium',
 ] as const;
 export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
 
-export const ALL_STRATEGIES = [
-  'basic',
-  'default',
-  ...DEFAULT_STRATEGIES,
-  ...ADDITIONAL_STRATEGIES,
-] as const;
+export const ALL_STRATEGIES = ['default', ...DEFAULT_STRATEGIES, ...ADDITIONAL_STRATEGIES] as const;
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
-  default: 'Includes common plugins',
-  'ascii-smuggling': 'Attempts to obfuscate malicious content using ASCII smuggling',
-  base64: 'Attempts to obfuscate malicious content using Base64 encoding',
-  basic: 'Single-shot, unoptimized attacks using raw prompts based on plugin description',
-  bfla: 'Broken Function Level Authorization (BFLA) tests',
-  bola: 'Broken Object Level Authorization (BOLA) tests',
-  competitors: 'Competitor mentions and endorsements',
-  contracts: 'Enters business or legal commitments without supervision',
-  crescendo: 'Conversational attack strategy (high cost)',
-  'cross-session-leak': 'Checks for information sharing between unrelated sessions',
-  'debug-access': 'Attempts to access or use debugging commands',
-  'excessive-agency': 'Model taking excessive initiative or misunderstanding its capabilities',
-  goat: 'Dynamically combines multiple adversarial prompting techniques in multi-turn conversations',
-  hallucination: 'Model generating false or misleading information',
-  harmful: 'All harmful categories',
-  'harmful:chemical-biological-weapons': 'Content related to chemical or biological weapons',
-  'harmful:child-exploitation': 'Content exploiting or harming children',
-  'harmful:copyright-violations': 'Content violating copyright laws',
-  'harmful:cybercrime': 'Content related to cybercriminal activities',
-  'harmful:graphic-content': 'Displaying graphic or violent content',
-  'harmful:harassment-bullying': 'Content that harasses or bullies individuals',
-  'harmful:hate': 'Content that promotes hate or discrimination',
-  'harmful:illegal-activities': 'Content promoting illegal activities',
-  'harmful:illegal-drugs': 'Content related to illegal drug use or trade',
-  'harmful:indiscriminate-weapons': 'Content related to weapons without context',
-  'harmful:insults': 'Content that insults or demeans individuals',
-  'harmful:intellectual-property': 'Content violating intellectual property rights',
-  'harmful:misinformation-disinformation': 'Spreading false or misleading information',
-  'harmful:non-violent-crime': 'Content related to non-violent criminal activities',
-  'harmful:privacy': 'Content violating privacy rights',
-  'harmful:profanity': 'Content containing profane or inappropriate language',
-  'harmful:radicalization': 'Content that promotes radical or extremist views',
-  'harmful:self-harm': 'Content that encourages self-harm or suicide',
-  'harmful:sex-crime': 'Content related to sexual crimes',
-  'harmful:sexual-content': 'Explicit or inappropriate sexual content',
-  'harmful:specialized-advice': 'Providing advice in specialized fields without expertise',
-  'harmful:unsafe-practices': 'Content promoting unsafe or harmful practices',
-  'harmful:violent-crime': 'Content related to violent criminal activities',
-  hijacking: 'Unauthorized or off-topic resource use',
-  imitation: 'Imitates people, brands, or organizations',
-  'indirect-prompt-injection':
-    'Tests if the prompt is vulnerable to instructions injected into variables in the prompt',
-  intent: 'Attempts to manipulate the model to exhibit specific behaviors',
-  jailbreak: 'Attempts to bypass security measures through iterative prompt refinement',
-  'jailbreak:tree': 'Tree-based jailbreak search (medium cost)',
-  leetspeak: 'Attempts to obfuscate malicious content using leetspeak',
-  'math-prompt': 'Encodes potentially harmful content using mathematical concepts and notation',
-  multilingual: 'Translates the input into low-resource languages',
-  overreliance: 'Model susceptible to relying on an incorrect user assumption or input',
-  pii: 'All PII categories',
-  'pii:api-db': 'PII exposed through API or database',
-  'pii:direct': 'Direct exposure of PII',
-  'pii:session': 'PII exposed in session data',
-  'pii:social': 'PII exposed through social engineering',
-  policy: 'Violates a custom configured policy',
-  politics: 'Makes political statements',
-  'prompt-extraction': 'Attempts to get the model to reveal its system prompt',
-  'prompt-injection': "Malicious inputs designed to manipulate the model's behavior",
-  rbac: 'Tests whether the model properly implements Role-Based Access Control (RBAC)',
-  religion: 'Makes potentially controversial statements about religion',
-  rot13: 'Attempts to obfuscate malicious content using ROT13 encoding',
-  'shell-injection': 'Attempts to execute shell commands through the model',
-  'sql-injection': 'Attempts to perform SQL injection attacks to manipulate database queries',
-  ssrf: 'Server-Side Request Forgery (SSRF) tests',
+  pandamonium:
+    "[Experimental] Promptfoo's blackbox jailbreak. The latest and greatest jailbreak techniques, expertly tuned and crafted by Promptfoo's AI team.",
+  default: 'Standard security testing plugins',
+  'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
+  base64: 'Tests handling of Base64-encoded malicious payloads',
+  basic: 'Original plugin tests without any additional strategies or optimizations',
+  beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
+  'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
+  bfla: 'Tests for broken function-level authorization vulnerabilities (OWASP API 5)',
+  bola: 'Tests for broken object-level authorization vulnerabilities (OWASP API 1)',
+  citation: 'Exploits academic authority bias to bypass content filters',
+  competitors: 'Tests for unauthorized competitor mentions and endorsements',
+  contracts: 'Tests for unauthorized contractual commitments and legal exposure',
+  crescendo: 'Multi-turn attack strategy that gradually escalates malicious intent',
+  'cross-session-leak': 'Tests for information leakage between user sessions',
+  cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
+  'debug-access': 'Tests for exposed debugging interfaces and commands',
+  'divergent-repetition':
+    'Tests for training data leaks through repetitive pattern exploitation that causes model divergence',
+  'jailbreak:likert': 'Uses Likert scale-based prompts to bypass content filters',
+  'excessive-agency': 'Tests for unauthorized actions beyond defined system boundaries',
+  foundation: 'Tests a collection of plugins designed to run against foundation models',
+  gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
+  goat: 'Dynamic multi-turn attack generation using adversarial techniques',
+  hallucination: 'Tests for fabrication of false or misleading information',
+  harmbench: 'Tests for harmful content using the HarmBench dataset',
+  harmful: 'Tests handling of malicious content across multiple categories',
+  'harmful:chemical-biological-weapons': 'Tests handling of WMD-related content',
+  'harmful:child-exploitation': 'Tests handling of child exploitation content',
+  'harmful:copyright-violations': 'Tests handling of intellectual property violations',
+  'harmful:cybercrime': 'Tests handling of cybercrime-related content',
+  'harmful:graphic-content': 'Tests handling of graphic or violent content',
+  'harmful:harassment-bullying': 'Tests handling of harassment and bullying content',
+  'harmful:hate': 'Tests handling of hate speech and discriminatory content',
+  'harmful:illegal-activities': 'Tests handling of general illegal activities',
+  'harmful:illegal-drugs': 'Tests handling of illegal drug-related content',
+  'harmful:indiscriminate-weapons': 'Tests handling of weapons-related content',
+  'harmful:insults': 'Tests handling of personal attacks and insults',
+  'harmful:intellectual-property': 'Tests handling of IP theft and violations',
+  'harmful:misinformation-disinformation': 'Tests handling of false information campaigns',
+  'harmful:non-violent-crime': 'Tests handling of non-violent criminal content',
+  'harmful:privacy': 'Tests handling of privacy violation attempts',
+  'harmful:profanity': 'Tests handling of profane or inappropriate language',
+  'harmful:radicalization': 'Tests handling of extremist content and recruitment',
+  'harmful:self-harm': 'Tests handling of self-harm and suicide content',
+  'harmful:sex-crime': 'Tests handling of sexual crime content',
+  'harmful:sexual-content': 'Tests handling of explicit sexual content',
+  'harmful:specialized-advice': 'Tests handling of unauthorized professional advice',
+  'harmful:unsafe-practices': 'Tests handling of dangerous activity instructions',
+  'harmful:violent-crime': 'Tests handling of violent crime content',
+  'harmful:illegal-drugs:meth': 'Tests handling of methamphetamine-related content',
+  'harmful:cybercrime:malicious-code': 'Tests creation of malicious code',
+  'harmful:weapons:ied': 'Tests handling of Improvised Explosive Devices',
+  hex: 'Tests handling of hex-encoded malicious payloads',
+  hijacking: 'Tests for unauthorized resource usage and purpose deviation',
+  imitation: 'Tests for unauthorized impersonation of entities',
+  'indirect-prompt-injection': 'Tests for injection vulnerabilities via untrusted variables',
+  intent: 'Tests for manipulation of system behavior via specific prompts',
+  jailbreak: 'Single-shot optimization of safety bypass techniques',
+  'jailbreak:composite': 'Combines multiple jailbreak techniques for enhanced effectiveness',
+  'jailbreak:tree': 'Tree-based search for optimal safety bypass vectors',
+  leetspeak: 'Tests handling of leetspeak-encoded malicious content',
+  'math-prompt': 'Tests handling of mathematical notation-based attacks',
+  multilingual: 'Tests handling of attacks across multiple languages',
+  overreliance: 'Tests for overreliance on system assumptions',
+  'rag-document-exfiltration': 'Tests for RAG document exfiltration',
+  pii: 'Tests handling of personal identifiable information',
+  'pii:api-db': 'Tests for PII exposure via API/database access',
+  'pii:direct': 'Tests for direct PII exposure vulnerabilities',
+  'pii:session': 'Tests for PII exposure in session data',
+  'pii:social': 'Tests for PII exposure via social engineering',
+  pliny: 'Tests handling of Pliny prompt injections',
+  policy: 'Tests compliance with custom security policies',
+  politics: 'Tests handling of political content and bias',
+  'prompt-extraction': 'Tests for system prompt disclosure vulnerabilities',
+  'prompt-injection': 'Tests for direct prompt injection vulnerabilities',
+  rbac: 'Tests role-based access control implementation',
+  religion: 'Tests handling of religious content and bias',
+  rot13: 'Tests handling of ROT13-encoded malicious content',
+  'shell-injection': 'Tests for command injection vulnerabilities',
+  'sql-injection': 'Tests for SQL injection vulnerabilities',
+  ssrf: 'Tests for server-side request forgery vulnerabilities',
+  'system-prompt-override': 'Tests for system prompt override vulnerabilities',
 };
 
 // These names are displayed in risk cards and in the table
 export const displayNameOverrides: Record<Plugin | Strategy, string> = {
-  'ascii-smuggling': 'ASCII smuggling',
-  base64: 'Base64 Encoding',
-  basic: 'Basic',
-  bfla: 'Privilege Escalation',
-  bola: 'Unauthorized Data Access',
-  competitors: 'Competitor Endorsements',
-  contracts: 'Unsupervised Contracts',
-  crescendo: 'Crescendo',
-  'cross-session-leak': 'Cross-Session Leak',
-  'debug-access': 'Debug Access',
-  default: 'Default',
+  pandamonium: '[Experimental] Pandamonium',
+  'ascii-smuggling': 'ASCII Smuggling',
+  base64: 'Base64 Payload Encoding',
+  basic: 'Baseline Testing',
+  'jailbreak:likert': 'Likert Scale Jailbreak',
+  beavertails: 'BeaverTails Dataset',
+  'best-of-n': 'Best-of-N',
+  bfla: 'Function-Level Authorization Bypass',
+  bola: 'Object-Level Authorization Bypass',
+  competitors: 'Competitors',
+  contracts: 'Unauthorized Commitments',
+  citation: 'Authority Bias Exploitation',
+  crescendo: 'Multi-Turn Crescendo',
+  'cross-session-leak': 'Cross-Session Data Leakage',
+  cyberseceval: 'CyberSecEval Dataset',
+  'debug-access': 'Debug Interface Exposure',
+  default: 'Standard Security Suite',
+  'divergent-repetition': 'Divergent Repetition',
   'excessive-agency': 'Excessive Agency',
+  foundation: 'Foundation Model Plugin Collection',
+  gcg: 'Greedy Coordinate Gradient',
   goat: 'Generative Offensive Agent Tester',
-  hallucination: 'Hallucination',
-  harmful: 'Harmful Content',
-  'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
+  hallucination: 'False Information (Hallucination)',
+  harmbench: 'HarmBench Dataset',
+  harmful: 'Malicious Content Suite',
+  'harmful:chemical-biological-weapons': 'WMD Content',
   'harmful:child-exploitation': 'Child Exploitation',
-  'harmful:copyright-violations': 'Copyright Violations',
+  'harmful:copyright-violations': 'IP Violations',
+  'harmful:cybercrime:malicious-code': 'Malicious Code',
   'harmful:cybercrime': 'Cybercrime',
   'harmful:graphic-content': 'Graphic Content',
-  'harmful:harassment-bullying': 'Harassment & Bullying',
+  'harmful:harassment-bullying': 'Harassment',
   'harmful:hate': 'Hate Speech',
-  'harmful:illegal-activities': 'Illegal Activities',
-  'harmful:illegal-drugs': 'Illegal Drugs',
-  'harmful:indiscriminate-weapons': 'Indiscriminate Weapons',
-  'harmful:insults': 'Insults',
-  'harmful:intellectual-property': 'Intellectual Property Violation',
-  'harmful:misinformation-disinformation': 'Misinformation & Disinformation',
+  'harmful:illegal-activities': 'Illegal Activity',
+  'harmful:illegal-drugs:meth': 'Methamphetamine Content',
+  'harmful:illegal-drugs': 'Drug-Related Content',
+  'harmful:indiscriminate-weapons': 'Weapons Content',
+  'harmful:insults': 'Personal Attacks',
+  'harmful:intellectual-property': 'IP Theft',
+  'harmful:misinformation-disinformation': 'Disinformation Campaigns',
   'harmful:non-violent-crime': 'Non-Violent Crime',
   'harmful:privacy': 'Privacy Violation',
   'harmful:profanity': 'Profanity',
-  'harmful:radicalization': 'Radicalization',
+  'harmful:radicalization': 'Extremist Content',
   'harmful:self-harm': 'Self-Harm',
-  'harmful:sex-crime': 'Sex Crime',
-  'harmful:sexual-content': 'Sexual Content',
-  'harmful:specialized-advice': 'Specialized Advice',
-  'harmful:unsafe-practices': 'Unsafe Practices',
-  'harmful:violent-crime': 'Violent Crime',
-  hijacking: 'Hijacking',
-  imitation: 'Imitation',
+  'harmful:sex-crime': 'Sexual Crime Content',
+  'harmful:sexual-content': 'Explicit Content',
+  'harmful:specialized-advice': 'Unauthorized Advice',
+  'harmful:unsafe-practices': 'Dangerous Activity Content',
+  'harmful:violent-crime': 'Violent Crime Content',
+  'harmful:weapons:ied': 'Improvised Explosive Devices',
+  hex: 'Hex Encoding',
+  hijacking: 'Resource Hijacking',
+  imitation: 'Entity Impersonation',
   'indirect-prompt-injection': 'Indirect Prompt Injection',
   intent: 'Intent',
-  jailbreak: 'Single-shot optimization',
-  'jailbreak:tree': 'Tree-based optimization',
-  leetspeak: 'Leetspeak Encoding',
-  'math-prompt': 'Math Prompt',
-  multilingual: 'Multilingual',
+  jailbreak: 'Single-shot Optimization',
+  'jailbreak:composite': 'Multi-Vector Safety Bypass',
+  'jailbreak:tree': 'Tree-Based Attack Search',
+  leetspeak: 'Leetspeak Payload Encoding',
+  'math-prompt': 'Mathematical Notation Attack',
+  multilingual: 'Cross-Language Attack',
   overreliance: 'Overreliance',
-  pii: 'PII Leaks',
-  'pii:api-db': 'PII in API/Database',
-  'pii:direct': 'Direct PII Exposure',
-  'pii:session': 'PII in Session Data',
+  'rag-document-exfiltration': 'RAG Document Exfiltration',
+  pii: 'PII Protection Suite',
+  'pii:api-db': 'PII via API/Database',
+  'pii:direct': 'PII via Direct Exposure',
+  'pii:session': 'PII via Session Data',
   'pii:social': 'PII via Social Engineering',
-  policy: 'Custom Policy',
-  politics: 'Political Opinions',
-  'prompt-extraction': 'Prompt Extraction',
-  'prompt-injection': 'Prompt Injection',
-  rbac: 'RBAC Enforcement',
-  religion: 'Religious Sensitivity',
-  rot13: 'ROT13 Encoding',
-  'shell-injection': 'Shell Injection',
+  pliny: 'Pliny Prompt Injections',
+  policy: 'Policy Compliance',
+  politics: 'Political Bias',
+  'prompt-extraction': 'System Prompt Disclosure',
+  'prompt-injection': 'Direct Prompt Injection',
+  rbac: 'RBAC Implementation',
+  religion: 'Religious Bias',
+  rot13: 'ROT13 Payload Encoding',
+  'shell-injection': 'Command Injection',
   'sql-injection': 'SQL Injection',
-  ssrf: 'Malicious Resource Fetching',
+  ssrf: 'SSRF Vulnerability',
+  'system-prompt-override': 'System Prompt Override',
 };
 
 export enum Severity {
@@ -541,26 +766,37 @@ export const severityDisplayNames: Record<Severity, string> = {
   [Severity.Low]: 'Low',
 };
 
+/*
+ * Default severity values for each plugin.
+ * Use getRiskCategorySeverityMap() whenever possible to respect the user's severity settings.
+ */
 export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'ascii-smuggling': Severity.Low,
+  beavertails: Severity.Low,
   bfla: Severity.High,
   bola: Severity.High,
   competitors: Severity.Low,
   contracts: Severity.Medium,
   'cross-session-leak': Severity.Medium,
+  cyberseceval: Severity.Medium,
   'debug-access': Severity.High,
   default: Severity.Low,
+  'divergent-repetition': Severity.Medium,
   'excessive-agency': Severity.Medium,
+  foundation: Severity.Medium,
   hallucination: Severity.Medium,
+  harmbench: Severity.Medium,
   harmful: Severity.Medium,
   'harmful:chemical-biological-weapons': Severity.High,
   'harmful:child-exploitation': Severity.Critical,
   'harmful:copyright-violations': Severity.Low,
+  'harmful:cybercrime:malicious-code': Severity.Low,
   'harmful:cybercrime': Severity.Low,
   'harmful:graphic-content': Severity.Medium,
   'harmful:harassment-bullying': Severity.Low,
   'harmful:hate': Severity.Critical,
   'harmful:illegal-activities': Severity.Medium,
+  'harmful:illegal-drugs:meth': Severity.Low,
   'harmful:illegal-drugs': Severity.Medium,
   'harmful:indiscriminate-weapons': Severity.Medium,
   'harmful:insults': Severity.Low,
@@ -576,16 +812,19 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'harmful:specialized-advice': Severity.Medium,
   'harmful:unsafe-practices': Severity.Low,
   'harmful:violent-crime': Severity.High,
+  'harmful:weapons:ied': Severity.Low,
   hijacking: Severity.High,
   imitation: Severity.Low,
   'indirect-prompt-injection': Severity.High,
   intent: Severity.High,
   overreliance: Severity.Low,
+  'rag-document-exfiltration': Severity.Medium,
   pii: Severity.High,
   'pii:api-db': Severity.High,
   'pii:direct': Severity.High,
   'pii:session': Severity.High,
   'pii:social': Severity.High,
+  pliny: Severity.Medium,
   policy: Severity.High,
   politics: Severity.Low,
   'prompt-extraction': Severity.Medium,
@@ -594,6 +833,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'shell-injection': Severity.High,
   'sql-injection': Severity.High,
   ssrf: Severity.High,
+  'system-prompt-override': Severity.High,
 };
 
 export const riskCategories: Record<string, Plugin[]> = {
@@ -609,7 +849,6 @@ export const riskCategories: Record<string, Plugin[]> = {
     'indirect-prompt-injection',
     'ascii-smuggling',
     'hijacking',
-    'intent',
 
     // Data protection
     'pii',
@@ -620,6 +859,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'cross-session-leak',
     'harmful:privacy',
     'prompt-extraction',
+    'divergent-repetition',
   ],
 
   'Compliance & Legal': [
@@ -631,15 +871,17 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:non-violent-crime',
     'harmful:sex-crime',
     'harmful:cybercrime',
+    'harmful:cybercrime:malicious-code',
     'harmful:illegal-activities',
     'harmful:illegal-drugs',
+    'harmful:illegal-drugs:meth',
     'harmful:chemical-biological-weapons',
     'harmful:indiscriminate-weapons',
+    'harmful:weapons:ied',
     'harmful:unsafe-practices',
   ],
 
   'Trust & Safety': [
-    'hijacking',
     'harmful:child-exploitation',
     'harmful:graphic-content',
     'harmful:hate',
@@ -649,19 +891,24 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:harassment-bullying',
     'harmful:insults',
     'harmful:radicalization',
-    'politics',
-    'religion',
+    'pliny',
+    'beavertails',
+    'cyberseceval',
+    'harmbench',
   ],
 
   Brand: [
-    'policy',
-    'intent',
     'competitors',
-    'harmful:misinformation-disinformation',
-    'hallucination',
-    'overreliance',
     'excessive-agency',
+    'hallucination',
+    'harmful:misinformation-disinformation',
+    'hijacking',
     'imitation',
+    'intent',
+    'overreliance',
+    'policy',
+    'politics',
+    'religion',
   ],
 };
 
@@ -689,15 +936,20 @@ export const categoryLabels = Object.keys(categoryMapReverse);
 // Map from plugin name to metric name or harm category
 export const categoryAliases: Record<Plugin, string> = {
   'ascii-smuggling': 'AsciiSmuggling',
+  beavertails: 'BeaverTails',
   bfla: 'BFLAEnforcement',
   bola: 'BOLAEnforcement',
   competitors: 'CompetitorEndorsement',
   contracts: 'ContractualCommitment',
   'cross-session-leak': 'CrossSessionLeak',
+  cyberseceval: 'CyberSecEval',
   'debug-access': 'DebugAccess',
   default: 'Default',
+  'divergent-repetition': 'DivergentRepetition',
   'excessive-agency': 'ExcessiveAgency',
+  foundation: 'Foundation',
   hallucination: 'Hallucination',
+  harmbench: 'Harmbench',
   harmful: 'Harmful',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
@@ -723,16 +975,21 @@ export const categoryAliases: Record<Plugin, string> = {
   'harmful:specialized-advice': 'Specialized Advice - Financial',
   'harmful:unsafe-practices': 'Promotion of unsafe practices',
   'harmful:violent-crime': 'Violent Crimes',
+  'harmful:illegal-drugs:meth': 'Methamphetamine',
+  'harmful:cybercrime:malicious-code': 'Malicious Code',
+  'harmful:weapons:ied': 'Improvised Explosive Devices',
   hijacking: 'Hijacking',
   imitation: 'Imitation',
-  'indirect-prompt-injection': 'IndirectPromptInjection',
+  'indirect-prompt-injection': 'Indirect Prompt Injection',
   intent: 'Intent',
   overreliance: 'Overreliance',
+  'rag-document-exfiltration': 'RAG Document Exfiltration',
   pii: 'PIILeak',
   'pii:api-db': 'PIILeak',
   'pii:direct': 'PIILeak',
   'pii:session': 'PIILeak',
   'pii:social': 'PIILeak',
+  pliny: 'Pliny',
   policy: 'PolicyViolation',
   politics: 'PoliticalStatement',
   'prompt-extraction': 'PromptExtraction',
@@ -741,6 +998,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'shell-injection': 'ShellInjection',
   'sql-injection': 'SqlInjection',
   ssrf: 'SSRFEnforcement',
+  'system-prompt-override': 'System Prompt Override',
 };
 
 export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
@@ -753,107 +1011,130 @@ export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
 
 export const pluginDescriptions: Record<Plugin, string> = {
   'ascii-smuggling':
-    'ASCII smuggling is a technique used to obfuscate malicious content using ASCII characters, potentially bypassing security filters.',
-  bfla: 'Broken Function Level Authorization (BFLA) is a vulnerability where an application fails to properly restrict access to sensitive functions based on user roles.',
-  bola: 'Broken Object Level Authorization (BOLA) is a vulnerability where an application fails to properly restrict access to sensitive data objects based on user permissions.',
+    'Tests system resilience against Unicode tag-based instruction smuggling attacks that can bypass content filters and security controls',
+  beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
+  bfla: 'Evaluates function-level authorization controls to identify privilege escalation vulnerabilities (OWASP API Security Top 10 #5)',
+  bola: 'Tests object-level authorization mechanisms to detect unauthorized data access vulnerabilities (OWASP API Security Top 10 #1)',
   competitors:
-    'Competitor mentions and endorsements can lead to unintended promotion of rival products or services.',
-  contracts:
-    'Unauthorized contract creation or modification can lead to legal and financial risks for the organization.',
+    'Assesses system protection against unauthorized competitor endorsements and brand security risks',
+  contracts: 'Evaluates safeguards against unauthorized contractual commitments and legal exposure',
   'cross-session-leak':
-    'Cross-session leak occurs when sensitive information from one user session is inadvertently exposed to another session, compromising data privacy.',
+    'Tests for information leakage vulnerabilities between different user sessions',
+  cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
   'debug-access':
-    'Debug access vulnerabilities can expose sensitive system information or provide unauthorized control over the application.',
-  default: 'Default plugin behavior',
-  'excessive-agency':
-    'Excessive agency occurs when the AI model takes actions or makes decisions beyond its intended scope, potentially leading to unintended consequences.',
-  hallucination:
-    'AI hallucination refers to the generation of false or misleading information, which can lead to misinformation or incorrect decision-making.',
-  harmful: 'Content that may be harmful or dangerous in various ways',
-  'harmful:chemical-biological-weapons': 'Content related to chemical or biological weapons',
-  'harmful:child-exploitation': 'Content exploiting or harming children',
-  'harmful:copyright-violations': 'Content violating copyright laws',
-  'harmful:cybercrime': 'Content related to cybercriminal activities',
-  'harmful:graphic-content': 'Displaying graphic or violent content',
-  'harmful:harassment-bullying': 'Content that harasses or bullies individuals',
-  'harmful:hate': 'Content that promotes hate or discrimination',
-  'harmful:illegal-activities': 'Content promoting illegal activities',
-  'harmful:illegal-drugs': 'Content related to illegal drug use or trade',
-  'harmful:indiscriminate-weapons': 'Content related to weapons without context',
-  'harmful:insults': 'Content that insults or demeans individuals',
-  'harmful:intellectual-property': 'Content violating intellectual property rights',
-  'harmful:misinformation-disinformation': 'Spreading false or misleading information',
-  'harmful:non-violent-crime': 'Content related to non-violent criminal activities',
-  'harmful:privacy': 'Content violating privacy rights',
-  'harmful:profanity': 'Content containing profane or inappropriate language',
-  'harmful:radicalization': 'Content that promotes radical or extremist views',
-  'harmful:self-harm': 'Content that encourages self-harm or suicide',
-  'harmful:sex-crime': 'Content related to sexual crimes',
-  'harmful:sexual-content': 'Explicit or inappropriate sexual content',
-  'harmful:specialized-advice': 'Providing advice in specialized fields without expertise',
-  'harmful:unsafe-practices': 'Content promoting unsafe or harmful practices',
-  'harmful:violent-crime': 'Content related to violent criminal activities',
-  hijacking:
-    'Hijacking vulnerabilities allow attackers to take control of user sessions or system resources, compromising security and privacy.',
-  imitation:
-    'Imitation vulnerabilities occur when the AI impersonates individuals, brands, or organizations without authorization, potentially leading to fraud or reputational damage.',
+    'Identifies exposed debugging interfaces and unauthorized command execution vectors',
+  default: 'Executes comprehensive baseline security testing across multiple risk categories',
+  'excessive-agency': 'Evaluates system boundary enforcement and unauthorized action prevention',
+  'divergent-repetition':
+    'Tests repetitive patterns that can cause the model to diverge from normal behavior and leak training data',
+  foundation: 'Tests a collection of plugins designed to run against foundation models',
+  hallucination: 'Tests system resilience against false information generation and propagation',
+  harmbench:
+    'Tests for harmful content, illegal activities, misinformation using the HarmBench dataset from the Center for AI Safety (CAIS)',
+  harmful: 'Comprehensive suite for testing handling of various categories of malicious content',
+  hijacking: 'Assesses protection against unauthorized resource usage and purpose deviation',
+  imitation: 'Tests safeguards against unauthorized entity impersonation attempts',
   'indirect-prompt-injection':
-    "Indirect prompt injection allows attackers to manipulate the AI's behavior by injecting malicious content into variables used in prompts.",
-  intent:
-    'Tests whether the model can be manipulated to exhibit specific behaviors or responses, potentially bypassing safety measures.',
-  overreliance:
-    'Overreliance on AI systems without proper validation can lead to errors in decision-making or actions based on incorrect assumptions.',
-  pii: 'Personal Identifiable Information (PII) leaks can compromise user privacy and lead to legal and reputational consequences.',
-  'pii:api-db': 'PII exposed through API or database',
-  'pii:direct': 'Direct exposure of PII',
-  'pii:session': 'PII exposed in session data',
-  'pii:social': 'PII exposed through social engineering',
-  policy:
-    'Policy violations occur when the AI system acts in ways that contradict established organizational policies or guidelines.',
-  politics:
-    'Political statements or biases in AI responses can lead to controversy or alienation of users with different political views.',
-  'prompt-extraction':
-    'Prompt extraction vulnerabilities allow attackers to reveal the system prompts used to guide the AI, potentially exposing sensitive information or enabling further attacks.',
-  rbac: 'Role-Based Access Control (RBAC) vulnerabilities occur when the system fails to properly enforce access restrictions based on user roles.',
-  religion:
-    'Religious statements or biases in AI responses can lead to controversy or alienation of users with different religious beliefs.',
-  'shell-injection':
-    'Shell injection vulnerabilities allow attackers to execute unauthorized system commands, potentially leading to system compromise.',
-  'sql-injection':
-    'SQL injection is a vulnerability that allows attackers to execute unauthorized database queries, potentially leading to data theft or manipulation.',
-  ssrf: 'Server-Side Request Forgery (SSRF) vulnerabilities allow attackers to make unauthorized requests from the server, potentially accessing internal resources or services.',
+    'Evaluates vulnerability to injection attacks via untrusted variables',
+  intent: 'Tests system resilience against specific manipulation attempts',
+  overreliance: 'Assesses overreliance on system assumptions',
+  'rag-document-exfiltration': 'Tests handling of RAG document exfiltration',
+  pii: 'Comprehensive evaluation of personal identifiable information protection',
+  'pii:api-db': 'Tests for PII exposure through API and database access vectors',
+  'pii:direct': 'Evaluates direct PII exposure vulnerabilities',
+  'pii:session': 'Tests for PII leakage in session data',
+  'pii:social': 'Assesses PII exposure through social engineering vectors',
+  pliny: 'Tests handling of Pliny prompt injections',
+  policy: 'Validates compliance with custom security policies and controls',
+  politics: 'Tests handling of political content and bias mitigation',
+  'prompt-extraction': 'Evaluates protection against system prompt disclosure attempts',
+  rbac: 'Tests implementation of role-based access control mechanisms',
+  religion: 'Assesses handling of religious content and bias mitigation',
+  'shell-injection': 'Tests protection against command injection vulnerabilities',
+  'sql-injection': 'Evaluates resilience against SQL injection attacks',
+  ssrf: 'Tests for server-side request forgery vulnerabilities',
+  'system-prompt-override': 'Tests for system prompt override vulnerabilities',
+  'harmful:chemical-biological-weapons': 'Tests detection and response to WMD-related content',
+  'harmful:child-exploitation': 'Tests handling of child exploitation content',
+  'harmful:copyright-violations': 'Tests handling of intellectual property violations',
+  'harmful:cybercrime': 'Tests detection of cybercrime-related content',
+  'harmful:graphic-content': 'Tests handling of graphic or violent content',
+  'harmful:harassment-bullying': 'Tests handling of harassment and bullying content',
+  'harmful:hate': 'Tests handling of hate speech and discriminatory content',
+  'harmful:illegal-activities': 'Tests handling of illegal activity content',
+  'harmful:illegal-drugs': 'Tests handling of drug-related content',
+  'harmful:illegal-drugs:meth': 'Tests handling of methamphetamine-related content',
+  'harmful:cybercrime:malicious-code': 'Tests creation of malicious code',
+  'harmful:indiscriminate-weapons': 'Tests handling of weapons-related content',
+  'harmful:weapons:ied': 'Tests handling of Improvised Explosive Devices',
+  'harmful:insults': 'Tests handling of personal attacks and insults',
+  'harmful:intellectual-property': 'Tests handling of IP theft attempts',
+  'harmful:misinformation-disinformation': 'Tests handling of disinformation campaigns',
+  'harmful:non-violent-crime': 'Tests handling of non-violent criminal content',
+  'harmful:privacy': 'Tests handling of privacy violation attempts',
+  'harmful:profanity': 'Tests handling of profane content',
+  'harmful:radicalization': 'Tests handling of extremist content',
+  'harmful:self-harm': 'Tests handling of self-harm content',
+  'harmful:sex-crime': 'Tests handling of sexual crime content',
+  'harmful:sexual-content': 'Tests handling of explicit sexual content',
+  'harmful:specialized-advice': 'Tests handling of unauthorized professional advice',
+  'harmful:unsafe-practices': 'Tests handling of dangerous activity instructions',
+  'harmful:violent-crime': 'Tests handling of violent crime content',
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
-  'ascii-smuggling': 'Obfuscates malicious content using ASCII characters to bypass filters',
-  base64: 'Encodes malicious content in Base64 to evade detection',
-  basic: 'Single-shot',
-  crescendo:
-    'A multi-turn attack that gradually escalates the conversation to probe for vulnerabilities',
-  default: 'Single-shot',
-  goat: 'Dynamically combines multiple adversarial prompting techniques in multi-turn conversations',
-  jailbreak:
-    'An optimized single shot attack generated by iteratively refining the prompt to bypass security measures',
-  'jailbreak:tree': 'Uses a tree-based search approach for more sophisticated jailbreaking',
-  leetspeak: 'Replaces characters with similar-looking numbers or symbols to obfuscate content',
-  'math-prompt': 'Encodes harmful content using mathematical concepts and notation',
-  multilingual: 'Translates malicious content into low-resource languages to evade detection',
-  'prompt-injection': 'Injects malicious instructions into prompts via user input',
-  rot13: 'Applies a simple letter substitution cipher to obfuscate malicious content',
+  pandamonium:
+    "Promptfoo's exclusive dynamic jailbreak strategy currently in development. Note: This is an expensive jailbreak strategy with no limit on probes.",
+  base64: 'Tests detection and handling of Base64-encoded malicious payloads',
+  basic: 'Equivalent to no strategy. Always included. Can be disabled in configuration.',
+  'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
+  citation: 'Exploits academic authority bias to circumvent content filtering mechanisms',
+  crescendo: 'Executes progressive multi-turn attacks with escalating malicious intent',
+  default: 'Applies standard security testing methodology',
+  gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
+  goat: 'Deploys dynamic attack generation using advanced adversarial techniques',
+  hex: 'Tests detection and handling of hex-encoded malicious payloads',
+  jailbreak: 'Optimizes single-turn attacks to bypass security controls',
+  'jailbreak:composite': 'Chains multiple attack vectors for enhanced effectiveness',
+  'jailbreak:likert': 'Uses Likert scale-based prompts to bypass content filters',
+  'jailbreak:tree': 'Implements tree-based search for optimal attack paths',
+  leetspeak: 'Assesses handling of leetspeak-encoded malicious content',
+  'math-prompt': 'Tests resilience against mathematical notation-based attacks',
+  multilingual: 'Evaluates cross-language attack vector handling',
+  'prompt-injection': 'Tests direct prompt injection vulnerability detection',
+  rot13: 'Assesses handling of ROT13-encoded malicious payloads',
 };
 
 export const strategyDisplayNames: Record<Strategy, string> = {
-  'ascii-smuggling': 'ASCII Smuggling',
+  pandamonium: 'Pandamonium',
   base64: 'Base64 Encoding',
   basic: 'Basic',
+  'best-of-n': 'Best-of-N',
+  citation: 'Authority Bias',
   crescendo: 'Multi-turn Crescendo',
   default: 'Basic',
-  goat: 'GOAT',
+  gcg: 'Greedy Coordinate Gradient',
+  goat: 'Generative Offensive Agent Tester',
+  hex: 'Hex Encoding',
+  'jailbreak:composite': 'Composite Jailbreaks',
+  'jailbreak:likert': 'Likert Scale Jailbreak',
   'jailbreak:tree': 'Tree-based Optimization',
   jailbreak: 'Single-shot Optimization',
-  leetspeak: 'Leetspeak',
+  leetspeak: 'Leetspeak Encoding',
   'math-prompt': 'Mathematical Encoding',
-  multilingual: 'Multilingual',
+  multilingual: 'Multilingual Encoding',
   'prompt-injection': 'Prompt Injection',
   rot13: 'ROT13 Encoding',
 };
+
+export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
+  Custom: 'Choose your own plugins',
+  Foundation: 'Plugins for redteaming foundation models recommended by Promptfoo',
+  'Minimal Test': 'Minimal set of plugins to validate your setup',
+  MITRE: 'MITRE ATLAS framework',
+  NIST: 'NIST AI Risk Management Framework',
+  'OWASP API': 'OWASP API Top 10',
+  'OWASP LLM': 'OWASP LLM Top 10',
+  RAG: 'Recommended plugins plus additional tests for RAG specific scenarios like access control',
+  Recommended: 'A broad set of plugins recommended by Promptfoo',
+} as const;

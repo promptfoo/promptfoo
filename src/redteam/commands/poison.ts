@@ -3,10 +3,11 @@ import type { Command } from 'commander';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import * as path from 'path';
+import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
-import { getRemoteGenerationUrl } from '../constants';
+import { getRemoteGenerationUrl } from '../remoteGeneration';
 
 interface PoisonOptions {
   documents: string[];
@@ -48,6 +49,7 @@ async function generatePoisonedDocument(document: string, goal?: string): Promis
       task: 'poison-document',
       document,
       goal,
+      email: getUserEmail(),
     }),
   });
 
@@ -130,7 +132,7 @@ async function doPoisonDocuments(options: PoisonOptions) {
 
       logger.info(chalk.green(`✓ Successfully poisoned ${isFile ? docPath : 'document'}`));
     } catch (error) {
-      logger.error(`Failed to poison ${docPath}:`, error);
+      logger.error(`Failed to poison ${docPath}: ${error}`);
     }
   }
 
@@ -165,7 +167,7 @@ export function poisonCommand(program: Command) {
           ...opts,
         });
       } catch (error) {
-        logger.error('An unexpected error occurred:', error);
+        logger.error(`An unexpected error occurred: ${error}`);
         process.exit(1);
       }
     });

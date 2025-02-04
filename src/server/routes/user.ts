@@ -65,7 +65,7 @@ userRouter.post('/consent', async (req: Request, res: Response) => {
     await telemetry.saveConsent(email, metadata);
     res.status(200).json({ success: true });
   } catch (error) {
-    logger.error(`Error saving consent: ${error}`);
+    logger.debug(`Failed to save consent: ${(error as Error).message}`);
     res.status(500).json({ error: 'Failed to save consent' });
   }
 });

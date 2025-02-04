@@ -34,15 +34,16 @@ export function listCommand(program: Command) {
 
       const tableData = evals.map((evl) => {
         const prompts = evl.getPrompts();
+        const description = evl.config.description || '';
         return {
           'Eval ID': evl.id,
-          Description: evl.description || '',
+          Description: description.slice(0, 100) + (description.length > 100 ? '...' : ''),
           Prompts: prompts.map((p) => sha256(p.raw).slice(0, 6)).join(', ') || '',
           Vars: vars[evl.id]?.join(', ') || '',
         };
       });
 
-      logger.info(wrapTable(tableData));
+      logger.info(wrapTable(tableData) as string);
       printBorder();
 
       logger.info(
@@ -82,7 +83,7 @@ export function listCommand(program: Command) {
         'Most recent eval': prompt.recentEvalId.slice(0, 6),
       }));
 
-      logger.info(wrapTable(tableData));
+      logger.info(wrapTable(tableData) as string);
       printBorder();
       logger.info(
         `Run ${chalk.green('promptfoo show prompt <id>')} to see details of a specific prompt.`,
@@ -124,7 +125,7 @@ export function listCommand(program: Command) {
         'Most recent eval': dataset.recentEvalId.slice(0, 6),
       }));
 
-      logger.info(wrapTable(tableData));
+      logger.info(wrapTable(tableData) as string);
       printBorder();
       logger.info(
         `Run ${chalk.green('promptfoo show dataset <id>')} to see details of a specific dataset.`,

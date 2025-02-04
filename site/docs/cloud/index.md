@@ -53,3 +53,9 @@ Once you have access, you can log in to Promptfoo Cloud and start sharing your e
 To add users to your organization, open the menu in the top right corner of the page and click your Organization name. Then invite the user using the form at the bottom of the page.
 
 ![Invite a user](/img/docs/cloud/invite-user.png)
+
+## Domains and Whitelisting
+
+Promptfoo requires access to [promptfoo.app](https://promptfoo.app), [api.promptfoo.app](https://api.promptfoo.app), and [api.promptfoo.dev](https://api.promptfoo.dev) to function.
+
+If you are using a proxy or VPN, you may need to add these domains to your whitelist.

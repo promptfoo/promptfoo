@@ -5,7 +5,12 @@ import cliState from '../../src/cliState';
 import { getDb } from '../../src/database';
 import * as googleSheets from '../../src/googleSheets';
 import Eval from '../../src/models/eval';
-import type { ApiProvider, EvaluateResult, TestCase } from '../../src/types';
+import {
+  ResultFailureReason,
+  type ApiProvider,
+  type EvaluateResult,
+  type TestCase,
+} from '../../src/types';
 import {
   maybeLoadFromExternalFile,
   parsePathOrGlob,
@@ -41,7 +46,6 @@ jest.mock('fs', () => ({
   mkdirSync: jest.fn(),
 }));
 
-jest.mock('../../src/logger');
 jest.mock('../../src/esm');
 
 jest.mock('../../src/googleSheets', () => ({
@@ -214,6 +218,7 @@ describe('util', () => {
       const results: EvaluateResult[] = [
         {
           success: true,
+          failureReason: ResultFailureReason.NONE,
           score: 1.0,
           namedScores: {},
           latencyMs: 1000,
@@ -238,7 +243,7 @@ describe('util', () => {
         },
       ];
       const eval_ = new Eval({});
-      eval_.addResult(results[0], {});
+      await eval_.addResult(results[0]);
 
       const shareableUrl = null;
       await writeOutput(outputPath, eval_, shareableUrl);

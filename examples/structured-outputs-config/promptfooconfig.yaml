@@ -53,10 +53,29 @@ prompts:
             additionalProperties: false
 
 providers:
-  - openai:chat:gpt-4o-2024-08-06
+  - openai:chat:gpt-4o-2024-11-20
+  - id: azure:chat:gpt-4o-2024-08-06
+    config:
+      apiHost: 'YOUR_ORG.openai.azure.com'
+      apiVersion: '2024-08-01-preview'
+      deploymentName: 'YOUR_DEPLOYMENT_NAME'
+
+defaultTest:
+  assert:
+    - type: is-json
+    - type: javascript
+      value: typeof output === 'object'
 
 tests:
   - vars:
       problem: '8x + 31 = 2'
+    assert:
+      - type: contains-any
+        value:
+          - -3.625
+          - -29/8
   - vars:
       problem: 'sqrt(x) = 4.9'
+    assert:
+      - type: contains
+        value: 24.01

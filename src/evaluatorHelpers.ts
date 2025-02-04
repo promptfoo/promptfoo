@@ -1,10 +1,12 @@
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import * as path from 'path';
-import invariant from 'tiny-invariant';
 import cliState from './cliState';
 import { getEnvBool } from './envars';
 import { importModule } from './esm';
+import { getPrompt as getHeliconePrompt } from './integrations/helicone';
+import { getPrompt as getLangfusePrompt } from './integrations/langfuse';
+import { getPrompt as getPortkeyPrompt } from './integrations/portkey';
 import logger from './logger';
 import { isPackagePath, loadFromPackage } from './providers/packageParser';
 import { runPython } from './python/pythonUtils';
@@ -12,8 +14,26 @@ import telemetry from './telemetry';
 import type { ApiProvider, NunjucksFilterMap, Prompt } from './types';
 import { renderVarsInObject } from './util';
 import { isJavascriptFile } from './util/file';
+import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
+
+export async function extractTextFromPDF(pdfPath: string): Promise<string> {
+  logger.debug(`Extracting text from PDF: ${pdfPath}`);
+  try {
+    const { default: PDFParser } = await import('pdf-parse');
+    const dataBuffer = fs.readFileSync(pdfPath);
+    const data = await PDFParser(dataBuffer);
+    return data.text.trim();
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("Cannot find module 'pdf-parse'")) {
+      throw new Error('pdf-parse is not installed. Please install it with: npm install pdf-parse');
+    }
+    throw new Error(
+      `Failed to extract text from PDF ${pdfPath}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
 
 export function resolveVariables(
   variables: Record<string, string | object>,
@@ -102,6 +122,8 @@ export async function renderPrompt(
         vars[varName] = JSON.stringify(
           yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object,
         );
+      } else if (fileExtension === 'pdf') {
+        vars[varName] = await extractTextFromPDF(filePath);
       } else {
         vars[varName] = fs.readFileSync(filePath, 'utf8').trim();
       }
@@ -149,11 +171,9 @@ export async function renderPrompt(
 
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
-    const { getPrompt } = await import('./integrations/portkey');
-    const portKeyResult = await getPrompt(prompt.raw.slice('portkey://'.length), vars);
+    const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
     return JSON.stringify(portKeyResult.messages);
   } else if (prompt.raw.startsWith('langfuse://')) {
-    const { getPrompt } = await import('./integrations/langfuse');
     const langfusePrompt = prompt.raw.slice('langfuse://'.length);
 
     // we default to "text" type.
@@ -162,7 +182,7 @@ export async function renderPrompt(
       throw new Error('Unknown promptfoo prompt type');
     }
 
-    const langfuseResult = await getPrompt(
+    const langfuseResult = await getLangfusePrompt(
       helper,
       vars,
       promptType,
@@ -170,11 +190,10 @@ export async function renderPrompt(
     );
     return langfuseResult;
   } else if (prompt.raw.startsWith('helicone://')) {
-    const { getPrompt } = await import('./integrations/helicone');
     const heliconePrompt = prompt.raw.slice('helicone://'.length);
     const [id, version] = heliconePrompt.split(':');
     const [majorVersion, minorVersion] = version ? version.split('.') : [undefined, undefined];
-    const heliconeResult = await getPrompt(
+    const heliconeResult = await getHeliconePrompt(
       id,
       vars,
       majorVersion === undefined ? undefined : Number(majorVersion),

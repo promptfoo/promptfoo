@@ -6,7 +6,8 @@ import type {
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
+import type { ApiProvider, ProviderResponse, TokenUsage } from '../types';
+import type { EnvOverrides } from '../types/env';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface BAMGenerationParameters {
@@ -68,7 +69,7 @@ interface BAMModerations {
       };
 }
 
-function convertResponse(response: TextGenerationCreateOutput): ProviderResponse {
+export function convertResponse(response: TextGenerationCreateOutput): ProviderResponse {
   const totalGeneratedTokens = response.results.reduce(
     (acc, result) => acc + result.generated_token_count,
     0,

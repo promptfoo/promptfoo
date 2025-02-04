@@ -4,6 +4,7 @@ import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import ForumIcon from '@mui/icons-material/Forum';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
+import WorkIcon from '@mui/icons-material/Work';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -32,12 +33,17 @@ const links: { icon: React.ReactNode; text: string; href: string }[] = [
   {
     icon: <ForumIcon fontSize="small" />,
     text: 'Join Our Discord Community',
-    href: 'https://discord.gg/gHPS9jjfbs',
+    href: 'https://discord.gg/promptfoo',
   },
   {
     icon: <CalendarTodayIcon fontSize="small" />,
     text: 'Book a Meeting',
     href: 'https://cal.com/team/promptfoo/intro2',
+  },
+  {
+    icon: <WorkIcon fontSize="small" />,
+    text: 'Careers',
+    href: 'https://www.promptfoo.dev/careers/',
   },
 ];
 

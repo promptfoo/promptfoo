@@ -10,7 +10,7 @@ prompts:
   # - file:///path/to/prompt.json
   # Learn more: https://promptfoo.dev/docs/configuration/parameters/#prompts
 
-providers:
+targets:
   # Providers are red team targets. To talk directly to your application, use a custom provider.
   # See https://promptfoo.dev/docs/red-team/configuration/#providers
   - openrouter:meta-llama/llama-3.1-8b-instruct

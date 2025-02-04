@@ -2,9 +2,9 @@ import type { ValidateFunction } from 'ajv';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import yaml from 'js-yaml';
-import invariant from 'tiny-invariant';
 import { getEnvBool } from '../envars';
 import type { AssertionParams, GradingResult } from '../types';
+import invariant from '../util/invariant';
 import { extractJsonObjects } from '../util/json';
 
 let ajvInstance: Ajv | null = null;

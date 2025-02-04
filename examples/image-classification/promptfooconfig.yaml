@@ -1,24 +1,72 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Image Classification Example of Fashion MNIST dataset
 providers:
-  - id: anthropic:messages:claude-3-5-sonnet-20241022
-    label: claude-3.5-sonnet
+  - openai:chat:gpt-4o
+  - openai:chat:gpt-4o-mini
 prompts:
-  - id: file://prompt.js
-    label: Image Classification
-tests: file://fashion_mnist_sample_base64.csv
+  - label: Image Classification
+    raw: file://prompt.js
+    config:
+      response_format:
+        type: json_schema
+        json_schema:
+          name: image_classification
+          schema:
+            type: object
+            properties:
+              classification:
+                type: string
+                enum:
+                  [
+                    'T-shirt/top',
+                    'Trouser',
+                    'Pullover',
+                    'Dress',
+                    'Coat',
+                    'Sandal',
+                    'Shirt',
+                    'Sneaker',
+                    'Bag',
+                    'Ankle boot',
+                  ]
+              color:
+                type: string
+              features:
+                type: string
+              style:
+                type: string
+              confidence:
+                type: integer
+              reasoning:
+                type: string
+            required:
+              - classification
+              - color
+              - features
+              - style
+              - confidence
+              - reasoning
+            additionalProperties: false
 defaultTest:
   assert:
-    - type: contains-xml
+    - type: is-json
       value:
-        requiredElements:
-          - analysis.classification
-          - analysis.color
-          - analysis.confidence
-          - analysis.features
-          - analysis.reasoning
-          - analysis.style
-    - type: is-xml
-      value: 'analysis.classification,analysis.color,analysis.features,analysis.style,analysis.confidence,analysis.reasoning'
-    - type: contains
-      value: '<classification>{{label}}</classification>'
+        type: object
+        properties:
+          classification:
+            type: string
+          color:
+            type: string
+          features:
+            type: string
+          style:
+            type: string
+          confidence:
+            type: integer
+          reasoning:
+            type: string
+    - type: javascript
+      value: 'output.classification === context.vars.label'
+      metric: accuracy
+
+tests: file://fashion_mnist_sample_base64.csv

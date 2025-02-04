@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Adaline Gateway Embedding Similarity Example'
+
+prompts:
+  - file://prompt.json
+
+providers:
+  - id: adaline:anthropic:chat:claude-3-5-sonnet-20240620
+    config:
+      maxTokens: 120
+
+defaultTest:
+  vars:
+    system_message: file://system_message.txt
+    previous_messages:
+      - user: Who founded Facebook?
+      - assistant: Mark Zuckerberg
+
+tests:
+  - vars:
+      question: What is his role at Internet.org?
+    assert:
+      - type: similar
+        value: Founder and CEO
+        threshold: 0.25
+        provider: adaline:openai:embedding:text-embedding-3-large
+  - vars:
+      question: Is he still connected with Facebook?
+    assert:
+      - type: similar
+        value: Yes
+        threshold: 0.5
+        provider: adaline:openai:embedding:text-embedding-3-small

@@ -12,7 +12,6 @@ jest.mock('fs');
 jest.mock('crypto');
 jest.mock('child_process');
 jest.mock('../../src/cache');
-jest.mock('../../src/logger');
 
 describe('parseScriptParts', () => {
   it('should parse script parts correctly', () => {

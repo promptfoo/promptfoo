@@ -1,14 +1,14 @@
 import async from 'async';
 import { SingleBar, Presets } from 'cli-progress';
 import dedent from 'dedent';
-import invariant from 'tiny-invariant';
 import { fetchWithCache } from '../../cache';
+import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { TestCase } from '../../types';
-import { getRemoteGenerationUrl } from '../constants';
-import { loadRedteamProvider } from '../providers/shared';
-import { shouldGenerateRemote } from '../util';
+import invariant from '../../util/invariant';
+import { redteamProviderManager } from '../providers/shared';
+import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration';
 
 const DEFAULT_MATH_CONCEPTS = ['set theory', 'group theory', 'abstract algebra'];
 
@@ -53,6 +53,7 @@ export async function generateMathPrompt(
         testCases: batch,
         injectVar,
         config,
+        email: getUserEmail(),
       };
 
       const { data } = await fetchWithCache(
@@ -92,7 +93,10 @@ export async function generateMathPrompt(
 }
 
 export async function encodeMathPrompt(text: string, concept: string): Promise<string> {
-  const redteamProvider = await loadRedteamProvider({ jsonOnly: true, preferSmallModel: true });
+  const redteamProvider = await redteamProviderManager.getProvider({
+    jsonOnly: true,
+    preferSmallModel: true,
+  });
   const examplePrompt = EXAMPLES[Math.floor(Math.random() * EXAMPLES.length)];
 
   const result = await redteamProvider.callApi(

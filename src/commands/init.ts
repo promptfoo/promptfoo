@@ -6,10 +6,10 @@ import dedent from 'dedent';
 import fs from 'fs/promises';
 import path from 'path';
 import { VERSION } from '../constants';
-import { getEnvString } from '../envars';
 import logger from '../logger';
 import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
+import { isRunningUnderNpx, setupEnv } from '../util';
 
 const GITHUB_API_BASE = 'https://api.github.com';
 
@@ -131,25 +131,32 @@ async function handleExampleDownload(
     }
   }
 
-  const isNpx = getEnvString('npm_execpath')?.includes('npx');
-  const runCommand = isNpx ? 'npx promptfoo@latest eval' : 'promptfoo eval';
-  if (directory === '.' || !directory) {
+  const runCommand = isRunningUnderNpx() ? 'npx promptfoo eval' : 'promptfoo eval';
+  if (!exampleName) {
+    return;
+  }
+
+  const basePath = directory && directory !== '.' ? `${directory}/` : '';
+  const readmePath = path.join(basePath, exampleName, 'README.md');
+  const cdCommand = `cd ${path.join(basePath, exampleName)}`;
+
+  if (exampleName.includes('redteam')) {
     logger.info(
-      dedent`View the README file at ${chalk.bold(`${exampleName}/README.md`)} or run 
-        
-        \`${chalk.bold(`cd ${exampleName} && ${runCommand}`)}\`
-        
-        to get started!`,
+      dedent`
+
+      View the README file at ${chalk.bold(readmePath)} to get started!
+      `,
     );
   } else {
     logger.info(
-      '\n' +
-        dedent`
-        View the README file at: ${chalk.bold(`${directory}/${exampleName}/README.md`)} or run
+      dedent`
 
-        \`${chalk.bold(`cd ${directory}/${exampleName} && ${runCommand}`)}\`
-        
-        to get started!`,
+      View the README at ${chalk.bold(readmePath)} or run:
+
+      \`${chalk.bold(`${cdCommand} && ${runCommand}`)}\`
+
+      to get started!
+      `,
     );
   }
 
@@ -159,6 +166,7 @@ async function handleExampleDownload(
 interface InitCommandOptions {
   interactive: boolean;
   example: string | boolean | undefined;
+  envPath: string | undefined;
 }
 
 export function initCommand(program: Command) {
@@ -166,11 +174,13 @@ export function initCommand(program: Command) {
     .command('init [directory]')
     .description('Initialize project with dummy files or download an example')
     .option('--no-interactive', 'Do not run in interactive mode')
+    .option('--env-file, --env-path <path>', 'Path to .env file')
     .option('--example [name]', 'Download an example from the promptfoo repo')
     .action(async (directory: string | null, cmdObj: InitCommandOptions) => {
       telemetry.record('command_used', {
         name: 'init - started',
       });
+      setupEnv(cmdObj.envPath);
 
       if (directory === 'redteam' && cmdObj.interactive) {
         const useRedteam = await confirm({

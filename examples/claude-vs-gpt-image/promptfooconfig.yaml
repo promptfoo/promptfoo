@@ -16,6 +16,7 @@ tests:
       image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/Great_Wave_off_Kanagawa2.jpg/640px-Great_Wave_off_Kanagawa2.jpg
       label: Great Wave off Kanagawa
 
-assert:
-  - type: icontains
-    value: '{{label}}'
+defaultTest:
+  assert:
+    - type: llm-rubric
+      value: Is a detailed description of the image '{{label}}'

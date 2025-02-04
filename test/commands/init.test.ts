@@ -3,6 +3,22 @@ import fs from 'fs/promises';
 import * as init from '../../src/commands/init';
 import logger from '../../src/logger';
 
+// Add mock for redteam init
+jest.mock('../../src/redteam/commands/init', () => ({
+  redteamInit: jest.fn(),
+}));
+
+jest.mock('../../src/server/server', () => ({
+  startServer: jest.fn(),
+  BrowserBehavior: {
+    ASK: 0,
+    OPEN: 1,
+    SKIP: 2,
+    OPEN_TO_REPORT: 3,
+    OPEN_TO_REDTEAM_CREATE: 4,
+  },
+}));
+
 jest.mock('../../src/commands/init', () => {
   const actual = jest.requireActual('../../src/commands/init');
   return {
@@ -16,7 +32,6 @@ jest.mock('../../src/commands/init', () => {
 jest.mock('fs/promises');
 jest.mock('path');
 jest.mock('../../src/constants');
-jest.mock('../../src/logger');
 jest.mock('../../src/onboarding');
 jest.mock('../../src/telemetry');
 jest.mock('@inquirer/confirm');
@@ -173,7 +188,7 @@ describe('init command', () => {
       expect(initCmd?.description()).toBe(
         'Initialize project with dummy files or download an example',
       );
-      expect(initCmd?.options).toHaveLength(2);
+      expect(initCmd?.options).toHaveLength(3);
     });
   });
 });

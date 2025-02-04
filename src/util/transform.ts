@@ -8,6 +8,7 @@ import { isJavascriptFile } from './file';
 export type TransformContext = {
   vars?: Vars;
   prompt: Partial<Prompt>;
+  uuid?: string;
 };
 
 export enum TransformInputType {
@@ -129,7 +130,7 @@ export async function transform(
   context: TransformContext,
   validateReturn: boolean = true,
   inputType: TransformInputType = TransformInputType.OUTPUT,
-): Promise<string | object | undefined> {
+): Promise<Vars> {
   const postprocessFn = await getTransformFunction(codeOrFilepath, inputType);
 
   const ret = await Promise.resolve(postprocessFn(transformInput, context));

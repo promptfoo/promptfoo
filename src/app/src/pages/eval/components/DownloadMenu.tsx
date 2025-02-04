@@ -11,6 +11,7 @@ import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { ResultFailureReason } from '@promptfoo/types';
 import { stringify as csvStringify } from 'csv-stringify/browser/esm/sync';
 import yaml from 'js-yaml';
 import { useStore as useResultsViewStore } from './store';
@@ -88,7 +89,14 @@ function DownloadMenu() {
     table.body.forEach((row) => {
       const rowValues = [
         ...row.vars,
-        ...row.outputs.map(({ pass, text }) => (pass ? '[PASS] ' : '[FAIL] ') + text),
+        ...row.outputs.map(
+          ({ pass, text, failureReason: failureType }) =>
+            (pass
+              ? '[PASS] '
+              : failureType === ResultFailureReason.ASSERT
+                ? '[FAIL] '
+                : '[ERROR] ') + text,
+        ),
       ];
       csvRows.push(rowValues);
     });
@@ -131,6 +139,40 @@ function DownloadMenu() {
     handleClose();
   };
 
+  const downloadBurpPayloads = () => {
+    if (!table) {
+      alert('No table data');
+      return;
+    }
+
+    if (!config?.redteam) {
+      alert('No redteam config');
+      return;
+    }
+
+    // Extract all unique test inputs and prepare them for Burp
+    const varName = config.redteam.injectVar || 'prompt';
+    const payloads = table.body
+      .map((row) => {
+        const vars = row.test.vars as Record<string, unknown>;
+        return String(vars?.[varName] || '');
+      })
+      .filter(Boolean)
+      .map((input) => {
+        // JSON escape and URL encode
+        const jsonEscaped = JSON.stringify(input).slice(1, -1); // Remove surrounding quotes
+        return encodeURIComponent(jsonEscaped);
+      });
+
+    // Remove duplicates
+    const uniquePayloads = [...new Set(payloads)];
+
+    const content = uniquePayloads.join('\n');
+    const blob = new Blob([content], { type: 'text/plain' });
+    openDownloadDialog(blob, `${evalId}-burp-payloads.burp`);
+    handleClose();
+  };
+
   const handleOpen = () => {
     setOpen(true);
   };
@@ -155,6 +197,9 @@ function DownloadMenu() {
             break;
           case '5':
             downloadHumanEvalTestCases();
+            break;
+          case '6':
+            downloadBurpPayloads();
             break;
         }
       }
@@ -250,6 +295,20 @@ function DownloadMenu() {
                 Download Human Eval Test YAML
               </Button>
             </Tooltip>
+
+            {config?.redteam && (
+              <Tooltip title="Download test inputs as Burp Intruder payloads (JSON-escaped and URL-encoded)">
+                <Button
+                  onClick={downloadBurpPayloads}
+                  startIcon={<DownloadIcon />}
+                  variant="outlined"
+                  color="secondary"
+                  fullWidth
+                >
+                  Download Burp Suite Payloads
+                </Button>
+              </Tooltip>
+            )}
           </Stack>
         </DialogContent>
       </Dialog>

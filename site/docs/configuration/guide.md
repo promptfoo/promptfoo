@@ -19,7 +19,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - vertex:gemini-pro
+  - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
       language: French
@@ -47,7 +47,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - vertex:gemini-pro
+  - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
       language: French
@@ -71,7 +71,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - vertex:gemini-pro
+  - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
       language: French
@@ -94,7 +94,7 @@ tests:
 ```
 
 :::tip
-To learn more about assertions, see docs on configuring [expected outputs](/docs/configuration/expected-outputs).
+To learn more about assertions, see docs on configuring [assertions and metrics](/docs/configuration/expected-outputs).
 :::
 
 ## Import providers from separate files
@@ -141,20 +141,20 @@ tests:
 A single string is also valid:
 
 ```yaml
-tests: tests/*
+tests: file://tests/*
 ```
 
 Or a list of paths:
 
 ```yaml
 tests:
-  - 'tests/accuracy'
-  - 'tests/creativity'
-  - 'tests/hallucination'
+  - file://tests/accuracy
+  - file://tests/creativity
+  - file://tests/hallucination
 ```
 
 :::tip
-We also support CSV datasets from [local file](/docs/configuration/parameters/#import-from-csv) and [Google Sheets](/docs/integrations/google-sheets).
+Test files can be defined in YAML/JSON, JSONL, [CSV](/docs/configuration/parameters/#import-from-csv), and TypeScript/JavaScript. We also support [Google Sheets](/docs/integrations/google-sheets) CSV datasets.
 :::
 
 ## Import vars from separate files
@@ -184,7 +184,21 @@ tests:
       context: file://fetch_from_vector_database.py
 ```
 
-This is useful when testing vector databases like Pinecone, Chroma, Milvus, etc.
+Scripted vars are useful when testing vector databases like Pinecone, Chroma, Milvus, etc. You can communicate directly with the database to fetch the context you need.
+
+PDFs are also supported and can be used to extract text from a document:
+
+```yaml
+tests:
+  - vars:
+      paper: file://pdfs/arxiv_1.pdf
+```
+
+Note that you must install the `pdf-parse` package to use PDFs as variables:
+
+```
+npm install pdf-parse
+```
 
 ### Javascript variables
 
@@ -257,7 +271,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - vertex:gemini-pro
+  - vertex:gemini-2.0-flash-exp
 // highlight-start
 defaultTest:
   assert:
@@ -289,6 +303,24 @@ defaultTest:
     provider: openai:gpt-4o-mini-0613
 ```
 
+### Default variables
+
+Use `defaultTest` to define variables that are shared across all tests:
+
+```yaml
+defaultTest:
+  vars:
+    template: 'A reusable prompt template with {{shared_var}}'
+    shared_var: 'some shared content'
+
+tests:
+  - vars:
+      unique_var: value1
+  - vars:
+      unique_var: value2
+      shared_var: 'override shared content' # Optionally override defaults
+```
+
 ### YAML references
 
 promptfoo configurations support JSON schema [references](https://opis.io/json-schema/2.x/references.html), which define reusable blocks.
@@ -301,7 +333,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - vertex:gemini-pro
+  - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
       language: French
@@ -640,7 +672,7 @@ The `transformVars` function should return an object with the transformed variab
 
 ```yaml
 prompts:
-  - 'Summarize the following text in {{topic_length}} words: {{file_content}}'
+  - 'Summarize the following text in {{topic_length}} words: {{processed_content}}'
 
 defaultTest:
   options:
@@ -648,13 +680,13 @@ defaultTest:
       return {
         uppercase_topic: vars.topic.toUpperCase(),
         topic_length: vars.topic.length,
-        file_content: fs.readFileSync(vars.file_path, 'utf-8')
+        processed_content: vars.content.trim()
       };
 
 tests:
   - vars:
       topic: 'climate change'
-      file_path: './data/climate_article.txt'
+      content: '  This is some text about climate change that needs processing.  '
     assert:
       - type: contains
         value: '{{uppercase_topic}}'
@@ -763,7 +795,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - vertex:gemini-pro
+  - vertex:gemini-2.0-flash-exp
 // highlight-next-line
 tests: file://tests.csv
 ```
@@ -776,7 +808,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - vertex:gemini-pro
+  - vertex:gemini-2.0-flash-exp
 // highlight-next-line
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
 ```

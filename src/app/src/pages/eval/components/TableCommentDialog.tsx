@@ -32,7 +32,17 @@ const CommentDialog: React.FC<CommentDialogProps> = ({
       <DialogTitle>Edit Comment</DialogTitle>
       <DialogContent>
         <Box
-          sx={{ backgroundColor: darkMode ? '#1e1e1e' : '#f0f0f0', padding: 2, marginBottom: 2 }}
+          component="pre"
+          data-testid="context-text"
+          sx={{
+            backgroundColor: darkMode ? '#1e1e1e' : '#f0f0f0',
+            padding: 2,
+            marginBottom: 2,
+            whiteSpace: 'pre-wrap',
+            wordWrap: 'break-word',
+            fontFamily: 'inherit',
+            margin: 0,
+          }}
         >
           {contextText}
         </Box>

@@ -32,7 +32,7 @@ configsRouter.get('/', async (req: Request, res: Response): Promise<void> => {
 
     res.json({ configs });
   } catch (error) {
-    logger.error('Error fetching configs:', error);
+    logger.error(`Error fetching configs: ${error}`);
     res.status(500).json({ error: 'Failed to fetch configs' });
   }
 });
@@ -43,18 +43,24 @@ configsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
     const { name, type, config } = req.body;
     const id = uuidv4();
 
-    await db.insert(configsTable).values({
-      id,
-      name,
-      type,
-      config,
-    });
+    const [result] = await db
+      .insert(configsTable)
+      .values({
+        id,
+        name,
+        type,
+        config,
+      })
+      .returning({
+        id: configsTable.id,
+        createdAt: configsTable.createdAt,
+      });
 
     logger.info(`Saved config ${id} of type ${type}`);
 
-    res.json({ id });
+    res.json(result);
   } catch (error) {
-    logger.error('Error saving config:', error);
+    logger.error(`Error saving config: ${error}`);
     res.status(500).json({ error: 'Failed to save config' });
   }
 });
@@ -77,7 +83,7 @@ configsRouter.get('/:type', async (req: Request, res: Response): Promise<void> =
 
     res.json({ configs });
   } catch (error) {
-    logger.error('Error fetching configs:', error);
+    logger.error(`Error fetching configs: ${error}`);
     res.status(500).json({ error: 'Failed to fetch configs' });
   }
 });
@@ -100,7 +106,7 @@ configsRouter.get('/:type/:id', async (req: Request, res: Response): Promise<voi
 
     res.json(config[0]);
   } catch (error) {
-    logger.error('Error fetching config:', error);
+    logger.error(`Error fetching config: ${error}`);
     res.status(500).json({ error: 'Failed to fetch config' });
   }
 });

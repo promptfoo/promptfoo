@@ -1,7 +1,14 @@
 import fs from 'fs';
 import path from 'path';
+import { loadFromJavaScriptFile } from '../src/assertions/utils';
 import cliState from '../src/cliState';
-import { getAndCheckProvider, getGradingProvider, matchesClassification } from '../src/matchers';
+import { importModule } from '../src/esm';
+import {
+  getAndCheckProvider,
+  getGradingProvider,
+  matchesClassification,
+  matchesModeration,
+} from '../src/matchers';
 import {
   matchesSimilarity,
   matchesLlmRubric,
@@ -14,8 +21,12 @@ import {
 } from '../src/matchers';
 import { ANSWER_RELEVANCY_GENERATE, CONTEXT_RECALL, CONTEXT_RELEVANCE } from '../src/prompts';
 import { HuggingfaceTextClassificationProvider } from '../src/providers/huggingface';
-import { OpenAiChatCompletionProvider, OpenAiEmbeddingProvider } from '../src/providers/openai';
-import { DefaultEmbeddingProvider, DefaultGradingProvider } from '../src/providers/openai';
+import { OpenAiChatCompletionProvider } from '../src/providers/openai/chat';
+import { DefaultEmbeddingProvider, DefaultGradingProvider } from '../src/providers/openai/defaults';
+import { OpenAiEmbeddingProvider } from '../src/providers/openai/embedding';
+import { OpenAiModerationProvider } from '../src/providers/openai/moderation';
+import { ReplicateModerationProvider } from '../src/providers/replicate';
+import { LLAMA_GUARD_REPLICATE_PROVIDER } from '../src/redteam/constants';
 import * as remoteGrading from '../src/remoteGrading';
 import type {
   GradingConfig,
@@ -32,12 +43,11 @@ jest.mock('../src/database', () => ({
   }),
 }));
 jest.mock('../src/esm');
-jest.mock('../src/logger');
 jest.mock('../src/cliState');
 jest.mock('../src/remoteGrading', () => ({
   doRemoteGrading: jest.fn(),
 }));
-jest.mock('../src/redteam/util', () => ({
+jest.mock('../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: jest.fn().mockReturnValue(true),
 }));
 jest.mock('proxy-agent', () => ({
@@ -51,6 +61,9 @@ jest.mock('fs', () => ({
   ...jest.requireActual('fs'),
   readFileSync: jest.fn(),
   existsSync: jest.fn(),
+}));
+jest.mock('../src/esm', () => ({
+  importModule: jest.fn(),
 }));
 
 const Grader = new TestGrader();
@@ -91,6 +104,7 @@ describe('matchesSimilarity', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
   });
@@ -109,6 +123,7 @@ describe('matchesSimilarity', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
   });
@@ -129,6 +144,7 @@ describe('matchesSimilarity', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
   });
@@ -149,6 +165,7 @@ describe('matchesSimilarity', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
   });
@@ -186,6 +203,7 @@ describe('matchesSimilarity', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith('Expected output');
@@ -266,6 +284,7 @@ describe('matchesLlmRubric', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
   });
@@ -292,6 +311,7 @@ describe('matchesLlmRubric', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
   });
@@ -329,6 +349,7 @@ describe('matchesLlmRubric', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith('Grading prompt');
@@ -369,8 +390,43 @@ describe('matchesLlmRubric', () => {
         prompt: 5,
         completion: 5,
         cached: 0,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
       },
     });
+  });
+
+  it('should load rubric prompt from js file when specified', async () => {
+    const filePath = path.join('path', 'to', 'external', 'file.js');
+    const mockImportModule = jest.mocked(importModule);
+    const mockFunction = jest.fn(() => 'Do this: {{ rubric }}');
+    mockImportModule.mockResolvedValue(mockFunction);
+
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {
+      rubricPrompt: `file://${filePath}`,
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
+        }),
+      },
+    };
+
+    const result = await matchesLlmRubric(rubric, llmOutput, grading);
+
+    await expect(loadFromJavaScriptFile(filePath, undefined, [])).resolves.toBe(
+      'Do this: {{ rubric }}',
+    );
+
+    expect(grading.provider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Do this: Test rubric'),
+    );
+    expect(mockImportModule).toHaveBeenCalledWith(filePath, undefined);
+
+    expect(result).toEqual(
+      expect.objectContaining({ pass: true, score: 1, reason: 'Test passed' }),
+    );
   });
 
   it('should throw an error when the external file is not found', async () => {
@@ -478,6 +534,7 @@ describe('matchesFactuality', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
   });
@@ -501,6 +558,7 @@ describe('matchesFactuality', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
   });
@@ -535,6 +593,7 @@ describe('matchesFactuality', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
   });
@@ -605,6 +664,7 @@ describe('matchesClosedQa', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
   });
@@ -629,6 +689,7 @@ describe('matchesClosedQa', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
   });
@@ -676,6 +737,7 @@ describe('matchesClosedQa', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
     expect(isJson).toBeTruthy();
@@ -874,6 +936,7 @@ describe('matchesAnswerRelevance', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith(
@@ -923,6 +986,7 @@ describe('matchesAnswerRelevance', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith(
@@ -1063,6 +1127,7 @@ describe('matchesContextRelevance', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith(
@@ -1094,6 +1159,7 @@ describe('matchesContextRelevance', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith(
@@ -1135,6 +1201,7 @@ describe('matchesContextFaithfulness', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
     expect(mockCallApi).toHaveBeenCalledTimes(2);
@@ -1172,6 +1239,7 @@ describe('matchesContextFaithfulness', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
     expect(mockCallApi).toHaveBeenCalledTimes(2);
@@ -1203,6 +1271,7 @@ describe('matchesContextRecall', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith(expect.stringContaining(CONTEXT_RECALL.slice(0, 100)));
@@ -1232,10 +1301,94 @@ describe('matchesContextRecall', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
+        completionDetails: expect.any(Object),
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith(expect.stringContaining(CONTEXT_RECALL.slice(0, 100)));
 
     mockCallApi.mockRestore();
+  });
+});
+
+describe('matchesModeration', () => {
+  const mockModerationResponse = {
+    flags: [],
+    tokenUsage: { total: 5, prompt: 2, completion: 3 },
+  };
+
+  beforeEach(() => {
+    // Clear all environment variables
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.REPLICATE_API_KEY;
+    delete process.env.REPLICATE_API_TOKEN;
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('should skip moderation when assistant response is empty', async () => {
+    const openAiSpy = jest
+      .spyOn(OpenAiModerationProvider.prototype, 'callModerationApi')
+      .mockResolvedValue(mockModerationResponse);
+
+    const result = await matchesModeration({
+      userPrompt: 'test prompt',
+      assistantResponse: '',
+    });
+
+    expect(result).toEqual({
+      pass: true,
+      score: 1,
+      reason: expect.any(String),
+    });
+    expect(openAiSpy).not.toHaveBeenCalled();
+  });
+
+  it('should use OpenAI when OPENAI_API_KEY is present', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    const openAiSpy = jest
+      .spyOn(OpenAiModerationProvider.prototype, 'callModerationApi')
+      .mockResolvedValue(mockModerationResponse);
+
+    await matchesModeration({
+      userPrompt: 'test prompt',
+      assistantResponse: 'test response',
+    });
+
+    expect(openAiSpy).toHaveBeenCalledWith('test prompt', 'test response');
+  });
+
+  it('should fallback to Replicate when only REPLICATE_API_KEY is present', async () => {
+    process.env.REPLICATE_API_KEY = 'test-key';
+    const replicateSpy = jest
+      .spyOn(ReplicateModerationProvider.prototype, 'callModerationApi')
+      .mockResolvedValue(mockModerationResponse);
+
+    await matchesModeration({
+      userPrompt: 'test prompt',
+      assistantResponse: 'test response',
+    });
+
+    expect(replicateSpy).toHaveBeenCalledWith('test prompt', 'test response');
+  });
+
+  it('should respect provider override in grading config', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    const replicateSpy = jest
+      .spyOn(ReplicateModerationProvider.prototype, 'callModerationApi')
+      .mockResolvedValue(mockModerationResponse);
+
+    await matchesModeration(
+      {
+        userPrompt: 'test prompt',
+        assistantResponse: 'test response',
+      },
+      {
+        provider: LLAMA_GUARD_REPLICATE_PROVIDER,
+      },
+    );
+
+    expect(replicateSpy).toHaveBeenCalledWith('test prompt', 'test response');
   });
 });

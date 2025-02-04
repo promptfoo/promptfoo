@@ -3,7 +3,6 @@ import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
-import invariant from 'tiny-invariant';
 import { fromError } from 'zod-validation-error';
 import { readAssertions } from '../../assertions';
 import { validateAssertions } from '../../assertions/validateAssertions';
@@ -30,6 +29,7 @@ import {
 } from '../../types';
 import { maybeLoadFromExternalFile, readFilters } from '../../util';
 import { isJavascriptFile } from '../../util/file';
+import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
@@ -153,7 +153,11 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
     const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8'));
     const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
-    const validationResult = UnifiedConfigSchema.safeParse(dereferencedConfig);
+    // Validator requires `prompts`, but prompts is not actually required for redteam.
+    const UnifiedConfigSchemaWithoutPrompts = UnifiedConfigSchema.innerType()
+      .innerType()
+      .extend({ prompts: UnifiedConfigSchema.innerType().innerType().shape.prompts.optional() });
+    const validationResult = UnifiedConfigSchemaWithoutPrompts.safeParse(dereferencedConfig);
     if (!validationResult.success) {
       logger.warn(
         `Invalid configuration file ${configPath}:\n${fromError(validationResult.error).message}`,
@@ -297,11 +301,11 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       for (const redteamKey of Object.keys(config.redteam) as Array<keyof typeof redteam>) {
         if (['entities', 'plugins', 'strategies'].includes(redteamKey)) {
           if (Array.isArray(config.redteam[redteamKey])) {
-            const currentValue = redteam[redteamKey];
+            const currentValue = redteam[redteamKey] || [];
             const newValue = config.redteam[redteamKey];
-            if (Array.isArray(currentValue) && Array.isArray(newValue)) {
+            if (Array.isArray(newValue)) {
               (redteam[redteamKey] as unknown[]) = [
-                ...new Set([...currentValue, ...newValue]),
+                ...new Set([...(currentValue as unknown[]), ...(newValue as unknown[])]),
               ].sort();
             }
           }
@@ -364,7 +368,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
           typeof prompt === 'string' ||
             (typeof prompt === 'object' &&
               (typeof prompt.raw === 'string' || typeof prompt.label === 'string')),
-          'Invalid prompt',
+          `Invalid prompt: ${JSON.stringify(prompt)}. Prompts must be either a string or an object with a 'raw' or 'label' string property.`,
         );
         addSeenPrompt(makeAbsolute(configPaths[idx], prompt as string | Prompt));
       });
@@ -419,7 +423,14 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     extensions,
     redteam,
     metadata: configs.reduce((prev, curr) => ({ ...prev, ...curr.metadata }), {}),
-    sharing: !configs.some((config) => config.sharing === false),
+    sharing: (() => {
+      if (configs.some((config) => config.sharing === false)) {
+        return false;
+      }
+
+      const sharingConfig = configs.find((config) => typeof config.sharing === 'object');
+      return sharingConfig ? sharingConfig.sharing : true;
+    })(),
   };
 
   return combinedConfig;
@@ -437,7 +448,6 @@ export async function resolveConfigs(
     // The user has provided a config file, so we do not want to use the default config.
     defaultConfig = {};
   }
-
   // Standalone assertion mode
   if (cmdObj.assertions) {
     telemetry.recordAndSendOnce('feature_used', {

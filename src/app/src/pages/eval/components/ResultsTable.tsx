@@ -10,11 +10,12 @@ import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Link } from 'react-router-dom';
 import { useToast } from '@app/hooks/useToast';
-import type {
-  EvaluateTableRow,
-  EvaluateTableOutput,
-  FilterMode,
-  EvaluateTable,
+import {
+  type EvaluateTableRow,
+  type EvaluateTableOutput,
+  type FilterMode,
+  type EvaluateTable,
+  ResultFailureReason,
 } from '@app/pages/eval/components/types';
 import { callApi } from '@app/utils/api';
 import CloseIcon from '@mui/icons-material/Close';
@@ -29,14 +30,15 @@ import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import invariant from '@promptfoo/util/invariant';
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
 import yaml from 'js-yaml';
 import remarkGfm from 'remark-gfm';
-import invariant from 'tiny-invariant';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import GenerateTestCases from './GenerateTestCases';
+import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import type { TruncatedTextProps } from './TruncatedText';
 import TruncatedText from './TruncatedText';
 import { useStore as useMainStore } from './store';
@@ -52,6 +54,8 @@ function formatRowOutput(output: EvaluateTableOutput | string) {
       text = text.slice('[PASS]'.length);
     } else if (output.startsWith('[FAIL]')) {
       text = text.slice('[FAIL]'.length);
+    } else if (output.startsWith('[ERROR]')) {
+      text = text.slice('[ERROR]'.length);
     }
     return {
       text,
@@ -116,6 +120,7 @@ interface ResultsTableProps {
   showStats: boolean;
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
   onSearchTextChange: (text: string) => void;
+  setFilterMode: (mode: FilterMode) => void;
 }
 
 interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
@@ -163,12 +168,21 @@ function ResultsTable({
   showStats,
   onFailureFilterToggle,
   onSearchTextChange,
+  setFilterMode,
 }: ResultsTableProps) {
   const { evalId, table, setTable, config, inComparisonMode, version } = useMainStore();
   const { showToast } = useToast();
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
+
+  const [lightboxOpen, setLightboxOpen] = React.useState(false);
+  const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
+
+  const toggleLightbox = (url?: string) => {
+    setLightboxImage(url || null);
+    setLightboxOpen(!lightboxOpen);
+  };
 
   const handleRating = React.useCallback(
     async (
@@ -288,13 +302,17 @@ function ResultsTable({
               return (
                 failureFilter[columnId] &&
                 !output.pass &&
-                (!columnVisibilityIsSet || columnVisibility[columnId])
+                (!columnVisibilityIsSet || columnVisibility[columnId]) &&
+                output.failureReason !== ResultFailureReason.ERROR
               );
             });
+          } else if (filterMode === 'errors') {
+            outputsPassFilter = row.outputs.some(
+              (output) => output.failureReason === ResultFailureReason.ERROR,
+            );
           } else if (filterMode === 'different') {
             outputsPassFilter = !row.outputs.every((output) => output.text === row.outputs[0].text);
           } else if (filterMode === 'highlights') {
-            console.log(row.outputs[0].text);
             outputsPassFilter = row.outputs.some((output) =>
               output.gradingResult?.comment?.startsWith('!highlight'),
             );
@@ -394,7 +412,13 @@ function ResultsTable({
                 <TableHeader text={varName} maxLength={maxTextLength} className="font-bold" />
               ),
               cell: (info: CellContext<EvaluateTableRow, string>) => {
-                const value = info.getValue();
+                let value: string | object = info.getValue();
+                if (typeof value === 'object') {
+                  value = JSON.stringify(value, null, 2);
+                  if (renderMarkdown) {
+                    value = `\`\`\`json\n${value}\n\`\`\``;
+                  }
+                }
                 const truncatedValue =
                   value.length > maxTextLength
                     ? `${value.substring(0, maxTextLength - 3).trim()}...`
@@ -402,9 +426,11 @@ function ResultsTable({
                 return (
                   <div className="cell">
                     {renderMarkdown ? (
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{truncatedValue}</ReactMarkdown>
+                      <MarkdownErrorBoundary fallback={<>{value}</>}>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{truncatedValue}</ReactMarkdown>
+                      </MarkdownErrorBoundary>
                     ) : (
-                      <TruncatedText text={value} maxLength={maxTextLength} />
+                      <>{value}</>
                     )}
                   </div>
                 );
@@ -476,6 +502,42 @@ function ResultsTable({
                       <strong>Asserts:</strong> {numGoodAsserts[idx]}/{numAsserts[idx]} passed
                     </div>
                   ) : null}
+                  {prompt.metrics?.cost ? (
+                    <div>
+                      <strong>Total Cost:</strong>{' '}
+                      <Tooltip
+                        title={`Average: $${Intl.NumberFormat(undefined, {
+                          minimumFractionDigits: 1,
+                          maximumFractionDigits: prompt.metrics.cost / body.length >= 1 ? 2 : 4,
+                        }).format(prompt.metrics.cost / body.length)} per test`}
+                      >
+                        <span style={{ cursor: 'help' }}>
+                          $
+                          {Intl.NumberFormat(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: prompt.metrics.cost >= 1 ? 2 : 4,
+                          }).format(prompt.metrics.cost)}
+                        </span>
+                      </Tooltip>
+                    </div>
+                  ) : null}
+                  {prompt.metrics?.tokenUsage?.total ? (
+                    <div>
+                      <strong>Total Tokens:</strong>{' '}
+                      {Intl.NumberFormat(undefined, {
+                        maximumFractionDigits: 0,
+                      }).format(prompt.metrics.tokenUsage.total)}
+                    </div>
+                  ) : null}
+
+                  {prompt.metrics?.tokenUsage?.total ? (
+                    <div>
+                      <strong>Avg Tokens:</strong>{' '}
+                      {Intl.NumberFormat(undefined, {
+                        maximumFractionDigits: 0,
+                      }).format(prompt.metrics.tokenUsage.total / body.length)}
+                    </div>
+                  ) : null}
                   {prompt.metrics?.totalLatencyMs ? (
                     <div>
                       <strong>Avg Latency:</strong>{' '}
@@ -485,33 +547,21 @@ function ResultsTable({
                       ms
                     </div>
                   ) : null}
-                  {prompt.metrics?.tokenUsage?.total ? (
-                    <div>
-                      <strong>Avg Tokens:</strong>{' '}
-                      {Intl.NumberFormat(undefined, {
-                        maximumFractionDigits: 0,
-                      }).format(prompt.metrics.tokenUsage.total / body.length)}
-                    </div>
-                  ) : null}
                   {prompt.metrics?.totalLatencyMs && prompt.metrics?.tokenUsage?.completion ? (
                     <div>
                       <strong>Tokens/Sec:</strong>{' '}
-                      {Intl.NumberFormat(undefined, {
-                        maximumFractionDigits: 0,
-                      }).format(
-                        prompt.metrics.tokenUsage.completion /
-                          (prompt.metrics.totalLatencyMs / 1000),
-                      )}
-                    </div>
-                  ) : null}
-                  {prompt.metrics?.cost ? (
-                    <div>
-                      <strong>Cost:</strong> ${prompt.metrics.cost.toPrecision(2)}
+                      {prompt.metrics.totalLatencyMs > 0
+                        ? Intl.NumberFormat(undefined, {
+                            maximumFractionDigits: 0,
+                          }).format(
+                            prompt.metrics.tokenUsage.completion /
+                              (prompt.metrics.totalLatencyMs / 1000),
+                          )
+                        : '0'}
                     </div>
                   ) : null}
                 </div>
               ) : null;
-
               const providerConfig = Array.isArray(config?.providers)
                 ? config.providers[idx]
                 : undefined;
@@ -536,6 +586,13 @@ function ResultsTable({
                         <strong>{pct}% passing</strong> ({numGoodTests[idx]}/{body.length} cases)
                       </div>
                     </div>
+                    {prompt.metrics?.testErrorCount && prompt.metrics.testErrorCount > 0 ? (
+                      <div className="summary error-pill" onClick={() => setFilterMode('errors')}>
+                        <div className="highlight fail">
+                          <strong>Errors:</strong> {prompt.metrics?.testErrorCount || 0}
+                        </div>
+                      </div>
+                    ) : null}
                     {prompt.metrics?.namedScores &&
                     Object.keys(prompt.metrics.namedScores).length > 0 ? (
                       <CustomMetrics
@@ -555,7 +612,7 @@ function ResultsTable({
                     resourceId={prompt.id}
                   />
                   {details}
-                  {filterMode === 'failures' && (
+                  {filterMode === 'failures' && head.prompts.length > 1 && (
                     <FormControlLabel
                       sx={{
                         '& .MuiFormControlLabel-label': {
@@ -723,6 +780,46 @@ function ResultsTable({
                     colBorderDrawn = true;
                   }
                   const shouldDrawRowBorder = rowIndex === 0 && !isMetadataCol;
+
+                  let cellContent = flexRender(cell.column.columnDef.cell, cell.getContext());
+                  const value = cell.getValue();
+                  if (
+                    typeof value === 'string' &&
+                    (value.match(/^data:(image\/[a-z]+|application\/octet-stream);base64,/) ||
+                      value.match(/^\/[0-9A-Za-z+/]{4}.*/))
+                  ) {
+                    const imgSrc = value.startsWith('data:')
+                      ? value
+                      : `data:image/jpeg;base64,${value}`;
+                    cellContent = (
+                      <>
+                        <img
+                          src={imgSrc}
+                          alt="Base64 encoded image"
+                          style={{
+                            maxWidth: '100%',
+                            height: 'auto',
+                            cursor: 'pointer',
+                          }}
+                          onClick={() => toggleLightbox(imgSrc)}
+                        />
+                        {lightboxOpen && lightboxImage === imgSrc && (
+                          <div className="lightbox" onClick={() => toggleLightbox()}>
+                            <img
+                              src={lightboxImage}
+                              alt="Lightbox"
+                              style={{
+                                maxWidth: '90%',
+                                maxHeight: '90vh',
+                                objectFit: 'contain',
+                              }}
+                            />
+                          </div>
+                        )}
+                      </>
+                    );
+                  }
+
                   return (
                     <td
                       key={cell.id}
@@ -731,9 +828,9 @@ function ResultsTable({
                       }}
                       className={`${isMetadataCol ? 'variable' : ''} ${
                         shouldDrawRowBorder ? 'first-prompt-row' : ''
-                      } ${shouldDrawColBorder ? 'first-prompt-col' : ''}`}
+                      } ${shouldDrawColBorder ? 'first-prompt-col' : 'second-prompt-column'}`}
                     >
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      {cellContent}
                     </td>
                   );
                 })}

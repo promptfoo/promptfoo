@@ -4,7 +4,7 @@ prompts:
   - 'Analyze the following customer support query: "{{query}}"'
 
 providers:
-  - id: openai:chat:gpt-4o-2024-08-06
+  - id: openai:chat:gpt-4o-2024-11-20
     config: &structured_output_config
       response_format:
         type: json_schema

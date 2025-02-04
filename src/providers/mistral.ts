@@ -3,11 +3,11 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import type {
   ApiProvider,
-  EnvOverrides,
   ProviderEmbeddingResponse,
   ProviderResponse,
   TokenUsage,
 } from '../types';
+import type { EnvOverrides } from '../types/env';
 import { calculateCost, REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 const MISTRAL_CHAT_MODELS = [

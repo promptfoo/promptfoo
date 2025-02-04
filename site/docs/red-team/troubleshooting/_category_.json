@@ -1,0 +1,9 @@
+{
+  "position": 9000,
+  "label": "Troubleshooting",
+  "collapsed": true,
+  "link": {
+    "type": "doc",
+    "id": "overview"
+  }
+}

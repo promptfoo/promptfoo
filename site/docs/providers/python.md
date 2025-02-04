@@ -1,8 +1,8 @@
 ---
-sidebar_position: 51
+sidebar_label: Custom Python
 ---
 
-# Custom Python
+# Python Provider
 
 The `python` provider allows you to use a Python script as an API provider for evaluating prompts. This is useful when you have custom logic or models implemented in Python that you want to integrate with your test suite.
 
@@ -65,6 +65,10 @@ def call_api(prompt: str, options: Dict[str, Any], context: Dict[str, Any]) -> P
     if token_usage_calculated:
         # If you want to report token usage, you can set the 'tokenUsage' field.
         result['tokenUsage'] = {"total": token_count, "prompt": prompt_token_count, "completion": completion_token_count}
+
+    if failed_guardrails:
+        # If guardrails triggered, you can set the 'guardrails' field.
+        result['guardrails'] = {"flagged": True}
 
     return result
 

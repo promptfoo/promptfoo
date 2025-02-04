@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: 'Custom strategy'
+
+prompts:
+  - 'You are a helpful assistant. Respond to: {{prompt}}'
+
+targets:
+  - id: openai:gpt-4o-mini
+
+# Other redteam settings
+redteam:
+  purpose: 'Customer service chatbot'
+
+  numTests: 1
+
+  plugins:
+    - politics
+
+  strategies:
+    - id: file://custom-strategy.js

@@ -14,13 +14,11 @@ const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: stri
   .concat(
     [
       'openai:gpt-4o',
+      'openai:gpt-4o-2024-11-20',
       'openai:gpt-4o-2024-08-06',
       'openai:gpt-4o-2024-05-13',
       'openai:gpt-4o-mini',
       'openai:gpt-4o-mini-2024-07-18',
-      'openai:gpt-4-turbo',
-      'openai:gpt-4',
-      'openai:gpt-3.5-turbo',
     ].map((id) => ({
       id,
       config: {
@@ -41,15 +39,13 @@ const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: stri
       'anthropic:messages:claude-3-5-sonnet-20241022',
       'anthropic:messages:claude-3-5-sonnet-20240620',
       'anthropic:messages:claude-3-5-haiku-20241022',
-      'anthropic:messages:claude-3-opus-20240229',
     ].map((id) => ({ id, config: { max_tokens: 1024, temperature: 0.5 } })),
   )
   .concat(
     [
-      'bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0',
-      'bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0',
-      'bedrock:anthropic.claude-3-opus-20240307-v1:0',
-      'bedrock:anthropic.claude-3-haiku-20240307-v1:0',
+      'bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0',
+      'bedrock:us.anthropic.claude-3-5-sonnet-20240620-v1:0',
+      'bedrock:us.anthropic.claude-3-5-haiku-20241022-v1:0',
     ].map((id) => ({ id, config: { max_tokens_to_sample: 256, temperature: 0.5 } })),
   )
   .concat(

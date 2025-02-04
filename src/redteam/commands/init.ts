@@ -10,13 +10,16 @@ import type { Command } from 'commander';
 import dedent from 'dedent';
 import fs from 'fs';
 import * as path from 'path';
-import { getEnvString } from '../../envars';
+import { DEFAULT_PORT } from '../../constants';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig/globalConfig';
 import logger from '../../logger';
+import { startServer } from '../../server/server';
 import telemetry, { type EventProperties } from '../../telemetry';
 import type { ProviderOptions, RedteamPluginObject } from '../../types';
-import { setupEnv } from '../../util';
+import { setupEnv, isRunningUnderNpx } from '../../util';
+import { BrowserBehavior } from '../../util/server';
+import { checkServerRunning, openBrowser } from '../../util/server';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import {
   type Plugin,
@@ -26,6 +29,7 @@ import {
   DEFAULT_STRATEGIES,
   type Strategy,
   subCategoryDescriptions,
+  HARM_PLUGINS,
 } from '../constants';
 import { doGenerateRedteam } from './generate';
 
@@ -70,7 +74,8 @@ redteam:
   purpose: {{ purpose | dump }}
   {% endif %}
   # Default number of inputs to generate for each plugin.
-  # The total number of tests will be (numTests * plugins.length * (1 + strategies.length))
+  # The total number of tests will be (numTests * plugins.length * (1 + strategies.length) * languages.length)
+  # Languages.length is 1 by default, but is added when the multilingual strategy is used.
   numTests: {{numTests}}
 
   {% if plugins.length > 0 -%}
@@ -283,9 +288,10 @@ export async function redteamInit(directory: string | undefined) {
     if (redTeamChoice === 'http_endpoint' || redTeamChoice === 'not_sure') {
       providers = [
         {
-          id: 'https://example.com/generate',
+          id: 'https',
           label,
           config: {
+            url: 'https://example.com/generate',
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -329,32 +335,6 @@ export async function redteamInit(directory: string | undefined) {
       providers = [{ id: 'openai:gpt-4o-mini', label }];
     } else {
       providers = [{ id: selectedProvider, label }];
-    }
-  }
-
-  if (!getEnvString('OPENAI_API_KEY')) {
-    recordOnboardingStep('missing api key');
-
-    console.clear();
-    logger.info(chalk.bold('OpenAI API Configuration\n'));
-
-    const apiKeyChoice = await select({
-      message: `OpenAI API key is required, but I don't see an OPENAI_API_KEY environment variable. How to proceed?`,
-      choices: [
-        { name: 'Enter API key now', value: 'enter' },
-        { name: 'Set it later', value: 'later' },
-      ],
-    });
-
-    recordOnboardingStep('choose api key', { value: apiKeyChoice });
-
-    if (apiKeyChoice === 'enter') {
-      const apiKey = await input({ message: 'Enter your OpenAI API key:' });
-      process.env.OPENAI_API_KEY = apiKey;
-      logger.info('OPENAI_API_KEY set for this session.');
-    } else {
-      deferGeneration = true;
-      logger.warn('Remember to set OPENAI_API_KEY before generating the dataset.');
     }
   }
 
@@ -462,33 +442,46 @@ export async function redteamInit(directory: string | undefined) {
   if (plugins.includes('indirect-prompt-injection')) {
     recordOnboardingStep('choose indirect prompt injection variable');
     logger.info(chalk.bold('Indirect Prompt Injection Configuration\n'));
-    const variables = extractVariablesFromTemplate(prompts[0]);
-    if (variables.length > 1) {
-      const indirectInjectionVar = await select({
-        message: 'Which variable would you like to test for indirect prompt injection?',
-        choices: variables.sort().map((variable) => ({
-          name: variable,
-          value: variable,
-        })),
-      });
-      recordOnboardingStep('chose indirect prompt injection variable');
-      plugins = plugins.filter((p) => p !== 'indirect-prompt-injection');
-      plugins.push({
-        id: 'indirect-prompt-injection',
-        config: {
-          indirectInjectionVar,
-        },
-      } as RedteamPluginObject);
-    } else {
+    if (prompts.length === 0) {
       plugins = plugins.filter((p) => p !== 'indirect-prompt-injection');
       recordOnboardingStep('skip indirect prompt injection');
       logger.warn(
-        dedent`${chalk.bold('Warning:')} Skipping indirect prompt injection plugin because it requires at least two {{variables}} in the prompt.
+        dedent`${chalk.bold('Warning:')} Skipping indirect prompt injection plugin because no prompt is specified.
+        You can re-add this plugin after adding a prompt in your redteam config.
 
         Learn more: https://www.promptfoo.dev/docs/red-team/plugins/indirect-prompt-injection`,
       );
+    } else {
+      const variables = extractVariablesFromTemplate(prompts[0]);
+      if (variables.length > 1) {
+        const indirectInjectionVar = await select({
+          message: 'Which variable would you like to test for indirect prompt injection?',
+          choices: variables.sort().map((variable) => ({
+            name: variable,
+            value: variable,
+          })),
+        });
+        recordOnboardingStep('chose indirect prompt injection variable');
+        plugins = plugins.filter((p) => p !== 'indirect-prompt-injection');
+        plugins.push({
+          id: 'indirect-prompt-injection',
+          config: {
+            indirectInjectionVar,
+          },
+        } as RedteamPluginObject);
+      } else {
+        plugins = plugins.filter((p) => p !== 'indirect-prompt-injection');
+        recordOnboardingStep('skip indirect prompt injection');
+        logger.warn(
+          dedent`${chalk.bold('Warning:')} Skipping indirect prompt injection plugin because it requires at least two {{variables}} in the prompt.
+
+          Learn more: https://www.promptfoo.dev/docs/red-team/plugins/indirect-prompt-injection`,
+        );
+      }
     }
   }
+
+  console.clear();
 
   logger.info(
     dedent`
@@ -578,10 +571,24 @@ export async function redteamInit(directory: string | undefined) {
           });
           writeGlobalConfigPartial({ hasHarmfulRedteamConsent: true });
         } catch (err) {
-          logger.error(`Error saving consent: ${(err as Error).message}`);
+          logger.debug(`Failed to save consent: ${(err as Error).message}`);
         }
       }
     }
+  }
+
+  // Remove harmful plugin collection if all harmful plugins are already selected
+  if (
+    plugins
+      .map((plugin) => (typeof plugin === 'string' ? plugin : plugin.id))
+      .includes('harmful') &&
+    Object.keys(HARM_PLUGINS).every((plugin: string) =>
+      plugins.map((plugin) => (typeof plugin === 'string' ? plugin : plugin.id)).includes(plugin),
+    )
+  ) {
+    plugins = plugins.filter((plugin) =>
+      typeof plugin === 'string' ? plugin !== 'harmful' : plugin.id !== 'harmful',
+    );
   }
 
   const numTests = 5;
@@ -613,9 +620,9 @@ export async function redteamInit(directory: string | undefined) {
     logger.info(
       '\n' +
         chalk.green(dedent`
-          To generate test cases after editing your configuration, use the command:
+          To generate test cases and run your red team, use the command:
 
-              ${chalk.bold('promptfoo redteam generate')}
+              ${chalk.bold(`${isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo'} redteam run`)}
         `),
     );
     return;
@@ -642,8 +649,8 @@ export async function redteamInit(directory: string | undefined) {
       logger.info(
         '\n' +
           chalk.blue(
-            'To generate test cases later, use the command: ' +
-              chalk.bold('promptfoo redteam generate'),
+            'To generate test cases and run your red team later, use the command: ' +
+              chalk.bold(`${isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo'} redteam run`),
           ),
       );
     }
@@ -655,28 +662,49 @@ export function initCommand(program: Command) {
     .command('init [directory]')
     .description('Initialize red teaming project')
     .option('--env-file, --env-path <path>', 'Path to .env file')
-    .action(async (directory: string | undefined, opts: { envPath: string | undefined }) => {
-      setupEnv(opts.envPath);
-      try {
-        await redteamInit(directory);
-      } catch (err) {
-        if (err instanceof ExitPromptError) {
-          logger.info(
-            '\n' +
-              chalk.blue(
-                'Red team initialization paused. To continue setup later, use the command: ',
-              ) +
-              chalk.bold('promptfoo redteam init'),
-          );
-          logger.info(
-            chalk.blue('For help or feedback, visit ') +
-              chalk.green('https://www.promptfoo.dev/contact/'),
-          );
-          await recordOnboardingStep('early exit');
-          process.exit(130);
-        } else {
-          throw err;
+    .option('--no-gui', 'Do not open the browser UI')
+    .action(
+      async (
+        directory: string | undefined,
+        opts: { envPath: string | undefined; gui: boolean },
+      ) => {
+        setupEnv(opts.envPath);
+        try {
+          // Check if we're in a non-GUI environment
+          const hasDisplay =
+            process.env.DISPLAY || process.platform === 'win32' || process.platform === 'darwin';
+          const useGui = opts.gui && hasDisplay;
+
+          if (useGui) {
+            const isRunning = await checkServerRunning();
+
+            if (isRunning) {
+              await openBrowser(BrowserBehavior.OPEN_TO_REDTEAM_CREATE);
+            } else {
+              await startServer(DEFAULT_PORT, BrowserBehavior.OPEN_TO_REDTEAM_CREATE);
+            }
+          } else {
+            await redteamInit(directory);
+          }
+        } catch (err) {
+          if (err instanceof ExitPromptError) {
+            logger.info(
+              '\n' +
+                chalk.blue(
+                  'Red team initialization paused. To continue setup later, use the command: ',
+                ) +
+                chalk.bold(`${isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo'} redteam init`),
+            );
+            logger.info(
+              chalk.blue('For help or feedback, visit ') +
+                chalk.green('https://www.promptfoo.dev/contact/'),
+            );
+            await recordOnboardingStep('early exit');
+            process.exit(130);
+          } else {
+            throw err;
+          }
         }
-      }
-    });
+      },
+    );
 }

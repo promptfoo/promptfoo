@@ -14,7 +14,7 @@ This guide explains some eval techniques for testing your model's JSON quality o
 
 ## Prerequisites
 
-Before proceeding, ensure you have a basic understanding of how to set up test cases and assertions. Find more information in the [Getting Started](/docs/getting-started) guide and the [Expected Outputs](/docs/configuration/expected-outputs/index.md) documentation.
+Before proceeding, ensure you have a basic understanding of how to set up test cases and assertions. Find more information in the [Getting Started](/docs/getting-started) guide and the [Assertions & Metrics](/docs/configuration/expected-outputs/index.md) documentation.
 
 ## Example Scenario
 

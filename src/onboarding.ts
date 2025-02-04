@@ -10,7 +10,8 @@ import { getEnvString } from './envars';
 import logger from './logger';
 import { redteamInit } from './redteam/commands/init';
 import telemetry, { type EventProperties } from './telemetry';
-import type { EnvOverrides } from './types';
+import type { EnvOverrides } from './types/env';
+import { isRunningUnderNpx } from './util';
 import { getNunjucksEngine } from './util/templates';
 
 export const CONFIG_TEMPLATE = `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -131,6 +132,10 @@ def call_api(prompt, options, context):
     if token_usage_calculated:
         # If you want to report token usage, you can set the 'tokenUsage' field.
         result['tokenUsage'] = {"total": token_count, "prompt": prompt_token_count, "completion": completion_token_count}
+
+    if failed_guardrails:
+        # If guardrails triggered, you can set the 'guardrails' field.
+        result['guardrails'] = {"flagged": True}
 
     return result
 `;
@@ -266,44 +271,74 @@ export function reportProviderAPIKeyWarnings(providerChoices: (string | object)[
     );
 }
 
+async function askForPermissionToOverwrite({
+  absolutePath,
+  relativePath,
+  required,
+}: {
+  absolutePath: string;
+  relativePath: string;
+  required: boolean;
+}): Promise<boolean> {
+  if (!fs.existsSync(absolutePath)) {
+    return true;
+  }
+
+  const requiredText = required ? '(required)' : '(optional)';
+  const hasPermissionToWrite = await confirm({
+    message: `${relativePath} ${requiredText} already exists. Do you want to overwrite it?`,
+    default: false,
+  });
+
+  if (required && !hasPermissionToWrite) {
+    throw new Error(`User did not grant permission to overwrite ${relativePath}`);
+  }
+
+  return hasPermissionToWrite;
+}
+
 export async function createDummyFiles(directory: string | null, interactive: boolean = true) {
   console.clear();
+  const outDirectory = directory || '.';
+  const outDirAbsolute = path.join(process.cwd(), outDirectory);
 
-  directory = directory || '.';
+  async function writeFile({
+    file,
+    contents,
+    required,
+  }: {
+    file: string;
+    contents: string;
+    required: boolean;
+  }) {
+    const relativePath = path.join(outDirectory, file);
+    const absolutePath = path.join(outDirAbsolute, file);
 
-  if (!fs.existsSync(directory)) {
-    fs.mkdirSync(directory, { recursive: true });
-  }
+    if (interactive) {
+      const hasPermissionToWrite = await askForPermissionToOverwrite({
+        absolutePath,
+        relativePath,
+        required,
+      });
 
-  // Check for existing files and prompt for overwrite
-  const filesToCheck = ['promptfooconfig.yaml', 'README.md'];
-  const existingFiles = filesToCheck.filter((file) =>
-    fs.existsSync(path.join(process.cwd(), directory, file)),
-  );
-
-  if (existingFiles.length > 0) {
-    const fileList = existingFiles.join(' and ');
-    const overwrite = await confirm({
-      message: `${fileList} already exist${existingFiles.length > 1 ? '' : 's'}${directory === '.' ? '' : ` in ${directory}`}. Do you want to overwrite ${existingFiles.length > 1 ? 'them' : 'it'}?`,
-      default: false,
-    });
-    if (!overwrite) {
-      const isNpx = getEnvString('npm_execpath')?.includes('npx');
-      const runCommand = isNpx ? 'npx promptfoo@latest init' : 'promptfoo init';
-      logger.info(
-        chalk.red(
-          `Please run \`${runCommand}\` in a different directory or use \`${runCommand} <directory>\` to specify a new location.`,
-        ),
-      );
-      process.exit(1);
+      if (!hasPermissionToWrite) {
+        logger.info(`⏩ Skipping ${relativePath}`);
+        return;
+      }
     }
+
+    fs.writeFileSync(absolutePath, contents);
+    logger.info(`⌛ Wrote ${relativePath}`);
   }
 
-  // Rest of the onboarding flow
   const prompts: string[] = [];
   const providers: (string | object)[] = [];
   let action: string;
   let language: string;
+
+  if (!fs.existsSync(outDirAbsolute)) {
+    fs.mkdirSync(outDirAbsolute, { recursive: true });
+  }
 
   if (interactive) {
     recordOnboardingStep('start');
@@ -325,7 +360,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     });
 
     if (action === 'redteam') {
-      await redteamInit(directory || '.');
+      await redteamInit(outDirectory);
       return {
         numPrompts: 0,
         providerPrefixes: [],
@@ -479,14 +514,20 @@ export async function createDummyFiles(directory: string | null, interactive: bo
             typeof choice === 'string' && choice.startsWith('file://') && choice.endsWith('.js'),
         )
       ) {
-        fs.writeFileSync(path.join(process.cwd(), directory, 'provider.js'), JAVASCRIPT_PROVIDER);
-        logger.info('⌛ Wrote provider.js');
+        await writeFile({
+          file: 'provider.js',
+          contents: JAVASCRIPT_PROVIDER,
+          required: true,
+        });
       }
       if (
         providerChoices.some((choice) => typeof choice === 'string' && choice.startsWith('exec:'))
       ) {
-        fs.writeFileSync(path.join(process.cwd(), directory, 'provider.sh'), BASH_PROVIDER);
-        logger.info('⌛ Wrote provider.sh');
+        await writeFile({
+          file: 'provider.sh',
+          contents: BASH_PROVIDER,
+          required: true,
+        });
       }
       if (
         providerChoices.some(
@@ -496,8 +537,11 @@ export async function createDummyFiles(directory: string | null, interactive: bo
               (choice.startsWith('file://') && choice.endsWith('.py'))),
         )
       ) {
-        fs.writeFileSync(path.join(process.cwd(), directory, 'provider.py'), PYTHON_PROVIDER);
-        logger.info('⌛ Wrote provider.py');
+        await writeFile({
+          file: 'provider.py',
+          contents: PYTHON_PROVIDER,
+          required: true,
+        });
       }
     } else {
       providers.push('openai:gpt-4o-mini');
@@ -519,11 +563,17 @@ export async function createDummyFiles(directory: string | null, interactive: bo
 
     if (action === 'rag' || action === 'agent') {
       if (language === 'javascript') {
-        fs.writeFileSync(path.join(directory, 'context.js'), JAVASCRIPT_VAR);
-        logger.info('⌛ Wrote context.js');
+        await writeFile({
+          file: 'context.js',
+          contents: JAVASCRIPT_VAR,
+          required: true,
+        });
       } else {
-        fs.writeFileSync(path.join(directory, 'context.py'), PYTHON_VAR);
-        logger.info('⌛ Wrote context.py');
+        await writeFile({
+          file: 'context.py',
+          contents: PYTHON_VAR,
+          required: true,
+        });
       }
     }
 
@@ -545,43 +595,51 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     language,
   });
 
-  fs.writeFileSync(path.join(directory, 'promptfooconfig.yaml'), config);
-  fs.writeFileSync(path.join(directory, 'README.md'), DEFAULT_README);
+  await writeFile({
+    file: 'README.md',
+    contents: DEFAULT_README,
+    required: false,
+  });
 
-  const isNpx = getEnvString('npm_execpath')?.includes('npx');
-  const runCommand = isNpx ? 'npx promptfoo@latest eval' : 'promptfoo eval';
-  if (directory === '.') {
-    logger.info(
-      chalk.green(
-        `✅ Wrote promptfooconfig.yaml. Run \`${chalk.bold(runCommand)}\` to get started!`,
-      ),
-    );
-  } else {
-    logger.info(`✅ Wrote promptfooconfig.yaml to ./${directory}`);
-    logger.info(
-      chalk.green(
-        `Run \`${chalk.bold(`cd ${directory}`)}\` and then \`${chalk.bold(
-          runCommand,
-        )}\` to get started!`,
-      ),
-    );
-  }
+  await writeFile({
+    file: 'promptfooconfig.yaml',
+    contents: config,
+    required: true,
+  });
 
   return {
     numPrompts: prompts.length,
     providerPrefixes: providers.map((p) => (typeof p === 'string' ? p.split(':')[0] : 'unknown')),
     action,
     language,
+    outDirectory,
   };
 }
 
 export async function initializeProject(directory: string | null, interactive: boolean = true) {
   try {
-    return await createDummyFiles(directory, interactive);
+    const result = await createDummyFiles(directory, interactive);
+    const { outDirectory, ...telemetryDetails } = result;
+
+    const runCommand = isRunningUnderNpx() ? 'npx promptfoo eval' : 'promptfoo eval';
+
+    if (outDirectory === '.') {
+      logger.info(chalk.green(`✅ Run \`${chalk.bold(runCommand)}\` to get started!`));
+    } else {
+      logger.info(`✅ Wrote promptfooconfig.yaml to ./${outDirectory}`);
+      logger.info(
+        chalk.green(
+          `Run \`${chalk.bold(`cd ${outDirectory}`)}\` and then \`${chalk.bold(
+            runCommand,
+          )}\` to get started!`,
+        ),
+      );
+    }
+
+    return telemetryDetails;
   } catch (err) {
     if (err instanceof ExitPromptError) {
-      const isNpx = getEnvString('npm_execpath')?.includes('npx');
-      const runCommand = isNpx ? 'npx promptfoo@latest init' : 'promptfoo init';
+      const runCommand = isRunningUnderNpx() ? 'npx promptfoo@latest init' : 'promptfoo init';
       logger.info(
         '\n' +
           chalk.blue('Initialization paused. To continue setup later, use the command: ') +

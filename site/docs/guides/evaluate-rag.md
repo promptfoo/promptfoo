@@ -333,6 +333,6 @@ tests:
   # ...
 ```
 
-By following this approach and setting up tests on [expected outputs](/docs/configuration/expected-outputs), you can ensure that the quality of your RAG pipeline is improving, and prevent regressions.
+By following this approach and setting up tests on [assertions & metrics](/docs/configuration/expected-outputs), you can ensure that the quality of your RAG pipeline is improving, and prevent regressions.
 
 See the [RAG example](https://github.com/promptfoo/promptfoo/tree/main/examples/rag-full) on GitHub for a fully functioning end-to-end example.

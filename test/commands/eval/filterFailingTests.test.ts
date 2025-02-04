@@ -1,5 +1,5 @@
 import { filterFailingTests } from '../../../src/commands/eval/filterFailingTests';
-import type { EvaluateSummaryV2, TestSuite } from '../../../src/types';
+import { ResultFailureReason, type EvaluateSummaryV2, type TestSuite } from '../../../src/types';
 import { readOutput } from '../../../src/util';
 
 jest.mock('../../../src/util', () => {
@@ -37,6 +37,7 @@ describe('filterFailingTests', () => {
           {
             ...restResult,
             success: true,
+            failureReason: ResultFailureReason.NONE,
             provider: { id: 'provider1' },
             vars: varsSuccess,
             promptIdx: 0,
@@ -47,6 +48,7 @@ describe('filterFailingTests', () => {
           {
             ...restResult,
             success: false,
+            failureReason: ResultFailureReason.NONE,
             provider: { id: 'provider2' },
             vars: varsFailure,
             promptIdx: 0,
@@ -89,6 +91,7 @@ describe('filterFailingTests', () => {
         results: [
           {
             success: true,
+            failureReason: ResultFailureReason.NONE,
             provider: { id: 'provider1' },
             vars: varsSuccess,
             prompt: {

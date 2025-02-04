@@ -1,4 +1,3 @@
-import invariant from 'tiny-invariant';
 import logger from '../logger';
 import type {
   ApiProvider,
@@ -7,7 +6,9 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types';
+import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
+import { sleep } from '../util/time';
 import { PromptfooSimulatedUserProvider } from './promptfoo';
 
 export type AgentSubproviderConfig = {
@@ -63,6 +64,10 @@ export class SimulatedUser implements ApiProvider {
     targetProvider: ApiProvider,
   ): Promise<Message[]> {
     const response = await targetProvider.callApi(JSON.stringify(messages));
+    if (targetProvider.delay) {
+      logger.debug(`[SimulatedUser] Sleeping for ${targetProvider.delay}ms`);
+      await sleep(targetProvider.delay);
+    }
     logger.debug(`Agent: ${response.output}`);
     return [...messages, { role: 'assistant', content: response.output }];
   }
@@ -82,9 +87,11 @@ export class SimulatedUser implements ApiProvider {
     logger.debug(`Formatted user instructions: ${instructions}`);
     let messages: Message[] = [];
     const maxTurns = this.maxTurns;
+    let numRequests = 0;
     for (let i = 0; i < maxTurns; i++) {
       messages = await this.sendMessageToUser(messages, userProvider);
       messages = await this.sendMessageToAgent(messages, context.originalProvider);
+      numRequests += 1; // Only count the request to the agent.
 
       const lastMessage = messages[messages.length - 1];
       if (lastMessage.content.includes('###STOP###')) {
@@ -98,6 +105,12 @@ export class SimulatedUser implements ApiProvider {
           (message) => `${message.role === 'assistant' ? 'Assistant' : 'User'}: ${message.content}`,
         )
         .join('\n---\n'),
+      tokenUsage: {
+        numRequests,
+      },
+      metadata: {
+        messages,
+      },
     };
   }
 

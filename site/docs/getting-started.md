@@ -254,7 +254,7 @@ You can also output a nice [spreadsheet](https://docs.google.com/spreadsheets/d/
 
 ### Model quality
 
-In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-4o-vs-4o-mini), we evaluate the difference between GPT 3 and GPT 4 outputs for a given prompt:
+In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-4o-vs-4o-mini), we evaluate the difference between GPT 4o and GPT 4o mini outputs for a given prompt:
 
 ```yaml title=promptfooconfig.yaml
 prompts:
@@ -264,7 +264,7 @@ prompts:
 # Set the LLMs we want to test
 providers:
   - openai:gpt-4o-mini
-  - openai:gpt-4
+  - openai:gpt-4o
 ```
 
 A simple `npx promptfoo@latest eval` will run the example. Also note that you can override parameters directly from the command line. For example, this command:
@@ -307,4 +307,4 @@ There are many examples available in the [`examples/` directory](https://github.
 
 The above examples create a table of outputs that can be manually reviewed. By setting up assertions, you can automatically grade outputs on a pass/fail basis.
 
-For more information on automatically assessing outputs, see [Expected Outputs](/docs/configuration/expected-outputs).
+For more information on automatically assessing outputs, see [Assertions & Metrics](/docs/configuration/expected-outputs).

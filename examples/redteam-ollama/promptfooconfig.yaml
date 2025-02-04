@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Ollama Red Team Example'
+
+prompts:
+  - file://system_message.txt
+
+targets:
+  - id: ollama:chat:llama3.2
+    label: llama3.2-redteam
+    config:
+      temperature: 0.7
+      max_tokens: 150
+
+redteam:
+  numTests: 5
+  purpose: 'The system is a helpful chatbot assistant that answers questions and helps with tasks.'
+  plugins:
+    - harmful
+    - pii
+    - contracts
+    - hallucination
+    - imitation
+  strategies:
+    - jailbreak
+    - jailbreak:composite

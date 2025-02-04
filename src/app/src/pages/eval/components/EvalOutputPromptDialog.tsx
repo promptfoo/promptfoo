@@ -16,14 +16,9 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TextareaAutosize from '@mui/material/TextareaAutosize';
 import Typography from '@mui/material/Typography';
+import { ellipsize } from '../../../../../utils/text';
+import ChatMessages, { type Message } from './ChatMessages';
 import type { GradingResult } from './types';
-
-function ellipsize(value: string, maxLength: number) {
-  if (value.length <= maxLength) {
-    return value;
-  }
-  return value.slice(0, maxLength) + '...';
-}
 
 function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[] }) {
   const [expandedValues, setExpandedValues] = useState<{ [key: number]: boolean }>({});
@@ -31,6 +26,8 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
   if (!gradingResults) {
     return null;
   }
+
+  const hasMetrics = gradingResults.some((result) => result?.assertion?.metric);
 
   const toggleExpand = (index: number) => {
     setExpandedValues((prev) => ({ ...prev, [index]: !prev[index] }));
@@ -43,6 +40,7 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
         <Table>
           <TableHead>
             <TableRow>
+              {hasMetrics && <TableCell style={{ fontWeight: 'bold' }}>Metric</TableCell>}
               <TableCell style={{ fontWeight: 'bold' }}>Pass</TableCell>
               <TableCell style={{ fontWeight: 'bold' }}>Score</TableCell>
               <TableCell style={{ fontWeight: 'bold' }}>Type</TableCell>
@@ -65,6 +63,7 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
 
               return (
                 <TableRow key={i}>
+                  {hasMetrics && <TableCell>{result.assertion?.metric || ''}</TableCell>}
                   <TableCell>{result.pass ? '✅' : '❌'}</TableCell>
                   <TableCell>{result.score?.toFixed(2)}</TableCell>
                   <TableCell>{result.assertion?.type || ''}</TableCell>
@@ -83,6 +82,13 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
       </TableContainer>
     </Box>
   );
+}
+
+interface ExpandedMetadataState {
+  [key: string]: {
+    expanded: boolean;
+    lastClickTime: number;
+  };
 }
 
 interface EvalOutputPromptDialogProps {
@@ -105,7 +111,7 @@ export default function EvalOutputPromptDialog({
   metadata,
 }: EvalOutputPromptDialogProps) {
   const [copied, setCopied] = useState(false);
-  const [expandedMetadata, setExpandedMetadata] = useState<{ [key: string]: boolean }>({});
+  const [expandedMetadata, setExpandedMetadata] = useState<ExpandedMetadataState>({});
 
   useEffect(() => {
     setCopied(false);
@@ -116,9 +122,24 @@ export default function EvalOutputPromptDialog({
     setCopied(true);
   };
 
-  const toggleMetadataExpand = (key: string) => {
-    setExpandedMetadata((prev) => ({ ...prev, [key]: !prev[key] }));
+  const handleMetadataClick = (key: string) => {
+    const now = Date.now();
+    const lastClick = expandedMetadata[key]?.lastClickTime || 0;
+    const isDoubleClick = now - lastClick < 300; // 300ms threshold
+
+    setExpandedMetadata((prev: ExpandedMetadataState) => ({
+      ...prev,
+      [key]: {
+        expanded: isDoubleClick ? false : true,
+        lastClickTime: now,
+      },
+    }));
   };
+
+  let parsedMessages: Message[] = [];
+  try {
+    parsedMessages = JSON.parse(metadata?.messages || '[]');
+  } catch {}
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
@@ -168,6 +189,7 @@ export default function EvalOutputPromptDialog({
           </Box>
         )}
         <AssertionResults gradingResults={gradingResults} />
+        {parsedMessages && parsedMessages.length > 0 && <ChatMessages messages={parsedMessages} />}
         {metadata && Object.keys(metadata).length > 0 && (
           <Box my={2}>
             <Typography variant="subtitle1" style={{ marginBottom: '1rem', marginTop: '1rem' }}>
@@ -189,16 +211,15 @@ export default function EvalOutputPromptDialog({
                   {Object.entries(metadata).map(([key, value]) => {
                     const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
                     const truncatedValue = ellipsize(stringValue, 300);
-                    const isExpanded = expandedMetadata[key] || false;
 
                     return (
                       <TableRow key={key}>
                         <TableCell>{key}</TableCell>
                         <TableCell
                           style={{ whiteSpace: 'pre-wrap', cursor: 'pointer' }}
-                          onClick={() => toggleMetadataExpand(key)}
+                          onClick={() => handleMetadataClick(key)}
                         >
-                          {isExpanded ? stringValue : truncatedValue}
+                          {expandedMetadata[key]?.expanded ? stringValue : truncatedValue}
                         </TableCell>
                       </TableRow>
                     );
@@ -206,6 +227,33 @@ export default function EvalOutputPromptDialog({
                 </TableBody>
               </Table>
             </TableContainer>
+          </Box>
+        )}
+        {(metadata?.redteamHistory || metadata?.redteamTreeHistory) && (
+          <Box mt={2} mb={3}>
+            <ChatMessages
+              title="Attempts"
+              messages={(metadata?.redteamHistory ?? metadata?.redteamTreeHistory ?? [])
+                .filter((entry: any) => entry?.prompt && entry?.output)
+                .flatMap(
+                  (entry: {
+                    prompt: string;
+                    output: string;
+                    score?: number;
+                    isOnTopic?: boolean;
+                    graderPassed?: boolean;
+                  }) => [
+                    {
+                      role: 'user' as const,
+                      content: entry.prompt,
+                    },
+                    {
+                      role: 'assistant' as const,
+                      content: entry.output,
+                    },
+                  ],
+                )}
+            />
           </Box>
         )}
       </DialogContent>

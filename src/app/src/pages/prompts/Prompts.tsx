@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSearchParams } from 'react-router-dom';
 import { callApi } from '@app/utils/api';
@@ -29,6 +29,7 @@ export default function Prompts() {
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedPromptIndex, setSelectedPromptIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const hasShownPopup = useRef(false);
 
   const handleSort = (field: string) => {
     const order = sortField === field && sortOrder === 'asc' ? 'desc' : 'asc';
@@ -66,11 +67,15 @@ export default function Prompts() {
   };
 
   useEffect(() => {
+    if (hasShownPopup.current) {
+      return;
+    }
     const promptId = searchParams.get('id');
     if (promptId) {
       const promptIndex = prompts.findIndex((prompt) => prompt.id.startsWith(promptId));
       if (promptIndex !== -1) {
         handleClickOpen(promptIndex);
+        hasShownPopup.current = true;
       }
     }
   }, [prompts, searchParams]);

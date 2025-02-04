@@ -2,7 +2,8 @@ import Anthropic, { APIError } from '@anthropic-ai/sdk';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString, getEnvFloat, getEnvInt } from '../envars';
 import logger from '../logger';
-import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
+import type { ApiProvider, ProviderResponse, TokenUsage } from '../types';
+import type { EnvOverrides } from '../types/env';
 import { maybeLoadFromExternalFile } from '../util';
 import { calculateCost } from './shared';
 
@@ -28,35 +29,34 @@ const ANTHROPIC_MODELS = [
       output: 0.024 / 1000,
     },
   })),
-  ...['claude-3-haiku-20240307'].map((model) => ({
+  ...['claude-3-haiku-20240307', 'claude-3-haiku-latest'].map((model) => ({
     id: model,
     cost: {
       input: 0.00025 / 1000,
       output: 0.00125 / 1000,
     },
   })),
-  ...['claude-3-sonnet-20240229'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.003 / 1000,
-      output: 0.015 / 1000,
-    },
-  })),
-  ...['claude-3-opus-20240229'].map((model) => ({
+  ...['claude-3-opus-20240229', 'claude-3-opus-latest'].map((model) => ({
     id: model,
     cost: {
       input: 0.015 / 1000,
       output: 0.075 / 1000,
     },
   })),
-  ...['claude-3-5-haiku-20241022'].map((model) => ({
+  ...['claude-3-5-haiku-20241022', 'claude-3-5-haiku-latest'].map((model) => ({
     id: model,
     cost: {
       input: 1 / 1e6,
       output: 5 / 1e6,
     },
   })),
-  ...['claude-3-5-sonnet-20240620', 'claude-3-5-sonnet-20241022'].map((model) => ({
+  ...[
+    'claude-3-sonnet-20240229',
+    'claude-3-sonnet-latest',
+    'claude-3-5-sonnet-20240620',
+    'claude-3-5-sonnet-20241022',
+    'claude-3-5-sonnet-latest',
+  ].map((model) => ({
     id: model,
     cost: {
       input: 3 / 1e6,

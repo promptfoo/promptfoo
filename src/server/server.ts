@@ -1,37 +1,34 @@
 import compression from 'compression';
 import cors from 'cors';
-import debounce from 'debounce';
 import type { Request, Response } from 'express';
 import express from 'express';
-import type { Stats } from 'fs';
-import fs from 'fs';
 import http from 'node:http';
 import path from 'node:path';
-import readline from 'node:readline';
-import opener from 'opener';
 import { Server as SocketIOServer } from 'socket.io';
-import invariant from 'tiny-invariant';
 import { fromError } from 'zod-validation-error';
-import { createPublicUrl } from '../commands/share';
-import { VERSION } from '../constants';
-import { getDbSignalPath } from '../database';
+import { createPublicUrl, determineShareDomain } from '../commands/share';
+import { DEFAULT_PORT, VERSION } from '../constants';
+import { setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
-import telemetry from '../telemetry';
-import { TelemetryEventSchema } from '../telemetry';
+import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
+import telemetry, { TelemetryEventSchema } from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCases';
 import {
+  getLatestEval,
   getPrompts,
   getPromptsForTestCasesHash,
+  getStandaloneEvals,
+  getTestCases,
   listPreviousResults,
   readResult,
-  getTestCases,
-  getLatestEval,
-  getStandaloneEvals,
 } from '../util';
+import { checkRemoteHealth } from '../util/apiHealth';
+import invariant from '../util/invariant';
+import { BrowserBehavior, openBrowser } from '../util/server';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
 import { providersRouter } from './routes/providers';
@@ -40,13 +37,6 @@ import { userRouter } from './routes/user';
 
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
-
-export enum BrowserBehavior {
-  ASK = 0,
-  OPEN = 1,
-  SKIP = 2,
-  OPEN_TO_REPORT = 3,
-}
 
 export function createApp() {
   const app = express();
@@ -61,6 +51,21 @@ export function createApp() {
     res.status(200).json({ status: 'OK', version: VERSION });
   });
 
+  app.get('/api/remote-health', async (req: Request, res: Response): Promise<void> => {
+    const apiUrl = getRemoteHealthUrl();
+
+    if (apiUrl === null) {
+      res.json({
+        status: 'DISABLED',
+        message: 'remote generation and grading are disabled',
+      });
+      return;
+    }
+
+    const result = await checkRemoteHealth(apiUrl);
+    res.json(result);
+  });
+
   app.get('/api/results', async (req: Request, res: Response): Promise<void> => {
     const datasetId = req.query.datasetId as string | undefined;
     const previousResults = await listPreviousResults(
@@ -73,7 +78,6 @@ export function createApp() {
         return {
           ...meta,
           label: meta.description ? `${meta.description} (${meta.evalId})` : meta.evalId,
-          isRedTeam: meta.isRedteam,
         };
       }),
     });
@@ -119,19 +123,45 @@ export function createApp() {
     res.json({ data: await getTestCases() });
   });
 
-  // This is used by ResultsView.tsx to share an eval with another promptfoo instance
+  app.get('/api/results/share/check-domain', async (req: Request, res: Response): Promise<void> => {
+    const id = String(req.query.id);
+    if (!id) {
+      res.status(400).json({ error: 'Missing id parameter' });
+      return;
+    }
+
+    const eval_ = await Eval.findById(id);
+    if (!eval_) {
+      logger.warn(`Eval not found for id: ${id}`);
+      res.status(404).json({ error: 'Eval not found' });
+      return;
+    }
+
+    const { domain } = determineShareDomain(eval_);
+    res.json({ domain });
+  });
+
   app.post('/api/results/share', async (req: Request, res: Response): Promise<void> => {
+    logger.debug(`Share request body: ${JSON.stringify(req.body)}`);
     const { id } = req.body;
 
     const result = await readResult(id);
     if (!result) {
+      logger.warn(`Result not found for id: ${id}`);
       res.status(404).json({ error: 'Eval not found' });
       return;
     }
     const eval_ = await Eval.findById(id);
     invariant(eval_, 'Eval not found');
-    const url = await createPublicUrl(eval_, true);
-    res.json({ url });
+
+    try {
+      const url = await createPublicUrl(eval_, true);
+      logger.debug(`Generated share URL: ${url}`);
+      res.json({ url });
+    } catch (error) {
+      logger.error(`Failed to generate share URL: ${error}`);
+      res.status(500).json({ error: 'Failed to generate share URL' });
+    }
   });
 
   app.post('/api/dataset/generate', async (req: Request, res: Response): Promise<void> => {
@@ -180,8 +210,8 @@ export function createApp() {
   return app;
 }
 
-export function startServer(
-  port = 15500,
+export async function startServer(
+  port = DEFAULT_PORT,
   browserBehavior = BrowserBehavior.ASK,
   filterDescription?: string,
 ) {
@@ -194,18 +224,16 @@ export function startServer(
     },
   });
 
-  runDbMigrations().then(() => {
-    logger.info('Migrated results from file system to database');
-  });
+  await runDbMigrations();
 
-  const watchFilePath = getDbSignalPath();
-  const watcher = debounce(async (curr: Stats, prev: Stats) => {
-    if (curr.mtime !== prev.mtime) {
-      io.emit('update', await getLatestEval(filterDescription));
+  setupSignalWatcher(async () => {
+    const latestEval = await getLatestEval(filterDescription);
+    if ((latestEval?.results.results.length || 0) > 0) {
+      logger.info(`Emitting update with eval ID: ${latestEval?.config?.description || 'unknown'}`);
+      io.emit('update', latestEval);
       allPrompts = null;
     }
-  }, 250);
-  fs.watchFile(watchFilePath, watcher);
+  });
 
   io.on('connection', async (socket) => {
     socket.emit('init', await getLatestEval(filterDescription));
@@ -215,42 +243,14 @@ export function startServer(
     .listen(port, () => {
       const url = `http://localhost:${port}`;
       logger.info(`Server running at ${url} and monitoring for new evals.`);
-
-      const openUrl = async () => {
-        try {
-          logger.info('Press Ctrl+C to stop the server');
-          if (browserBehavior === BrowserBehavior.OPEN_TO_REPORT) {
-            await opener(`${url}/report`);
-          } else {
-            await opener(url);
-          }
-        } catch (err) {
-          logger.error(`Failed to open browser: ${String(err)}`);
-        }
-      };
-
-      if (
-        browserBehavior === BrowserBehavior.OPEN ||
-        browserBehavior === BrowserBehavior.OPEN_TO_REPORT
-      ) {
-        openUrl();
-      } else if (browserBehavior === BrowserBehavior.ASK) {
-        const rl = readline.createInterface({
-          input: process.stdin,
-          output: process.stdout,
-        });
-        rl.question('Open URL in browser? (y/N): ', async (answer) => {
-          if (answer.toLowerCase().startsWith('y')) {
-            openUrl();
-          }
-          rl.close();
-        });
-      }
+      openBrowser(browserBehavior, port).catch((err) => {
+        logger.error(`Failed to handle browser behavior: ${err}`);
+      });
     })
     .on('error', (error: NodeJS.ErrnoException) => {
       if (error.code === 'EADDRINUSE') {
         logger.error(
-          `Unable to start server on port ${port}. It's currently in use. Check for existing promptfoo instances.`,
+          `Port ${port} is already in use. Do you have another Promptfoo instance running?`,
         );
         process.exit(1);
       } else {

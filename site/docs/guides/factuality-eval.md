@@ -81,6 +81,6 @@ The above configuration marks the eval as failed if the LLM output is a superset
 
 ## Model grading
 
-In general, grading should be done by a model that is proficient in reasoning. By default, promptfoo uses GPT-4 to run model-graded evals.
+In general, grading should be done by a model that is proficient in reasoning. By default, promptfoo uses GPT-4o to run model-graded evals.
 
 However, you can use any model you want to grade the evals. To use something other than GPT-4, see [overriding the LLM grader](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader).
