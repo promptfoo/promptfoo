@@ -1,4 +1,3 @@
-import type { TestCase } from '../types';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 import type { Plugin, Severity } from './constants';
 
@@ -23,6 +22,15 @@ type ConfigurableObject = {
 
 type WithNumTests = {
   numTests?: number;
+};
+
+type TestCase = {
+  description?: string;
+  vars?: Record<string, unknown>;
+  provider?: string | ProviderOptions | ApiProvider;
+  providerOutput?: string | Record<string, unknown>;
+  assert?: any;
+  options?: any;
 };
 
 // Derived types
