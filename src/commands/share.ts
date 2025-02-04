@@ -3,7 +3,6 @@ import type { Command } from 'commander';
 import dedent from 'dedent';
 import readline from 'readline';
 import { URL } from 'url';
-import { DEFAULT_SHARE_VIEW_BASE_URL } from '../constants';
 import { getEnvString } from '../envars';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
@@ -13,31 +12,7 @@ import telemetry from '../telemetry';
 import { setupEnv } from '../util';
 import invariant from '../util/invariant';
 
-interface ShareDomainResult {
-  domain: string;
-  isPublicShare: boolean;
-}
-
-export function determineShareDomain(eval_: Eval): ShareDomainResult {
-  const sharing = eval_.config.sharing;
-  logger.debug(
-    `Share config: isCloudEnabled=${cloudConfig.isEnabled()}, sharing=${JSON.stringify(sharing)}, evalId=${eval_.id}`,
-  );
-
-  const isPublicShare =
-    !cloudConfig.isEnabled() && (!sharing || sharing === true || !('appBaseUrl' in sharing));
-
-  const domain = isPublicShare
-    ? DEFAULT_SHARE_VIEW_BASE_URL
-    : cloudConfig.isEnabled()
-      ? cloudConfig.getAppUrl()
-      : typeof sharing === 'object' && sharing.appBaseUrl
-        ? sharing.appBaseUrl
-        : DEFAULT_SHARE_VIEW_BASE_URL;
-
-  logger.debug(`Share domain determined: domain=${domain}, isPublic=${isPublicShare}`);
-  return { domain, isPublicShare };
-}
+export { determineShareDomain } from '../share';
 
 export async function createPublicUrl(evalRecord: Eval, showAuth: boolean) {
   const url = await createShareableUrl(evalRecord, showAuth);

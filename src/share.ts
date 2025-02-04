@@ -2,7 +2,6 @@ import input from '@inquirer/input';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { URL } from 'url';
-import { determineShareDomain } from './commands/share';
 import { DEFAULT_SHARE_VIEW_BASE_URL, SHARE_API_BASE_URL, SHARE_VIEW_BASE_URL } from './constants';
 import { getEnvBool, getEnvInt, isCI } from './envars';
 import { fetchWithProxy } from './fetch';
@@ -12,6 +11,32 @@ import logger from './logger';
 import type Eval from './models/eval';
 import type { SharedResults } from './types';
 import { cloudCanAcceptChunkedResults } from './util/cloud';
+
+export interface ShareDomainResult {
+  domain: string;
+  isPublicShare: boolean;
+}
+
+export function determineShareDomain(eval_: Eval): ShareDomainResult {
+  const sharing = eval_.config.sharing;
+  logger.debug(
+    `Share config: isCloudEnabled=${cloudConfig.isEnabled()}, sharing=${JSON.stringify(sharing)}, evalId=${eval_.id}`,
+  );
+
+  const isPublicShare =
+    !cloudConfig.isEnabled() && (!sharing || sharing === true || !('appBaseUrl' in sharing));
+
+  const domain = isPublicShare
+    ? DEFAULT_SHARE_VIEW_BASE_URL
+    : cloudConfig.isEnabled()
+      ? cloudConfig.getAppUrl()
+      : typeof sharing === 'object' && sharing.appBaseUrl
+        ? sharing.appBaseUrl
+        : DEFAULT_SHARE_VIEW_BASE_URL;
+
+  logger.debug(`Share domain determined: domain=${domain}, isPublic=${isPublicShare}`);
+  return { domain, isPublicShare };
+}
 
 const VERSION_SUPPORTS_CHUNKS = '0.103.8';
 
