@@ -27,7 +27,7 @@ const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, evalId, onShare 
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const checkDomain = async () => {
+    const handleShare = async () => {
       if (!open || !evalId) {
         return;
       }
@@ -37,8 +37,22 @@ const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, evalId, onShare 
         const data = await response.json();
 
         if (response.ok) {
-          // Only show confirmation for public domain shares
-          setShowConfirmation(data.domain.includes('app.promptfoo.dev'));
+          const isPublicDomain = data.domain.includes('app.promptfoo.dev');
+          setShowConfirmation(isPublicDomain);
+
+          // If it's not a public domain or we already have a URL, no need to generate
+          if (!isPublicDomain && !shareUrl && !error) {
+            setIsLoading(true);
+            try {
+              const url = await onShare(evalId);
+              setShareUrl(url);
+            } catch (error) {
+              console.error('Failed to generate share URL:', error);
+              setError('Failed to generate share URL');
+            } finally {
+              setIsLoading(false);
+            }
+          }
         } else {
           setError(data.error || 'Failed to check share domain');
         }
@@ -48,8 +62,8 @@ const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, evalId, onShare 
       }
     };
 
-    checkDomain();
-  }, [open, evalId]);
+    handleShare();
+  }, [open, evalId, shareUrl, error, onShare]);
 
   const handleCopyClick = () => {
     if (inputRef.current) {
@@ -80,26 +94,6 @@ const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, evalId, onShare 
       setIsLoading(false);
     }
   };
-
-  // If there's no confirmation needed, generate the URL immediately
-  useEffect(() => {
-    const generateUrl = async () => {
-      if (open && !showConfirmation && !shareUrl && !error) {
-        setIsLoading(true);
-        try {
-          const url = await onShare(evalId);
-          setShareUrl(url);
-        } catch (error) {
-          console.error('Failed to generate share URL:', error);
-          setError('Failed to generate share URL');
-        } finally {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    generateUrl();
-  }, [open, showConfirmation, shareUrl, evalId, error]);
 
   if (error) {
     return (
