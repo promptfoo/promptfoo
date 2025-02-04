@@ -1,8 +1,9 @@
 import dedent from 'dedent';
+import path from 'path';
+import { loadFromJavaScriptFile } from './assertions/utils';
 import cliState from './cliState';
 import { getEnvString } from './envars';
 import logger from './logger';
-import path from 'path';
 import {
   ANSWER_RELEVANCY_GENERATE,
   SELECT_BEST_PROMPT,
@@ -35,11 +36,10 @@ import type {
   ApiModerationProvider,
 } from './types';
 import { maybeLoadFromExternalFile } from './util';
+import { isJavascriptFile } from './util/file';
 import invariant from './util/invariant';
 import { extractJsonObjects } from './util/json';
 import { getNunjucksEngine } from './util/templates';
-import { isJavascriptFile } from './util/file';
-import { loadFromJavaScriptFile } from './assertions/utils';
 
 const nunjucks = getNunjucksEngine(undefined, false, true);
 
@@ -1202,3 +1202,5 @@ export async function matchesModeration(
     reason: 'No relevant moderation flags detected',
   };
 }
+
+export { nunjucks, cosineSimilarity, fromVars, loadFromProviderOptions, fail, loadRubricPrompt };
