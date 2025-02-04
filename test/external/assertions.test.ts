@@ -66,7 +66,7 @@ describe('handleConversationRelevance', () => {
     expect(result.score).toBe(1);
   });
 
-  it('should ignore outputString when _conversation is present', async () => {
+  it('should ignore outputString when _conversation is present and non-empty', async () => {
     const conversation = [{ input: 'Hi', output: 'Hello! How can I help you?' }];
 
     const params: AssertionParams = {
@@ -215,5 +215,53 @@ describe('handleConversationRelevance', () => {
     const result = await handleConversationRelevance(params);
     expect(result).toHaveProperty('score');
     expect(result).toHaveProperty('pass');
+  });
+
+  it('should use outputString when _conversation is empty', async () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'conversation-relevance',
+        threshold: 0.8,
+      },
+      prompt: 'What is the weather like?',
+      outputString: 'The weather is sunny today.',
+      test: {
+        vars: {
+          _conversation: [], // Empty conversation array
+        },
+        options: {
+          provider: createMockProvider('yes'),
+        },
+      },
+    };
+
+    const result = await handleConversationRelevance(params);
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+  });
+
+  it('should use outputString when _conversation is undefined', async () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'conversation-relevance',
+        threshold: 0.8,
+      },
+      prompt: 'What is the weather like?',
+      outputString: 'The weather is sunny today.',
+      test: {
+        vars: {
+          // _conversation is not defined
+        },
+        options: {
+          provider: createMockProvider('yes'),
+        },
+      },
+    };
+
+    const result = await handleConversationRelevance(params);
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
   });
 });

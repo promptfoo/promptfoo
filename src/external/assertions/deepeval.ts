@@ -14,7 +14,7 @@ export const handleConversationRelevance = async ({
   test,
 }: AssertionParams): Promise<GradingResult> => {
   let messages: Message[] = [];
-  if (test.vars?._conversation) {
+  if (test.vars?._conversation && (test.vars._conversation as Message[]).length > 0) {
     messages = test.vars?._conversation as Message[];
   } else {
     invariant(
@@ -29,7 +29,6 @@ export const handleConversationRelevance = async ({
       },
     ];
   }
-
   const windowSize = assertion.config?.windowSize || DEFAULT_WINDOW_SIZE;
   const threshold = assertion.threshold || 0;
   let relevantCount = 0;
