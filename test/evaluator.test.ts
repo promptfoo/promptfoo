@@ -1985,7 +1985,7 @@ describe('runEval', () => {
   };
 
   it('should handle basic prompt evaluation', async () => {
-    const result = await runEval({
+    const results = await runEval({
       ...defaultOptions,
       provider: mockProvider,
       prompt: { raw: 'Test prompt', label: 'test-label' },
@@ -1993,7 +1993,7 @@ describe('runEval', () => {
       conversations: {},
       registers: {},
     });
-
+    const result = results[0];
     expect(result.success).toBe(true);
     expect(result.response?.output).toBe('Test output');
     expect(result.prompt.label).toBe('test-label');
@@ -2007,7 +2007,7 @@ describe('runEval', () => {
   it('should handle conversation history', async () => {
     const conversations = {} as Record<string, any>;
 
-    const result = await runEval({
+    const results = await runEval({
       ...defaultOptions,
       provider: mockProvider,
       prompt: { raw: 'Hello {{_conversation[0].output}}', label: 'test-label' },
@@ -2015,7 +2015,7 @@ describe('runEval', () => {
       conversations,
       registers: {},
     });
-
+    const result = results[0];
     expect(result.success).toBe(true);
     expect(conversations).toHaveProperty('test-provider:undefined');
     expect(conversations['test-provider:undefined']).toHaveLength(1);
@@ -2029,7 +2029,7 @@ describe('runEval', () => {
   it('should handle conversation with custom ID', async () => {
     const conversations = {};
 
-    const result = await runEval({
+    const results = await runEval({
       ...defaultOptions,
       provider: mockProvider,
       prompt: { raw: 'Hello {{_conversation[0].output}}', label: 'test-label', id: 'custom-id' },
@@ -2037,7 +2037,7 @@ describe('runEval', () => {
       conversations,
       registers: {},
     });
-
+    const result = results[0];
     expect(result.success).toBe(true);
     expect(conversations).toHaveProperty('test-provider:custom-id:conv1');
   });
@@ -2045,7 +2045,7 @@ describe('runEval', () => {
   it('should handle registers', async () => {
     const registers = { savedValue: 'stored data' };
 
-    const result = await runEval({
+    const results = await runEval({
       ...defaultOptions,
       provider: mockProvider,
       prompt: { raw: 'Using {{savedValue}}', label: 'test-label' },
@@ -2053,7 +2053,7 @@ describe('runEval', () => {
       conversations: {},
       registers,
     });
-
+    const result = results[0];
     expect(result.success).toBe(true);
     expect(mockProvider.callApi).toHaveBeenCalledWith(
       'Using stored data',
@@ -2065,7 +2065,7 @@ describe('runEval', () => {
   it('should store output in register when specified', async () => {
     const registers = {};
 
-    const result = await runEval({
+    const results = await runEval({
       ...defaultOptions,
       provider: mockProvider,
       prompt: { raw: 'Test prompt', label: 'test-label' },
@@ -2073,7 +2073,7 @@ describe('runEval', () => {
       conversations: {},
       registers,
     });
-
+    const result = results[0];
     expect(result.success).toBe(true);
     expect(registers).toHaveProperty('myOutput', 'Test output');
   });
@@ -2084,7 +2084,7 @@ describe('runEval', () => {
       callApi: jest.fn().mockRejectedValue(new Error('API Error')),
     };
 
-    const result = await runEval({
+    const results = await runEval({
       ...defaultOptions,
       provider: errorProvider,
       prompt: { raw: 'Test prompt', label: 'test-label' },
@@ -2092,7 +2092,7 @@ describe('runEval', () => {
       conversations: {},
       registers: {},
     });
-
+    const result = results[0];
     expect(result.success).toBe(false);
     expect(result.error).toContain('API Error');
     expect(result.failureReason).toBe(ResultFailureReason.ERROR);
@@ -2108,7 +2108,7 @@ describe('runEval', () => {
     };
 
     // Regular test
-    const regularResult = await runEval({
+    const regularResults = await runEval({
       ...defaultOptions,
       provider: nullOutputProvider,
       prompt: { raw: 'Test prompt', label: 'test-label' },
@@ -2118,11 +2118,11 @@ describe('runEval', () => {
       isRedteam: false,
     });
 
-    expect(regularResult.success).toBe(false);
-    expect(regularResult.error).toBe('No output');
+    expect(regularResults[0].success).toBe(false);
+    expect(regularResults[0].error).toBe('No output');
 
     // Red team test
-    const redTeamResult = await runEval({
+    const redTeamResults = await runEval({
       ...defaultOptions,
       provider: nullOutputProvider,
       prompt: { raw: 'Test prompt', label: 'test-label' },
@@ -2132,8 +2132,8 @@ describe('runEval', () => {
       isRedteam: true,
     });
 
-    expect(redTeamResult.success).toBe(true);
-    expect(redTeamResult.error).toBeUndefined();
+    expect(redTeamResults[0].success).toBe(true);
+    expect(redTeamResults[0].error).toBeUndefined();
   });
 
   it('should apply transforms in correct order', async () => {
@@ -2146,7 +2146,7 @@ describe('runEval', () => {
       transform: 'output + "-provider"',
     };
 
-    const result = await runEval({
+    const results = await runEval({
       ...defaultOptions,
       provider: providerWithTransform,
       prompt: { raw: 'Test prompt', label: 'test-label' },
@@ -2157,12 +2157,12 @@ describe('runEval', () => {
       registers: {},
     });
 
-    expect(result.success).toBe(true);
-    expect(result.response?.output).toBe('original-provider-test');
+    expect(results[0].success).toBe(true);
+    expect(results[0].response?.output).toBe('original-provider-test');
   });
 
   it('should accumulate token usage correctly', async () => {
-    const result = await runEval({
+    const results = await runEval({
       ...defaultOptions,
 
       provider: mockProvider,
@@ -2180,7 +2180,7 @@ describe('runEval', () => {
       registers: {},
     });
 
-    expect(result.tokenUsage).toEqual({
+    expect(results[0].tokenUsage).toEqual({
       total: 20, // 10 from provider + 5 from assertion
       prompt: 10, // 5 from provider + 5 from assertion
       completion: 10, // 5 from provider + 5 from assertion

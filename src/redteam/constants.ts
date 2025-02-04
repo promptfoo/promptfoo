@@ -21,7 +21,49 @@ export const LLAMA_GUARD_ENABLED_CATEGORIES: string[] = [
   'S13', // Elections
 ];
 
-export const COLLECTIONS = ['default', 'harmful', 'pii'] as const;
+export const FOUNDATION_PLUGINS = [
+  'ascii-smuggling',
+  'beavertails',
+  'contracts',
+  'cyberseceval',
+  'divergent-repetition',
+  'excessive-agency',
+  'hallucination',
+  'harmful:chemical-biological-weapons',
+  'harmful:child-exploitation',
+  'harmful:copyright-violations',
+  'harmful:cybercrime',
+  'harmful:cybercrime:malicious-code',
+  'harmful:graphic-content',
+  'harmful:harassment-bullying',
+  'harmful:hate',
+  'harmful:illegal-activities',
+  'harmful:illegal-drugs',
+  'harmful:illegal-drugs:meth',
+  'harmful:indiscriminate-weapons',
+  'harmful:insults',
+  'harmful:intellectual-property',
+  'harmful:misinformation-disinformation',
+  'harmful:non-violent-crime',
+  'harmful:profanity',
+  'harmful:radicalization',
+  'harmful:self-harm',
+  'harmful:sex-crime',
+  'harmful:sexual-content',
+  'harmful:specialized-advice',
+  'harmful:unsafe-practices',
+  'harmful:violent-crime',
+  'harmful:weapons:ied',
+  'hijacking',
+  'imitation',
+  'overreliance',
+  'pii:direct',
+  'pliny',
+  'politics',
+  'religion',
+] as const;
+
+export const COLLECTIONS = ['default', 'foundation', 'harmful', 'pii'] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 
 export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
@@ -508,7 +550,13 @@ export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 export const MULTI_TURN_STRATEGIES = ['crescendo', 'goat'] as const;
 export type MultiTurnStrategy = (typeof MULTI_TURN_STRATEGIES)[number];
 
-export const AGENTIC_STRATEGIES = ['crescendo', 'goat', 'jailbreak', 'jailbreak:tree'] as const;
+export const AGENTIC_STRATEGIES = [
+  'crescendo',
+  'goat',
+  'jailbreak',
+  'jailbreak:tree',
+  'pandamonium',
+] as const;
 export type AgenticStrategy = (typeof AGENTIC_STRATEGIES)[number];
 
 export const ADDITIONAL_STRATEGIES = [
@@ -526,6 +574,7 @@ export const ADDITIONAL_STRATEGIES = [
   'multilingual',
   'rot13',
   'best-of-n',
+  'pandamonium',
 ] as const;
 export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
 
@@ -533,6 +582,8 @@ export const ALL_STRATEGIES = ['default', ...DEFAULT_STRATEGIES, ...ADDITIONAL_S
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
+  pandamonium:
+    "[Experimental] Promptfoo's blackbox jailbreak. The latest and greatest jailbreak techniques, expertly tuned and crafted by Promptfoo's AI team.",
   default: 'Standard security testing plugins',
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
   base64: 'Tests handling of Base64-encoded malicious payloads',
@@ -552,6 +603,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests for training data leaks through repetitive pattern exploitation that causes model divergence',
   'jailbreak:likert': 'Uses Likert scale-based prompts to bypass content filters',
   'excessive-agency': 'Tests for unauthorized actions beyond defined system boundaries',
+  foundation: 'Tests a collection of plugins designed to run against foundation models',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Dynamic multi-turn attack generation using adversarial techniques',
   hallucination: 'Tests for fabrication of false or misleading information',
@@ -617,6 +669,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
 
 // These names are displayed in risk cards and in the table
 export const displayNameOverrides: Record<Plugin | Strategy, string> = {
+  pandamonium: '[Experimental] Pandamonium',
   'ascii-smuggling': 'ASCII Smuggling',
   base64: 'Base64 Payload Encoding',
   basic: 'Baseline Testing',
@@ -635,6 +688,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   default: 'Standard Security Suite',
   'divergent-repetition': 'Divergent Repetition',
   'excessive-agency': 'Excessive Agency',
+  foundation: 'Foundation Model Plugin Collection',
   gcg: 'Greedy Coordinate Gradient',
   goat: 'Generative Offensive Agent Tester',
   hallucination: 'False Information (Hallucination)',
@@ -729,6 +783,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   default: Severity.Low,
   'divergent-repetition': Severity.Medium,
   'excessive-agency': Severity.Medium,
+  foundation: Severity.Medium,
   hallucination: Severity.Medium,
   harmbench: Severity.Medium,
   harmful: Severity.Medium,
@@ -892,6 +947,7 @@ export const categoryAliases: Record<Plugin, string> = {
   default: 'Default',
   'divergent-repetition': 'DivergentRepetition',
   'excessive-agency': 'ExcessiveAgency',
+  foundation: 'Foundation',
   hallucination: 'Hallucination',
   harmbench: 'Harmbench',
   harmful: 'Harmful',
@@ -964,12 +1020,14 @@ export const pluginDescriptions: Record<Plugin, string> = {
   contracts: 'Evaluates safeguards against unauthorized contractual commitments and legal exposure',
   'cross-session-leak':
     'Tests for information leakage vulnerabilities between different user sessions',
+  cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
   'debug-access':
     'Identifies exposed debugging interfaces and unauthorized command execution vectors',
   default: 'Executes comprehensive baseline security testing across multiple risk categories',
   'excessive-agency': 'Evaluates system boundary enforcement and unauthorized action prevention',
   'divergent-repetition':
     'Tests repetitive patterns that can cause the model to diverge from normal behavior and leak training data',
+  foundation: 'Tests a collection of plugins designed to run against foundation models',
   hallucination: 'Tests system resilience against false information generation and propagation',
   harmbench:
     'Tests for harmful content, illegal activities, misinformation using the HarmBench dataset from the Center for AI Safety (CAIS)',
@@ -1022,10 +1080,11 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'harmful:specialized-advice': 'Tests handling of unauthorized professional advice',
   'harmful:unsafe-practices': 'Tests handling of dangerous activity instructions',
   'harmful:violent-crime': 'Tests handling of violent crime content',
-  cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
+  pandamonium:
+    "Promptfoo's exclusive dynamic jailbreak strategy currently in development. Note: This is an expensive jailbreak strategy with no limit on probes.",
   base64: 'Tests detection and handling of Base64-encoded malicious payloads',
   basic: 'Equivalent to no strategy. Always included. Can be disabled in configuration.',
   'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
@@ -1047,6 +1106,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
 };
 
 export const strategyDisplayNames: Record<Strategy, string> = {
+  pandamonium: 'Pandamonium',
   base64: 'Base64 Encoding',
   basic: 'Basic',
   'best-of-n': 'Best-of-N',
@@ -1068,12 +1128,13 @@ export const strategyDisplayNames: Record<Strategy, string> = {
 };
 
 export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
+  Custom: 'Choose your own plugins',
+  Foundation: 'Plugins for redteaming foundation models recommended by Promptfoo',
+  'Minimal Test': 'Minimal set of plugins to validate your setup',
+  MITRE: 'MITRE ATLAS framework',
+  NIST: 'NIST AI Risk Management Framework',
+  'OWASP API': 'OWASP API Top 10',
+  'OWASP LLM': 'OWASP LLM Top 10',
   RAG: 'Recommended plugins plus additional tests for RAG specific scenarios like access control',
   Recommended: 'A broad set of plugins recommended by Promptfoo',
-  'Minimal Test': 'Minimal set of plugins to validate your setup',
-  NIST: 'NIST AI Risk Management Framework',
-  'OWASP LLM': 'OWASP LLM Top 10',
-  'OWASP API': 'OWASP API Top 10',
-  MITRE: 'MITRE ATLAS framework',
-  Custom: 'Choose your own plugins',
 } as const;
