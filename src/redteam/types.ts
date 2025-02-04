@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 import type { Plugin, Severity } from './constants';
 
@@ -24,9 +25,22 @@ type WithNumTests = {
   numTests?: number;
 };
 
+const _VarsSchema = z.record(
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.array(z.union([z.string(), z.number(), z.boolean()])),
+    z.record(z.string(), z.any()),
+    z.array(z.any()),
+  ]),
+);
+
+type Vars = z.infer<typeof _VarsSchema>;
+
 type TestCase = {
   description?: string;
-  vars?: Record<string, unknown>;
+  vars?: Record<string, Vars>;
   provider?: string | ProviderOptions | ApiProvider;
   providerOutput?: string | Record<string, unknown>;
   assert?: any;
