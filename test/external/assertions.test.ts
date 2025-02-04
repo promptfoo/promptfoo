@@ -88,12 +88,6 @@ describe('handleConversationRelevance', () => {
     };
 
     const result = await handleConversationRelevance(params);
-    console.log({
-      pass: result.pass,
-      score: result.score,
-      reason: result.reason,
-      threshold: params.assertion.threshold,
-    });
     expect(result.pass).toBe(true);
     expect(result.score).toBe(1);
   });
