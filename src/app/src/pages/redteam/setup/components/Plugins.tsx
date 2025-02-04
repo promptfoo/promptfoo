@@ -34,7 +34,6 @@ import {
   categoryAliases,
   type Plugin,
   riskCategories,
-  PLUGIN_PRESET_DESCRIPTIONS,
 } from '@promptfoo/redteam/constants';
 import { useDebounce } from 'use-debounce';
 import { useRedTeamConfig, useRecentlyUsedPlugins } from '../hooks/useRedTeamConfig';
