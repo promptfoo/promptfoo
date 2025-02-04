@@ -32,20 +32,15 @@ function fromVars(vars?: Record<string, string | object>) {
 }
 
 function parseJsonResponse(output: string): any {
-  // First try direct JSON parse
+  const match = output.match(/```(?:json)?([^`]+)```/);
+  if (match) {
+    output = match[1].trim();
+  }
+
   try {
     return JSON.parse(output);
-  } catch (e) {
-    // Try to extract JSON from markdown code block if present
-    const match = output.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
-    if (match) {
-      try {
-        return JSON.parse(match[1]);
-      } catch (e) {
-        throw new Error(`Failed to parse JSON from markdown: ${e}`);
-      }
-    }
-    throw new Error(`Failed to parse response as JSON: ${e}`);
+  } catch (err) {
+    throw new Error(`Failed to parse LLM output (${output}) as JSON: ${err}`);
   }
 }
 
