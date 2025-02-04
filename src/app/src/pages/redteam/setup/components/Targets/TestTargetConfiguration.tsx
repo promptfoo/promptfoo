@@ -4,6 +4,7 @@ import ClearIcon from '@mui/icons-material/Clear';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import InfoIcon from '@mui/icons-material/Info';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
+import { FormControl, FormControlLabel, RadioGroup, Radio } from '@mui/material';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -19,11 +20,6 @@ import ListItemText from '@mui/material/ListItemText';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Switch from '@mui/material/Switch';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
@@ -33,26 +29,28 @@ import 'prismjs/components/prism-clike';
 import { highlight, languages } from 'prismjs/components/prism-core';
 import 'prismjs/components/prism-javascript';
 import type { ProviderOptions } from '../../types';
+import ProviderResponse from './ProviderResponse';
 import 'prismjs/themes/prism.css';
 
 interface TestTargetConfigurationProps {
   testingTarget: boolean;
-  hasTestedTarget: boolean;
   handleTestTarget: () => void;
   selectedTarget: ProviderOptions;
   testResult: any;
   requiresTransformResponse: (target: ProviderOptions) => boolean;
   updateCustomTarget: (field: string, value: any) => void;
+  hasTestedTarget: boolean;
+  defaultRequestTransform?: string;
 }
 
 const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
   testingTarget,
-  hasTestedTarget,
   handleTestTarget,
   selectedTarget,
   testResult,
   requiresTransformResponse,
   updateCustomTarget,
+  defaultRequestTransform,
 }) => {
   const theme = useTheme();
   const darkMode = theme.palette.mode === 'dark';
@@ -155,10 +153,12 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                   onValueChange={(code) => updateCustomTarget('transformResponse', code)}
                   highlight={(code) => highlight(code, languages.javascript)}
                   padding={10}
-                  placeholder={dedent`Optional: A JavaScript expression to parse the response.
-                    Simple transform: json.choices[0].message.content
+                  placeholder={dedent`Optional: Transform the API response before using it. Format as either:
 
-                    With guardrails: { output: json.choices[0].message.content, guardrails: { flagged: context.response.status === 500 } }`}
+                      1. A JavaScript object path: \`json.choices[0].message.content\`
+                      2. A function that receives response data: \`(json, text) => json.choices[0].message.content || text\`
+
+                      With guardrails: { output: json.choices[0].message.content, guardrails: { flagged: context.response.status === 500 } }`}
                   style={{
                     fontFamily: '"Fira code", "Fira Mono", monospace',
                     fontSize: 14,
@@ -189,17 +189,51 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 </a>{' '}
                 for more information.
               </Typography>
-              <TextField
-                fullWidth
-                label="Session"
-                value={selectedTarget.config.sessionParser}
-                placeholder="Optional: Enter a javascript expression to extract the session Id"
-                onChange={(e) => updateCustomTarget('sessionParser', e.target.value)}
-                margin="normal"
-                InputLabelProps={{
-                  shrink: true,
-                }}
-              />
+
+              <Stack spacing={2}>
+                <FormControl>
+                  <RadioGroup
+                    value={selectedTarget.config.sessionSource || 'server'}
+                    onChange={(e) => {
+                      updateCustomTarget('sessionSource', e.target.value);
+                      if (e.target.value === 'client') {
+                        updateCustomTarget('sessionParser', undefined);
+                      }
+                    }}
+                  >
+                    <FormControlLabel
+                      value="server"
+                      control={<Radio />}
+                      label="Server-generated Session ID"
+                    />
+                    <FormControlLabel
+                      value="client"
+                      control={<Radio />}
+                      label="Client-generated Session ID"
+                    />
+                  </RadioGroup>
+                </FormControl>
+
+                {selectedTarget.config.sessionSource === 'server' ||
+                selectedTarget.config.sessionSource == null ? (
+                  <TextField
+                    fullWidth
+                    label="Session Parser"
+                    value={selectedTarget.config.sessionParser}
+                    placeholder="Optional: Enter a Javascript expression to extract the session ID"
+                    onChange={(e) => updateCustomTarget('sessionParser', e.target.value)}
+                    margin="normal"
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                  />
+                ) : (
+                  <Alert severity="info">
+                    A UUID will be created for each conversation and stored in the `sessionId`
+                    variable. Add {'{{'}sessionId{'}}'} in the header or body of the request above.
+                  </Alert>
+                )}
+              </Stack>
             </AccordionDetails>
           </Accordion>
 
@@ -428,15 +462,42 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                   padding={10}
                   placeholder={dedent`Customize HTTP status code validation. Examples:
 
-                      () => true                     // Default: accept all responses - javascript function
-                      status >= 200 && status < 300  // Accept only 2xx codes - javascript expression
-                      (status) => status < 500       // Accept anything but server errors - javascript function`}
+                      () => true                     // Default: accept all responses - Javascript function
+                      status >= 200 && status < 300  // Accept only 2xx codes - Javascript expression
+                      (status) => status < 500       // Accept anything but server errors - Javascript function`}
                   style={{
                     fontFamily: '"Fira code", "Fira Mono", monospace',
                     fontSize: 14,
                     minHeight: '106px',
                   }}
                 />
+              </Box>
+            </AccordionDetails>
+          </Accordion>
+          <Accordion defaultExpanded={!!selectedTarget.delay}>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Box>
+                <Typography variant="h6">Delay</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Configure the delay between requests
+                </Typography>
+              </Box>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                Add a delay (ms) between requests to simulate a real user. See{' '}
+                <a href="https://www.promptfoo.dev/docs/providers/http/#delay" target="_blank">
+                  docs
+                </a>{' '}
+                for more details.
+              </Typography>
+              <Box>
+                <TextField
+                  value={selectedTarget.delay || ''}
+                  onChange={(e) => updateCustomTarget('delay', Number(e.target.value))}
+                />
+                <br />
+                <Typography variant="caption">Delay in milliseconds (default: 0)</Typography>
               </Box>
             </AccordionDetails>
           </Accordion>
@@ -471,33 +532,48 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
 
       {testResult && (
         <Box mt={2}>
-          {testResult.success != null && (
-            <Alert severity={testResult.success ? 'success' : 'error'}>{testResult.message}</Alert>
-          )}
-          {testResult.suggestions && (
-            <Box mt={2}>
-              <Typography variant="subtitle1" gutterBottom>
-                Suggestions:
-              </Typography>
-              <Paper
-                elevation={1}
-                sx={{
-                  p: 2,
-                  bgcolor: theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
-                }}
+          {!testResult.unalignedProviderResult && testResult.success != null && (
+            <>
+              <Alert
+                severity={
+                  testResult.success &&
+                  // If it's a redteam test make sure the openAI formmated prompt doesn't include any JSON and it exists
+                  (!testResult.redteamProviderResult ||
+                    (testResult.redteamProviderResult.output.length > 5 &&
+                      !testResult.redteamProviderResult.output.includes('{')))
+                    ? 'success'
+                    : 'error'
+                }
               >
-                <List>
-                  {testResult.suggestions.map((suggestion: string, index: number) => (
-                    <ListItem key={index}>
-                      <ListItemIcon>
-                        <InfoIcon color="primary" />
-                      </ListItemIcon>
-                      <ListItemText primary={suggestion} />
-                    </ListItem>
-                  ))}
-                </List>
-              </Paper>
-            </Box>
+                {testResult.message}
+              </Alert>
+
+              {testResult.suggestions && (
+                <Box mt={2}>
+                  <Typography variant="subtitle1" gutterBottom>
+                    Suggestions:
+                  </Typography>
+                  <Paper
+                    elevation={1}
+                    sx={{
+                      p: 2,
+                      bgcolor: theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
+                    }}
+                  >
+                    <List>
+                      {testResult.suggestions.map((suggestion: string, index: number) => (
+                        <ListItem key={index}>
+                          <ListItemIcon>
+                            <InfoIcon color="primary" />
+                          </ListItemIcon>
+                          <ListItemText primary={suggestion} />
+                        </ListItem>
+                      ))}
+                    </List>
+                  </Paper>
+                </Box>
+              )}
+            </>
           )}
           <Accordion sx={{ mt: 2 }} expanded>
             <AccordionSummary
@@ -508,115 +584,63 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
               <Typography>Provider Response Details</Typography>
             </AccordionSummary>
             <AccordionDetails>
-              <Typography variant="subtitle2" gutterBottom>
-                Headers:
-              </Typography>
-              <Paper
-                elevation={0}
-                sx={{
-                  p: 2,
-                  bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
-                  maxHeight: '200px',
-                  overflow: 'auto',
-                  mb: 2,
-                }}
-              >
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Header</TableCell>
-                      <TableCell>Value</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {Object.entries(testResult.providerResponse?.metadata?.headers || {}).map(
-                      ([key, value]) => (
-                        <TableRow key={key}>
-                          <TableCell>{key}</TableCell>
-                          <TableCell
-                            sx={{
-                              wordBreak: 'break-all',
-                            }}
-                          >
-                            {value as string}
-                          </TableCell>
-                        </TableRow>
-                      ),
+              {/* If It's a unaligned test show the harmful outputs */}
+              {testResult.unalignedProviderResult && (
+                <>
+                  <Box>
+                    {testResult.unalignedProviderResult.outputs.length > 0 ? (
+                      <Alert severity="info" sx={{ mb: 2 }}>
+                        The provider appears to be working properly. Review the harmful outputs
+                        below. If you have at least one result, it is working as intended. This
+                        should have a harmful intent.
+                      </Alert>
+                    ) : (
+                      <Alert severity="error">
+                        We weren't able to get any harmful outputs from the provider. Please review
+                        the raw request and response below.
+                      </Alert>
                     )}
-                  </TableBody>
-                </Table>
-              </Paper>
-              <Typography variant="subtitle2" gutterBottom>
-                Raw Result:
-              </Typography>
 
-              <Paper
-                elevation={0}
-                sx={{
-                  p: 2,
-                  bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
-                  maxHeight: '200px',
-                  overflow: 'auto',
-                }}
-              >
-                <pre
-                  style={{
-                    margin: 0,
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                  }}
-                >
-                  {typeof testResult.providerResponse?.raw === 'string'
-                    ? testResult.providerResponse?.raw
-                    : JSON.stringify(testResult.providerResponse?.raw, null, 2)}
-                </pre>
-              </Paper>
-              <Typography variant="subtitle2" gutterBottom sx={{ mt: 2 }}>
-                Parsed Result:
-              </Typography>
-              <Paper
-                elevation={0}
-                sx={{
-                  p: 2,
-                  bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
-                  maxHeight: '200px',
-                  overflow: 'auto',
-                }}
-              >
-                <pre
-                  style={{
-                    margin: 0,
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                  }}
-                >
-                  {typeof testResult.providerResponse?.output === 'string'
-                    ? testResult.providerResponse?.output
-                    : JSON.stringify(testResult.providerResponse?.output, null, 2)}
-                </pre>
-              </Paper>
-              <Typography variant="subtitle2" gutterBottom sx={{ mt: 2 }}>
-                Session ID:
-              </Typography>
-              <Paper
-                elevation={0}
-                sx={{
-                  p: 2,
-                  bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
-                  maxHeight: '200px',
-                  overflow: 'auto',
-                }}
-              >
-                <pre
-                  style={{
-                    margin: 0,
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                  }}
-                >
-                  {testResult.providerResponse?.sessionId}
-                </pre>
-              </Paper>
+                    <Typography variant="h6" gutterBottom>
+                      Harmful Outputs:
+                    </Typography>
+                    <Paper
+                      elevation={0}
+                      sx={{
+                        p: 2,
+                        bgcolor: (theme) =>
+                          theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
+                        maxHeight: '200px',
+                        overflow: 'auto',
+                        mb: 2,
+                      }}
+                    >
+                      <pre> - {testResult.unalignedProviderResult.outputs.join('\n - ')}</pre>
+                    </Paper>
+                  </Box>
+                  <Typography variant="h6" sx={{ mt: 10 }} gutterBottom>
+                    When testing harmful outputs, we also do a raw request to the provider to help
+                    troubleshooting. If there are any issues, you can review the raw request and
+                    response below:
+                  </Typography>
+                </>
+              )}
+              {/* If It's a redteam test show a header since we have two prompts */}
+              {testResult.redteamProviderResult && (
+                <Typography variant="h6" gutterBottom>
+                  Simple String Prompt "hello world"
+                </Typography>
+              )}
+              {/* If It's a redteam test show the second test */}
+              <ProviderResponse providerResponse={testResult.providerResponse} />
+              {testResult.redteamProviderResult && (
+                <>
+                  <Typography variant="h6" sx={{ mt: 4 }} gutterBottom>
+                    OpenAI Formatted Prompt
+                  </Typography>
+                  <ProviderResponse providerResponse={testResult.redteamProviderResult} />
+                </>
+              )}
             </AccordionDetails>
           </Accordion>
         </Box>
