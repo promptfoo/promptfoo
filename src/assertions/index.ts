@@ -4,7 +4,6 @@ import yaml from 'js-yaml';
 import path from 'path';
 import cliState from '../cliState';
 import { getEnvInt } from '../envars';
-import { importModule } from '../esm';
 import logger from '../logger';
 import {
   matchesAnswerRelevance,

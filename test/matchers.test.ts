@@ -3,10 +3,23 @@ import path from 'path';
 import { loadFromJavaScriptFile } from '../src/assertions/utils';
 import cliState from '../src/cliState';
 import { importModule } from '../src/esm';
-import { getAndCheckProvider, getGradingProvider, matchesClassification, matchesModeration } from '../src/matchers';
-import { matchesSimilarity, matchesLlmRubric, matchesFactuality, matchesClosedQa, matchesAnswerRelevance, matchesContextRelevance, matchesContextRecall, matchesContextFaithfulness } from '../src/matchers';
+import {
+  getAndCheckProvider,
+  getGradingProvider,
+  matchesClassification,
+  matchesModeration,
+} from '../src/matchers';
+import {
+  matchesSimilarity,
+  matchesLlmRubric,
+  matchesFactuality,
+  matchesClosedQa,
+  matchesAnswerRelevance,
+  matchesContextRelevance,
+  matchesContextRecall,
+  matchesContextFaithfulness,
+} from '../src/matchers';
 import { ANSWER_RELEVANCY_GENERATE, CONTEXT_RECALL, CONTEXT_RELEVANCE } from '../src/prompts';
-import { processJsFile } from '../src/prompts/processors/javascript';
 import { HuggingfaceTextClassificationProvider } from '../src/providers/huggingface';
 import { OpenAiChatCompletionProvider } from '../src/providers/openai/chat';
 import { DefaultEmbeddingProvider, DefaultGradingProvider } from '../src/providers/openai/defaults';
@@ -15,9 +28,14 @@ import { OpenAiModerationProvider } from '../src/providers/openai/moderation';
 import { ReplicateModerationProvider } from '../src/providers/replicate';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from '../src/redteam/constants';
 import * as remoteGrading from '../src/remoteGrading';
-import type { GradingConfig, ProviderResponse, ProviderClassificationResponse, ApiProvider, ProviderTypeMap } from '../src/types';
+import type {
+  GradingConfig,
+  ProviderResponse,
+  ProviderClassificationResponse,
+  ApiProvider,
+  ProviderTypeMap,
+} from '../src/types';
 import { TestGrader } from './util/utils';
-
 
 jest.mock('../src/database', () => ({
   getDb: jest.fn().mockImplementation(() => {
@@ -375,7 +393,7 @@ describe('matchesLlmRubric', () => {
         completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
       },
     });
-  })
+  });
 
   it('should load rubric prompt from js file when specified', async () => {
     const filePath = path.join('path', 'to', 'external', 'file.js');
