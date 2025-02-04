@@ -310,7 +310,7 @@ export class CrescendoProvider implements ApiProvider {
           `[Crescendo] Refusal check result: isRefusal=${isRefusal}, rationale=${refusalRationale}`,
         );
 
-        if (isRefusal) {
+        if (isRefusal && !this.stateful) {
           logger.debug('\n[Crescendo] Response Rejected, performing back tracking...\n');
           backtrackCount++;
           this.targetConversationId = await this.backtrackMemory(this.targetConversationId);
