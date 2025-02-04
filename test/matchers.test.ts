@@ -1,23 +1,12 @@
 import fs from 'fs';
 import path from 'path';
+import { loadFromJavaScriptFile } from '../src/assertions/utils';
 import cliState from '../src/cliState';
-import {
-  getAndCheckProvider,
-  getGradingProvider,
-  matchesClassification,
-  matchesModeration,
-} from '../src/matchers';
-import {
-  matchesSimilarity,
-  matchesLlmRubric,
-  matchesFactuality,
-  matchesClosedQa,
-  matchesAnswerRelevance,
-  matchesContextRelevance,
-  matchesContextRecall,
-  matchesContextFaithfulness,
-} from '../src/matchers';
+import { importModule } from '../src/esm';
+import { getAndCheckProvider, getGradingProvider, matchesClassification, matchesModeration } from '../src/matchers';
+import { matchesSimilarity, matchesLlmRubric, matchesFactuality, matchesClosedQa, matchesAnswerRelevance, matchesContextRelevance, matchesContextRecall, matchesContextFaithfulness } from '../src/matchers';
 import { ANSWER_RELEVANCY_GENERATE, CONTEXT_RECALL, CONTEXT_RELEVANCE } from '../src/prompts';
+import { processJsFile } from '../src/prompts/processors/javascript';
 import { HuggingfaceTextClassificationProvider } from '../src/providers/huggingface';
 import { OpenAiChatCompletionProvider } from '../src/providers/openai/chat';
 import { DefaultEmbeddingProvider, DefaultGradingProvider } from '../src/providers/openai/defaults';
@@ -26,14 +15,9 @@ import { OpenAiModerationProvider } from '../src/providers/openai/moderation';
 import { ReplicateModerationProvider } from '../src/providers/replicate';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from '../src/redteam/constants';
 import * as remoteGrading from '../src/remoteGrading';
-import type {
-  GradingConfig,
-  ProviderResponse,
-  ProviderClassificationResponse,
-  ApiProvider,
-  ProviderTypeMap,
-} from '../src/types';
+import type { GradingConfig, ProviderResponse, ProviderClassificationResponse, ApiProvider, ProviderTypeMap } from '../src/types';
 import { TestGrader } from './util/utils';
+
 
 jest.mock('../src/database', () => ({
   getDb: jest.fn().mockImplementation(() => {
@@ -59,6 +43,9 @@ jest.mock('fs', () => ({
   ...jest.requireActual('fs'),
   readFileSync: jest.fn(),
   existsSync: jest.fn(),
+}));
+jest.mock('../src/esm', () => ({
+  importModule: jest.fn(),
 }));
 
 const Grader = new TestGrader();
@@ -388,6 +375,40 @@ describe('matchesLlmRubric', () => {
         completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
       },
     });
+  })
+
+  it('should load rubric prompt from js file when specified', async () => {
+    const filePath = path.join('path', 'to', 'external', 'file.js');
+    const mockImportModule = jest.mocked(importModule);
+    const mockFunction = jest.fn(() => 'Do this: {{ rubric }}');
+    mockImportModule.mockResolvedValue(mockFunction);
+
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {
+      rubricPrompt: `file://${filePath}`,
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
+        }),
+      },
+    };
+
+    const result = await matchesLlmRubric(rubric, llmOutput, grading);
+
+    await expect(loadFromJavaScriptFile(filePath, undefined, [])).resolves.toBe(
+      'Do this: {{ rubric }}',
+    );
+
+    expect(grading.provider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Do this: Test rubric'),
+    );
+    expect(mockImportModule).toHaveBeenCalledWith(filePath, undefined);
+
+    expect(result).toEqual(
+      expect.objectContaining({ pass: true, score: 1, reason: 'Test passed' }),
+    );
   });
 
   it('should throw an error when the external file is not found', async () => {
