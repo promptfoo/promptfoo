@@ -1,7 +1,6 @@
 /*
- * The prompts used by this CLI are licensed under the AGPL-3.0 license and are
- * dynamically downloaded from Github. For details, see
- * https://github.com/elder-plinius/L1B3RT4S/blob/main/LICENSE.
+ * This plugin downloads prompt templates from the L1B3RT4S project
+ * (https://github.com/elder-plinius/L1B3RT4S).
  */
 import { fetchWithProxy } from '../../fetch';
 import type { Assertion, TestCase } from '../../types';
