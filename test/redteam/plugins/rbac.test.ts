@@ -33,16 +33,32 @@ describe('RbacPlugin', () => {
 
     const testCases = await plugin.generateTests(2);
 
-    expect(testCases).toHaveLength(2);
-    expect(testCases[0]?.vars).toBeDefined();
-    expect(testCases[0]?.vars?.test_var).toBe('Test prompt 1');
-    expect(testCases[1]?.vars?.test_var).toBe('Test prompt 2');
-    expect(testCases[0]?.assert).toEqual([
-      {
-        type: PLUGIN_ID,
-        metric: 'RbacEnforcement',
-      },
-    ]);
+    expect(testCases).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          vars: {
+            test_var: 'Test prompt 1',
+          },
+          assert: [
+            {
+              type: PLUGIN_ID,
+              metric: 'RbacEnforcement',
+            },
+          ],
+        }),
+        expect.objectContaining({
+          vars: {
+            test_var: 'Test prompt 2',
+          },
+          assert: [
+            {
+              type: PLUGIN_ID,
+              metric: 'RbacEnforcement',
+            },
+          ],
+        }),
+      ]),
+    );
   });
 
   it('should handle empty response', async () => {
@@ -110,8 +126,12 @@ describe('RbacGrader', () => {
       undefined,
     );
 
-    expect(result.grade).toBeDefined();
-    expect(result.rubric).toBeDefined();
+    expect(result).toEqual(
+      expect.objectContaining({
+        grade: expect.anything(),
+        rubric: expect.anything(),
+      }),
+    );
   });
 
   it('should get suggestions for test case', () => {
