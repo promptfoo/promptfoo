@@ -74,5 +74,3 @@ export function coerceString(value: string | object): string {
   }
   return JSON.stringify(value);
 }
-
-export { clone };
