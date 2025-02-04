@@ -108,3 +108,5 @@ export class RbacGrader extends RedteamGraderBase {
       "pass": true/false
     }`;
 }
+
+export { DEFAULT_EXAMPLES };
