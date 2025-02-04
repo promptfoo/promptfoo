@@ -19,7 +19,6 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
-import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
@@ -31,6 +30,7 @@ import 'prismjs/components/prism-clike';
 import { highlight, languages } from 'prismjs/components/prism-core';
 import 'prismjs/components/prism-javascript';
 import type { ProviderOptions } from '../../types';
+import { convertStringKeyToPem } from '../../utils/crypto';
 import ProviderResponse from './ProviderResponse';
 import 'prismjs/themes/prism.css';
 
@@ -380,14 +380,15 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                     multiline
                     rows={4}
                     label="Raw Base64 Private Key"
-                    value={''} // TODO: Fix this
-                    onChange={(e) =>
+                    value={selectedTarget.config.signatureAuth?.privateKey || ''}
+                    onChange={(e) => {
+                      const rawKey = e.target.value.trim();
                       updateCustomTarget('signatureAuth', {
                         ...selectedTarget.config.signatureAuth,
-                        privateKey: undefined, // TODO: Fix this
+                        privateKey: rawKey ? convertStringKeyToPem(rawKey) : undefined,
                         privateKeyPath: undefined,
-                      })
-                    }
+                      });
+                    }}
                     placeholder="Base64-encoded private key (without PEM headers)"
                     helperText="Raw base64-encoded RSA private key without PKCS8 headers"
                   />
