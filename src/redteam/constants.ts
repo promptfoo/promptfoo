@@ -174,9 +174,7 @@ export type Plugin =
   | PIIPlugin;
 
 export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
-  ...[...BASE_PLUGINS].sort(),
-  ...(Object.keys(HARM_PLUGINS) as HarmPlugin[]).sort(),
-  ...[...PII_PLUGINS].sort(),
+  ...[...BASE_PLUGINS, ...(Object.keys(HARM_PLUGINS) as HarmPlugin[]), ...PII_PLUGINS].sort(),
 ] as const satisfies readonly Plugin[]);
 
 export const ALL_PLUGINS: readonly Plugin[] = [
@@ -579,7 +577,9 @@ export const ADDITIONAL_STRATEGIES = [
 ] as const;
 export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
 
-export const ALL_STRATEGIES = ['default', ...DEFAULT_STRATEGIES, ...ADDITIONAL_STRATEGIES] as const;
+export const ALL_STRATEGIES = [
+  ...['default', ...DEFAULT_STRATEGIES, ...ADDITIONAL_STRATEGIES].sort(),
+] as const;
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
