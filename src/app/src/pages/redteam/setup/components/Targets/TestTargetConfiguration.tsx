@@ -265,13 +265,9 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                   exclusive
                   onChange={(e, newValue) => {
                     if (newValue !== null) {
-                      // Prevent deselection
                       updateCustomTarget('signatureAuth', {
                         ...selectedTarget.config.signatureAuth,
                         keyInputType: newValue,
-                        // Clear other key-related fields when switching types
-                        privateKey: undefined,
-                        privateKeyPath: undefined,
                       });
                     }
                   }}
@@ -280,7 +276,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 >
                   <ToggleButton value="upload">Upload Key File</ToggleButton>
                   <ToggleButton value="path">Specify File Path</ToggleButton>
-                  <ToggleButton value="base64">Raw Base64 Key</ToggleButton>
+                  <ToggleButton value="base64">Base64-encoded Key String</ToggleButton>
                 </ToggleButtonGroup>
 
                 {selectedTarget.config.signatureAuth?.keyInputType === 'upload' && (
@@ -384,7 +380,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                     multiline
                     rows={4}
                     label="Raw Base64 Private Key"
-                    value={selectedTarget.config.signatureAuth?.privateKey || ''}
+                    value={selectedTarget.config.signatureAuth?.privateKey}
                     onChange={(e) => {
                       const rawKey = e.target.value.trim();
                       updateCustomTarget('signatureAuth', {
