@@ -30,6 +30,7 @@ type TestCase = {
   provider?: string | ProviderOptions | ApiProvider;
   providerOutput?: string | Record<string, unknown>;
   assert?: any;
+  options?: any;
 };
 
 // Derived types

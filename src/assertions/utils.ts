@@ -3,6 +3,7 @@ import yaml from 'js-yaml';
 import path from 'path';
 import Clone from 'rfdc';
 import cliState from '../cliState';
+import { importModule } from '../esm';
 import { type Assertion, type TestCase } from '../types';
 
 const clone = Clone();
@@ -32,6 +33,25 @@ export function getFinalTest(test: TestCase, assertion: Assertion) {
   ret.options.provider = assertion.provider || test?.options?.provider;
   ret.options.rubricPrompt = assertion.rubricPrompt || ret.options.rubricPrompt;
   return Object.freeze(ret);
+}
+
+export async function loadFromJavaScriptFile(
+  filePath: string,
+  functionName: string | undefined,
+  args: any[],
+): Promise<any> {
+  const requiredModule = await importModule(filePath, functionName);
+  if (functionName && typeof requiredModule[functionName] === 'function') {
+    return requiredModule[functionName](...args);
+  } else if (typeof requiredModule === 'function') {
+    return requiredModule(...args);
+  } else if (requiredModule.default && typeof requiredModule.default === 'function') {
+    return requiredModule.default(...args);
+  } else {
+    throw new Error(
+      `Assertion malformed: ${filePath} must export a function or have a default export as a function`,
+    );
+  }
 }
 
 export function processFileReference(fileRef: string): object | string {

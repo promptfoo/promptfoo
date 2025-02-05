@@ -15,7 +15,7 @@ import {
   DefaultGradingProvider as OpenAiGradingProvider,
   DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
   DefaultModerationProvider as OpenAiModerationProvider,
-} from './openai';
+} from './openai/defaults';
 import {
   DefaultGradingProvider as GeminiGradingProvider,
   DefaultEmbeddingProvider as GeminiEmbeddingProvider,

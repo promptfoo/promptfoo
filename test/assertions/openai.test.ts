@@ -5,7 +5,7 @@ import {
   handleIsValidOpenAiToolsCall,
   handleIsValidOpenAiFunctionCall,
 } from '../../src/assertions/openai';
-import { OpenAiChatCompletionProvider } from '../../src/providers/openai';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import type {
   Assertion,
   ApiProvider,

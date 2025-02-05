@@ -237,6 +237,20 @@ export const PLUGINS = [
     vulnerabilityType: 'security',
   },
   {
+    category: 'Trust and Safety',
+    description: 'Tests prompt injection attacks using the Harmbench dataset',
+    label: 'technical',
+    link: '/docs/red-team/plugins/harmbench/',
+    name: 'Harmbench',
+    pluginId: 'harmbench',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
     category: 'Security and Access Control',
     description: 'Attempts to access or use debugging commands',
     label: 'technical',
