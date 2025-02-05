@@ -8,6 +8,7 @@ import Grid from '@mui/material/Grid';
 import Typography from '@mui/material/Typography';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import Layout from '@theme/Layout';
+import styles from './press.module.css';
 
 const PressContent = () => {
   const { colorMode } = useColorMode();
@@ -59,45 +60,127 @@ const PressContent = () => {
           <Typography variant="h4" component="h3" gutterBottom fontWeight="medium">
             Recent Coverage
           </Typography>
+
+          {/* Featured Research */}
+          <Grid container spacing={4} mb={6}>
+            <Grid item xs={12}>
+              <Box className={styles.coverageItem} p={3}>
+                <Typography variant="h6" component="h4" gutterBottom>
+                  DeepSeek AI Censorship Research
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Our groundbreaking research on AI censorship and content filtering in DeepSeek
+                  models has been widely covered by major technology and news publications.
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  <Link to="/blog/deepseek-censorship/">Read the original research →</Link>
+                </Typography>
+                <Grid container spacing={2} mt={2}>
+                  {[
+                    {
+                      publication: 'Ars Technica',
+                      title:
+                        "The questions the Chinese government doesn't want DeepSeek AI to answer",
+                      link: 'https://arstechnica.com/ai/2025/01/the-questions-the-chinese-government-doesnt-want-deepseek-ai-to-answer/',
+                    },
+                    {
+                      publication: 'TechCrunch',
+                      title:
+                        "DeepSeek's AI avoids answering 85% of prompts on sensitive topics related to China",
+                      link: 'https://techcrunch.com/2025/01/29/deepseeks-ai-avoids-answering-85-of-prompts-on-sensitive-topics-related-to-china/',
+                    },
+                    {
+                      publication: 'CyberNews',
+                      title: 'DeepSeek China censorship prompts output AI',
+                      link: 'https://cybernews.com/news/deepseek-china-censorship-promps-output-ai/',
+                    },
+                    {
+                      publication: 'Gizmodo',
+                      title: 'The Knives Are Coming Out For DeepSeek AI',
+                      link: 'http://gizmodo.com/the-knives-are-coming-out-for-deepseek-ai-2000556375',
+                    },
+                    {
+                      publication: 'The Independent',
+                      title: 'DeepSeek AI China censorship Tiananmen Square',
+                      link: 'https://www.the-independent.com/tech/deepseek-ai-china-censorship-tiananmen-square-b2688390.html',
+                    },
+                    {
+                      publication: 'Washington Times',
+                      title: 'Inside Ring: DeepSeek toes Chinese party line',
+                      link: 'https://www.washingtontimes.com/news/2025/jan/29/inside-ring-deepseek-toes-chinese-party-line-xi-ta/',
+                    },
+                    {
+                      publication: 'Yahoo Finance',
+                      title: 'DeepSeek Users Forcing AI to Reveal Censorship',
+                      link: 'https://finance.yahoo.com/news/deepseek-users-forcing-ai-reveal-151950834.html',
+                    },
+                    {
+                      publication: 'MSN',
+                      title: 'DeepSeek AI censors most prompts on sensitive topics for China',
+                      link: 'https://www.msn.com/en-us/news/technology/deepseek-ai-censors-most-prompts-on-sensitive-topics-for-china/ar-AA1ycVkf',
+                    },
+                    {
+                      publication: 'Hacker News',
+                      title: 'Discussion: DeepSeek Censorship Research',
+                      link: 'https://news.ycombinator.com/item?id=42858552',
+                    },
+                  ].map((article) => (
+                    <Grid item xs={12} md={6} key={article.link}>
+                      <Link href={article.link} className={styles.articleLink}>
+                        <Typography variant="subtitle2" color="text.secondary" component="span">
+                          {article.publication}
+                        </Typography>
+                        <Typography variant="body2">{article.title}</Typography>
+                      </Link>
+                    </Grid>
+                  ))}
+                </Grid>
+              </Box>
+            </Grid>
+          </Grid>
+
+          {/* Featured Podcasts */}
+          <Typography variant="h5" component="h4" gutterBottom mt={6}>
+            Featured Podcasts
+          </Typography>
           <Grid container spacing={4}>
-            {[
-              {
-                title: 'Securing the Future of AI Applications',
-                publication: 'TechCrunch',
-                date: 'January 2024',
-                description:
-                  'An in-depth look at how Promptfoo is revolutionizing AI security testing.',
-                link: '#',
-              },
-              {
-                title: 'The AI Security Podcast',
-                publication: 'Software Engineering Daily',
-                date: 'December 2023',
-                description: "Interview with Promptfoo's founders on the future of AI security.",
-                link: '#',
-              },
-              {
-                title: 'Open Source AI Security Tools',
-                publication: 'InfoQ',
-                date: 'November 2023',
-                description: "Feature coverage of Promptfoo's open source framework.",
-                link: '#',
-              },
-            ].map((coverage) => (
-              <Grid item xs={12} md={4} key={coverage.title}>
-                <Box>
-                  <Typography variant="h6" component="h4" gutterBottom>
-                    {coverage.title}
-                  </Typography>
-                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                    {coverage.publication} • {coverage.date}
-                  </Typography>
-                  <Typography variant="body2" paragraph>
-                    {coverage.description}
-                  </Typography>
-                </Box>
-              </Grid>
-            ))}
+            <Grid item xs={12} md={6}>
+              <Box className={styles.coverageItem} p={3}>
+                <Typography variant="h6" component="h4" gutterBottom>
+                  Securing AI by Democratizing Red Teams
+                </Typography>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  a16z Podcast • August 2, 2024
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  a16z General Partner Anjney Midha speaks with PromptFoo founder and CEO Ian
+                  Webster about the importance of red-teaming for AI safety and security, and how
+                  bringing those capabilities to more organizations will lead to safer, more
+                  predictable generative AI applications.
+                </Typography>
+                <Link href="https://a16z.com/podcast/securing-ai-by-democratizing-red-teams/">
+                  Listen to episode →
+                </Link>
+              </Box>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Box className={styles.coverageItem} p={3}>
+                <Typography variant="h6" component="h4" gutterBottom>
+                  The Future of AI Security
+                </Typography>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  CyberBytes with Steffen Foley • 2024
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  A deep dive into Ian's evolution from shipping Gen AI products as an engineer to
+                  launching a cybersecurity company, the fascinating origin of Promptfoo, and key
+                  insights on the latest AI security trends.
+                </Typography>
+                <Link href="https://open.spotify.com/episode/6bdzElwFgZoBHjRrYyqHoN">
+                  Listen on Spotify →
+                </Link>
+              </Box>
+            </Grid>
           </Grid>
         </Box>
 
@@ -167,7 +250,7 @@ const PressContent = () => {
                 Founded
               </Typography>
               <Typography variant="body1" paragraph>
-                2023
+                2024
               </Typography>
               <Typography variant="h6" component="h4" gutterBottom>
                 Headquarters
