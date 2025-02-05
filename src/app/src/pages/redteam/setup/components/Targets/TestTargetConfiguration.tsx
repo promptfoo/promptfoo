@@ -1,5 +1,7 @@
-import React, { useCallback } from 'react';
+import React from 'react';
 import Editor from 'react-simple-code-editor';
+import { useToast } from '@app/hooks/useToast';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ClearIcon from '@mui/icons-material/Clear';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import InfoIcon from '@mui/icons-material/Info';
@@ -30,8 +32,11 @@ import 'prismjs/components/prism-clike';
 import { highlight, languages } from 'prismjs/components/prism-core';
 import 'prismjs/components/prism-javascript';
 import type { ProviderOptions } from '../../types';
+import { convertStringKeyToPem, validatePrivateKey } from '../../utils/crypto';
 import ProviderResponse from './ProviderResponse';
 import 'prismjs/themes/prism.css';
+
+// adjust the import path as needed
 
 interface TestTargetConfigurationProps {
   testingTarget: boolean;
@@ -54,6 +59,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
   defaultRequestTransform,
 }) => {
   const theme = useTheme();
+  const { showToast } = useToast();
   const darkMode = theme.palette.mode === 'dark';
 
   const [signatureAuthExpanded, setSignatureAuthExpanded] = React.useState(
@@ -374,7 +380,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                         sx={{ mb: 1 }}
                       />
                       <Typography variant="body1" gutterBottom>
-                        Base64 Key
+                        Base64 Key String
                       </Typography>
                       <Typography variant="body2" color="text.secondary" align="center">
                         Paste encoded key
@@ -433,7 +439,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                       ) : (
                         <>
                           <Typography gutterBottom color="text.secondary">
-                            Upload your PEM format private key
+                            Upload your PKCS-8 format private key
                           </Typography>
                           <label htmlFor="private-key-upload">
                             <Button variant="outlined" component="span" startIcon={<VpnKeyIcon />}>
@@ -465,20 +471,50 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
 
                 {selectedTarget.config.signatureAuth?.keyInputType === 'base64' && (
                   <Paper variant="outlined" sx={{ p: 3 }}>
-                    <TextField
-                      fullWidth
-                      multiline
-                      rows={4}
-                      placeholder="-----BEGIN PRIVATE KEY-----&#10;Base64 encoded key content&#10;-----END PRIVATE KEY-----"
-                      value={selectedTarget.config.signatureAuth?.privateKey || ''}
-                      onChange={(e) => {
-                        updateCustomTarget('signatureAuth', {
-                          ...selectedTarget.config.signatureAuth,
-                          privateKey: e.target.value,
-                          privateKeyPath: undefined,
-                        });
-                      }}
-                    />
+                    <Stack spacing={2}>
+                      <TextField
+                        fullWidth
+                        multiline
+                        rows={4}
+                        placeholder="-----BEGIN PRIVATE KEY-----&#10;Base64 encoded key content&#10;-----END PRIVATE KEY-----"
+                        value={selectedTarget.config.signatureAuth?.privateKey || ''}
+                        onChange={(e) => {
+                          updateCustomTarget('signatureAuth', {
+                            ...selectedTarget.config.signatureAuth,
+                            privateKey: e.target.value,
+                            privateKeyPath: undefined,
+                          });
+                        }}
+                      />
+                      <Box sx={{ textAlign: 'center' }}>
+                        <Button
+                          variant="outlined"
+                          startIcon={<CheckCircleIcon />}
+                          onClick={async () => {
+                            try {
+                              const inputKey =
+                                selectedTarget.config.signatureAuth?.privateKey || '';
+                              const formattedKey = convertStringKeyToPem(inputKey);
+                              const validatedKey = await validatePrivateKey(formattedKey);
+                              updateCustomTarget('signatureAuth', {
+                                ...selectedTarget.config.signatureAuth,
+                                privateKey: validatedKey,
+                                privateKeyPath: undefined,
+                              });
+                              showToast('Private key validated successfully', 'success');
+                            } catch (error) {
+                              console.error('Invalid key:', error);
+                              showToast(
+                                `Invalid private key: ${(error as Error).message}`,
+                                'error',
+                              );
+                            }
+                          }}
+                        >
+                          Format & Validate
+                        </Button>
+                      </Box>
+                    </Stack>
                   </Paper>
                 )}
 
