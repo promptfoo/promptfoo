@@ -174,9 +174,7 @@ export type Plugin =
   | PIIPlugin;
 
 export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
-  ...[...BASE_PLUGINS].sort(),
-  ...(Object.keys(HARM_PLUGINS) as HarmPlugin[]).sort(),
-  ...[...PII_PLUGINS].sort(),
+  ...[...BASE_PLUGINS, ...(Object.keys(HARM_PLUGINS) as HarmPlugin[]), ...PII_PLUGINS].sort(),
 ] as const satisfies readonly Plugin[]);
 
 export const ALL_PLUGINS: readonly Plugin[] = [
