@@ -19,6 +19,7 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
+import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
@@ -260,24 +261,45 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 for more information.
               </Typography>
               <Stack spacing={2}>
-                <ToggleButtonGroup
-                  value={selectedTarget.config.signatureAuth?.keyInputType || 'upload'}
-                  exclusive
-                  onChange={(e, newValue) => {
-                    if (newValue !== null) {
-                      updateCustomTarget('signatureAuth', {
-                        ...selectedTarget.config.signatureAuth,
-                        keyInputType: newValue,
-                      });
-                    }
-                  }}
-                  fullWidth
-                  size="small"
-                >
-                  <ToggleButton value="upload">Upload Key File</ToggleButton>
-                  <ToggleButton value="path">Specify File Path</ToggleButton>
-                  <ToggleButton value="base64">Base64-encoded Key String</ToggleButton>
-                </ToggleButtonGroup>
+                <Stack direction="row" alignItems="center" spacing={1}>
+                  <Switch
+                    checked={!!selectedTarget.config.signatureAuth}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      if (e.target.checked) {
+                        updateCustomTarget('signatureAuth', {
+                          ...selectedTarget.config.signatureAuth,
+                          signatureValidityMs: 300000,
+                          signatureDataTemplate: '{{signatureTimestamp}}',
+                          keyInputType: 'upload',
+                        });
+                      } else {
+                        updateCustomTarget('signatureAuth', undefined);
+                      }
+                    }}
+                  />
+                  <Typography>Use Signature Authentication</Typography>
+                </Stack>
+
+                {selectedTarget.config.signatureAuth && (
+                  <ToggleButtonGroup
+                    value={selectedTarget.config.signatureAuth?.keyInputType || 'upload'}
+                    exclusive
+                    onChange={(e, newValue) => {
+                      if (newValue !== null) {
+                        updateCustomTarget('signatureAuth', {
+                          ...selectedTarget.config.signatureAuth,
+                          keyInputType: newValue,
+                        });
+                      }
+                    }}
+                    fullWidth
+                    size="small"
+                  >
+                    <ToggleButton value="upload">Upload Key File</ToggleButton>
+                    <ToggleButton value="path">Specify File Path</ToggleButton>
+                    <ToggleButton value="base64">Raw Base64 Key</ToggleButton>
+                  </ToggleButtonGroup>
+                )}
 
                 {selectedTarget.config.signatureAuth?.keyInputType === 'upload' && (
                   <Box>
@@ -550,7 +572,13 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
         <Button
           variant="contained"
           onClick={handleTestTarget}
-          disabled={testingTarget || !selectedTarget.config.url}
+          disabled={
+            testingTarget ||
+            (!selectedTarget.config.url && !selectedTarget.config.request) ||
+            (selectedTarget.config.signatureAuth &&
+              !selectedTarget.config.signatureAuth.privateKey &&
+              !selectedTarget.config.signatureAuth.privateKeyPath)
+          }
           startIcon={testingTarget ? <CircularProgress size={20} /> : null}
           color="primary"
         >
