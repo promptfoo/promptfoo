@@ -153,7 +153,7 @@ const PressContent = () => {
                   a16z Podcast • August 2, 2024
                 </Typography>
                 <Typography variant="body2" paragraph>
-                  a16z General Partner Anjney Midha speaks with PromptFoo founder and CEO Ian
+                  a16z General Partner Anjney Midha speaks with Promptfoo founder and CEO Ian
                   Webster about the importance of red-teaming for AI safety and security, and how
                   bringing those capabilities to more organizations will lead to safer, more
                   predictable generative AI applications.
