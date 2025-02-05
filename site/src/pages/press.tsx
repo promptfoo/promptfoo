@@ -252,7 +252,7 @@ const PressContent = () => {
                 Headquarters
               </Typography>
               <Typography variant="body1" paragraph>
-                San Mateo, California
+                San Francisco, California
               </Typography>
             </Grid>
             <Grid item xs={12} md={6}>
