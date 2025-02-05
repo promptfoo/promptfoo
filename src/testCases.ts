@@ -210,7 +210,7 @@ export async function readTests(
       windowsPathsNoEscape: true,
     });
 
-    if (resolvedPath.includes('.py')) {
+    if (resolvedPath.includes('.py') && !testFiles.includes(resolvedPath)) {
       testFiles.push(resolvedPath);
     }
 
