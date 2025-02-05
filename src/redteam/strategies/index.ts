@@ -6,6 +6,7 @@ import { importModule } from '../../esm';
 import logger from '../../logger';
 import type { RedteamStrategyObject, TestCase, TestCaseWithPlugin } from '../../types';
 import { isJavascriptFile } from '../../util/file';
+import type { Strategy as StrategyType } from '../constants';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
 import { addCitationTestCases } from './citation';
@@ -23,12 +24,14 @@ import { addInjections } from './promptInjections';
 import { addRot13 } from './rot13';
 import { addCompositeTestCases } from './singleTurnComposite';
 
+export type StrategyId = AdditionalStrategy | DefaultStrategy | 'basic';
+
 export interface Strategy {
-  id: string;
+  id: StrategyType;
   action: (
     testCases: TestCaseWithPlugin[],
     injectVar: string,
-    config: Record<string, any>,
+    config: Record<string, unknown>,
   ) => Promise<TestCase[]>;
 }
 
@@ -229,6 +232,10 @@ export async function validateStrategies(strategies: RedteamStrategyObject[]): P
   }
 }
 
+function isValidStrategyId(id: unknown): id is StrategyType {
+  return typeof id === 'string' && Strategies.some((s) => s.id === id);
+}
+
 export async function loadStrategy(strategyPath: string): Promise<Strategy> {
   if (strategyPath.startsWith('file://')) {
     const filePath = strategyPath.slice('file://'.length);
@@ -248,6 +255,10 @@ export async function loadStrategy(strategyPath: string): Promise<Strategy> {
     }
 
     return CustomStrategy;
+  }
+
+  if (!isValidStrategyId(strategyPath)) {
+    throw new Error(`Strategy not found: ${strategyPath}`);
   }
 
   const strategy = Strategies.find((s) => s.id === strategyPath);
