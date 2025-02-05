@@ -2,8 +2,10 @@ import React, { useCallback } from 'react';
 import Editor from 'react-simple-code-editor';
 import ClearIcon from '@mui/icons-material/Clear';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import FormatAlignCenterIcon from '@mui/icons-material/FormatAlignCenter';
 import InfoIcon from '@mui/icons-material/Info';
+import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
+import KeyIcon from '@mui/icons-material/Key';
+import UploadIcon from '@mui/icons-material/Upload';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import { FormControl, FormControlLabel, RadioGroup, Radio } from '@mui/material';
 import Accordion from '@mui/material/Accordion';
@@ -13,17 +15,13 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
-import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
-import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
-import ToggleButton from '@mui/material/ToggleButton';
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import dedent from 'dedent';
@@ -32,7 +30,6 @@ import 'prismjs/components/prism-clike';
 import { highlight, languages } from 'prismjs/components/prism-core';
 import 'prismjs/components/prism-javascript';
 import type { ProviderOptions } from '../../types';
-import { convertStringKeyToPem } from '../../utils/crypto';
 import ProviderResponse from './ProviderResponse';
 import 'prismjs/themes/prism.css';
 
@@ -261,70 +258,143 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 </a>{' '}
                 for more information.
               </Typography>
-              <Stack spacing={2}>
-                <Stack direction="row" alignItems="center" spacing={1}>
-                  <Switch
-                    checked={!!selectedTarget.config.signatureAuth}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                      if (e.target.checked) {
+              <Stack spacing={4}>
+                <Box>
+                  <Typography variant="subtitle1" gutterBottom>
+                    Key Input Method
+                  </Typography>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
+                    <Paper
+                      variant="outlined"
+                      sx={{
+                        p: 2,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        cursor: 'pointer',
+                        bgcolor:
+                          selectedTarget.config.signatureAuth?.keyInputType === 'upload'
+                            ? 'action.selected'
+                            : 'background.paper',
+                        '&:hover': {
+                          bgcolor: 'action.hover',
+                        },
+                      }}
+                      onClick={() =>
                         updateCustomTarget('signatureAuth', {
                           ...selectedTarget.config.signatureAuth,
-                          signatureValidityMs: 300000,
-                          signatureDataTemplate: '{{signatureTimestamp}}',
                           keyInputType: 'upload',
-                        });
-                      } else {
-                        updateCustomTarget('signatureAuth', undefined);
+                        })
                       }
-                    }}
-                  />
-                  <Typography>Use Signature Authentication</Typography>
-                </Stack>
-
-                {selectedTarget.config.signatureAuth && (
-                  <ToggleButtonGroup
-                    value={selectedTarget.config.signatureAuth?.keyInputType || 'upload'}
-                    exclusive
-                    onChange={(e, newValue) => {
-                      if (newValue !== null) {
-                        const currentKey = selectedTarget.config.signatureAuth?.privateKey;
-                        let formattedKey = currentKey;
-
-                        // If switching to base64 and there's content, format it
-                        if (newValue === 'base64' && currentKey?.trim()) {
-                          formattedKey = convertStringKeyToPem(currentKey.trim());
+                    >
+                      <UploadIcon
+                        color={
+                          selectedTarget.config.signatureAuth?.keyInputType === 'upload'
+                            ? 'primary'
+                            : 'action'
                         }
+                        sx={{ mb: 1 }}
+                      />
+                      <Typography variant="body1" gutterBottom>
+                        Upload Key
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" align="center">
+                        Upload PEM file
+                      </Typography>
+                    </Paper>
 
+                    <Paper
+                      variant="outlined"
+                      sx={{
+                        p: 2,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        cursor: 'pointer',
+                        bgcolor:
+                          selectedTarget.config.signatureAuth?.keyInputType === 'path'
+                            ? 'action.selected'
+                            : 'background.paper',
+                        '&:hover': {
+                          bgcolor: 'action.hover',
+                        },
+                      }}
+                      onClick={() =>
                         updateCustomTarget('signatureAuth', {
                           ...selectedTarget.config.signatureAuth,
-                          keyInputType: newValue,
-                          privateKey: formattedKey,
-                        });
+                          keyInputType: 'path',
+                        })
                       }
-                    }}
-                    fullWidth
-                    size="small"
-                  >
-                    <ToggleButton value="upload">Upload Key File</ToggleButton>
-                    <ToggleButton value="path">Specify File Path</ToggleButton>
-                    <ToggleButton value="base64">Raw Base64 Key</ToggleButton>
-                  </ToggleButtonGroup>
-                )}
+                    >
+                      <InsertDriveFileIcon
+                        color={
+                          selectedTarget.config.signatureAuth?.keyInputType === 'path'
+                            ? 'primary'
+                            : 'action'
+                        }
+                        sx={{ mb: 1 }}
+                      />
+                      <Typography variant="body1" gutterBottom>
+                        File Path
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" align="center">
+                        Specify key location
+                      </Typography>
+                    </Paper>
+
+                    <Paper
+                      variant="outlined"
+                      sx={{
+                        p: 2,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        cursor: 'pointer',
+                        bgcolor:
+                          selectedTarget.config.signatureAuth?.keyInputType === 'base64'
+                            ? 'action.selected'
+                            : 'background.paper',
+                        '&:hover': {
+                          bgcolor: 'action.hover',
+                        },
+                      }}
+                      onClick={() =>
+                        updateCustomTarget('signatureAuth', {
+                          ...selectedTarget.config.signatureAuth,
+                          keyInputType: 'base64',
+                        })
+                      }
+                    >
+                      <KeyIcon
+                        color={
+                          selectedTarget.config.signatureAuth?.keyInputType === 'base64'
+                            ? 'primary'
+                            : 'action'
+                        }
+                        sx={{ mb: 1 }}
+                      />
+                      <Typography variant="body1" gutterBottom>
+                        Base64 Key
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" align="center">
+                        Paste encoded key
+                      </Typography>
+                    </Paper>
+                  </Box>
+                </Box>
 
                 {selectedTarget.config.signatureAuth?.keyInputType === 'upload' && (
-                  <Box>
+                  <Paper variant="outlined" sx={{ p: 3 }}>
                     <input
                       type="file"
                       accept=".pem,.key"
                       style={{ display: 'none' }}
                       id="private-key-upload"
                       onClick={(e) => {
-                        // Reset value to trigger onChange even if same file selected
                         (e.target as HTMLInputElement).value = '';
                       }}
                       onChange={(e) => {
                         const file = e.target.files?.[0];
-                        console.log('Loaded file', file);
                         if (file) {
                           const reader = new FileReader();
                           reader.onload = (event) => {
@@ -339,30 +409,16 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                         }
                       }}
                     />
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <label htmlFor="private-key-upload">
-                        <Button
-                          variant="outlined"
-                          component="span"
-                          startIcon={<VpnKeyIcon />}
-                          color="warning"
-                        >
-                          {selectedTarget.config.signatureAuth?.privateKey
-                            ? 'Change Key File'
-                            : 'Upload Key File'}
-                        </Button>
-                      </label>
-                      {selectedTarget.config.signatureAuth?.privateKey && (
+                    <Box sx={{ textAlign: 'center' }}>
+                      {selectedTarget.config.signatureAuth?.privateKey ? (
                         <>
-                          <Typography
-                            variant="caption"
-                            color="success.main"
-                            sx={{ display: 'inline-flex', alignItems: 'center' }}
-                          >
+                          <Typography color="success.main" gutterBottom>
                             Key file loaded successfully
                           </Typography>
-                          <IconButton
-                            size="small"
+                          <Button
+                            variant="outlined"
+                            color="error"
+                            startIcon={<ClearIcon />}
                             onClick={() =>
                               updateCustomTarget('signatureAuth', {
                                 ...selectedTarget.config.signatureAuth,
@@ -370,49 +426,50 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                                 privateKeyPath: undefined,
                               })
                             }
-                            title="Clear private key"
                           >
-                            <ClearIcon fontSize="small" />
-                          </IconButton>
+                            Remove Key
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Typography gutterBottom color="text.secondary">
+                            Upload your PEM format private key
+                          </Typography>
+                          <label htmlFor="private-key-upload">
+                            <Button variant="outlined" component="span" startIcon={<VpnKeyIcon />}>
+                              Choose File
+                            </Button>
+                          </label>
                         </>
                       )}
                     </Box>
-                    {!selectedTarget.config.signatureAuth?.privateKey && (
-                      <Typography
-                        variant="caption"
-                        color="warning.main"
-                        sx={{ mt: 1, display: 'block' }}
-                      >
-                        Upload a private key in PKCS-8 format (e.g., "-----BEGIN PRIVATE KEY-----")
-                      </Typography>
-                    )}
-                  </Box>
+                  </Paper>
                 )}
 
                 {selectedTarget.config.signatureAuth?.keyInputType === 'path' && (
-                  <TextField
-                    fullWidth
-                    label="Private Key File Path"
-                    value={selectedTarget.config.signatureAuth?.privateKeyPath || ''}
-                    onChange={(e) =>
-                      updateCustomTarget('signatureAuth', {
-                        ...selectedTarget.config.signatureAuth,
-                        privateKeyPath: e.target.value,
-                        privateKey: undefined,
-                      })
-                    }
-                    placeholder="Path to private key file (e.g., /path/to/key.pem)"
-                    helperText="Absolute path to a private key in PKCS-8 format"
-                  />
+                  <Paper variant="outlined" sx={{ p: 3 }}>
+                    <TextField
+                      fullWidth
+                      placeholder="/path/to/private_key.pem"
+                      value={selectedTarget.config.signatureAuth?.privateKeyPath || ''}
+                      onChange={(e) =>
+                        updateCustomTarget('signatureAuth', {
+                          ...selectedTarget.config.signatureAuth,
+                          privateKeyPath: e.target.value,
+                          privateKey: undefined,
+                        })
+                      }
+                    />
+                  </Paper>
                 )}
 
                 {selectedTarget.config.signatureAuth?.keyInputType === 'base64' && (
-                  <Box>
+                  <Paper variant="outlined" sx={{ p: 3 }}>
                     <TextField
                       fullWidth
                       multiline
                       rows={4}
-                      label="Raw Base64 Private Key"
+                      placeholder="-----BEGIN PRIVATE KEY-----&#10;Base64 encoded key content&#10;-----END PRIVATE KEY-----"
                       value={selectedTarget.config.signatureAuth?.privateKey || ''}
                       onChange={(e) => {
                         updateCustomTarget('signatureAuth', {
@@ -421,27 +478,8 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                           privateKeyPath: undefined,
                         });
                       }}
-                      placeholder="Base64-encoded private key (with or without PKCS8 headers/footers)"
-                      helperText="Raw base64-encoded RSA private key with or without PKCS8 headers/footers"
                     />
-                    <Button
-                      sx={{ mt: 1 }}
-                      variant="outlined"
-                      startIcon={<FormatAlignCenterIcon />}
-                      onClick={() => {
-                        const rawKey = selectedTarget.config.signatureAuth?.privateKey?.trim();
-                        if (rawKey) {
-                          updateCustomTarget('signatureAuth', {
-                            ...selectedTarget.config.signatureAuth,
-                            privateKey: convertStringKeyToPem(rawKey),
-                            privateKeyPath: undefined,
-                          });
-                        }
-                      }}
-                    >
-                      Format as PKCS-8
-                    </Button>
-                  </Box>
+                  </Paper>
                 )}
 
                 <TextField
@@ -463,6 +501,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                     shrink: true,
                   }}
                 />
+
                 <TextField
                   fullWidth
                   label="Signature Validity (ms)"
@@ -479,6 +518,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                     shrink: true,
                   }}
                 />
+
                 <TextField
                   fullWidth
                   label="Signature Refresh Buffer (ms)"
@@ -495,6 +535,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                     shrink: true,
                   }}
                 />
+
                 <TextField
                   fullWidth
                   label="Signature Algorithm"
