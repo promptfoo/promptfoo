@@ -66,6 +66,7 @@ async function getFailedTestCases(pluginId: string, targetLabel: string): Promis
 
           return {
             ...rest,
+            ...(testCase.provider ? { provider: testCase.provider } : {}),
             metadata: {
               ...restMetadata,
               originalEvalId: r.evalId,
@@ -133,7 +134,40 @@ export async function addRetryTestCases(
       const maxTests = typeof config.numTests === 'number' ? config.numTests : tests.length;
       const selected = failedTests.slice(0, maxTests);
 
-      retryTestCases.push(...selected);
+      // Get provider configuration from an existing test case if available
+      const existingTest = tests.find((t) => t.provider && typeof t.provider === 'object');
+
+      // Ensure each test case has a proper provider configuration
+      const withProvider = selected.map((test) => {
+        // If test has a provider in object format already, keep it
+        if (test.provider && typeof test.provider === 'object') {
+          return test;
+        }
+
+        // If test has a string provider, convert it to object format
+        if (test.provider && typeof test.provider === 'string') {
+          return {
+            ...test,
+            provider: {
+              id: test.provider,
+              config: {
+                injectVar,
+              },
+            },
+          };
+        }
+
+        // If no provider, use the one from existing test if available
+        if (existingTest?.provider) {
+          return {
+            ...test,
+            provider: existingTest.provider,
+          };
+        }
+        return test;
+      });
+
+      retryTestCases.push(...withProvider);
     }
   }
 
