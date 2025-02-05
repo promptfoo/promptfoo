@@ -1186,25 +1186,25 @@
                       {
                         "type": "string",
                         "enum": [
-                          "default",
-                          "basic",
-                          "jailbreak",
-                          "jailbreak:composite",
-                          "prompt-injection",
                           "base64",
+                          "basic",
+                          "best-of-n",
                           "citation",
                           "crescendo",
+                          "default",
                           "gcg",
                           "goat",
                           "hex",
-                          "jailbreak:tree",
+                          "jailbreak",
+                          "jailbreak:composite",
                           "jailbreak:likert",
+                          "jailbreak:tree",
                           "leetspeak",
                           "math-prompt",
                           "multilingual",
-                          "rot13",
-                          "best-of-n",
-                          "pandamonium"
+                          "pandamonium",
+                          "prompt-injection",
+                          "rot13"
                         ]
                       },
                       {
@@ -1232,7 +1232,7 @@
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports default, basic, jailbreak, jailbreak:composite, prompt-injection, base64, citation, crescendo, gcg, goat, hex, jailbreak:tree, jailbreak:likert, leetspeak, math-prompt, multilingual, rot13, best-of-n, pandamonium",
+              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports base64, basic, best-of-n, citation, crescendo, default, gcg, goat, hex, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, multilingual, pandamonium, prompt-injection, rot13",
               "default": [
                 "default"
               ]
