@@ -108,17 +108,8 @@ export async function readStandaloneTestsFile(
     telemetry.recordAndSendOnce('feature_used', {
       feature: 'python tests file',
     });
-
-    // Extract function name if specified (e.g., file.py:function_name)
-    const [_filePath, functionName] = varsPath.split(':');
-    if (!functionName) {
-      throw new Error(
-        'Python test files must specify a function name (e.g., file.py:generate_tests)',
-      );
-    }
-
-    // Use pathWithoutFunction for the actual file path
-    const result = await runPython(pathWithoutFunction, functionName, []);
+    const [filePath, functionName] = varsPath.split(':');
+    const result = await runPython(filePath, functionName ?? 'generate_tests', []);
     if (!Array.isArray(result)) {
       throw new Error(
         `Python test function must return a list of test cases, got ${typeof result}`,
