@@ -1,0 +1,20 @@
+.pressContainer {
+  padding: 1rem;
+}
+
+.assetCard {
+  transition: transform 0.2s ease-in-out;
+}
+
+.assetCard:hover {
+  transform: translateY(-4px);
+}
+
+.coverageItem {
+  transition: all 0.2s ease-in-out;
+}
+
+.coverageItem:hover {
+  background-color: var(--ifm-color-emphasis-100);
+  border-radius: 8px;
+}

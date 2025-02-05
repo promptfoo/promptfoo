@@ -152,6 +152,10 @@ const config = {
                 label: 'Blog',
               },
               {
+                href: '/press/',
+                label: 'Press',
+              },
+              {
                 href: '/contact/',
                 label: 'Contact',
               },
@@ -298,6 +302,31 @@ const config = {
               {
                 label: 'LinkedIn',
                 href: 'https://www.linkedin.com/company/promptfoo/',
+              },
+            ],
+          },
+          {
+            title: 'Company',
+            items: [
+              {
+                label: 'About',
+                to: '/about/',
+              },
+              {
+                label: 'Blog',
+                to: '/blog/',
+              },
+              {
+                label: 'Press',
+                to: '/press/',
+              },
+              {
+                label: 'Contact',
+                to: '/contact/',
+              },
+              {
+                label: 'Careers',
+                to: '/careers/',
               },
             ],
           },
