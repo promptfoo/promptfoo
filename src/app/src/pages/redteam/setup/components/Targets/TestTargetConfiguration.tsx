@@ -403,13 +403,23 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                         const file = e.target.files?.[0];
                         if (file) {
                           const reader = new FileReader();
-                          reader.onload = (event) => {
-                            const content = event.target?.result as string;
-                            updateCustomTarget('signatureAuth', {
-                              ...selectedTarget.config.signatureAuth,
-                              privateKey: content,
-                              privateKeyPath: undefined,
-                            });
+                          reader.onload = async (event) => {
+                            try {
+                              const content = event.target?.result as string;
+                              const validatedKey = await validatePrivateKey(content);
+                              updateCustomTarget('signatureAuth', {
+                                ...selectedTarget.config.signatureAuth,
+                                privateKey: validatedKey,
+                                privateKeyPath: undefined,
+                              });
+                              showToast('Private key validated successfully', 'success');
+                            } catch (error) {
+                              console.error('Invalid key:', error);
+                              showToast(
+                                `Invalid private key: ${(error as Error).message}`,
+                                'error',
+                              );
+                            }
                           };
                           reader.readAsText(file);
                         }
