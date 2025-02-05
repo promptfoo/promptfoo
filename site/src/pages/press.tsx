@@ -8,11 +8,11 @@ import Grid from '@mui/material/Grid';
 import Typography from '@mui/material/Typography';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import Layout from '@theme/Layout';
+import LogoPanda from '../../static/img/logo-panda.svg';
 import styles from './press.module.css';
 
 const PressContent = () => {
   const { colorMode } = useColorMode();
-
   const theme = React.useMemo(
     () =>
       createTheme({
@@ -205,17 +205,13 @@ const PressContent = () => {
                   textAlign: 'center',
                 }}
               >
-                <img
-                  src="/img/logo-panda.svg"
-                  alt="Promptfoo Logo"
-                  style={{ maxWidth: '200px', height: 'auto' }}
-                />
+                <LogoPanda style={{ maxWidth: '200px', height: 'auto' }} />
                 <Typography variant="subtitle1" mt={2}>
                   Promptfoo Logo (SVG)
                 </Typography>
-                <Link href="/img/logo-panda.svg" download>
+                <a href="/img/logo-panda.svg" download>
                   Download
-                </Link>
+                </a>
               </Box>
             </Grid>
           </Grid>
