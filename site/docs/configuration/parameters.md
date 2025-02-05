@@ -368,7 +368,7 @@ tests: file://path/to/tests.js
 
 The file should export an array of test cases:
 
-```js
+```js title="tests.js"
 export default [
   { vars: { var1: 'value1', var2: 'value2' }, assert: [], description: 'Test #1' },
   { vars: { var1: 'value3', var2: 'value4' }, assert: [], description: 'Test #2' },
@@ -383,26 +383,10 @@ You can also import tests from Python files. The Python file should contain a fu
 tests: file://path/to/tests.py:generate_tests
 ```
 
-The Python function can be either a module-level function or a class method:
-
-```python
-# Simple example returning static test cases
-def generate_tests():
-    return [
-        {
-            "vars": {"var1": "value1"},
-            "assert": [{
-                "type": "equals",
-                "value": "expected1"
-            }],
-            "description": "Test case 1"
-        }
-    ]
-
-# Complex example using pandas to load test cases from CSV
+```python title="tests.py"
 import pandas as pd
 
-def generate_from_csv():
+def generate_tests():
     # Load test data from CSV - or from any other data source
     df = pd.read_csv('test_data.csv')
 
