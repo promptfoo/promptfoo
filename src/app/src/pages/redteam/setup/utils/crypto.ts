@@ -5,6 +5,11 @@ const END_RSA_PRIVATE_KEY = '-----END RSA PRIVATE KEY-----';
 const BEGIN_EC_PRIVATE_KEY = '-----BEGIN EC PRIVATE KEY-----';
 const END_EC_PRIVATE_KEY = '-----END EC PRIVATE KEY-----';
 
+// EC key constants
+const EC_POINT_FORMAT_BYTE = 0x04;
+const EC_PUBLIC_KEY_LENGTH = 65; // Size in bytes of uncompressed EC public key
+const EC_TYPICAL_KEY_LENGTH = 132; // Common total size for EC private key in DER format
+
 /**
  * Converts a raw base64-encoded RSA private key string into PEM format
  * by adding PKCS8 headers and proper line breaks if needed
@@ -86,26 +91,47 @@ export async function validatePrivateKey(input: string): Promise<string> {
     }
 
     // For EC keys, try specific EC import
-    if (der.length === 132 || isEcKey) {
-      // P-256 key length
+    if (der.length === EC_TYPICAL_KEY_LENGTH || isEcKey) {
       try {
-        await window.crypto.subtle.importKey(
-          'raw',
-          der.slice(7), // Skip SEC1 header
-          {
-            name: 'ECDSA',
-            namedCurve: 'P-256',
-          },
-          true,
-          ['sign'],
-        );
-        return formattedKey;
+        // Find the actual key data by looking for the EC point format byte
+        let keyStart = -1;
+        for (let i = 0; i < der.length - EC_PUBLIC_KEY_LENGTH; i++) {
+          if (der[i] === EC_POINT_FORMAT_BYTE && der.length - i >= EC_PUBLIC_KEY_LENGTH) {
+            keyStart = i;
+            break;
+          }
+        }
+
+        if (keyStart === -1) {
+          throw new Error('Could not find EC key data');
+        }
+
+        // Try different EC curves
+        const curves = ['P-256', 'P-384', 'P-521'];
+        for (const curve of curves) {
+          try {
+            await window.crypto.subtle.importKey(
+              'raw',
+              der.slice(keyStart),
+              {
+                name: 'ECDSA',
+                namedCurve: curve,
+              },
+              true,
+              ['sign'],
+            );
+            return formattedKey;
+          } catch (error) {
+            console.log(`EC import error for ${curve}:`, error);
+            continue;
+          }
+        }
       } catch (error) {
-        console.log('EC import error:', error);
+        console.log('EC key parsing error:', error);
       }
     }
 
-    // Try other algorithms as fallback
+    // Try PKCS8 verification with the raw key data as a fallback
     const algorithms = [
       { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
       { name: 'RSA-PSS', hash: 'SHA-256' },
