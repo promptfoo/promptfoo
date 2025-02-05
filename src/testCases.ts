@@ -206,12 +206,12 @@ export async function readTests(
       loadTestsGlob = loadTestsGlob.slice('file://'.length);
     }
     const resolvedPath = path.resolve(basePath, loadTestsGlob);
-    let testFiles: Array<string> = globSync(resolvedPath, {
+    const testFiles: Array<string> = globSync(resolvedPath, {
       windowsPathsNoEscape: true,
     });
 
-    if (testFiles.length === 0) {
-      testFiles = [resolvedPath];
+    if (resolvedPath.includes('.py')) {
+      testFiles.push(resolvedPath);
     }
 
     if (loadTestsGlob.startsWith('https://docs.google.com/spreadsheets/')) {
