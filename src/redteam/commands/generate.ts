@@ -13,7 +13,7 @@ import cliState from '../../cliState';
 import { VERSION } from '../../constants';
 import logger, { setLogLevel } from '../../logger';
 import telemetry from '../../telemetry';
-import type { TestSuite, UnifiedConfig } from '../../types';
+import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
 import { printBorder, setupEnv } from '../../util';
 import { isRunningUnderNpx } from '../../util';
 import { resolveConfigs } from '../../util/config/load';
@@ -192,6 +192,10 @@ export async function doGenerateRedteam(
     throw new Error('Invalid redteam configuration');
   }
 
+  const targetLabels = testSuite.providers
+    .map((provider: ApiProvider) => provider?.label)
+    .filter(Boolean);
+
   const {
     testCases: redteamTests,
     purpose,
@@ -205,6 +209,7 @@ export async function doGenerateRedteam(
     maxConcurrency: config.maxConcurrency,
     delay: config.delay,
     abortSignal: options.abortSignal,
+    targetLabels,
   } as SynthesizeOptions);
 
   if (redteamTests.length === 0) {

@@ -1203,6 +1203,7 @@
                           "multilingual",
                           "pandamonium",
                           "prompt-injection",
+                          "retry",
                           "rot13"
                         ]
                       },
@@ -1231,7 +1232,7 @@
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports base64, basic, best-of-n, citation, crescendo, default, gcg, goat, hex, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, multilingual, pandamonium, prompt-injection, rot13",
+              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports base64, basic, best-of-n, citation, crescendo, default, gcg, goat, hex, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, multilingual, pandamonium, prompt-injection, retry, rot13",
               "default": [
                 "default"
               ]
