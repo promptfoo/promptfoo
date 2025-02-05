@@ -42,7 +42,7 @@ const PressContent = () => {
           </Typography>
           <Typography variant="body1" paragraph>
             Promptfoo is a leading provider of AI security solutions, helping developers and
-            enterprises build secure, reliable AI applications. Based in San Mateo, California,
+            enterprises build secure, reliable AI applications. Based in San Francisco, California,
             Promptfoo is backed by Andreessen Horowitz and top leaders in the technology and
             security industries.
           </Typography>
@@ -228,7 +228,7 @@ const PressContent = () => {
             For press inquiries, please contact our media relations team:
           </Typography>
           <Typography variant="body1" paragraph>
-            <Link href="mailto:press@promptfoo.dev">press@promptfoo.dev</Link>
+            <Link href="mailto:inquiries@promptfoo.dev">inquiries@promptfoo.dev</Link>
           </Typography>
           <Typography variant="body1" paragraph>
             For urgent inquiries, please include "URGENT" in the subject line.
@@ -260,10 +260,23 @@ const PressContent = () => {
                 Leadership
               </Typography>
               <Typography variant="body1" paragraph>
-                <Link href="https://www.linkedin.com/in/ianww/">Ian Webster</Link>, CEO & Co-founder
+                <Link
+                  href="https://www.linkedin.com/in/ianww/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Ian Webster
+                </Link>
+                , CEO & Co-founder
                 <br />
-                <Link href="https://www.linkedin.com/in/michaelldangelo/">Michael D'Angelo</Link>,
-                CTO & Co-founder
+                <Link
+                  href="https://www.linkedin.com/in/michaelldangelo/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Michael D'Angelo
+                </Link>
+                , CTO & Co-founder
               </Typography>
               <Typography variant="h6" component="h4" gutterBottom>
                 Investors
