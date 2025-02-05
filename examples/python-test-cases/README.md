@@ -1,39 +1,37 @@
 # Python Test Cases Example
 
-This example demonstrates how to generate test cases using Python. It shows how to:
+This example demonstrates how to generate test cases using Python. It showcases three methods for generating test cases:
 
-1. Load test cases from a Python function
-2. Generate test cases programmatically
-3. Use pandas to load test cases from a CSV file
+1. Loading static test cases via a Python function.
+2. Generating test cases programmatically using pandas (simulating CSV data).
+3. Systematically creating test cases through a class method.
+
+## Quick Start
+
+Initialize this example in a new directory with:
+
+```bash
+npx promptfoo@latest init --example python-test-cases
+```
 
 ## Requirements
 
-```bash
-pip install pandas
-```
+1. **Python Dependencies**:
+
+   ```bash
+   pip install pandas
+   ```
+
+2. **Environment Variables**:
+
+   ```bash
+   export OPENAI_API_KEY=your_api_key_here
+   ```
 
 ## Usage
 
-1. Install the Python dependencies:
-
-```bash
-pip install pandas
-```
-
-2. Run the evaluation:
+After ensuring the requirements are met, run the evaluation with:
 
 ```bash
 promptfoo eval -c promptfooconfig.yaml
 ```
-
-The example uses a simple language translation task to demonstrate different ways of generating test cases in Python.
-
-## How it Works
-
-The example shows three different ways to generate test cases:
-
-1. `generate_simple_tests()`: A simple function that returns static test cases
-2. `generate_from_csv()`: Shows how to generate test cases from a pandas DataFrame
-3. `TestGenerator.generate_systematic_tests()`: A class method that generates test cases systematically
-
-Each method in `test_cases.py` returns a list of test cases that follow the promptfoo test case format.
