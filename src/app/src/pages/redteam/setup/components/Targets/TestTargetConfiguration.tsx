@@ -2,6 +2,7 @@ import React, { useCallback } from 'react';
 import Editor from 'react-simple-code-editor';
 import ClearIcon from '@mui/icons-material/Clear';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import FormatAlignCenterIcon from '@mui/icons-material/FormatAlignCenter';
 import InfoIcon from '@mui/icons-material/Info';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import { FormControl, FormControlLabel, RadioGroup, Radio } from '@mui/material';
@@ -286,9 +287,18 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                     exclusive
                     onChange={(e, newValue) => {
                       if (newValue !== null) {
+                        const currentKey = selectedTarget.config.signatureAuth?.privateKey;
+                        let formattedKey = currentKey;
+
+                        // If switching to base64 and there's content, format it
+                        if (newValue === 'base64' && currentKey?.trim()) {
+                          formattedKey = convertStringKeyToPem(currentKey.trim());
+                        }
+
                         updateCustomTarget('signatureAuth', {
                           ...selectedTarget.config.signatureAuth,
                           keyInputType: newValue,
+                          privateKey: formattedKey,
                         });
                       }
                     }}
@@ -397,23 +407,41 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 )}
 
                 {selectedTarget.config.signatureAuth?.keyInputType === 'base64' && (
-                  <TextField
-                    fullWidth
-                    multiline
-                    rows={4}
-                    label="Raw Base64 Private Key"
-                    value={selectedTarget.config.signatureAuth?.privateKey}
-                    onChange={(e) => {
-                      const rawKey = e.target.value.trim();
-                      updateCustomTarget('signatureAuth', {
-                        ...selectedTarget.config.signatureAuth,
-                        privateKey: rawKey ? convertStringKeyToPem(rawKey) : undefined,
-                        privateKeyPath: undefined,
-                      });
-                    }}
-                    placeholder="Base64-encoded private key (without PEM headers)"
-                    helperText="Raw base64-encoded RSA private key without PKCS8 headers"
-                  />
+                  <Box>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={4}
+                      label="Raw Base64 Private Key"
+                      value={selectedTarget.config.signatureAuth?.privateKey || ''}
+                      onChange={(e) => {
+                        updateCustomTarget('signatureAuth', {
+                          ...selectedTarget.config.signatureAuth,
+                          privateKey: e.target.value,
+                          privateKeyPath: undefined,
+                        });
+                      }}
+                      placeholder="Base64-encoded private key (with or without PKCS8 headers/footers)"
+                      helperText="Raw base64-encoded RSA private key with or without PKCS8 headers/footers"
+                    />
+                    <Button
+                      sx={{ mt: 1 }}
+                      variant="outlined"
+                      startIcon={<FormatAlignCenterIcon />}
+                      onClick={() => {
+                        const rawKey = selectedTarget.config.signatureAuth?.privateKey?.trim();
+                        if (rawKey) {
+                          updateCustomTarget('signatureAuth', {
+                            ...selectedTarget.config.signatureAuth,
+                            privateKey: convertStringKeyToPem(rawKey),
+                            privateKeyPath: undefined,
+                          });
+                        }
+                      }}
+                    >
+                      Format as PKCS-8
+                    </Button>
+                  </Box>
                 )}
 
                 <TextField

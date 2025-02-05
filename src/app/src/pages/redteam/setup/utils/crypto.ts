@@ -1,32 +1,30 @@
+const BEGIN_PRIVATE_KEY = '-----BEGIN PRIVATE KEY-----';
+const END_PRIVATE_KEY = '-----END PRIVATE KEY-----';
+
 /**
  * Converts a raw base64-encoded RSA private key string into PEM format
- * by adding PKCS8 headers and proper line breaks
+ * by adding PKCS8 headers and proper line breaks if needed
  *
- * @param rawBase64Key - The raw base64 string of the private key without headers
+ * @param input - The private key string, either raw base64 or already in PEM format
  * @returns The properly formatted PEM string
  */
+export function convertStringKeyToPem(input: string): string {
+  // Remove any leading/trailing whitespace
+  const trimmedInput = input.trim();
 
-const BEGIN_PRIVATE_KEY_HEADER = '-----BEGIN PRIVATE KEY-----';
-const END_PRIVATE_KEY_FOOTER = '-----END PRIVATE KEY-----';
-
-export function convertStringKeyToPem(rawBase64Key: string): string {
-  // Remove any existing whitespace
-  const cleanKey = rawBase64Key.replace(/\s/g, '');
-  const linesToJoin: string[] = [];
-
-  if (!cleanKey.includes(BEGIN_PRIVATE_KEY_HEADER)) {
-    linesToJoin.push(BEGIN_PRIVATE_KEY_HEADER);
+  // If it's already a properly formatted PEM, return as-is
+  if (trimmedInput.startsWith(BEGIN_PRIVATE_KEY) && trimmedInput.endsWith(END_PRIVATE_KEY)) {
+    return trimmedInput;
   }
 
-  // Split the key into 64-character chunks
-  for (let i = 0; i < cleanKey.length; i += 64) {
-    linesToJoin.push(cleanKey.slice(i, i + 64));
-  }
+  // Clean the key by removing any existing headers, footers, or whitespace
+  const cleanKey = trimmedInput
+    .replace(new RegExp(BEGIN_PRIVATE_KEY, 'g'), '')
+    .replace(new RegExp(END_PRIVATE_KEY, 'g'), '')
+    .replace(/[\s-]/g, '');
 
-  if (!cleanKey.includes(END_PRIVATE_KEY_FOOTER)) {
-    linesToJoin.push(END_PRIVATE_KEY_FOOTER);
-  }
+  // Split into 64-character chunks
+  const chunks = cleanKey.match(/.{1,64}/g) || [];
 
-  // Construct the PEM format with headers and line breaks
-  return linesToJoin.join('\n');
+  return [BEGIN_PRIVATE_KEY, ...chunks, END_PRIVATE_KEY].join('\n');
 }
