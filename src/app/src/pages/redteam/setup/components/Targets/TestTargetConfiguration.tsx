@@ -292,6 +292,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                       }}
                       onChange={(e) => {
                         const file = e.target.files?.[0];
+                        console.log('Loaded file', file);
                         if (file) {
                           const reader = new FileReader();
                           reader.onload = (event) => {
