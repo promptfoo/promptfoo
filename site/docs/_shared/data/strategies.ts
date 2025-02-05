@@ -212,4 +212,16 @@ export const strategies: Strategy[] = [
     asrIncrease: '20-30%',
     link: '/docs/red-team/strategies/rot13/',
   },
+  {
+    category: 'Regression',
+    strategy: 'retry',
+    displayName: 'Retry',
+    description: 'Historical failure testing',
+    longDescription:
+      'Automatically incorporates previously failed test cases into your test suite, creating a regression testing system that learns from past failures',
+    cost: 'Low',
+    asrIncrease: '50-70%',
+    link: '/docs/red-team/strategies/retry/',
+    recommended: false,
+  },
 ];

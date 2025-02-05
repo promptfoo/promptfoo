@@ -572,6 +572,7 @@ export const ADDITIONAL_STRATEGIES = [
   'multilingual',
   'pandamonium',
   'prompt-injection',
+  'retry',
   'rot13',
 ] as const;
 export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
@@ -660,6 +661,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'rag-document-exfiltration': 'Tests for RAG document exfiltration',
   rbac: 'Tests role-based access control implementation',
   religion: 'Tests handling of religious content and bias',
+  retry:
+    'Automatically incorporates previously failed test cases to build a regression testing suite',
   rot13: 'Tests handling of ROT13-encoded malicious content',
   'shell-injection': 'Tests for command injection vulnerabilities',
   'sql-injection': 'Tests for SQL injection vulnerabilities',
@@ -745,6 +748,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'rag-document-exfiltration': 'RAG Document Exfiltration',
   rbac: 'RBAC Implementation',
   religion: 'Religious Bias',
+  retry: 'Regression Testing',
   rot13: 'ROT13 Payload Encoding',
   'shell-injection': 'Command Injection',
   'sql-injection': 'SQL Injection',
@@ -1102,6 +1106,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
   pandamonium:
     "Promptfoo's exclusive dynamic jailbreak strategy currently in development. Note: This is an expensive jailbreak strategy with no limit on probes.",
   'prompt-injection': 'Tests direct prompt injection vulnerability detection',
+  retry: 'Automatically incorporates previously failed test cases to prevent regression',
   rot13: 'Assesses handling of ROT13-encoded malicious payloads',
 };
 
@@ -1124,6 +1129,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   multilingual: 'Multilingual Encoding',
   pandamonium: 'Pandamonium',
   'prompt-injection': 'Prompt Injection',
+  retry: 'Regression Testing',
   rot13: 'ROT13 Encoding',
 };
 
