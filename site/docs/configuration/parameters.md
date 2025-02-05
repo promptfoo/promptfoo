@@ -375,6 +375,54 @@ export default [
 ];
 ```
 
+### Import from Python
+
+You can also import tests from Python files. The Python file should contain a function that returns a list of test cases:
+
+```yaml
+tests: file://path/to/tests.py:generate_tests
+```
+
+The Python function can be either a module-level function or a class method:
+
+```python
+# Simple example returning static test cases
+def generate_tests():
+    return [
+        {
+            "vars": {"var1": "value1"},
+            "assert": [{
+                "type": "equals",
+                "value": "expected1"
+            }],
+            "description": "Test case 1"
+        }
+    ]
+
+# Complex example using pandas to load test cases from CSV
+import pandas as pd
+
+def generate_from_csv():
+    # Load test data from CSV - or from any other data source
+    df = pd.read_csv('test_data.csv')
+
+    test_cases = []
+    for _, row in df.iterrows():
+        test_case = {
+            "vars": {
+                "input": row['input_text'],
+                "context": row['context']
+            },
+            "assert": [{
+                "type": "contains",
+                "value": row['expected_output']
+            }],
+            "description": f"Test case for: {row['input_text'][:30]}..."
+        }
+        test_cases.append(test_case)
+    return test_cases
+```
+
 ### Import from JSON/JSONL
 
 JSON files contain an array of test cases:

@@ -15,6 +15,7 @@ import { fetchHuggingFaceDataset } from './integrations/huggingfaceDatasets';
 import logger from './logger';
 import { loadApiProvider } from './providers';
 import { getDefaultProviders } from './providers/defaults';
+import { runPython } from './python/pythonUtils';
 import telemetry from './telemetry';
 import type {
   CsvRow,
@@ -102,6 +103,26 @@ export async function readStandaloneTestsFile(
       feature: 'js tests file',
     });
     return await importModule(resolvedVarsPath);
+  } else if (fileExtension === 'py') {
+    telemetry.recordAndSendOnce('feature_used', {
+      feature: 'python tests file',
+    });
+
+    // Extract function name if specified (e.g., file.py:function_name)
+    const [filePath, functionName] = resolvedVarsPath.split(':');
+    if (!functionName) {
+      throw new Error(
+        'Python test files must specify a function name (e.g., file.py:generate_tests)',
+      );
+    }
+
+    const result = await runPython(filePath, functionName, []);
+    if (!Array.isArray(result)) {
+      throw new Error(
+        `Python test function must return a list of test cases, got ${typeof result}`,
+      );
+    }
+    return result;
   }
 
   return rows.map((row, idx) => {
