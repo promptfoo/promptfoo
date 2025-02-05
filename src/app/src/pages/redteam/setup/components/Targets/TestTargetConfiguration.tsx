@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import Editor from 'react-simple-code-editor';
 import ClearIcon from '@mui/icons-material/Clear';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -335,7 +335,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                           variant="outlined"
                           component="span"
                           startIcon={<VpnKeyIcon />}
-                          color="primary"
+                          color="warning"
                         >
                           {selectedTarget.config.signatureAuth?.privateKey
                             ? 'Change Key File'
@@ -370,7 +370,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                     {!selectedTarget.config.signatureAuth?.privateKey && (
                       <Typography
                         variant="caption"
-                        color="text.secondary"
+                        color="warning.main"
                         sx={{ mt: 1, display: 'block' }}
                       >
                         Upload a private key in PKCS-8 format (e.g., "-----BEGIN PRIVATE KEY-----")
@@ -411,8 +411,8 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                         privateKeyPath: undefined,
                       });
                     }}
-                    placeholder="Base64-encoded private key (with or without PEM headers)"
-                    helperText="Raw base64-encoded private key with or without PKCS8 headers"
+                    placeholder="Base64-encoded private key (without PEM headers)"
+                    helperText="Raw base64-encoded RSA private key without PKCS8 headers"
                   />
                 )}
 
