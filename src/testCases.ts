@@ -70,7 +70,11 @@ export async function readStandaloneTestsFile(
   // This function is confusingly named - it reads a CSV, JSON, or YAML file of
   // TESTS or test equivalents.
   const resolvedVarsPath = path.resolve(basePath, varsPath.replace(/^file:\/\//, ''));
-  const fileExtension = parsePath(resolvedVarsPath).ext.slice(1);
+  const [pathWithoutFunction] = resolvedVarsPath.split(':');
+  const fileExtension = parsePath(pathWithoutFunction).ext.slice(1);
+  logger.warn(`resolvedVarsPath: ${resolvedVarsPath}`);
+  logger.warn(`pathWithoutFunction: ${pathWithoutFunction}`);
+  logger.warn(`fileExtension: ${fileExtension}`);
   let rows: CsvRow[] = [];
 
   if (varsPath.startsWith('https://docs.google.com/spreadsheets/')) {
@@ -109,14 +113,17 @@ export async function readStandaloneTestsFile(
     });
 
     // Extract function name if specified (e.g., file.py:function_name)
-    const [filePath, functionName] = resolvedVarsPath.split(':');
+    const [filePath, functionName] = varsPath.split(':');
+    logger.debug(`filePath: ${filePath}`);
+    logger.debug(`functionName: ${functionName}`);
     if (!functionName) {
       throw new Error(
         'Python test files must specify a function name (e.g., file.py:generate_tests)',
       );
     }
 
-    const result = await runPython(filePath, functionName, []);
+    // Use pathWithoutFunction for the actual file path
+    const result = await runPython(pathWithoutFunction, functionName, []);
     if (!Array.isArray(result)) {
       throw new Error(
         `Python test function must return a list of test cases, got ${typeof result}`,
@@ -201,7 +208,10 @@ export async function readTests(
 ): Promise<TestCase[]> {
   const ret: TestCase[] = [];
 
+  logger.warn(`tests: ${tests}, type: ${typeof tests}, length: ${tests?.length}`);
+
   const loadTestsFromGlob = async (loadTestsGlob: string) => {
+    logger.warn(`loadTestsGlob: ${loadTestsGlob}`);
     if (loadTestsGlob.startsWith('huggingface://datasets/')) {
       telemetry.recordAndSendOnce('feature_used', {
         feature: 'huggingface dataset',
@@ -213,9 +223,15 @@ export async function readTests(
       loadTestsGlob = loadTestsGlob.slice('file://'.length);
     }
     const resolvedPath = path.resolve(basePath, loadTestsGlob);
-    const testFiles = globSync(resolvedPath, {
+    let testFiles: Array<string> = globSync(resolvedPath, {
       windowsPathsNoEscape: true,
     });
+
+    if (testFiles.length === 0) {
+      testFiles = [resolvedPath];
+    }
+
+    logger.warn(`testFiles: ${testFiles}, type: ${typeof testFiles}, length: ${testFiles?.length}`);
 
     if (loadTestsGlob.startsWith('https://docs.google.com/spreadsheets/')) {
       testFiles.push(loadTestsGlob);
@@ -233,6 +249,7 @@ export async function readTests(
     }
     for (const testFile of testFiles) {
       let testCases: TestCase[] | undefined;
+      logger.warn(`testFile: ${testFile}`);
       if (
         testFile.endsWith('.csv') ||
         testFile.startsWith('https://docs.google.com/spreadsheets/')
@@ -251,6 +268,14 @@ export async function readTests(
       } else if (testFile.endsWith('.json')) {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         testCases = await _deref(require(testFile), testFile);
+      } else if (testFile.endsWith('.py') || testFile.includes('.py:')) {
+        const [filePath, functionName] = testFile.split(':');
+        if (!filePath.endsWith('.py')) {
+          throw new Error(`Invalid Python test file path: ${testFile}`);
+        }
+        // If no function name specified, use generate_tests as default
+        const fnName = functionName || 'generate_tests';
+        testCases = await runPython(filePath, fnName, []);
       } else {
         throw new Error(`Unsupported file type for test file: ${testFile}`);
       }
@@ -268,6 +293,7 @@ export async function readTests(
   };
 
   if (typeof tests === 'string') {
+    logger.warn(`tests: ${tests}`);
     if (tests.endsWith('yaml') || tests.endsWith('yml')) {
       // Points to a tests file with multiple test cases
       return loadTestsFromGlob(tests);
@@ -278,6 +304,7 @@ export async function readTests(
   } else if (Array.isArray(tests)) {
     for (const globOrTest of tests) {
       if (typeof globOrTest === 'string') {
+        logger.warn(`globOrTest: ${globOrTest}`);
         // Resolve globs
         ret.push(...(await loadTestsFromGlob(globOrTest)));
       } else {
