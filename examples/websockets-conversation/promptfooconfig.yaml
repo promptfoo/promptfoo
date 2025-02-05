@@ -28,13 +28,16 @@ providers:
       transformResponse: |
         if (!data || typeof data !== 'object') {
           console.log('Invalid data:', data);
-          return { output: 'Invalid response data' };
+          return { output: 'Invalid response data', history: [] };
         }
+        console.log('Transform received data:', JSON.stringify(data));
         // Return an object with both output and history
-        return {
-          output: data.output,
-          history: data.history
+        const result = {
+          output: data.output || (data.response && data.response.output) || 'No output found',
+          history: data.history || []
         };
+        console.log('Transform returning:', JSON.stringify(result));
+        return result;
 
 # Test multi-turn conversations
 tests:
@@ -68,11 +71,4 @@ tests:
       question: How does conversation history work?
     assert:
       - type: javascript
-        value: |
-          (() => {
-            if (!response || typeof response !== 'object') {
-              console.log('Invalid response:', response);
-              return false;
-            }
-            return Array.isArray(response.history);
-          })()
+        value: file://assert.js:validateHistory
