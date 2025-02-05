@@ -389,8 +389,8 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                         privateKeyPath: undefined,
                       });
                     }}
-                    placeholder="Base64-encoded private key (without PEM headers)"
-                    helperText="Raw base64-encoded RSA private key without PKCS8 headers"
+                    placeholder="Base64-encoded private key (with or without PEM headers)"
+                    helperText="Raw base64-encoded private key with or without PKCS8 headers"
                   />
                 )}
 
