@@ -121,7 +121,7 @@ export async function validatePrivateKey(input: string): Promise<string> {
 
     for (const algorithm of algorithms) {
       try {
-        const format = isTraditionalRsa ? 'pkcs1' : 'pkcs8';
+        const format = 'pkcs8';
         await window.crypto.subtle.importKey(format, der, algorithm, true, ['sign']);
         return formattedKey;
       } catch (error) {
