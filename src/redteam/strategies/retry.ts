@@ -5,7 +5,7 @@ import logger from '../../logger';
 import type { TestCase, TestCaseWithPlugin } from '../../types';
 import invariant from '../../util/invariant';
 
-function deduplicateTests(tests: TestCase[]): TestCase[] {
+export function deduplicateTests(tests: TestCase[]): TestCase[] {
   const seen = new Set<string>();
   return tests.filter((test) => {
     const key = JSON.stringify(test.vars);
@@ -175,5 +175,3 @@ export async function addRetryTestCases(
   logger.debug(`Added ${deduped.length} unique retry test cases`);
   return deduped;
 }
-
-export { deduplicateTests };
