@@ -260,9 +260,10 @@ const PressContent = () => {
                 Leadership
               </Typography>
               <Typography variant="body1" paragraph>
-                Ian Webster, CEO & Co-founder
+                <Link href="https://www.linkedin.com/in/ianww/">Ian Webster</Link>, CEO & Co-founder
                 <br />
-                Michael D'Angelo, CTO & Co-founder
+                <Link href="https://www.linkedin.com/in/michaelldangelo/">Michael D'Angelo</Link>,
+                CTO & Co-founder
               </Typography>
               <Typography variant="h6" component="h4" gutterBottom>
                 Investors
