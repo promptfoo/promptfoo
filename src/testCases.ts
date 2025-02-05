@@ -253,9 +253,7 @@ export async function readTests(
         if (!filePath.endsWith('.py')) {
           throw new Error(`Invalid Python test file path: ${testFile}`);
         }
-        // If no function name specified, use generate_tests as default
-        const fnName = functionName || 'generate_tests';
-        testCases = await runPython(filePath, fnName, []);
+        testCases = await runPython(filePath, functionName ?? 'generate_tests', []);
       } else {
         throw new Error(`Unsupported file type for test file: ${testFile}`);
       }
