@@ -223,8 +223,6 @@ export async function readTests(
       testFiles = [resolvedPath];
     }
 
-    logger.warn(`testFiles: ${testFiles}, type: ${typeof testFiles}, length: ${testFiles?.length}`);
-
     if (loadTestsGlob.startsWith('https://docs.google.com/spreadsheets/')) {
       testFiles.push(loadTestsGlob);
     }
@@ -241,7 +239,6 @@ export async function readTests(
     }
     for (const testFile of testFiles) {
       let testCases: TestCase[] | undefined;
-      logger.warn(`testFile: ${testFile}`);
       if (
         testFile.endsWith('.csv') ||
         testFile.startsWith('https://docs.google.com/spreadsheets/')
@@ -285,7 +282,6 @@ export async function readTests(
   };
 
   if (typeof tests === 'string') {
-    logger.warn(`tests: ${tests}`);
     if (tests.endsWith('yaml') || tests.endsWith('yml')) {
       // Points to a tests file with multiple test cases
       return loadTestsFromGlob(tests);
@@ -296,7 +292,6 @@ export async function readTests(
   } else if (Array.isArray(tests)) {
     for (const globOrTest of tests) {
       if (typeof globOrTest === 'string') {
-        logger.warn(`globOrTest: ${globOrTest}`);
         // Resolve globs
         ret.push(...(await loadTestsFromGlob(globOrTest)));
       } else {
