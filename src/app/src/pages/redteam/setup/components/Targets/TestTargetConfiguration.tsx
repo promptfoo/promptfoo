@@ -266,6 +266,12 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 </a>{' '}
                 for more information.
               </Typography>
+              <Typography gutterBottom color="info">
+                <strong>
+                  Your private key is never sent to PromptFoo and will always be stored locally on
+                  your system.
+                </strong>{' '}
+              </Typography>
               <FormGroup>
                 <FormControlLabel
                   control={
@@ -434,18 +440,21 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                             reader.onload = async (event) => {
                               try {
                                 const content = event.target?.result as string;
-                                const validatedKey = await validatePrivateKey(content);
                                 updateCustomTarget('signatureAuth', {
                                   ...selectedTarget.config.signatureAuth,
-                                  privateKey: validatedKey,
+                                  privateKey: content,
                                   privateKeyPath: undefined,
                                 });
+                                await validatePrivateKey(content);
                                 showToast('Private key validated successfully', 'success');
                               } catch (error) {
-                                console.error('Invalid key:', error);
+                                console.warn(
+                                  'Key was loaded but could not be successfully validated:',
+                                  error,
+                                );
                                 showToast(
-                                  `Invalid private key: ${(error as Error).message}`,
-                                  'error',
+                                  `Key was loaded but could not be successfully validated: ${(error as Error).message}`,
+                                  'warning',
                                 );
                               }
                             };
@@ -477,7 +486,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                         ) : (
                           <>
                             <Typography gutterBottom color="text.secondary">
-                              Upload your PKCS-8 format private key
+                              Upload your PEM format private key
                             </Typography>
                             <label htmlFor="private-key-upload">
                               <Button
@@ -496,6 +505,9 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
 
                   {selectedTarget.config.signatureAuth?.keyInputType === 'path' && (
                     <Paper variant="outlined" sx={{ p: 3 }}>
+                      <Typography gutterBottom color="text.secondary">
+                        Specify the path on disk to your PEM format private key file
+                      </Typography>
                       <TextField
                         fullWidth
                         placeholder="/path/to/private_key.pem"
@@ -518,7 +530,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                           fullWidth
                           multiline
                           rows={4}
-                          placeholder="-----BEGIN PRIVATE KEY-----&#10;Base64 encoded key content&#10;-----END PRIVATE KEY-----"
+                          placeholder="-----BEGIN PRIVATE KEY-----&#10;Base64 encoded key content in PEM format&#10;-----END PRIVATE KEY-----"
                           value={selectedTarget.config.signatureAuth?.privateKey || ''}
                           onChange={(e) => {
                             updateCustomTarget('signatureAuth', {
@@ -537,18 +549,21 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                                 const inputKey =
                                   selectedTarget.config.signatureAuth?.privateKey || '';
                                 const formattedKey = convertStringKeyToPem(inputKey);
-                                const validatedKey = await validatePrivateKey(formattedKey);
                                 updateCustomTarget('signatureAuth', {
                                   ...selectedTarget.config.signatureAuth,
-                                  privateKey: validatedKey,
+                                  privateKey: formattedKey,
                                   privateKeyPath: undefined,
                                 });
+                                await validatePrivateKey(formattedKey);
                                 showToast('Private key validated successfully', 'success');
                               } catch (error) {
-                                console.error('Invalid key:', error);
+                                console.warn(
+                                  'Key was loaded but could not be successfully validated:',
+                                  error,
+                                );
                                 showToast(
-                                  `Invalid private key: ${(error as Error).message}`,
-                                  'error',
+                                  `Key was loaded but could not be successfully validated: ${(error as Error).message}`,
+                                  'warning',
                                 );
                               }
                             }}
