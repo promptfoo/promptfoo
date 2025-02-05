@@ -46,7 +46,6 @@ export async function validatePrivateKey(input: string): Promise<string> {
   try {
     // Format the key first
     let formattedKey: string;
-    const isTraditionalRsa = trimmedInput.includes(BEGIN_RSA_PRIVATE_KEY);
     const isEcKey = trimmedInput.includes(BEGIN_EC_PRIVATE_KEY);
 
     if (trimmedInput.startsWith(BEGIN_PRIVATE_KEY) && trimmedInput.endsWith(END_PRIVATE_KEY)) {
