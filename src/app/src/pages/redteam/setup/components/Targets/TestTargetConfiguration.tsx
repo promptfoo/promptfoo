@@ -350,8 +350,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                         color="text.secondary"
                         sx={{ mt: 1, display: 'block' }}
                       >
-                        Upload an RSA private key in PEM format (e.g., "-----BEGIN PRIVATE
-                        KEY-----")
+                        Upload a private key in PKCS-8 format (e.g., "-----BEGIN PRIVATE KEY-----")
                       </Typography>
                     )}
                   </Box>
@@ -370,7 +369,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                       })
                     }
                     placeholder="Path to private key file (e.g., /path/to/key.pem)"
-                    helperText="Absolute path to an RSA private key in PEM format"
+                    helperText="Absolute path to a private key in PKCS-8 format"
                   />
                 )}
 
