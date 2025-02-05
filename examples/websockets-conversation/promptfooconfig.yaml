@@ -1,0 +1,78 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+# Define the prompt template
+prompts:
+  - id: chat-prompt
+    label: Chat Message
+    raw: '{{ question }}'
+
+# Define the provider configuration
+providers:
+  - id: websocket
+    config:
+      type: websocket
+      url: ws://localhost:4000
+      maintainConnectionBetweenCalls: true
+      timeoutMs: 30000 # Set to 30 seconds
+      messageTemplate: |
+        {
+          "prompt": "{{ prompt }}",
+          "conversationId": "{{ context.conversationId }}"
+        }
+      beforeConnect: |
+        (async () => {
+          const response = await fetch('http://localhost:4000/conversation');
+          const data = await response.json();
+          return data;
+        })()
+      transformResponse: |
+        if (!data || typeof data !== 'object') {
+          console.log('Invalid data:', data);
+          return { output: 'Invalid response data' };
+        }
+        // Return an object with both output and history
+        return {
+          output: data.output,
+          history: data.history
+        };
+
+# Test multi-turn conversations
+tests:
+  # First conversation about the project
+  - vars:
+      question: What is this project about?
+    metadata:
+      conversationId: project_thread
+  - vars:
+      question: Can you give me some examples of its usage?
+    metadata:
+      conversationId: project_thread
+  - vars:
+      question: How does it handle errors?
+    metadata:
+      conversationId: project_thread
+
+  # Second conversation about features (runs independently)
+  - vars:
+      question: What are the main features?
+    metadata:
+      conversationId: features_thread
+  - vars:
+      question: Tell me more about the testing capabilities.
+    metadata:
+      conversationId: features_thread
+
+  # Verify responses
+  - description: Test response format and history
+    vars:
+      question: How does conversation history work?
+    assert:
+      - type: javascript
+        value: |
+          (() => {
+            if (!response || typeof response !== 'object') {
+              console.log('Invalid response:', response);
+              return false;
+            }
+            return Array.isArray(response.history);
+          })()

@@ -1,0 +1,9 @@
+prompts:
+  - name: first-message
+    provider: websocket-chat
+    vars:
+      prompt: 'Hello, this is my first message'
+  - name: follow-up
+    provider: websocket-chat
+    vars:
+      prompt: 'This is a follow-up message'

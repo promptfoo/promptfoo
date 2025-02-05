@@ -1,0 +1,14 @@
+{
+  "name": "websocket-conversation-server",
+  "version": "1.0.0",
+  "description": "Example WebSocket server with conversation state",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.13.0",
+    "uuid": "^9.0.0",
+    "node-fetch": "^2.6.9"
+  }
+}

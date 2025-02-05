@@ -1,0 +1,10 @@
+tests:
+  - description: Test multi-step conversation
+    prompts:
+      - first-message
+      - follow-up
+    assert:
+      - type: javascript
+        value: response.includes('Processed: Hello, this is my first message')
+      - type: javascript
+        value: response.includes('Processed: This is a follow-up message') 
