@@ -296,7 +296,6 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                       }}
                       onChange={(e) => {
                         const file = e.target.files?.[0];
-                        console.log('Loaded file', file);
                         if (file) {
                           const reader = new FileReader();
                           reader.onload = (event) => {
@@ -311,45 +310,50 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                         }
                       }}
                     />
-                    <label htmlFor="private-key-upload">
-                      <Button
-                        variant="outlined"
-                        component="span"
-                        startIcon={<VpnKeyIcon />}
-                        color={
-                          selectedTarget.config.signatureAuth?.privateKey ? 'primary' : 'warning'
-                        }
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <label htmlFor="private-key-upload">
+                        <Button
+                          variant="outlined"
+                          component="span"
+                          startIcon={<VpnKeyIcon />}
+                          color="primary"
+                        >
+                          {selectedTarget.config.signatureAuth?.privateKey
+                            ? 'Change Key File'
+                            : 'Upload Key File'}
+                        </Button>
+                      </label>
+                      {selectedTarget.config.signatureAuth?.privateKey && (
+                        <>
+                          <Typography
+                            variant="caption"
+                            color="success.main"
+                            sx={{ display: 'inline-flex', alignItems: 'center' }}
+                          >
+                            Key file loaded successfully
+                          </Typography>
+                          <IconButton
+                            size="small"
+                            onClick={() =>
+                              updateCustomTarget('signatureAuth', {
+                                ...selectedTarget.config.signatureAuth,
+                                privateKey: undefined,
+                                privateKeyPath: undefined,
+                              })
+                            }
+                            title="Clear private key"
+                          >
+                            <ClearIcon fontSize="small" />
+                          </IconButton>
+                        </>
+                      )}
+                    </Box>
+                    {!selectedTarget.config.signatureAuth?.privateKey && (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ mt: 1, display: 'block' }}
                       >
-                        {selectedTarget.config.signatureAuth?.privateKey
-                          ? 'Change Key File'
-                          : 'Upload Key File (Required)'}
-                      </Button>
-                    </label>
-                    {selectedTarget.config.signatureAuth?.privateKey ? (
-                      <>
-                        <Typography
-                          variant="caption"
-                          color="success.main"
-                          sx={{ ml: 1, display: 'inline-flex', alignItems: 'center' }}
-                        >
-                          Key file loaded successfully
-                        </Typography>
-                        <IconButton
-                          size="small"
-                          onClick={() =>
-                            updateCustomTarget('signatureAuth', {
-                              ...selectedTarget.config.signatureAuth,
-                              privateKey: undefined,
-                              privateKeyPath: undefined,
-                            })
-                          }
-                          title="Clear private key"
-                        >
-                          <ClearIcon fontSize="small" />
-                        </IconButton>
-                      </>
-                    ) : (
-                      <Typography variant="caption" color="warning.main" sx={{ ml: 1 }}>
                         Upload an RSA private key in PEM format (e.g., "-----BEGIN PRIVATE
                         KEY-----")
                       </Typography>
