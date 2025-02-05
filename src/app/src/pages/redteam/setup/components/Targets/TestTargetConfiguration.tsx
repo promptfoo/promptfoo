@@ -738,7 +738,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
           disabled={
             testingTarget ||
             (!selectedTarget.config.url && !selectedTarget.config.request) ||
-            (selectedTarget.config.signatureAuth &&
+            (selectedTarget.config.signatureAuth?.enabled &&
               !selectedTarget.config.signatureAuth.privateKey &&
               !selectedTarget.config.signatureAuth.privateKeyPath)
           }
