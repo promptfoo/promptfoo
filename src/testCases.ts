@@ -72,9 +72,6 @@ export async function readStandaloneTestsFile(
   const resolvedVarsPath = path.resolve(basePath, varsPath.replace(/^file:\/\//, ''));
   const [pathWithoutFunction] = resolvedVarsPath.split(':');
   const fileExtension = parsePath(pathWithoutFunction).ext.slice(1);
-  logger.warn(`resolvedVarsPath: ${resolvedVarsPath}`);
-  logger.warn(`pathWithoutFunction: ${pathWithoutFunction}`);
-  logger.warn(`fileExtension: ${fileExtension}`);
   let rows: CsvRow[] = [];
 
   if (varsPath.startsWith('https://docs.google.com/spreadsheets/')) {
@@ -113,9 +110,7 @@ export async function readStandaloneTestsFile(
     });
 
     // Extract function name if specified (e.g., file.py:function_name)
-    const [filePath, functionName] = varsPath.split(':');
-    logger.debug(`filePath: ${filePath}`);
-    logger.debug(`functionName: ${functionName}`);
+    const [_filePath, functionName] = varsPath.split(':');
     if (!functionName) {
       throw new Error(
         'Python test files must specify a function name (e.g., file.py:generate_tests)',
@@ -208,10 +203,7 @@ export async function readTests(
 ): Promise<TestCase[]> {
   const ret: TestCase[] = [];
 
-  logger.warn(`tests: ${tests}, type: ${typeof tests}, length: ${tests?.length}`);
-
   const loadTestsFromGlob = async (loadTestsGlob: string) => {
-    logger.warn(`loadTestsGlob: ${loadTestsGlob}`);
     if (loadTestsGlob.startsWith('huggingface://datasets/')) {
       telemetry.recordAndSendOnce('feature_used', {
         feature: 'huggingface dataset',
