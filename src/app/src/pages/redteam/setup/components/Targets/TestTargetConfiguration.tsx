@@ -1,8 +1,13 @@
 import React from 'react';
 import Editor from 'react-simple-code-editor';
+import { useToast } from '@app/hooks/useToast';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ClearIcon from '@mui/icons-material/Clear';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import InfoIcon from '@mui/icons-material/Info';
+import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
+import KeyIcon from '@mui/icons-material/Key';
+import UploadIcon from '@mui/icons-material/Upload';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import { FormControl, FormControlLabel, RadioGroup, Radio } from '@mui/material';
 import Accordion from '@mui/material/Accordion';
@@ -12,7 +17,7 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
-import IconButton from '@mui/material/IconButton';
+import FormGroup from '@mui/material/FormGroup';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemIcon from '@mui/material/ListItemIcon';
@@ -29,8 +34,11 @@ import 'prismjs/components/prism-clike';
 import { highlight, languages } from 'prismjs/components/prism-core';
 import 'prismjs/components/prism-javascript';
 import type { ProviderOptions } from '../../types';
+import { convertStringKeyToPem, validatePrivateKey } from '../../utils/crypto';
 import ProviderResponse from './ProviderResponse';
 import 'prismjs/themes/prism.css';
+
+// adjust the import path as needed
 
 interface TestTargetConfigurationProps {
   testingTarget: boolean;
@@ -53,6 +61,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
   defaultRequestTransform,
 }) => {
   const theme = useTheme();
+  const { showToast } = useToast();
   const darkMode = theme.palette.mode === 'dark';
 
   const [signatureAuthExpanded, setSignatureAuthExpanded] = React.useState(
@@ -257,82 +266,212 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                 </a>{' '}
                 for more information.
               </Typography>
-              <Stack spacing={2}>
-                <Stack direction="row" alignItems="center" spacing={1}>
-                  <Switch
-                    checked={!!selectedTarget.config.signatureAuth}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        updateCustomTarget('signatureAuth', {
-                          privateKeyPath: '',
-                          signatureValidityMs: 300000,
-                          signatureDataTemplate: '{{signatureTimestamp}}',
-                        });
-                      } else {
-                        updateCustomTarget('signatureAuth', undefined);
-                      }
-                    }}
-                  />
-                  <Typography>Use Signature Authentication</Typography>
-                </Stack>
+              <Typography gutterBottom color="info">
+                <strong>
+                  Your private key is never sent to PromptFoo and will always be stored locally on
+                  your system.
+                </strong>{' '}
+              </Typography>
+              <FormGroup>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={!!selectedTarget.config.signatureAuth?.enabled}
+                      onChange={(event) => {
+                        if (event.target.checked) {
+                          updateCustomTarget('signatureAuth', {
+                            ...selectedTarget.config.signatureAuth,
+                            enabled: true,
+                            keyInputType:
+                              selectedTarget.config.signatureAuth?.keyInputType || 'upload',
+                          });
+                        } else {
+                          updateCustomTarget('signatureAuth', {
+                            ...selectedTarget.config.signatureAuth,
+                            enabled: false,
+                          });
+                        }
+                      }}
+                    />
+                  }
+                  label="Enable signature authentication"
+                />
+              </FormGroup>
+              {selectedTarget.config.signatureAuth?.enabled && (
+                <Stack spacing={4}>
+                  <Box>
+                    <Typography variant="subtitle1" gutterBottom>
+                      Key Input Method
+                    </Typography>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
+                      <Paper
+                        variant="outlined"
+                        sx={{
+                          p: 2,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          cursor: 'pointer',
+                          bgcolor:
+                            selectedTarget.config.signatureAuth?.keyInputType === 'upload'
+                              ? 'action.selected'
+                              : 'background.paper',
+                          '&:hover': {
+                            bgcolor: 'action.hover',
+                          },
+                        }}
+                        onClick={() =>
+                          updateCustomTarget('signatureAuth', {
+                            ...selectedTarget.config.signatureAuth,
+                            keyInputType: 'upload',
+                          })
+                        }
+                      >
+                        <UploadIcon
+                          color={
+                            selectedTarget.config.signatureAuth?.keyInputType === 'upload'
+                              ? 'primary'
+                              : 'action'
+                          }
+                          sx={{ mb: 1 }}
+                        />
+                        <Typography variant="body1" gutterBottom>
+                          Upload Key
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" align="center">
+                          Upload PEM file
+                        </Typography>
+                      </Paper>
 
-                {selectedTarget.config.signatureAuth && (
-                  <>
-                    <Stack spacing={4}>
-                      <Box>
-                        <input
-                          type="file"
-                          accept=".pem,.key"
-                          style={{ display: 'none' }}
-                          id="private-key-upload"
-                          onClick={(e) => {
-                            // Reset value to trigger onChange even if same file selected
-                            (e.target as HTMLInputElement).value = '';
-                          }}
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            console.log('Loaded file', file);
-                            if (file) {
-                              const reader = new FileReader();
-                              reader.onload = (event) => {
+                      <Paper
+                        variant="outlined"
+                        sx={{
+                          p: 2,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          cursor: 'pointer',
+                          bgcolor:
+                            selectedTarget.config.signatureAuth?.keyInputType === 'path'
+                              ? 'action.selected'
+                              : 'background.paper',
+                          '&:hover': {
+                            bgcolor: 'action.hover',
+                          },
+                        }}
+                        onClick={() =>
+                          updateCustomTarget('signatureAuth', {
+                            ...selectedTarget.config.signatureAuth,
+                            keyInputType: 'path',
+                          })
+                        }
+                      >
+                        <InsertDriveFileIcon
+                          color={
+                            selectedTarget.config.signatureAuth?.keyInputType === 'path'
+                              ? 'primary'
+                              : 'action'
+                          }
+                          sx={{ mb: 1 }}
+                        />
+                        <Typography variant="body1" gutterBottom>
+                          File Path
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" align="center">
+                          Specify key location
+                        </Typography>
+                      </Paper>
+
+                      <Paper
+                        variant="outlined"
+                        sx={{
+                          p: 2,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          cursor: 'pointer',
+                          bgcolor:
+                            selectedTarget.config.signatureAuth?.keyInputType === 'base64'
+                              ? 'action.selected'
+                              : 'background.paper',
+                          '&:hover': {
+                            bgcolor: 'action.hover',
+                          },
+                        }}
+                        onClick={() =>
+                          updateCustomTarget('signatureAuth', {
+                            ...selectedTarget.config.signatureAuth,
+                            keyInputType: 'base64',
+                          })
+                        }
+                      >
+                        <KeyIcon
+                          color={
+                            selectedTarget.config.signatureAuth?.keyInputType === 'base64'
+                              ? 'primary'
+                              : 'action'
+                          }
+                          sx={{ mb: 1 }}
+                        />
+                        <Typography variant="body1" gutterBottom>
+                          Base64 Key String
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" align="center">
+                          Paste encoded key
+                        </Typography>
+                      </Paper>
+                    </Box>
+                  </Box>
+
+                  {selectedTarget.config.signatureAuth?.keyInputType === 'upload' && (
+                    <Paper variant="outlined" sx={{ p: 3 }}>
+                      <input
+                        type="file"
+                        accept=".pem,.key"
+                        style={{ display: 'none' }}
+                        id="private-key-upload"
+                        onClick={(e) => {
+                          (e.target as HTMLInputElement).value = '';
+                        }}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = async (event) => {
+                              try {
                                 const content = event.target?.result as string;
                                 updateCustomTarget('signatureAuth', {
                                   ...selectedTarget.config.signatureAuth,
                                   privateKey: content,
                                   privateKeyPath: undefined,
                                 });
-                              };
-                              reader.readAsText(file);
-                            }
-                          }}
-                        />
-                        <label htmlFor="private-key-upload">
-                          <Button
-                            variant="outlined"
-                            component="span"
-                            startIcon={<VpnKeyIcon />}
-                            color={
-                              selectedTarget.config.signatureAuth?.privateKey
-                                ? 'primary'
-                                : 'warning'
-                            }
-                          >
-                            {selectedTarget.config.signatureAuth?.privateKey
-                              ? 'Change Key File'
-                              : 'Upload Key File (Required)'}
-                          </Button>
-                        </label>
+                                await validatePrivateKey(content);
+                                showToast('Private key validated successfully', 'success');
+                              } catch (error) {
+                                console.warn(
+                                  'Key was loaded but could not be successfully validated:',
+                                  error,
+                                );
+                                showToast(
+                                  `Key was loaded but could not be successfully validated: ${(error as Error).message}`,
+                                  'warning',
+                                );
+                              }
+                            };
+                            reader.readAsText(file);
+                          }
+                        }}
+                      />
+                      <Box sx={{ textAlign: 'center' }}>
                         {selectedTarget.config.signatureAuth?.privateKey ? (
                           <>
-                            <Typography
-                              variant="caption"
-                              color="success.main"
-                              sx={{ ml: 1, display: 'inline-flex', alignItems: 'center' }}
-                            >
+                            <Typography color="success.main" gutterBottom>
                               Key file loaded successfully
                             </Typography>
-                            <IconButton
-                              size="small"
+                            <Button
+                              variant="outlined"
+                              color="error"
+                              startIcon={<ClearIcon />}
                               onClick={() =>
                                 updateCustomTarget('signatureAuth', {
                                   ...selectedTarget.config.signatureAuth,
@@ -340,88 +479,173 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                                   privateKeyPath: undefined,
                                 })
                               }
-                              title="Clear private key"
                             >
-                              <ClearIcon fontSize="small" />
-                            </IconButton>
+                              Remove Key
+                            </Button>
                           </>
                         ) : (
-                          <Typography variant="caption" color="warning.main" sx={{ ml: 1 }}>
-                            Upload an RSA private key in PEM format (e.g., "-----BEGIN PRIVATE
-                            KEY-----")
-                          </Typography>
+                          <>
+                            <Typography gutterBottom color="text.secondary">
+                              Upload your PEM format private key
+                            </Typography>
+                            <label htmlFor="private-key-upload">
+                              <Button
+                                variant="outlined"
+                                component="span"
+                                startIcon={<VpnKeyIcon />}
+                              >
+                                Choose File
+                              </Button>
+                            </label>
+                          </>
                         )}
                       </Box>
+                    </Paper>
+                  )}
+
+                  {selectedTarget.config.signatureAuth?.keyInputType === 'path' && (
+                    <Paper variant="outlined" sx={{ p: 3 }}>
+                      <Typography gutterBottom color="text.secondary">
+                        Specify the path on disk to your PEM format private key file
+                      </Typography>
                       <TextField
                         fullWidth
-                        label="Signature Data Template"
-                        value={
-                          selectedTarget.config.signatureAuth?.signatureDataTemplate ||
-                          '{{signatureTimestamp}}'
-                        }
-                        onChange={(e) =>
+                        placeholder="/path/to/private_key.pem"
+                        value={selectedTarget.config.signatureAuth?.privateKeyPath || ''}
+                        onChange={(e) => {
                           updateCustomTarget('signatureAuth', {
                             ...selectedTarget.config.signatureAuth,
-                            signatureDataTemplate: e.target.value,
-                          })
-                        }
-                        placeholder="Template for generating signature data"
-                        helperText="Supported variables: {{signatureTimestamp}}. Use \n for newlines"
-                        InputLabelProps={{
-                          shrink: true,
+                            privateKeyPath: e.target.value,
+                            privateKey: undefined,
+                          });
                         }}
                       />
-                      <TextField
-                        fullWidth
-                        label="Signature Validity (ms)"
-                        type="number"
-                        value={selectedTarget.config.signatureAuth?.signatureValidityMs || '300000'}
-                        onChange={(e) =>
-                          updateCustomTarget('signatureAuth', {
-                            ...selectedTarget.config.signatureAuth,
-                            signatureValidityMs: Number.parseInt(e.target.value),
-                          })
-                        }
-                        placeholder="How long the signature remains valid"
-                        InputLabelProps={{
-                          shrink: true,
-                        }}
-                      />
-                      <TextField
-                        fullWidth
-                        label="Signature Refresh Buffer (ms)"
-                        type="number"
-                        value={selectedTarget.config.signatureAuth?.signatureRefreshBufferMs}
-                        onChange={(e) =>
-                          updateCustomTarget('signatureAuth', {
-                            ...selectedTarget.config.signatureAuth,
-                            signatureRefreshBufferMs: Number.parseInt(e.target.value),
-                          })
-                        }
-                        placeholder="Buffer time before signature expiry to refresh - defaults to 10% of signature validity"
-                        InputLabelProps={{
-                          shrink: true,
-                        }}
-                      />
-                      <TextField
-                        fullWidth
-                        label="Signature Algorithm"
-                        value={selectedTarget.config.signatureAuth?.signatureAlgorithm || 'SHA256'}
-                        onChange={(e) =>
-                          updateCustomTarget('signatureAuth', {
-                            ...selectedTarget.config.signatureAuth,
-                            signatureAlgorithm: e.target.value,
-                          })
-                        }
-                        placeholder="Signature algorithm (default: SHA256)"
-                        InputLabelProps={{
-                          shrink: true,
-                        }}
-                      />
-                    </Stack>
-                  </>
-                )}
-              </Stack>
+                    </Paper>
+                  )}
+
+                  {selectedTarget.config.signatureAuth?.keyInputType === 'base64' && (
+                    <Paper variant="outlined" sx={{ p: 3 }}>
+                      <Stack spacing={2}>
+                        <TextField
+                          fullWidth
+                          multiline
+                          rows={4}
+                          placeholder="-----BEGIN PRIVATE KEY-----&#10;Base64 encoded key content in PEM format&#10;-----END PRIVATE KEY-----"
+                          value={selectedTarget.config.signatureAuth?.privateKey || ''}
+                          onChange={(e) => {
+                            updateCustomTarget('signatureAuth', {
+                              ...selectedTarget.config.signatureAuth,
+                              privateKey: e.target.value,
+                              privateKeyPath: undefined,
+                            });
+                          }}
+                        />
+                        <Box sx={{ textAlign: 'center' }}>
+                          <Button
+                            variant="outlined"
+                            startIcon={<CheckCircleIcon />}
+                            onClick={async () => {
+                              try {
+                                const inputKey =
+                                  selectedTarget.config.signatureAuth?.privateKey || '';
+                                const formattedKey = convertStringKeyToPem(inputKey);
+                                updateCustomTarget('signatureAuth', {
+                                  ...selectedTarget.config.signatureAuth,
+                                  privateKey: formattedKey,
+                                  privateKeyPath: undefined,
+                                });
+                                await validatePrivateKey(formattedKey);
+                                showToast('Private key validated successfully', 'success');
+                              } catch (error) {
+                                console.warn(
+                                  'Key was loaded but could not be successfully validated:',
+                                  error,
+                                );
+                                showToast(
+                                  `Key was loaded but could not be successfully validated: ${(error as Error).message}`,
+                                  'warning',
+                                );
+                              }
+                            }}
+                          >
+                            Format & Validate
+                          </Button>
+                        </Box>
+                      </Stack>
+                    </Paper>
+                  )}
+
+                  <TextField
+                    fullWidth
+                    label="Signature Data Template"
+                    value={
+                      selectedTarget.config.signatureAuth?.signatureDataTemplate ||
+                      '{{signatureTimestamp}}'
+                    }
+                    onChange={(e) =>
+                      updateCustomTarget('signatureAuth', {
+                        ...selectedTarget.config.signatureAuth,
+                        signatureDataTemplate: e.target.value,
+                      })
+                    }
+                    placeholder="Template for generating signature data"
+                    helperText="Supported variables: {{signatureTimestamp}}. Use \n for newlines"
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                  />
+
+                  <TextField
+                    fullWidth
+                    label="Signature Validity (ms)"
+                    type="number"
+                    value={selectedTarget.config.signatureAuth?.signatureValidityMs || '300000'}
+                    onChange={(e) =>
+                      updateCustomTarget('signatureAuth', {
+                        ...selectedTarget.config.signatureAuth,
+                        signatureValidityMs: Number.parseInt(e.target.value),
+                      })
+                    }
+                    placeholder="How long the signature remains valid"
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                  />
+
+                  <TextField
+                    fullWidth
+                    label="Signature Refresh Buffer (ms)"
+                    type="number"
+                    value={selectedTarget.config.signatureAuth?.signatureRefreshBufferMs}
+                    onChange={(e) =>
+                      updateCustomTarget('signatureAuth', {
+                        ...selectedTarget.config.signatureAuth,
+                        signatureRefreshBufferMs: Number.parseInt(e.target.value),
+                      })
+                    }
+                    placeholder="Buffer time before signature expiry to refresh - defaults to 10% of signature validity"
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                  />
+
+                  <TextField
+                    fullWidth
+                    label="Signature Algorithm"
+                    value={selectedTarget.config.signatureAuth?.signatureAlgorithm || 'SHA256'}
+                    onChange={(e) =>
+                      updateCustomTarget('signatureAuth', {
+                        ...selectedTarget.config.signatureAuth,
+                        signatureAlgorithm: e.target.value,
+                      })
+                    }
+                    placeholder="Signature algorithm (default: SHA256)"
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                  />
+                </Stack>
+              )}
             </AccordionDetails>
           </Accordion>
 
@@ -511,7 +735,13 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
         <Button
           variant="contained"
           onClick={handleTestTarget}
-          disabled={testingTarget || !selectedTarget.config.url}
+          disabled={
+            testingTarget ||
+            (!selectedTarget.config.url && !selectedTarget.config.request) ||
+            (selectedTarget.config.signatureAuth?.enabled &&
+              !selectedTarget.config.signatureAuth.privateKey &&
+              !selectedTarget.config.signatureAuth.privateKeyPath)
+          }
           startIcon={testingTarget ? <CircularProgress size={20} /> : null}
           color="primary"
         >
