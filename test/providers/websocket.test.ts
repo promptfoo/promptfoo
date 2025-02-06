@@ -11,7 +11,7 @@ describe('createTransformResponse', () => {
   });
 
   it('should create function from string parser', () => {
-    const parser = 'return { output: `parsed-${data}` }';
+    const parser = '({ output: `parsed-${data}` })';
     const transform = createTransformResponse(parser);
     expect(transform('test')).toEqual({ output: 'parsed-test' });
   });
@@ -27,18 +27,13 @@ describe('WebSocketProvider', () => {
   let provider: WebSocketProvider;
 
   beforeEach(() => {
-    jest.useFakeTimers();
     mockWs = {
-      get readyState() {
-        return WebSocket.OPEN;
-      },
       on: jest.fn(),
       send: jest.fn(),
       close: jest.fn(),
       onmessage: jest.fn(),
       onerror: jest.fn(),
       onopen: jest.fn(),
-      onclose: jest.fn(),
     } as unknown as jest.Mocked<WebSocket>;
 
     jest.mocked(WebSocket).mockImplementation(() => mockWs);
@@ -52,7 +47,6 @@ describe('WebSocketProvider', () => {
   });
 
   afterEach(() => {
-    jest.useRealTimers();
     jest.clearAllMocks();
   });
 
@@ -67,26 +61,26 @@ describe('WebSocketProvider', () => {
         config: {},
       });
     }).toThrow(
-      'Expected WebSocket provider ws://test.com to have a config containing messageTemplate',
+      'Expected WebSocket provider ws://test.com to have a config containing {messageTemplate}',
     );
   });
 
   it('should send message and handle response', async () => {
     const responseData = { result: 'test response' };
-    let resolvePromise: (value: unknown) => void;
-    const promise = new Promise((resolve) => {
-      resolvePromise = resolve;
+
+    jest.mocked(WebSocket).mockImplementation(() => {
+      setTimeout(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        setTimeout(() => {
+          mockWs.onmessage?.({ data: JSON.stringify(responseData) } as WebSocket.MessageEvent);
+        }, 10);
+      }, 10);
+      return mockWs;
     });
 
-    mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-    const response = provider.callApi('test prompt');
-    mockWs.onmessage?.({ data: JSON.stringify(responseData) } as WebSocket.MessageEvent);
-
-    resolvePromise!(undefined);
-    await promise;
-
-    await expect(response).resolves.toEqual({ output: { output: responseData } });
-  }, 10000);
+    const response = await provider.callApi('test prompt');
+    expect(response).toEqual({ output: { output: responseData } });
+  });
 
   it('should handle WebSocket errors', async () => {
     jest.mocked(WebSocket).mockImplementation(() => {

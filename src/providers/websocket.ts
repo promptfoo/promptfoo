@@ -13,24 +13,17 @@ import { getNunjucksEngine } from '../util/templates';
 const nunjucks = getNunjucksEngine();
 
 const DEFAULT_TIMEOUT = 30000; // 30 seconds
-const CONNECTION_TIMEOUT = 5000; // 5 seconds
 
 interface WebSocketProviderConfig {
   messageTemplate: string;
   url?: string;
-  timeoutMs?: number; // Document that this defaults to DEFAULT_TIMEOUT
+  timeoutMs?: number;
   transformResponse?: string | Function;
-  beforeConnect?: string | Function;
-  maintainConnectionBetweenCalls?: boolean;
+  setOrUpdateVars?: string | Function;
   /**
    * @deprecated
    */
   responseParser?: string | Function;
-}
-
-interface WebSocketContext {
-  ws?: WebSocket;
-  connectionContext?: any;
 }
 
 export function createTransformResponse(parser: any): (data: any) => ProviderResponse {
@@ -68,66 +61,59 @@ export function createTransformResponse(parser: any): (data: any) => ProviderRes
   return (data) => ({ output: data });
 }
 
-export function createBeforeConnect(fn: any): () => Promise<any> {
+export function createSetOrUpdateVars(
+  fn: any,
+): (vars: Record<string, any>) => Promise<Record<string, any>> {
   if (typeof fn === 'function') {
-    logger.debug('Using provided beforeConnect function');
+    logger.debug('Using provided setOrUpdateVars function');
     return fn;
   }
   if (typeof fn === 'string') {
-    logger.debug('Creating beforeConnect function from string');
+    logger.debug('Creating setOrUpdateVars function from string');
 
-    return async () => {
+    return async (vars: Record<string, any>) => {
       try {
         // Execute the string as async code directly
-        const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+        const AsyncFunction = Object.getPrototypeOf(async function (
+          vars: Record<string, any>,
+        ) {}).constructor;
         const asyncFn = new AsyncFunction(
           'fetch',
+          'vars',
           `
           ${fn}
         `,
         );
-        return await asyncFn(fetch);
+        return await asyncFn(fetch, vars);
       } catch (error) {
-        logger.error(`Error in beforeConnect: ${error}`);
+        logger.error(`Error in setOrUpdateVars: ${error}`);
         throw error;
       }
     };
   }
 
-  logger.debug('Using default empty beforeConnect function');
+  logger.debug('Using default empty setOrUpdateVars function');
   return async () => ({});
 }
 
-/**
- * WebSocket provider for making API calls over WebSocket connections.
- *
- * Note: When running with multiple workers, each worker maintains its own WebSocket
- * connections. This means conversation history and connection state is not shared
- * between workers. For multi-turn conversations, it's recommended to run with a
- * single worker or use a different provider type that supports shared state.
- */
 export class WebSocketProvider implements ApiProvider {
   url: string;
   config: WebSocketProviderConfig;
   transformResponse: (data: any) => ProviderResponse;
-  beforeConnect: () => Promise<any>;
-  context: WebSocketContext;
+  setOrUpdateVars: (
+    vars: Record<string, string | object>,
+  ) => Promise<Record<string, string | object>>;
 
   constructor(url: string, options: ProviderOptions) {
-    logger.debug(`Initializing WebSocket provider for ${url}`);
     this.config = options.config as WebSocketProviderConfig;
     this.url = this.config.url || url;
     this.transformResponse = createTransformResponse(
       this.config.transformResponse || this.config.responseParser,
     );
-    this.beforeConnect = createBeforeConnect(this.config.beforeConnect);
-    this.context = {};
-
-    logger.debug(`WebSocket provider config: ${JSON.stringify(this.config)}`);
-
+    this.setOrUpdateVars = createSetOrUpdateVars(this.config.setOrUpdateVars);
     invariant(
       this.config.messageTemplate,
-      `Expected WebSocket provider ${this.url} to have a config containing messageTemplate, but got ${safeJsonStringify(
+      `Expected WebSocket provider ${this.url} to have a config containing {messageTemplate}, but got ${safeJsonStringify(
         this.config,
       )}`,
     );
@@ -141,205 +127,51 @@ export class WebSocketProvider implements ApiProvider {
     return `[WebSocket Provider ${this.url}]`;
   }
 
-  private async closeWebSocket(): Promise<void> {
-    return new Promise<void>((resolve) => {
-      if (!this.context.ws) {
-        resolve();
-        return;
-      }
-
-      // If already closing or closed, just cleanup state
-      if (
-        this.context.ws.readyState === WebSocket.CLOSING ||
-        this.context.ws.readyState === WebSocket.CLOSED
-      ) {
-        this.context.ws = undefined;
-        this.context.connectionContext = undefined;
-        resolve();
-        return;
-      }
-
-      // For open connections, wait for close
-      if (this.context.ws.readyState === WebSocket.OPEN) {
-        this.context.ws.once('close', () => {
-          this.context.ws = undefined;
-          this.context.connectionContext = undefined;
-          resolve();
-        });
-        this.context.ws.close();
-      }
-    });
-  }
-
-  private async withCleanup<T>(
-    operation: () => Promise<T>,
-    options: {
-      ws?: WebSocket;
-      shouldCleanup?: boolean;
-      forceCleanupOnError?: boolean;
-    } = {},
-  ): Promise<T> {
-    const {
-      ws,
-      shouldCleanup = !this.config.maintainConnectionBetweenCalls,
-      forceCleanupOnError = true,
-    } = options;
-
-    try {
-      const result = await operation();
-      if (shouldCleanup) {
-        await this.closeWebSocket();
-      }
-      return result;
-    } catch (error) {
-      if (forceCleanupOnError) {
-        if (ws) {
-          ws.close();
-        } else {
-          await this.closeWebSocket();
-        }
-      }
-      throw error;
-    }
-  }
-
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    logger.debug(`callApi called with prompt: ${prompt}`);
-
-    if (
-      this.config.maintainConnectionBetweenCalls &&
-      this.context.ws?.readyState === WebSocket.OPEN
-    ) {
-      logger.debug('Using existing WebSocket connection');
-      return this.withCleanup(() => this.sendMessage(prompt, context));
-    }
-
-    logger.debug('Creating new WebSocket connection');
-    return this.withCleanup(async () => {
-      await this.connect();
-      return this.sendMessage(prompt, context);
-    });
-  }
-
-  private async connect(): Promise<void> {
-    logger.debug('Starting WebSocket connection');
-
-    try {
-      logger.debug('Calling beforeConnect function');
-      this.context.connectionContext = await this.beforeConnect();
-      logger.debug(`Connection context set to: ${JSON.stringify(this.context.connectionContext)}`);
-    } catch (error) {
-      logger.error(`Error in beforeConnect: ${error}`);
-      throw error; // Propagate the error to prevent connection without context
-    }
-
-    return new Promise<void>((resolve, reject) => {
-      try {
-        logger.debug(`Opening WebSocket connection to ${this.url}`);
-        const ws = new WebSocket(this.url);
-
-        ws.onopen = () => {
-          logger.debug('WebSocket connection opened successfully');
-          this.context.ws = ws;
-          resolve();
-        };
-
-        ws.onerror = (err) => {
-          const errMsg = `WebSocket connection error: ${JSON.stringify(err)}`;
-          logger.error(errMsg);
-          reject(new Error(errMsg));
-        };
-
-        ws.onclose = () => {
-          logger.debug('WebSocket connection closed');
-          if (this.context.ws === ws) {
-            this.context.ws = undefined;
-          }
-        };
-
-        setTimeout(() => {
-          if (ws.readyState !== WebSocket.OPEN) {
-            ws.close();
-            reject(new Error('WebSocket connection timeout'));
-          }
-        }, CONNECTION_TIMEOUT);
-      } catch (error) {
-        logger.error(`Error creating WebSocket: ${error}`);
-        reject(error);
-      }
-    });
-  }
-
-  private async sendMessage(
-    prompt: string,
-    context?: CallApiContextParams,
-  ): Promise<ProviderResponse> {
-    const ws = this.context.ws;
-    if (!ws) {
-      throw new Error('No WebSocket connection available');
-    }
-
-    logger.debug('Building message vars with:');
-    logger.debug(`- Context vars: ${JSON.stringify(context?.vars)}`);
-    logger.debug(`- Connection context: ${JSON.stringify(this.context.connectionContext)}`);
-
-    const vars = {
+    let vars = {
       ...(context?.vars || {}),
-      prompt,
-      conversationId:
-        context?.vars?.conversationId || this.context.connectionContext?.conversationId,
-      context: this.context.connectionContext,
     };
-
-    logger.debug(`Final template vars: ${JSON.stringify(vars)}`);
+    vars.prompt = prompt;
+    vars = await this.setOrUpdateVars?.(vars);
 
     const message = nunjucks.renderString(this.config.messageTemplate, vars);
+
     logger.debug(`Sending WebSocket message to ${this.url}: ${message}`);
 
-    return this.withCleanup(
-      () =>
-        new Promise<ProviderResponse>((resolve) => {
-          const timeout = setTimeout(() => {
-            if (!this.config.maintainConnectionBetweenCalls) {
-              ws.close();
-            }
-            resolve({ error: 'WebSocket request timed out' });
-          }, this.config.timeoutMs || DEFAULT_TIMEOUT);
+    return new Promise<ProviderResponse>((resolve) => {
+      const ws = new WebSocket(this.url);
+      const timeout = setTimeout(() => {
+        ws.close();
+        resolve({ error: 'WebSocket request timed out' });
+      }, this.config.timeoutMs || DEFAULT_TIMEOUT);
 
-          ws.onmessage = (event) => {
-            clearTimeout(timeout);
+      ws.onmessage = (event) => {
+        clearTimeout(timeout);
+        logger.debug(`Received WebSocket response: ${event.data}`);
+        try {
+          let data = event.data;
+          if (typeof data === 'string') {
             try {
-              let data = event.data;
-              if (typeof data === 'string') {
-                try {
-                  data = JSON.parse(data);
-                } catch {
-                  logger.debug('Failed to parse response as JSON');
-                }
-              }
-              const result = this.transformResponse(data);
-              if (!this.config.maintainConnectionBetweenCalls) {
-                ws.close();
-              }
-              resolve({ output: result });
-            } catch (err) {
-              ws.close();
-              resolve({ error: `Failed to process response: ${JSON.stringify(err)}` });
+              data = JSON.parse(data);
+            } catch {
+              // If parsing fails, assume it's a text response
             }
-          };
-
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(message);
-          } else {
-            throw new Error('WebSocket not in OPEN state');
           }
-        }),
-      { ws: this.context.ws, forceCleanupOnError: true },
-    );
-  }
+          resolve({ output: this.transformResponse(data) });
+        } catch (err) {
+          resolve({ error: `Failed to process response: ${JSON.stringify(err)}` });
+        }
+        ws.close();
+      };
 
-  async cleanup(): Promise<void> {
-    logger.debug('Cleaning up WebSocket provider');
-    await this.closeWebSocket();
+      ws.onerror = (err) => {
+        clearTimeout(timeout);
+        resolve({ error: `WebSocket error: ${JSON.stringify(err)}` });
+      };
+
+      ws.onopen = () => {
+        ws.send(message);
+      };
+    });
   }
 }

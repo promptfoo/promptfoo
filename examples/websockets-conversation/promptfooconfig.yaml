@@ -15,16 +15,19 @@ providers:
       maintainConnectionBetweenCalls: true
       timeoutMs: 30000 # Set to 30 seconds
       messageTemplate: '{"prompt": "{{ prompt }}", "conversationId": "{{ conversationId }}"}'
-      beforeConnect: |
-        console.log('Starting beforeConnect...');
-        const response = await fetch('http://localhost:4000/conversation', {
-          method: 'POST'
-        });
-        const data = await response.json();
-        console.log('Server returned conversation ID:', data.conversationId);
-        const context = { conversationId: data.conversationId };
-        console.log('Returning context:', context);
-        return context;
+      setOrUpdateVars: |
+        console.log('Starting setOrUpdateVars...');
+        console.log('Vars:', vars);
+        if (!vars.conversationId) {
+          const response = await fetch('http://localhost:4000/conversation', {
+            method: 'POST'
+          });
+          const data = await response.json();
+          console.log('Server returned conversation ID:', data.conversationId);
+          vars.conversationId = data.conversationId;
+          console.log('Returning updated vars:', vars);
+        }
+        return vars;
       transformResponse: |
         if (!data || typeof data !== 'object') {
           return { output: 'Invalid response data', history: [] };

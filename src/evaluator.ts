@@ -331,11 +331,6 @@ export async function runEval({
       registers[test.options.storeOutputAs] = ret.response.output;
     }
 
-    // Cleanup provider if needed
-    if (provider.cleanup) {
-      await provider.cleanup();
-    }
-
     return [ret];
   } catch (err) {
     return [

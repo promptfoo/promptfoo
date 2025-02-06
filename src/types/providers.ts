@@ -63,8 +63,8 @@ export interface CallApiOptionsParams {
 }
 
 export interface ApiProvider {
-  id(): string;
-  callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse>;
+  id: () => string;
+  callApi: CallApiFunction;
   callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
   callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
   config?: any;
@@ -73,7 +73,6 @@ export interface ApiProvider {
   label?: ProviderLabel;
   transform?: string;
   toJSON?: () => any;
-  cleanup?(): Promise<void>;
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {
