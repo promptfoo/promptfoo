@@ -26,11 +26,13 @@ providers:
 | [AI21 Labs](./ai21.md)                              | Jurassic and Jamba models                  | `ai21:jamba-1.5-mini`                              |
 | [AWS Bedrock](./aws-bedrock.md)                     | AWS-hosted models from various providers   | `bedrock:us.meta.llama3-2-90b-instruct-v1:0`       |
 | [Azure OpenAI](./azure.md)                          | Azure-hosted OpenAI models                 | `azureopenai:gpt-4o-custom-deployment-name`        |
+| [Adaline Gateway](./adaline.md)                     | Unified interface for multiple providers   | Compatible with OpenAI syntax                      |
 | [Cloudflare AI](./cloudflare-ai.md)                 | Cloudflare's AI platform                   | `cloudflare-ai:@cf/meta/llama-3-8b-instruct`       |
 | [Cohere](./cohere.md)                               | Cohere's language models                   | `cohere:command`                                   |
 | [DeepSeek](./deepseek.md)                           | DeepSeek's language models                 | `deepseek:deepseek-chat`                           |
 | [F5](./f5.md)                                       | OpenAI-compatible AI Gateway interface     | `f5:path-name`                                     |
 | [fal.ai](./fal.md)                                  | Image Generation Provider                  | `fal:image:fal-ai/fast-sdxl`                       |
+| [Fireworks AI](./fireworks.md)                      | Various hosted models                      | `fireworks:accounts/fireworks/models/qwen-v2p5-7b` |
 | [GitHub](./github.md)                               | GitHub AI Gateway                          | `github:gpt-4o-mini`                               |
 | [Google AI Studio](./google.md)                     | Gemini models                              | `google:gemini-2.0-flash-thinking-exp`             |
 | [Google Vertex AI](./vertex.md)                     | Google Cloud's AI platform                 | `vertex:gemini-pro`                                |
@@ -63,8 +65,6 @@ providers:
 | [Simulated User](./simulated-user.md)               | Custom - Conversation simulator            | `promptfoo:simulated-user`                         |
 | [WatsonX](./watsonx.md)                             | IBM's WatsonX                              | `watsonx:ibm/granite-13b-chat-v2`                  |
 | [X.AI](./xai.md)                                    | X.AI's models                              | `xai:grok-2`                                       |
-| [Adaline Gateway](./adaline.md)                     | Unified interface for multiple providers   | Compatible with OpenAI syntax                      |
-| [Fireworks AI](./fireworks.md)                      | Various hosted models                      | `fireworks:accounts/fireworks/models/qwen-v2p5-7b` |
 
 ## Provider Syntax
 
