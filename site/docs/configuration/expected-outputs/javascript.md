@@ -98,15 +98,30 @@ assert:
 
 ## Using test context
 
-The `context` variable contains the prompt and test case variables:
+The `context` variable contains information about the test case and execution environment:
 
 ```ts
-interface AssertContext {
+interface AssertionValueFunctionContext {
   // Raw prompt sent to LLM
-  prompt: string;
+  prompt: string | undefined;
 
   // Test case variables
   vars: Record<string, string | object>;
+
+  // The complete test case
+  test: AtomicTestCase;
+
+  // Log probabilities from the LLM response, if available
+  logProbs: number[] | undefined;
+
+  // Configuration passed to the assertion
+  config?: Record<string, any>;
+
+  // The provider that generated the response
+  provider: ApiProvider | undefined;
+
+  // The complete provider response
+  providerResponse: ProviderResponse | undefined;
 }
 ```
 
