@@ -731,13 +731,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
         <Button
           variant="contained"
           onClick={handleTestTarget}
-          disabled={
-            testingTarget ||
-            (!selectedTarget.config.url && !selectedTarget.config.request) ||
-            (selectedTarget.config.signatureAuth?.enabled &&
-              !selectedTarget.config.signatureAuth.privateKey &&
-              !selectedTarget.config.signatureAuth.privateKeyPath)
-          }
+          disabled={testingTarget || (!selectedTarget.config.url && !selectedTarget.config.request)}
           startIcon={testingTarget ? <CircularProgress size={20} /> : null}
           color="primary"
         >
