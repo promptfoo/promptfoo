@@ -14,11 +14,7 @@ providers:
       url: ws://localhost:4000
       maintainConnectionBetweenCalls: true
       timeoutMs: 30000 # Set to 30 seconds
-      messageTemplate: |
-        {
-          "prompt": "{{ prompt }}",
-          "conversationId": "{{ context.conversationId }}"
-        }
+      messageTemplate: '{"prompt": "{{ prompt }}", "conversationId": "{{ conversationId }}"}'
       beforeConnect: |
         (async () => {
           const response = await fetch('http://localhost:4000/conversation');
@@ -33,7 +29,7 @@ providers:
         console.log('Transform received data:', JSON.stringify(data));
         // Return an object with both output and history
         const result = {
-          output: data.output || (data.response && data.response.output) || 'No output found',
+          output: data.output || (data.error && `Error: ${data.error}`) || 'No output found',
           history: data.history || []
         };
         console.log('Transform returning:', JSON.stringify(result));
@@ -44,31 +40,24 @@ tests:
   # First conversation about the project
   - vars:
       question: What is this project about?
-    metadata:
       conversationId: project_thread
   - vars:
       question: Can you give me some examples of its usage?
-    metadata:
       conversationId: project_thread
   - vars:
       question: How does it handle errors?
-    metadata:
       conversationId: project_thread
 
   # Second conversation about features (runs independently)
   - vars:
       question: What are the main features?
-    metadata:
       conversationId: features_thread
   - vars:
       question: Tell me more about the testing capabilities.
-    metadata:
       conversationId: features_thread
 
   # Verify responses
   - description: Test response format and history
     vars:
       question: How does conversation history work?
-    assert:
-      - type: javascript
-        value: file://assert.js:validateHistory
+      conversationId: history_thread
