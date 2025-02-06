@@ -280,16 +280,12 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
                       onChange={(event) => {
                         if (event.target.checked) {
                           updateCustomTarget('signatureAuth', {
-                            ...selectedTarget.config.signatureAuth,
                             enabled: true,
                             keyInputType:
                               selectedTarget.config.signatureAuth?.keyInputType || 'upload',
                           });
                         } else {
-                          updateCustomTarget('signatureAuth', {
-                            ...selectedTarget.config.signatureAuth,
-                            enabled: false,
-                          });
+                          updateCustomTarget('signatureAuth', undefined);
                         }
                       }}
                     />
