@@ -1,0 +1,25 @@
+name: Security Checks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  security-checks:
+    name: Security Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Required for scanning history
+
+      - name: TruffleHog OSS
+        uses: trufflesecurity/trufflehog@v3.88.5
+        with:
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
