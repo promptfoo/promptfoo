@@ -98,6 +98,14 @@ export function createBeforeConnect(fn: any): () => Promise<any> {
   return async () => ({});
 }
 
+/**
+ * WebSocket provider for making API calls over WebSocket connections.
+ *
+ * Note: When running with multiple workers, each worker maintains its own WebSocket
+ * connections. This means conversation history and connection state is not shared
+ * between workers. For multi-turn conversations, it's recommended to run with a
+ * single worker or use a different provider type that supports shared state.
+ */
 export class WebSocketProvider implements ApiProvider {
   url: string;
   config: WebSocketProviderConfig;

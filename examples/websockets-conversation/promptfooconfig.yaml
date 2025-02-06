@@ -47,15 +47,15 @@ tests:
       question: What about tomorrow?
 
   # Example 2: Using client-specified conversation IDs
-  # - vars:
-  #     question: What is this project about?
-  #     conversationId: project_thread
-  # - vars:
-  #     question: Can you give me some examples of its usage?
-  #     conversationId: project_thread
-  # - vars:
-  #     question: How does it handle errors?
-  #     conversationId: project_thread
+  - vars:
+      question: What is this project about?
+      conversationId: project_thread
+  - vars:
+      question: Can you give me some examples of its usage?
+      conversationId: project_thread
+  - vars:
+      question: How does it handle errors?
+      conversationId: project_thread
 
   # Example 3: Another client-specified conversation
   - vars:
@@ -65,8 +65,8 @@ tests:
       question: Tell me more about the testing capabilities.
       conversationId: features_thread
 
-  # Verify responses
-  # - description: Test response format and history
-  #   vars:
-  #     question: How does conversation history work?
-  #     conversationId: history_thread
+  Verify responses
+  - description: Test response format and history
+    vars:
+      question: How does conversation history work?
+      conversationId: history_thread

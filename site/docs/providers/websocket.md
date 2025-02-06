@@ -13,59 +13,74 @@ providers:
       messageTemplate: '{"prompt": "{{prompt}}", "model": "{{model}}"}'
       transformResponse: 'data.output'
       timeoutMs: 10000
+      maintainConnectionBetweenCalls: true
 ```
 
 ### Configuration Options
 
 - `url` (required): The WebSocket URL to connect to.
 - `messageTemplate` (required): A template for the message to be sent over the WebSocket connection. You can use placeholders like `{{prompt}}` which will be replaced with the actual prompt.
-- `transformResponse` (optional): A JavaScript snippet or function to extract the desired output from the WebSocket response given the `data` parameter. If not provided, the entire response will be used as the output. If the response is valid JSON, the object will be returned.
-- `timeoutMs` (optional): The timeout in milliseconds for the WebSocket connection. Default is 10000 (10 seconds).
+- `transformResponse` (optional): A JavaScript snippet or function to extract the desired output from the WebSocket response given the `data` parameter. If not provided, the entire
+  response will be used as the output. If the response is valid JSON, the object will be returned.
+- `timeoutMs` (optional): The timeout in milliseconds for the WebSocket connection. Default is 30000 (30 seconds).
+- `beforeConnect` (optional): A JavaScript function that runs before establishing the WebSocket connection. Useful for getting session tokens or conversation IDs.
+- `maintainConnectionBetweenCalls` (optional): If true, keeps the WebSocket connection open between calls. Useful for maintaining conversation state.
 
-## Using Variables
+## Multi-turn Conversations
 
-You can use test variables in your `messageTemplate`:
+The WebSocket provider supports multi-turn conversations by maintaining connection state and conversation history. There are two ways to handle conversation IDs:
+
+### Server-generated Conversation IDs
+
+For a complete working example of server-generated conversation IDs, see [examples/websockets-conversation/](https://github.com/promptfoo/promptfoo/tree/main/examples/websockets-conversation/) in the GitHub repository.
 
 ```yaml
 providers:
-  - id: 'wss://example.com/ws'
+  - id: websocket
     config:
-      messageTemplate: '{"prompt": "{{prompt}}", "model": "{{model}}", "language": "{{language}}"}'
-      transformResponse: 'data.translation'
+      url: 'ws://localhost:4000'
+      maintainConnectionBetweenCalls: true
+      messageTemplate: '{"prompt": "{{prompt}}", "conversationId": "{{context.conversationId}}"}'
+      beforeConnect: |
+        const response = await fetch('http://localhost:4000/conversation', {
+          method: 'POST'
+        });
+        const data = await response.json();
+        return { conversationId: data.conversationId };
 
 tests:
   - vars:
-      model: 'gpt-4'
-      language: 'French'
+      question: 'What is this project about?'
+  - vars:
+      question: 'Can you give me some examples?'
 ```
 
-## Parsing the Response
+The example includes:
 
-Use the `transformResponse` property to extract specific values from the WebSocket response. For example:
+- A simple WebSocket server that maintains conversation state
+- A complete configuration showing both server-generated and client-specified conversation IDs
+- Example test cases demonstrating multi-turn conversations
+
+### Client-specified Conversation IDs
 
 ```yaml
 providers:
-  - id: 'wss://example.com/ws'
+  - id: websocket
     config:
-      messageTemplate: '{"prompt": "{{prompt}}"}'
-      transformResponse: 'data.choices[0].message.content'
+      url: 'ws://localhost:4000'
+      maintainConnectionBetweenCalls: true
+      messageTemplate: '{"prompt": "{{prompt}}", "conversationId": "{{conversationId}}"}'
+
+tests:
+  - vars:
+      question: 'Tell me about features'
+      conversationId: features_thread
+  - vars:
+      question: 'How does testing work?'
+      conversationId: features_thread
 ```
 
-This configuration extracts the message content from a response structure similar to:
-
-```json
-{
-  "choices": [
-    {
-      "message": {
-        "content": "This is the response."
-      }
-    }
-  ]
-}
-```
-
-## Using as a Library
+> **Note:** When running with multiple workers, each worker maintains its own WebSocket connections. This means conversation history and connection state is not shared between workers. For multi-turn conversations, it's recommended to run with a single worker or use a different provider type that supports shared state.
 
 If you are using promptfoo as a node library, you can provide the equivalent provider config:
 
