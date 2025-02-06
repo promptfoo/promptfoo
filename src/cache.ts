@@ -58,11 +58,6 @@ export async function fetchWithCache<T = any>(
   bust: boolean = false,
   maxRetries?: number,
 ): Promise<FetchWithCacheResult<T>> {
-  const copy = Object.assign({}, options);
-  delete copy.headers;
-  const cacheKey = `fetch:v2:${url}:${JSON.stringify(copy)}`;
-  const cache = await getCache();
-
   if (!enabled || bust) {
     const resp = await fetchWithRetries(url, options, timeout, maxRetries);
 
@@ -75,16 +70,18 @@ export async function fetchWithCache<T = any>(
         statusText: resp.statusText,
         headers: Object.fromEntries(resp.headers.entries()),
         deleteFromCache: async () => {
-          if (enabled) {
-            await cache.del(cacheKey);
-            logger.debug(`Evicted from cache: ${cacheKey}`);
-          }
+          // No-op when cache is disabled
         },
       };
     } catch {
       throw new Error(`Error parsing response as JSON: ${respText}`);
     }
   }
+
+  const copy = Object.assign({}, options);
+  delete copy.headers;
+  const cacheKey = `fetch:v2:${url}:${JSON.stringify(copy)}`;
+  const cache = await getCache();
 
   let cached = true;
   let errorResponse = null;
