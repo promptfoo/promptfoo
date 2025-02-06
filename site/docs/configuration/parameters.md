@@ -363,7 +363,10 @@ tests:
 You can also import tests from Javascript or Typescript files.
 
 ```yaml
-tests: file://path/to/tests.js
+tests:
+  - file://path/to/tests.js
+  # or
+  - file://path/to/tests.ts:generate_tests
 ```
 
 The file should export an array of test cases:
@@ -373,6 +376,21 @@ export default [
   { vars: { var1: 'value1', var2: 'value2' }, assert: [], description: 'Test #1' },
   { vars: { var1: 'value3', var2: 'value4' }, assert: [], description: 'Test #2' },
 ];
+```
+
+```ts title="tests.ts"
+export async function generate_tests() {
+  // Fetch test cases from database
+  const results = await mockDb.query('SELECT input, context FROM test_cases');
+  return results.map((row, i) => ({
+    vars: {
+      var1: row.input,
+      var2: row.context,
+    },
+    assert: [],
+    description: `Test #${i + 1}`,
+  }));
+}
 ```
 
 ### Import from Python

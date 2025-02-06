@@ -1,0 +1,15 @@
+description: Example showing how to load test cases from JavaScript/TypeScript functions
+
+prompts:
+  - 'Translate the following text to {{target_language}}: {{text}}'
+
+providers:
+  - openai:gpt-4o-mini
+
+# Demonstrate different ways to load test cases from JavaScript/TypeScript
+tests:
+  # Load simple test cases
+  - file://defaultExport.ts
+
+  # Load test cases from simulated database
+  - file://functionExport.ts:generateFromDatabase

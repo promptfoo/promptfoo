@@ -95,7 +95,9 @@ export async function readStandaloneTestsFile(
     telemetry.recordAndSendOnce('feature_used', {
       feature: 'js tests file',
     });
-    return await importModule(resolvedVarsPath, maybeFunctionName);
+    const mod = await importModule(pathWithoutFunction, maybeFunctionName);
+    logger.warn(`Mod: ${JSON.stringify(mod)}`);
+    return typeof mod === 'function' ? await mod() : mod;
   }
   if (fileExtension === 'py') {
     telemetry.recordAndSendOnce('feature_used', {
@@ -208,101 +210,113 @@ export async function readTest(
   return testCase;
 }
 
+/**
+ * Loads test cases from a glob pattern, supporting various file formats and sources.
+ * @param loadTestsGlob - The glob pattern or URL to load tests from
+ * @param basePath - Base path for resolving relative paths
+ * @returns Promise resolving to an array of TestCase objects
+ */
+async function loadTestsFromGlob(
+  loadTestsGlob: string,
+  basePath: string = '',
+): Promise<TestCase[]> {
+  if (loadTestsGlob.startsWith('huggingface://datasets/')) {
+    telemetry.recordAndSendOnce('feature_used', {
+      feature: 'huggingface dataset',
+    });
+    return await fetchHuggingFaceDataset(loadTestsGlob);
+  }
+
+  if (loadTestsGlob.startsWith('file://')) {
+    loadTestsGlob = loadTestsGlob.slice('file://'.length);
+  }
+  const resolvedPath = path.resolve(basePath, loadTestsGlob);
+  const testFiles: Array<string> = globSync(resolvedPath, {
+    windowsPathsNoEscape: true,
+  });
+
+  // Check for possible function names in the path
+  const pathWithoutFunction: string = resolvedPath.split(':')[0];
+  if (
+    (isJavascriptFile(pathWithoutFunction) || pathWithoutFunction.endsWith('.py')) &&
+    !testFiles.includes(resolvedPath)
+  ) {
+    testFiles.push(resolvedPath);
+  }
+
+  if (loadTestsGlob.startsWith('https://docs.google.com/spreadsheets/')) {
+    testFiles.push(loadTestsGlob);
+  }
+
+  const _deref = async (testCases: TestCase[], file: string) => {
+    logger.debug(`Dereferencing test file: ${file}`);
+    return (await $RefParser.dereference(testCases)) as TestCase[];
+  };
+
+  const ret: TestCase<Record<string, string | string[] | object>>[] = [];
+  if (testFiles.length < 1) {
+    logger.error(`No test files found for path: ${loadTestsGlob}`);
+    return ret;
+  }
+  for (const testFile of testFiles) {
+    let testCases: TestCase[] | undefined;
+    const pathWithoutFunction: string = testFile.split(':')[0];
+
+    if (
+      testFile.endsWith('.csv') ||
+      testFile.startsWith('https://docs.google.com/spreadsheets/') ||
+      isJavascriptFile(pathWithoutFunction) ||
+      pathWithoutFunction.endsWith('.py')
+    ) {
+      testCases = await readStandaloneTestsFile(testFile, basePath);
+    } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
+      testCases = yaml.load(fs.readFileSync(testFile, 'utf-8')) as TestCase[];
+      testCases = await _deref(testCases, testFile);
+    } else if (testFile.endsWith('.jsonl')) {
+      const fileContent = fs.readFileSync(testFile, 'utf-8');
+      testCases = fileContent
+        .split('\n')
+        .filter((line) => line.trim())
+        .map((line) => JSON.parse(line));
+      testCases = await _deref(testCases, testFile);
+    } else if (testFile.endsWith('.json')) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      testCases = await _deref(require(testFile), testFile);
+    } else {
+      throw new Error(`Unsupported file type for test file: ${testFile}`);
+    }
+
+    if (testCases) {
+      if (!Array.isArray(testCases) && typeof testCases === 'object') {
+        testCases = [testCases];
+      }
+      for (const testCase of testCases) {
+        ret.push(await readTest(testCase, path.dirname(testFile)));
+      }
+    }
+  }
+  return ret;
+}
+
 export async function readTests(
   tests: TestSuiteConfig['tests'],
   basePath: string = '',
 ): Promise<TestCase[]> {
   const ret: TestCase[] = [];
 
-  const loadTestsFromGlob = async (loadTestsGlob: string) => {
-    if (loadTestsGlob.startsWith('huggingface://datasets/')) {
-      telemetry.recordAndSendOnce('feature_used', {
-        feature: 'huggingface dataset',
-      });
-      return await fetchHuggingFaceDataset(loadTestsGlob);
-    }
-
-    if (loadTestsGlob.startsWith('file://')) {
-      loadTestsGlob = loadTestsGlob.slice('file://'.length);
-    }
-    const resolvedPath = path.resolve(basePath, loadTestsGlob);
-    const testFiles: Array<string> = globSync(resolvedPath, {
-      windowsPathsNoEscape: true,
-    });
-
-    if (resolvedPath.includes('.py') && !testFiles.includes(resolvedPath)) {
-      testFiles.push(resolvedPath);
-    }
-
-    if (loadTestsGlob.startsWith('https://docs.google.com/spreadsheets/')) {
-      testFiles.push(loadTestsGlob);
-    }
-
-    const _deref = async (testCases: TestCase[], file: string) => {
-      logger.debug(`Dereferencing test file: ${file}`);
-      return (await $RefParser.dereference(testCases)) as TestCase[];
-    };
-
-    const ret: TestCase<Record<string, string | string[] | object>>[] = [];
-    if (testFiles.length < 1) {
-      logger.error(`No test files found for path: ${loadTestsGlob}`);
-      return ret;
-    }
-    for (const testFile of testFiles) {
-      let testCases: TestCase[] | undefined;
-      if (
-        testFile.endsWith('.csv') ||
-        testFile.startsWith('https://docs.google.com/spreadsheets/')
-      ) {
-        testCases = await readStandaloneTestsFile(testFile, basePath);
-      } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
-        testCases = yaml.load(fs.readFileSync(testFile, 'utf-8')) as TestCase[];
-        testCases = await _deref(testCases, testFile);
-      } else if (testFile.endsWith('.jsonl')) {
-        const fileContent = fs.readFileSync(testFile, 'utf-8');
-        testCases = fileContent
-          .split('\n')
-          .filter((line) => line.trim())
-          .map((line) => JSON.parse(line));
-        testCases = await _deref(testCases, testFile);
-      } else if (testFile.endsWith('.json')) {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        testCases = await _deref(require(testFile), testFile);
-      } else if (testFile.endsWith('.py') || testFile.includes('.py:')) {
-        const [filePath, functionName] = testFile.split(':');
-        if (!filePath.endsWith('.py')) {
-          throw new Error(`Invalid Python test file path: ${testFile}`);
-        }
-        testCases = await runPython(filePath, functionName ?? 'generate_tests', []);
-      } else {
-        throw new Error(`Unsupported file type for test file: ${testFile}`);
-      }
-
-      if (testCases) {
-        if (!Array.isArray(testCases) && typeof testCases === 'object') {
-          testCases = [testCases];
-        }
-        for (const testCase of testCases) {
-          ret.push(await readTest(testCase, path.dirname(testFile)));
-        }
-      }
-    }
-    return ret;
-  };
-
   if (typeof tests === 'string') {
+    // Points to a tests file with multiple test cases
     if (tests.endsWith('yaml') || tests.endsWith('yml')) {
-      // Points to a tests file with multiple test cases
-      return loadTestsFromGlob(tests);
-    } else {
-      // Points to a tests.{csv,json,yaml,yml,js} or Google Sheet
-      return readStandaloneTestsFile(tests, basePath);
+      return loadTestsFromGlob(tests, basePath);
     }
-  } else if (Array.isArray(tests)) {
+    // Points to a tests.{csv,json,yaml,yml,js} or Google Sheet
+    return readStandaloneTestsFile(tests, basePath);
+  }
+  if (Array.isArray(tests)) {
     for (const globOrTest of tests) {
       if (typeof globOrTest === 'string') {
         // Resolve globs
-        ret.push(...(await loadTestsFromGlob(globOrTest)));
+        ret.push(...(await loadTestsFromGlob(globOrTest, basePath)));
       } else {
         // Load individual TestCase
         ret.push(await readTest(globOrTest, basePath));
