@@ -159,7 +159,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       }
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);
-      await data.deleteFromCache?.();
+      await data?.deleteFromCache?.();
       return {
         error: `API call error: ${String(err)}`,
       };
@@ -254,7 +254,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ),
       };
     } catch (err) {
-      await data.deleteFromCache?.();
+      await data?.deleteFromCache?.();
       return {
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
       };
