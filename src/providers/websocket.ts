@@ -173,8 +173,18 @@ export class WebSocketProvider implements ApiProvider {
 
   private async withCleanup<T>(
     operation: () => Promise<T>,
-    shouldCleanup = !this.config.maintainConnectionBetweenCalls,
+    options: {
+      ws?: WebSocket;
+      shouldCleanup?: boolean;
+      forceCleanupOnError?: boolean;
+    } = {},
   ): Promise<T> {
+    const {
+      ws,
+      shouldCleanup = !this.config.maintainConnectionBetweenCalls,
+      forceCleanupOnError = true,
+    } = options;
+
     try {
       const result = await operation();
       if (shouldCleanup) {
@@ -182,7 +192,13 @@ export class WebSocketProvider implements ApiProvider {
       }
       return result;
     } catch (error) {
-      await this.closeWebSocket();
+      if (forceCleanupOnError) {
+        if (ws) {
+          ws.close();
+        } else {
+          await this.closeWebSocket();
+        }
+      }
       throw error;
     }
   }
@@ -280,40 +296,50 @@ export class WebSocketProvider implements ApiProvider {
     const message = nunjucks.renderString(this.config.messageTemplate, vars);
     logger.debug(`Sending WebSocket message to ${this.url}: ${message}`);
 
-    return new Promise<ProviderResponse>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        resolve({ error: 'WebSocket request timed out' });
-      }, this.config.timeoutMs || DEFAULT_TIMEOUT);
-
-      ws.onmessage = (event) => {
-        clearTimeout(timeout);
-        logger.debug(`Received WebSocket response raw: ${event.data}`);
-        try {
-          let data = event.data;
-          if (typeof data === 'string') {
-            try {
-              data = JSON.parse(data);
-              logger.debug(`Parsed WebSocket data: ${JSON.stringify(data)}`);
-            } catch {
-              logger.debug('Failed to parse response as JSON');
+    return this.withCleanup(
+      () =>
+        new Promise<ProviderResponse>((resolve) => {
+          const timeout = setTimeout(() => {
+            if (!this.config.maintainConnectionBetweenCalls) {
+              ws.close();
             }
+            resolve({ error: 'WebSocket request timed out' });
+          }, this.config.timeoutMs || DEFAULT_TIMEOUT);
+
+          ws.onmessage = (event) => {
+            clearTimeout(timeout);
+            try {
+              let data = event.data;
+              if (typeof data === 'string') {
+                try {
+                  data = JSON.parse(data);
+                } catch {
+                  logger.debug('Failed to parse response as JSON');
+                }
+              }
+              const result = this.transformResponse(data);
+              if (!this.config.maintainConnectionBetweenCalls) {
+                ws.close();
+              }
+              resolve({ output: result });
+            } catch (err) {
+              ws.close();
+              resolve({ error: `Failed to process response: ${JSON.stringify(err)}` });
+            }
+          };
+
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(message);
+          } else {
+            throw new Error('WebSocket not in OPEN state');
           }
-          const result = this.transformResponse(data);
-          logger.debug(`Transform result: ${JSON.stringify(result)}`);
-          resolve({ output: result });
-        } catch (err) {
-          logger.error(`Failed to process response: ${err}`);
-          resolve({ error: `Failed to process response: ${JSON.stringify(err)}` });
-        }
-      };
+        }),
+      { ws: this.context.ws, forceCleanupOnError: true },
+    );
+  }
 
-      ws.onerror = (err) => {
-        clearTimeout(timeout);
-        logger.error(`WebSocket error during message: ${JSON.stringify(err)}`);
-        reject(new Error(`WebSocket error: ${JSON.stringify(err)}`));
-      };
-
-      ws.send(message);
-    });
+  async cleanup(): Promise<void> {
+    logger.debug('Cleaning up WebSocket provider');
+    await this.closeWebSocket();
   }
 }

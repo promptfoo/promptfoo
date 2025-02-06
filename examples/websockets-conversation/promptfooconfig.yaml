@@ -65,7 +65,7 @@ tests:
       question: Tell me more about the testing capabilities.
       conversationId: features_thread
 
-  Verify responses
+  # Verify responses
   - description: Test response format and history
     vars:
       question: How does conversation history work?
