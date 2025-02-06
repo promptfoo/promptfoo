@@ -159,6 +159,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       }
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);
+      await data.deleteFromCache?.();
       return {
         error: `API call error: ${String(err)}`,
       };
@@ -166,10 +167,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     logger.debug(`\tOpenAI chat completions API response: ${JSON.stringify(data)}`);
     if (data.error) {
+      await data.deleteFromCache?.();
       return {
         error: formatOpenAiError(data),
       };
     }
+
     try {
       const message = data.choices[0].message;
       if (message.refusal) {
@@ -251,6 +254,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ),
       };
     } catch (err) {
+      await data.deleteFromCache?.();
       return {
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
       };

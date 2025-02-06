@@ -47,6 +47,7 @@ export type FetchWithCacheResult<T> = {
   status: number;
   statusText: string;
   headers?: Record<string, string>;
+  deleteFromCache?: () => Promise<void>;
 };
 
 export async function fetchWithCache<T = any>(
@@ -57,6 +58,11 @@ export async function fetchWithCache<T = any>(
   bust: boolean = false,
   maxRetries?: number,
 ): Promise<FetchWithCacheResult<T>> {
+  const copy = Object.assign({}, options);
+  delete copy.headers;
+  const cacheKey = `fetch:v2:${url}:${JSON.stringify(copy)}`;
+  const cache = await getCache();
+
   if (!enabled || bust) {
     const resp = await fetchWithRetries(url, options, timeout, maxRetries);
 
@@ -68,17 +74,17 @@ export async function fetchWithCache<T = any>(
         status: resp.status,
         statusText: resp.statusText,
         headers: Object.fromEntries(resp.headers.entries()),
+        deleteFromCache: async () => {
+          if (enabled) {
+            await cache.del(cacheKey);
+            logger.debug(`Evicted from cache: ${cacheKey}`);
+          }
+        },
       };
     } catch {
       throw new Error(`Error parsing response as JSON: ${respText}`);
     }
   }
-
-  const cache = await getCache();
-
-  const copy = Object.assign({}, options);
-  delete copy.headers;
-  const cacheKey = `fetch:v2:${url}:${JSON.stringify(copy)}`;
 
   let cached = true;
   let errorResponse = null;
@@ -138,6 +144,12 @@ export async function fetchWithCache<T = any>(
     status: parsedResponse.status,
     statusText: parsedResponse.statusText,
     headers: parsedResponse.headers,
+    deleteFromCache: async () => {
+      if (cached) {
+        await cache.del(cacheKey);
+        logger.debug(`Evicted from cache: ${cacheKey}`);
+      }
+    },
   };
 }
 
