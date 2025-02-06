@@ -6,7 +6,6 @@ import * as path from 'path';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
-import { readTests } from '../../../src/util/testCaseReader';
 import type { UnifiedConfig } from '../../../src/types';
 import { maybeLoadFromExternalFile } from '../../../src/util';
 import {
@@ -15,6 +14,7 @@ import {
   resolveConfigs,
   combineConfigs,
 } from '../../../src/util/config/load';
+import { readTests } from '../../../src/util/testCaseReader';
 
 jest.mock('../../../src/database', () => ({
   getDb: jest.fn(),

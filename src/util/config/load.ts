@@ -14,7 +14,6 @@ import logger from '../../logger';
 import { readPrompts, readProviderPromptMap } from '../../prompts';
 import { loadApiProviders } from '../../providers';
 import telemetry from '../../telemetry';
-import { readTest, readTests } from '../testCaseReader';
 import {
   UnifiedConfigSchema,
   type CommandLineOptions,
@@ -31,6 +30,7 @@ import { maybeLoadFromExternalFile, readFilters } from '../../util';
 import { isJavascriptFile } from '../../util/file';
 import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
+import { readTest, readTests } from '../testCaseReader';
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
   if (getEnvBool('PROMPTFOO_DISABLE_REF_PARSER')) {

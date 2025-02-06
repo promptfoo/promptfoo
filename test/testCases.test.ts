@@ -7,14 +7,14 @@ import { getEnvString } from '../src/envars';
 import { fetchCsvFromGoogleSheet } from '../src/googleSheets';
 import logger from '../src/logger';
 import { loadApiProvider } from '../src/providers';
+import { generatePersonasPrompt, synthesize, testCasesPrompt } from '../src/testCase/synthesis';
+import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../src/types';
 import {
   readStandaloneTestsFile,
   readTest,
   readTests,
   readVarsFiles,
 } from '../src/util/testCaseReader';
-import { generatePersonasPrompt, synthesize, testCasesPrompt } from '../src/testCase/synthesis';
-import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../src/types';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
