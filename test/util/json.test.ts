@@ -134,6 +134,23 @@ describe('json utilities', () => {
       expect(extractJsonObjects(input)).toEqual(expectedOutput);
     });
 
+    it('should handle comments', () => {
+      const input = `{
+        "reason": "all good",
+        "score": 1.0 // perfect score
+      }`;
+      const expectedOutput = [{ reason: 'all good', score: 1.0 }];
+      expect(extractJsonObjects(input)).toEqual(expectedOutput);
+    });
+
+
+    it('should handle jsonl', () => {
+      const input = `{"reason": "hello", "score": 1.0}
+      {"reason": "world", "score": 0.0}`;
+      const expectedOutput = [{ reason: 'hello', score: 1.0 }, { reason: 'world', score: 0.0 }];
+      expect(extractJsonObjects(input)).toEqual(expectedOutput);
+    });
+
     it('should handle invalid JSON gracefully', () => {
       const input = '{"key": "value" some text {"key2": "value2"}';
       const expectedOutput = [{ key2: 'value2' }];

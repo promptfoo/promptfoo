@@ -1,3 +1,5 @@
+import { jsonrepair } from 'jsonrepair';
+import logger from '../logger';
 import invariant from '../util/invariant';
 
 export function isValidJson(str: string): boolean {
@@ -31,30 +33,18 @@ export function safeJsonStringify<T>(value: T, prettyPrint: boolean = false): st
 }
 
 export function extractJsonObjects(str: string): object[] {
-  const jsonObjects: object[] = [];
-  const maxJsonLength = 100000; // Prevent processing extremely large invalid JSON
-
-  for (let i = 0; i < str.length; i++) {
-    if (str[i] === '{') {
-      for (let j = i + 1; j <= Math.min(i + maxJsonLength, str.length); j++) {
-        try {
-          const potentialJson = str.slice(i, j);
-          const parsedObj = JSON.parse(potentialJson);
-          jsonObjects.push(parsedObj);
-          i = j - 1; // Move i to the end of the valid JSON object
-          break;
-        } catch {
-          // If it's not valid JSON yet, continue to the next character
-          if (j === str.length || j === i + maxJsonLength) {
-            // If we've reached the end of the string or max length, stop trying with this starting point
-            break;
-          }
-        }
-      }
+  try {
+    str = jsonrepair(str);
+    const jsonObjects = JSON.parse(str);
+    if (Array.isArray(jsonObjects)) {
+      return jsonObjects;
+    } else {
+      return [jsonObjects];
     }
+  } catch (e) {
+    logger.debug(`Failed to repair JSON: ${e}`);
+    return [];
   }
-
-  return jsonObjects;
 }
 
 export function extractFirstJsonObject<T>(str: string): T {
