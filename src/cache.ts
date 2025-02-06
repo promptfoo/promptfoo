@@ -123,8 +123,7 @@ export async function fetchWithCache<T = any>(
       // Don't cache if the parsed data contains an error
       if (format === 'json' && parsedData?.error) {
         logger.debug(`Not caching ${url} because it contains an 'error' key: ${parsedData.error}`);
-        errorResponse = data;
-        return;
+        return data;
       }
       logger.debug(`Storing ${url} response in cache: ${data}`);
       return data;
@@ -149,10 +148,8 @@ export async function fetchWithCache<T = any>(
     statusText: parsedResponse.statusText,
     headers: parsedResponse.headers,
     deleteFromCache: async () => {
-      if (cached) {
-        await cache.del(cacheKey);
-        logger.debug(`Evicted from cache: ${cacheKey}`);
-      }
+      await cache.del(cacheKey);
+      logger.debug(`Evicted from cache: ${cacheKey}`);
     },
   };
 }
