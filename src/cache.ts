@@ -95,8 +95,9 @@ export async function fetchWithCache<T = any>(
     const headers = Object.fromEntries(response.headers.entries());
 
     try {
+      const parsedData = format === 'json' ? JSON.parse(responseText) : responseText;
       const data = JSON.stringify({
-        data: format === 'json' ? JSON.parse(responseText) : responseText,
+        data: parsedData,
         status: response.status,
         statusText: response.statusText,
         headers,
@@ -117,6 +118,12 @@ export async function fetchWithCache<T = any>(
       }
       if (!data) {
         // Don't cache empty responses
+        return;
+      }
+      // Don't cache if the parsed data contains an error
+      if (format === 'json' && parsedData?.error) {
+        logger.debug(`Not caching ${url} because it contains an 'error' key: ${parsedData.error}`);
+        errorResponse = data;
         return;
       }
       logger.debug(`Storing ${url} response in cache: ${data}`);
