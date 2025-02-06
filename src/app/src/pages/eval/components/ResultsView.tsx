@@ -460,7 +460,7 @@ export default function ResultsView({
                 Table Settings
               </Button>
             </Tooltip>
-            <Button color="primary" onClick={handleOpenMenu} startIcon={<ArrowDropDownIcon />}>
+            <Button color="primary" onClick={handleOpenMenu} endIcon={<ArrowDropDownIcon />}>
               Eval actions
             </Button>
             {config && (
