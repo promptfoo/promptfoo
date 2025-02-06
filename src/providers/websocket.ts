@@ -46,7 +46,6 @@ export function createTransformResponse(parser: any): (data: any) => ProviderRes
         const result = (function() {
           ${parser}
         })();
-        console.log('Transform function returning:', result);
         return result;
       } catch (e) {
         console.error('Transform function error:', e);
@@ -76,14 +75,23 @@ export function createBeforeConnect(fn: any): () => Promise<any> {
   }
   if (typeof fn === 'string') {
     logger.debug('Creating beforeConnect function from string');
-    logger.debug(`beforeConnect function string: ${fn}`);
 
-    // Create a function from the provided string
-    return new Function(
-      `return (async () => {
-        ${fn}
-      })()`,
-    ) as () => Promise<any>;
+    return async () => {
+      try {
+        // Execute the string as async code directly
+        const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+        const asyncFn = new AsyncFunction(
+          'fetch',
+          `
+          ${fn}
+        `,
+        );
+        return await asyncFn(fetch);
+      } catch (error) {
+        logger.error(`Error in beforeConnect: ${error}`);
+        throw error;
+      }
+    };
   }
 
   logger.debug('Using default empty beforeConnect function');
@@ -125,16 +133,34 @@ export class WebSocketProvider implements ApiProvider {
     return `[WebSocket Provider ${this.url}]`;
   }
 
-  private cleanup() {
-    logger.debug('Cleaning up WebSocket provider');
-    if (this.context.ws) {
+  private async closeWebSocket(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      if (!this.context.ws) {
+        resolve();
+        return;
+      }
+
+      // If already closing or closed, just cleanup state
+      if (
+        this.context.ws.readyState === WebSocket.CLOSING ||
+        this.context.ws.readyState === WebSocket.CLOSED
+      ) {
+        this.context.ws = undefined;
+        this.context.connectionContext = undefined;
+        resolve();
+        return;
+      }
+
+      // For open connections, wait for close
       if (this.context.ws.readyState === WebSocket.OPEN) {
-        logger.debug('Closing WebSocket connection');
+        this.context.ws.once('close', () => {
+          this.context.ws = undefined;
+          this.context.connectionContext = undefined;
+          resolve();
+        });
         this.context.ws.close();
       }
-      this.context.ws = undefined;
-      this.context.connectionContext = undefined;
-    }
+    });
   }
 
   private async withCleanup<T>(
@@ -144,11 +170,11 @@ export class WebSocketProvider implements ApiProvider {
     try {
       const result = await operation();
       if (shouldCleanup) {
-        this.cleanup();
+        await this.closeWebSocket();
       }
       return result;
     } catch (error) {
-      this.cleanup(); // Always cleanup on error
+      await this.closeWebSocket();
       throw error;
     }
   }
@@ -177,9 +203,10 @@ export class WebSocketProvider implements ApiProvider {
     try {
       logger.debug('Calling beforeConnect function');
       this.context.connectionContext = await this.beforeConnect();
-      logger.debug(`beforeConnect returned: ${JSON.stringify(this.context.connectionContext)}`);
+      logger.debug(`Connection context set to: ${JSON.stringify(this.context.connectionContext)}`);
     } catch (error) {
       logger.error(`Error in beforeConnect: ${error}`);
+      throw error; // Propagate the error to prevent connection without context
     }
 
     return new Promise<void>((resolve, reject) => {
@@ -228,14 +255,19 @@ export class WebSocketProvider implements ApiProvider {
       throw new Error('No WebSocket connection available');
     }
 
+    logger.debug('Building message vars with:');
+    logger.debug(`- Context vars: ${JSON.stringify(context?.vars)}`);
+    logger.debug(`- Connection context: ${JSON.stringify(this.context.connectionContext)}`);
+
     const vars = {
       ...(context?.vars || {}),
       prompt,
+      conversationId:
+        context?.vars?.conversationId || this.context.connectionContext?.conversationId,
       context: this.context.connectionContext,
     };
 
-    logger.debug(`Connection context: ${JSON.stringify(this.context.connectionContext)}`);
-    logger.debug(`Template vars: ${JSON.stringify(vars)}`);
+    logger.debug(`Final template vars: ${JSON.stringify(vars)}`);
 
     const message = nunjucks.renderString(this.config.messageTemplate, vars);
     logger.debug(`Sending WebSocket message to ${this.url}: ${message}`);

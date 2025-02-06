@@ -4,8 +4,8 @@ const fetch = require('node-fetch');
 const { v4: uuidv4 } = require('uuid');
 
 const server = http.createServer((req, res) => {
-  // Handle GET request for new conversation
-  if (req.method === 'GET' && req.url === '/conversation') {
+  // Handle POST request for new conversation
+  if (req.method === 'POST' && req.url === '/conversation') {
     const conversationId = uuidv4();
     console.log('New conversation initiated:', conversationId);
     res.writeHead(200, { 'Content-Type': 'application/json' });
