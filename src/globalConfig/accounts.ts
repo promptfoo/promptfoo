@@ -1,4 +1,5 @@
 import input from '@inquirer/input';
+import { z } from 'zod';
 import type { GlobalConfig } from '../configTypes';
 import { getEnvString, isCI } from '../envars';
 import { fetchWithTimeout } from '../fetch';
@@ -23,13 +24,12 @@ export function getAuthor(): string | null {
 export async function promptForEmailUnverified() {
   let email = isCI() ? 'ci-placeholder@promptfoo.dev' : getUserEmail();
   if (!email) {
+    const emailSchema = z.string().email('Please enter a valid email address');
     email = await input({
       message: 'Redteam evals require email verification. Please enter your work email:',
       validate: (input: string) => {
-        if (!input || !input.includes('@')) {
-          return 'Email is required';
-        }
-        return true;
+        const result = emailSchema.safeParse(input);
+        return result.success || result.error.errors[0].message;
       },
     });
     setUserEmail(email);
