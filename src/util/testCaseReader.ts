@@ -22,6 +22,7 @@ import type {
   TestSuiteConfig,
   ProviderOptions,
 } from '../types';
+import { isJavascriptFile } from './file';
 
 function parseJson(json: string): any | undefined {
   try {
@@ -54,15 +55,61 @@ export async function readVarsFiles(
   return ret;
 }
 
+/**
+ * Reads test cases from a file in various formats (CSV, JSON, YAML, Python, JavaScript) and returns them as TestCase objects.
+ *
+ * Supports multiple input sources:
+ * - Hugging Face datasets (huggingface://datasets/...)
+ * - JavaScript/TypeScript files (.js, .ts, .mjs)
+ * - Python files (.py) with optional function name
+ * - Google Sheets (https://docs.google.com/spreadsheets/...)
+ * - Local CSV files with configurable delimiter
+ * - Local JSON files
+ * - Local YAML files (.yaml, .yml)
+ *
+ * For file-based inputs, each row/entry is converted into a TestCase object with an auto-generated description
+ * if none is provided.
+ *
+ * @param varsPath - Path or URL to the file containing test cases. Can include protocol prefixes for special handlers.
+ * @param basePath - Optional base path for resolving relative file paths. Defaults to empty string.
+ * @returns Promise resolving to an array of TestCase objects parsed from the input source.
+ * @throws Error if Python test function returns non-array result
+ */
 export async function readStandaloneTestsFile(
   varsPath: string,
   basePath: string = '',
 ): Promise<TestCase[]> {
-  // This function is confusingly named - it reads a CSV, JSON, or YAML file of
-  // TESTS or test equivalents.
   const resolvedVarsPath = path.resolve(basePath, varsPath.replace(/^file:\/\//, ''));
-  const [pathWithoutFunction] = resolvedVarsPath.split(':');
+  const parts = resolvedVarsPath.split(':');
+  const pathWithoutFunction: string = parts[0];
+  const maybeFunctionName: string | undefined = parts[1];
   const fileExtension = parsePath(pathWithoutFunction).ext.slice(1);
+
+  if (varsPath.startsWith('huggingface://datasets/')) {
+    telemetry.recordAndSendOnce('feature_used', {
+      feature: 'huggingface dataset',
+    });
+    return await fetchHuggingFaceDataset(varsPath);
+  }
+  if (isJavascriptFile(pathWithoutFunction)) {
+    telemetry.recordAndSendOnce('feature_used', {
+      feature: 'js tests file',
+    });
+    return await importModule(resolvedVarsPath, maybeFunctionName);
+  }
+  if (fileExtension === 'py') {
+    telemetry.recordAndSendOnce('feature_used', {
+      feature: 'python tests file',
+    });
+    const result = await runPython(pathWithoutFunction, maybeFunctionName ?? 'generate_tests', []);
+    if (!Array.isArray(result)) {
+      throw new Error(
+        `Python test function must return a list of test cases, got ${typeof result}`,
+      );
+    }
+    return result;
+  }
+
   let rows: CsvRow[] = [];
 
   if (varsPath.startsWith('https://docs.google.com/spreadsheets/')) {
@@ -90,25 +137,7 @@ export async function readStandaloneTestsFile(
       feature: 'yaml tests file',
     });
     rows = yaml.load(fs.readFileSync(resolvedVarsPath, 'utf-8')) as unknown as any;
-  } else if (fileExtension === 'js' || fileExtension === 'ts' || fileExtension === 'mjs') {
-    telemetry.recordAndSendOnce('feature_used', {
-      feature: 'js tests file',
-    });
-    return await importModule(resolvedVarsPath);
-  } else if (fileExtension === 'py') {
-    telemetry.recordAndSendOnce('feature_used', {
-      feature: 'python tests file',
-    });
-    const [filePath, functionName] = varsPath.split(':');
-    const result = await runPython(filePath, functionName ?? 'generate_tests', []);
-    if (!Array.isArray(result)) {
-      throw new Error(
-        `Python test function must return a list of test cases, got ${typeof result}`,
-      );
-    }
-    return result;
   }
-
   return rows.map((row, idx) => {
     const test = testCaseFromCsvRow(row);
     test.description ||= `Row #${idx + 1}`;

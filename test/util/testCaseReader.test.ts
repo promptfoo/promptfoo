@@ -52,6 +52,14 @@ jest.mock('../../src/envars', () => ({
   getEnvString: jest.fn().mockImplementation((key, defaultValue) => defaultValue),
 }));
 
+jest.mock('../../src/python/pythonUtils', () => ({
+  runPython: jest.fn(),
+}));
+
+jest.mock('../../src/integrations/huggingfaceDatasets', () => ({
+  fetchHuggingFaceDataset: jest.fn(),
+}));
+
 describe('readStandaloneTestsFile', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -246,6 +254,61 @@ describe('readStandaloneTestsFile', () => {
         vars: { var1: 'value3', var2: 'value4' },
       },
     ]);
+  });
+
+  it('should handle Python files with default function name', async () => {
+    const pythonResult = [
+      { vars: { var1: 'value1' }, assert: [{ type: 'equals', value: 'expected1' }] },
+      { vars: { var2: 'value2' }, assert: [{ type: 'equals', value: 'expected2' }] },
+    ];
+    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
+    mockRunPython.mockResolvedValueOnce(pythonResult);
+
+    const result = await readStandaloneTestsFile('test.py');
+
+    expect(mockRunPython).toHaveBeenCalledWith(
+      expect.stringContaining('test.py'),
+      'generate_tests',
+      [],
+    );
+    expect(result).toEqual(pythonResult);
+  });
+
+  it('should handle Python files with custom function name', async () => {
+    const pythonResult = [
+      { vars: { var1: 'value1' }, assert: [{ type: 'equals', value: 'expected1' }] },
+    ];
+    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
+    mockRunPython.mockResolvedValueOnce(pythonResult);
+
+    const result = await readStandaloneTestsFile('test.py:custom_function');
+
+    expect(mockRunPython).toHaveBeenCalledWith(
+      expect.stringContaining('test.py'),
+      'custom_function',
+      [],
+    );
+    expect(result).toEqual(pythonResult);
+  });
+
+  it('should throw error when Python file returns non-array', async () => {
+    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
+    mockRunPython.mockResolvedValueOnce({ not: 'an array' });
+
+    await expect(readStandaloneTestsFile('test.py')).rejects.toThrow(
+      'Python test function must return a list of test cases, got object',
+    );
+  });
+
+  it('should throw error for invalid Python file path', async () => {
+    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
+    mockRunPython.mockRejectedValueOnce(
+      new Error('Invalid Python test file path: test.py:invalid:extra'),
+    );
+
+    await expect(readStandaloneTestsFile('test.py:invalid:extra')).rejects.toThrow(
+      'Invalid Python test file path: test.py:invalid:extra',
+    );
   });
 });
 
@@ -611,6 +674,141 @@ describe('readTests', () => {
       vars: { var1: 'value5', var2: 'value6' },
       assert: [{ type: 'equals', value: 'expected3' }],
     });
+  });
+
+  it('should handle HuggingFace dataset URLs', async () => {
+    const mockDataset: TestCase[] = [
+      {
+        description: 'Test 1',
+        vars: { var1: 'value1' },
+        assert: [{ type: 'equals', value: 'expected1' }],
+        options: {},
+      },
+      {
+        description: 'Test 2',
+        vars: { var2: 'value2' },
+        assert: [{ type: 'equals', value: 'expected2' }],
+        options: {},
+      },
+    ];
+    const mockFetchHuggingFaceDataset = jest.requireMock(
+      '../../src/integrations/huggingfaceDatasets',
+    ).fetchHuggingFaceDataset;
+    mockFetchHuggingFaceDataset.mockImplementation(async () => mockDataset);
+    jest.mocked(globSync).mockReturnValueOnce([]);
+
+    const result = await readTests('huggingface://datasets/example/dataset');
+
+    expect(mockFetchHuggingFaceDataset).toHaveBeenCalledWith(
+      'huggingface://datasets/example/dataset',
+    );
+    expect(result).toEqual(mockDataset);
+  });
+
+  it('should handle JSONL files', async () => {
+    const expectedTests: TestCase[] = [
+      {
+        description: 'Test 1',
+        vars: { var1: 'value1' },
+        assert: [{ type: 'equals', value: 'expected1' }],
+        options: {},
+      },
+      {
+        description: 'Test 2',
+        vars: { var2: 'value2' },
+        assert: [{ type: 'equals', value: 'expected2' }],
+        options: {},
+      },
+    ];
+    const jsonlContent = expectedTests.map((test) => JSON.stringify(test)).join('\n');
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(jsonlContent);
+    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
+
+    const result = await readTests(['test.jsonl']);
+
+    expect(result).toEqual(expectedTests);
+  });
+
+  it('should handle file read errors gracefully', async () => {
+    jest.mocked(fs.readFileSync).mockImplementation(() => {
+      throw new Error('File read error');
+    });
+    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
+
+    await expect(readTests(['test.yaml'])).rejects.toThrow('File read error');
+  });
+
+  it('should handle Python files in readTests', async () => {
+    const pythonTests: TestCase[] = [
+      {
+        description: 'Python Test 1',
+        vars: { var1: 'value1' },
+        assert: [{ type: 'equals', value: 'expected1' }],
+        options: {},
+      },
+      {
+        description: 'Python Test 2',
+        vars: { var2: 'value2' },
+        assert: [{ type: 'equals', value: 'expected2' }],
+        options: {},
+      },
+    ];
+    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
+    mockRunPython.mockResolvedValueOnce(pythonTests);
+    jest.mocked(globSync).mockReturnValueOnce(['test.py']);
+
+    const result = await readTests(['test.py']);
+
+    expect(mockRunPython).toHaveBeenCalledWith('test.py', 'generate_tests', []);
+    expect(result).toEqual(pythonTests);
+  });
+
+  it('should handle Python files with custom function in readTests', async () => {
+    const pythonTests: TestCase[] = [
+      {
+        description: 'Python Test 1',
+        vars: { var1: 'value1' },
+        assert: [{ type: 'equals', value: 'expected1' }],
+        options: {},
+      },
+    ];
+    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
+    mockRunPython.mockReset();
+    mockRunPython.mockResolvedValueOnce(pythonTests);
+    jest.mocked(globSync).mockReturnValueOnce(['test.py']);
+
+    const result = await readTests(['test.py:custom_function']);
+
+    expect(mockRunPython).toHaveBeenCalledWith(
+      expect.stringContaining('test.py'),
+      'custom_function',
+      [],
+    );
+    expect(result).toEqual(pythonTests);
+  });
+
+  it('should handle Python files with invalid function name in readTests', async () => {
+    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
+    mockRunPython.mockReset();
+    mockRunPython.mockRejectedValueOnce(
+      new Error('Invalid Python test file path: test.py:invalid:extra'),
+    );
+    jest.mocked(globSync).mockReturnValueOnce(['test.py']);
+
+    await expect(readTests(['test.py:invalid:extra'])).rejects.toThrow(
+      'Invalid Python test file path: test.py:invalid:extra',
+    );
+  });
+
+  it('should handle Python files that return non-array in readTests', async () => {
+    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
+    mockRunPython.mockReset();
+    mockRunPython.mockResolvedValueOnce({ not: 'an array' });
+    jest.mocked(globSync).mockReturnValueOnce(['test.py']);
+
+    await expect(readTests(['test.py'])).rejects.toThrow(
+      'Test case must contain one of the following properties: assert, vars, options, metadata, provider, providerOutput, threshold',
+    );
   });
 });
 
