@@ -16,7 +16,7 @@ import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
 import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
 import telemetry, { TelemetryEventSchema } from '../telemetry';
-import { synthesizeFromTestSuite } from '../testCases';
+import { synthesizeFromTestSuite } from '../testCase/synthesis';
 import {
   getLatestEval,
   getPrompts,
