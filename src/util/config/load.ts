@@ -14,7 +14,7 @@ import logger from '../../logger';
 import { readPrompts, readProviderPromptMap } from '../../prompts';
 import { loadApiProviders } from '../../providers';
 import telemetry from '../../telemetry';
-import { readTest, readTests } from '../../testCases';
+import { readTest, readTests } from '../testCaseReader';
 import {
   UnifiedConfigSchema,
   type CommandLineOptions,

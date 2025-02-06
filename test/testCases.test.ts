@@ -8,14 +8,12 @@ import { fetchCsvFromGoogleSheet } from '../src/googleSheets';
 import logger from '../src/logger';
 import { loadApiProvider } from '../src/providers';
 import {
-  generatePersonasPrompt,
   readStandaloneTestsFile,
   readTest,
   readTests,
   readVarsFiles,
-  synthesize,
-  testCasesPrompt,
-} from '../src/testCases';
+} from '../src/util/testCaseReader';
+import { generatePersonasPrompt, synthesize, testCasesPrompt } from '../src/testCase/synthesis';
 import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../src/types';
 
 jest.mock('proxy-agent', () => ({
