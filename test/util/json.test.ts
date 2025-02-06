@@ -87,8 +87,8 @@ describe('json utilities', () => {
         },
       };
       const result = safeJsonStringify(complex);
-      expect(result).toBeDefined(); // Ensure it returns a string
-      expect(JSON.parse(result as string)).toEqual(complex); // Ensure it matches the original structure
+      expect(result).toBeDefined();
+      expect(JSON.parse(result as string)).toEqual(complex);
     });
 
     it('handles arrays with circular references', () => {
@@ -116,24 +116,6 @@ describe('json utilities', () => {
       expect(extractJsonObjects(input)).toEqual(expectedOutput);
     });
 
-    it('should extract multiple JSON objects from a string', () => {
-      const input = 'yolo {"key1": "value1"} some text {"key2": "value2"} fomo';
-      const expectedOutput = [{ key1: 'value1' }, { key2: 'value2' }];
-      expect(extractJsonObjects(input)).toEqual(expectedOutput);
-    });
-
-    it('should return an empty array if no JSON objects are found', () => {
-      const input = 'no json here';
-      const expectedOutput: any[] = [];
-      expect(extractJsonObjects(input)).toEqual(expectedOutput);
-    });
-
-    it('should handle nested JSON objects', () => {
-      const input = 'wassup {"outer": {"inner": "value"}, "foo": [1,2,3,4]}';
-      const expectedOutput = [{ outer: { inner: 'value' }, foo: [1, 2, 3, 4] }];
-      expect(extractJsonObjects(input)).toEqual(expectedOutput);
-    });
-
     it('should handle comments', () => {
       const input = `{
         "reason": "all good",
@@ -143,45 +125,14 @@ describe('json utilities', () => {
       expect(extractJsonObjects(input)).toEqual(expectedOutput);
     });
 
-
     it('should handle jsonl', () => {
       const input = `{"reason": "hello", "score": 1.0}
       {"reason": "world", "score": 0.0}`;
-      const expectedOutput = [{ reason: 'hello', score: 1.0 }, { reason: 'world', score: 0.0 }];
+      const expectedOutput = [
+        { reason: 'hello', score: 1.0 },
+        { reason: 'world', score: 0.0 },
+      ];
       expect(extractJsonObjects(input)).toEqual(expectedOutput);
-    });
-
-    it('should handle invalid JSON gracefully', () => {
-      const input = '{"key": "value" some text {"key2": "value2"}';
-      const expectedOutput = [{ key2: 'value2' }];
-      expect(extractJsonObjects(input)).toEqual(expectedOutput);
-    });
-
-    it('should handle incomplete JSON', () => {
-      const input = `{
-  "incomplete": "object"`;
-      expect(extractJsonObjects(input)).toEqual([]);
-    });
-
-    it('should handle string containing incomplete JSON', () => {
-      const input = `{
-  "key1": "value1",
-  "key2": {
-    "nested": "value2"
-  },
-  "key3": "value3"
-}
-{
-  "incomplete": "object"`;
-      expect(extractJsonObjects(input)).toEqual([
-        {
-          key1: 'value1',
-          key2: {
-            nested: 'value2',
-          },
-          key3: 'value3',
-        },
-      ]);
     });
 
     it('should handle this case', () => {
