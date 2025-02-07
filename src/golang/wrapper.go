@@ -7,6 +7,17 @@ import (
 	"reflect"
 )
 
+// Function type definitions for the API functions
+type ApiFunc func(string, map[string]interface{}, map[string]interface{}) (map[string]interface{}, error)
+
+// Variable to hold the function implementation, allowing it to be replaced in tests
+var CallApi = defaultCallApi
+
+// Default implementation that will be replaced by the actual provider
+func defaultCallApi(prompt string, options map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
+	return nil, fmt.Errorf("CallApi not implemented")
+}
+
 func main() {
 	if len(os.Args) != 4 {
 		fmt.Println("Usage: golang_wrapper <script_path> <function_name> <json_args>")
@@ -29,8 +40,6 @@ func main() {
 	switch functionName {
 	case "call_api", "CallApi":
 		f = reflect.ValueOf(CallApi)
-	case "call_embedding_api", "EchoWithQuotes":
-		f = reflect.ValueOf(EchoWithQuotes)
 	default:
 		fmt.Printf("Unknown function: %s\n", functionName)
 		os.Exit(1)
