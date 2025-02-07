@@ -14,20 +14,24 @@ providers:
       url: ws://localhost:4000
       maintainConnectionBetweenCalls: true
       timeoutMs: 30000 # Set to 30 seconds
-      messageTemplate: '{"prompt": "{{ prompt }}", "conversationId": "{{ conversationId }}"}'
-      setOrUpdateVars: |
-        console.log('Starting setOrUpdateVars...');
+      messageTemplate: '{"prompt": "{{ prompt }}", "sessionId": "{{ sessionId }}"}'
+      setSessionContext: |
+        console.log('Starting sessionParser...');
         console.log('Vars:', vars);
-        if (!vars.conversationId) {
+        if (!vars.sessionId) {
           const response = await fetch('http://localhost:4000/conversation', {
             method: 'POST'
           });
           const data = await response.json();
-          console.log('Server returned conversation ID:', data.conversationId);
-          vars.conversationId = data.conversationId;
+          console.log('Server returned conversation ID:', data.sessionId);
+          const { sessionId } = data;
+          vars.sessionId = sessionId;
           console.log('Returning updated vars:', vars);
         }
-        return vars;
+        return { 
+          vars,
+          sessionId,
+        };
       transformResponse: |
         if (!data || typeof data !== 'object') {
           return { output: 'Invalid response data', history: [] };
@@ -43,33 +47,21 @@ providers:
 
 # Test multi-turn conversations
 tests:
-  # Example 1: Using server-generated conversation IDs
+  # Example 1
   - vars:
-      question: Tell me about the weather
+      question: Can you help me with booking a flight to Toronto?
+      sessionId: flightToTorontoThread
   - vars:
-      question: What about tomorrow?
+      question: Will it be cold there right now?
+      sessionId: flightToTorontoThread
+  - vars:
+      question: I'm flying from Tokyo. Do I need to renew my passport? I have 6 months left on it.
+      sessionId: flightToTorontoThread
 
-  # Example 2: Using client-specified conversation IDs
+  # Example 2
   - vars:
-      question: What is this project about?
-      conversationId: project_thread
+      question: What's the fastest bus that will take me from New York to Toronto?
+      sessionId: busTicketToNewYorkThread
   - vars:
-      question: Can you give me some examples of its usage?
-      conversationId: project_thread
-  - vars:
-      question: How does it handle errors?
-      conversationId: project_thread
-
-  # Example 3: Another client-specified conversation
-  - vars:
-      question: What are the main features?
-      conversationId: features_thread
-  - vars:
-      question: Tell me more about the testing capabilities.
-      conversationId: features_thread
-
-  # Verify responses
-  - description: Test response format and history
-    vars:
-      question: How does conversation history work?
-      conversationId: history_thread
+      question: How much will it cost?
+      sessionId: busTicketToNewYorkThread

@@ -35,6 +35,8 @@ interface TargetsProps {
 
 const selectOptions = [...predefinedTargets, customTargetOption];
 
+const websocketSpecificConfigs = ['setSessionContext'];
+
 const knownTargetIds = predefinedTargets
   .map((target) => target.value)
   .filter((value) => value !== '');
@@ -61,6 +63,8 @@ const requiresPrompt = (target: ProviderOptions) => {
   return target.id !== 'http' && target.id !== 'websocket' && target.id !== 'browser';
 };
 
+const testableTargetTypes = ['http'];
+
 export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps) {
   const { config, updateConfig } = useRedTeamConfig();
   const theme = useTheme();
@@ -82,7 +86,9 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   const [urlError, setUrlError] = useState<string | null>(null);
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [promptRequired, setPromptRequired] = useState(requiresPrompt(selectedTarget));
-  const [testingEnabled, setTestingEnabled] = useState(selectedTarget.id === 'http');
+  const [testingEnabled, setTestingEnabled] = useState(
+    testableTargetTypes.includes(selectedTarget.id),
+  );
 
   const { recordEvent } = useTelemetry();
   const [rawConfigJson, setRawConfigJson] = useState<string>(
@@ -197,7 +203,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   };
 
   useEffect(() => {
-    setTestingEnabled(selectedTarget.id === 'http');
+    setTestingEnabled(testableTargetTypes.includes(selectedTarget.id));
   }, [selectedTarget]);
 
   const updateCustomTarget = (field: string, value: any) => {
@@ -274,7 +280,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         } else {
           setUrlError('Please enter a valid WebSocket URL (ws:// or wss://)');
         }
-      } else if (field in updatedTarget.config) {
+      } else if (field in updatedTarget.config || websocketSpecificConfigs.includes(field)) {
         (updatedTarget.config as any)[field] = value;
       }
       setSelectedTarget(updatedTarget);

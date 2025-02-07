@@ -12,13 +12,13 @@ import {
 interface SystemConfigurationProps {
   isStatefulValue: boolean;
   onStatefulChange: (val: boolean) => void;
-  hasSessionParser: boolean;
+  stateManagementConfigured: boolean;
 }
 
 export function SystemConfiguration({
   isStatefulValue,
   onStatefulChange,
-  hasSessionParser,
+  stateManagementConfigured,
 }: SystemConfigurationProps) {
   return (
     <Paper elevation={1} sx={{ p: 3, mb: 3 }}>
@@ -45,7 +45,7 @@ export function SystemConfiguration({
           />
         </RadioGroup>
 
-        {!hasSessionParser && isStatefulValue && (
+        {!stateManagementConfigured && isStatefulValue && (
           <Alert severity="warning" sx={{ mt: 2 }}>
             Your system is stateful but you don't have session handling set up. Please return to
             your Target setup to configure it.

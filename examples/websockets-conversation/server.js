@@ -6,10 +6,10 @@ const { v4: uuidv4 } = require('uuid');
 const server = http.createServer((req, res) => {
   // Handle POST request for new conversation
   if (req.method === 'POST' && req.url === '/conversation') {
-    const conversationId = uuidv4();
-    console.log('New conversation initiated:', conversationId);
+    const sessionId = uuidv4();
+    console.log('New conversation initiated:', sessionId);
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ conversationId }));
+    res.end(JSON.stringify({ sessionId }));
     return;
   }
 
@@ -91,25 +91,25 @@ wss.on('connection', (ws) => {
       const data = JSON.parse(message);
       console.log('Parsed WebSocket data:', data);
 
-      // Require conversation ID in the message
-      if (!data.conversationId) {
+      // Require session ID in the message
+      if (!data.sessionId) {
         ws.send(
           JSON.stringify({
-            error: 'Missing conversation ID',
+            error: 'Missing session ID',
           }),
         );
         return;
       }
 
-      // Create conversation entry if it doesn't exist
-      if (!conversations.has(data.conversationId)) {
-        conversations.set(data.conversationId, {
+      // Create session entry if it doesn't exist
+      if (!conversations.has(data.sessionId)) {
+        conversations.set(data.sessionId, {
           ws,
           history: [],
         });
       }
 
-      const conversation = conversations.get(data.conversationId);
+      const conversation = conversations.get(data.sessionId);
 
       // Add message to conversation history
       conversation.history.push({
@@ -129,7 +129,7 @@ wss.on('connection', (ws) => {
 
         const chatResponse = await forwardChatRequest(
           data.prompt,
-          data.conversationId,
+          data.sessionId,
           controller.signal,
         );
         currentRequestController = null; // Clear the reference
@@ -137,7 +137,7 @@ wss.on('connection', (ws) => {
 
         const response = {
           type: 'response',
-          conversationId: data.conversationId,
+          sessionId: data.sessionId,
           output: chatResponse.response || chatResponse.message,
           timestamp: new Date().toISOString(),
           history: conversation.history,
@@ -170,5 +170,5 @@ wss.on('connection', (ws) => {
 
 const PORT = process.env.PORT || 4000;
 server.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+  console.log(`Server is running on http://localhost:${PORT} and ws://localhost:${PORT}`);
 });

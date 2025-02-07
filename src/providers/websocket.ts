@@ -14,12 +14,17 @@ const nunjucks = getNunjucksEngine();
 
 const DEFAULT_TIMEOUT = 30000; // 30 seconds
 
+interface WebsocketContext {
+  sessionId?: string;
+  vars?: Record<string, any>;
+}
+
 interface WebSocketProviderConfig {
   messageTemplate: string;
   url?: string;
   timeoutMs?: number;
   transformResponse?: string | Function;
-  setOrUpdateVars?: string | Function;
+  setSessionContext?: string | Function;
   /**
    * @deprecated
    */
@@ -61,22 +66,20 @@ export function createTransformResponse(parser: any): (data: any) => ProviderRes
   return (data) => ({ output: data });
 }
 
-export function createSetOrUpdateVars(
+export function createSetSessionContext(
   fn: any,
-): (vars: Record<string, any>) => Promise<Record<string, any>> {
+): (vars: Record<string, any>) => Promise<WebsocketContext> {
   if (typeof fn === 'function') {
-    logger.debug('Using provided setOrUpdateVars function');
+    logger.debug('Using provided setSessionContext function');
     return fn;
   }
   if (typeof fn === 'string') {
-    logger.debug('Creating setOrUpdateVars function from string');
+    logger.debug('Creating setSessionContext function from string');
 
     return async (vars: Record<string, any>) => {
       try {
         // Execute the string as async code directly
-        const AsyncFunction = Object.getPrototypeOf(async function (
-          vars: Record<string, any>,
-        ) {}).constructor;
+        const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
         const asyncFn = new AsyncFunction(
           'fetch',
           'vars',
@@ -86,13 +89,13 @@ export function createSetOrUpdateVars(
         );
         return await asyncFn(fetch, vars);
       } catch (error) {
-        logger.error(`Error in setOrUpdateVars: ${error}`);
+        logger.error(`Error in setSessionContext: ${error}`);
         throw error;
       }
     };
   }
 
-  logger.debug('Using default empty setOrUpdateVars function');
+  logger.debug('Using default empty setSessionContext function');
   return async () => ({});
 }
 
@@ -100,9 +103,7 @@ export class WebSocketProvider implements ApiProvider {
   url: string;
   config: WebSocketProviderConfig;
   transformResponse: (data: any) => ProviderResponse;
-  setOrUpdateVars: (
-    vars: Record<string, string | object>,
-  ) => Promise<Record<string, string | object>>;
+  setSessionContext: (vars: Record<string, string | object>) => Promise<WebsocketContext>;
 
   constructor(url: string, options: ProviderOptions) {
     this.config = options.config as WebSocketProviderConfig;
@@ -110,7 +111,7 @@ export class WebSocketProvider implements ApiProvider {
     this.transformResponse = createTransformResponse(
       this.config.transformResponse || this.config.responseParser,
     );
-    this.setOrUpdateVars = createSetOrUpdateVars(this.config.setOrUpdateVars);
+    this.setSessionContext = createSetSessionContext(this.config.setSessionContext);
     invariant(
       this.config.messageTemplate,
       `Expected WebSocket provider ${this.url} to have a config containing {messageTemplate}, but got ${safeJsonStringify(
@@ -128,11 +129,18 @@ export class WebSocketProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    let vars = {
-      ...(context?.vars || {}),
-    };
-    vars.prompt = prompt;
-    vars = await this.setOrUpdateVars?.(vars);
+    logger.debug(`Calling WebSocket provider ${this.url} with prompt: ${prompt}`);
+    let vars = { ...(context?.vars || {}), prompt };
+    const updatedContext = await this.setSessionContext?.(vars);
+    logger.warn(`Updated context: ${safeJsonStringify(updatedContext)}`);
+    console.log(`Updated context: ${safeJsonStringify(updatedContext)}`);
+    vars = { ...vars, ...(updatedContext.vars || {}) };
+
+    // Only relevant to multi-turn red team strategies like Crescendo and GOAT
+    // all other uses will have this reset for each new test
+    if (context?.vars) {
+      context.vars = vars;
+    }
 
     const message = nunjucks.renderString(this.config.messageTemplate, vars);
 
@@ -157,7 +165,10 @@ export class WebSocketProvider implements ApiProvider {
               // If parsing fails, assume it's a text response
             }
           }
-          resolve({ output: this.transformResponse(data) });
+          resolve({
+            output: this.transformResponse(data),
+            sessionId: updatedContext.sessionId || undefined,
+          });
         } catch (err) {
           resolve({ error: `Failed to process response: ${JSON.stringify(err)}` });
         }
