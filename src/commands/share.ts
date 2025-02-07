@@ -12,6 +12,8 @@ import telemetry from '../telemetry';
 import { setupEnv } from '../util';
 import invariant from '../util/invariant';
 
+export { determineShareDomain } from '../share';
+
 export async function createPublicUrl(evalRecord: Eval, showAuth: boolean) {
   const url = await createShareableUrl(evalRecord, showAuth);
 

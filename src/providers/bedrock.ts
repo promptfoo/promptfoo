@@ -967,9 +967,11 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
     const response = await bedrockInstance.invokeModel({
       modelId: this.modelName,
       ...(this.config.guardrailIdentifier
-        ? { guardrailIdentifier: this.config.guardrailIdentifier }
+        ? { guardrailIdentifier: String(this.config.guardrailIdentifier) }
         : {}),
-      ...(this.config.guardrailVersion ? { guardrailVersion: this.config.guardrailVersion } : {}),
+      ...(this.config.guardrailVersion
+        ? { guardrailVersion: String(this.config.guardrailVersion) }
+        : {}),
       ...(this.config.trace ? { trace: this.config.trace } : {}),
       accept: 'application/json',
       contentType: 'application/json',

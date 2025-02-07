@@ -1,4 +1,6 @@
 import dedent from 'dedent';
+import path from 'path';
+import { loadFromJavaScriptFile } from './assertions/utils';
 import cliState from './cliState';
 import { getEnvString } from './envars';
 import logger from './logger';
@@ -35,6 +37,7 @@ import type {
   TokenUsage,
 } from './types';
 import { maybeLoadFromExternalFile } from './util';
+import { isJavascriptFile } from './util/file';
 import invariant from './util/invariant';
 import { extractJsonObjects } from './util/json';
 import { getNunjucksEngine } from './util/templates';
@@ -351,16 +354,29 @@ export async function matchesClassification(
   };
 }
 
-function loadRubricPrompt(
+async function loadRubricPrompt(
   rubricPrompt: string | object | undefined,
   defaultPrompt: string,
-): string {
+): Promise<string> {
   if (!rubricPrompt) {
     return defaultPrompt;
   }
 
-  // Load from external file if needed
-  rubricPrompt = maybeLoadFromExternalFile(rubricPrompt);
+  if (
+    typeof rubricPrompt === 'string' &&
+    rubricPrompt.startsWith('file://') &&
+    isJavascriptFile(rubricPrompt)
+  ) {
+    const basePath = cliState.basePath || '';
+    let filePath = rubricPrompt.slice('file://'.length);
+
+    const [pathPart, functionName] = filePath.split(':');
+    filePath = path.resolve(basePath, pathPart);
+    rubricPrompt = await loadFromJavaScriptFile(filePath, functionName, []);
+  } else {
+    // Load from external file if needed
+    rubricPrompt = maybeLoadFromExternalFile(rubricPrompt);
+  }
 
   // Stringify if it's an object
   if (typeof rubricPrompt === 'object') {
@@ -371,13 +387,13 @@ function loadRubricPrompt(
   return rubricPrompt;
 }
 
-export function renderLlmRubricPrompt(
+export async function renderLlmRubricPrompt(
   rubric: string,
   llmOutput: string,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
 ) {
-  const rubricPrompt = loadRubricPrompt(grading?.rubricPrompt, DEFAULT_GRADING_PROMPT);
+  const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, DEFAULT_GRADING_PROMPT);
 
   return nunjucks.renderString(rubricPrompt, {
     output: JSON.stringify(llmOutput).slice(1, -1),
@@ -408,7 +424,7 @@ export async function matchesLlmRubric(
     });
   }
 
-  const prompt = renderLlmRubricPrompt(rubric, llmOutput, grading, vars);
+  const prompt = await renderLlmRubricPrompt(rubric, llmOutput, grading, vars);
 
   const defaultProviders = await getDefaultProviders();
   const defaultProvider =
@@ -472,7 +488,7 @@ export async function matchesFactuality(
     );
   }
 
-  const rubricPrompt = loadRubricPrompt(grading?.rubricPrompt, OPENAI_FACTUALITY_PROMPT);
+  const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, OPENAI_FACTUALITY_PROMPT);
   const prompt = nunjucks.renderString(rubricPrompt, {
     input: JSON.stringify(input).slice(1, -1),
     ideal: JSON.stringify(expected).slice(1, -1),
@@ -572,7 +588,7 @@ export async function matchesClosedQa(
     );
   }
 
-  const rubricPrompt = loadRubricPrompt(grading?.rubricPrompt, OPENAI_CLOSED_QA_PROMPT);
+  const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, OPENAI_CLOSED_QA_PROMPT);
   const prompt = nunjucks.renderString(rubricPrompt, {
     input: JSON.stringify(input).slice(1, -1),
     criteria: JSON.stringify(expected).slice(1, -1),
@@ -748,7 +764,7 @@ export async function matchesAnswerRelevance(
   const candidateQuestions: string[] = [];
   for (let i = 0; i < 3; i++) {
     // TODO(ian): Parallelize
-    const rubricPrompt = loadRubricPrompt(grading?.rubricPrompt, ANSWER_RELEVANCY_GENERATE);
+    const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, ANSWER_RELEVANCY_GENERATE);
     const promptText = nunjucks.renderString(rubricPrompt, {
       answer: JSON.stringify(output).slice(1, -1),
     });
@@ -865,7 +881,7 @@ export async function matchesContextRecall(
     'context recall check',
   );
 
-  const rubricPrompt = loadRubricPrompt(grading?.rubricPrompt, CONTEXT_RECALL);
+  const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, CONTEXT_RECALL);
   const promptText = nunjucks.renderString(rubricPrompt, {
     context: JSON.stringify(context).slice(1, -1),
     groundTruth: JSON.stringify(groundTruth).slice(1, -1),
@@ -918,7 +934,7 @@ export async function matchesContextRelevance(
     'context relevance check',
   );
 
-  const rubricPrompt = loadRubricPrompt(grading?.rubricPrompt, CONTEXT_RELEVANCE);
+  const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, CONTEXT_RELEVANCE);
   const promptText = nunjucks.renderString(rubricPrompt, {
     context: JSON.stringify(context).slice(1, -1),
     query: JSON.stringify(question).slice(1, -1),
@@ -1062,7 +1078,7 @@ export async function matchesSelectBest(
     'select-best check',
   );
 
-  const rubricPrompt = loadRubricPrompt(grading?.rubricPrompt, SELECT_BEST_PROMPT);
+  const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, SELECT_BEST_PROMPT);
   const promptText = nunjucks.renderString(rubricPrompt, {
     criteria: JSON.stringify(criteria).slice(1, -1),
     outputs: outputs.map((output) => JSON.stringify(output).slice(1, -1)),

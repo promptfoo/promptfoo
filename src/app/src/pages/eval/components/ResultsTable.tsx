@@ -490,8 +490,6 @@ function ResultsTable({
                 numGoodTests[idx] && body.length
                   ? ((numGoodTests[idx] / body.length) * 100.0).toFixed(2)
                   : '0.00';
-              const isHighestPassing =
-                numGoodTests[idx] === highestPassingCount && highestPassingCount !== 0;
               const columnId = `Prompt ${idx + 1}`;
               const isChecked = failureFilter[columnId] || false;
 
@@ -582,7 +580,13 @@ function ResultsTable({
                   <div className="pills">
                     {prompt.provider ? <div className="provider">{providerDisplay}</div> : null}
                     <div className="summary">
-                      <div className={`highlight ${isHighestPassing ? 'success' : ''}`}>
+                      <div
+                        className={`highlight ${
+                          numGoodTests[idx] && body.length
+                            ? `success-${Math.round(((numGoodTests[idx] / body.length) * 100) / 20) * 20}`
+                            : 'success-0'
+                        }`}
+                      >
                         <strong>{pct}% passing</strong> ({numGoodTests[idx]}/{body.length} cases)
                       </div>
                     </div>

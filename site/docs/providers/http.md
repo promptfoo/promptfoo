@@ -550,7 +550,7 @@ The HTTP provider supports digital signature authentication. This feature allows
 - Customize header names and signature formats
 - Configure different signature algorithms
 
-The current implementation uses asymmetric key cryptography (RSA by default), but the configuration is algorithm-agnostic.
+The current implementation uses asymmetric key cryptography (RSA by default), but the configuration is algorithm-agnostic. In either case, the private key is **never sent to PromptFoo** and will always be stored locally on your system either in your `promptfooconfig.yaml` file or on a local path that the configuration file references.
 
 ### Basic Usage
 

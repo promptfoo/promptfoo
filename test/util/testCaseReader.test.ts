@@ -2,21 +2,18 @@ import dedent from 'dedent';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import { testCaseFromCsvRow } from '../src/csv';
-import { getEnvString } from '../src/envars';
-import { fetchCsvFromGoogleSheet } from '../src/googleSheets';
-import logger from '../src/logger';
-import { loadApiProvider } from '../src/providers';
+import { testCaseFromCsvRow } from '../../src/csv';
+import { getEnvString } from '../../src/envars';
+import { fetchCsvFromGoogleSheet } from '../../src/googleSheets';
+import logger from '../../src/logger';
+import { loadApiProvider } from '../../src/providers';
+import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../../src/types';
 import {
-  generatePersonasPrompt,
   readStandaloneTestsFile,
   readTest,
   readTests,
   readVarsFiles,
-  synthesize,
-  testCasesPrompt,
-} from '../src/testCases';
-import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../src/types';
+} from '../../src/util/testCaseReader';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
@@ -24,10 +21,10 @@ jest.mock('proxy-agent', () => ({
 jest.mock('glob', () => ({
   globSync: jest.fn(),
 }));
-jest.mock('../src/providers', () => ({
+jest.mock('../../src/providers', () => ({
   loadApiProvider: jest.fn(),
 }));
-jest.mock('../src/fetch');
+jest.mock('../../src/fetch');
 
 jest.mock('fs', () => ({
   readFileSync: jest.fn(),
@@ -41,16 +38,16 @@ jest.mock('fs', () => ({
   },
 }));
 
-jest.mock('../src/database', () => ({
+jest.mock('../../src/database', () => ({
   getDb: jest.fn(),
 }));
 
-jest.mock('../src/googleSheets', () => ({
+jest.mock('../../src/googleSheets', () => ({
   fetchCsvFromGoogleSheet: jest.fn(),
 }));
 
-jest.mock('../src/envars', () => ({
-  ...jest.requireActual('../src/envars'),
+jest.mock('../../src/envars', () => ({
+  ...jest.requireActual('../../src/envars'),
   getEnvBool: jest.fn(),
   getEnvString: jest.fn().mockImplementation((key, defaultValue) => defaultValue),
 }));
@@ -169,7 +166,7 @@ describe('readStandaloneTestsFile', () => {
 
   it('should read JS file and return test cases', async () => {
     jest.mock(
-      '../test.js',
+      '../../test.js',
       () => [
         { vars: { var1: 'value1', var2: 'value2' } },
         { vars: { var1: 'value3', var2: 'value4' } },
@@ -538,7 +535,7 @@ describe('readTests', () => {
 
   it('should read tests from a Google Sheets URL', async () => {
     const mockFetchCsvFromGoogleSheet =
-      jest.requireMock('../src/googleSheets').fetchCsvFromGoogleSheet;
+      jest.requireMock('../../src/googleSheets').fetchCsvFromGoogleSheet;
     mockFetchCsvFromGoogleSheet.mockResolvedValue([
       { var1: 'value1', var2: 'value2', __expected: 'expected1' },
       { var1: 'value3', var2: 'value4', __expected: 'expected2' },
@@ -673,163 +670,5 @@ describe('readVarsFiles', () => {
     const result = await readVarsFiles(['vars1.yaml', 'vars2.yaml']);
 
     expect(result).toEqual({ var1: 'value1', var2: 'value2' });
-  });
-});
-
-describe('synthesize', () => {
-  it('should generate test cases based on prompts and personas', async () => {
-    let i = 0;
-    const mockProvider = {
-      id: () => 'mock-provider',
-      callApi: jest.fn(() => {
-        if (i === 0) {
-          i++;
-          return Promise.resolve({ output: '{"personas": ["Persona 1", "Persona 2"]}' });
-        }
-        return Promise.resolve({ output: '{"vars": [{"var1": "value1"}, {"var2": "value2"}]}' });
-      }),
-    };
-    jest.mocked(loadApiProvider).mockResolvedValue(mockProvider);
-    const result = await synthesize({
-      provider: 'mock-provider',
-      prompts: ['Test prompt'],
-      tests: [],
-      numPersonas: 2,
-      numTestCasesPerPersona: 1,
-    });
-
-    expect(result).toHaveLength(2);
-    expect(result).toEqual([{ var1: 'value1' }, { var2: 'value2' }]);
-  });
-});
-
-describe('generatePersonasPrompt', () => {
-  it('should generate a prompt for a single prompt input', () => {
-    const prompts = ['What is the capital of France?'];
-    const numPersonas = 3;
-    const result = generatePersonasPrompt(prompts, numPersonas);
-
-    expect(result).toBe(dedent`
-      Consider the following prompt for an LLM application:
-
-      <Prompts>
-      <Prompt>
-      What is the capital of France?
-      </Prompt>
-      </Prompts>
-
-      List up to 3 user personas that would send this prompt. Your response should be JSON of the form {personas: string[]}
-    `);
-  });
-
-  it('should generate a prompt for multiple prompt inputs', () => {
-    const prompts = ['What is the capital of France?', 'Who wrote Romeo and Juliet?'];
-    const numPersonas = 5;
-    const result = generatePersonasPrompt(prompts, numPersonas);
-
-    expect(result).toBe(dedent`
-      Consider the following prompts for an LLM application:
-
-      <Prompts>
-      <Prompt>
-      What is the capital of France?
-      </Prompt>
-      <Prompt>
-      Who wrote Romeo and Juliet?
-      </Prompt>
-      </Prompts>
-
-      List up to 5 user personas that would send these prompts. Your response should be JSON of the form {personas: string[]}
-    `);
-  });
-});
-
-describe('testCasesPrompt', () => {
-  it('should generate a test cases prompt with single prompt and no existing tests', () => {
-    const prompts = ['What is the capital of {{country}}?'];
-    const persona = 'A curious student';
-    const tests: TestCase[] = [];
-    const numTestCasesPerPersona = 3;
-    const variables = ['country'];
-    const result = testCasesPrompt(prompts, persona, tests, numTestCasesPerPersona, variables);
-
-    expect(result).toBe(dedent`
-      Consider this prompt, which contains some {{variables}}:
-      <Prompts>
-      <Prompt>
-      What is the capital of {{country}}?
-      </Prompt>
-      </Prompts>
-
-      This is your persona:
-      <Persona>
-      A curious student
-      </Persona>
-
-      Here are some existing tests:
-
-      Fully embody this persona and determine a value for each variable, such that the prompt would be sent by this persona.
-
-      You are a tester, so try to think of 3 sets of values that would be interesting or unusual to test.
-
-      Your response should contain a JSON map of variable names to values, of the form {vars: {country: string}[]}
-    `);
-  });
-
-  it('should generate a test cases prompt with multiple prompts and existing tests', () => {
-    const prompts = ['What is the capital of {{country}}?', 'What is the population of {{city}}?'];
-    const persona = 'A geography enthusiast';
-    const tests: TestCase[] = [
-      { vars: { country: 'France', city: 'Paris' } },
-      { vars: { country: 'Japan', city: 'Tokyo' } },
-    ];
-    const numTestCasesPerPersona = 2;
-    const variables = ['country', 'city'];
-    const instructions = 'Focus on less known countries and cities.';
-    const result = testCasesPrompt(
-      prompts,
-      persona,
-      tests,
-      numTestCasesPerPersona,
-      variables,
-      instructions,
-    );
-
-    expect(result).toBe(dedent`
-      Consider these prompts, which contains some {{variables}}:
-      <Prompts>
-      <Prompt>
-      What is the capital of {{country}}?
-      </Prompt>
-      <Prompt>
-      What is the population of {{city}}?
-      </Prompt>
-      </Prompts>
-
-      This is your persona:
-      <Persona>
-      A geography enthusiast
-      </Persona>
-
-      Here are some existing tests:
-      <Test>
-        {
-      "country": "France",
-      "city": "Paris"
-      }
-        </Test>
-      <Test>
-        {
-      "country": "Japan",
-      "city": "Tokyo"
-      }
-        </Test>
-
-      Fully embody this persona and determine a value for each variable, such that the prompt would be sent by this persona.
-
-      You are a tester, so try to think of 2 sets of values that would be interesting or unusual to test. Focus on less known countries and cities.
-
-      Your response should contain a JSON map of variable names to values, of the form {vars: {country: string, city: string}[]}
-    `);
   });
 });

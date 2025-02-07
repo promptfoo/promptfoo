@@ -37,6 +37,8 @@ export function getStrategyIdFromMetric(metric: string): string | null {
       return 'multilingual';
     } else if (metricSuffix === 'Rot13') {
       return 'rot13';
+    } else if (metricSuffix === 'Pandamonium') {
+      return 'pandamonium';
     }
   }
   return null;

@@ -41,6 +41,7 @@ export default function StrategyConfigDialog({
   const [enabled, setEnabled] = React.useState<boolean>(
     config.enabled === undefined ? true : config.enabled,
   );
+  const [numTests, setNumTests] = React.useState<string>(config.numTests?.toString() || '10');
   const [newLanguage, setNewLanguage] = React.useState<string>('');
   const [error, setError] = React.useState<string>('');
 
@@ -68,6 +69,19 @@ export default function StrategyConfigDialog({
     setLanguages(languages.filter((l) => l !== lang));
   };
 
+  const handleNumTestsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    const num = Number.parseInt(value, 10);
+
+    if (num < 1) {
+      setError('Must be at least 1');
+    } else {
+      setError('');
+    }
+
+    setNumTests(value);
+  };
+
   const handleSave = () => {
     if (!strategy) {
       return;
@@ -91,6 +105,14 @@ export default function StrategyConfigDialog({
         ...config,
         languages,
       });
+    } else if (strategy === 'retry') {
+      const num = Number.parseInt(numTests, 10);
+      if (num >= 1) {
+        onSave(strategy, {
+          ...config,
+          numTests: num,
+        });
+      }
     }
     onClose();
   };
@@ -193,13 +215,39 @@ export default function StrategyConfigDialog({
             />
           </>
         )}
+        {strategy === 'retry' && (
+          <>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Automatically reuse previously failed test cases to identify additional
+              vulnerabilities and identify regressions.
+            </Typography>
+            <TextField
+              fullWidth
+              label="Maximum Tests Per Plugin"
+              type="number"
+              value={numTests}
+              onChange={handleNumTestsChange}
+              error={!!error}
+              helperText={error || 'Default: 10'}
+              inputProps={{
+                min: 1,
+                max: 100,
+                step: 1,
+              }}
+              sx={{ mt: 1 }}
+            />
+          </>
+        )}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
         <Button
           onClick={handleSave}
           variant="contained"
-          disabled={strategy === 'jailbreak' && (!!error || !numIterations)}
+          disabled={
+            (strategy === 'jailbreak' && (!!error || !numIterations)) ||
+            (strategy === 'retry' && (!!error || !numTests))
+          }
         >
           Save
         </Button>

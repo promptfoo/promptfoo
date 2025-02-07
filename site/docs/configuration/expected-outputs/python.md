@@ -50,12 +50,29 @@ assert:
 A `context` object is available in the Python function. Here is its type definition:
 
 ```py
-from typing import Any, Dict, TypedDict, Union
+from typing import Any, Dict, Optional, TypedDict, Union
 
-class AssertContext(TypedDict):
-    prompt: str
-    vars: Dict[str, str]
+class AssertionValueFunctionContext(TypedDict):
+    # Raw prompt sent to LLM
+    prompt: Optional[str]
+
+    # Test case variables
+    vars: Dict[str, Union[str, object]]
+
+    # The complete test case
     test: Dict[str, Any]  # Contains keys like "vars", "assert", "options"
+
+    # Log probabilities from the LLM response, if available
+    logProbs: Optional[list[float]]
+
+    # Configuration passed to the assertion
+    config: Optional[Dict[str, Any]]
+
+    # The provider that generated the response
+    provider: Optional[Any]  # ApiProvider type
+
+    # The complete provider response
+    providerResponse: Optional[Any]  # ProviderResponse type
 ```
 
 For example, if the test case has a var `example`, access it in Python like this:
@@ -67,7 +84,7 @@ tests:
       example: 'Example text'
     assert:
       - type: python
-        value: 'context['vars']['example'] in output'
+        value: 'context["vars"]["example"] in output'
 ```
 
 ## External .py
@@ -92,7 +109,7 @@ assert:
 
 If no function is specified, it defaults to `get_assert`.
 
-This file will be called with an `output` string and an `AssertContext` object (see above).
+This file will be called with an `output` string and an `AssertionValueFunctionContext` object (see above).
 It expects that either a `bool` (pass/fail), `float` (score), or `GradingResult` will be returned.
 
 Here's an example `assert.py`:
@@ -123,7 +140,7 @@ This is an example of an assertion that uses data from a configuration defined i
 from typing import Dict, Union
 
 def get_assert(output: str, context) -> Union[bool, float, Dict[str, Any]]:
-    return output.length() <= context.get('config', {}).get('outputLengthLimit', 0)
+    return len(output) <= context.get('config', {}).get('outputLengthLimit', 0)
 ```
 
 You can also return nested metrics and assertions via a `GradingResult` object:

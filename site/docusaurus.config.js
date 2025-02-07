@@ -152,6 +152,10 @@ const config = {
                 label: 'Blog',
               },
               {
+                href: '/press/',
+                label: 'Press',
+              },
+              {
                 href: '/contact/',
                 label: 'Contact',
               },
@@ -199,10 +203,10 @@ const config = {
         style: 'dark',
         links: [
           {
-            title: 'Docs',
+            title: 'Product',
             items: [
               {
-                label: 'Intro',
+                label: 'Docs',
                 to: '/docs/intro/',
               },
               {
@@ -214,25 +218,17 @@ const config = {
                 to: '/docs/usage/node-package/',
               },
               {
-                label: 'Privacy Policy',
-                to: '/privacy/',
+                label: 'Enterprise',
+                href: '/pricing/',
               },
               {
-                label: 'Terms of Service',
-                to: '/terms-of-service/',
-              },
-              {
-                html: `
-                <div style="position: relative; margin-top:8px">
-                  <span style="position: absolute; left: 65px; top: 25px; font-size: 10px; font-weight: bold; background-color: #25842c; padding: 2px 4px; border-radius: 4px;">In Progress</span>
-                  <img loading="lazy" src="/img/badges/soc2.png" alt="SOC2 Compliance in progress" style="width:80px; height: auto"/>
-                </div>
-                `,
+                label: 'Status',
+                href: 'https://status.promptfoo.dev',
               },
             ],
           },
           {
-            title: 'Guides & Tools',
+            title: 'Resources',
             items: [
               {
                 label: 'LLM Red Teaming',
@@ -255,38 +251,39 @@ const config = {
                 to: '/docs/guides/prevent-llm-hallucations',
               },
               {
-                label: 'Promptfoo Config Validator',
+                label: 'Config Validator',
                 to: '/validator',
               },
             ],
           },
           {
-            title: 'Resources',
+            title: 'Company',
             items: [
               {
                 label: 'About',
-                href: '/about/',
+                to: '/about/',
               },
               {
                 label: 'Blog',
-                href: '/blog/',
+                to: '/blog/',
               },
               {
-                label: 'Enterprise',
-                href: '/pricing/',
+                label: 'Press',
+                to: '/press/',
               },
               {
-                label: 'Contact Us',
-                href: '/contact/',
+                label: 'Contact',
+                to: '/contact/',
               },
               {
                 label: 'Careers',
-                href: '/careers/',
+                to: '/careers/',
               },
-              {
-                label: 'Status',
-                href: 'https://status.promptfoo.dev',
-              },
+            ],
+          },
+          {
+            title: 'Legal & Social',
+            items: [
               {
                 label: 'GitHub',
                 href: 'https://github.com/promptfoo/promptfoo',
@@ -298,6 +295,22 @@ const config = {
               {
                 label: 'LinkedIn',
                 href: 'https://www.linkedin.com/company/promptfoo/',
+              },
+              {
+                label: 'Privacy Policy',
+                to: '/privacy/',
+              },
+              {
+                label: 'Terms of Service',
+                to: '/terms-of-service/',
+              },
+              {
+                html: `
+                <div style="position: relative; margin-top:8px">
+                  <span style="position: absolute; left: 65px; top: 25px; font-size: 10px; font-weight: bold; background-color: #25842c; padding: 2px 4px; border-radius: 4px;">In Progress</span>
+                  <img loading="lazy" src="/img/badges/soc2.png" alt="SOC2 Compliance in progress" style="width:80px; height: auto"/>
+                </div>
+                `,
               },
             ],
           },
