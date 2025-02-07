@@ -197,3 +197,5 @@ export function removePrefix(str: string, prefix: string) {
   str = str.replace(new RegExp(prefix + ':', 'i'), '').trim();
   return str;
 }
+
+export { normalizeApostrophes, REFUSAL_PREFIXES, REFUSAL_SUBSTRINGS };
