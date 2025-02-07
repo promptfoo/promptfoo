@@ -1,8 +1,18 @@
 import * as path from 'path';
+import logger from '../../src/logger';
 import { runPython } from '../../src/python/pythonUtils';
 import { transform, TransformInputType } from '../../src/util/transform';
 
 jest.mock('../../src/esm');
+jest.mock('../../src/logger', () => ({
+  __esModule: true,
+  default: {
+    error: jest.fn(),
+    warn: jest.fn(),
+    info: jest.fn(),
+    debug: jest.fn(),
+  },
+}));
 
 jest.mock('../../src/python/pythonUtils', () => ({
   runPython: jest.fn().mockImplementation(async (filePath, functionName, args) => {
@@ -105,6 +115,9 @@ describe('util', () => {
       await expect(transform(transformFunctionPath, output, context)).rejects.toThrow(
         'Transform transform.js must export a function, have a default export as a function, or export the specified function "undefined"',
       );
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Error loading transform function from file:'),
+      );
     });
 
     it('transforms output using a Python file', async () => {
@@ -123,6 +136,9 @@ describe('util', () => {
 
       await expect(transform(unsupportedFilePath, output, context)).rejects.toThrow(
         'Unsupported transform file format: file://transform.txt',
+      );
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Error loading transform function from file:'),
       );
     });
 
@@ -212,6 +228,39 @@ describe('util', () => {
       const transformFunction = ''; // Empty function, returns undefined
       await expect(transform(transformFunction, output, context, true)).rejects.toThrow(
         'Transform function did not return a value',
+      );
+    });
+
+    it('handles file transform function errors gracefully', async () => {
+      const output = 'test';
+      const context = { vars: {}, prompt: {} };
+      const errorMessage = 'File not found';
+
+      jest.doMock(
+        path.resolve('transform.js'),
+        () => {
+          throw new Error(errorMessage);
+        },
+        { virtual: true },
+      );
+
+      const transformFunctionPath = 'file://transform.js';
+      await expect(transform(transformFunctionPath, output, context)).rejects.toThrow(errorMessage);
+      expect(logger.error).toHaveBeenCalledWith(
+        `Error loading transform function from file: ${errorMessage}`,
+      );
+    });
+
+    it('handles inline transform function errors gracefully', async () => {
+      const output = 'test';
+      const context = { vars: {}, prompt: {} };
+      const invalidFunction = 'invalid javascript code {';
+
+      await expect(transform(invalidFunction, output, context)).rejects.toThrow(
+        'Unexpected identifier',
+      );
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Error creating inline transform function:'),
       );
     });
   });
