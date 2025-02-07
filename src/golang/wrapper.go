@@ -13,8 +13,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// scriptPath := os.Args[1]
-	// functionName := os.Args[2]
+	functionName := os.Args[2]
 	jsonArgs := os.Args[3]
 
 	// Parse the JSON arguments
@@ -25,8 +24,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Get the function from the provider package
-	f := reflect.ValueOf(CallApi)
+	// Get the function by name using reflection
+	f := reflect.ValueOf(nil)
+	switch functionName {
+	case "call_api", "CallApi":
+		f = reflect.ValueOf(CallApi)
+	case "call_embedding_api", "EchoWithQuotes":
+		f = reflect.ValueOf(EchoWithQuotes)
+	default:
+		fmt.Printf("Unknown function: %s\n", functionName)
+		os.Exit(1)
+	}
 
 	// Call the function
 	result := f.Call([]reflect.Value{

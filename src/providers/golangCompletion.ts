@@ -79,10 +79,9 @@ export class GolangProvider implements ApiProvider {
         delete context.logger;
       }
 
-      const safePrompt = prompt.replace(/'/g, "\\'");
-
+      // No need to escape the prompt here since it will be properly escaped by safeJsonStringify
       const args =
-        apiType === 'call_api' ? [safePrompt, this.options, context] : [safePrompt, this.options];
+        apiType === 'call_api' ? [prompt, this.options, context] : [prompt, this.options];
       logger.debug(
         `Running Golang script ${absPath} with scriptPath ${this.scriptPath} and args: ${safeJsonStringify(args)}`,
       );
@@ -139,8 +138,10 @@ export class GolangProvider implements ApiProvider {
           await execAsync(compileCommand);
         }
 
-        // Run the compiled binary
-        const command = `${executablePath} ${tempScriptPath} ${functionName} '${safeJsonStringify(args)}'`;
+        // Run the compiled binary with proper shell escaping for the JSON string
+        const jsonArgs = safeJsonStringify(args) || '[]';
+        const escapedJsonArgs = jsonArgs.replace(/'/g, "'\\''");
+        const command = `${executablePath} ${tempScriptPath} ${functionName} '${escapedJsonArgs}'`;
         logger.debug(`Running command: ${command}`);
 
         const { stdout, stderr } = await execAsync(command);
