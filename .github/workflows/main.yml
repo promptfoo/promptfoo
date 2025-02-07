@@ -92,7 +92,7 @@ jobs:
 
       - name: Check PromptFoo capitalization
         run: |
-          apt-get install -y ripgrep
+          sudo apt-get install -y ripgrep
           if rg -w "(?i)promptfoo" --no-heading | grep -vE '(promptfoo|Promptfoo)($|[^a-zA-Z])'; then
             echo "Error: Found incorrect capitalization of 'promptfoo'. Please use either 'promptfoo' (lowercase) or 'Promptfoo' (capitalized)."
             exit 1
