@@ -447,14 +447,26 @@ export async function matchesLlmRubric(
       return fail('Could not extract JSON from llm-rubric response', resp.tokenUsage);
     }
     const parsed = jsonObjects[0] as Partial<GradingResult>;
-    const threshold = assertion?.threshold ?? 0;
-    const pass =
-      parsed.pass ?? (typeof parsed.score === 'undefined' ? true : parsed.score >= threshold);
+    const threshold = assertion?.threshold;
+    let pass = parsed.pass ?? true;
+    let score = parsed.score;
+
+    // Handle invalid or missing scores
+    if (typeof score !== 'number' || Number.isNaN(score)) {
+      score = pass ? 1.0 : 0.0;
+    }
+
+    // Apply threshold check if threshold is defined
+    if (threshold !== undefined) {
+      pass = pass && score >= threshold;
+    }
+
     return {
       assertion,
       pass,
-      score: parsed.score ?? (pass ? 1.0 : 0.0),
-      reason: parsed.reason || (pass ? 'Grading passed' : 'Grading failed'),
+      score,
+      reason:
+        parsed.reason || (pass ? 'Grading passed' : `Score ${score} below threshold ${threshold}`),
       tokensUsed: {
         total: resp.tokenUsage?.total || 0,
         prompt: resp.tokenUsage?.prompt || 0,
