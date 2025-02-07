@@ -372,23 +372,13 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
         0,
       );
       addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('AWS_BEDROCK_TOP_P'), 1);
-      if ([LlamaVersion.V2, LlamaVersion.V3, LlamaVersion.V3_1].includes(version)) {
-        addConfigParam(
-          params,
-          'max_gen_len',
-          config?.max_gen_len,
-          getEnvInt('AWS_BEDROCK_MAX_GEN_LEN'),
-          1024,
-        );
-      }
-      if ([LlamaVersion.V3_2, LlamaVersion.V3_3].includes(version)) {
-        addConfigParam(
-          params,
-          'max_new_tokens',
-          config?.max_new_tokens,
-          getEnvInt('AWS_BEDROCK_MAX_NEW_TOKENS'),
-        );
-      }
+      addConfigParam(
+        params,
+        'max_gen_len',
+        config?.max_gen_len,
+        getEnvInt('AWS_BEDROCK_MAX_GEN_LEN'),
+        1024,
+      );
       return params;
     },
     output: (responseJson: any) => responseJson?.generation,
