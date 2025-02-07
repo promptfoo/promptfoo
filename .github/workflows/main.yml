@@ -92,8 +92,8 @@ jobs:
 
       - name: Check PromptFoo capitalization
         run: |
-          if rg -i "promptfoo" --type-not json --type-not lock -o | grep -vqE '^(promptfoo|Promptfoo)$'; then
-            echo "Error: Use 'promptfoo' or 'Promptfoo' only"
+          if rg -w "(?i)promptfoo" --no-heading | grep -vE '(promptfoo|Promptfoo)($|[^a-zA-Z])'; then
+            echo "Error: Found incorrect capitalization of 'promptfoo'. Please use either 'promptfoo' (lowercase) or 'Promptfoo' (capitalized)."
             exit 1
           fi
 

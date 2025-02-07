@@ -268,7 +268,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
               </Typography>
               <Typography gutterBottom color="info">
                 <strong>
-                  Your private key is never sent to PromptFoo and will always be stored locally on
+                  Your private key is never sent to Promptfoo and will always be stored locally on
                   your system.
                 </strong>{' '}
               </Typography>
