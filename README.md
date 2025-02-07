@@ -1,4 +1,4 @@
-# Promptfoo: LLM evals & red teaming
+# PromptFoo: LLM evals & red teaming
 
 [![npm](https://img.shields.io/npm/v/promptfoo)](https://npmjs.com/package/promptfoo)
 [![npm](https://img.shields.io/npm/dm/promptfoo)](https://npmjs.com/package/promptfoo)

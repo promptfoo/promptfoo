@@ -93,7 +93,7 @@ jobs:
       - name: Install ripgrep
         run: sudo apt-get install -y ripgrep
 
-      - name: Check PromptFoo capitalization
+      - name: Check Prompfoo capitalization
         shell: bash
         run: |
           # Store the findings in a variable
