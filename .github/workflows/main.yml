@@ -90,9 +90,11 @@ jobs:
           # shellcheck disable=SC2046
           npx madge $(git ls-files '*.ts') --circular
 
+      - name: Install ripgrep
+        run: sudo apt-get install -y ripgrep
+
       - name: Check PromptFoo capitalization
         run: |
-          sudo apt-get install -y ripgrep
           if rg -w "(?i)promptfoo" --no-heading --hidden | grep -vE '(^|[^a-zA-Z])(promptfoo|Promptfoo)([^a-zA-Z]|$)'; then
             echo "Error: Found incorrect capitalization of 'promptfoo'. Please use either 'promptfoo' (lowercase) or 'Promptfoo' (capitalized)."
             exit 1
