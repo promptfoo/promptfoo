@@ -93,6 +93,7 @@ jobs:
       - name: Check Promptfoo capitalization
         run: |
           # Gather files
+          # shellcheck disable=SC2046
           git ls-files | grep -v -E '(package\.json|package-lock\.json|\.git|\.env|dist/|node_modules/|\.github/workflows/)' > filtered_files.txt
 
           # If any invalid variants are found, fail
