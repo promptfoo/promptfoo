@@ -352,4 +352,4 @@ jobs:
       - name: Run wrapper tests
         working-directory: src/golang
         run: |
-          go test -v ./wrapper_test.go
+          go test -v wrapper.go wrapper_test.go
