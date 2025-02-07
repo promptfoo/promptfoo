@@ -203,6 +203,28 @@ describe('OpenAI Provider', () => {
       expect(result.isRefusal).toBe(true);
     });
 
+    it('should handle empty function tool callbacks array correctly', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test output', tool_calls: [] } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+      );
+
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe('Test output');
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+    });
+
     it('should handle function tool callbacks correctly', async () => {
       const mockResponse = {
         data: {
