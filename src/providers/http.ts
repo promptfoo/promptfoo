@@ -17,6 +17,7 @@ import { maybeLoadFromExternalFile } from '../util';
 import { isJavascriptFile } from '../util/file';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
+import { evalInSandbox } from '../util/sandbox';
 import { getNunjucksEngine } from '../util/templates';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
@@ -160,13 +161,15 @@ interface TransformResponseContext {
 
 export async function createTransformResponse(
   parser: string | Function | undefined,
-): Promise<(data: any, text: string, context?: TransformResponseContext) => ProviderResponse> {
+): Promise<
+  (data: any, text: string, context?: TransformResponseContext) => Promise<ProviderResponse>
+> {
   if (!parser) {
-    return (data, text) => ({ output: data || text });
+    return async (data, text) => ({ output: data || text });
   }
 
   if (typeof parser === 'function') {
-    return (data, text, context) => {
+    return async (data, text, context) => {
       try {
         const result = parser(data, text, context);
         if (typeof result === 'string') {
@@ -199,30 +202,32 @@ export async function createTransformResponse(
       `Response transform malformed: ${filename} must export a function or have a default export as a function`,
     );
   } else if (typeof parser === 'string') {
-    return (data, text, context) => {
+    return async (data, text, context) => {
       try {
         const trimmedParser = parser.trim();
         // Check if it's a function expression (either arrow or regular)
         const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedParser);
-        const transformFn = new Function(
-          'json',
-          'text',
-          'context',
-          isFunctionExpression
-            ? `try { return (${trimmedParser})(json, text, context); } catch(e) { throw new Error('Transform failed: ' + e.message); }`
-            : `try { return (${trimmedParser}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
-        );
-        let resp: ProviderResponse | string;
-        if (context) {
-          resp = transformFn(data || null, text, context);
-        } else {
-          resp = transformFn(data || null, text);
-        }
 
-        if (typeof resp === 'string') {
-          return { output: resp };
+        // Create sandbox context with necessary variables
+        const sandboxContext = {
+          json: data || null,
+          text,
+          context,
+        };
+
+        const code = isFunctionExpression
+          ? `return (${trimmedParser})(json, text, context);`
+          : `return (${trimmedParser});`;
+
+        const result = await evalInSandbox(code, sandboxContext, {
+          timeout: 5000,
+          memoryLimitMb: 64,
+        });
+
+        if (typeof result === 'string') {
+          return { output: result };
         }
-        return resp;
+        return { output: result };
       } catch (err) {
         logger.error(`Error in response transform: ${String(err)}`);
         throw new Error(`Failed to transform response: ${String(err)}`);
@@ -373,7 +378,15 @@ export async function createTransformRequest(
     return async (prompt) => {
       try {
         const rendered = nunjucks.renderString(transform, { prompt });
-        return await new Function('prompt', `${rendered}`)(prompt);
+        // Run in sandbox
+        return await evalInSandbox(
+          rendered,
+          { prompt },
+          {
+            timeout: 5000,
+            memoryLimitMb: 64,
+          },
+        );
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         const wrappedError = new Error(
@@ -416,14 +429,14 @@ export function determineRequestBody(
 }
 
 export async function createValidateStatus(
-  validator: string | ((status: number) => boolean) | undefined,
-): Promise<(status: number) => boolean> {
+  validator: string | ((status: number) => boolean | Promise<boolean>) | undefined,
+): Promise<(status: number) => Promise<boolean>> {
   if (!validator) {
-    return (status: number) => true;
+    return async (status: number) => true;
   }
 
   if (typeof validator === 'function') {
-    return validator;
+    return async (status: number) => validator(status);
   }
 
   if (typeof validator === 'string') {
@@ -442,23 +455,42 @@ export async function createValidateStatus(
           functionName,
         );
         if (typeof requiredModule === 'function') {
-          return requiredModule;
+          return async (status: number) => requiredModule(status);
         }
         throw new Error('Exported value must be a function');
       } catch (err: any) {
         throw new Error(`Status validator malformed: ${filename} - ${err?.message || String(err)}`);
       }
     }
-    // Handle string template - wrap in a function body
+    // Handle string template - wrap in a function body and run in sandbox
     try {
       const trimmedValidator = validator.trim();
       // Check if it's an arrow function or regular function
       if (trimmedValidator.includes('=>') || trimmedValidator.startsWith('function')) {
-        // For arrow functions and regular functions, evaluate the whole function
-        return new Function(`return ${trimmedValidator}`)() as (status: number) => boolean;
+        // For arrow functions and regular functions, evaluate in sandbox
+        const code = `return ${trimmedValidator}`;
+        const fn = await evalInSandbox(
+          code,
+          {},
+          {
+            timeout: 5000,
+            memoryLimitMb: 64,
+          },
+        );
+        return async (status: number) => fn(status);
       }
-      // For expressions, wrap in a function body
-      return new Function('status', `return ${trimmedValidator}`) as (status: number) => boolean;
+      // For expressions, wrap in a function body and run in sandbox
+      return async (status: number) => {
+        const result = await evalInSandbox(
+          `return ${trimmedValidator}`,
+          { status },
+          {
+            timeout: 5000,
+            memoryLimitMb: 64,
+          },
+        );
+        return !!result;
+      };
     } catch (err: any) {
       throw new Error(`Invalid status validator expression: ${err?.message || String(err)}`);
     }
@@ -473,11 +505,11 @@ export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
   private transformResponse: Promise<
-    (data: any, text: string, context?: TransformResponseContext) => ProviderResponse
+    (data: any, text: string, context?: TransformResponseContext) => Promise<ProviderResponse>
   >;
   private sessionParser: Promise<(data: SessionParserData) => string>;
   private transformRequest: Promise<(prompt: string) => any>;
-  private validateStatus: Promise<(status: number) => boolean>;
+  private validateStatus: Promise<(status: number) => Promise<boolean>>;
   private lastSignatureTimestamp?: number;
   private lastSignature?: string;
 
@@ -693,7 +725,7 @@ export class HttpProvider implements ApiProvider {
     );
 
     logger.debug(`[HTTP Provider]: Response: ${response.data}`);
-    if (!(await this.validateStatus)(response.status)) {
+    if (!(await (await this.validateStatus)(response.status))) {
       throw new Error(
         `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
       );
@@ -730,7 +762,7 @@ export class HttpProvider implements ApiProvider {
       );
       throw err;
     }
-    const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
+    const parsedOutput = await (await this.transformResponse)(parsedData, rawText, { response });
     if (parsedOutput?.output) {
       return {
         ...ret,
@@ -770,7 +802,7 @@ export class HttpProvider implements ApiProvider {
 
     logger.debug(`[HTTP Provider]: Response: ${response.data}`);
 
-    if (!(await this.validateStatus)(response.status)) {
+    if (!(await (await this.validateStatus)(response.status))) {
       throw new Error(
         `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
       );
@@ -784,7 +816,7 @@ export class HttpProvider implements ApiProvider {
       parsedData = null;
     }
 
-    const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
+    const parsedOutput = await (await this.transformResponse)(parsedData, rawText, { response });
     if (parsedOutput?.output) {
       return parsedOutput;
     }
