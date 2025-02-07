@@ -1,38 +1,13 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-
-# Define the prompt template
-prompts:
-  - id: chat-prompt
-    label: Chat Message
-    raw: '{{ question }}'
-
-# Define the provider configuration
-providers:
+description: Local Websocket Conversation Example
+targets:
   - id: websocket
+    label: promptfoo-redpanda-websocket-proxy
     config:
       type: websocket
       url: ws://localhost:4000
-      maintainConnectionBetweenCalls: true
-      timeoutMs: 30000 # Set to 30 seconds
-      messageTemplate: '{"prompt": "{{ prompt }}", "sessionId": "{{ sessionId }}"}'
-      setSessionContext: |
-        console.log('Starting sessionParser...');
-        console.log('Vars:', vars);
-        if (!vars.sessionId) {
-          const response = await fetch('http://localhost:4000/conversation', {
-            method: 'POST'
-          });
-          const data = await response.json();
-          console.log('Server returned conversation ID:', data.sessionId);
-          const { sessionId } = data;
-          vars.sessionId = sessionId;
-          console.log('Returning updated vars:', vars);
-        }
-        return { 
-          vars,
-          sessionId,
-        };
-      transformResponse: |
+      messageTemplate: '{"prompt": "{{prompt}}", "sessionId": "{{sessionId}}"}'
+      transformResponse: |-
         if (!data || typeof data !== 'object') {
           return { output: 'Invalid response data', history: [] };
         }
@@ -42,26 +17,35 @@ providers:
           output: data.output || (data.error && `Error: ${data.error}`) || 'No output found',
           history: data.history || []
         };
-
-        return result;
-
-# Test multi-turn conversations
-tests:
-  # Example 1
-  - vars:
-      question: Can you help me with booking a flight to Toronto?
-      sessionId: flightToTorontoThread
-  - vars:
-      question: Will it be cold there right now?
-      sessionId: flightToTorontoThread
-  - vars:
-      question: I'm flying from Tokyo. Do I need to renew my passport? I have 6 months left on it.
-      sessionId: flightToTorontoThread
-
-  # Example 2
-  - vars:
-      question: What's the fastest bus that will take me from New York to Toronto?
-      sessionId: busTicketToNewYorkThread
-  - vars:
-      question: How much will it cost?
-      sessionId: busTicketToNewYorkThread
+      timeoutMs: 30000
+      setSessionContext: |-
+        console.log('Starting sessionParser...');
+        console.log('Vars:', vars);
+        let sessionId = undefined;
+        if (!vars.sessionId) {
+          const response = await fetch('http://localhost:4000/conversation', {
+            method: 'POST'
+          });
+          const data = await response.json();
+          sessionId = data.sessionId;
+          console.log('Server returned session ID:', sessionId);
+          vars.sessionId = sessionId;
+          console.log('Returning updated vars:', vars);
+        }
+        const retVal = {
+          vars,
+          sessionId,
+        };
+        console.log('Returning full session context:', retVal);
+        return retVal;
+prompts:
+  - '{{prompt}}'
+redteam:
+  purpose: ''
+  plugins:
+    - id: harmbench # Tests for harmful content using the HarmBench dataset
+  strategies:
+    - id: basic # Original plugin tests without any additional strategies or optimizations
+defaultTest:
+  options:
+    transformVars: '{ ...vars, sessionId: context.uuid }'
