@@ -79,10 +79,8 @@ export class GolangProvider implements ApiProvider {
         delete context.logger;
       }
 
-      const safePrompt = prompt.replace(/'/g, "\\'");
-
       const args =
-        apiType === 'call_api' ? [safePrompt, this.options, context] : [safePrompt, this.options];
+        apiType === 'call_api' ? [prompt, this.options, context] : [prompt, this.options];
       logger.debug(
         `Running Golang script ${absPath} with scriptPath ${this.scriptPath} and args: ${safeJsonStringify(args)}`,
       );
