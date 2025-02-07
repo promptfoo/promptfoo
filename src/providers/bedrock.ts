@@ -263,6 +263,7 @@ export enum LlamaVersion {
   V3 = 3,
   V3_1 = 3.1,
   V3_2 = 3.2,
+  V3_3 = 3.3,
 }
 
 export interface LlamaMessage {
@@ -329,7 +330,15 @@ export const formatPromptLlama3Instruct = (messages: LlamaMessage[]): string => 
 };
 
 export const getLlamaModelHandler = (version: LlamaVersion) => {
-  if (![LlamaVersion.V2, LlamaVersion.V3, LlamaVersion.V3_1, LlamaVersion.V3_2].includes(version)) {
+  if (
+    ![
+      LlamaVersion.V2,
+      LlamaVersion.V3,
+      LlamaVersion.V3_1,
+      LlamaVersion.V3_2,
+      LlamaVersion.V3_3,
+    ].includes(version)
+  ) {
     throw new Error(`Unsupported LLAMA version: ${version}`);
   }
 
@@ -345,6 +354,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
         case LlamaVersion.V3:
         case LlamaVersion.V3_1:
         case LlamaVersion.V3_2:
+        case LlamaVersion.V3_3:
           finalPrompt = formatPromptLlama3Instruct(messages as LlamaMessage[]);
           break;
         default:
@@ -371,7 +381,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
           1024,
         );
       }
-      if (LlamaVersion.V3_2 === version) {
+      if ([LlamaVersion.V3_2, LlamaVersion.V3_3].includes(version)) {
         addConfigParam(
           params,
           'max_new_tokens',
@@ -637,6 +647,7 @@ export const BEDROCK_MODEL = {
   LLAMA3: getLlamaModelHandler(LlamaVersion.V3),
   LLAMA3_1: getLlamaModelHandler(LlamaVersion.V3_1),
   LLAMA3_2: getLlamaModelHandler(LlamaVersion.V3_2),
+  LLAMA3_3: getLlamaModelHandler(LlamaVersion.V3_3),
   COHERE_COMMAND: {
     params: (config: BedrockCohereCommandGenerationOptions, prompt: string, stop: string[]) => {
       const params: any = { prompt };
@@ -777,6 +788,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.meta.llama3-2-1b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'us.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'us.meta.llama3-2-90b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
+  'us.meta.llama3-3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_3,
 
   // EU Models
   'eu.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -814,6 +826,9 @@ function getHandlerForModel(modelName: string) {
   }
   if (modelName.includes('meta.llama3-2')) {
     return BEDROCK_MODEL.LLAMA3_2;
+  }
+  if (modelName.includes('meta.llama3-3')) {
+    return BEDROCK_MODEL.LLAMA3_3;
   }
   if (modelName.includes('meta.llama3')) {
     return BEDROCK_MODEL.LLAMA3;
