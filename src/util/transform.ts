@@ -1,6 +1,7 @@
 import path from 'path';
 import cliState from '../cliState';
 import { importModule } from '../esm';
+import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
 import type { Prompt, Vars } from '../types';
 import { isJavascriptFile } from './file';
@@ -108,16 +109,22 @@ async function getTransformFunction(
     try {
       transformFn = await getFileTransformFunction(codeOrFilepath);
     } catch (error) {
-      console.error(`Error loading transform function from file: ${error.message}`);
+      logger.error(
+        `Error loading transform function from file: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw error;
     }
   } else {
     try {
       transformFn = getInlineTransformFunction(codeOrFilepath, inputType);
     } catch (error) {
-      console.error(`Error creating inline transform function: ${error.message}`);
+      logger.error(
+        `Error creating inline transform function: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw error;
     }
   }
-  return typeof transformFn === 'function' ? transformFn : null;
+  return transformFn;
 }
 
 /**
