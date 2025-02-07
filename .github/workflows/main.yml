@@ -98,12 +98,11 @@ jobs:
         run: |
           # Store the findings in a variable
           FINDINGS=$(rg -w "(?i)promptfoo" --no-heading --hidden | grep -vE '(^|[^a-zA-Z])(promptfoo|Promptfoo)([^a-zA-Z]|$)' || true)
-
-          # If there are findings, display them and exit with error
           if [ -n "$FINDINGS" ]; then
-            echo "Error: Found incorrect capitalization of 'promptfoo'. Please use either 'promptfoo' (lowercase) or 'Promptfoo' (capitalized)."
-            echo "Findings:"
+            echo "::error::Found incorrect capitalization of 'promptfoo'. Please use either 'promptfoo' (lowercase) or 'Promptfoo' (capitalized)."
+            echo "::group::Incorrect capitalizations found"
             echo "$FINDINGS"
+            echo "::endgroup::"
             exit 1
           fi
 
