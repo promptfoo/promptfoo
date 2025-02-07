@@ -277,7 +277,7 @@ export async function doEval(
     }
 
     if (totalTests >= 500) {
-      logger.info('No table output will be shown because there are more than 500 tests.');
+      logger.info('Skipping table output because there are more than 500 tests.');
     }
 
     const { outputPath } = config;
