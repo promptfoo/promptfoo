@@ -29,10 +29,11 @@ import { ReplicateModerationProvider } from '../src/providers/replicate';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from '../src/redteam/constants';
 import * as remoteGrading from '../src/remoteGrading';
 import type {
-  GradingConfig,
-  ProviderResponse,
-  ProviderClassificationResponse,
   ApiProvider,
+  Assertion,
+  GradingConfig,
+  ProviderClassificationResponse,
+  ProviderResponse,
   ProviderTypeMap,
 } from '../src/types';
 import { TestGrader } from './util/utils';
@@ -355,6 +356,248 @@ describe('matchesLlmRubric', () => {
     expect(mockCallApi).toHaveBeenCalledWith('Grading prompt');
 
     mockCallApi.mockRestore();
+  });
+
+  it('should use provided score threshold if llm does not return pass', async () => {
+    const rubricPrompt = 'Rubric prompt';
+    const llmOutput = 'Sample output';
+    const assertion: Assertion = {
+      type: 'llm-rubric',
+      value: rubricPrompt,
+      threshold: 0.5,
+    };
+
+    const lowScoreResponse = { score: 0.25, reason: 'Low score' };
+    const lowScoreProvider: ApiProvider = {
+      id: () => 'test-provider',
+      callApi: jest.fn().mockResolvedValue({
+        output: JSON.stringify(lowScoreResponse),
+      }),
+    };
+
+    await expect(
+      matchesLlmRubric(
+        rubricPrompt,
+        llmOutput,
+        { rubricPrompt, provider: lowScoreProvider },
+        {},
+        assertion,
+      ),
+    ).resolves.toEqual(expect.objectContaining({ assertion, pass: false, ...lowScoreResponse }));
+
+    const highScoreResponse = { score: 0.75, reason: 'High score' };
+    const highScoreProvider: ApiProvider = {
+      id: () => 'test-provider',
+      callApi: jest.fn().mockResolvedValue({
+        output: JSON.stringify(highScoreResponse),
+      }),
+    };
+    await expect(
+      matchesLlmRubric(
+        rubricPrompt,
+        llmOutput,
+        { rubricPrompt, provider: highScoreProvider },
+        {},
+        assertion,
+      ),
+    ).resolves.toEqual(expect.objectContaining({ assertion, pass: true, ...highScoreResponse }));
+  });
+
+  it('should ignore the score threshold if llm returns pass', async () => {
+    const rubricPrompt = 'Rubric prompt';
+    const output = 'Sample output';
+    const assertion: Assertion = {
+      type: 'llm-rubric',
+      value: rubricPrompt,
+      threshold: 0.1,
+    };
+
+    const lowScoreResult = { score: 0.25, reason: 'Low score but pass', pass: true };
+    const lowScoreOptions: GradingConfig = {
+      rubricPrompt,
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: JSON.stringify(lowScoreResult),
+        }),
+      },
+    };
+
+    await expect(
+      matchesLlmRubric(rubricPrompt, output, lowScoreOptions, {}, assertion),
+    ).resolves.toEqual(expect.objectContaining({ assertion, ...lowScoreResult }));
+  });
+
+  it('should respect both threshold and explicit pass/fail when both are present', async () => {
+    const rubricPrompt = 'Rubric prompt';
+    const output = 'Sample output';
+    const assertion: Assertion = {
+      type: 'llm-rubric',
+      value: rubricPrompt,
+      threshold: 0.8,
+    };
+
+    // Case 1: Pass is true but score is below threshold
+    const failingResult = { score: 0.7, reason: 'Score below threshold', pass: true };
+    const failingOptions: GradingConfig = {
+      rubricPrompt,
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: JSON.stringify(failingResult),
+        }),
+      },
+    };
+
+    await expect(
+      matchesLlmRubric(rubricPrompt, output, failingOptions, {}, assertion),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        assertion,
+        score: 0.7,
+        pass: false,
+        reason: 'Score below threshold',
+      }),
+    );
+
+    // Case 2: Pass is false but score is above threshold
+    const passingResult = {
+      score: 0.9,
+      reason: 'Score above threshold but explicit fail',
+      pass: false,
+    };
+    const passingOptions: GradingConfig = {
+      rubricPrompt,
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: JSON.stringify(passingResult),
+        }),
+      },
+    };
+
+    await expect(
+      matchesLlmRubric(rubricPrompt, output, passingOptions, {}, assertion),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        assertion,
+        score: 0.9,
+        pass: false,
+        reason: 'Score above threshold but explicit fail',
+      }),
+    );
+  });
+
+  it('should handle edge cases around threshold value', async () => {
+    const rubricPrompt = 'Rubric prompt';
+    const output = 'Sample output';
+    const assertion: Assertion = {
+      type: 'llm-rubric',
+      value: rubricPrompt,
+      threshold: 0.8,
+    };
+
+    // Exactly at threshold should pass
+    const exactThresholdResult = { score: 0.8, reason: 'Exactly at threshold' };
+    const exactOptions: GradingConfig = {
+      rubricPrompt,
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: JSON.stringify(exactThresholdResult),
+        }),
+      },
+    };
+
+    await expect(
+      matchesLlmRubric(rubricPrompt, output, exactOptions, {}, assertion),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        assertion,
+        score: 0.8,
+        pass: true,
+        reason: 'Exactly at threshold',
+      }),
+    );
+
+    // Just below threshold should fail
+    const justBelowResult = { score: 0.799, reason: 'Just below threshold' };
+    const belowOptions: GradingConfig = {
+      rubricPrompt,
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: JSON.stringify(justBelowResult),
+        }),
+      },
+    };
+
+    await expect(
+      matchesLlmRubric(rubricPrompt, output, belowOptions, {}, assertion),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        assertion,
+        score: 0.799,
+        pass: false,
+        reason: 'Just below threshold',
+      }),
+    );
+  });
+
+  it('should handle missing or invalid scores when threshold is present', async () => {
+    const rubricPrompt = 'Rubric prompt';
+    const output = 'Sample output';
+    const assertion: Assertion = {
+      type: 'llm-rubric',
+      value: rubricPrompt,
+      threshold: 0.8,
+    };
+
+    // Missing score should default to pass value
+    const missingScoreResult = { pass: true, reason: 'No score provided' };
+    const missingScoreOptions: GradingConfig = {
+      rubricPrompt,
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: JSON.stringify(missingScoreResult),
+        }),
+      },
+    };
+
+    await expect(
+      matchesLlmRubric(rubricPrompt, output, missingScoreOptions, {}, assertion),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        assertion,
+        score: 1.0,
+        pass: true,
+        reason: 'No score provided',
+      }),
+    );
+
+    // Invalid score type should be handled gracefully
+    const invalidScoreResult = { score: 'high', reason: 'Invalid score type', pass: true };
+    const invalidScoreOptions: GradingConfig = {
+      rubricPrompt,
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: JSON.stringify(invalidScoreResult),
+        }),
+      },
+    };
+
+    await expect(
+      matchesLlmRubric(rubricPrompt, output, invalidScoreOptions, {}, assertion),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        assertion,
+        score: 1.0,
+        pass: true,
+        reason: 'Invalid score type',
+      }),
+    );
   });
 
   it('should load rubric prompt from external file when specified', async () => {

@@ -25,15 +25,16 @@ import { doRemoteGrading } from './remoteGrading';
 import type {
   ApiClassificationProvider,
   ApiEmbeddingProvider,
+  ApiModerationProvider,
   ApiProvider,
   ApiSimilarityProvider,
+  Assertion,
   GradingConfig,
   GradingResult,
   ProviderOptions,
+  ProviderType,
   ProviderTypeMap,
   TokenUsage,
-  ProviderType,
-  ApiModerationProvider,
 } from './types';
 import { maybeLoadFromExternalFile } from './util';
 import { isJavascriptFile } from './util/file';
@@ -406,7 +407,8 @@ export async function matchesLlmRubric(
   llmOutput: string,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
-): Promise<Omit<GradingResult, 'assertion'>> {
+  assertion?: Assertion | null,
+): Promise<GradingResult> {
   if (!grading) {
     throw new Error(
       'Cannot grade output without grading config. Specify --grader option or grading config.',
@@ -445,11 +447,26 @@ export async function matchesLlmRubric(
       return fail('Could not extract JSON from llm-rubric response', resp.tokenUsage);
     }
     const parsed = jsonObjects[0] as Partial<GradingResult>;
-    const pass = parsed.pass ?? (typeof parsed.score === 'undefined' ? true : parsed.score > 0);
+    const threshold = assertion?.threshold;
+    let pass = parsed.pass ?? true;
+    let score = parsed.score;
+
+    // Handle invalid or missing scores
+    if (typeof score !== 'number' || Number.isNaN(score)) {
+      score = pass ? 1.0 : 0.0;
+    }
+
+    // Apply threshold check if threshold is defined
+    if (threshold !== undefined) {
+      pass = pass && score >= threshold;
+    }
+
     return {
+      assertion,
       pass,
-      score: parsed.score ?? (pass ? 1.0 : 0.0),
-      reason: parsed.reason || (pass ? 'Grading passed' : 'Grading failed'),
+      score,
+      reason:
+        parsed.reason || (pass ? 'Grading passed' : `Score ${score} below threshold ${threshold}`),
       tokensUsed: {
         total: resp.tokenUsage?.total || 0,
         prompt: resp.tokenUsage?.prompt || 0,
