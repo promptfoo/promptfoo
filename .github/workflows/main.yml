@@ -90,23 +90,10 @@ jobs:
           # shellcheck disable=SC2046
           npx madge $(git ls-files '*.ts') --circular
 
-      - name: Check Promptfoo capitalization
+      - name: Check PromptFoo capitalization
         run: |
-          # Gather files
-          # shellcheck disable=SC2046
-          git ls-files | grep -v -E '(package\.json|package-lock\.json|\.git|\.env|dist/|node_modules/|\.github/workflows/)' > filtered_files.txt
-
-          # If any invalid variants are found, fail
-          if grep -i -o -E "[pP][rR][oO][mM][pP][tT][fF][oO][oO]" $(cat filtered_files.txt) \
-            | grep -v -E "^promptfoo$|^Promptfoo$" \
-            | grep -q .; then
-            
-            echo "Error: Found incorrect capitalization of 'Promptfoo'."
-            echo "Only 'promptfoo' or 'Promptfoo' are allowed."
-            exit 1
-          fi
-
-          echo "All good!"
+          sudo apt-get update && sudo apt-get install -y ripgrep
+          rg -i "promptfoo" --type-not json --type-not lock --glob '!.{git,env}*' --glob '!{dist,node_modules}/**' -o | grep -vqE '^(promptfoo|Promptfoo)$' && echo "Error: Use 'promptfoo' or 'Promptfoo' only" && exit 1 || true
 
   shell-format:
     name: Shell Format Check
