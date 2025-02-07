@@ -88,7 +88,9 @@ wss.on('connection', (ws) => {
     console.log('Received WebSocket message:', message.toString());
 
     try {
-      const data = JSON.parse(message);
+      // Clean up the message string before parsing
+      const cleanMessage = message.toString().replace(/\s+/g, ' ').trim();
+      const data = JSON.parse(cleanMessage);
       console.log('Parsed WebSocket data:', data);
 
       // Require session ID in the message
