@@ -531,8 +531,8 @@ describe('HttpProvider', () => {
 
     it('should return default parser when no parser is provided', async () => {
       const parser = await createTransformResponse(undefined);
-      const result = parser({ key: 'value' }, 'raw text');
-      expect(result.output).toEqual({ key: 'value' });
+      const result = await parser({ key: 'value' }, 'raw text');
+      expect(result).toEqual({ key: 'value' });
     });
 
     it('should handle response transform file with default export', async () => {

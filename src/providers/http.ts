@@ -117,12 +117,15 @@ interface SessionParserData {
 
 export async function createSessionParser(
   parser: string | Function | undefined,
-): Promise<(data: SessionParserData) => string> {
+): Promise<(data: SessionParserData) => Promise<string>> {
   if (!parser) {
-    return () => '';
+    return async () => '';
   }
   if (typeof parser === 'function') {
-    return (response) => parser(response);
+    return async (response) => {
+      const result = await Promise.resolve(parser(response));
+      return String(result || '');
+    };
   }
   if (typeof parser === 'string' && parser.startsWith('file://')) {
     let filename = parser.slice('file://'.length);
@@ -138,21 +141,32 @@ export async function createSessionParser(
       functionName,
     );
     if (typeof requiredModule === 'function') {
-      return requiredModule;
+      return async (response) => {
+        const result = await Promise.resolve(requiredModule(response));
+        return String(result || '');
+      };
     }
     throw new Error(
       `Response transform malformed: ${filename} must export a function or have a default export as a function`,
     );
-  } else if (typeof parser === 'string') {
-    return (data: SessionParserData) => {
-      const trimmedParser = parser.trim();
-
-      return new Function('data', `return (${trimmedParser});`)(data);
-    };
   }
-  throw new Error(
-    `Unsupported response transform type: ${typeof parser}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
-  );
+  return async (data: SessionParserData) => {
+    try {
+      const trimmedParser = parser.trim();
+      const result = await evalInSandbox(
+        `return (${trimmedParser});`,
+        { data },
+        {
+          timeout: 5000,
+          memoryLimitMb: 64,
+        },
+      );
+      return String(result || '');
+    } catch (err) {
+      logger.error(`Error in session parser: ${String(err)}`);
+      throw new Error(`Failed to parse session: ${String(err)}`);
+    }
+  };
 }
 
 interface TransformResponseContext {
@@ -171,9 +185,12 @@ export async function createTransformResponse(
   if (typeof parser === 'function') {
     return async (data, text, context) => {
       try {
-        const result = parser(data, text, context);
+        const result = await Promise.resolve(parser(data, text, context));
         if (typeof result === 'string') {
           return { output: result };
+        }
+        if (result && typeof result === 'object' && 'output' in result) {
+          return result as ProviderResponse;
         }
         return { output: result };
       } catch (err) {
@@ -182,6 +199,7 @@ export async function createTransformResponse(
       }
     };
   }
+
   if (typeof parser === 'string' && parser.startsWith('file://')) {
     let filename = parser.slice('file://'.length);
     let functionName: string | undefined;
@@ -196,47 +214,56 @@ export async function createTransformResponse(
       functionName,
     );
     if (typeof requiredModule === 'function') {
-      return requiredModule;
+      return async (data, text, context) => {
+        const result = await Promise.resolve(requiredModule(data, text, context));
+        if (typeof result === 'string') {
+          return { output: result };
+        }
+        if (result && typeof result === 'object' && 'output' in result) {
+          return result as ProviderResponse;
+        }
+        return { output: result };
+      };
     }
     throw new Error(
       `Response transform malformed: ${filename} must export a function or have a default export as a function`,
     );
-  } else if (typeof parser === 'string') {
-    return async (data, text, context) => {
-      try {
-        const trimmedParser = parser.trim();
-        // Check if it's a function expression (either arrow or regular)
-        const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedParser);
-
-        // Create sandbox context with necessary variables
-        const sandboxContext = {
-          json: data || null,
-          text,
-          context,
-        };
-
-        const code = isFunctionExpression
-          ? `return (${trimmedParser})(json, text, context);`
-          : `return (${trimmedParser});`;
-
-        const result = await evalInSandbox(code, sandboxContext, {
-          timeout: 5000,
-          memoryLimitMb: 64,
-        });
-
-        if (typeof result === 'string') {
-          return { output: result };
-        }
-        return { output: result };
-      } catch (err) {
-        logger.error(`Error in response transform: ${String(err)}`);
-        throw new Error(`Failed to transform response: ${String(err)}`);
-      }
-    };
   }
-  throw new Error(
-    `Unsupported response transform type: ${typeof parser}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
-  );
+
+  return async (data, text, context) => {
+    try {
+      const trimmedParser = parser.trim();
+      // Check if it's a function expression (either arrow or regular)
+      const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedParser);
+
+      // Create sandbox context with necessary variables
+      const sandboxContext = {
+        json: data || null,
+        text,
+        context,
+      };
+
+      const code = isFunctionExpression
+        ? `return (${trimmedParser})(json, text, context);`
+        : `return (${trimmedParser});`;
+
+      const result = await evalInSandbox(code, sandboxContext, {
+        timeout: 5000,
+        memoryLimitMb: 64,
+      });
+
+      if (typeof result === 'string') {
+        return { output: result };
+      }
+      if (result && typeof result === 'object' && 'output' in result) {
+        return result as ProviderResponse;
+      }
+      return { output: result };
+    } catch (err) {
+      logger.error(`Error in response transform: ${String(err)}`);
+      throw new Error(`Failed to transform response: ${String(err)}`);
+    }
+  };
 }
 
 function processValue(value: any, vars: Record<string, any>): any {
@@ -507,7 +534,7 @@ export class HttpProvider implements ApiProvider {
   private transformResponse: Promise<
     (data: any, text: string, context?: TransformResponseContext) => Promise<ProviderResponse>
   >;
-  private sessionParser: Promise<(data: SessionParserData) => string>;
+  private sessionParser: Promise<(data: SessionParserData) => Promise<string>>;
   private transformRequest: Promise<(prompt: string) => any>;
   private validateStatus: Promise<(status: number) => Promise<boolean>>;
   private lastSignatureTimestamp?: number;
@@ -752,7 +779,9 @@ export class HttpProvider implements ApiProvider {
       const sessionId =
         this.sessionParser == null
           ? undefined
-          : (await this.sessionParser)({ headers: response.headers, body: parsedData ?? rawText });
+          : await (
+              await this.sessionParser
+            )({ headers: response.headers, body: parsedData ?? rawText });
       if (sessionId) {
         ret.sessionId = sessionId;
       }
