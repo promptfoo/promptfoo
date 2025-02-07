@@ -185,8 +185,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       } else if (message.content && (message.function_call || message.tool_calls)) {
         if (Array.isArray(message.tool_calls) && message.tool_calls.length === 0) {
           output = message.content;
+        } else {
+          output = message;
         }
-        output = message;
       } else if (message.content === null) {
         output = message.function_call || message.tool_calls;
       } else {
