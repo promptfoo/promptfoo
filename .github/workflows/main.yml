@@ -92,8 +92,10 @@ jobs:
 
       - name: Check PromptFoo capitalization
         run: |
-          sudo apt-get update && sudo apt-get install -y ripgrep
-          rg -i "promptfoo" --type-not json --type-not lock --glob '!.{git,env}*' --glob '!{dist,node_modules}/**' -o | grep -vqE '^(promptfoo|Promptfoo)$' && echo "Error: Use 'promptfoo' or 'Promptfoo' only" && exit 1 || true
+          if rg -i "promptfoo" --type-not json --type-not lock -o | grep -vqE '^(promptfoo|Promptfoo)$'; then
+            echo "Error: Use 'promptfoo' or 'Promptfoo' only"
+            exit 1
+          fi
 
   shell-format:
     name: Shell Format Check
