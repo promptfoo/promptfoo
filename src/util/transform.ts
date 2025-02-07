@@ -1,6 +1,7 @@
 import path from 'path';
 import cliState from '../cliState';
 import { importModule } from '../esm';
+import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
 import type { Prompt, Vars } from '../types';
 import { isJavascriptFile } from './file';
@@ -102,11 +103,28 @@ function getInlineTransformFunction(code: string, inputType: TransformInputType)
 async function getTransformFunction(
   codeOrFilepath: string,
   inputType: TransformInputType,
-): Promise<Function> {
+): Promise<Function | null> {
+  let transformFn: Function | null = null;
   if (codeOrFilepath.startsWith('file://')) {
-    return getFileTransformFunction(codeOrFilepath);
+    try {
+      transformFn = await getFileTransformFunction(codeOrFilepath);
+    } catch (error) {
+      logger.error(
+        `Error loading transform function from file: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw error;
+    }
+  } else {
+    try {
+      transformFn = getInlineTransformFunction(codeOrFilepath, inputType);
+    } catch (error) {
+      logger.error(
+        `Error creating inline transform function: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw error;
+    }
   }
-  return getInlineTransformFunction(codeOrFilepath, inputType);
+  return transformFn;
 }
 
 /**
@@ -132,6 +150,9 @@ export async function transform(
   inputType: TransformInputType = TransformInputType.OUTPUT,
 ): Promise<Vars> {
   const postprocessFn = await getTransformFunction(codeOrFilepath, inputType);
+  if (!postprocessFn) {
+    throw new Error(`Invalid transform function for ${codeOrFilepath}`);
+  }
 
   const ret = await Promise.resolve(postprocessFn(transformInput, context));
 
