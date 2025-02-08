@@ -77,7 +77,7 @@ The provider will automatically use AWS SSO credentials when a profile is specif
 
 ## Example
 
-See [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) for full examples of Claude, Nova, AI21, Llama 3.1/3.2/3.3, and Titan model usage.
+See [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) for full examples of Claude, Nova, AI21, Llama 3.3, and Titan model usage.
 
 ```yaml
 prompts:
