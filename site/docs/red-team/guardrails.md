@@ -361,6 +361,57 @@ The table view provides detailed information about each event.
 
 ![Guardrails event](/img/guardrails-table.png)
 
+## Node.js Client
+
+The guardrails functionality is also available directly in the promptfoo Node.js package. You can use it in two ways:
+
+### Using the default client
+
+```typescript
+import { guardrails } from 'promptfoo';
+
+// Check for prompt injections/jailbreaks
+const guardResult = await guardrails.guard('Some text');
+
+// Check for PII
+const piiResult = await guardrails.pii('Some text');
+
+// Check for harmful content
+const harmResult = await guardrails.harm('Some text');
+```
+
+### Creating a custom client
+
+```typescript
+import { createGuardrailsClient } from 'promptfoo';
+
+const client = createGuardrailsClient();
+const result = await client.guard('Some text');
+```
+
+All methods return a `GuardResult` object with the following TypeScript interface:
+
+```typescript
+interface GuardResult {
+  model: string;
+  results: Array<{
+    categories: Record<string, boolean>;
+    category_scores: Record<string, number>;
+    flagged: boolean;
+    payload?: {
+      pii?: Array<{
+        entity_type: string;
+        start: number;
+        end: number;
+        pii: string;
+      }>;
+    };
+  }>;
+}
+```
+
+The response format matches exactly what's returned by the REST API endpoints described above.
+
 # More
 
 For more information on LLM vulnerabilities and how to mitigate LLM failure modes, refer to our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) and [Introduction to AI red teaming](/docs/red-team/) documentation.
