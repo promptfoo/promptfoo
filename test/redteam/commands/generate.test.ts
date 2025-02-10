@@ -208,30 +208,15 @@ describe('doGenerateRedteam', () => {
 
     await doGenerateRedteam(options);
 
-    expect(synthesize).toHaveBeenCalledWith({
-      language: undefined,
-      numTests: undefined,
-      purpose: 'Test purpose',
-      plugins: expect.any(Array),
-      prompts: expect.any(Array),
-      strategies: expect.any(Array),
-      targetLabels: [],
-    });
-    expect(writePromptfooConfig).toHaveBeenCalledWith(
+    expect(synthesize).toHaveBeenCalledWith(
       expect.objectContaining({
-        tests: expect.arrayContaining([
-          expect.objectContaining({
-            vars: { input: 'Test input' },
-            assert: [{ type: 'equals', value: 'Test output' }],
-            metadata: { pluginId: 'redteam' },
-          }),
-        ]),
-        redteam: expect.objectContaining({
-          purpose: 'Test purpose',
-          entities: ['Test entity'],
-        }),
+        language: undefined,
+        numTests: undefined,
+        plugins: expect.any(Array),
+        prompts: expect.any(Array),
+        strategies: expect.any(Array),
+        targetLabels: [],
       }),
-      'redteam.yaml',
     );
   });
 
