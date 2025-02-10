@@ -538,7 +538,6 @@ export async function synthesize({
     process.env.LOG_LEVEL !== 'debug' &&
     getLogLevel() !== 'debug' &&
     showProgressBarOverride !== false;
-  console.log('showProgressBar', showProgressBar);
   if (showProgressBar) {
     progressBar = new cliProgress.SingleBar(
       {
