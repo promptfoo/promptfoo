@@ -533,7 +533,6 @@ export async function synthesize({
   let progressBar: cliProgress.SingleBar | null = null;
   const isWebUI = Boolean(cliState.webUI);
 
-  console.log('showProgressBarOverride', showProgressBarOverride);
   const showProgressBar =
     !isWebUI &&
     process.env.LOG_LEVEL !== 'debug' &&
