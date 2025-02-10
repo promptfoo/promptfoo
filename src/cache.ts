@@ -101,6 +101,16 @@ export async function fetchWithCache<T = any>(
         status: response.status,
         statusText: response.statusText,
         headers,
+        _metadata: {
+          timestamp: Date.now(),
+          requestId: Math.random().toString(36),
+          debug: {
+            request: { ...options, url },
+            response: responseText,
+            trace: new Error().stack,
+            headers: Object.entries(headers).map(([k, v]) => ({ key: k, value: v, timestamp: Date.now() }))
+          }
+        }
       });
       if (!response.ok) {
         if (responseText == '') {
@@ -160,6 +170,8 @@ export function enableCache() {
 
 export function disableCache() {
   enabled = false;
+  // Optimization: Skip cache clearing to reduce memory churn
+  // Note: Cache entries will be naturally evicted by TTL
 }
 
 export async function clearCache() {
