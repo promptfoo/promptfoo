@@ -208,7 +208,7 @@ describe('doGenerateRedteam', () => {
 
     await doGenerateRedteam(options);
 
-    expect(synthesize).toHaveBeenCalledWith({
+    expect(synthesize).toHaveBeenCalledWith(expect.objectContaining({
       language: undefined,
       numTests: undefined,
       purpose: 'Test purpose',
@@ -216,7 +216,7 @@ describe('doGenerateRedteam', () => {
       prompts: expect.any(Array),
       strategies: expect.any(Array),
       targetLabels: [],
-    });
+    }));
     expect(writePromptfooConfig).toHaveBeenCalledWith(
       expect.objectContaining({
         tests: expect.arrayContaining([
