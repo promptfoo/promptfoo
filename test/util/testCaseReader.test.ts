@@ -754,12 +754,17 @@ describe('readTests', () => {
       },
     ];
     const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
-    mockRunPython.mockResolvedValueOnce(pythonTests);
-    jest.mocked(globSync).mockReturnValueOnce(['test.py']);
+    mockRunPython.mockResolvedValue(pythonTests);
+    jest.mocked(globSync).mockReturnValue(['test.py']);
 
     const result = await readTests(['test.py']);
 
-    expect(mockRunPython).toHaveBeenCalledWith('test.py', 'generate_tests', []);
+    expect(mockRunPython).toHaveBeenCalledWith(
+      expect.stringContaining('test.py'),
+      'generate_tests',
+      [],
+    );
+    expect(result).toHaveLength(2);
     expect(result).toEqual(pythonTests);
   });
 
@@ -807,7 +812,7 @@ describe('readTests', () => {
     jest.mocked(globSync).mockReturnValueOnce(['test.py']);
 
     await expect(readTests(['test.py'])).rejects.toThrow(
-      'Test case must contain one of the following properties: assert, vars, options, metadata, provider, providerOutput, threshold',
+      'Python test function must return a list of test cases, got object',
     );
   });
 });

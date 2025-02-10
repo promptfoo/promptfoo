@@ -96,7 +96,6 @@ export async function readStandaloneTestsFile(
       feature: 'js tests file',
     });
     const mod = await importModule(pathWithoutFunction, maybeFunctionName);
-    logger.warn(`Mod: ${JSON.stringify(mod)}`);
     return typeof mod === 'function' ? await mod() : mod;
   }
   if (fileExtension === 'py') {
@@ -237,9 +236,10 @@ async function loadTestsFromGlob(
 
   // Check for possible function names in the path
   const pathWithoutFunction: string = resolvedPath.split(':')[0];
+  // Only add the file if it's not already included by glob and it's a special file type
   if (
     (isJavascriptFile(pathWithoutFunction) || pathWithoutFunction.endsWith('.py')) &&
-    !testFiles.includes(resolvedPath)
+    !testFiles.some((file) => file === resolvedPath || file === pathWithoutFunction)
   ) {
     testFiles.push(resolvedPath);
   }
@@ -305,18 +305,37 @@ export async function readTests(
   const ret: TestCase[] = [];
 
   if (typeof tests === 'string') {
+    const pathWithoutFunction: string = tests.split(':')[0];
     // Points to a tests file with multiple test cases
     if (tests.endsWith('yaml') || tests.endsWith('yml')) {
       return loadTestsFromGlob(tests, basePath);
     }
-    // Points to a tests.{csv,json,yaml,yml,js} or Google Sheet
+    // For Python and JS files, or files with potential function names, use readStandaloneTestsFile
+    if (
+      isJavascriptFile(pathWithoutFunction) ||
+      pathWithoutFunction.endsWith('.py') ||
+      tests.includes(':')
+    ) {
+      return readStandaloneTestsFile(tests, basePath);
+    }
+    // Points to a tests.{csv,json,yaml,yml} or Google Sheet
     return readStandaloneTestsFile(tests, basePath);
   }
   if (Array.isArray(tests)) {
     for (const globOrTest of tests) {
       if (typeof globOrTest === 'string') {
-        // Resolve globs
-        ret.push(...(await loadTestsFromGlob(globOrTest, basePath)));
+        const pathWithoutFunction: string = globOrTest.split(':')[0];
+        // For Python and JS files, or files with potential function names, use readStandaloneTestsFile
+        if (
+          isJavascriptFile(pathWithoutFunction) ||
+          pathWithoutFunction.endsWith('.py') ||
+          globOrTest.includes(':')
+        ) {
+          ret.push(...(await readStandaloneTestsFile(globOrTest, basePath)));
+        } else {
+          // Resolve globs for other file types
+          ret.push(...(await loadTestsFromGlob(globOrTest, basePath)));
+        }
       } else {
         // Load individual TestCase
         ret.push(await readTest(globOrTest, basePath));
