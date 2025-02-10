@@ -218,7 +218,7 @@ Content-Type: application/json
 - `category_scores` provides a numerical score (between 0 and 1) for each harm category.
 - `flagged`: True if any harm category is detected in the input.
 
-## Supported Categories
+#### Supported Categories
 
 The harm detection API supports the following categories from ML Commons taxonomy:
 
