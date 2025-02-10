@@ -97,7 +97,13 @@ jobs:
         shell: bash
         run: |
           # Store the findings in a variable
-          FINDINGS=$(rg -w "(?i)promptfoo" --no-heading --hidden | grep -vE '(^|[^a-zA-Z])(promptfoo|Promptfoo)([^a-zA-Z]|$)' || true)
+          # First find all instances of promptfoo
+          echo "::debug::Running ripgrep search for promptfoo..."
+          RG_RESULTS=$(rg -w "(?i)promptfoo" --no-heading --hidden || true)
+          echo "::debug::RG_RESULTS: $RG_RESULTS"
+
+          # Then filter out correct capitalizations
+          FINDINGS=$(echo "$RG_RESULTS" | LC_ALL=C grep -vE '(^|[^a-zA-Z])(promptfoo|Promptfoo)([^a-zA-Z]|$)' || true)
 
           if [ -n "$FINDINGS" ]; then
             echo "::error::Found incorrect capitalization of 'promptfoo'. Please use either 'promptfoo' (lowercase) or 'Promptfoo' (capitalized)."
@@ -353,3 +359,22 @@ jobs:
       - name: Run actionlint
         id: actionlint
         uses: raven-actions/actionlint@v2
+
+  golang:
+    name: Go Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.6'
+          check-latest: true
+
+      - name: Run wrapper tests
+        working-directory: src/golang
+        run: |
+          go test -v wrapper.go wrapper_test.go
