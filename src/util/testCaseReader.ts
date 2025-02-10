@@ -109,7 +109,12 @@ export async function readStandaloneTestsFile(
       feature: 'js tests file',
     });
     const mod = await importModule(pathWithoutFunction, maybeFunctionName);
-    return typeof mod === 'function' ? await mod() : mod;
+    if (typeof mod === 'function') {
+      return await mod();
+    } else if (mod?.default && typeof mod.default === 'function') {
+      return await mod.default();
+    }
+    return mod;
   }
   if (fileExtension === 'py') {
     telemetry.recordAndSendOnce('feature_used', {
