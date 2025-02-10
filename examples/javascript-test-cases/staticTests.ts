@@ -1,4 +1,6 @@
-// Array of test cases
+// For TypeScript users:
+// To get type checking, uncomment the following line and the satisfies clause below
+// import type { TestCase } from 'promptfoo';
 export default [
   {
     vars: {
@@ -16,4 +18,4 @@ export default [
     assert: [{ type: 'contains', value: 'Buenos días' }],
     description: 'Basic Spanish translation',
   },
-];
+]; // satisfies TestCase[];

@@ -4,12 +4,13 @@ prompts:
   - 'Translate the following text to {{target_language}}: {{text}}'
 
 providers:
-  - openai:gpt-4o-mini
+  - id: openai:o3-mini
+    config:
+      reasoning_effort: low
 
 # Demonstrate different ways to load test cases from JavaScript/TypeScript
 tests:
   # Load simple test cases
-  - file://defaultExport.ts
-
+  - file://staticTests.ts
   # Load test cases from simulated database
-  - file://functionExport.ts:generateFromDatabase
+  - file://dynamicTests.ts:generateFromDatabase

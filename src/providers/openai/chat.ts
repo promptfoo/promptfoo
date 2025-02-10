@@ -7,7 +7,7 @@ import type { EnvOverrides } from '../../types/env';
 import { renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from '../shared';
-import type { OpenAiCompletionOptions } from './types';
+import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 import { calculateOpenAICost } from './util';
 import { formatOpenAiError, getTokenUsage, OPENAI_CHAT_MODELS } from './util';
 
@@ -64,7 +64,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ? (config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0))
       : undefined;
     const reasoningEffort = isReasoningModel
-      ? renderVarsInObject(config.reasoning_effort, context?.vars)
+      ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
       : undefined;
 
     const body = {

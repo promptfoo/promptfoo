@@ -1,43 +1,29 @@
 # JavaScript/TypeScript Test Cases Example
 
-This example demonstrates different ways to generate test cases using JavaScript/TypeScript functions.
+This example demonstrates different ways to generate test cases using JavaScript/TypeScript functions. It shows both static and dynamic test case generation with optional type checking.
 
 ## Files
 
-- `promptfooconfig.yaml` - Configuration file that specifies prompts, providers, and test sources
-- `tests.ts` - TypeScript file containing different test case generators
-
-## Test Case Generation Methods
-
-1. **Simple Test Cases** (`generateSimpleTests`)
-
-   - Basic function that returns hardcoded test cases
-   - Good for simple, static test scenarios
-
-2. **Database-Driven Test Cases** (`generateFromDatabase`)
-   - Async function that simulates fetching test cases from a database
-   - Shows how to work with external data sources
-   - Demonstrates async test case generation
+- `promptfooconfig.yaml` - Configuration file specifying prompts and providers
+- `staticTests.ts` - Static test cases with type checking examples
+- `dynamicTests.ts` - Dynamic test case generation from a simulated database
 
 ## Usage
 
-1. Run promptfoo:
+1. Install dependencies:
+
    ```bash
-   npx promptfoo@latest eval
+   npm install promptfoo
    ```
 
-## Test Case Structure
+2. Set up your API key:
 
-Each test case includes:
+   ```bash
+   export OPENAI_API_KEY=your_api_key_here
+   ```
 
-- `vars`: Variables used in the prompt template
-- `assert`: Expected outputs or validation rules
-- `description`: Human-readable description of the test case
+3. Run the evaluation:
 
-## Example Output
-
-The test cases will be used to evaluate translations to different languages:
-
-- French translation of "Hello world"
-- Spanish translation of "Good morning"
-- Systematic combinations of greetings in multiple languages
+   ```bash
+   npx promptfoo eval
+   ```

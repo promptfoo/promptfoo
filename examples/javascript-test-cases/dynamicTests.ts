@@ -1,7 +1,10 @@
-import type { TestCase } from '../../src/types';
+// For TypeScript users:
+// To get type checking, uncomment the following line and Promise<TestCase[]> below
+// import type { TestCase } from 'promptfoo';
 
 // Generate test cases dynamically from a database
-export async function generateFromDatabase(): Promise<TestCase[]> {
+export async function generateFromDatabase() {
+  // : Promise<TestCase[]> {
   // Simulate database query
   const mockDb = {
     query: async (query: string) => [
