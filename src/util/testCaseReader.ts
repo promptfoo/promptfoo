@@ -323,20 +323,11 @@ export async function readTests(
   const ret: TestCase[] = [];
 
   if (typeof tests === 'string') {
-    const pathWithoutFunction: string = tests.split(':')[0];
     // Points to a tests file with multiple test cases
     if (tests.endsWith('yaml') || tests.endsWith('yml')) {
       return loadTestsFromGlob(tests, basePath);
     }
-    // For Python and JS files, or files with potential function names, use readStandaloneTestsFile
-    if (
-      isJavascriptFile(pathWithoutFunction) ||
-      pathWithoutFunction.endsWith('.py') ||
-      tests.includes(':')
-    ) {
-      return readStandaloneTestsFile(tests, basePath);
-    }
-    // Points to a tests.{csv,json,yaml,yml} or Google Sheet
+    // Points to a tests.{csv,json,yaml,yml,py,js,ts,mjs} or Google Sheet
     return readStandaloneTestsFile(tests, basePath);
   }
   if (Array.isArray(tests)) {
