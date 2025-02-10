@@ -91,15 +91,35 @@ jobs:
           npx madge $(git ls-files '*.ts') --circular
 
       - name: Install ripgrep
-        run: sudo apt-get install -y ripgrep
+        run: |
+          sudo apt-get install -y ripgrep
+          # Verify ripgrep is installed and get its version
+          if ! command -v rg &> /dev/null; then
+            echo "::error::ripgrep installation failed - command not found"
+            exit 1
+          fi
+          rg --version
 
       - name: Check Prompfoo capitalization
         shell: bash
         run: |
+          # First verify ripgrep is available
+          if ! command -v rg &> /dev/null; then
+            echo "::error::ripgrep command not found"
+            exit 1
+          fi
+
           # Store the findings in a variable
           # First find all instances of promptfoo
           echo "::debug::Running ripgrep search for promptfoo..."
-          RG_RESULTS=$(rg -w "(?i)promptfoo" --no-heading --hidden || true)
+          RG_RESULTS=$(rg -w "(?i)promptfoo" --no-heading --hidden)
+
+          # Check if ripgrep command failed
+          if [ $? -eq 2 ]; then
+            echo "::error::ripgrep search failed with an error"
+            exit 1
+          fi
+
           echo "::debug::RG_RESULTS: $RG_RESULTS"
 
           # Then filter out correct capitalizations
