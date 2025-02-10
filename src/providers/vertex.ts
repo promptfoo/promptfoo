@@ -81,9 +81,9 @@ interface VertexCompletionOptions {
     maxOutputTokens?: number;
     topP?: number;
     topK?: number;
-    candidateCount?: number;  // Number of candidate responses to generate
-    maxInputTokens?: number;  // For models with large context windows
-    streamMode?: 'STREAM_MODE_UNSPECIFIED' | 'BLOCKING' | 'STREAMING';  // For real-time streaming
+    candidateCount?: number; // Number of candidate responses to generate
+    maxInputTokens?: number; // For models with large context windows
+    streamMode?: 'STREAM_MODE_UNSPECIFIED' | 'BLOCKING' | 'STREAMING'; // For real-time streaming
   };
 
   toolConfig?: {
@@ -97,8 +97,8 @@ interface VertexCompletionOptions {
 
   // New options for Gemini 2.0
   grounding?: {
-    googleSearch?: boolean;  // Enable Google Search grounding
-    webSearch?: boolean;     // Enable web search grounding
+    googleSearch?: boolean; // Enable Google Search grounding
+    webSearch?: boolean; // Enable web search grounding
   };
 
   // For MedLM models

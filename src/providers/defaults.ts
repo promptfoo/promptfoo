@@ -71,7 +71,7 @@ export async function setDefaultEmbeddingProviders(provider: ApiProvider) {
 /**
  * Checks whether Azure configuration is available.
  *
- * Azure is used if no OpenAI API key is provided and Azure credentials (API key or client credentials) 
+ * Azure is used if no OpenAI API key is provided and Azure credentials (API key or client credentials)
  * along with required deployment names are available.
  *
  * @param env - Optional overrides for environment variables.
@@ -79,14 +79,26 @@ export async function setDefaultEmbeddingProviders(provider: ApiProvider) {
  */
 function isAzureConfigured(env?: EnvOverrides): boolean {
   const hasOpenAikey = getEnvString('OPENAI_API_KEY') || env?.OPENAI_API_KEY;
-  if (hasOpenAikey) { return false; }
-  const azureApiKey = getEnvString('AZURE_OPENAI_API_KEY') || env?.AZURE_OPENAI_API_KEY || getEnvString('AZURE_API_KEY') || env?.AZURE_API_KEY;
-  const azureClientCreds = (getEnvString('AZURE_CLIENT_ID') || env?.AZURE_CLIENT_ID) &&
-                           (getEnvString('AZURE_CLIENT_SECRET') || env?.AZURE_CLIENT_SECRET) &&
-                           (getEnvString('AZURE_TENANT_ID') || env?.AZURE_TENANT_ID);
+  if (hasOpenAikey) {
+    return false;
+  }
+  const azureApiKey =
+    getEnvString('AZURE_OPENAI_API_KEY') ||
+    env?.AZURE_OPENAI_API_KEY ||
+    getEnvString('AZURE_API_KEY') ||
+    env?.AZURE_API_KEY;
+  const azureClientCreds =
+    (getEnvString('AZURE_CLIENT_ID') || env?.AZURE_CLIENT_ID) &&
+    (getEnvString('AZURE_CLIENT_SECRET') || env?.AZURE_CLIENT_SECRET) &&
+    (getEnvString('AZURE_TENANT_ID') || env?.AZURE_TENANT_ID);
   const deploymentName = getEnvString('AZURE_DEPLOYMENT_NAME') || env?.AZURE_DEPLOYMENT_NAME;
-  const openaiDeploymentName = getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') || env?.AZURE_OPENAI_DEPLOYMENT_NAME;
-  return (Boolean(azureApiKey) || Boolean(azureClientCreds)) && Boolean(deploymentName) && Boolean(openaiDeploymentName);
+  const openaiDeploymentName =
+    getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') || env?.AZURE_OPENAI_DEPLOYMENT_NAME;
+  return (
+    (Boolean(azureApiKey) || Boolean(azureClientCreds)) &&
+    Boolean(deploymentName) &&
+    Boolean(openaiDeploymentName)
+  );
 }
 
 /**
@@ -98,9 +110,11 @@ function isAzureConfigured(env?: EnvOverrides): boolean {
  * @returns True if Anthropic configuration is detected.
  */
 function isAnthropicConfigured(env?: EnvOverrides): boolean {
-  return !getEnvString('OPENAI_API_KEY') &&
-         !env?.OPENAI_API_KEY &&
-         Boolean(getEnvString('ANTHROPIC_API_KEY') || env?.ANTHROPIC_API_KEY);
+  return (
+    !getEnvString('OPENAI_API_KEY') &&
+    !env?.OPENAI_API_KEY &&
+    Boolean(getEnvString('ANTHROPIC_API_KEY') || env?.ANTHROPIC_API_KEY)
+  );
 }
 
 /**
@@ -139,11 +153,15 @@ function isOpenAIConfigured(env?: EnvOverrides): boolean {
  * @throws Error if required Azure deployment settings are missing.
  */
 function getAzureProviders(env?: EnvOverrides): DefaultProviders {
-  const deploymentName = getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') || env?.AZURE_OPENAI_DEPLOYMENT_NAME;
+  const deploymentName =
+    getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') || env?.AZURE_OPENAI_DEPLOYMENT_NAME;
   if (!deploymentName) {
     throw new Error('AZURE_OPENAI_DEPLOYMENT_NAME must be set when using Azure OpenAI');
   }
-  const embeddingDeploymentName = getEnvString('AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME') || env?.AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME || deploymentName;
+  const embeddingDeploymentName =
+    getEnvString('AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME') ||
+    env?.AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME ||
+    deploymentName;
   const azureProvider = new AzureChatCompletionProvider(deploymentName, { env });
   const azureEmbeddingProvider = new AzureEmbeddingProvider(embeddingDeploymentName, { env });
   return {
