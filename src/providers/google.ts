@@ -312,19 +312,27 @@ export class GoogleChatProvider extends GoogleGenericProvider {
   }
 }
 
-// --------------------------------------------------------------------
-// GoogleEmbeddingProvider: handles text embedding API calls for Google
 export class GoogleEmbeddingProvider extends GoogleGenericProvider {
   async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
     if (!this.getApiKey()) {
       throw new Error('Google API key is not set for embedding');
     }
 
-    const body = { input: text };
+    // Format request body according to the API spec
+    const body = {
+      model: `models/${this.modelName}`,
+      content: {
+        parts: [
+          {
+            text,
+          },
+        ],
+      },
+    };
 
-    // Determine API version - defaulting to v1beta for Gemini models
-    const apiVersion = 'v1beta';
-    const url = `https://${this.getApiHost()}/${apiVersion}/models/${this.modelName}:embedText?key=${this.getApiKey()}`;
+    // Use embedContent endpoint
+    const endpoint = 'embedContent';
+    const url = `https://${this.getApiHost()}/v1/models/${this.modelName}:${endpoint}?key=${this.getApiKey()}`;
 
     logger.debug(`Calling Google Embedding API: ${url} with body: ${JSON.stringify(body)}`);
 
@@ -350,10 +358,10 @@ export class GoogleEmbeddingProvider extends GoogleGenericProvider {
     logger.debug(`Google Embedding API response: ${JSON.stringify(data)}`);
 
     try {
-      // Assume response structure: either { embedding: number[] } or { data: [{ embedding: number[] }] }
-      const embedding = data.embedding || (data.data && data.data[0] && data.data[0].embedding);
+      // The embedding is returned in data.embedding.values
+      const embedding = data.embedding?.values;
       if (!embedding) {
-        throw new Error('No embedding found in Google Embedding API response');
+        throw new Error('No embedding values found in Google Embedding API response');
       }
 
       return {

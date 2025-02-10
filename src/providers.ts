@@ -23,7 +23,7 @@ import * as CloudflareAiProviders from './providers/cloudflare-ai';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './providers/cohere';
 import { FalImageGenerationProvider } from './providers/fal';
 import { GolangProvider } from './providers/golangCompletion';
-import { GoogleChatProvider } from './providers/google';
+import { GoogleChatProvider, GoogleEmbeddingProvider } from './providers/google';
 import { GroqProvider } from './providers/groq';
 import { HttpProvider } from './providers/http';
 import {
@@ -435,8 +435,17 @@ export async function loadApiProvider(
       ret = new OllamaCompletionProvider(modelName, providerOptions);
     }
   } else if (providerPath.startsWith('google:') || providerPath.startsWith('palm:')) {
-    const modelName = providerPath.split(':')[1];
-    ret = new GoogleChatProvider(modelName, providerOptions);
+    const splits = providerPath.split(':');
+    const modelType = splits[1];
+    const modelName = splits.slice(2).join(':');
+
+    if (modelType === 'embedding' || modelType === 'embeddings') {
+      // Handle embedding models (text-embedding-004 and embedding-001)
+      ret = new GoogleEmbeddingProvider(modelName || 'text-embedding-004', providerOptions);
+    } else {
+      // Default to chat provider for all other models
+      ret = new GoogleChatProvider(modelName || modelType, providerOptions);
+    }
   } else if (providerPath.startsWith('vertex:')) {
     const splits = providerPath.split(':');
     const firstPart = splits[1];
@@ -727,4 +736,5 @@ export default {
   WebSocketProvider,
   loadApiProvider,
   WatsonXProvider,
+  GoogleEmbeddingProvider,
 };

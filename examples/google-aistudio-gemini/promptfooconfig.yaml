@@ -7,63 +7,69 @@ prompts:
 
 providers:
   - google:gemini-2.0-flash-exp
-  - google:gemini-2.0-flash-thinking-exp
-  - google:gemini-2.0-pro-exp
+  # - google:gemini-2.0-flash-thinking-exp
+  # - google:gemini-2.0-pro-exp
 
-  - id: google:gemini-1.5-flash
-    config:
-      temperature: 0.7
-      maxOutputTokens: 512
+  # -  id: google:gemini-1.5-flash
+  #   config:
+  #     temperature: 0.7
+  #     maxOutputTokens: 512
 
-  - id: google:gemini-1.5-pro
-    config:
-      temperature: 0.7
-      maxOutputTokens: 1024
-      topP: 0.9
-      topK: 40
+  # - id: google:gemini-1.5-pro
+  #   config:
+  #     temperature: 0.7
+  #     maxOutputTokens: 1024
+  #     topP: 0.9
+  #     topK: 40
 
   # Structured output example
-  - id: google:gemini-1.5-pro
-    config:
-      generationConfig:
-        temperature: 0
-        maxOutputTokens: 1024
-        response_mime_type: 'application/json'
-        response_schema:
-          type: 'object'
-          properties:
-            answer:
-              type: 'string'
-              description: 'The numerical or text answer'
-            confidence:
-              type: 'string'
-              enum: ['high', 'medium', 'low']
-            method_used:
-              type: 'string'
-              description: 'One-word description of solving method'
-          required: ['answer', 'confidence', 'method_used']
+  # - id: google:gemini-1.5-pro
+  #   config:
+  #     generationConfig:
+  #       temperature: 0
+  #       maxOutputTokens: 1024
+  #       response_mime_type: 'application/json'
+  #       response_schema:
+  #         type: 'object'
+  #         properties:
+  #           answer:
+  #             type: 'string'
+  #             description: 'The numerical or text answer'
+  #           confidence:
+  #             type: 'string'
+  #             enum: ['high', 'medium', 'low']
+  #           method_used:
+  #             type: 'string'
+  #             description: 'One-word description of solving method'
+  #         required: ['answer', 'confidence', 'method_used']
 
   # Function calling example
-  - id: google:gemini-1.5-pro
-    config:
-      tools:
-        function_declarations:
-          - name: 'verify_answer'
-            description: 'Verify if the answer is correct'
-            parameters:
-              type: 'object'
-              properties:
-                answer:
-                  type: 'string'
-                  description: 'The proposed answer'
-                explanation:
-                  type: 'string'
-                  description: 'Brief explanation'
-              required: ['answer']
-      tool_config:
-        function_calling_config:
-          mode: 'auto'
-
+  # - id: google:gemini-1.5-pro
+  #   config:
+  #     tools:
+  #       function_declarations:
+  #         - name: 'verify_answer'
+  #           description: 'Verify if the answer is correct'
+  #           parameters:
+  #             type: 'object'
+  #             properties:
+  #               answer:
+  #                 type: 'string'
+  #                 description: 'The proposed answer'
+  #              explanation:
+  #               type: 'string'
+  #                 description: 'Brief explanation'
+  #             required: ['answer']
+  #     tool_config:
+  #       function_calling_config:
+  #         mode: 'auto'
+defaultTest:
+  options:
+    provider:
+      text:
+        id: google:gemini-2.0-flash-exp
+      embedding:
+        id: google:embedding:text-embedding-004
 tests:
   - vars:
       puzzle: 'If a train travels at 60 mph for 2.5 hours, then at 40 mph for 1.5 hours, what is the average speed for the entire journey?'
@@ -73,3 +79,5 @@ tests:
       - type: llm-rubric
         value: |
           The answer should be 52.5 mph.
+      - type: similar
+        value: 52.5 mph
