@@ -113,7 +113,6 @@ export async function runEval({
   isRedteam,
   allTests,
   concurrency,
-  job,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
   // Use the original prompt to set the label, not renderedPrompt
   const promptLabel = prompt.label;
@@ -332,28 +331,8 @@ export async function runEval({
       registers[test.options.storeOutputAs] = ret.response.output;
     }
 
-    if (job && job.progress && job.updateProgress) {
-      await job.updateProgress({
-        completed: job.progress.completed + 1,
-        passes: job.progress.passes + (ret.success ? 1 : 0),
-        failures:
-          job.progress.failures +
-          (!ret.success && ret.failureReason === ResultFailureReason.ASSERT ? 1 : 0),
-        errors:
-          job.progress.errors +
-          (!ret.success && ret.failureReason === ResultFailureReason.ERROR ? 1 : 0),
-      });
-    }
-
     return [ret];
   } catch (err) {
-    if (job && job.progress && job.updateProgress) {
-      await job.updateProgress({
-        completed: job.progress.completed + 1,
-        errors: job.progress.errors + 1,
-      });
-    }
-
     return [
       {
         ...setup,

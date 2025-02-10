@@ -129,6 +129,12 @@ export interface RedteamRunOptions {
   // Used by webui
   liveRedteamConfig?: any;
   logCallback?: (message: string) => void;
+  progressCallback?: (
+    completed: number,
+    total: number,
+    index: number | string,
+    evalStep: any, // RunEvalOptions, but introduces circular dependency
+  ) => void;
   abortSignal?: AbortSignal;
 
   loadedFromCloud?: boolean;
