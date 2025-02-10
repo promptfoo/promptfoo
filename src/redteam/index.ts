@@ -362,6 +362,7 @@ export async function synthesize({
   purpose: purposeOverride,
   strategies,
   targetLabels,
+  showProgressBar: showProgressBarOverride,
 }: SynthesizeOptions): Promise<{
   purpose: string;
   entities: string[];
@@ -533,7 +534,10 @@ export async function synthesize({
   const isWebUI = Boolean(cliState.webUI);
 
   const showProgressBar =
-    !isWebUI && process.env.LOG_LEVEL !== 'debug' && getLogLevel() !== 'debug';
+    !isWebUI &&
+    process.env.LOG_LEVEL !== 'debug' &&
+    getLogLevel() !== 'debug' &&
+    showProgressBarOverride !== false;
   if (showProgressBar) {
     progressBar = new cliProgress.SingleBar(
       {
