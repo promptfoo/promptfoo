@@ -1,7 +1,7 @@
 import assertions from './assertions';
 import * as cache from './cache';
 import { evaluate as doEvaluate } from './evaluator';
-import guardrails, { createGuardrailsClient } from './guardrails';
+import guardrails from './guardrails';
 import logger from './logger';
 import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
@@ -170,7 +170,7 @@ const redteam = {
   },
 };
 
-export { assertions, cache, evaluate, providers, redteam, guardrails, createGuardrailsClient };
+export { assertions, cache, evaluate, providers, redteam, guardrails };
 
 export default {
   assertions,
@@ -179,5 +179,4 @@ export default {
   providers,
   redteam,
   guardrails,
-  createGuardrailsClient,
 };

@@ -21,12 +21,6 @@ export interface GuardResult {
   }>;
 }
 
-export interface GuardrailsClient {
-  guard(input: string): Promise<GuardResult>;
-  pii(input: string): Promise<GuardResult>;
-  harm(input: string): Promise<GuardResult>;
-}
-
 async function makeRequest(endpoint: string, input: string): Promise<GuardResult> {
   try {
     const response = await fetchWithCache(
@@ -53,21 +47,18 @@ async function makeRequest(endpoint: string, input: string): Promise<GuardResult
   }
 }
 
-export function createGuardrailsClient(): GuardrailsClient {
-  return {
-    async guard(input: string): Promise<GuardResult> {
-      return makeRequest('/guard', input);
-    },
+const guardrails = {
+  async guard(input: string): Promise<GuardResult> {
+    return makeRequest('/guard', input);
+  },
 
-    async pii(input: string): Promise<GuardResult> {
-      return makeRequest('/pii', input);
-    },
+  async pii(input: string): Promise<GuardResult> {
+    return makeRequest('/pii', input);
+  },
 
-    async harm(input: string): Promise<GuardResult> {
-      return makeRequest('/harm', input);
-    },
-  };
-}
+  async harm(input: string): Promise<GuardResult> {
+    return makeRequest('/harm', input);
+  },
+};
 
-// Export a default client instance
-export default createGuardrailsClient();
+export default guardrails;

@@ -34,7 +34,6 @@ describe('index.ts exports', () => {
   const expectedNamedExports = [
     'assertions',
     'cache',
-    'createGuardrailsClient',
     'evaluate',
     'generateTable',
     'guardrails',
@@ -110,7 +109,6 @@ describe('index.ts exports', () => {
     expect(index.default).toEqual({
       assertions: index.assertions,
       cache: index.cache,
-      createGuardrailsClient: index.createGuardrailsClient,
       evaluate: index.evaluate,
       guardrails: index.guardrails,
       providers: index.providers,
