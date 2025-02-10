@@ -11,6 +11,36 @@ import type { OpenAiCompletionOptions } from './types';
 import { calculateOpenAICost } from './util';
 import { formatOpenAiError, getTokenUsage, OPENAI_CHAT_MODELS } from './util';
 
+export type OpenAiChatCompletionMessage = {
+  reasoning?: string;
+  content?: string;
+  function_call?: any;
+  tool_calls?: any;
+};
+
+export function extractMessageOutput(message: OpenAiChatCompletionMessage): any {
+
+  if (message.reasoning) {
+    return message.reasoning;
+  }
+
+  if (message.content && (message.function_call || message.tool_calls)) {
+    if (Array.isArray(message.tool_calls) && message.tool_calls.length === 0) {
+      return message.content;
+    }
+    return message;
+  }
+
+  if (
+    (message.content === null || message.content === undefined) &&
+    (message.function_call || message.tool_calls)
+  ) {
+    return message.function_call || message.tool_calls;
+  }
+
+  return message.content;
+}
+
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_CHAT_MODELS = OPENAI_CHAT_MODELS;
 
@@ -182,25 +212,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           isRefusal: true,
         };
       }
-      let output = '';
-      if (message.reasoning) {
-        output = message.reasoning;
-      } else if (message.content && (message.function_call || message.tool_calls)) {
-        if (Array.isArray(message.tool_calls) && message.tool_calls.length === 0) {
-          output = message.content;
-        } else {
-          output = message;
-        }
-      } else if (message.content === null || message.content === undefined) {
-        output = message.function_call || message.tool_calls;
-      } else {
-        output = message.content;
-      }
-      const logProbs = data.choices[0].logprobs?.content?.map(
-        (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
-      );
-
-      // Handle structured output
+      let output = extractMessageOutput(message);
       if (config.response_format?.type === 'json_schema' && typeof output === 'string') {
         try {
           output = JSON.parse(output);
@@ -208,7 +220,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           logger.error(`Failed to parse JSON output: ${error}`);
         }
       }
-
+      const logProbs = data.choices[0].logprobs?.content?.map(
+        (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
+      );
       // Handle function tool callbacks
       const functionCalls = message.function_call ? [message.function_call] : message.tool_calls;
       if (functionCalls && config.functionToolCallbacks) {
