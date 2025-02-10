@@ -1,6 +1,53 @@
 # Google Vertex
 
-The `vertex` provider is compatible with Google's [Vertex AI](https://cloud.google.com/vertex-ai) offering, which offers access to models such as Gemini and Bison.
+The `vertex` provider is compatible with Google's [Vertex AI](https://cloud.google.com/vertex-ai) offering, which offers access to models such as Gemini, Gemma, and MedLM.
+
+## Available Models
+
+### Gemini Models
+
+#### Gemini 2.0 Series
+- `vertex:gemini-2.0-flash-001` - Workhorse model for all daily tasks with strong overall performance and real-time streaming
+- `vertex:gemini-2.0-pro-exp-02-05` - Strongest model quality, especially for code & world knowledge with 2M context window
+- `vertex:gemini-2.0-flash-lite-preview-02-05` - Cost-effective offering for high throughput
+- `vertex:gemini-2.0-flash-thinking-exp-01-21` - Enhanced reasoning capabilities with thinking process in responses
+
+#### Gemini 1.5 Series
+- `vertex:gemini-1.5-flash` - Fast and efficient for high-volume, quality, cost-effective applications
+- `vertex:gemini-1.5-pro` - Strong performance for text/chat with long-context understanding
+- `vertex:gemini-1.5-flash-8b` - Small model optimized for high-volume, lower complexity tasks
+
+#### Gemini 1.0 Series
+- `vertex:gemini-1.0-pro` - Best performing model for text-only tasks
+- `vertex:gemini-1.0-pro-vision` - Best performing image and video understanding model
+
+### Gemma Models
+- `vertex:gemma` - Lightweight open text model for generation, summarization, and extraction
+- `vertex:codegemma` - Lightweight code generation and completion model
+- `vertex:paligemma` - Lightweight vision-language model for image tasks
+
+### MedLM Models (Restricted Access)
+- `vertex:medlm-medium` - HIPAA-compliant medical model with better throughput
+- `vertex:medlm-large` - HIPAA-compliant medical model for complex tasks
+
+### Legacy Models
+- `vertex:chat-bison` and variants - Legacy chat models
+- `vertex:codechat-bison` and variants - Legacy code-specific chat models
+
+## Model Capabilities
+
+### Gemini 2.0 Pro Specifications
+- Max input tokens: 2,097,152
+- Max output tokens: 8,192
+- Training data: Up to June 2024
+- Supports: Text, code, images, audio, video, PDF inputs
+- Features: System instructions, JSON support, grounding with Google Search
+
+### Language Support
+
+Gemini models support a wide range of languages including:
+- Core languages: Arabic, Bengali, Chinese (simplified/traditional), English, French, German, Hindi, Indonesian, Italian, Japanese, Korean, Portuguese, Russian, Spanish, Thai, Turkish, Vietnamese
+- Gemini 1.5 adds support for 50+ additional languages including regional and less common languages
 
 You can use it by specifying any of the available stable or latest [model versions](https://cloud.google.com/vertex-ai/docs/generative-ai/learn/model-versioning) offered by Vertex AI. These include:
 

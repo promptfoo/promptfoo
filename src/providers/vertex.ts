@@ -81,6 +81,9 @@ interface VertexCompletionOptions {
     maxOutputTokens?: number;
     topP?: number;
     topK?: number;
+    candidateCount?: number;  // Number of candidate responses to generate
+    maxInputTokens?: number;  // For models with large context windows
+    streamMode?: 'STREAM_MODE_UNSPECIFIED' | 'BLOCKING' | 'STREAMING';  // For real-time streaming
   };
 
   toolConfig?: {
@@ -91,6 +94,15 @@ interface VertexCompletionOptions {
   };
 
   systemInstruction?: Content;
+
+  // New options for Gemini 2.0
+  grounding?: {
+    googleSearch?: boolean;  // Enable Google Search grounding
+    webSearch?: boolean;     // Enable web search grounding
+  };
+
+  // For MedLM models
+  hipaaCompliance?: boolean;
 }
 
 const clone = Clone();
@@ -543,5 +555,5 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
   }
 }
 
-export const DefaultGradingProvider = new VertexChatProvider('gemini-1.5-pro');
+export const DefaultGradingProvider = new VertexChatProvider('gemini-2.0-pro-exp-02-05');
 export const DefaultEmbeddingProvider = new VertexEmbeddingProvider('text-embedding-004');
