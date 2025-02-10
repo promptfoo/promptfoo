@@ -113,7 +113,6 @@ export async function runEval({
   isRedteam,
   allTests,
   concurrency,
-  job,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
   // Use the original prompt to set the label, not renderedPrompt
   const promptLabel = prompt.label;
