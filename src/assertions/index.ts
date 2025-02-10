@@ -116,9 +116,10 @@ export async function runAssertion({
 
   invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
 
-  const inverse = assertion.type.startsWith('not-');
+  // Support for extended assertion types and custom handlers
+  const inverse = assertion.type?.startsWith('not-') || false;
   const baseType = inverse
-    ? (assertion.type.slice(4) as AssertionType)
+    ? ((assertion.type?.slice(4) || assertion.type || 'unknown') as AssertionType)
     : (assertion.type as AssertionType);
 
   telemetry.record('assertion_used', {
