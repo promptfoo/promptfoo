@@ -147,6 +147,7 @@ export interface SavedRedteamConfig {
   plugins: (RedteamPlugin | { id: string; config?: any })[];
   strategies: RedteamStrategy[];
   purpose?: string;
+  extensions?: string[];
   numTests?: number;
   applicationDefinition: {
     purpose?: string;

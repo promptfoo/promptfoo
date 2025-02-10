@@ -49,6 +49,7 @@ export function getUnifiedConfig(
     description: config.description,
     targets: [target],
     prompts: config.prompts,
+    extensions: config.extensions,
     defaultTest,
     redteam: {
       purpose: config.purpose,
