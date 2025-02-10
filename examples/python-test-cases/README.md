@@ -30,8 +30,8 @@ npx promptfoo@latest init --example python-test-cases
 
 ## Usage
 
-After ensuring the requirements are met, run the evaluation with:
+Run the evaluation with:
 
 ```bash
-promptfoo eval -c promptfooconfig.yaml
+promptfoo eval
 ```
