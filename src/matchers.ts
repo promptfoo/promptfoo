@@ -452,8 +452,8 @@ export async function matchesLlmRubric(
     let score = parsed.score;
 
     // Handle invalid or missing scores
-    if (typeof score !== 'number' || Number.isNaN(score)) {
-      score = pass ? 1.0 : 0.0;
+    if (typeof score !== 'number') {
+      score = Number.isNaN(Number(score)) ? Number(pass) : Number(score);
     }
 
     // Apply threshold check if threshold is defined
