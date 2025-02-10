@@ -1,4 +1,3 @@
-
 // Array of test cases
 export default [
   {
