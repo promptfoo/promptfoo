@@ -88,6 +88,7 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   verbose?: boolean;
   abortSignal?: AbortSignal;
   burpEscapeJson?: boolean;
+  progressBar?: boolean;
 }
 
 export interface RedteamFileConfig extends CommonOptions {
@@ -105,6 +106,7 @@ export interface SynthesizeOptions extends CommonOptions {
   prompts: [string, ...string[]];
   strategies: RedteamStrategyObject[];
   targetLabels: string[];
+  showProgressBar?: boolean;
 }
 
 export type RedteamAssertionTypes = `promptfoo:redteam:${string}`;
@@ -122,6 +124,7 @@ export interface RedteamRunOptions {
   filterProviders?: string;
   filterTargets?: string;
   verbose?: boolean;
+  progressBar?: boolean;
 
   // Used by webui
   liveRedteamConfig?: any;

@@ -46,6 +46,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     delay: options.delay,
     inRedteamRun: true,
     abortSignal: options.abortSignal,
+    progressBar: options.progressBar,
   });
 
   // Check if redteam.yaml exists before running evaluation
@@ -70,7 +71,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     defaultConfig,
     redteamPath,
     {
-      showProgressBar: true,
+      showProgressBar: options.progressBar,
       abortSignal: options.abortSignal,
     },
   );
