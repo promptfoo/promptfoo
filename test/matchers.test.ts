@@ -35,6 +35,7 @@ import type {
   ProviderClassificationResponse,
   ProviderResponse,
   ProviderTypeMap,
+  GradingResult,
 } from '../src/types';
 import { TestGrader } from './util/utils';
 
@@ -68,6 +69,36 @@ jest.mock('../src/esm', () => ({
 }));
 
 const Grader = new TestGrader();
+
+function mockGradingProvider(result: Partial<GradingResult>) {
+  return {
+    id: () => 'mock',
+    callApi: jest.fn().mockResolvedValue({
+      output: JSON.stringify({
+        pass: result.pass ?? true,
+        score: result.score ?? 1,
+        reason: result.reason ?? 'Test passed',
+        tokensUsed: result.tokensUsed ?? {
+          total: 0,
+          prompt: 0,
+          completion: 0,
+          cached: 0,
+          completionDetails: {
+            reasoning: 0,
+            acceptedPrediction: 0,
+            rejectedPrediction: 0,
+          },
+        },
+      }),
+      tokenUsage: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+      },
+    }),
+  };
+}
 
 describe('matchesSimilarity', () => {
   beforeEach(() => {
@@ -835,6 +866,182 @@ describe('matchesLlmRubric', () => {
     });
 
     expect(grading.provider.callApi).not.toHaveBeenCalled();
+  });
+
+  describe('type coercion and threshold behavior', () => {
+    let rubricPrompt: string;
+    let output: string;
+    let assertion: { type: 'llm-rubric'; value: string; threshold: number };
+
+    beforeEach(() => {
+      rubricPrompt = 'Test rubric';
+      output = 'Test output';
+      assertion = {
+        type: 'llm-rubric',
+        value: rubricPrompt,
+        threshold: 0.8,
+      };
+    });
+
+    describe('type coercion', () => {
+      it('should handle undefined values', async () => {
+        const result = await matchesLlmRubric(
+          rubricPrompt,
+          output,
+          {
+            provider: mockGradingProvider({
+              pass: undefined,
+              score: undefined,
+              reason: undefined,
+            }),
+            rubricPrompt: 'Test rubric',
+          },
+          {},
+          assertion,
+        );
+        expect(result.pass).toBe(true);
+        expect(result.score).toBe(1);
+        expect(result.reason).toBe('Test passed');
+      });
+
+      it('should handle missing values', async () => {
+        const result = await matchesLlmRubric(
+          rubricPrompt,
+          output,
+          {
+            provider: mockGradingProvider({}),
+            rubricPrompt: 'Test rubric',
+          },
+          {},
+          assertion,
+        );
+        expect(result.pass).toBe(true);
+        expect(result.score).toBe(1);
+        expect(result.reason).toBe('Test passed');
+      });
+
+      it('should handle boolean-like values', async () => {
+        interface TestCase {
+          value: boolean | number;
+          expected: boolean;
+        }
+
+        const testCases: TestCase[] = [
+          { value: true, expected: true },
+          { value: false, expected: false },
+          { value: 1, expected: true },
+          { value: 0, expected: false },
+        ];
+
+        for (const { value, expected } of testCases) {
+          const result = await matchesLlmRubric(
+            rubricPrompt,
+            output,
+            {
+              provider: mockGradingProvider({
+                pass: value as boolean,
+                score: 1,
+              }),
+              rubricPrompt: 'Test rubric',
+            },
+            {},
+            assertion,
+          );
+          expect(result.pass).toBe(expected);
+        }
+      });
+
+      it('should handle string pass values', async () => {
+        interface TestCase {
+          value: string;
+          expected: boolean;
+        }
+
+        const testCases: TestCase[] = [
+          { value: 'true', expected: true },
+          { value: 'yes', expected: true },
+          { value: 'pass', expected: true },
+          { value: 'y', expected: true },
+          { value: 'false', expected: false },
+          { value: 'no', expected: false },
+          { value: 'fail', expected: false },
+          { value: 'n', expected: false },
+        ];
+
+        for (const { value, expected } of testCases) {
+          const result = await matchesLlmRubric(
+            rubricPrompt,
+            output,
+            {
+              provider: mockGradingProvider({
+                pass: value as unknown as boolean,
+                score: 1,
+              }),
+              rubricPrompt: 'Test rubric',
+            },
+            {},
+            assertion,
+          );
+          expect(result.pass).toBe(expected);
+        }
+      });
+    });
+
+    describe('threshold behavior', () => {
+      it('should handle exact threshold matches', async () => {
+        const result = await matchesLlmRubric(
+          rubricPrompt,
+          output,
+          {
+            provider: mockGradingProvider({
+              pass: true,
+              score: 0.8,
+            }),
+            rubricPrompt: 'Test rubric',
+          },
+          {},
+          { ...assertion, threshold: 0.8 },
+        );
+        expect(result.pass).toBe(true);
+        expect(result.score).toBe(0.8);
+      });
+
+      it('should handle decimal thresholds', async () => {
+        const result = await matchesLlmRubric(
+          rubricPrompt,
+          output,
+          {
+            provider: mockGradingProvider({
+              pass: true,
+              score: 0.753,
+            }),
+            rubricPrompt: 'Test rubric',
+          },
+          {},
+          { ...assertion, threshold: 0.75 },
+        );
+        expect(result.pass).toBe(true);
+        expect(result.score).toBe(0.753);
+      });
+
+      it('should handle invalid scores with threshold', async () => {
+        const result = await matchesLlmRubric(
+          rubricPrompt,
+          output,
+          {
+            provider: mockGradingProvider({
+              pass: true,
+              score: undefined,
+            }),
+            rubricPrompt: 'Test rubric',
+          },
+          {},
+          { ...assertion, threshold: 0.8 },
+        );
+        expect(result.pass).toBe(true);
+        expect(result.score).toBe(1);
+      });
+    });
   });
 });
 

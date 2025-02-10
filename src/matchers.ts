@@ -44,6 +44,65 @@ import { getNunjucksEngine } from './util/templates';
 
 const nunjucks = getNunjucksEngine(undefined, false, true);
 
+/**
+ * Type guard to validate if an unknown object matches the expected GradingResult structure.
+ * Allows for flexible type conversion while maintaining type safety.
+ *
+ * Valid formats for fields:
+ * - pass: boolean, string ('true', 'yes', 'pass', 'y'), or number
+ * - score: any value that can be converted to a number, or undefined
+ * - reason: string, number, or boolean (anything that can be converted to string)
+ */
+function isValidGradingResult(obj: unknown): obj is Partial<GradingResult> {
+  if (obj === null || typeof obj !== 'object') {
+    return false;
+  }
+
+  const result = obj as Record<string, unknown>;
+
+  // Empty objects are valid
+  if (Object.keys(result).length === 0) {
+    return true;
+  }
+
+  // Allow any value that can be converted to boolean for 'pass'
+  if ('pass' in result) {
+    // undefined is valid
+    if (result.pass === undefined) {
+      return true;
+    }
+    // Accept anything that can be converted to a boolean
+    const passValue = result.pass;
+    if (
+      typeof passValue !== 'boolean' &&
+      typeof passValue !== 'string' &&
+      typeof passValue !== 'number'
+    ) {
+      return false;
+    }
+  }
+
+  // Allow any value for 'score'
+  if ('score' in result) {
+    return true;
+  }
+
+  // Allow any string-convertible value for 'reason'
+  if ('reason' in result && result.reason !== undefined) {
+    const reasonValue = result.reason;
+    // Accept anything that can be meaningfully converted to string
+    if (
+      typeof reasonValue !== 'string' &&
+      typeof reasonValue !== 'number' &&
+      typeof reasonValue !== 'boolean'
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 function cosineSimilarity(vecA: number[], vecB: number[]) {
   if (vecA.length !== vecB.length) {
     throw new Error('Vectors must be of equal length');
@@ -402,6 +461,39 @@ export async function renderLlmRubricPrompt(
   });
 }
 
+/**
+ * Converts any valid value to a boolean according to grading rules.
+ * 'true', 'yes', 'pass', 'y' (case-insensitive) are converted to true,
+ * everything else is converted to false.
+ */
+function coerceToBoolean(value: unknown): boolean {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    return value !== 0;
+  }
+  return /^(true|yes|pass|y)$/i.test(String(value));
+}
+
+/**
+ * Converts any value to a number according to grading rules.
+ * If conversion fails or produces an invalid number, falls back to boolean conversion (1 for true, 0 for false)
+ */
+function coerceToNumber(value: unknown, fallbackBoolean: boolean): number {
+  if (value === undefined || value === null) {
+    return Number(fallbackBoolean);
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  const num = Number(value);
+  if (Number.isFinite(num)) {
+    return num;
+  }
+  return Number(fallbackBoolean);
+}
+
 export async function matchesLlmRubric(
   rubric: string,
   llmOutput: string,
@@ -446,37 +538,42 @@ export async function matchesLlmRubric(
     if (jsonObjects.length === 0) {
       return fail('Could not extract JSON from llm-rubric response', resp.tokenUsage);
     }
-    const parsed = jsonObjects[0] as Partial<GradingResult>;
+
+    // Validate the structure of the extracted JSON
+    const result: Partial<GradingResult> | object | null | undefined = jsonObjects[0];
+    if (typeof result !== 'object' || result === null) {
+      return fail('Extracted JSON is not an object', resp.tokenUsage);
+    }
+
+    if (!isValidGradingResult(result)) {
+      return fail(
+        'Extracted JSON does not match expected GradingResult structure',
+        resp.tokenUsage,
+      );
+    }
+
     const threshold = assertion?.threshold;
-    let pass = parsed.pass ?? true;
-    if (typeof pass as any === 'string') {
-      pass = /^(true|yes|pass|y)$/i.test(String(pass));
-    }
 
-    let score = parsed.score;
+    // Convert values with consistent coercion rules
+    const pass = coerceToBoolean(result.pass ?? true);
+    const score = coerceToNumber(result.score, pass);
+    const reason = result.reason?.toString();
 
-    // Handle invalid or missing scores
-    if (typeof score !== 'number') {
-      score = Number.isNaN(Number(score)) ? Number(pass) : Number(score);
-    }
-
-    // Apply threshold check if threshold is defined
-    if (threshold !== undefined) {
-      pass = pass && score >= threshold;
-    }
+    // Apply threshold check if defined
+    const finalPass = threshold === undefined ? pass : pass && score >= threshold;
 
     return {
       assertion,
-      pass,
+      pass: finalPass,
       score,
       reason:
-        parsed.reason || (pass ? 'Grading passed' : `Score ${score} below threshold ${threshold}`),
+        reason || (finalPass ? 'Grading passed' : `Score ${score} below threshold ${threshold}`),
       tokensUsed: {
         total: resp.tokenUsage?.total || 0,
         prompt: resp.tokenUsage?.prompt || 0,
         completion: resp.tokenUsage?.completion || 0,
         cached: resp.tokenUsage?.cached || 0,
-        completionDetails: parsed.tokensUsed?.completionDetails || {
+        completionDetails: result.tokensUsed?.completionDetails || {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
