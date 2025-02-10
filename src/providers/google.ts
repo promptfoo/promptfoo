@@ -6,6 +6,7 @@ import type {
   ProviderResponse,
   CallApiContextParams,
   GuardrailResponse,
+  ProviderEmbeddingResponse,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
@@ -307,6 +308,66 @@ export class GoogleChatProvider extends GoogleGenericProvider {
       return {
         error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
       };
+    }
+  }
+}
+
+// --------------------------------------------------------------------
+// GoogleEmbeddingProvider: handles text embedding API calls for Google
+export class GoogleEmbeddingProvider extends GoogleGenericProvider {
+  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+    if (!this.getApiKey()) {
+      throw new Error('Google API key is not set for embedding');
+    }
+
+    const body = { input: text };
+
+    // Determine API version - defaulting to v1beta for Gemini models
+    const apiVersion = 'v1beta';
+    const url = `https://${this.getApiHost()}/${apiVersion}/models/${this.modelName}:embedText?key=${this.getApiKey()}`;
+
+    logger.debug(`Calling Google Embedding API: ${url} with body: ${JSON.stringify(body)}`);
+
+    let data,
+      _cached = false;
+    try {
+      ({ data, cached: _cached } = await fetchWithCache(
+        url,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        },
+        REQUEST_TIMEOUT_MS,
+        'json',
+        false,
+      ));
+    } catch (err) {
+      logger.error(`Google Embedding API call error: ${err}`);
+      throw err;
+    }
+
+    logger.debug(`Google Embedding API response: ${JSON.stringify(data)}`);
+
+    try {
+      // Assume response structure: either { embedding: number[] } or { data: [{ embedding: number[] }] }
+      const embedding = data.embedding || (data.data && data.data[0] && data.data[0].embedding);
+      if (!embedding) {
+        throw new Error('No embedding found in Google Embedding API response');
+      }
+
+      return {
+        embedding,
+        tokenUsage: {
+          prompt: 0,
+          completion: 0,
+          total: 0,
+          numRequests: 1,
+        },
+      };
+    } catch (err) {
+      logger.error(`Error processing Google Embedding API response: ${JSON.stringify(data)}`);
+      throw err;
     }
   }
 }
