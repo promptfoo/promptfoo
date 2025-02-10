@@ -14,7 +14,6 @@ import { Plugins } from './redteam/plugins';
 import { RedteamPluginBase, RedteamGraderBase } from './redteam/plugins/base';
 import { Strategies } from './redteam/strategies';
 import telemetry from './telemetry';
-import { readTests } from './testCases';
 import type {
   EvaluateOptions,
   TestSuite,
@@ -25,6 +24,7 @@ import type {
 } from './types';
 import { readFilters, writeMultipleOutputs, writeOutput } from './util';
 import invariant from './util/invariant';
+import { readTests } from './util/testCaseReader';
 import { PromptSchema } from './validators/prompts';
 
 export * from './types';

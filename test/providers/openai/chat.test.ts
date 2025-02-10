@@ -203,6 +203,28 @@ describe('OpenAI Provider', () => {
       expect(result.isRefusal).toBe(true);
     });
 
+    it('should handle empty function tool callbacks array correctly', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test output', tool_calls: [] } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+      );
+
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe('Test output');
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+    });
+
     it('should handle function tool callbacks correctly', async () => {
       const mockResponse = {
         data: {
@@ -400,6 +422,65 @@ describe('OpenAI Provider', () => {
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toEqual({ arguments: '{}', name: 'errorFunction' });
       expect(result.tokenUsage).toEqual({ total: 5, prompt: 2, completion: 3 });
+    });
+
+    it('should handle undefined message content with tool calls', async () => {
+      const mockResponse = {
+        data: {
+          choices: [
+            {
+              message: {
+                tool_calls: [
+                  {
+                    function: {
+                      name: 'testFunction',
+                      arguments: '{"param": "value"}',
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'testFunction',
+                description: 'A test function',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    param: { type: 'string' },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      expect(result.output).toEqual([
+        {
+          function: {
+            name: 'testFunction',
+            arguments: '{"param": "value"}',
+          },
+        },
+      ]);
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
     });
 
     it('should prioritize response_format from prompt config over provider config', async () => {

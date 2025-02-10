@@ -6,7 +6,6 @@ import * as path from 'path';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
-import { readTests } from '../../../src/testCases';
 import type { UnifiedConfig } from '../../../src/types';
 import { maybeLoadFromExternalFile } from '../../../src/util';
 import {
@@ -15,6 +14,7 @@ import {
   resolveConfigs,
   combineConfigs,
 } from '../../../src/util/config/load';
+import { readTests } from '../../../src/util/testCaseReader';
 
 jest.mock('../../../src/database', () => ({
   getDb: jest.fn(),
@@ -49,8 +49,8 @@ jest.mock('../../../src/esm', () => ({
   importModule: jest.fn(),
 }));
 
-jest.mock('../../../src/testCases', () => {
-  const originalModule = jest.requireActual('../../../src/testCases');
+jest.mock('../../../src/util/testCaseReader', () => {
+  const originalModule = jest.requireActual('../../../src/util/testCaseReader');
   return {
     ...originalModule,
     readTests: jest.fn(originalModule.readTests),
@@ -1152,5 +1152,19 @@ describe('readConfig', () => {
     );
     const calls = jest.mocked(logger.warn).mock.calls;
     expect(calls[0][0]).toContain('Invalid configuration file');
+  });
+
+  it('should handle empty YAML file by defaulting to empty object', async () => {
+    jest.spyOn(fs, 'readFileSync').mockReturnValue('');
+    jest.spyOn(path, 'parse').mockReturnValue({ ext: '.yaml' } as any);
+    jest.spyOn(yaml, 'load').mockReturnValue(null);
+    jest.spyOn($RefParser.prototype, 'dereference').mockResolvedValue({});
+
+    const result = await readConfig('empty.yaml');
+
+    expect(result).toEqual({
+      prompts: ['{{prompt}}'],
+    });
+    expect(fs.readFileSync).toHaveBeenCalledWith('empty.yaml', 'utf-8');
   });
 });

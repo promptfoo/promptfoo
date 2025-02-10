@@ -54,6 +54,26 @@ To add users to your organization, open the menu in the top right corner of the 
 
 ![Invite a user](/img/docs/cloud/invite-user.png)
 
+## Service Accounts
+
+Service accounts allow you to create API keys for programmatic access to Promptfoo Cloud. These are useful for CI/CD pipelines and automated testing.
+
+To create a service account:
+
+1. Navigate to your Organization page
+2. Scroll down to the Service Accounts section
+3. Click **Create Service Account**
+4. Enter a name for your service account
+5. Copy the API key that is generated.
+
+:::warning
+Make sure to copy your API key when it's first created. For security reasons, you won't be able to view it again after closing the dialog.
+:::
+
+![Create a service account](/img/docs/cloud/service-account-creation.gif)
+
+You can manage your service accounts from the Organization page, including creating new ones or deleting existing ones as needed.
+
 ## Domains and Whitelisting
 
 Promptfoo requires access to [promptfoo.app](https://promptfoo.app), [api.promptfoo.app](https://api.promptfoo.app), and [api.promptfoo.dev](https://api.promptfoo.dev) to function.

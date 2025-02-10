@@ -20,6 +20,7 @@ import { addMathPrompt } from './mathPrompt';
 import { addMultilingual } from './multilingual';
 import { addPandamonium } from './pandamonium';
 import { addInjections } from './promptInjections';
+import { addRetryTestCases } from './retry';
 import { addRot13 } from './rot13';
 import { addCompositeTestCases } from './singleTurnComposite';
 
@@ -34,6 +35,15 @@ export interface Strategy {
 
 export const Strategies: Strategy[] = [
   {
+    id: 'base64',
+    action: async (testCases, injectVar) => {
+      logger.debug(`Adding Base64 encoding to ${testCases.length} test cases`);
+      const newTestCases = addBase64Encoding(testCases, injectVar);
+      logger.debug(`Added ${newTestCases.length} Base64 encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
     id: 'basic',
     action: async (testCases: TestCase[], injectVar: string, config?: Record<string, any>) => {
       // Basic strategy doesn't modify test cases, it just controls whether they're included
@@ -42,11 +52,20 @@ export const Strategies: Strategy[] = [
     },
   },
   {
-    id: 'base64',
-    action: async (testCases, injectVar) => {
-      logger.debug(`Adding Base64 encoding to ${testCases.length} test cases`);
-      const newTestCases = addBase64Encoding(testCases, injectVar);
-      logger.debug(`Added ${newTestCases.length} Base64 encoded test cases`);
+    id: 'best-of-n',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding Best-of-N to ${testCases.length} test cases`);
+      const newTestCases = await addBestOfNTestCases(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} Best-of-N test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'citation',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding Citation to ${testCases.length} test cases`);
+      const newTestCases = await addCitationTestCases(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} Citation test cases`);
       return newTestCases;
     },
   },
@@ -60,6 +79,15 @@ export const Strategies: Strategy[] = [
     },
   },
   {
+    id: 'gcg',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding GCG test cases to ${testCases.length} test cases`);
+      const newTestCases = await addGcgTestCases(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} GCG test cases`);
+      return newTestCases;
+    },
+  },
+  {
     id: 'goat',
     action: async (testCases, injectVar, config) => {
       logger.debug(`Adding GOAT to ${testCases.length} test cases`);
@@ -69,11 +97,11 @@ export const Strategies: Strategy[] = [
     },
   },
   {
-    id: 'best-of-n',
-    action: async (testCases, injectVar, config) => {
-      logger.debug(`Adding Best-of-N to ${testCases.length} test cases`);
-      const newTestCases = await addBestOfNTestCases(testCases, injectVar, config);
-      logger.debug(`Added ${newTestCases.length} Best-of-N test cases`);
+    id: 'hex',
+    action: async (testCases, injectVar) => {
+      logger.debug(`Adding Hex encoding to ${testCases.length} test cases`);
+      const newTestCases = addHexEncoding(testCases, injectVar);
+      logger.debug(`Added ${newTestCases.length} Hex encoded test cases`);
       return newTestCases;
     },
   },
@@ -83,6 +111,24 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding experimental jailbreaks to ${testCases.length} test cases`);
       const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative', config);
       logger.debug(`Added ${newTestCases.length} experimental jailbreak test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'jailbreak:composite',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding composite jailbreak test cases to ${testCases.length} test cases`);
+      const newTestCases = await addCompositeTestCases(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} composite jailbreak test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'jailbreak:likert',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding Likert scale jailbreaks to ${testCases.length} test cases`);
+      const newTestCases = await addLikertTestCases(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} Likert scale jailbreak test cases`);
       return newTestCases;
     },
   },
@@ -123,6 +169,15 @@ export const Strategies: Strategy[] = [
     },
   },
   {
+    id: 'pandamonium',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding pandamonium runs to ${testCases.length} test cases`);
+      const newTestCases = await addPandamonium(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} Pandamonium test cases`);
+      return newTestCases;
+    },
+  },
+  {
     id: 'prompt-injection',
     action: async (testCases, injectVar, config) => {
       logger.debug(`Adding prompt injections to ${testCases.length} test cases`);
@@ -132,65 +187,20 @@ export const Strategies: Strategy[] = [
     },
   },
   {
+    id: 'retry',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding retry test cases to ${testCases.length} test cases`);
+      const newTestCases = await addRetryTestCases(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} retry test cases`);
+      return newTestCases;
+    },
+  },
+  {
     id: 'rot13',
     action: async (testCases, injectVar) => {
       logger.debug(`Adding ROT13 encoding to ${testCases.length} test cases`);
       const newTestCases = addRot13(testCases, injectVar);
       logger.debug(`Added ${newTestCases.length} ROT13 encoded test cases`);
-      return newTestCases;
-    },
-  },
-  {
-    id: 'citation',
-    action: async (testCases, injectVar, config) => {
-      logger.debug(`Adding Citation to ${testCases.length} test cases`);
-      const newTestCases = await addCitationTestCases(testCases, injectVar, config);
-      logger.debug(`Added ${newTestCases.length} Citation test cases`);
-      return newTestCases;
-    },
-  },
-  {
-    id: 'jailbreak:composite',
-    action: async (testCases, injectVar, config) => {
-      logger.debug(`Adding composite jailbreak test cases to ${testCases.length} test cases`);
-      const newTestCases = await addCompositeTestCases(testCases, injectVar, config);
-      logger.debug(`Added ${newTestCases.length} composite jailbreak test cases`);
-      return newTestCases;
-    },
-  },
-  {
-    id: 'jailbreak:likert',
-    action: async (testCases, injectVar, config) => {
-      logger.debug(`Adding Likert scale jailbreaks to ${testCases.length} test cases`);
-      const newTestCases = await addLikertTestCases(testCases, injectVar, config);
-      logger.debug(`Added ${newTestCases.length} Likert scale jailbreak test cases`);
-      return newTestCases;
-    },
-  },
-  {
-    id: 'gcg',
-    action: async (testCases, injectVar, config) => {
-      logger.debug(`Adding GCG test cases to ${testCases.length} test cases`);
-      const newTestCases = await addGcgTestCases(testCases, injectVar, config);
-      logger.debug(`Added ${newTestCases.length} GCG test cases`);
-      return newTestCases;
-    },
-  },
-  {
-    id: 'hex',
-    action: async (testCases, injectVar) => {
-      logger.debug(`Adding Hex encoding to ${testCases.length} test cases`);
-      const newTestCases = addHexEncoding(testCases, injectVar);
-      logger.debug(`Added ${newTestCases.length} Hex encoded test cases`);
-      return newTestCases;
-    },
-  },
-  {
-    id: 'pandamonium',
-    action: async (testCases, injectVar, config) => {
-      logger.debug(`Adding pandamonium runs to ${testCases.length} test cases`);
-      const newTestCases = await addPandamonium(testCases, injectVar, config);
-      logger.debug(`Added ${newTestCases.length} Pandamonium test cases`);
       return newTestCases;
     },
   },

@@ -4,7 +4,6 @@ import yaml from 'js-yaml';
 import path from 'path';
 import cliState from '../cliState';
 import { getEnvInt } from '../envars';
-import { importModule } from '../esm';
 import logger from '../logger';
 import {
   matchesAnswerRelevance,
@@ -76,7 +75,7 @@ import { handleRougeScore } from './rouge';
 import { handleSimilar } from './similar';
 import { handleContainsSql, handleIsSql } from './sql';
 import { handleStartsWith } from './startsWith';
-import { coerceString, getFinalTest, processFileReference } from './utils';
+import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
 import { handleIsXml } from './xml';
 
@@ -162,18 +161,7 @@ export async function runAssertion({
       filePath = path.resolve(basePath, filePath);
 
       if (isJavascriptFile(filePath)) {
-        const requiredModule = await importModule(filePath, functionName);
-        if (functionName && typeof requiredModule[functionName] === 'function') {
-          valueFromScript = await Promise.resolve(requiredModule[functionName](output, context));
-        } else if (typeof requiredModule === 'function') {
-          valueFromScript = await Promise.resolve(requiredModule(output, context));
-        } else if (requiredModule.default && typeof requiredModule.default === 'function') {
-          valueFromScript = await Promise.resolve(requiredModule.default(output, context));
-        } else {
-          throw new Error(
-            `Assertion malformed: ${filePath} must export a function or have a default export as a function`,
-          );
-        }
+        valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.py')) {
         try {

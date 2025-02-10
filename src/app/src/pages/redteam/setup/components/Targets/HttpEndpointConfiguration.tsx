@@ -29,6 +29,7 @@ import 'prismjs/components/prism-http';
 import 'prismjs/components/prism-json';
 import 'prismjs/components/prism-yaml';
 import type { ProviderOptions } from '../../types';
+import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
 import './syntax-highlighting.css';
 
 interface HttpEndpointConfigurationProps {
@@ -88,7 +89,7 @@ Content-Type: application/json
 {
   "messages": [
     {
-      "role": "user", 
+      "role": "user",
       "content": "{{prompt}}"
     }
   ]
@@ -562,6 +563,11 @@ ${exampleRequest}`;
           )}
         </DialogActions>
       </Dialog>
+      <HttpAdvancedConfiguration
+        selectedTarget={selectedTarget}
+        updateCustomTarget={updateCustomTarget}
+        defaultRequestTransform={selectedTarget.config.transformRequest}
+      />
     </Box>
   );
 };

@@ -589,6 +589,17 @@ export async function loadApiProvider(
     } else {
       ret = new AlibabaChatCompletionProvider(modelName || modelType, providerOptions);
     }
+  } else if (providerPath.startsWith('fireworks:')) {
+    const splits = providerPath.split(':');
+    const modelName = splits.slice(1).join(':');
+    ret = new OpenAiChatCompletionProvider(modelName, {
+      ...providerOptions,
+      config: {
+        ...providerOptions.config,
+        apiBaseUrl: 'https://api.fireworks.ai/inference/v1',
+        apiKeyEnvar: 'FIREWORKS_API_KEY',
+      },
+    });
   } else {
     logger.error(dedent`
       Could not identify provider: ${chalk.bold(providerPath)}.
