@@ -249,6 +249,100 @@ describe('json utilities', () => {
       const expectedOutput = [{ key: 'value with spaces', special: 'value!@#$%', empty: null }];
       expect(extractJsonObjects(input)).toEqual(expectedOutput);
     });
+
+    describe('LLM output scenarios', () => {
+      it('should handle JSON with inline comments', () => {
+        const input = dedent`
+          {
+            "reason": "The test passed",
+            "score": 1.0 # The score is perfect because all criteria were met
+          }`;
+        const expectedOutput = [
+          {
+            reason: 'The test passed',
+            score: 1.0,
+          },
+        ];
+        expect(extractJsonObjects(input)).toEqual(expectedOutput);
+      });
+
+      it('should handle JSON with multiline string containing markdown', () => {
+        const input = dedent`
+          {
+            "reason": "The summary provided is mostly accurate but contains some omissions:
+
+            - Point 1: Details here
+            - Point 2: More details
+
+            Some additional context...",
+            "score": 0.75
+          }`;
+        const expectedOutput = [
+          {
+            reason:
+              'The summary provided is mostly accurate but contains some omissions:\n- Point 1: Details here - Point 2: More details\nSome additional context...',
+            score: 0.75,
+          },
+        ];
+        expect(extractJsonObjects(input)).toEqual(expectedOutput);
+      });
+
+      it('should handle JSON with unescaped backticks', () => {
+        const input = dedent`
+          {
+            "reason": "\`\`The summary accurately reflects...",
+            "score": 1.0
+          }`;
+        const expectedOutput = [
+          {
+            reason: '``The summary accurately reflects...',
+            score: 1.0,
+          },
+        ];
+        expect(extractJsonObjects(input)).toEqual(expectedOutput);
+      });
+
+      it('should handle JSON with trailing commas', () => {
+        const input = dedent`
+          {
+            "key1": "value1",
+            "key2": "value2",
+          }`;
+        const expectedOutput = [
+          {
+            key1: 'value1',
+            key2: 'value2',
+          },
+        ];
+        expect(extractJsonObjects(input)).toEqual(expectedOutput);
+      });
+
+      it('should handle multiple JSON objects in LLM output with text in between', () => {
+        const input = dedent`
+          Here's my analysis:
+          {
+            "first_point": "valid observation",
+            "score": 0.8
+          }
+
+          And another point:
+          {
+            "second_point": "another observation",
+            "score": 0.9
+          }`;
+        const expectedOutput = [
+          {
+            first_point: 'valid observation',
+            score: 0.8,
+          },
+          {
+            second_point: 'another observation',
+            score: 0.9,
+          },
+        ];
+        expect(extractJsonObjects(input)).toEqual(expectedOutput);
+      });
+    });
   });
 
   describe('orderKeys', () => {
