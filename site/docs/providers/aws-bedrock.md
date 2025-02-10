@@ -5,7 +5,7 @@ sidebar_position: 3
 
 # Bedrock
 
-The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to access Anthropic's Claude, Meta's Llama 3.1, Amazon's Nova, AI21's Jamba, and other models. The complete list of available models can be found [here](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns).
+The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to access Anthropic's Claude, Meta's Llama 3.3, Amazon's Nova, AI21's Jamba, and other models. The complete list of available models can be found [here](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns).
 
 ## Setup
 
@@ -77,7 +77,7 @@ The provider will automatically use AWS SSO credentials when a profile is specif
 
 ## Example
 
-See [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) for full examples of Claude, Nova, AI21, Llama 3.1, and Titan model usage.
+See [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) for full examples of Claude, Nova, AI21, Llama 3.3, and Titan model usage.
 
 ```yaml
 prompts:
@@ -89,6 +89,9 @@ providers:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
+  - id: bedrock:us.meta.llama3-3-70b-instruct-v1:0
+    config:
+      max_gen_len: 256
   - id: bedrock:amazon.nova-lite-v1:0
     config:
       region: 'us-east-1'
@@ -188,7 +191,7 @@ config:
 
 ### Llama
 
-For Llama models (e.g., `meta.llama3-1-70b-instruct-v1:0`), you can use the following configuration options:
+For Llama models (e.g., `meta.llama3-1-70b-instruct-v1:0`, `meta.llama3-2-90b-instruct-v1:0`, `meta.llama3-3-70b-instruct-v1:0`), you can use the following configuration options:
 
 ```yaml
 config:

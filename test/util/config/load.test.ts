@@ -1153,4 +1153,18 @@ describe('readConfig', () => {
     const calls = jest.mocked(logger.warn).mock.calls;
     expect(calls[0][0]).toContain('Invalid configuration file');
   });
+
+  it('should handle empty YAML file by defaulting to empty object', async () => {
+    jest.spyOn(fs, 'readFileSync').mockReturnValue('');
+    jest.spyOn(path, 'parse').mockReturnValue({ ext: '.yaml' } as any);
+    jest.spyOn(yaml, 'load').mockReturnValue(null);
+    jest.spyOn($RefParser.prototype, 'dereference').mockResolvedValue({});
+
+    const result = await readConfig('empty.yaml');
+
+    expect(result).toEqual({
+      prompts: ['{{prompt}}'],
+    });
+    expect(fs.readFileSync).toHaveBeenCalledWith('empty.yaml', 'utf-8');
+  });
 });

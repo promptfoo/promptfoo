@@ -137,8 +137,11 @@ export class GolangProvider implements ApiProvider {
           await execAsync(compileCommand);
         }
 
-        // Run the compiled binary
-        const command = `${executablePath} ${tempScriptPath} ${functionName} '${safeJsonStringify(args)}'`;
+        const jsonArgs = safeJsonStringify(args) || '[]';
+        // Escape single quotes in the JSON string to prevent command injection and ensure proper shell argument passing.
+        // This replaces each ' with '\'' which closes the current string, adds an escaped quote, and reopens the string.
+        const escapedJsonArgs = jsonArgs.replace(/'/g, "'\\''");
+        const command = `${executablePath} ${tempScriptPath} ${functionName} '${escapedJsonArgs}'`;
         logger.debug(`Running command: ${command}`);
 
         const { stdout, stderr } = await execAsync(command);

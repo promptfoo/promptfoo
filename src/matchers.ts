@@ -25,15 +25,16 @@ import { doRemoteGrading } from './remoteGrading';
 import type {
   ApiClassificationProvider,
   ApiEmbeddingProvider,
+  ApiModerationProvider,
   ApiProvider,
   ApiSimilarityProvider,
+  Assertion,
   GradingConfig,
   GradingResult,
   ProviderOptions,
+  ProviderType,
   ProviderTypeMap,
   TokenUsage,
-  ProviderType,
-  ApiModerationProvider,
 } from './types';
 import { maybeLoadFromExternalFile } from './util';
 import { isJavascriptFile } from './util/file';
@@ -406,7 +407,8 @@ export async function matchesLlmRubric(
   llmOutput: string,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
-): Promise<Omit<GradingResult, 'assertion'>> {
+  assertion?: Assertion | null,
+): Promise<GradingResult> {
   if (!grading) {
     throw new Error(
       'Cannot grade output without grading config. Specify --grader option or grading config.',
@@ -444,12 +446,34 @@ export async function matchesLlmRubric(
     if (jsonObjects.length === 0) {
       return fail('Could not extract JSON from llm-rubric response', resp.tokenUsage);
     }
+
+    // expects properties pass, score, and reason
     const parsed = jsonObjects[0] as Partial<GradingResult>;
-    const pass = parsed.pass ?? (typeof parsed.score === 'undefined' ? true : parsed.score > 0);
+
+    let pass = parsed.pass ?? true;
+    if (typeof pass !== 'boolean') {
+      pass = /^(true|yes|pass|y)$/i.test(String(pass));
+    }
+
+    let score = parsed.score;
+    if (typeof score !== 'number') {
+      score = Number.isFinite(Number(score)) ? Number(score) : Number(pass);
+    }
+
+    const threshold =
+      typeof assertion?.threshold === 'string' ? Number(assertion.threshold) : assertion?.threshold;
+    if (typeof threshold === 'number' && Number.isFinite(threshold)) {
+      pass = pass && score >= threshold;
+    }
+
+    const reason =
+      parsed.reason || (pass ? 'Grading passed' : `Score ${score} below threshold ${threshold}`);
+
     return {
+      assertion,
       pass,
-      score: parsed.score ?? (pass ? 1.0 : 0.0),
-      reason: parsed.reason || (pass ? 'Grading passed' : 'Grading failed'),
+      score,
+      reason,
       tokensUsed: {
         total: resp.tokenUsage?.total || 0,
         prompt: resp.tokenUsage?.prompt || 0,
