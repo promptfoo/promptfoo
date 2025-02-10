@@ -5,10 +5,10 @@ prompts:
   - file://prompts.txt
 
 providers:
-  - bedrock:anthropic.claude-v2
-  - bedrock:meta.llama3-70b-instruct-v1:0
+  - bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+  - bedrock:us.meta.llama3-3-70b-instruct-v1:0
+  - bedrock:amazon.nova-pro-v1:0
   - bedrock:mistral.mixtral-8x7b-instruct-v0:1
-  - bedrock:cohere.command-r-plus-v1:0
 
 defaultTest:
   options:
