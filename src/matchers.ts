@@ -449,6 +449,10 @@ export async function matchesLlmRubric(
     const parsed = jsonObjects[0] as Partial<GradingResult>;
     const threshold = assertion?.threshold;
     let pass = parsed.pass ?? true;
+    if (typeof pass as any === 'string') {
+      pass = /^(true|yes|pass|y)$/i.test(String(pass));
+    }
+
     let score = parsed.score;
 
     // Handle invalid or missing scores
