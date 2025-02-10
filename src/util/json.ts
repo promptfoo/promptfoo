@@ -1,3 +1,4 @@
+import yaml from 'js-yaml';
 import invariant from '../util/invariant';
 
 export function isValidJson(str: string): boolean {
@@ -39,12 +40,14 @@ export function extractJsonObjects(str: string): object[] {
       for (let j = i + 1; j <= Math.min(i + maxJsonLength, str.length); j++) {
         try {
           const potentialJson = str.slice(i, j);
-          const parsedObj = JSON.parse(potentialJson);
-          jsonObjects.push(parsedObj);
-          i = j - 1; // Move i to the end of the valid JSON object
-          break;
+          const parsedObj = yaml.load(potentialJson);
+          if (typeof parsedObj === 'object' && parsedObj !== null) {
+            jsonObjects.push(parsedObj);
+            i = j - 1; // Move i to the end of the valid JSON object
+            break;
+          }
         } catch {
-          // If it's not valid JSON yet, continue to the next character
+          // If it's not valid YAML yet, continue to the next character
           if (j === str.length || j === i + maxJsonLength) {
             // If we've reached the end of the string or max length, stop trying with this starting point
             break;

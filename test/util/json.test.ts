@@ -219,6 +219,36 @@ describe('json utilities', () => {
       const input = JSON.stringify(obj);
       expect(extractJsonObjects(input)).toEqual([obj]);
     });
+
+    it('should handle YAML-style unquoted strings', () => {
+      const input = '{key: value, another_key: another value}';
+      const expectedOutput = [{ key: 'value', another_key: 'another value' }];
+      expect(extractJsonObjects(input)).toEqual(expectedOutput);
+    });
+
+    it('should skip non-object YAML values', () => {
+      const input = 'plain string {key: value} 42 {another: obj} true';
+      const expectedOutput = [{ key: 'value' }, { another: 'obj' }];
+      expect(extractJsonObjects(input)).toEqual(expectedOutput);
+    });
+
+    it('should handle YAML with mixed quoted and unquoted strings', () => {
+      const input = '{unquoted: value, "quoted": "value", another: "mixed"}';
+      const expectedOutput = [{ unquoted: 'value', quoted: 'value', another: 'mixed' }];
+      expect(extractJsonObjects(input)).toEqual(expectedOutput);
+    });
+
+    it('should ignore YAML arrays and scalars', () => {
+      const input = '[1, 2, 3] {obj: value} plain: string {another: obj}';
+      const expectedOutput = [{ obj: 'value' }, { another: 'obj' }];
+      expect(extractJsonObjects(input)).toEqual(expectedOutput);
+    });
+
+    it('should handle YAML with special characters', () => {
+      const input = '{key: value with spaces, special: value!@#$%, empty:}';
+      const expectedOutput = [{ key: 'value with spaces', special: 'value!@#$%', empty: null }];
+      expect(extractJsonObjects(input)).toEqual(expectedOutput);
+    });
   });
 
   describe('orderKeys', () => {
