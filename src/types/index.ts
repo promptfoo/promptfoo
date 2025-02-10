@@ -150,22 +150,6 @@ export interface RunEvalOptions {
   // Used by pandamonium, this should never be passed to callApi, it could be a massive object that will break the stack
   allTests?: RunEvalOptions[];
   concurrency?: number;
-
-  // This field corresponds to the Cloud server EvalJob type.
-  job?: {
-    progress: {
-      completed: number;
-      passes: number;
-      failures: number;
-      errors: number;
-    };
-    updateProgress: (progress: {
-      completed?: number;
-      passes?: number;
-      failures?: number;
-      errors?: number;
-    }) => Promise<void>;
-  };
 }
 
 const EvaluateOptionsSchema = z.object({

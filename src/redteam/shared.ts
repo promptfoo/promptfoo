@@ -72,6 +72,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     {
       showProgressBar: true,
       abortSignal: options.abortSignal,
+      progressCallback: options.progressCallback,
     },
   );
 
