@@ -22,6 +22,7 @@ __pycache__
 
 # IDE-specific
 .idea/
+.vscode/
 
 # Examples-related
 examples/**/package-lock.json
