@@ -220,7 +220,7 @@ export async function readTest(
  * @param basePath - Base path for resolving relative paths
  * @returns Promise resolving to an array of TestCase objects
  */
-async function loadTestsFromGlob(
+export async function loadTestsFromGlob(
   loadTestsGlob: string,
   basePath: string = '',
 ): Promise<TestCase[]> {

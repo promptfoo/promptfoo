@@ -13,6 +13,7 @@ import {
   readTest,
   readTests,
   readVarsFiles,
+  loadTestsFromGlob,
 } from '../../src/util/testCaseReader';
 
 jest.mock('proxy-agent', () => ({
@@ -873,5 +874,39 @@ describe('readVarsFiles', () => {
     const result = await readVarsFiles(['vars1.yaml', 'vars2.yaml']);
 
     expect(result).toEqual({ var1: 'value1', var2: 'value2' });
+  });
+});
+
+describe('loadTestsFromGlob', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+  });
+
+  it('should handle Hugging Face dataset URLs', async () => {
+    const mockDataset: TestCase[] = [
+      {
+        description: 'Test 1',
+        vars: { var1: 'value1' },
+        assert: [{ type: 'equals', value: 'expected1' }],
+        options: {},
+      },
+      {
+        description: 'Test 2',
+        vars: { var2: 'value2' },
+        assert: [{ type: 'equals', value: 'expected2' }],
+        options: {},
+      },
+    ];
+    const mockFetchHuggingFaceDataset = jest.requireMock(
+      '../../src/integrations/huggingfaceDatasets',
+    ).fetchHuggingFaceDataset;
+    mockFetchHuggingFaceDataset.mockImplementation(async () => mockDataset);
+
+    const result = await loadTestsFromGlob('huggingface://datasets/example/dataset');
+
+    expect(mockFetchHuggingFaceDataset).toHaveBeenCalledWith(
+      'huggingface://datasets/example/dataset',
+    );
+    expect(result).toEqual(mockDataset);
   });
 });
