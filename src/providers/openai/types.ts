@@ -11,6 +11,8 @@ export interface OpenAiSharedOptions {
   headers?: { [key: string]: string };
 }
 
+export type ReasoningEffort = 'low' | 'medium' | 'high';
+
 export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   temperature?: number;
   max_completion_tokens?: number;
@@ -43,6 +45,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   stop?: string[];
   seed?: number;
   passthrough?: object;
+  reasoning_effort?: ReasoningEffort;
 
   /**
    * If set, automatically call these functions when the assistant activates

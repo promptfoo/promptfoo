@@ -1,0 +1,18 @@
+description: Example showing how to load test cases from Python functions
+
+prompts:
+  - 'Translate the following text to {{target_language}}: {{text}}'
+
+providers:
+  - openai:gpt-4o-mini
+
+# Demonstrate different ways to load test cases from Python
+tests:
+  # Load simple test cases
+  - file://test_cases.py:generate_simple_tests
+
+  # Load test cases from simulated CSV data
+  - file://test_cases.py:generate_from_csv
+
+  # Load systematically generated test cases from a class method
+  - file://test_cases.py:TestGenerator.generate_systematic_tests

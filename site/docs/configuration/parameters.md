@@ -363,16 +363,66 @@ tests:
 You can also import tests from Javascript or Typescript files.
 
 ```yaml
-tests: file://path/to/tests.js
+tests:
+  - file://path/to/tests.js
+  # or
+  - file://path/to/tests.ts:generate_tests
 ```
 
 The file should export an array of test cases:
 
-```js
+```js title="tests.js"
 export default [
   { vars: { var1: 'value1', var2: 'value2' }, assert: [], description: 'Test #1' },
   { vars: { var1: 'value3', var2: 'value4' }, assert: [], description: 'Test #2' },
 ];
+```
+
+```ts title="tests.ts"
+export async function generate_tests() {
+  // Fetch test cases from database
+  const results = await mockDb.query('SELECT input, context FROM test_cases');
+  return results.map((row, i) => ({
+    vars: {
+      var1: row.input,
+      var2: row.context,
+    },
+    assert: [],
+    description: `Test #${i + 1}`,
+  }));
+}
+```
+
+### Import from Python
+
+You can also import tests from Python files. The Python file should contain a function that returns a list of test cases:
+
+```yaml
+tests: file://path/to/tests.py:generate_tests
+```
+
+```python title="tests.py"
+import pandas as pd
+
+def generate_tests():
+    # Load test data from CSV - or from any other data source
+    df = pd.read_csv('test_data.csv')
+
+    test_cases = []
+    for _, row in df.iterrows():
+        test_case = {
+            "vars": {
+                "input": row['input_text'],
+                "context": row['context']
+            },
+            "assert": [{
+                "type": "contains",
+                "value": row['expected_output']
+            }],
+            "description": f"Test case for: {row['input_text'][:30]}..."
+        }
+        test_cases.append(test_case)
+    return test_cases
 ```
 
 ### Import from JSON/JSONL
