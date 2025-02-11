@@ -752,14 +752,6 @@ class Evaluator {
         }
 
         numComplete++;
-        if (options.progressCallback) {
-          options.progressCallback(
-            this.evalRecord.results.length,
-            runEvalOptions.length,
-            index,
-            evalStep,
-          );
-        }
 
         try {
           await this.evalRecord.addResult(row);
@@ -840,6 +832,16 @@ class Evaluator {
           test: evalStep.test,
           result: row,
         });
+
+        if (options.progressCallback) {
+          options.progressCallback(
+            this.evalRecord.resultsCount,
+            runEvalOptions.length,
+            index,
+            evalStep,
+            metrics,
+          );
+        }
       }
     };
 
@@ -849,9 +851,9 @@ class Evaluator {
     const originalProgressCallback = this.options.progressCallback;
     const isWebUI = Boolean(cliState.webUI);
 
-    this.options.progressCallback = (completed, total, index, evalStep) => {
+    this.options.progressCallback = (completed, total, index, evalStep, metrics) => {
       if (originalProgressCallback) {
-        originalProgressCallback(completed, total, index, evalStep);
+        originalProgressCallback(completed, total, index, evalStep, metrics);
       }
 
       if (isWebUI) {

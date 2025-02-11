@@ -165,7 +165,10 @@ const EvaluateOptionsSchema = z.object({
   interactiveProviders: z.boolean().optional(),
   maxConcurrency: z.number().optional(),
   progressCallback: z
-    .function(z.tuple([z.number(), z.number(), z.number(), z.custom<RunEvalOptions>()]), z.void())
+    .function(
+      z.tuple([z.number(), z.number(), z.number(), z.custom<RunEvalOptions>(), z.custom<PromptMetrics>()]),
+      z.void(),
+    )
     .optional(),
   repeat: z.number().optional(),
   showProgressBar: z.boolean().optional(),

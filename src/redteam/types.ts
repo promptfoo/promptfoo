@@ -134,6 +134,7 @@ export interface RedteamRunOptions {
     total: number,
     index: number | string,
     evalStep: any, // RunEvalOptions, but introduces circular dependency
+    metrics: any, // PromptMetrics, but introduces circular dependency
   ) => void;
   abortSignal?: AbortSignal;
 
@@ -147,7 +148,6 @@ export interface SavedRedteamConfig {
   plugins: (RedteamPlugin | { id: string; config?: any })[];
   strategies: RedteamStrategy[];
   purpose?: string;
-  extensions?: string[];
   numTests?: number;
   applicationDefinition: {
     purpose?: string;
