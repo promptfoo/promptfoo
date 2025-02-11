@@ -136,7 +136,7 @@
     "@types/supertest": "^6.0.2",
     "@types/uuid": "^10.0.0",
     "check-dependency-version-consistency": "^5.0.0",
-    "cloudflare": "3.4.0",
+    "cloudflare": "4.1.0",
     "concurrently": "^9.1.2",
     "drizzle-kit": "^0.30.4",
     "esbuild": "^0.25.0",
