@@ -3,7 +3,7 @@
  * Application tests were failing when trying to import this module possibly
  * because of an older version of polyfilled of node:url.
  *
- * TODO:vedant Fix this ugly hack one day
+ * TODO:vedant Fix this hack one day
  */
 import { fileURLToPath } from 'node:url';
 import path from 'path';
