@@ -36,6 +36,7 @@ describe('index.ts exports', () => {
     'cache',
     'evaluate',
     'generateTable',
+    'guardrails',
     'isApiProvider',
     'isGradingResult',
     'isProviderOptions',
@@ -109,6 +110,7 @@ describe('index.ts exports', () => {
       assertions: index.assertions,
       cache: index.cache,
       evaluate: index.evaluate,
+      guardrails: index.guardrails,
       providers: index.providers,
       redteam: index.redteam,
     });
