@@ -4,6 +4,7 @@ import {
   LLAMA_GUARD_ENABLED_CATEGORIES,
   LLAMA_GUARD_REPLICATE_PROVIDER,
 } from '../../../../src/redteam/constants';
+import { GRADERS } from '../../../../src/redteam/graders';
 import {
   createTestCase,
   getHarmfulAssertions,
@@ -127,6 +128,28 @@ describe('harmful plugin', () => {
 
       expect(testCase.vars?.harmCategory).toBe(unknownCategory);
       expect(testCase.metadata?.harmCategory).toBe(unknownCategory);
+    });
+  });
+
+  describe('harm categories and graders', () => {
+    it.only('should have corresponding graders for all harm categories', () => {
+      // Get all harm categories from HARM_PLUGINS
+      const harmCategories = Object.keys(HARM_PLUGINS);
+
+      // Check each harm category has a corresponding grader
+      harmCategories.forEach((category) => {
+        const graderKey = `promptfoo:redteam:${category}` as keyof typeof GRADERS;
+        if (!GRADERS[graderKey]) {
+          console.log(graderKey, GRADERS[graderKey]);
+        }
+        expect(GRADERS[graderKey]).toBeDefined();
+      });
+
+      // Verify the number of harm-related graders matches
+      const harmGraders = Object.keys(GRADERS).filter((key) =>
+        key.startsWith('promptfoo:redteam:harmful:'),
+      );
+      expect(harmGraders.length).toBeGreaterThanOrEqual(harmCategories.length);
     });
   });
 });
