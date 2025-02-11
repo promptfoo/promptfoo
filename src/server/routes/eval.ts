@@ -160,7 +160,7 @@ evalRouter.post('/:id/results', async (req: Request, res: Response) => {
     return;
   }
   try {
-    await eval_.addResults(results);
+    await eval_.setResults(results);
   } catch (error) {
     logger.error(`Failed to add results to eval: ${error}`);
     res.status(500).json({ error: 'Failed to add results to eval' });

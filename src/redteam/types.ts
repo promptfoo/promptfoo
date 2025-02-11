@@ -134,6 +134,7 @@ export interface RedteamRunOptions {
     total: number,
     index: number | string,
     evalStep: any, // RunEvalOptions, but introduces circular dependency
+    metrics: any, // PromptMetrics, but introduces circular dependency
   ) => void;
   abortSignal?: AbortSignal;
 

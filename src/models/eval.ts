@@ -63,6 +63,7 @@ export default class Eval {
   config: Partial<UnifiedConfig>;
   // If these are empty, you need to call loadResults(). We don't load them by default to save memory.
   results: EvalResult[];
+  resultsCount: number; // Fast way to get the number of results
   datasetId?: string;
   prompts: CompletedPrompt[];
   oldResults?: EvaluateSummaryV2;
@@ -276,6 +277,7 @@ export default class Eval {
     this.author = opts?.author;
     this.config = config;
     this.results = [];
+    this.resultsCount = 0;
     this.prompts = opts?.prompts || [];
     this.datasetId = opts?.datasetId;
     this.persisted = opts?.persisted || false;
@@ -355,6 +357,7 @@ export default class Eval {
       // This is to avoid memory issues when running large evaluations
       this.results.push(newResult);
     }
+    this.resultsCount++;
   }
 
   async *fetchResultsBatched(batchSize: number = 100) {
@@ -375,8 +378,9 @@ export default class Eval {
     }
   }
 
-  async addResults(results: EvalResult[]) {
+  async setResults(results: EvalResult[]) {
     this.results = results;
+    this.resultsCount = results.length;
     if (this.persisted) {
       const db = getDb();
       await db.insert(evalResultsTable).values(results.map((r) => ({ ...r, evalId: this.id })));
@@ -385,6 +389,7 @@ export default class Eval {
 
   async loadResults() {
     this.results = await EvalResult.findManyByEvalId(this.id);
+    this.resultsCount = this.results.length;
   }
 
   async getResults(): Promise<EvaluateResult[] | EvalResult[]> {
@@ -395,20 +400,8 @@ export default class Eval {
     await this.loadResults();
     return this.results;
   }
-  async toEvaluateSummary(): Promise<EvaluateSummaryV3 | EvaluateSummaryV2> {
-    if (this.useOldResults()) {
-      invariant(this.oldResults, 'Old results not found');
-      return {
-        version: 2,
-        timestamp: new Date(this.createdAt).toISOString(),
-        results: this.oldResults.results,
-        table: this.oldResults.table,
-        stats: this.oldResults.stats,
-      };
-    }
-    if (this.results.length === 0) {
-      await this.loadResults();
-    }
+
+  getStats(): EvaluateStats {
     const stats: EvaluateStats = {
       successes: 0,
       failures: 0,
@@ -445,6 +438,25 @@ export default class Eval {
         prompt.metrics?.tokenUsage.completionDetails?.rejectedPrediction || 0;
     }
 
+    return stats;
+  }
+
+  async toEvaluateSummary(): Promise<EvaluateSummaryV3 | EvaluateSummaryV2> {
+    if (this.useOldResults()) {
+      invariant(this.oldResults, 'Old results not found');
+      return {
+        version: 2,
+        timestamp: new Date(this.createdAt).toISOString(),
+        results: this.oldResults.results,
+        table: this.oldResults.table,
+        stats: this.oldResults.stats,
+      };
+    }
+    if (this.results.length === 0) {
+      await this.loadResults();
+    }
+
+    const stats = await this.getStats();
     const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
 
     const prompts = shouldStripPromptText
