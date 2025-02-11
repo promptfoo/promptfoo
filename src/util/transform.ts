@@ -3,7 +3,8 @@ import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
 import type { Prompt, Vars } from '../types';
-import { isJavascriptFile, safeJoin } from './file';
+import { isJavascriptFile } from './file';
+import { safeJoin } from './file.node';
 
 export type TransformContext = {
   vars?: Vars;

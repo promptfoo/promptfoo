@@ -1,5 +1,6 @@
 import path from 'path';
-import { isJavascriptFile, safeResolve, safeJoin } from '../../src/util/file';
+import { isJavascriptFile } from '../../src/util/file';
+import { safeResolve, safeJoin } from '../../src/util/file.node';
 
 describe('file utilities', () => {
   // Helper to create platform-appropriate file URLs
