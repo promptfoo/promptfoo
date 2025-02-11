@@ -357,7 +357,7 @@ export default class Eval {
       // This is to avoid memory issues when running large evaluations
       this.results.push(newResult);
     }
-      this.resultsCount++;
+    this.resultsCount++;
   }
 
   async *fetchResultsBatched(batchSize: number = 100) {
