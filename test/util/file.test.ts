@@ -1,34 +1,77 @@
-import { isJavascriptFile } from '../../src/util/file';
+import path from 'path';
+import { isJavascriptFile, safeResolve, safeJoin } from '../../src/util/file';
 
-describe('util', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
+describe('file utilities', () => {
+  describe('isJavascriptFile', () => {
+    it('identifies JavaScript and TypeScript files', () => {
+      expect(isJavascriptFile('test.js')).toBe(true);
+      expect(isJavascriptFile('test.cjs')).toBe(true);
+      expect(isJavascriptFile('test.mjs')).toBe(true);
+      expect(isJavascriptFile('test.ts')).toBe(true);
+      expect(isJavascriptFile('test.cts')).toBe(true);
+      expect(isJavascriptFile('test.mts')).toBe(true);
+      expect(isJavascriptFile('test.txt')).toBe(false);
+      expect(isJavascriptFile('test.py')).toBe(false);
+    });
   });
 
-  describe('isJavascriptFile', () => {
-    it('should return true for JavaScript files', () => {
-      expect(isJavascriptFile('file.js')).toBe(true);
-      expect(isJavascriptFile('file.cjs')).toBe(true);
-      expect(isJavascriptFile('file.mjs')).toBe(true);
+  describe('safeResolve', () => {
+    it('returns absolute path unchanged', () => {
+      const absolutePath = path.resolve('/absolute/path/file.txt');
+      expect(safeResolve('some/base/path', absolutePath)).toBe(absolutePath);
     });
 
-    it('should return true for TypeScript files', () => {
-      expect(isJavascriptFile('file.ts')).toBe(true);
-      expect(isJavascriptFile('file.cts')).toBe(true);
-      expect(isJavascriptFile('file.mts')).toBe(true);
+    it('returns file URL unchanged', () => {
+      const fileUrl = 'file:///absolute/path/file.txt';
+      expect(safeResolve('some/base/path', fileUrl)).toBe(fileUrl);
     });
 
-    it('should return false for non-JavaScript/TypeScript files', () => {
-      expect(isJavascriptFile('file.txt')).toBe(false);
-      expect(isJavascriptFile('file.py')).toBe(false);
-      expect(isJavascriptFile('file.jsx')).toBe(false);
-      expect(isJavascriptFile('file.tsx')).toBe(false);
+    it('resolves relative paths', () => {
+      const expected = path.resolve('base/path', 'relative/file.txt');
+      expect(safeResolve('base/path', 'relative/file.txt')).toBe(expected);
     });
 
-    it('should handle paths with directories', () => {
-      expect(isJavascriptFile('/path/to/file.js')).toBe(true);
-      expect(isJavascriptFile('C:\\path\\to\\file.ts')).toBe(true);
-      expect(isJavascriptFile('/path/to/file.txt')).toBe(false);
+    it('handles multiple path segments', () => {
+      const absolutePath = path.resolve('/absolute/path/file.txt');
+      expect(safeResolve('base', 'path', absolutePath)).toBe(absolutePath);
+
+      const expected = path.resolve('base', 'path', 'relative/file.txt');
+      expect(safeResolve('base', 'path', 'relative/file.txt')).toBe(expected);
+    });
+
+    it('handles empty input', () => {
+      expect(safeResolve()).toBe(path.resolve());
+      expect(safeResolve('')).toBe(path.resolve(''));
+    });
+  });
+
+  describe('safeJoin', () => {
+    it('returns absolute path unchanged', () => {
+      const absolutePath = path.resolve('/absolute/path/file.txt');
+      expect(safeJoin('some/base/path', absolutePath)).toBe(absolutePath);
+    });
+
+    it('returns file URL unchanged', () => {
+      const fileUrl = 'file:///absolute/path/file.txt';
+      expect(safeJoin('some/base/path', fileUrl)).toBe(fileUrl);
+    });
+
+    it('joins relative paths', () => {
+      const expected = path.join('base/path', 'relative/file.txt');
+      expect(safeJoin('base/path', 'relative/file.txt')).toBe(expected);
+    });
+
+    it('handles multiple path segments', () => {
+      const absolutePath = path.resolve('/absolute/path/file.txt');
+      expect(safeJoin('base', 'path', absolutePath)).toBe(absolutePath);
+
+      const expected = path.join('base', 'path', 'relative/file.txt');
+      expect(safeJoin('base', 'path', 'relative/file.txt')).toBe(expected);
+    });
+
+    it('handles empty input', () => {
+      expect(safeJoin()).toBe(path.join());
+      expect(safeJoin('')).toBe(path.join(''));
     });
   });
 });

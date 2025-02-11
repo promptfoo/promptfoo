@@ -263,5 +263,80 @@ describe('util', () => {
         expect.stringContaining('Error creating inline transform function:'),
       );
     });
+
+    describe('file path handling', () => {
+      it('handles absolute paths in transform files', async () => {
+        const output = 'hello';
+        const context = { vars: { key: 'value' }, prompt: { id: '123' } };
+        const absolutePath = path.resolve('/absolute/path/transform.js');
+
+        jest.doMock(absolutePath, () => (output: string) => output.toUpperCase(), {
+          virtual: true,
+        });
+
+        const transformFunctionPath = `file://${absolutePath}`;
+        const transformedOutput = await transform(transformFunctionPath, output, context);
+        expect(transformedOutput).toBe('HELLO');
+      });
+
+      it('handles file URLs in transform files', async () => {
+        const output = 'hello';
+        const context = { vars: { key: 'value' }, prompt: { id: '123' } };
+        const fileUrl = 'file:///absolute/path/transform.js';
+        const absolutePath = fileUrl.slice('file://'.length);
+
+        jest.doMock(absolutePath, () => (output: string) => output.toUpperCase(), {
+          virtual: true,
+        });
+
+        const transformedOutput = await transform(fileUrl, output, context);
+        expect(transformedOutput).toBe('HELLO');
+      });
+
+      it('resolves relative paths against cliState.basePath', async () => {
+        const output = 'hello';
+        const context = { vars: { key: 'value' }, prompt: { id: '123' } };
+        const basePath = '/base/path';
+        const relativePath = 'transform.js';
+        const expectedPath = path.join(basePath, relativePath);
+
+        // Mock cliState before other operations
+        jest.mock('../../src/cliState', () => ({
+          __esModule: true,
+          default: {
+            basePath,
+          },
+        }));
+
+        // Clear module cache to ensure our mock is used
+        jest.resetModules();
+
+        // Re-import transform after mocking cliState
+        const transform = (await import('../../src/util/transform')).transform;
+
+        // Mock the resolved path, not the relative path
+        jest.doMock(expectedPath, () => (output: string) => output.toUpperCase(), {
+          virtual: true,
+        });
+
+        const transformFunctionPath = `file://${relativePath}`;
+        const transformedOutput = await transform(transformFunctionPath, output, context);
+        expect(transformedOutput).toBe('HELLO');
+      });
+
+      it('handles Python files with absolute paths', async () => {
+        const output = 'hello';
+        const context = { vars: { key: 'value' }, prompt: { id: '123' } };
+        const absolutePath = path.resolve('/absolute/path/transform.py');
+        const pythonFilePath = `file://${absolutePath}`;
+
+        const transformedOutput = await transform(pythonFilePath, output, context);
+        expect(transformedOutput).toBe('HELLO FROM PYTHON');
+        expect(runPython).toHaveBeenCalledWith(absolutePath, 'get_transform', [
+          output,
+          expect.any(Object),
+        ]);
+      });
+    });
   });
 });

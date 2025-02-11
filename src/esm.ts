@@ -1,6 +1,6 @@
 import { pathToFileURL } from 'node:url';
-import * as path from 'path';
 import logger from './logger';
+import { safeResolve } from './util/file';
 
 // esm-specific crap that needs to get mocked out in tests
 
@@ -18,7 +18,7 @@ export function getDirectory(): string {
 
 export async function importModule(modulePath: string, functionName?: string) {
   logger.debug(
-    `Attempting to import module: ${JSON.stringify({ resolvedPath: path.resolve(modulePath), moduleId: modulePath })}`,
+    `Attempting to import module: ${JSON.stringify({ resolvedPath: safeResolve(modulePath), moduleId: modulePath })}`,
   );
 
   try {
@@ -27,7 +27,8 @@ export async function importModule(modulePath: string, functionName?: string) {
       // @ts-ignore: It actually works
       await import('tsx/cjs');
     }
-    const resolvedPath = pathToFileURL(path.resolve(modulePath));
+
+    const resolvedPath = pathToFileURL(safeResolve(modulePath));
     logger.debug(`Attempting ESM import from: ${resolvedPath.toString()}`);
     const importedModule = await import(resolvedPath.toString());
     const mod = importedModule?.default?.default || importedModule?.default || importedModule;
@@ -45,10 +46,10 @@ export async function importModule(modulePath: string, functionName?: string) {
     logger.debug('Attempting CommonJS require fallback...');
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const importedModule = require(path.resolve(modulePath));
+      const importedModule = require(safeResolve(modulePath));
       const mod = importedModule?.default?.default || importedModule?.default || importedModule;
       logger.debug(
-        `Successfully required module: ${JSON.stringify({ resolvedPath: path.resolve(modulePath), moduleId: modulePath })}`,
+        `Successfully required module: ${JSON.stringify({ resolvedPath: safeResolve(modulePath), moduleId: modulePath })}`,
       );
       if (functionName) {
         logger.debug(`Returning named export: ${functionName}`);
