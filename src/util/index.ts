@@ -150,7 +150,6 @@ export async function writeOutput(
           return [...row.vars, ...row.outputs.map(outputToSimpleString)];
         }),
       );
-      console.log({ batchCsv });
       fs.appendFileSync(outputPath, batchCsv);
     }
   } else if (outputExtension === 'json') {
