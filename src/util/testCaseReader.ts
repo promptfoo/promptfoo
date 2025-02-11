@@ -24,14 +24,6 @@ import type {
 } from '../types';
 import { isJavascriptFile } from './file';
 
-function parseJson(json: string): any | undefined {
-  try {
-    return JSON.parse(json);
-  } catch {
-    return undefined;
-  }
-}
-
 export async function readVarsFiles(
   pathOrGlobs: string | string[],
   basePath: string = '',
@@ -109,12 +101,7 @@ export async function readStandaloneTestsFile(
       feature: 'js tests file',
     });
     const mod = await importModule(pathWithoutFunction, maybeFunctionName);
-    if (typeof mod === 'function') {
-      return await mod();
-    } else if (mod?.default && typeof mod.default === 'function') {
-      return await mod.default();
-    }
-    return mod;
+    return typeof mod === 'function' ? await mod() : mod;
   }
   if (fileExtension === 'py') {
     telemetry.recordAndSendOnce('feature_used', {
@@ -150,7 +137,7 @@ export async function readStandaloneTestsFile(
     telemetry.recordAndSendOnce('feature_used', {
       feature: 'json tests file',
     });
-    rows = parseJson(fs.readFileSync(resolvedVarsPath, 'utf-8'));
+    rows = yaml.load(fs.readFileSync(resolvedVarsPath, 'utf-8')) as unknown as any;
   } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
     telemetry.recordAndSendOnce('feature_used', {
       feature: 'yaml tests file',
