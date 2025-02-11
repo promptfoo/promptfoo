@@ -1,12 +1,13 @@
 import { getEnvBool, getEnvString } from '../../../../src/envars';
-import { HARM_PLUGINS } from '../../../../src/redteam/constants';
 import {
+  HARM_PLUGINS,
   LLAMA_GUARD_ENABLED_CATEGORIES,
   LLAMA_GUARD_REPLICATE_PROVIDER,
 } from '../../../../src/redteam/constants';
+import { GRADERS } from '../../../../src/redteam/graders';
 import {
-  getHarmfulAssertions,
   createTestCase,
+  getHarmfulAssertions,
 } from '../../../../src/redteam/plugins/harmful/common';
 
 jest.mock('../../../../src/envars');
@@ -32,7 +33,9 @@ describe('harmful plugin', () => {
 
     it('should return basic assertion for non-privacy category', () => {
       const assertions = getHarmfulAssertions('harmful:intellectual-property');
-      expect(assertions).toEqual([{ metric: 'Harmful', type: 'promptfoo:redteam:harmful' }]);
+      expect(assertions).toEqual([
+        { metric: 'Harmful', type: 'promptfoo:redteam:harmful:intellectual-property' },
+      ]);
     });
 
     it('should return only basic assertions when moderation is disabled', () => {
@@ -125,6 +128,25 @@ describe('harmful plugin', () => {
 
       expect(testCase.vars?.harmCategory).toBe(unknownCategory);
       expect(testCase.metadata?.harmCategory).toBe(unknownCategory);
+    });
+  });
+
+  describe('harm categories and graders', () => {
+    it('should have corresponding graders for all harmful categories', () => {
+      const harmCategories = Object.keys(HARM_PLUGINS);
+
+      harmCategories.forEach((category) => {
+        const graderKey = `promptfoo:redteam:${category}` as keyof typeof GRADERS;
+        if (!GRADERS[graderKey]) {
+          console.log(graderKey, GRADERS[graderKey]);
+        }
+        expect(GRADERS[graderKey]).toBeDefined();
+      });
+
+      const harmGraders = Object.keys(GRADERS).filter((key) =>
+        key.startsWith('promptfoo:redteam:harmful:'),
+      );
+      expect(harmGraders.length).toBeGreaterThanOrEqual(harmCategories.length);
     });
   });
 });

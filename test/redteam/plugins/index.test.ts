@@ -3,12 +3,12 @@ import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';
 import logger from '../../../src/logger';
 import {
+  PII_PLUGINS,
   REDTEAM_PROVIDER_HARM_PLUGINS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
-  PII_PLUGINS,
 } from '../../../src/redteam/constants';
 import { Plugins } from '../../../src/redteam/plugins';
-import { shouldGenerateRemote, neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
+import { neverGenerateRemote, shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import type { ApiProvider } from '../../../src/types';
 
 jest.mock('../../../src/cache');
@@ -220,7 +220,7 @@ describe('Plugins', () => {
       expect(result).toHaveLength(1);
       expect(result![0].assert).toBeDefined();
       expect(result![0].assert).toEqual([
-        { metric: 'Harmful', type: 'promptfoo:redteam:harmful' },
+        { metric: 'Harmful', type: 'promptfoo:redteam:harmful:misinformation-disinformation' },
         expect.objectContaining({ metric: 'Harmful', type: 'moderation' }),
       ]);
     });
