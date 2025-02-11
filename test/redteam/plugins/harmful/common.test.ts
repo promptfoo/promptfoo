@@ -132,11 +132,9 @@ describe('harmful plugin', () => {
   });
 
   describe('harm categories and graders', () => {
-    it.only('should have corresponding graders for all harm categories', () => {
-      // Get all harm categories from HARM_PLUGINS
+    it('should have corresponding graders for all harmful categories', () => {
       const harmCategories = Object.keys(HARM_PLUGINS);
 
-      // Check each harm category has a corresponding grader
       harmCategories.forEach((category) => {
         const graderKey = `promptfoo:redteam:${category}` as keyof typeof GRADERS;
         if (!GRADERS[graderKey]) {
@@ -145,7 +143,6 @@ describe('harmful plugin', () => {
         expect(GRADERS[graderKey]).toBeDefined();
       });
 
-      // Verify the number of harm-related graders matches
       const harmGraders = Object.keys(GRADERS).filter((key) =>
         key.startsWith('promptfoo:redteam:harmful:'),
       );
