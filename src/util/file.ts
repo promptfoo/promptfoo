@@ -7,8 +7,7 @@ function isAbsolute(filePath: string): boolean {
     // Windows: file://C:/path or file:///C:/path
     // POSIX: file:///path
     if (filePath.startsWith('file://')) {
-      fileURLToPath(filePath); // Validate it's a proper file URL
-      return true;
+      return path.isAbsolute(fileURLToPath(filePath));
     }
     return path.isAbsolute(filePath);
   } catch {
