@@ -1,7 +1,19 @@
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 function isAbsolute(filePath: string): boolean {
-  return filePath.startsWith('file:///') || path.isAbsolute(filePath);
+  try {
+    // Handle both Windows and POSIX file URL formats
+    // Windows: file://C:/path or file:///C:/path
+    // POSIX: file:///path
+    if (filePath.startsWith('file://')) {
+      fileURLToPath(filePath); // Validate it's a proper file URL
+      return true;
+    }
+    return path.isAbsolute(filePath);
+  } catch {
+    return false;
+  }
 }
 
 /**

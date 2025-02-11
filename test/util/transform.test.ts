@@ -301,8 +301,7 @@ describe('util', () => {
       it('resolves relative paths against cliState.basePath', async () => {
         const output = 'hello';
         const context = { vars: { key: 'value' }, prompt: { id: '123' } };
-        // Use a relative path that will work cross-platform
-        const basePath = path.join('test', 'base', 'path');
+        const basePath = getMockAbsolutePath('test', 'fixtures'); // Use our mock path helper
         const relativePath = 'transform.js';
         const expectedPath = path.join(basePath, relativePath);
 
