@@ -2,6 +2,13 @@ import path from 'path';
 import { isJavascriptFile, safeResolve, safeJoin } from '../../src/util/file';
 
 describe('file utilities', () => {
+  // Helper to create platform-appropriate file URLs
+  const getFileUrl = (path: string) => {
+    return process.platform === 'win32'
+      ? `file:///C:/${path.replace(/\\/g, '/')}`
+      : `file:///${path}`;
+  };
+
   describe('isJavascriptFile', () => {
     it('identifies JavaScript and TypeScript files', () => {
       expect(isJavascriptFile('test.js')).toBe(true);
@@ -22,7 +29,7 @@ describe('file utilities', () => {
     });
 
     it('returns file URL unchanged', () => {
-      const fileUrl = 'file:///absolute/path/file.txt';
+      const fileUrl = getFileUrl('absolute/path/file.txt');
       expect(safeResolve('some/base/path', fileUrl)).toBe(fileUrl);
     });
 
@@ -52,7 +59,7 @@ describe('file utilities', () => {
     });
 
     it('returns file URL unchanged', () => {
-      const fileUrl = 'file:///absolute/path/file.txt';
+      const fileUrl = getFileUrl('absolute/path/file.txt');
       expect(safeJoin('some/base/path', fileUrl)).toBe(fileUrl);
     });
 
