@@ -265,10 +265,15 @@ describe('util', () => {
     });
 
     describe('file path handling', () => {
+      // Helper to create mock absolute paths that work cross-platform
+      const getMockAbsolutePath = (...parts: string[]) => {
+        return process.platform === 'win32' ? path.join('C:', ...parts) : path.join('/', ...parts);
+      };
+
       it('handles absolute paths in transform files', async () => {
         const output = 'hello';
         const context = { vars: { key: 'value' }, prompt: { id: '123' } };
-        const absolutePath = ['', 'absolute', 'path', 'transform.js'].join(path.sep);
+        const absolutePath = getMockAbsolutePath('absolute', 'path', 'transform.js');
 
         jest.doMock(absolutePath, () => (output: string) => output.toUpperCase(), {
           virtual: true,
@@ -282,8 +287,8 @@ describe('util', () => {
       it('handles file URLs in transform files', async () => {
         const output = 'hello';
         const context = { vars: { key: 'value' }, prompt: { id: '123' } };
-        const fileUrl = 'file:///absolute/path/transform.js';
-        const absolutePath = fileUrl.slice('file://'.length);
+        const absolutePath = getMockAbsolutePath('absolute', 'path', 'transform.js');
+        const fileUrl = `file://${absolutePath}`;
 
         jest.doMock(absolutePath, () => (output: string) => output.toUpperCase(), {
           virtual: true,
@@ -296,7 +301,8 @@ describe('util', () => {
       it('resolves relative paths against cliState.basePath', async () => {
         const output = 'hello';
         const context = { vars: { key: 'value' }, prompt: { id: '123' } };
-        const basePath = ['', 'base', 'path'].join(path.sep);
+        // Use a relative path that will work cross-platform
+        const basePath = path.join('test', 'base', 'path');
         const relativePath = 'transform.js';
         const expectedPath = path.join(basePath, relativePath);
 
@@ -327,7 +333,7 @@ describe('util', () => {
       it('handles Python files with absolute paths', async () => {
         const output = 'hello';
         const context = { vars: { key: 'value' }, prompt: { id: '123' } };
-        const absolutePath = ['', 'absolute', 'path', 'transform.py'].join(path.sep);
+        const absolutePath = getMockAbsolutePath('absolute', 'path', 'transform.py');
         const pythonFilePath = `file://${absolutePath}`;
 
         const transformedOutput = await transform(pythonFilePath, output, context);

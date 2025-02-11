@@ -1,5 +1,9 @@
 import path from 'path';
 
+function isAbsolute(filePath: string): boolean {
+  return filePath.startsWith('file:///') || path.isAbsolute(filePath);
+}
+
 /**
  * Checks if a file is a JavaScript or TypeScript file based on its extension.
  *
@@ -19,7 +23,7 @@ export function isJavascriptFile(filePath: string): boolean {
  */
 export function safeResolve(...paths: string[]): string {
   const lastPath = paths[paths.length - 1] || '';
-  if (lastPath.startsWith('file:///') || path.isAbsolute(lastPath)) {
+  if (isAbsolute(lastPath)) {
     return lastPath;
   }
   return path.resolve(...paths);
@@ -34,7 +38,7 @@ export function safeResolve(...paths: string[]): string {
  */
 export function safeJoin(...paths: string[]): string {
   const lastPath = paths[paths.length - 1] || '';
-  if (lastPath.startsWith('file:///') || path.isAbsolute(lastPath)) {
+  if (isAbsolute(lastPath)) {
     return lastPath;
   }
   return path.join(...paths);
