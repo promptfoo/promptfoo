@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import { testCaseFromCsvRow } from '../../src/csv';
-import { getEnvString } from '../../src/envars';
+import { getEnvString, getEnvBool } from '../../src/envars';
 import { fetchCsvFromGoogleSheet } from '../../src/googleSheets';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers';
@@ -624,14 +624,12 @@ describe('readTests', () => {
   });
 
   it('should log a warning for unsupported test format', async () => {
-    const warnSpy = jest.spyOn(logger, 'warn');
     const unsupportedTests = { invalid: 'format' };
 
     await readTests(unsupportedTests as any);
-    expect(warnSpy).toHaveBeenCalledWith(
+    expect(logger.warn).toHaveBeenCalledWith(
       expect.stringContaining("Warning: Unsupported 'tests' format in promptfooconfig.yaml."),
     );
-    warnSpy.mockRestore();
   });
 
   it('should not log a warning if tests is undefined', async () => {
@@ -814,6 +812,51 @@ describe('readTests', () => {
 
     await expect(readTests(['test.py'])).rejects.toThrow(
       'Python test function must return a list of test cases, got object',
+    );
+  });
+
+  it('should warn when assert is found in vars', async () => {
+    const testWithAssertInVars = [
+      {
+        description: 'Test case',
+        vars: {
+          assert: [{ type: 'equals', value: 'test' }],
+        },
+      },
+    ];
+    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(testWithAssertInVars));
+    jest.mocked(globSync).mockReturnValue(['test.yaml']);
+    jest
+      .mocked(getEnvBool)
+      .mockImplementation((key) => !key.includes('PROMPTFOO_NO_TESTCASE_ASSERT_WARNING'));
+
+    const result = await readTests(['test.yaml']);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual(testWithAssertInVars[0]);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('PROMPTFOO_NO_TESTCASE_ASSERT_WARNING'),
+    );
+  });
+
+  it('should not warn about assert in vars when environment variable is set', async () => {
+    const testWithAssertInVars = [
+      {
+        description: 'Test case',
+        vars: {
+          assert: { type: 'equals', value: 'test' },
+        },
+      },
+    ];
+    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(testWithAssertInVars));
+    jest.mocked(globSync).mockReturnValue(['test.yaml']);
+    jest
+      .mocked(getEnvBool)
+      .mockImplementation((key) => (key === 'PROMPTFOO_NO_TESTCASE_ASSERT_WARNING' ? true : false));
+
+    await readTests('test.yaml');
+
+    expect(logger.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('PROMPTFOO_NO_TESTCASE_ASSERT_WARNING'),
     );
   });
 });
