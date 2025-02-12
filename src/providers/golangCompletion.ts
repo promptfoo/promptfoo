@@ -1,4 +1,4 @@
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -18,6 +18,7 @@ import { sha256 } from '../util/createHash';
 import { safeJsonStringify } from '../util/json';
 
 const execAsync = util.promisify(exec);
+const execFileAsync = util.promisify(execFile);
 
 interface GolangProviderConfig {
   goExecutable?: string;
@@ -135,7 +136,7 @@ export class GolangProvider implements ApiProvider {
           // Build from the module root to preserve import context
           const goExecutable = this.config.goExecutable || 'go';
           const compileArgs = ['build', '-o', executablePath, path.relative(tempDir, tempWrapperPath), path.relative(tempDir, tempScriptPath)];
-          await execAsync(goExecutable, compileArgs, { cwd: tempDir });
+          await execFileAsync(goExecutable, compileArgs, { cwd: tempDir });
         }
 
         const jsonArgs = safeJsonStringify(args) || '[]';

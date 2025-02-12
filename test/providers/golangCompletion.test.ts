@@ -1,4 +1,4 @@
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { getCache, isCacheEnabled } from '../../src/cache';
@@ -136,6 +136,68 @@ describe('GolangProvider', () => {
         expect.stringContaining('golang-provider'),
         expect.objectContaining({ recursive: true, force: true }),
       );
+    });
+  });
+
+  describe('build and execution process', () => {
+    const mockExecFile = jest.mocked(execFile);
+
+    beforeEach(() => {
+      jest.spyOn(fs, 'existsSync').mockImplementation((p: fs.PathLike) => {
+        if (!p) return false;
+        if ((p as string).includes('golang_wrapper')) {
+          return false;
+        }
+        return true;
+      });
+      jest.spyOn(fs, 'copyFileSync').mockImplementation(() => {});
+      jest.spyOn(fs, 'mkdirSync').mockImplementation(() => {});
+      mockExecFile.mockResolvedValue({ stdout: '', stderr: '' } as any);
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('should build the executable if not present and return correct result', async () => {
+      const provider = new GolangProvider('script.go', { config: { basePath: '/base' } });
+      const result = await provider.callApi('test prompt');
+
+      expect(mockExecFile).toHaveBeenCalledTimes(1);
+      const buildArgs = mockExecFile.mock.calls[0][1];
+      expect(buildArgs).toBeDefined();
+      expect(buildArgs[0]).toBe('build');
+      expect(buildArgs[1]).toBe('-o');
+      expect(buildArgs[2]).toContain('golang_wrapper');
+
+      expect(result).toEqual({ output: 'test output' });
+    });
+
+    it('should remove temporary directory after successful run', async () => {
+      const provider = new GolangProvider('script.go');
+      await provider.callApi('test prompt');
+      expect(fs.rmSync).toHaveBeenCalledWith('/tmp/golang-provider-xyz', { recursive: true, force: true });
+    });
+
+    it('should construct command with default function name (call_api)', async () => {
+      const provider = new GolangProvider('script.go');
+      await provider.callApi('test prompt');
+      expect(mockExec).toHaveBeenCalledWith(expect.stringContaining('call_api'));
+    });
+  });
+
+  describe('API alternative methods', () => {
+    beforeEach(() => {
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      jest.spyOn(fs, 'copyFileSync').mockImplementation(() => {});
+      jest.spyOn(fs, 'mkdirSync').mockImplementation(() => {});
+    });
+    it('should execute callEmbeddingApi and callClassificationApi correctly', async () => {
+      const provider = new GolangProvider('script.go', { config: { basePath: '/base' } });
+      const resultEmbedding = await provider.callEmbeddingApi('embedding prompt');
+      const resultClassification = await provider.callClassificationApi('classification prompt');
+      expect(resultEmbedding).toEqual({ output: 'test output' });
+      expect(resultClassification).toEqual({ output: 'test output' });
     });
   });
 });
