@@ -8,7 +8,7 @@ import TabItem from '@theme/TabItem';
 
 # Getting started
 
-1. First, run this command:
+Install promptfoo and set up an example by running this command with npx, npm, or brew:
 
   <Tabs groupId="promptfoo-command">
     <TabItem value="npx" label="npx" default>
@@ -32,13 +32,14 @@ import TabItem from '@theme/TabItem';
 
 This will create a new directory with a basic example that tests translation prompts across different models. The example includes:
 
-- A `promptfooconfig.yaml` file with sample prompts and test cases
-- A README explaining how the example works
-- Basic configuration showing variables, multiple providers, and test cases
+- A configuration file `promptfooconfig.yaml` with sample prompts, providers, and test cases.
+- A `README.md` file explaining how the example works.
 
 If you prefer to start from scratch instead of using the example, simply run `promptfoo init` without the `--example` flag. The command will guide you through an interactive setup process.
 
-2. **Set up your prompts**: Open `promptfooconfig.yaml` and add prompts that you want to test. Use double curly braces as placeholders for variables: `{{variable_name}}`. For example:
+Next, we can review the example configuration file and make changes to it.
+
+1. **Set up your prompts**: Open `promptfooconfig.yaml` and add prompts that you want to test. Use double curly braces as placeholders for variables: `{{variable_name}}`. For example:
 
    ```yaml
    prompts:
@@ -48,12 +49,14 @@ If you prefer to start from scratch instead of using the example, simply run `pr
 
    [&raquo; More information on setting up prompts](/docs/configuration/parameters)
 
-3. Add `providers` and specify the models you want to test:
+2. Add `providers` and specify the models you want to test:
 
    ```yaml
    providers:
      - openai:gpt-4o-mini
      - openai:gpt-4o
+     # or you can
+     - file://path/to/custom/python/script.py
    ```
 
    - **OpenAI**: if testing with an OpenAI model, you'll need to set the `OPENAI_API_KEY` environment variable (see [OpenAI provider docs](/docs/providers/openai) for more info):
@@ -65,7 +68,7 @@ If you prefer to start from scratch instead of using the example, simply run `pr
    - **Custom**: See how to call your existing [Javascript](/docs/providers/custom-api), [Python](/docs/providers/python), [any other executable](/docs/providers/custom-script) or [API endpoint](/docs/providers/http).
    - **APIs**: See setup instructions for [Azure](/docs/providers/azure), [Anthropic](/docs/providers/anthropic), [Mistral](/docs/providers/mistral), [HuggingFace](/docs/providers/huggingface), [AWS Bedrock](/docs/providers/aws-bedrock), and [more](/docs/providers).
 
-4. **Add test inputs**: Add some example inputs for your prompts. Optionally, add [assertions](/docs/configuration/expected-outputs) to set output requirements that are checked automatically.
+3. **Add test inputs**: Add some example inputs for your prompts. Optionally, add [assertions](/docs/configuration/expected-outputs) to set output requirements that are checked automatically.
 
    For example:
 
@@ -83,7 +86,7 @@ If you prefer to start from scratch instead of using the example, simply run `pr
 
    [&raquo; More information on setting up tests](/docs/configuration/guide)
 
-5. **Run the evaluation**: This tests every prompt, model, and test case:
+4. **Run the evaluation**: This tests every prompt, model, and test case:
 
    <Tabs groupId="promptfoo-command">
      <TabItem value="npx" label="npx" default>
@@ -103,7 +106,7 @@ If you prefer to start from scratch instead of using the example, simply run `pr
      </TabItem>
    </Tabs>
 
-6. After the evaluation is complete, open the web viewer to review the outputs:
+5. After the evaluation is complete, open the web viewer to review the outputs:
 
    <Tabs groupId="promptfoo-command">
      <TabItem value="npx" label="npx" default>
