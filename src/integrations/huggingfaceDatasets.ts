@@ -137,3 +137,5 @@ export async function fetchHuggingFaceDataset(
   logger.debug(`[Huggingface Dataset] Successfully loaded ${finalTests.length} test cases`);
   return finalTests;
 }
+
+export { parseDatasetPath };
