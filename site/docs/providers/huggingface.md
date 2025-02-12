@@ -119,6 +119,14 @@ providers:
       apiEndpoint: http://127.0.0.1:8080/generate
 ```
 
+## Authentication
+
+If you need to access private datasets or want to increase your rate limits, you can authenticate using your HuggingFace token. Set the `HUGGING_FACE_HUB_TOKEN` environment variable with your token:
+
+```bash
+export HUGGING_FACE_HUB_TOKEN=your_token_here
+```
+
 ## Datasets
 
 promptfoo can load test cases directly from HuggingFace datasets. To use a dataset, specify it in your config using the `huggingface://datasets/` prefix:

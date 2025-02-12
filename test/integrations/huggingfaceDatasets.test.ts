@@ -31,11 +31,10 @@ describe('huggingfaceDatasets', () => {
 
     // Verify the fetch call
     expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledWith(
-      expect.stringContaining('https://datasets-server.huggingface.co/rows'),
-    );
-    expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledWith(expect.stringContaining('split=test'));
-    expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledWith(
-      expect.stringContaining('config=default'),
+      'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&offset=0&length=100',
+      expect.objectContaining({
+        headers: {},
+      }),
     );
 
     // Verify the parsed results
@@ -48,6 +47,39 @@ describe('huggingfaceDatasets', () => {
       act: 'Math Tutor',
       prompt: 'Solve 2+2',
     });
+  });
+
+  it('should include auth token when HUGGING_FACE_HUB_TOKEN is set', async () => {
+    // Mock environment variable
+    process.env.HUGGING_FACE_HUB_TOKEN = 'test-token';
+
+    // Mock API response
+    jest.mocked(fetchWithProxy).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        num_rows_total: 1,
+        features: [
+          { name: 'question', type: { dtype: 'string', _type: 'Value' } },
+          { name: 'answer', type: { dtype: 'string', _type: 'Value' } },
+        ],
+        rows: [{ row: { question: 'What is 2+2?', answer: '4' } }],
+      }),
+    } as any);
+
+    await fetchHuggingFaceDataset('huggingface://datasets/test/dataset');
+
+    // Verify auth header was included
+    expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledWith(
+      'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&offset=0&length=100',
+      expect.objectContaining({
+        headers: {
+          Authorization: 'Bearer test-token',
+        },
+      }),
+    );
+
+    // Clean up
+    delete process.env.HUGGING_FACE_HUB_TOKEN;
   });
 
   it('should handle custom query parameters', async () => {
@@ -67,10 +99,10 @@ describe('huggingfaceDatasets', () => {
 
     // Verify custom parameters were used
     expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledWith(
-      expect.stringContaining('split=train'),
-    );
-    expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledWith(
-      expect.stringContaining('config=custom'),
+      'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=train&config=custom&offset=0&length=100',
+      expect.objectContaining({
+        headers: {},
+      }),
     );
   });
 
@@ -101,11 +133,17 @@ describe('huggingfaceDatasets', () => {
     expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledTimes(2);
     expect(jest.mocked(fetchWithProxy)).toHaveBeenNthCalledWith(
       1,
-      expect.stringContaining('length=100'),
+      'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&offset=0&length=100',
+      expect.objectContaining({
+        headers: {},
+      }),
     );
     expect(jest.mocked(fetchWithProxy)).toHaveBeenNthCalledWith(
       2,
-      expect.stringContaining('length=100'),
+      'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&offset=2&length=100',
+      expect.objectContaining({
+        headers: {},
+      }),
     );
 
     // Verify all results were combined
@@ -138,8 +176,12 @@ describe('huggingfaceDatasets', () => {
     const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset?limit=2');
 
     // Verify the request includes the correct length parameter
-    expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledTimes(1);
-    expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledWith(expect.stringContaining('length=2'));
+    expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledWith(
+      'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&limit=2&offset=0&length=2',
+      expect.objectContaining({
+        headers: {},
+      }),
+    );
 
     // Verify only limited number of results are returned
     expect(tests).toHaveLength(2);
@@ -177,11 +219,17 @@ describe('huggingfaceDatasets', () => {
     expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledTimes(2);
     expect(jest.mocked(fetchWithProxy)).toHaveBeenNthCalledWith(
       1,
-      expect.stringContaining('length=100'),
+      'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&limit=120&offset=0&length=100',
+      expect.objectContaining({
+        headers: {},
+      }),
     );
     expect(jest.mocked(fetchWithProxy)).toHaveBeenNthCalledWith(
       2,
-      expect.stringContaining('length=20'),
+      'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&limit=120&offset=100&length=20',
+      expect.objectContaining({
+        headers: {},
+      }),
     );
 
     // Verify we got exactly the number of results specified by limit
