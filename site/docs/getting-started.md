@@ -8,7 +8,7 @@ import TabItem from '@theme/TabItem';
 
 # Getting started
 
-Install promptfoo and set up an example by running this command with npx, npm, or brew:
+Install promptfoo and set up an example by running this command with [npx](https://docs.npmjs.com/cli/v8/commands/npx), [npm](https://www.npmjs.com/), or [brew](https://brew.sh/):
 
   <Tabs groupId="promptfoo-command">
     <TabItem value="npx" label="npx" default>
@@ -36,6 +36,8 @@ This will create a new directory with a basic example that tests translation pro
 - A `README.md` file explaining how the example works.
 
 If you prefer to start from scratch instead of using the example, simply run `promptfoo init` without the `--example` flag. The command will guide you through an interactive setup process.
+
+## Configuration
 
 Next, we can review the example configuration file and make changes to it.
 
