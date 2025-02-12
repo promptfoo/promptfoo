@@ -137,9 +137,6 @@ describe('harmful plugin', () => {
 
       harmCategories.forEach((category) => {
         const graderKey = `promptfoo:redteam:${category}` as keyof typeof GRADERS;
-        if (!GRADERS[graderKey]) {
-          console.log(graderKey, GRADERS[graderKey]);
-        }
         expect(GRADERS[graderKey]).toBeDefined();
       });
 
