@@ -133,8 +133,9 @@ export class GolangProvider implements ApiProvider {
 
         if (!fs.existsSync(executablePath)) {
           // Build from the module root to preserve import context
-          const compileCommand = `cd ${tempDir} && ${this.config.goExecutable || 'go'} build -o ${executablePath} ${path.relative(tempDir, tempWrapperPath)} ${path.relative(tempDir, tempScriptPath)}`;
-          await execAsync(compileCommand);
+          const goExecutable = this.config.goExecutable || 'go';
+          const compileArgs = ['build', '-o', executablePath, path.relative(tempDir, tempWrapperPath), path.relative(tempDir, tempScriptPath)];
+          await execAsync(goExecutable, compileArgs, { cwd: tempDir });
         }
 
         const jsonArgs = safeJsonStringify(args) || '[]';
