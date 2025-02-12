@@ -4,6 +4,7 @@ import { fetchWithProxy } from '../../src/fetch';
 import { getUserEmail, setUserEmail } from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
+import { createMockResponse } from '../util/utils';
 
 const mockCloudUser = {
   id: '1',
@@ -28,30 +29,9 @@ const mockApp = {
   url: 'https://app.example.com',
 };
 
-const createMockResponse = (options: { ok: boolean; body?: any; statusText?: string }) => {
-  return {
-    ok: options.ok,
-    headers: new Headers(),
-    redirected: false,
-    status: options.ok ? 200 : 400,
-    statusText: options.statusText || (options.ok ? 'OK' : 'Bad Request'),
-    type: 'basic' as ResponseType,
-    url: 'https://api.example.com',
-    json: () => Promise.resolve(options.body || {}),
-    text: () => Promise.resolve(''),
-    blob: () => Promise.resolve(new Blob()),
-    formData: () => Promise.resolve(new FormData()),
-    arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
-    bodyUsed: false,
-    body: null,
-    clone() {
-      return this;
-    },
-  } as Response;
-};
-
 jest.mock('../../src/globalConfig/accounts');
 jest.mock('../../src/globalConfig/cloud');
+jest.mock('../../src/logger');
 jest.mock('../../src/telemetry');
 jest.mock('../../src/fetch');
 jest.mock('readline', () => ({
