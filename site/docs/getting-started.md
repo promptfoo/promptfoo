@@ -49,24 +49,36 @@ Next, we can review the example configuration file and make changes to it.
 
    [&raquo; More information on setting up prompts](/docs/configuration/parameters)
 
-2. Add `providers` and specify the models you want to test:
+2. Add `providers` to specify which AI models you want to test. promptfoo supports 50+ providers including OpenAI, Anthropic, Google, and many others:
 
    ```yaml
    providers:
-     - openai:gpt-4o-mini
-     - openai:gpt-4o
-     # or you can
-     - file://path/to/custom/python/script.py
+     - openai:o3-mini
+     - anthropic:messages:claude-3-5-sonnet-20241022
+     - vertex:gemini-pro
+     # Or use your own custom provider
+     - file://path/to/custom/provider.py
    ```
 
-   - **OpenAI**: if testing with an OpenAI model, you'll need to set the `OPENAI_API_KEY` environment variable (see [OpenAI provider docs](/docs/providers/openai) for more info):
+   Each provider is specified using a simple format: `provider_name:model_name`. For example:
 
-     ```sh
-     export OPENAI_API_KEY=sk-abc123
-     ```
+   - `openai:o3-mini` for OpenAI's o3-mini
+   - `anthropic:messages:claude-3-5-sonnet-20241022` for Anthropic's Claude
+   - `bedrock:us.meta.llama3-3-70b-instruct-v1:0` for Meta's Llama 3.3 70B via AWS Bedrock
 
-   - **Custom**: See how to call your existing [Javascript](/docs/providers/custom-api), [Python](/docs/providers/python), [any other executable](/docs/providers/custom-script) or [API endpoint](/docs/providers/http).
-   - **APIs**: See setup instructions for [Azure](/docs/providers/azure), [Anthropic](/docs/providers/anthropic), [Mistral](/docs/providers/mistral), [HuggingFace](/docs/providers/huggingface), [AWS Bedrock](/docs/providers/aws-bedrock), and [more](/docs/providers).
+   Most providers need authentication. For example, with OpenAI:
+
+   ```sh
+   export OPENAI_API_KEY=sk-abc123
+   ```
+
+   You can use:
+
+   - **Cloud APIs**: [OpenAI](/docs/providers/openai), [Anthropic](/docs/providers/anthropic), [Google](/docs/providers/google), [Mistral](/docs/providers/mistral), and [many more](/docs/providers)
+   - **Local Models**: [Ollama](/docs/providers/ollama), [LM Studio](/docs/providers/lm-studio), [LocalAI](/docs/providers/localai)
+   - **Custom Code**: [Python](/docs/providers/python), [JavaScript](/docs/providers/custom-api), or any [executable](/docs/providers/custom-script)
+
+   [&raquo; See our full providers documentation](/docs/providers) for detailed setup instructions for each provider.
 
 3. **Add test inputs**: Add some example inputs for your prompts. Optionally, add [assertions](/docs/configuration/expected-outputs) to set output requirements that are checked automatically.
 
