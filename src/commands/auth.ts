@@ -86,18 +86,28 @@ export function authCommand(program: Command) {
         }
         const { user } = await cloudConfig.validateAndSetApiToken(token, apiHost);
 
-        // Store token in global config
+        // Store token in global config and handle email sync
+        const existingEmail = getUserEmail();
+        if (existingEmail && existingEmail !== user.email) {
+          logger.info(
+            chalk.yellow(
+              `Updating local email configuration from ${existingEmail} to ${user.email}`,
+            ),
+          );
+        }
         setUserEmail(user.email);
+        logger.info(chalk.green('Successfully logged in'));
 
         telemetry.record('command_used', {
           name: 'auth login',
         });
         await telemetry.send();
-        process.exit(0);
+        return;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error(`Authentication failed: ${errorMessage}`);
-        process.exit(1);
+        process.exitCode = 1;
+        return;
       }
     });
 
@@ -106,8 +116,10 @@ export function authCommand(program: Command) {
     .description('Logout')
     .action(async () => {
       await cloudConfig.delete();
+      // Always unset email on logout
+      setUserEmail('');
       logger.info(chalk.green('Successfully logged out'));
-      process.exit(0);
+      return;
     });
 
   authCommand
