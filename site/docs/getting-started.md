@@ -8,7 +8,7 @@ import TabItem from '@theme/TabItem';
 
 # Getting started
 
-Install promptfoo and set up an example by running this command with [npx](https://docs.npmjs.com/cli/v8/commands/npx), [npm](https://www.npmjs.com/), or [brew](https://brew.sh/):
+Install promptfoo and set up your first config file by running this command with [npx](https://nodejs.org/en/download), [npm](https://nodejs.org/en/download), or [brew](https://brew.sh/):
 
   <Tabs groupId="promptfoo-command">
     <TabItem value="npx" label="npx" default>
@@ -100,7 +100,7 @@ Next, we can review the example configuration file and make changes to it.
 
    [&raquo; More information on setting up tests](/docs/configuration/guide)
 
-4. **Run the evaluation**: This tests every prompt, model, and test case:
+4. **Run the evaluation**: Make sure you're in the directory containing `promptfooconfig.yaml`, then run:
 
    <Tabs groupId="promptfoo-command">
      <TabItem value="npx" label="npx" default>
@@ -119,6 +119,8 @@ Next, we can review the example configuration file and make changes to it.
        </CodeBlock>
      </TabItem>
    </Tabs>
+
+   This tests every prompt, model, and test case.
 
 5. After the evaluation is complete, open the web viewer to review the outputs:
 
@@ -139,6 +141,8 @@ Next, we can review the example configuration file and make changes to it.
        </CodeBlock>
      </TabItem>
    </Tabs>
+
+![Promptfoo Web UI showing evaluation results](/img/getting-started-web-ui.png)
 
 ### Configuration
 
@@ -168,7 +172,7 @@ tests:
     assert:
       - type: equals
         value: expected LLM output goes here
-      - type: function
+      - type: javascript
         value: output.includes('some text')
 
   - description: Second test case - manual review
@@ -253,10 +257,6 @@ A simple `npx promptfoo@latest eval` will run this example from the command line
 
 This command will evaluate the prompts, substituting variable values, and output the results in your terminal.
 
-After the evaluation completes, run `npx promptfoo@latest view` to open the web UI. The evaluation results will be displayed in your browser, where you can compare outputs and analyze results:
-
-![Promptfoo Web UI showing evaluation results](/img/getting-started-web-ui.png)
-
 Have a look at the setup and full output [here](https://github.com/promptfoo/promptfoo/tree/main/examples/self-grading).
 
 You can also output a nice [spreadsheet](https://docs.google.com/spreadsheets/d/1nanoj3_TniWrDl1Sj-qYqIMD6jwm5FBy15xPFdUTsmI/edit?usp=sharing), [JSON](https://github.com/promptfoo/promptfoo/blob/main/examples/simple-cli/output.json), YAML, or an HTML file:
@@ -324,13 +324,13 @@ Full setup and output [here](https://github.com/promptfoo/promptfoo/tree/main/ex
 
 A similar approach can be used to run other model comparisons. For example, you can:
 
-- Compare same models with different temperatures (see [GPT temperature comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-3.5-temperature-comparison))
+- Compare same models with different temperatures (see [GPT temperature comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-4o-temperature-comparison))
 - Compare Llama vs. GPT (see [Llama vs GPT benchmark](/docs/guides/compare-llama2-vs-gpt))
-- Compare Retrieval-Augmented Generation (RAG) with LangChain vs. regular GPT-4 (see [LangChain example](https://promptfoo.dev/docs/configuration/testing-llm-chains))
+- Compare Retrieval-Augmented Generation (RAG) with LangChain vs. regular GPT-4 (see [LangChain example](/docs/configuration/testing-llm-chains))
 
 ## Other examples
 
-There are many examples available in the [`examples/` directory](https://github.com/promptfoo/promptfoo/tree/main/examples) of our Github repository.
+There are many examples available in the [`examples/`](https://github.com/promptfoo/promptfoo/tree/main/examples) directory of our Github repository.
 
 ## Automatically assess outputs
 
