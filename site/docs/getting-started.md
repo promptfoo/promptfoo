@@ -77,7 +77,7 @@ Next, we can review the example configuration file and make changes to it.
    You can use:
 
    - **Cloud APIs**: [OpenAI](/docs/providers/openai), [Anthropic](/docs/providers/anthropic), [Google](/docs/providers/google), [Mistral](/docs/providers/mistral), and [many more](/docs/providers)
-   - **Local Models**: [Ollama](/docs/providers/ollama), [LM Studio](/docs/providers/lm-studio), [LocalAI](/docs/providers/localai)
+   - **Local Models**: [Ollama](/docs/providers/ollama), [llama.cpp](/docs/providers/llama.cpp), [LocalAI](/docs/providers/localai)
    - **Custom Code**: [Python](/docs/providers/python), [JavaScript](/docs/providers/custom-api), or any [executable](/docs/providers/custom-script)
 
    [&raquo; See our full providers documentation](/docs/providers) for detailed setup instructions for each provider.
