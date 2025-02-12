@@ -35,19 +35,7 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
   const [isReadOnly, setIsReadOnly] = React.useState(readOnly);
   const [showCopySuccess, setShowCopySuccess] = React.useState(false);
 
-  const handleChange = (yamlObj: any) => {
-    // Handle YAML changes if needed
-  };
-
   const toggleReadOnly = () => {
-    if (!isReadOnly) {
-      try {
-        const parsed = yaml.load(code, { json: true });
-        handleChange(parsed);
-      } catch {
-        // Invalid YAML, probably mid-edit
-      }
-    }
     setIsReadOnly(!isReadOnly);
   };
 
@@ -58,12 +46,6 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
       reader.onload = (e) => {
         const content = e.target?.result as string;
         setCode(content);
-        try {
-          const parsed = yaml.load(content, { json: true });
-          handleChange(parsed);
-        } catch (error) {
-          console.error('Error parsing uploaded YAML:', error);
-        }
       };
       reader.readAsText(file);
     }

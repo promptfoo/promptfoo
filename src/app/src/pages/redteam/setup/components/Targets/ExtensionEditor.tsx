@@ -53,8 +53,10 @@ export default function ExtensionEditor({
   React.useEffect(() => {
     if (extensions.length > 0) {
       setValue(extensions[0].replace(FILE_PROTOCOL_PREFIX, ''));
+    } else {
+      setValue('');
     }
-  }, []);
+  }, [extensions]);
 
   const error = React.useMemo(() => validatePath(value), [value]);
 
