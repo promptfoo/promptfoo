@@ -19,6 +19,7 @@ export interface State {
   defaultTest: TestCase;
   evaluateOptions: EvaluateOptions;
   scenarios: Scenario[];
+  extensions: string[];
   setEnv: (env: EnvOverrides) => void;
   setTestCases: (testCases: TestCase[]) => void;
   setDescription: (description: string) => void;
@@ -29,6 +30,7 @@ export interface State {
   setScenarios: (scenarios: Scenario[]) => void;
   setStateFromConfig: (config: Partial<UnifiedConfig>) => void;
   getTestSuite: () => EvaluateTestSuite;
+  setExtensions: (extensions: string[]) => void;
 }
 
 export const useStore = create<State>()(
@@ -39,6 +41,7 @@ export const useStore = create<State>()(
       description: '',
       providers: [],
       prompts: [],
+      extensions: [],
       defaultTest: {},
       evaluateOptions: {},
       scenarios: [],
@@ -50,6 +53,7 @@ export const useStore = create<State>()(
       setDefaultTest: (testCase) => set({ defaultTest: testCase }),
       setEvaluateOptions: (options) => set({ evaluateOptions: options }),
       setScenarios: (scenarios) => set({ scenarios }),
+      setExtensions: (extensions) => set({ extensions }),
       setStateFromConfig: (config: Partial<UnifiedConfig>) => {
         const updates: Partial<State> = {};
         if (config.description) {
