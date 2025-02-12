@@ -75,7 +75,6 @@ export async function fetchHuggingFaceDataset(
     const url = `${baseUrl}?dataset=${encodeURIComponent(`${owner}/${repo}`)}&${requestParams.toString()}`;
     logger.debug(`[Huggingface Dataset] Fetching page from ${url}`);
 
-    // Get HuggingFace token from environment
     const hfToken = getEnvString('HUGGING_FACE_HUB_TOKEN');
     const headers: Record<string, string> = {};
     if (hfToken) {
