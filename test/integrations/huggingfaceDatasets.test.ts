@@ -9,8 +9,20 @@ jest.mock('../../src/fetch', () => ({
 }));
 
 describe('huggingfaceDatasets', () => {
+  let originalHfApiToken: string | undefined;
+
   beforeEach(() => {
     jest.mocked(fetchWithProxy).mockClear();
+    originalHfApiToken = process.env.HF_API_TOKEN;
+    delete process.env.HF_API_TOKEN;
+  });
+
+  afterEach(() => {
+    if (originalHfApiToken) {
+      process.env.HF_API_TOKEN = originalHfApiToken;
+    } else {
+      delete process.env.HF_API_TOKEN;
+    }
   });
 
   describe('parseDatasetPath', () => {
@@ -82,8 +94,8 @@ describe('huggingfaceDatasets', () => {
     });
   });
 
-  it('should include auth token when HUGGING_FACE_HUB_TOKEN is set', async () => {
-    process.env.HUGGING_FACE_HUB_TOKEN = 'test-token';
+  it('should include auth token when HF_TOKEN is set', async () => {
+    process.env.HF_TOKEN = 'test-token';
 
     jest.mocked(fetchWithProxy).mockResolvedValueOnce({
       ok: true,
@@ -108,7 +120,7 @@ describe('huggingfaceDatasets', () => {
       }),
     );
 
-    delete process.env.HUGGING_FACE_HUB_TOKEN;
+    delete process.env.HF_TOKEN;
   });
 
   it('should handle custom query parameters', async () => {

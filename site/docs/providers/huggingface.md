@@ -121,10 +121,10 @@ providers:
 
 ## Authentication
 
-If you need to access private datasets or want to increase your rate limits, you can authenticate using your HuggingFace token. Set the `HUGGING_FACE_HUB_TOKEN` environment variable with your token:
+If you need to access private datasets or want to increase your rate limits, you can authenticate using your HuggingFace token. Set the `HF_TOKEN` environment variable with your token:
 
 ```bash
-export HUGGING_FACE_HUB_TOKEN=your_token_here
+export HF_TOKEN=your_token_here
 ```
 
 ## Datasets

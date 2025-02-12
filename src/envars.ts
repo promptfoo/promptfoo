@@ -87,8 +87,9 @@ export type EnvVars = {
   FAL_KEY?: string;
   GROQ_API_KEY?: string;
   HELICONE_API_KEY?: string;
+  /** @deprecated Use HF_TOKEN instead */
   HF_API_TOKEN?: string;
-  HUGGING_FACE_HUB_TOKEN?: string;
+  HF_TOKEN?: string;
   LANGFUSE_HOST?: string;
   LANGFUSE_PUBLIC_KEY?: string;
   LANGFUSE_SECRET_KEY?: string;

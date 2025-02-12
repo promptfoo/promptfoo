@@ -18,13 +18,13 @@ To access the MMLU dataset, you'll need to authenticate with Hugging Face:
 3. Set your token as an environment variable:
 
    ```bash
-   export HUGGING_FACE_HUB_TOKEN=your_token_here
+   export HF_TOKEN=your_token_here
    ```
 
    Or add it to your `.env` file:
 
    ```env
-   HUGGING_FACE_HUB_TOKEN=your_token_here
+   HF_TOKEN=your_token_here
    ```
 
 ## Running the Eval
