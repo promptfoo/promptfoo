@@ -8,31 +8,37 @@ import TabItem from '@theme/TabItem';
 
 # Getting started
 
-To get started, run this command:
+1. First, run this command:
 
-<Tabs groupId="promptfoo-command">
-  <TabItem value="npx" label="npx" default>
-    <CodeBlock language="bash">
-      npx promptfoo@latest init
-    </CodeBlock>
-  </TabItem>
-  <TabItem value="npm" label="npm">
-    <CodeBlock language="bash">
-      {`npm install -g promptfoo
-promptfoo init`}
-    </CodeBlock>
-  </TabItem>
-  <TabItem value="brew" label="brew">
-    <CodeBlock language="bash">
-      {`brew install promptfoo
-promptfoo init`}
-    </CodeBlock>
-  </TabItem>
-</Tabs>
+  <Tabs groupId="promptfoo-command">
+    <TabItem value="npx" label="npx" default>
+      <CodeBlock language="bash">
+        npx promptfoo@latest init --example getting-started
+      </CodeBlock>
+    </TabItem>
+    <TabItem value="npm" label="npm">
+      <CodeBlock language="bash">
+        {`npm install -g promptfoo
+  promptfoo init --example getting-started`}
+      </CodeBlock>
+    </TabItem>
+    <TabItem value="brew" label="brew">
+      <CodeBlock language="bash">
+        {`brew install promptfoo
+  promptfoo init --example getting-started`}
+      </CodeBlock>
+    </TabItem>
+  </Tabs>
 
-This will create a `promptfooconfig.yaml` file in your current directory.
+This will create a new directory with a basic example that tests translation prompts across different models. The example includes:
 
-1. **Set up your prompts**: Open `promptfooconfig.yaml` and prompts that you want to test. Use double curly braces as placeholders for variables: `{{variable_name}}`. For example:
+- A `promptfooconfig.yaml` file with sample prompts and test cases
+- A README explaining how the example works
+- Basic configuration showing variables, multiple providers, and test cases
+
+If you prefer to start from scratch instead of using the example, simply run `promptfoo init` without the `--example` flag. The command will guide you through an interactive setup process.
+
+2. **Set up your prompts**: Open `promptfooconfig.yaml` and add prompts that you want to test. Use double curly braces as placeholders for variables: `{{variable_name}}`. For example:
 
    ```yaml
    prompts:
@@ -42,12 +48,12 @@ This will create a `promptfooconfig.yaml` file in your current directory.
 
    [&raquo; More information on setting up prompts](/docs/configuration/parameters)
 
-1. Add `providers` and specify the models you want to test:
+3. Add `providers` and specify the models you want to test:
 
    ```yaml
    providers:
      - openai:gpt-4o-mini
-     - openai:gpt-4
+     - openai:gpt-4o
    ```
 
    - **OpenAI**: if testing with an OpenAI model, you'll need to set the `OPENAI_API_KEY` environment variable (see [OpenAI provider docs](/docs/providers/openai) for more info):
@@ -59,7 +65,7 @@ This will create a `promptfooconfig.yaml` file in your current directory.
    - **Custom**: See how to call your existing [Javascript](/docs/providers/custom-api), [Python](/docs/providers/python), [any other executable](/docs/providers/custom-script) or [API endpoint](/docs/providers/http).
    - **APIs**: See setup instructions for [Azure](/docs/providers/azure), [Anthropic](/docs/providers/anthropic), [Mistral](/docs/providers/mistral), [HuggingFace](/docs/providers/huggingface), [AWS Bedrock](/docs/providers/aws-bedrock), and [more](/docs/providers).
 
-1. **Add test inputs**: Add some example inputs for your prompts. Optionally, add [assertions](/docs/configuration/expected-outputs) to set output requirements that are checked automatically.
+4. **Add test inputs**: Add some example inputs for your prompts. Optionally, add [assertions](/docs/configuration/expected-outputs) to set output requirements that are checked automatically.
 
    For example:
 
@@ -77,7 +83,7 @@ This will create a `promptfooconfig.yaml` file in your current directory.
 
    [&raquo; More information on setting up tests](/docs/configuration/guide)
 
-1. **Run the evaluation**: This tests every prompt, model, and test case:
+5. **Run the evaluation**: This tests every prompt, model, and test case:
 
    <Tabs groupId="promptfoo-command">
      <TabItem value="npx" label="npx" default>
@@ -97,7 +103,7 @@ This will create a `promptfooconfig.yaml` file in your current directory.
      </TabItem>
    </Tabs>
 
-1. After the evaluation is complete, open the web viewer to review the outputs:
+6. After the evaluation is complete, open the web viewer to review the outputs:
 
    <Tabs groupId="promptfoo-command">
      <TabItem value="npx" label="npx" default>
@@ -130,7 +136,8 @@ See the [Configuration docs](/docs/configuration/guide) for a detailed guide.
 <details>
 <summary>Show example YAML</summary>
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://prompts.txt
 providers:
@@ -177,7 +184,8 @@ In [this example](https://github.com/promptfoo/promptfoo/tree/main/examples/self
 
 Here is the configuration:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 # Load prompts
 prompts:
   - file://prompt1.txt
