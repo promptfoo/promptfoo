@@ -49,7 +49,7 @@ describe('config command', () => {
 
     it('should allow setting email when user is not logged in', async () => {
       // Mock logged out state
-      jest.mocked(cloudConfig.getApiKey).mockReturnValue(null);
+      jest.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
 
       // Execute set email command
       const setEmailCmd = program.commands
@@ -73,7 +73,7 @@ describe('config command', () => {
 
     it('should validate email format even when not logged in', async () => {
       // Mock logged out state
-      jest.mocked(cloudConfig.getApiKey).mockReturnValue(null);
+      jest.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
 
       // Execute set email command with invalid email
       const setEmailCmd = program.commands
@@ -118,7 +118,7 @@ describe('config command', () => {
 
     it('should allow unsetting email when user is not logged in with force flag', async () => {
       // Mock logged out state
-      jest.mocked(cloudConfig.getApiKey).mockReturnValue(null);
+      jest.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
       jest.mocked(getUserEmail).mockReturnValue('test@example.com');
 
       // Execute unset email command with force flag
@@ -141,7 +141,7 @@ describe('config command', () => {
 
     it('should handle user confirmation for unsetting email', async () => {
       // Mock logged out state and user confirmation
-      jest.mocked(cloudConfig.getApiKey).mockReturnValue(null);
+      jest.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
       jest.mocked(getUserEmail).mockReturnValue('test@example.com');
       jest.mocked(confirm).mockResolvedValueOnce(true);
 
@@ -164,7 +164,7 @@ describe('config command', () => {
 
     it('should handle user cancellation for unsetting email', async () => {
       // Mock logged out state and user cancellation
-      jest.mocked(cloudConfig.getApiKey).mockReturnValue(null);
+      jest.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
       jest.mocked(getUserEmail).mockReturnValue('test@example.com');
       jest.mocked(confirm).mockResolvedValueOnce(false);
 
@@ -185,7 +185,7 @@ describe('config command', () => {
 
     it('should handle case when no email is set', async () => {
       // Mock logged out state and no existing email
-      jest.mocked(cloudConfig.getApiKey).mockReturnValue(null);
+      jest.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
       jest.mocked(getUserEmail).mockReturnValue(null);
 
       // Execute unset email command

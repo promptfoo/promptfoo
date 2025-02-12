@@ -5,6 +5,54 @@ import { getUserEmail, setUserEmail } from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
 
+// Mock a complete CloudUser object
+const mockCloudUser = {
+  id: '1',
+  email: 'test@example.com',
+  name: 'Test User',
+  createdAt: new Date(),
+  updatedAt: new Date(),
+};
+
+// Mock organization and app objects
+const mockOrganization = {
+  id: '1',
+  name: 'Test Org',
+  createdAt: new Date(),
+  updatedAt: new Date(),
+};
+
+const mockApp = {
+  id: '1',
+  name: 'Test App',
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  url: 'https://app.example.com',
+};
+
+// Mock Response object factory
+const createMockResponse = (options: { ok: boolean; body?: any; statusText?: string }) => {
+  return {
+    ok: options.ok,
+    headers: new Headers(),
+    redirected: false,
+    status: options.ok ? 200 : 400,
+    statusText: options.statusText || (options.ok ? 'OK' : 'Bad Request'),
+    type: 'basic' as ResponseType,
+    url: 'https://api.example.com',
+    json: () => Promise.resolve(options.body || {}),
+    text: () => Promise.resolve(''),
+    blob: () => Promise.resolve(new Blob()),
+    formData: () => Promise.resolve(new FormData()),
+    arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+    bodyUsed: false,
+    body: null,
+    clone () {
+      return this;
+    },
+  } as Response;
+};
+
 jest.mock('../../src/globalConfig/accounts');
 jest.mock('../../src/globalConfig/cloud');
 jest.mock('../../src/logger');
@@ -32,14 +80,18 @@ describe('auth command', () => {
   describe('login', () => {
     it('should set email in config after successful login with API key', async () => {
       // Mock successful login response
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ user: { email: 'test@example.com' } }),
-      });
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({
+          ok: true,
+          body: { user: mockCloudUser },
+        }),
+      );
 
       // Mock cloud config validation
       jest.mocked(cloudConfig.validateAndSetApiToken).mockResolvedValueOnce({
-        user: { email: 'test@example.com' },
+        user: mockCloudUser,
+        organization: mockOrganization,
+        app: mockApp,
       });
 
       // Execute login command
@@ -55,14 +107,18 @@ describe('auth command', () => {
 
     it('should handle interactive login flow successfully', async () => {
       // Mock successful login response
-      jest.mocked(fetchWithProxy).mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      });
+      jest.mocked(fetchWithProxy).mockResolvedValueOnce(
+        createMockResponse({
+          ok: true,
+          body: {},
+        }),
+      );
 
       // Mock cloud config validation
       jest.mocked(cloudConfig.validateAndSetApiToken).mockResolvedValueOnce({
-        user: { email: 'test@example.com' },
+        user: mockCloudUser,
+        organization: mockOrganization,
+        app: mockApp,
       });
 
       // Execute login command without API key
@@ -81,10 +137,12 @@ describe('auth command', () => {
 
     it('should handle login request failure', async () => {
       // Mock failed login response
-      jest.mocked(fetchWithProxy).mockResolvedValueOnce({
-        ok: false,
-        statusText: 'Bad Request',
-      });
+      jest.mocked(fetchWithProxy).mockResolvedValueOnce(
+        createMockResponse({
+          ok: false,
+          statusText: 'Bad Request',
+        }),
+      );
 
       // Execute login command without API key
       const loginCmd = program.commands
@@ -101,10 +159,12 @@ describe('auth command', () => {
 
     it('should handle token validation failure', async () => {
       // Mock successful login response but failed token validation
-      jest.mocked(fetchWithProxy).mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      });
+      jest.mocked(fetchWithProxy).mockResolvedValueOnce(
+        createMockResponse({
+          ok: true,
+          body: {},
+        }),
+      );
 
       jest
         .mocked(cloudConfig.validateAndSetApiToken)
@@ -124,18 +184,27 @@ describe('auth command', () => {
     });
 
     it('should overwrite existing email in config after successful login', async () => {
+      const newCloudUser = {
+        ...mockCloudUser,
+        email: 'new@example.com',
+      };
+
       // Mock existing email
       jest.mocked(getUserEmail).mockReturnValue('old@example.com');
 
       // Mock successful login response
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ user: { email: 'new@example.com' } }),
-      });
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({
+          ok: true,
+          body: { user: newCloudUser },
+        }),
+      );
 
       // Mock cloud config validation
       jest.mocked(cloudConfig.validateAndSetApiToken).mockResolvedValueOnce({
-        user: { email: 'new@example.com' },
+        user: newCloudUser,
+        organization: mockOrganization,
+        app: mockApp,
       });
 
       // Execute login command
@@ -181,14 +250,15 @@ describe('auth command', () => {
       jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
 
       // Mock successful user info response
-      jest.mocked(fetchWithProxy).mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            user: { email: 'test@example.com' },
+      jest.mocked(fetchWithProxy).mockResolvedValueOnce(
+        createMockResponse({
+          ok: true,
+          body: {
+            user: mockCloudUser,
             organization: { name: 'Test Org' },
-          }),
-      });
+          },
+        }),
+      );
 
       // Execute whoami command
       const whoamiCmd = program.commands
@@ -205,7 +275,7 @@ describe('auth command', () => {
     it('should handle not logged in state', async () => {
       // Mock not logged in state
       jest.mocked(getUserEmail).mockReturnValue(null);
-      jest.mocked(cloudConfig.getApiKey).mockReturnValue(null);
+      jest.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
 
       // Execute whoami command
       const whoamiCmd = program.commands
@@ -224,10 +294,12 @@ describe('auth command', () => {
       jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
 
       // Mock failed user info response
-      jest.mocked(fetchWithProxy).mockResolvedValueOnce({
-        ok: false,
-        statusText: 'Internal Server Error',
-      });
+      jest.mocked(fetchWithProxy).mockResolvedValueOnce(
+        createMockResponse({
+          ok: false,
+          statusText: 'Internal Server Error',
+        }),
+      );
 
       // Execute whoami command
       const whoamiCmd = program.commands
