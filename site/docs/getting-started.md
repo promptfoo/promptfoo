@@ -249,11 +249,11 @@ A simple `npx promptfoo@latest eval` will run this example from the command line
 
 ![promptfoo command line](https://user-images.githubusercontent.com/310310/244891726-480e1114-d049-40b9-bd5f-f81c15060284.gif)
 
+This command will evaluate the prompts, substituting variable values, and output the results in your terminal.
+
 After the evaluation completes, run `npx promptfoo@latest view` to open the web UI. The evaluation results will be displayed in your browser, where you can compare outputs and analyze results:
 
-![Promptfoo Web UI comparing model outputs](/img/claude-vs-gpt-example-dark@2x.png)
-
-This command will evaluate the prompts, substituting variable values, and output the results in your terminal.
+![Promptfoo Web UI showing evaluation results](/img/getting-started-web-ui.png)
 
 Have a look at the setup and full output [here](https://github.com/promptfoo/promptfoo/tree/main/examples/self-grading).
 
