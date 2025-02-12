@@ -246,7 +246,7 @@ export class VertexChatProvider extends VertexGenericProvider {
     logger.debug(`Preparing to call Google Vertex API (Gemini) with body: ${JSON.stringify(body)}`);
 
     const cache = await getCache();
-    const cacheKey = `vertex:gemini:${JSON.stringify(body)}`;
+    const cacheKey = `vertex:${this.modelName}:${JSON.stringify(body)}`;
 
     let cachedResponse;
     if (isCacheEnabled()) {
