@@ -5,7 +5,6 @@ import { getUserEmail, setUserEmail } from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
 
-// Mock a complete CloudUser object
 const mockCloudUser = {
   id: '1',
   email: 'test@example.com',
@@ -14,7 +13,6 @@ const mockCloudUser = {
   updatedAt: new Date(),
 };
 
-// Mock organization and app objects
 const mockOrganization = {
   id: '1',
   name: 'Test Org',
@@ -30,7 +28,6 @@ const mockApp = {
   url: 'https://app.example.com',
 };
 
-// Mock Response object factory
 const createMockResponse = (options: { ok: boolean; body?: any; statusText?: string }) => {
   return {
     ok: options.ok,
@@ -47,7 +44,7 @@ const createMockResponse = (options: { ok: boolean; body?: any; statusText?: str
     arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
     bodyUsed: false,
     body: null,
-    clone () {
+    clone() {
       return this;
     },
   } as Response;
@@ -55,7 +52,6 @@ const createMockResponse = (options: { ok: boolean; body?: any; statusText?: str
 
 jest.mock('../../src/globalConfig/accounts');
 jest.mock('../../src/globalConfig/cloud');
-jest.mock('../../src/logger');
 jest.mock('../../src/telemetry');
 jest.mock('../../src/fetch');
 jest.mock('readline', () => ({
@@ -79,7 +75,6 @@ describe('auth command', () => {
 
   describe('login', () => {
     it('should set email in config after successful login with API key', async () => {
-      // Mock successful login response
       mockFetch.mockResolvedValueOnce(
         createMockResponse({
           ok: true,
@@ -87,26 +82,22 @@ describe('auth command', () => {
         }),
       );
 
-      // Mock cloud config validation
       jest.mocked(cloudConfig.validateAndSetApiToken).mockResolvedValueOnce({
         user: mockCloudUser,
         organization: mockOrganization,
         app: mockApp,
       });
 
-      // Execute login command
       const loginCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
         ?.commands.find((cmd) => cmd.name() === 'login');
       await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
 
-      // Verify email was set
       expect(setUserEmail).toHaveBeenCalledWith('test@example.com');
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Successfully logged in'));
     });
 
     it('should handle interactive login flow successfully', async () => {
-      // Mock successful login response
       jest.mocked(fetchWithProxy).mockResolvedValueOnce(
         createMockResponse({
           ok: true,
@@ -114,20 +105,17 @@ describe('auth command', () => {
         }),
       );
 
-      // Mock cloud config validation
       jest.mocked(cloudConfig.validateAndSetApiToken).mockResolvedValueOnce({
         user: mockCloudUser,
         organization: mockOrganization,
         app: mockApp,
       });
 
-      // Execute login command without API key
       const loginCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
         ?.commands.find((cmd) => cmd.name() === 'login');
       await loginCmd?.parseAsync(['node', 'test']);
 
-      // Verify login flow
       expect(logger.info).toHaveBeenCalledWith(
         expect.stringContaining('A login link has been sent'),
       );
@@ -136,7 +124,6 @@ describe('auth command', () => {
     });
 
     it('should handle login request failure', async () => {
-      // Mock failed login response
       jest.mocked(fetchWithProxy).mockResolvedValueOnce(
         createMockResponse({
           ok: false,
@@ -144,13 +131,11 @@ describe('auth command', () => {
         }),
       );
 
-      // Execute login command without API key
       const loginCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
         ?.commands.find((cmd) => cmd.name() === 'login');
       await loginCmd?.parseAsync(['node', 'test']);
 
-      // Verify error handling
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Failed to send login request: Bad Request'),
       );
@@ -158,7 +143,6 @@ describe('auth command', () => {
     });
 
     it('should handle token validation failure', async () => {
-      // Mock successful login response but failed token validation
       jest.mocked(fetchWithProxy).mockResolvedValueOnce(
         createMockResponse({
           ok: true,
@@ -170,13 +154,11 @@ describe('auth command', () => {
         .mocked(cloudConfig.validateAndSetApiToken)
         .mockRejectedValueOnce(new Error('Invalid token'));
 
-      // Execute login command without API key
       const loginCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
         ?.commands.find((cmd) => cmd.name() === 'login');
       await loginCmd?.parseAsync(['node', 'test']);
 
-      // Verify error handling
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Authentication failed: Invalid token'),
       );
@@ -189,10 +171,7 @@ describe('auth command', () => {
         email: 'new@example.com',
       };
 
-      // Mock existing email
       jest.mocked(getUserEmail).mockReturnValue('old@example.com');
-
-      // Mock successful login response
       mockFetch.mockResolvedValueOnce(
         createMockResponse({
           ok: true,
@@ -200,20 +179,17 @@ describe('auth command', () => {
         }),
       );
 
-      // Mock cloud config validation
       jest.mocked(cloudConfig.validateAndSetApiToken).mockResolvedValueOnce({
         user: newCloudUser,
         organization: mockOrganization,
         app: mockApp,
       });
 
-      // Execute login command
       const loginCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
         ?.commands.find((cmd) => cmd.name() === 'login');
       await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
 
-      // Verify email was overwritten
       expect(setUserEmail).toHaveBeenCalledWith('new@example.com');
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Successfully logged in'));
       expect(logger.info).toHaveBeenCalledWith(
@@ -226,16 +202,13 @@ describe('auth command', () => {
 
   describe('logout', () => {
     it('should unset email in config after logout', async () => {
-      // Mock existing email
       jest.mocked(getUserEmail).mockReturnValue('test@example.com');
 
-      // Execute logout command
       const logoutCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
         ?.commands.find((cmd) => cmd.name() === 'logout');
       await logoutCmd?.parseAsync(['node', 'test']);
 
-      // Verify email was unset
       expect(setUserEmail).toHaveBeenCalledWith('');
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Successfully logged out'));
     });
@@ -243,13 +216,11 @@ describe('auth command', () => {
 
   describe('whoami', () => {
     it('should show user info when logged in', async () => {
-      // Mock logged in state
       jest.mocked(getUserEmail).mockReturnValue('test@example.com');
       jest.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key');
       jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
       jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
 
-      // Mock successful user info response
       jest.mocked(fetchWithProxy).mockResolvedValueOnce(
         createMockResponse({
           ok: true,
@@ -260,40 +231,33 @@ describe('auth command', () => {
         }),
       );
 
-      // Execute whoami command
       const whoamiCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
         ?.commands.find((cmd) => cmd.name() === 'whoami');
       await whoamiCmd?.parseAsync(['node', 'test']);
 
-      // Verify output
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Currently logged in as:'));
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('test@example.com'));
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Test Org'));
     });
 
     it('should handle not logged in state', async () => {
-      // Mock not logged in state
       jest.mocked(getUserEmail).mockReturnValue(null);
       jest.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
 
-      // Execute whoami command
       const whoamiCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
         ?.commands.find((cmd) => cmd.name() === 'whoami');
       await whoamiCmd?.parseAsync(['node', 'test']);
 
-      // Verify output
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Not logged in'));
     });
 
     it('should handle API error', async () => {
-      // Mock logged in state but API error
       jest.mocked(getUserEmail).mockReturnValue('test@example.com');
       jest.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key');
       jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
 
-      // Mock failed user info response
       jest.mocked(fetchWithProxy).mockResolvedValueOnce(
         createMockResponse({
           ok: false,
@@ -301,13 +265,11 @@ describe('auth command', () => {
         }),
       );
 
-      // Execute whoami command
       const whoamiCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
         ?.commands.find((cmd) => cmd.name() === 'whoami');
       await whoamiCmd?.parseAsync(['node', 'test']);
 
-      // Verify error handling
       expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to get user info'));
       expect(process.exitCode).toBe(1);
     });

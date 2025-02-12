@@ -8,7 +8,6 @@ import telemetry from '../../src/telemetry';
 
 jest.mock('../../src/globalConfig/accounts');
 jest.mock('../../src/globalConfig/cloud');
-jest.mock('../../src/logger');
 jest.mock('../../src/telemetry', () => ({
   record: jest.fn(),
   send: jest.fn().mockResolvedValue(undefined),
