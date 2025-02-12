@@ -1,5 +1,8 @@
 import { fetchWithProxy } from '../../src/fetch';
-import { fetchHuggingFaceDataset } from '../../src/integrations/huggingfaceDatasets';
+import {
+  fetchHuggingFaceDataset,
+  parseDatasetPath,
+} from '../../src/integrations/huggingfaceDatasets';
 
 jest.mock('../../src/fetch', () => ({
   fetchWithProxy: jest.fn(),
@@ -10,8 +13,40 @@ describe('huggingfaceDatasets', () => {
     jest.mocked(fetchWithProxy).mockClear();
   });
 
+  describe('parseDatasetPath', () => {
+    it('should parse path with default parameters', () => {
+      const result = parseDatasetPath('huggingface://datasets/owner/repo');
+      expect(result).toEqual({
+        owner: 'owner',
+        repo: 'repo',
+        queryParams: expect.any(URLSearchParams),
+      });
+      expect(result.queryParams.get('split')).toBe('test');
+      expect(result.queryParams.get('config')).toBe('default');
+    });
+
+    it('should parse path with custom query parameters', () => {
+      const result = parseDatasetPath(
+        'huggingface://datasets/owner/repo?split=train&config=custom&limit=10',
+      );
+      expect(result).toEqual({
+        owner: 'owner',
+        repo: 'repo',
+        queryParams: expect.any(URLSearchParams),
+      });
+      expect(result.queryParams.get('split')).toBe('train');
+      expect(result.queryParams.get('config')).toBe('custom');
+      expect(result.queryParams.get('limit')).toBe('10');
+    });
+
+    it('should override default parameters with user parameters', () => {
+      const result = parseDatasetPath('huggingface://datasets/owner/repo?split=validation');
+      expect(result.queryParams.get('split')).toBe('validation');
+      expect(result.queryParams.get('config')).toBe('default');
+    });
+  });
+
   it('should fetch and parse dataset with default parameters', async () => {
-    // Mock API response
     jest.mocked(fetchWithProxy).mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -29,7 +64,6 @@ describe('huggingfaceDatasets', () => {
 
     const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset');
 
-    // Verify the fetch call
     expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledWith(
       'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&offset=0&length=100',
       expect.objectContaining({
@@ -37,7 +71,6 @@ describe('huggingfaceDatasets', () => {
       }),
     );
 
-    // Verify the parsed results
     expect(tests).toHaveLength(2);
     expect(tests[0].vars).toEqual({
       act: 'Linux Terminal',
@@ -50,10 +83,8 @@ describe('huggingfaceDatasets', () => {
   });
 
   it('should include auth token when HUGGING_FACE_HUB_TOKEN is set', async () => {
-    // Mock environment variable
     process.env.HUGGING_FACE_HUB_TOKEN = 'test-token';
 
-    // Mock API response
     jest.mocked(fetchWithProxy).mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -68,7 +99,6 @@ describe('huggingfaceDatasets', () => {
 
     await fetchHuggingFaceDataset('huggingface://datasets/test/dataset');
 
-    // Verify auth header was included
     expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledWith(
       'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&offset=0&length=100',
       expect.objectContaining({
@@ -78,7 +108,6 @@ describe('huggingfaceDatasets', () => {
       }),
     );
 
-    // Clean up
     delete process.env.HUGGING_FACE_HUB_TOKEN;
   });
 
@@ -97,7 +126,6 @@ describe('huggingfaceDatasets', () => {
 
     await fetchHuggingFaceDataset('huggingface://datasets/test/dataset?split=train&config=custom');
 
-    // Verify custom parameters were used
     expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledWith(
       'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=train&config=custom&offset=0&length=100',
       expect.objectContaining({
@@ -107,7 +135,6 @@ describe('huggingfaceDatasets', () => {
   });
 
   it('should handle pagination', async () => {
-    // First page response
     jest.mocked(fetchWithProxy).mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -117,7 +144,6 @@ describe('huggingfaceDatasets', () => {
       }),
     } as any);
 
-    // Second page response
     jest.mocked(fetchWithProxy).mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -129,7 +155,6 @@ describe('huggingfaceDatasets', () => {
 
     const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset');
 
-    // Verify pagination
     expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledTimes(2);
     expect(jest.mocked(fetchWithProxy)).toHaveBeenNthCalledWith(
       1,
@@ -146,7 +171,6 @@ describe('huggingfaceDatasets', () => {
       }),
     );
 
-    // Verify all results were combined
     expect(tests).toHaveLength(3);
     expect(tests.map((t) => t.vars?.text)).toEqual(['First', 'Second', 'Third']);
   });
@@ -163,7 +187,6 @@ describe('huggingfaceDatasets', () => {
   });
 
   it('should respect user-specified limit parameter', async () => {
-    // Mock response with more data than the limit
     jest.mocked(fetchWithProxy).mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -175,7 +198,6 @@ describe('huggingfaceDatasets', () => {
 
     const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset?limit=2');
 
-    // Verify the request includes the correct length parameter
     expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledWith(
       'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&limit=2&offset=0&length=2',
       expect.objectContaining({
@@ -183,13 +205,11 @@ describe('huggingfaceDatasets', () => {
       }),
     );
 
-    // Verify only limited number of results are returned
     expect(tests).toHaveLength(2);
     expect(tests.map((t) => t.vars?.text)).toEqual(['First', 'Second']);
   });
 
   it('should handle limit larger than page size', async () => {
-    // First page response
     jest.mocked(fetchWithProxy).mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -201,7 +221,6 @@ describe('huggingfaceDatasets', () => {
       }),
     } as any);
 
-    // Second page response
     jest.mocked(fetchWithProxy).mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -215,7 +234,6 @@ describe('huggingfaceDatasets', () => {
 
     const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset?limit=120');
 
-    // Verify pagination with limit
     expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledTimes(2);
     expect(jest.mocked(fetchWithProxy)).toHaveBeenNthCalledWith(
       1,
@@ -232,7 +250,6 @@ describe('huggingfaceDatasets', () => {
       }),
     );
 
-    // Verify we got exactly the number of results specified by limit
     expect(tests).toHaveLength(120);
     expect(tests[119].vars?.text).toBe('Item 120');
   });

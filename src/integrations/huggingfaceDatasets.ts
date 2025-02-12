@@ -19,7 +19,7 @@ interface HuggingFaceResponse {
   }>;
 }
 
-function parseDatasetPath(path: string): {
+export function parseDatasetPath(path: string): {
   owner: string;
   repo: string;
   queryParams: URLSearchParams;
