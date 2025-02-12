@@ -108,6 +108,7 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
             style={{
               fontFamily: '"Fira code", "Fira Mono", monospace',
               fontSize: 14,
+              backgroundColor: darkMode ? '#1e1e1e' : '#fff',
             }}
             disabled={isReadOnly}
           />

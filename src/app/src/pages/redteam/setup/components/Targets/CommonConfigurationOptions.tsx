@@ -25,9 +25,12 @@ const CommonConfigurationOptions: React.FC<CommonConfigurationOptionsProps> = ({
   extensions = [],
   onExtensionsChange,
 }) => {
-  const handleExtensionsChange = (newExtensions: string[]) => {
-    onExtensionsChange?.(newExtensions);
-  };
+  const handleExtensionsChange = React.useCallback(
+    (newExtensions: string[]) => {
+      onExtensionsChange?.(newExtensions);
+    },
+    [onExtensionsChange],
+  );
 
   return (
     <Box>

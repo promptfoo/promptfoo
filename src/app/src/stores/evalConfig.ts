@@ -90,17 +90,21 @@ export const useStore = create<State>()(
         if (config.scenarios) {
           updates.scenarios = config.scenarios as Scenario[];
         }
+        if (config.extensions) {
+          updates.extensions = config.extensions;
+        }
         set(updates);
       },
       getTestSuite: () => {
-        const { description, testCases, providers, prompts, env, scenarios } = get();
+        const { description, env, extensions, prompts, providers, scenarios, testCases } = get();
         return {
-          env,
           description,
-          providers,
+          env,
+          extensions,
           prompts,
-          tests: testCases,
+          providers,
           scenarios,
+          tests: testCases,
         };
       },
     }),

@@ -64,15 +64,25 @@ export default function ExtensionEditor({
     onValidationChange?.(!!error);
   }, [error, onValidationChange]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.target.value;
-    setValue(newValue);
-    if (newValue && !validatePath(newValue)) {
-      onExtensionsChange([`${FILE_PROTOCOL_PREFIX}${newValue}`]);
-    } else {
-      onExtensionsChange([]);
-    }
-  };
+  const handleChange = React.useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const newValue = e.target.value;
+      setValue(newValue);
+
+      if (!newValue.trim()) {
+        onExtensionsChange([]);
+        return;
+      }
+
+      const validationResult = validatePath(newValue);
+      if (validationResult === undefined) {
+        onExtensionsChange([`${FILE_PROTOCOL_PREFIX}${newValue}`]);
+      } else {
+        // Invalid input: Parent state is not updated, error will be shown via onValidationChange
+      }
+    },
+    [onExtensionsChange],
+  );
 
   return (
     <Accordion defaultExpanded={!!extensions.length}>
