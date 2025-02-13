@@ -241,7 +241,6 @@ describe('Anthropic', () => {
     it('should handle APIError with error details', async () => {
       const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022');
 
-      // Create a proper mock of APIError
       const mockApiError = Object.create(APIError.prototype);
       Object.assign(mockApiError, {
         name: 'APIError',
