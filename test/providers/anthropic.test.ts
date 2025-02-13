@@ -1,4 +1,5 @@
 import type Anthropic from '@anthropic-ai/sdk';
+import { APIError } from '@anthropic-ai/sdk';
 import dedent from 'dedent';
 import { clearCache, disableCache, enableCache, getCache } from '../../src/cache';
 import {
@@ -42,7 +43,7 @@ describe('Anthropic', () => {
       },
     ];
 
-    const provider = new AnthropicMessagesProvider('claude-3-opus-20240229', {
+    const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
       config: { tools },
     });
 
@@ -70,7 +71,7 @@ describe('Anthropic', () => {
       expect(provider.anthropic.messages.create).toHaveBeenNthCalledWith(
         1,
         {
-          model: 'claude-3-opus-20240229',
+          model: 'claude-3-5-sonnet-20241022',
           max_tokens: 1024,
           messages: [
             {
@@ -132,7 +133,7 @@ describe('Anthropic', () => {
       expect(provider.anthropic.messages.create).toHaveBeenNthCalledWith(
         1,
         {
-          model: 'claude-3-opus-20240229',
+          model: 'claude-3-5-sonnet-20241022',
           max_tokens: 1024,
           messages: [
             {
@@ -200,7 +201,7 @@ describe('Anthropic', () => {
           content: [],
         } as unknown as Anthropic.Messages.Message);
       getCache().set(
-        'anthropic:{"model":"claude-3-opus-20240229","max_tokens":1024,"messages":[{"role":"user","content":[{"type":"text","text":"What is the forecast in San Francisco?"}]}],"stream":false,"temperature":0,"tools":[{"name":"get_weather","description":"Get the current weather in a given location","input_schema":{"type":"object","properties":{"location":{"type":"string","description":"The city and state, e.g. San Francisco, CA"},"unit":{"type":"string","enum":["celsius","fahrenheit"]}},"required":["location"]}}]}',
+        'anthropic:{"model":"claude-3-5-sonnet-20241022","max_tokens":1024,"messages":[{"role":"user","content":[{"type":"text","text":"What is the forecast in San Francisco?"}]}],"stream":false,"temperature":0,"tools":[{"name":"get_weather","description":"Get the current weather in a given location","input_schema":{"type":"object","properties":{"location":{"type":"string","description":"The city and state, e.g. San Francisco, CA"},"unit":{"type":"string","enum":["celsius","fahrenheit"]}},"required":["location"]}}]}',
         'Test output',
       );
       const result = await provider.callApi('What is the forecast in San Francisco?');
@@ -212,7 +213,7 @@ describe('Anthropic', () => {
     });
 
     it('should handle API call error', async () => {
-      const provider = new AnthropicMessagesProvider('claude-3-opus-20240229');
+      const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022');
       jest
         .spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
@@ -220,12 +221,52 @@ describe('Anthropic', () => {
 
       const result = await provider.callApi('What is the forecast in San Francisco?');
       expect(result).toMatchObject({
-        error: 'API call error: Error: API call failed',
+        error: 'API call error: API call failed',
+      });
+    });
+
+    it('should handle non-Error API call errors', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022');
+      jest
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockImplementation()
+        .mockRejectedValue('Non-error object');
+
+      const result = await provider.callApi('What is the forecast in San Francisco?');
+      expect(result).toMatchObject({
+        error: 'API call error: Non-error object',
+      });
+    });
+
+    it('should handle APIError with error details', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022');
+
+      const mockApiError = Object.create(APIError.prototype);
+      Object.assign(mockApiError, {
+        name: 'APIError',
+        message: 'API Error',
+        status: 400,
+        error: {
+          error: {
+            message: 'Invalid request parameters',
+            type: 'invalid_params',
+          },
+        },
+      });
+
+      jest
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockImplementation()
+        .mockRejectedValue(mockApiError);
+
+      const result = await provider.callApi('What is the forecast in San Francisco?');
+      expect(result).toMatchObject({
+        error: 'API call error: Invalid request parameters, status 400, type invalid_params',
       });
     });
 
     it('should return token usage and cost', async () => {
-      const provider = new AnthropicMessagesProvider('claude-3-opus-20240229', {
+      const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
         config: { max_tokens: 100, temperature: 0.5, cost: 0.015 },
       });
       jest
@@ -249,11 +290,11 @@ describe('Anthropic', () => {
     let provider: AnthropicLlmRubricProvider;
 
     beforeEach(() => {
-      provider = new AnthropicLlmRubricProvider('claude-3-5-sonnet-20240620');
+      provider = new AnthropicLlmRubricProvider('claude-3-5-sonnet-20241022');
     });
 
     it('should initialize with forced tool configuration', () => {
-      expect(provider.modelName).toBe('claude-3-5-sonnet-20240620');
+      expect(provider.modelName).toBe('claude-3-5-sonnet-20241022');
       expect(provider.config.tool_choice).toEqual({ type: 'tool', name: 'grade_output' });
     });
 
@@ -408,7 +449,7 @@ describe('Anthropic', () => {
 
   describe('calculateAnthropicCost', () => {
     it('should calculate cost for valid input and output tokens', () => {
-      const cost = calculateAnthropicCost('claude-3-opus-20240229', { cost: 0.015 }, 100, 200);
+      const cost = calculateAnthropicCost('claude-3-5-sonnet-20241022', { cost: 0.015 }, 100, 200);
 
       expect(cost).toBe(4.5); // (0.015 * 100) + (0.075 * 200)
     });
@@ -420,7 +461,7 @@ describe('Anthropic', () => {
     });
 
     it('should return undefined for missing tokens', () => {
-      const cost = calculateAnthropicCost('claude-3-opus-20240229', { cost: 0.015 });
+      const cost = calculateAnthropicCost('claude-3-5-sonnet-20241022', { cost: 0.015 });
 
       expect(cost).toBeUndefined();
     });
