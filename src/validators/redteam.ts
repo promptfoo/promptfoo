@@ -21,11 +21,15 @@ import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '..
 import { isJavascriptFile } from '../util/file';
 import { ProviderSchema } from '../validators/providers';
 
-const pluginOptions: string[] = [...COLLECTIONS, ...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS].sort();
+export const pluginOptions: string[] = [
+  ...COLLECTIONS,
+  ...REDTEAM_ALL_PLUGINS,
+  ...ALIASED_PLUGINS,
+].sort();
 /**
  * Schema for individual redteam plugins
  */
-const RedteamPluginObjectSchema = z.object({
+export const RedteamPluginObjectSchema = z.object({
   id: z
     .union([
       z.enum(pluginOptions as [string, ...string[]]).superRefine((val, ctx) => {
@@ -76,7 +80,7 @@ export const RedteamPluginSchema = z.union([
   RedteamPluginObjectSchema,
 ]);
 
-const strategyIdSchema = z
+export const strategyIdSchema = z
   .union([
     z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]).superRefine((val, ctx) => {
       if (!ALL_STRATEGIES.includes(val as Strategy)) {
@@ -342,5 +346,3 @@ assert<TypeEqualityGuard<RedteamFileConfig, z.infer<typeof RedteamConfigSchema>>
 
 // TODO: Why is this never?
 // assert<TypeEqualityGuard<RedteamPluginObject, z.infer<typeof RedteamPluginObjectSchema>>>();
-
-export { pluginOptions, RedteamPluginObjectSchema, strategyIdSchema, assert };

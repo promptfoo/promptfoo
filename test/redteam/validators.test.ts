@@ -15,7 +15,41 @@ import {
   RedteamGenerateOptionsSchema,
   RedteamPluginSchema,
   RedteamStrategySchema,
+  RedteamPluginObjectSchema,
 } from '../../src/validators/redteam';
+
+describe('RedteamPluginObjectSchema', () => {
+  it('should validate valid plugin object', () => {
+    const validPlugin = {
+      id: 'pii:direct',
+      numTests: 5,
+      config: { key: 'value' },
+    };
+
+    const result = RedteamPluginObjectSchema.safeParse(validPlugin);
+    expect(result.success).toBe(true);
+  });
+
+  it('should reject invalid plugin id', () => {
+    const invalidPlugin = {
+      id: 'invalid-plugin',
+      numTests: 5,
+    };
+
+    const result = RedteamPluginObjectSchema.safeParse(invalidPlugin);
+    expect(result.success).toBe(false);
+  });
+
+  it('should allow custom plugin paths starting with file://', () => {
+    const customPlugin = {
+      id: 'file:///path/to/plugin.js',
+      numTests: 5,
+    };
+
+    const result = RedteamPluginObjectSchema.safeParse(customPlugin);
+    expect(result.success).toBe(true);
+  });
+});
 
 describe('redteamGenerateOptionsSchema', () => {
   it('should accept valid options for a redteam test', () => {
@@ -47,6 +81,35 @@ describe('redteamGenerateOptionsSchema', () => {
         write: true,
       },
     });
+  });
+
+  it('should validate basic generate options', () => {
+    const options = {
+      cache: true,
+      defaultConfig: {},
+      force: false,
+      write: true,
+      burpEscapeJson: true,
+      progressBar: true,
+    };
+
+    const result = RedteamGenerateOptionsSchema.safeParse(options);
+    expect(result.success).toBe(true);
+  });
+
+  it('should validate optional fields', () => {
+    const options = {
+      cache: true,
+      defaultConfig: {},
+      write: true,
+      plugins: [{ id: 'pii:direct', numTests: 5 }],
+      strategies: ['basic'],
+      maxConcurrency: 5,
+      delay: 1000,
+    };
+
+    const result = RedteamGenerateOptionsSchema.safeParse(options);
+    expect(result.success).toBe(true);
   });
 
   it('should reject invalid plugin names', () => {
