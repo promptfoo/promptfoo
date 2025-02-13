@@ -318,7 +318,9 @@ export class AnthropicMessagesProvider implements ApiProvider {
         ),
       };
     } catch (err) {
-      logger.error(`Anthropic Messages API call error: ${String(err)}`);
+      logger.error(
+        `Anthropic Messages API call error: ${err instanceof Error ? err.message : String(err)}`,
+      );
       if (err instanceof APIError && err.error) {
         const errorDetails = err.error as { error: { message: string; type: string } };
         return {
@@ -326,7 +328,7 @@ export class AnthropicMessagesProvider implements ApiProvider {
         };
       }
       return {
-        error: `API call error: ${String(err)}`,
+        error: `API call error: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
   }
