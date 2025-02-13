@@ -6,6 +6,9 @@ import {
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
+  FOUNDATION_PLUGINS,
+  type BasePlugin,
+  type PIIPlugin,
 } from '../../src/redteam/constants';
 import {
   RedteamConfigSchema,
@@ -1127,6 +1130,55 @@ describe('RedteamConfigSchema transform', () => {
       'provider',
       'purpose',
     ]);
+  });
+  it('should expand harmful plugin to all harm categories', () => {
+    const result = RedteamConfigSchema.parse({
+      numTests: 5,
+      plugins: ['harmful'],
+    });
+
+    expect(result.plugins?.every((p: RedteamPluginObject) => p.id.startsWith('harmful:'))).toBe(
+      true,
+    );
+    expect(result.plugins?.every((p: RedteamPluginObject) => p.numTests === 5)).toBe(true);
+  });
+
+  it('should expand foundation plugin to all foundation plugins', () => {
+    const result = RedteamConfigSchema.parse({
+      numTests: 5,
+      plugins: ['foundation'],
+    });
+
+    expect(
+      result.plugins?.every((p: RedteamPluginObject) =>
+        Array.from(FOUNDATION_PLUGINS).includes(p.id as BasePlugin),
+      ),
+    ).toBe(true);
+    expect(result.plugins?.every((p: RedteamPluginObject) => p.numTests === 5)).toBe(true);
+  });
+
+  it('should handle multiple collection plugins including foundation', () => {
+    const result = RedteamConfigSchema.parse({
+      numTests: 3,
+      plugins: ['foundation', 'harmful', 'pii'],
+    });
+
+    expect(
+      result.plugins?.some((p: RedteamPluginObject) =>
+        Array.from(FOUNDATION_PLUGINS).includes(p.id as BasePlugin),
+      ),
+    ).toBe(true);
+    expect(result.plugins?.some((p: RedteamPluginObject) => p.id.startsWith('harmful:'))).toBe(
+      true,
+    );
+    expect(
+      result.plugins?.some((p: RedteamPluginObject) => PII_PLUGINS.includes(p.id as PIIPlugin)),
+    ).toBe(true);
+    expect(
+      result.plugins?.every(
+        (p: RedteamPluginObject) => !['foundation', 'harmful', 'pii'].includes(p.id),
+      ),
+    ).toBe(true);
   });
 });
 
