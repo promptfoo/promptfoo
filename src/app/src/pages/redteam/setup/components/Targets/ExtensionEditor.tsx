@@ -12,6 +12,7 @@ import {
   AccordionDetails,
 } from '@mui/material';
 import Link from '@mui/material/Link';
+import { isJavascriptFile } from '@promptfoo/util/file';
 
 interface ValidationError {
   message: string;
@@ -36,8 +37,9 @@ const validatePath = (value: string): ValidationError | undefined => {
   if (!filePath || !functionName) {
     return { message: 'Format: /path/to/file.js:hookFunction' };
   }
-  if (!filePath.endsWith('.js') && !filePath.endsWith('.py')) {
-    return { message: 'Must be a .js or .py file' };
+
+  if (!isJavascriptFile(filePath) && !filePath.endsWith('.py')) {
+    return { message: 'Must be a JavaScript/TypeScript or Python file' };
   }
 
   return undefined;
