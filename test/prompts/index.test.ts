@@ -329,6 +329,22 @@ describe('readPrompts', () => {
     ]);
   });
 
+  it('should read a markdown file', async () => {
+    const mdContent = '# Test Heading\n\nThis is a test markdown file.';
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(mdContent);
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+    jest.mocked(maybeFilePath).mockReturnValueOnce(true);
+
+    await expect(readPrompts('test.md')).resolves.toEqual([
+      {
+        raw: mdContent,
+        label: 'test.md: # Test Heading\n\nThis is a test markdown file....',
+      },
+    ]);
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    expect(fs.readFileSync).toHaveBeenCalledWith('test.md', 'utf8');
+  });
+
   it('should read a .py prompt object array', async () => {
     const prompts = [
       { id: 'prompts.py:prompt1', label: 'First prompt' },
