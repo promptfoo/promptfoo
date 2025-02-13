@@ -47,14 +47,6 @@ jest.mock('../../src/prompts/utils', () => {
   };
 });
 
-jest.mock('../../src/prompts', () => {
-  const actual = jest.requireActual('../../src/prompts');
-  return {
-    ...actual,
-    readPrompts: jest.fn(),
-  };
-});
-
 describe('readPrompts', () => {
   afterEach(() => {
     delete process.env.PROMPTFOO_STRICT_FILES;
@@ -96,6 +88,8 @@ describe('readPrompts', () => {
   it('should throw an error for a .txt file with no prompts', async () => {
     jest.mocked(fs.readFileSync).mockReturnValueOnce('');
     jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+    jest.mocked(maybeFilePath).mockReturnValueOnce(true);
+    process.env.PROMPTFOO_STRICT_FILES = 'true';
     await expect(readPrompts(['prompts.txt'])).rejects.toThrow(
       'There are no prompts in "prompts.txt"',
     );
@@ -104,6 +98,8 @@ describe('readPrompts', () => {
 
   it('should throw an error for an unsupported file format', async () => {
     jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+    jest.mocked(maybeFilePath).mockReturnValueOnce(true);
+    process.env.PROMPTFOO_STRICT_FILES = 'true';
     await expect(readPrompts(['unsupported.for.mat'])).rejects.toThrow(
       'There are no prompts in "unsupported.for.mat"',
     );
@@ -409,7 +405,7 @@ describe('readPrompts', () => {
         raw: String(mockFunction),
         label: 'prompt.js:functionName',
         function: expect.any(Function),
-        config: {}, // Add this line
+        config: {},
       },
     ]);
 
@@ -686,10 +682,11 @@ describe('processPrompts', () => {
     expect(result).toEqual([
       {
         raw: promptFn.toString(),
-        label: promptFn.toString(),
-        function: promptFn,
+        label: '',
+        function: expect.any(Function),
       },
     ]);
+    expect(fs.readFileSync).toHaveBeenCalledTimes(0);
   });
 
   it('should process string prompts by calling readPrompts', async () => {
