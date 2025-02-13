@@ -2,7 +2,7 @@ import dedent from 'dedent';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import { importModule } from '../../src/esm';
-import { readPrompts, readProviderPromptMap } from '../../src/prompts';
+import { readPrompts, readProviderPromptMap, processPrompts } from '../../src/prompts';
 import { maybeFilePath } from '../../src/prompts/utils';
 import type { ApiProvider, Prompt, ProviderResponse, UnifiedConfig } from '../../src/types';
 
@@ -44,6 +44,14 @@ jest.mock('../../src/prompts/utils', () => {
   return {
     ...actual,
     maybeFilePath: jest.fn(actual.maybeFilePath),
+  };
+});
+
+jest.mock('../../src/prompts', () => {
+  const actual = jest.requireActual('../../src/prompts');
+  return {
+    ...actual,
+    readPrompts: jest.fn(),
   };
 });
 
@@ -643,5 +651,131 @@ describe('readProviderPromptMap', () => {
     expect(readProviderPromptMap(config, parsedPrompts)).toEqual({
       originalProvider: ['customPrompt1'],
     });
+  });
+});
+
+describe('processPrompts', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should process function prompts', async () => {
+    function testFunction(vars: any) {
+      return `Hello ${vars.name}`;
+    }
+
+    const result = await processPrompts([testFunction]);
+
+    expect(result).toEqual([
+      {
+        raw: testFunction.toString(),
+        label: 'testFunction',
+        function: testFunction,
+      },
+    ]);
+  });
+
+  it('should process function prompts with no name', async () => {
+    function promptFn(vars: any) {
+      return `Hello ${vars.name}`;
+    }
+    Object.defineProperty(promptFn, 'name', { value: '' });
+
+    const result = await processPrompts([promptFn]);
+
+    expect(result).toEqual([
+      {
+        raw: promptFn.toString(),
+        label: promptFn.toString(),
+        function: promptFn,
+      },
+    ]);
+  });
+
+  it('should process string prompts by calling readPrompts', async () => {
+    // Setup mock for fs.readFileSync since readPrompts uses it
+    jest.mocked(fs.readFileSync).mockReturnValueOnce('test prompt');
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+
+    const result = await processPrompts(['test.txt']);
+
+    expect(result).toEqual([
+      {
+        raw: 'test prompt',
+        label: 'test.txt: test prompt',
+      },
+    ]);
+  });
+
+  it('should process valid prompt schema objects', async () => {
+    const validPrompt = {
+      raw: 'test prompt',
+      label: 'test label',
+    };
+
+    const result = await processPrompts([validPrompt]);
+
+    expect(result).toEqual([validPrompt]);
+  });
+
+  it('should fall back to JSON serialization for invalid prompt schema objects', async () => {
+    const invalidPrompt = {
+      invalidField: 'some value',
+      anotherField: 123,
+    };
+
+    const result = await processPrompts([invalidPrompt]);
+
+    expect(result).toEqual([
+      {
+        raw: JSON.stringify(invalidPrompt),
+        label: JSON.stringify(invalidPrompt),
+      },
+    ]);
+  });
+
+  it('should process multiple prompts of different types', async () => {
+    function testFunction(vars: any) {
+      return `Hello ${vars.name}`;
+    }
+
+    const validPrompt = {
+      raw: 'test prompt',
+      label: 'test label',
+    };
+
+    // Setup mock for fs.readFileSync since readPrompts uses it
+    jest.mocked(fs.readFileSync).mockReturnValueOnce('file prompt');
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+
+    const result = await processPrompts([testFunction, 'test.txt', validPrompt]);
+
+    expect(result).toEqual([
+      {
+        raw: testFunction.toString(),
+        label: 'testFunction',
+        function: testFunction,
+      },
+      {
+        raw: 'file prompt',
+        label: 'test.txt: file prompt',
+      },
+      validPrompt,
+    ]);
+  });
+
+  it('should flatten array results from readPrompts', async () => {
+    // Setup mock for fs.readFileSync since readPrompts uses it
+    jest.mocked(fs.readFileSync).mockReturnValueOnce('prompt1\n---\nprompt2');
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+
+    const result = await processPrompts(['test.txt']);
+
+    expect(result).toEqual([
+      { raw: 'prompt1', label: 'test.txt: prompt1' },
+      { raw: 'prompt2', label: 'test.txt: prompt2' },
+    ]);
+    expect(Array.isArray(result)).toBe(true);
+    expect(result).toHaveLength(2);
   });
 });
