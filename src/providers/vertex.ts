@@ -12,6 +12,8 @@ import type {
   TokenUsage,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
+import { renderVarsInObject } from '../util';
+import { maybeLoadFromExternalFile } from '../util';
 import { getNunjucksEngine } from '../util/templates';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 import type { GeminiErrorResponse, GeminiFormat, Palm2ApiResponse } from './vertexUtil';
@@ -55,6 +57,41 @@ interface Content {
   role?: string;
 }
 
+interface Schema {
+  type: 'TYPE_UNSPECIFIED' | 'STRING' | 'NUMBER' | 'INTEGER' | 'BOOLEAN' | 'ARRAY' | 'OBJECT';
+  format?: string;
+  description?: string;
+  nullable?: boolean;
+  enum?: string[];
+  maxItems?: string;
+  minItems?: string;
+  properties?: { [key: string]: Schema };
+  required?: string[];
+  propertyOrdering?: string[];
+  items?: Schema;
+}
+
+interface FunctionDeclaration {
+  name: string;
+  description: string;
+  parameters?: Schema;
+  response?: Schema;
+}
+
+interface GoogleSearchRetrieval {
+  dynamicRetrievalConfig: {
+    mode?: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
+    dynamicThreshold?: number;
+  };
+}
+
+interface Tool {
+  functionDeclarations?: FunctionDeclaration[];
+  googleSearchRetrieval?: GoogleSearchRetrieval;
+  codeExecution?: object;
+  googleSearch?: object;
+}
+
 interface VertexCompletionOptions {
   apiKey?: string;
   apiHost?: string;
@@ -89,6 +126,8 @@ interface VertexCompletionOptions {
       allowedFunctionNames?: string[];
     };
   };
+
+  tools?: Tool[];
 
   systemInstruction?: Content;
 }
@@ -241,6 +280,9 @@ export class VertexChatProvider extends VertexGenericProvider {
       },
       ...(this.config.safetySettings ? { safetySettings: this.config.safetySettings } : {}),
       ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
+      ...(this.config.tools
+        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(this.config.tools, context?.vars)) }
+        : {}),
       ...(systemInstruction ? { systemInstruction } : {}),
     };
     logger.debug(`Preparing to call Google Vertex API (Gemini) with body: ${JSON.stringify(body)}`);
