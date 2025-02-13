@@ -66,20 +66,21 @@ const ANTHROPIC_MODELS = [
 ];
 
 interface AnthropicMessageOptions {
-  apiKey?: string;
   apiBaseUrl?: string;
-  temperature?: number;
-  max_tokens?: number;
-  top_p?: number;
-  top_k?: number;
-  model?: string;
+  apiKey?: string;
   cost?: number;
-  tools?: Anthropic.Tool[];
+  extra_body?: Record<string, any>;
+  headers?: Record<string, string>;
+  max_tokens?: number;
+  model?: string;
+  temperature?: number;
   tool_choice?:
     | Anthropic.MessageCreateParams.ToolChoiceAny
     | Anthropic.MessageCreateParams.ToolChoiceAuto
     | Anthropic.MessageCreateParams.ToolChoiceTool;
-  headers?: Record<string, string>;
+  tools?: Anthropic.Tool[];
+  top_k?: number;
+  top_p?: number;
 }
 
 function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
@@ -260,6 +261,9 @@ export class AnthropicMessagesProvider implements ApiProvider {
       temperature: this.config.temperature || getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
       ...(this.config.tools ? { tools: maybeLoadFromExternalFile(this.config.tools) } : {}),
       ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
+      ...(typeof this.config?.extra_body === 'object' && this.config.extra_body
+        ? this.config.extra_body
+        : {}),
     };
 
     logger.debug(`Calling Anthropic Messages API: ${JSON.stringify(params)}`);

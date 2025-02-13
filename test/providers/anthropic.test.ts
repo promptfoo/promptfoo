@@ -157,6 +157,79 @@ describe('Anthropic', () => {
       provider.config.tool_choice = undefined;
     });
 
+    it('should include extra_body parameters in API call', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
+        config: {
+          extra_body: {
+            top_p: 0.9,
+            custom_param: 'test_value',
+          },
+        },
+      });
+
+      jest
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockImplementation()
+        .mockResolvedValue({
+          content: [{ type: 'text', text: 'Test response' }],
+        } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+
+      expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
+      expect(provider.anthropic.messages.create).toHaveBeenCalledWith(
+        {
+          model: 'claude-3-5-sonnet-20241022',
+          max_tokens: 1024,
+          messages: [
+            {
+              role: 'user',
+              content: [{ type: 'text', text: 'Test prompt' }],
+            },
+          ],
+          temperature: 0,
+          stream: false,
+          top_p: 0.9,
+          custom_param: 'test_value',
+        },
+        {},
+      );
+    });
+
+    it('should not include extra_body when it is not an object', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
+        config: {
+          extra_body: undefined,
+        },
+      });
+
+      jest
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockImplementation()
+        .mockResolvedValue({
+          content: [{ type: 'text', text: 'Test response' }],
+        } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+
+      expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
+      expect(provider.anthropic.messages.create).toHaveBeenCalledWith(
+        {
+          model: 'claude-3-5-sonnet-20241022',
+          max_tokens: 1024,
+          messages: [
+            {
+              role: 'user',
+              content: [{ type: 'text', text: 'Test prompt' }],
+            },
+          ],
+          temperature: 0,
+          stream: false,
+        },
+        {},
+      );
+    });
+
     it('should not use cache if caching is disabled for ToolUse requests', async () => {
       jest
         .spyOn(provider.anthropic.messages, 'create')
