@@ -690,7 +690,6 @@ describe('processPrompts', () => {
   });
 
   it('should process string prompts by calling readPrompts', async () => {
-    // Setup mock for fs.readFileSync since readPrompts uses it
     jest.mocked(fs.readFileSync).mockReturnValueOnce('test prompt');
     jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
 
@@ -741,7 +740,6 @@ describe('processPrompts', () => {
       label: 'test label',
     };
 
-    // Setup mock for fs.readFileSync since readPrompts uses it
     jest.mocked(fs.readFileSync).mockReturnValueOnce('file prompt');
     jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
 
@@ -762,7 +760,6 @@ describe('processPrompts', () => {
   });
 
   it('should flatten array results from readPrompts', async () => {
-    // Setup mock for fs.readFileSync since readPrompts uses it
     jest.mocked(fs.readFileSync).mockReturnValueOnce('prompt1\n---\nprompt2');
     jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
 
