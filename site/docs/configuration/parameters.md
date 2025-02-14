@@ -477,25 +477,13 @@ You can load your tests from [Google Sheets](/docs/configuration/guide#loading-t
 
 When using CSV files for test cases, you may need to include JSON fields. There are two ways to handle this:
 
-1. **Properly Escaped JSON (Recommended)**
-
-In CSV format, quotes are escaped by doubling them. For JSON fields, this means:
-
 ```csv
 label,query,expected_json_format
-my_test_label,What is the date?,"{\""answer\"":""""}"
+my_test_label,What is the date?,{"answer":""} # Simple JSON (no commas)
+my_test_label,What is the config?,"{""tone"":""formal"",""length"":""brief""}" # Escaped JSON with commas
 ```
 
-2. **Unescaped JSON (Fallback)**
-
-For convenience, promptfoo will also try to parse CSV files with unescaped JSON:
-
-```csv
-label,query,expected_json_format
-my_test_label,What is the date?,{"answer":""}
-```
-
-By default, promptfoo attempts strict CSV parsing first (per RFC 4180), then falls back to a more relaxed parsing if that fails. This behavior can be controlled with the `PROMPTFOO_CSV_STRICT=true` environment variable, which enforces strict parsing and requires proper quote escaping.
+By default, promptfoo will try to parse JSON fields in both formats. You can enforce strict CSV parsing (per RFC 4180, which requires properly escaped JSON) by setting `PROMPTFOO_CSV_STRICT=true`.
 
 ## Output File
 
