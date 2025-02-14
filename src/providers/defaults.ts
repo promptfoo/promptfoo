@@ -60,10 +60,17 @@ export async function setDefaultEmbeddingProviders(provider: ApiProvider) {
 }
 
 export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultProviders> {
+  logger.debug(`Getting default providers (with env overrides: ${env ? 'yes' : 'no'})`);
+
+  const anthropicApiKey = getEnvString('ANTHROPIC_API_KEY') || env?.ANTHROPIC_API_KEY;
+  const openAiApiKey = getEnvString('OPENAI_API_KEY') || env?.OPENAI_API_KEY;
+  logger.debug(`API Keys present - Anthropic: ${!!anthropicApiKey}, OpenAI: ${!!openAiApiKey}`);
+
   const preferAnthropic =
     !getEnvString('OPENAI_API_KEY') &&
     !env?.OPENAI_API_KEY &&
     (getEnvString('ANTHROPIC_API_KEY') || env?.ANTHROPIC_API_KEY);
+  logger.debug(`Prefer Anthropic: ${preferAnthropic}`);
 
   const hasAzureApiKey =
     getEnvString('AZURE_OPENAI_API_KEY') ||
@@ -74,6 +81,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     (getEnvString('AZURE_CLIENT_ID') || env?.AZURE_CLIENT_ID) &&
     (getEnvString('AZURE_CLIENT_SECRET') || env?.AZURE_CLIENT_SECRET) &&
     (getEnvString('AZURE_TENANT_ID') || env?.AZURE_TENANT_ID);
+  logger.debug(`Azure credentials status - API Key: ${hasAzureApiKey}, Client Credentials: ${hasAzureClientCreds}`);
 
   const preferAzure =
     !getEnvString('OPENAI_API_KEY') &&
@@ -81,13 +89,15 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     (hasAzureApiKey || hasAzureClientCreds) &&
     (getEnvString('AZURE_DEPLOYMENT_NAME') || env?.AZURE_DEPLOYMENT_NAME) &&
     (getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') || env?.AZURE_OPENAI_DEPLOYMENT_NAME);
+  logger.debug(`Prefer Azure: ${preferAzure}`);
 
   let providers: Pick<DefaultProviders, keyof DefaultProviders>;
 
   if (preferAzure) {
-    logger.debug('Using Azure OpenAI default providers');
+    logger.debug('Initializing Azure OpenAI providers');
     const deploymentName =
       getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') || env?.AZURE_OPENAI_DEPLOYMENT_NAME;
+    logger.debug(`Azure deployment name: ${deploymentName}`);
     if (!deploymentName) {
       throw new Error('AZURE_OPENAI_DEPLOYMENT_NAME must be set when using Azure OpenAI');
     }
@@ -113,6 +123,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     };
   } else if (preferAnthropic) {
     logger.debug('Using Anthropic default providers');
+    logger.debug(`Anthropic API Key status: ${!!anthropicApiKey}`);
     providers = {
       datasetGenerationProvider: AnthropicGradingProvider,
       embeddingProvider: OpenAiEmbeddingProvider, // TODO(ian): Voyager instead?
@@ -151,16 +162,20 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     };
   }
   if (defaultCompletionProvider) {
-    logger.debug(`Overriding default completion provider: ${defaultCompletionProvider.id()}`);
+    logger.debug(`Overriding completion providers with: ${defaultCompletionProvider.id()}`);
+    logger.debug(`Affected providers: ${COMPLETION_PROVIDERS.join(', ')}`);
     COMPLETION_PROVIDERS.forEach((provider) => {
       providers[provider] = defaultCompletionProvider;
     });
   }
 
   if (defaultEmbeddingProvider) {
+    logger.debug(`Overriding embedding providers with: ${defaultEmbeddingProvider.id()}`);
+    logger.debug(`Affected providers: ${EMBEDDING_PROVIDERS.join(', ')}`);
     EMBEDDING_PROVIDERS.forEach((provider) => {
       providers[provider] = defaultEmbeddingProvider;
     });
   }
+  logger.debug(`Final provider configuration: ${Object.keys(providers).join(', ')}`);
   return providers;
 }
