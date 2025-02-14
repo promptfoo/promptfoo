@@ -8,6 +8,9 @@ providers:
   - id: golang:provider.go # defaults to CallApi function
     config:
       someOption: foobar
+  - id: golang:evaluation/provider.go # nested provider example to demonstrate module root detection issue
+    config:
+      someOption: foobarNested
 
 tests:
   - vars:

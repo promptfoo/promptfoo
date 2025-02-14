@@ -55,7 +55,18 @@ export class GolangProvider implements ApiProvider {
     apiType: 'call_api' | 'call_embedding_api' | 'call_classification_api',
   ): Promise<any> {
     const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
-    const moduleRoot = path.dirname(absPath); // Assuming the go.mod is in the same directory as the script
+    let moduleRoot = path.dirname(absPath);
+    // Search upward for a go.mod file to determine the true module root
+    while (true) {
+      if (fs.existsSync(path.join(moduleRoot, 'go.mod'))) { 
+        break;
+      }
+      const parent = path.dirname(moduleRoot);
+      if (parent === moduleRoot) { 
+        break;
+      }
+      moduleRoot = parent;
+    }
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(fs.readFileSync(absPath, 'utf-8'));
     const cacheKey = `golang:${this.scriptPath}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
@@ -91,11 +102,6 @@ export class GolangProvider implements ApiProvider {
         // Create temp directory with same structure as original
         tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'golang-provider-'));
 
-        // Recreate the module structure
-        const relativeToModule = path.relative(moduleRoot, absPath);
-        const tempScriptDir = path.dirname(path.join(tempDir, relativeToModule));
-        fs.mkdirSync(tempScriptDir, { recursive: true });
-
         // Copy module files
         const moduleFiles = ['go.mod', 'go.sum'];
         for (const file of moduleFiles) {
@@ -124,18 +130,30 @@ export class GolangProvider implements ApiProvider {
           copyDir(internalDir, path.join(tempDir, 'internal'));
         }
 
-        const tempWrapperPath = path.join(tempDir, 'wrapper.go');
+        // Run go mod download from the module root to ensure dependencies are available
+        await execAsync(`cd ${tempDir} && ${this.config.goExecutable || 'go'} mod download`);
+
+        // Recreate the module structure
+        const relativeToModule = path.relative(moduleRoot, absPath);
+        // Determine the provider's directory relative to the module root
+        const providerDir = path.dirname(relativeToModule);
+        // Determine build directory: if provider is nested, build from that directory; otherwise, use tempDir
+        const buildDir = providerDir === '.' ? tempDir : path.join(tempDir, providerDir);
+        fs.mkdirSync(buildDir, { recursive: true });
+
+        // Copy files for building
+        // If the provider file is nested (providerDir !== '.'), copy wrapper.go into the same directory as the provider file
+        const tempWrapperPath = providerDir === '.' ? path.join(tempDir, 'wrapper.go') : path.join(buildDir, 'wrapper.go');
         const tempScriptPath = path.join(tempDir, relativeToModule);
         const executablePath = path.join(tempDir, 'golang_wrapper');
 
         fs.copyFileSync(path.join(__dirname, '../golang/wrapper.go'), tempWrapperPath);
         fs.copyFileSync(absPath, tempScriptPath);
 
-        if (!fs.existsSync(executablePath)) {
-          // Build from the module root to preserve import context
-          const compileCommand = `cd ${tempDir} && ${this.config.goExecutable || 'go'} build -o ${executablePath} ${path.relative(tempDir, tempWrapperPath)} ${path.relative(tempDir, tempScriptPath)}`;
-          await execAsync(compileCommand);
-        }
+        // Build the executable from the module root using the package path of the provider file
+        const packageArg = providerDir === '.' ? '.' : './' + providerDir;
+        const compileCommand = `cd ${tempDir} && ${this.config.goExecutable || 'go'} build -o ${executablePath} ${packageArg}`;
+        await execAsync(compileCommand);
 
         const jsonArgs = safeJsonStringify(args) || '[]';
         // Escape single quotes in the JSON string to prevent command injection and ensure proper shell argument passing.
