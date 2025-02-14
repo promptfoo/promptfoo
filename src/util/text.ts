@@ -9,4 +9,4 @@ export function ellipsize(str: string, maxLen: number): string {
     return str.slice(0, maxLen - 3) + '...';
   }
   return str;
-} 
+}

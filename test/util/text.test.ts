@@ -24,4 +24,4 @@ describe('ellipsize', () => {
   it('should handle empty string', () => {
     expect(ellipsize('', 5)).toBe('');
   });
-}); 
+});
