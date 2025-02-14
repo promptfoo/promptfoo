@@ -274,6 +274,8 @@ export async function runEval({
         });
       }
 
+      logger.warn(`test: ${test.assertScoringFunction}`);
+
       invariant(processedResponse.output != null, 'Response output should not be null');
       const checkResult = await runAssertions({
         prompt: renderedPrompt,
@@ -281,7 +283,10 @@ export async function runEval({
         providerResponse: processedResponse,
         test,
         latencyMs: response.cached ? undefined : latencyMs,
+        assertScoringFunction: test.assertScoringFunction,
       });
+
+      logger.warn(`checkResult: ${JSON.stringify(checkResult)}`);
 
       if (!checkResult.pass) {
         ret.error = checkResult.reason;

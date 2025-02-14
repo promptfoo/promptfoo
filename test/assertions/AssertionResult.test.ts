@@ -157,7 +157,7 @@ describe('AssertionsResult', () => {
     expect(assertionsResult.parentAssertionSet).toBe(parentAssertionSet);
   });
 
-  it('flattens nested componentResults', () => {
+  it('flattens nested componentResults', async () => {
     assertionsResult = new AssertionsResult();
 
     const nestedResult: GradingResult = {
@@ -186,7 +186,7 @@ describe('AssertionsResult', () => {
       result: nestedResult,
     });
 
-    const result = assertionsResult.testResult();
+    const result = await assertionsResult.testResult();
 
     expect(result.componentResults).toBeDefined();
     expect(result.componentResults).toHaveLength(3);

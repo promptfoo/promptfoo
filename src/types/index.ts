@@ -578,6 +578,9 @@ export const TestCaseSchema = z.object({
   // Optional list of automatic checks to run on the LLM output
   assert: z.array(z.union([AssertionSetSchema, AssertionSchema])).optional(),
 
+  // Optional scoring function to run on the LLM output
+  assertScoringFunction: z.string().startsWith('file://').optional(),
+
   // Additional configuration settings for the prompt
   options: z
     .intersection(

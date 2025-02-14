@@ -1,5 +1,6 @@
 import { getEnvBool } from '../envars';
 import type { AssertionSet, GradingResult } from '../types';
+import { loadFromJavaScriptFile } from './utils';
 
 const DEFAULT_TOKENS_USED = {
   total: 0,
@@ -104,7 +105,7 @@ export class AssertionsResult {
     }
   }
 
-  testResult(): GradingResult {
+  async testResult(assertScoringFunction?: string): Promise<GradingResult> {
     if (this.result) {
       return this.result;
     }
@@ -155,6 +156,19 @@ export class AssertionsResult {
       componentResults: flattenedComponentResults,
       assertion: null,
     };
+
+    if (assertScoringFunction) {
+      const scoringFunctionResult: {
+        pass: boolean;
+        score: number;
+        reason: string;
+      } = await loadFromJavaScriptFile(assertScoringFunction.replace(/^file:\/\//, ''), 'func', [
+        this.namedScores,
+      ]);
+      this.result.pass = scoringFunctionResult.pass;
+      this.result.score = scoringFunctionResult.score;
+      this.result.reason = scoringFunctionResult.reason;
+    }
 
     return this.result;
   }

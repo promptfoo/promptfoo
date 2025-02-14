@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+targets:
+  - id: bedrock:amazon.nova-micro-v1:0
+    label: bedrock-nova-micro-v1
+prompts:
+  - 'Translate the following text to  {{language}}: {{prompt}}'
+
+# defaultTest:
+#  assertionMapping: file://func.js
+
+tests:
+  - vars:
+      language: french
+      prompt: 'Hello, world!'
+    assertScoringFunction: file://func.js
+    assert:
+      - type: llm-rubric
+        value: Is an accurate translation of {{prompt}} in {{language}}
+        metric: metric1
+      - type: contains
+        value: 'Bonjour, le monde!'
+        metric: metric2
+      - type: assert-set
+        metric: metric3
+        assert:
+          - type: contains-any
+            metric: metric4
+            value:
+              - 'Bonjour, le monde!'
+              - 'Salut, le monde!'
+          - type: starts-with
+            metric: metric5
+            value: 'Bonjour'
+          - type: not-contains
+            metric: metric6
+            value: 'Hello'

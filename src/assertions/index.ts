@@ -301,12 +301,14 @@ export async function runAssertions({
   providerResponse,
   test,
   latencyMs,
+  assertScoringFunction,
 }: {
   prompt?: string;
   provider?: ApiProvider;
   providerResponse: ProviderResponse;
   test: AtomicTestCase;
   latencyMs?: number;
+  assertScoringFunction?: string;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
@@ -374,8 +376,8 @@ export async function runAssertions({
     },
   );
 
-  subAssertResults.forEach((subAssertResult) => {
-    const result = subAssertResult.testResult();
+  await async.forEach(subAssertResults, async (subAssertResult) => {
+    const result = await subAssertResult.testResult();
     const {
       index,
       assertionSet: { metric, weight },
@@ -389,7 +391,10 @@ export async function runAssertions({
     });
   });
 
-  return mainAssertResult.testResult();
+  logger.error(`assertScoringFunction: ${assertScoringFunction}`);
+  logger.error(`mainAssertResult:\n${JSON.stringify(mainAssertResult, null, 2)}`);
+
+  return mainAssertResult.testResult(assertScoringFunction);
 }
 
 export async function runCompareAssertion(
