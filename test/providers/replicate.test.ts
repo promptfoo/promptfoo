@@ -2,13 +2,77 @@ import Replicate from 'replicate';
 import { disableCache, enableCache, isCacheEnabled } from '../../src/cache';
 import {
   DefaultModerationProvider,
+  ReplicateProvider,
   ReplicateModerationProvider,
+  ReplicateImageProvider,
 } from '../../src/providers/replicate';
 
 jest.mock('replicate');
 jest.mock('../../src/cache');
 
 const MockedReplicate = jest.mocked(Replicate, { shallow: false });
+
+describe('ReplicateProvider', () => {
+  const mockApiKey = 'test-api-key';
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    disableCache();
+  });
+
+  afterEach(() => {
+    enableCache();
+  });
+
+  it('should handle successful API calls', async () => {
+    const mockRun = jest.fn().mockResolvedValue(['test response']);
+    MockedReplicate.prototype.run = mockRun;
+
+    const provider = new ReplicateProvider('test-model', {
+      config: { apiKey: mockApiKey },
+    });
+
+    const result = await provider.callApi('test prompt');
+    expect(result.output).toBe('test response');
+    expect(mockRun).toHaveBeenCalledWith('test-model', {
+      input: expect.any(Object),
+    });
+  });
+
+  it('should handle API errors', async () => {
+    const mockRun = jest.fn().mockRejectedValue(new Error('API Error'));
+    MockedReplicate.prototype.run = mockRun;
+
+    const provider = new ReplicateProvider('test-model', {
+      config: { apiKey: mockApiKey },
+    });
+
+    const result = await provider.callApi('test prompt');
+    expect(result.error).toBe('API call error: Error: API Error');
+  });
+
+  it('should handle prompt prefix and suffix', async () => {
+    const mockRun = jest.fn().mockResolvedValue(['test response']);
+    MockedReplicate.prototype.run = mockRun;
+
+    const provider = new ReplicateProvider('test-model', {
+      config: {
+        apiKey: mockApiKey,
+        prompt: {
+          prefix: 'prefix_',
+          suffix: '_suffix',
+        },
+      },
+    });
+
+    await provider.callApi('test');
+    expect(mockRun).toHaveBeenCalledWith('test-model', {
+      input: expect.objectContaining({
+        prompt: 'prefix_test_suffix',
+      }),
+    });
+  });
+});
 
 describe('ReplicateModerationProvider', () => {
   const mockApiKey = 'test-api-key';
@@ -133,6 +197,59 @@ describe('ReplicateModerationProvider', () => {
     await provider.callModerationApi('test prompt', 'test response');
     await provider.callModerationApi('test prompt', 'test response');
     expect(mockRun).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('ReplicateImageProvider', () => {
+  const mockApiKey = 'test-api-key';
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    disableCache();
+  });
+
+  afterEach(() => {
+    enableCache();
+  });
+
+  it('should handle successful image generation', async () => {
+    const mockImageUrl = 'https://example.com/image.png';
+    const mockRun = jest.fn().mockResolvedValue([mockImageUrl]);
+    MockedReplicate.prototype.run = mockRun;
+
+    const provider = new ReplicateImageProvider('test-model', {
+      config: {
+        width: 512,
+        height: 512,
+      },
+      env: {
+        REPLICATE_API_KEY: mockApiKey,
+      },
+    });
+
+    const result = await provider.callApi('test prompt');
+    expect(result.output).toBe(`![test prompt](${mockImageUrl})`);
+    expect(mockRun).toHaveBeenCalledWith('test-model', {
+      input: {
+        width: 512,
+        height: 512,
+        prompt: 'test prompt',
+      },
+    });
+  });
+
+  it('should handle API errors', async () => {
+    const mockRun = jest.fn().mockResolvedValue([]);
+    MockedReplicate.prototype.run = mockRun;
+
+    const provider = new ReplicateImageProvider('test-model', {
+      env: {
+        REPLICATE_API_KEY: mockApiKey,
+      },
+    });
+
+    const result = await provider.callApi('test prompt');
+    expect(result.error).toBe('No image URL found in response: []');
   });
 });
 
