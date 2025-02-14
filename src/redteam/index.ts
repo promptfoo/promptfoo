@@ -16,6 +16,7 @@ import {
   PII_PLUGINS,
   ALIASED_PLUGIN_MAPPINGS,
   STRATEGY_EXEMPT_PLUGINS,
+  FOUNDATION_PLUGINS,
 } from './constants';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
@@ -114,6 +115,7 @@ export function resolvePluginConfig(config: Record<string, any> | undefined): Re
 }
 
 const categories = {
+  foundation: FOUNDATION_PLUGINS,
   harmful: Object.keys(HARM_PLUGINS),
   pii: PII_PLUGINS,
 } as const;

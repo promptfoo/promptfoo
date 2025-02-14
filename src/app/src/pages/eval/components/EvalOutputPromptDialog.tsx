@@ -16,7 +16,7 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TextareaAutosize from '@mui/material/TextareaAutosize';
 import Typography from '@mui/material/Typography';
-import { ellipsize } from '../../../../../utils/text';
+import { ellipsize } from '../../../../../util/text';
 import ChatMessages, { type Message } from './ChatMessages';
 import type { GradingResult } from './types';
 

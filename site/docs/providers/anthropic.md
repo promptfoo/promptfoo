@@ -59,6 +59,7 @@ Claude models are available across multiple platforms. Here's how the model name
 | tools           | -                     | An array of tool or function definitions for the model to call    |
 | tool_choice     | -                     | An object specifying the tool to call                             |
 | headers         | -                     | Additional headers to be sent with the API request                |
+| extra_body      | -                     | Additional parameters to be included in the API request body      |
 
 ### Prompt Template
 
@@ -93,6 +94,7 @@ The Anthropic provider supports several options to customize the behavior of the
 - `top_k`: Only sample from the top K options for each subsequent token.
 - `tools`: An array of tool or function definitions for the model to call.
 - `tool_choice`: An object specifying the tool to call.
+- `extra_body`: Additional parameters to pass directly to the Anthropic API request body.
 
 Example configuration with options and prompts:
 
@@ -102,6 +104,8 @@ providers:
     config:
       temperature: 0.0
       max_tokens: 512
+      extra_body:
+        custom_param: 'test_value'
 prompts:
   - file://prompt.json
 ```
