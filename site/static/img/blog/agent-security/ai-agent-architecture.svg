@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 550">
+  <!-- Background -->
+  <rect width="800" height="600" fill="#f8fafc" />
+  
+  <!-- Grid Lines -->
+  <g stroke="#e2e8f0" stroke-width="1">
+    <path d="M 50 50 L 750 50" />
+    <path d="M 50 550 L 750 550" />
+    <path d="M 50 50 L 50 550" />
+    <path d="M 750 50 L 750 550" />
+  </g>
+
+  <!-- Core Agent Components Section -->
+  <g transform="translate(100, 100)">
+    <rect width="240" height="400" rx="8" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+    <text x="120" y="40" text-anchor="middle" font-family="Arial" font-size="16" fill="#1e293b" font-weight="bold">Core Agent</text>
+    
+    <!-- Reasoning Engine -->
+    <rect x="20" y="60" width="200" height="80" rx="6" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+    <text x="120" y="100" text-anchor="middle" font-family="Arial" font-size="14" fill="#1e293b">Reasoning Engine</text>
+    <text x="120" y="120" text-anchor="middle" font-family="Arial" font-size="12" fill="#64748b">Planning &amp; Decision Making</text>
+
+    <!-- Memory System -->
+    <rect x="20" y="160" width="200" height="80" rx="6" fill="#fee2e2" stroke="#ef4444" stroke-width="2"/>
+    <text x="120" y="200" text-anchor="middle" font-family="Arial" font-size="14" fill="#1e293b">Memory System</text>
+    <text x="120" y="220" text-anchor="middle" font-family="Arial" font-size="12" fill="#64748b">Short &amp; Long Term Storage</text>
+
+    <!-- Tool Integration -->
+    <rect x="20" y="260" width="200" height="80" rx="6" fill="#d1fae5" stroke="#10b981" stroke-width="2"/>
+    <text x="120" y="300" text-anchor="middle" font-family="Arial" font-size="14" fill="#1e293b">Tool Integration</text>
+    <text x="120" y="320" text-anchor="middle" font-family="Arial" font-size="12" fill="#64748b">APIs &amp; Function Calls</text>
+  </g>
+
+  <!-- External Systems Section -->
+  <g transform="translate(460, 100)">
+    <rect width="240" height="400" rx="8" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+    <text x="120" y="40" text-anchor="middle" font-family="Arial" font-size="16" fill="#1e293b" font-weight="bold">External Systems</text>
+
+    <!-- Knowledge Base -->
+    <rect x="20" y="60" width="200" height="80" rx="6" fill="#fae8ff" stroke="#d946ef" stroke-width="2"/>
+    <text x="120" y="100" text-anchor="middle" font-family="Arial" font-size="14" fill="#1e293b">Knowledge Base</text>
+    <text x="120" y="120" text-anchor="middle" font-family="Arial" font-size="12" fill="#64748b">Vector &amp; Traditional DBs</text>
+
+    <!-- API Gateway -->
+    <rect x="20" y="160" width="200" height="80" rx="6" fill="#fff7ed" stroke="#f97316" stroke-width="2"/>
+    <text x="120" y="200" text-anchor="middle" font-family="Arial" font-size="14" fill="#1e293b">API Gateway</text>
+    <text x="120" y="220" text-anchor="middle" font-family="Arial" font-size="12" fill="#64748b">External Services</text>
+
+    <!-- Security Layer -->
+    <rect x="20" y="260" width="200" height="80" rx="6" fill="#f0fdf4" stroke="#22c55e" stroke-width="2"/>
+    <text x="120" y="300" text-anchor="middle" font-family="Arial" font-size="14" fill="#1e293b">Security Layer</text>
+    <text x="120" y="320" text-anchor="middle" font-family="Arial" font-size="12" fill="#64748b">Access Control &amp; Monitoring</text>
+  </g>
+
+  <!-- Connection Lines -->
+  <g stroke="#94a3b8" stroke-width="2" fill="none">
+    <path d="M 340 180 L 460 180" stroke-dasharray="6,3"/>
+    <path d="M 340 280 L 460 280" stroke-dasharray="6,3"/>
+    <path d="M 340 380 L 460 380" stroke-dasharray="6,3"/>
+  </g>
+
+  <!-- Title -->
+  <!--
+  <text x="400" y="40" text-anchor="middle" font-family="Arial" font-size="24" fill="#0f172a" font-weight="bold">AI Agent Architecture</text>
+  -->
+</svg>
