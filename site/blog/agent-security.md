@@ -1,5 +1,5 @@
 ---
-date: 2025-02-12
+date: 2025-02-14
 image: /img/blog/agent-security/panda_tools.png
 ---
 
@@ -183,7 +183,7 @@ Consider the following controls when deploying AI agents:
 ### Monitoring and Alerting
 
 - Implement monitoring and alerting for AI agents to detect anomalous behavior.
-- Enforce any secondary controls that you would apply to other systems or employees, such as fraud alerting mechanisms and multi-factor authentication for sensitive transactions
+- Enforce any secondary controls that you would apply to other systems or employees, such as fraud alerting mechanisms and multi-factor authentication for sensitive transactions. 
 
 ## Red Teaming AI Agents with Promptfoo
 
