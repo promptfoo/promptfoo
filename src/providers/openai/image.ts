@@ -13,7 +13,7 @@ import type {
 } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import { safeJsonStringify } from '../../util/json';
-import { ellipsize } from '../../utils/text';
+import { ellipsize } from '../../util/text';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import type { OpenAiSharedOptions } from './types';
 

@@ -14,7 +14,7 @@ import type {
 } from '../types';
 import type { EnvOverrides } from '../types/env';
 import { safeJsonStringify } from '../util/json';
-import { ellipsize } from '../utils/text';
+import { ellipsize } from '../util/text';
 import { parseChatPrompt } from './shared';
 
 interface ReplicateCompletionOptions {
