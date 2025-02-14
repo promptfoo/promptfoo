@@ -815,6 +815,33 @@ describe('readTests', () => {
     );
   });
 
+  it('should handle file:// URLs with YAML files correctly in readTests', async () => {
+    const yamlTests = [
+      {
+        description: 'Test 1',
+        vars: { key1: 'value1' },
+        assert: [{ type: 'equals', value: 'expected1' }],
+      },
+      {
+        description: 'Test 2',
+        vars: { key2: 'value2' },
+        assert: [{ type: 'equals', value: 'expected2' }],
+      },
+    ];
+
+    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(yamlTests));
+    jest.mocked(globSync).mockReturnValue(['products.yaml']);
+
+    const result = await readTests(['file://products.yaml']);
+
+    // Verify it's using loadTestsFromGlob path (treating as test file) rather than readStandaloneTestsFile (which would treat as vars)
+    expect(result).toEqual(yamlTests);
+    expect(globSync).toHaveBeenCalledWith(
+      expect.stringContaining('products.yaml'),
+      expect.any(Object),
+    );
+  });
+
   it('should warn when assert is found in vars', async () => {
     const testWithAssertInVars = [
       {
@@ -858,6 +885,30 @@ describe('readTests', () => {
     expect(logger.warn).not.toHaveBeenCalledWith(
       expect.stringContaining('PROMPTFOO_NO_TESTCASE_ASSERT_WARNING'),
     );
+  });
+
+  it('should handle file:// URLs with function names in readTests', async () => {
+    const pythonTests: TestCase[] = [
+      {
+        description: 'Python Test with file:// URL',
+        vars: { var1: 'value1' },
+        assert: [{ type: 'equals', value: 'expected1' }],
+        options: {},
+      },
+    ];
+    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
+    mockRunPython.mockReset();
+    mockRunPython.mockResolvedValueOnce(pythonTests);
+    jest.mocked(globSync).mockReturnValueOnce(['test.py']);
+
+    const result = await readTests(['file://test.py:custom_function']);
+
+    expect(mockRunPython).toHaveBeenCalledWith(
+      expect.stringContaining('test.py'),
+      'custom_function',
+      [],
+    );
+    expect(result).toEqual(pythonTests);
   });
 });
 
