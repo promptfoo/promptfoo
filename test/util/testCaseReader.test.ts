@@ -1013,22 +1013,23 @@ describe('CSV parsing with JSON fields', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+    jest.resetModules();
   });
 
   it('should parse CSV file containing properly escaped JSON fields in strict mode', async () => {
     const csvContent = `label,query,expected_json_format,context
 my_test_label,What is the date?,"{\""answer\"":""""}",file://../get_context.py`;
-    
+
     jest.spyOn(fs, 'readFileSync').mockReturnValue(csvContent);
-    
+
     const testCases = await readStandaloneTestsFile('dummy.csv');
-    
+
     expect(testCases).toHaveLength(1);
     expect(testCases[0].vars).toEqual({
       label: 'my_test_label',
       query: 'What is the date?',
       expected_json_format: '{"answer":""}',
-      context: 'file://../get_context.py'
+      context: 'file://../get_context.py',
     });
 
     jest.mocked(fs.readFileSync).mockRestore();
@@ -1037,34 +1038,63 @@ my_test_label,What is the date?,"{\""answer\"":""""}",file://../get_context.py`;
   it('should fall back to relaxed parsing for unescaped JSON fields', async () => {
     const csvContent = `label,query,expected_json_format,context
 my_test_label,What is the date?,{"answer":""},file://../get_context.py`;
-    
+
     jest.spyOn(fs, 'readFileSync').mockReturnValue(csvContent);
-    
+
     const testCases = await readStandaloneTestsFile('dummy.csv');
-    
+
     expect(testCases).toHaveLength(1);
     expect(testCases[0].vars).toEqual({
       label: 'my_test_label',
       query: 'What is the date?',
       expected_json_format: '{"answer":""}',
-      context: 'file://../get_context.py'
+      context: 'file://../get_context.py',
     });
 
     jest.mocked(fs.readFileSync).mockRestore();
   });
 
   it('should enforce strict mode when PROMPTFOO_CSV_STRICT=true', async () => {
-    jest.mocked(getEnvBool).mockImplementation((key, defaultValue = false) => 
-      key === 'PROMPTFOO_CSV_STRICT' ? true : defaultValue
-    );
-    
+    jest
+      .mocked(getEnvBool)
+      .mockImplementation((key, defaultValue = false) =>
+        key === 'PROMPTFOO_CSV_STRICT' ? true : defaultValue,
+      );
+
     const csvContent = `label,query,expected_json_format,context
 my_test_label,What is the date?,{"answer":""},file://../get_context.py`;
-    
+
     jest.spyOn(fs, 'readFileSync').mockReturnValue(csvContent);
-    
-    await expect(readStandaloneTestsFile('dummy.csv')).rejects.toThrow('Invalid Opening Quote: a quote is found on field');
-    
+
+    await expect(readStandaloneTestsFile('dummy.csv')).rejects.toThrow(
+      'Invalid Opening Quote: a quote is found on field',
+    );
+
+    jest.mocked(fs.readFileSync).mockRestore();
+  });
+
+  it('should propagate non-quote-related CSV errors', async () => {
+    // Mock the parse function to throw a non-quote error
+    const mockParse = jest.fn().mockImplementation(() => {
+      const error = new Error('Some other CSV error');
+      (error as any).code = 'CSV_OTHER_ERROR';
+      throw error;
+    });
+
+    // Mock the module
+    jest.mock('csv-parse/sync', () => ({
+      parse: mockParse,
+    }));
+
+    const csvContent = `label,query,expected_json_format,context
+my_test_label,What is the date?,"{\""answer\"":""""}",file://../get_context.py`;
+
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(csvContent);
+
+    // Re-import the module to use the new mock
+    const { readStandaloneTestsFile } = await import('../../src/util/testCaseReader');
+    await expect(readStandaloneTestsFile('dummy.csv')).rejects.toThrow('Some other CSV error');
+
     jest.mocked(fs.readFileSync).mockRestore();
   });
 });
