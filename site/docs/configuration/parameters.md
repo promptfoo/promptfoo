@@ -494,3 +494,27 @@ For example outputs, see the [examples/](https://github.com/promptfoo/promptfoo/
 A vanilla `prompts.txt`/`promptfooconfig.yaml` pair supports each test combining one set of variables with one set of assertions. Trying to combine many sets of variables with many sets of assertions can lead to exponentially more config entries.
 
 [Scenarios](/docs/configuration/scenarios.md) enable you to use all possible combinations of 1+ sets of variables and 1+ sets of assertions within one config entry.
+
+### CSV Files with JSON Fields
+
+When using CSV files for test cases, you may need to include JSON fields. There are two ways to handle this:
+
+1. **Properly Escaped JSON (Recommended)**
+
+In CSV format, quotes are escaped by doubling them. For JSON fields, this means:
+
+```csv
+label,query,expected_json_format
+my_test_label,What is the date?,"{\""answer\"":""""}"
+```
+
+2. **Unescaped JSON (Fallback)**
+
+For convenience, promptfoo will also try to parse CSV files with unescaped JSON:
+
+```csv
+label,query,expected_json_format
+my_test_label,What is the date?,{"answer":""}
+```
+
+By default, promptfoo attempts strict CSV parsing first (per RFC 4180), then falls back to a more relaxed parsing if that fails. This behavior can be controlled with the `PROMPTFOO_CSV_STRICT=true` environment variable, which enforces strict parsing and requires proper quote escaping.
