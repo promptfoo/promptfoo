@@ -473,11 +473,20 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
       </Box>
 
       <Typography variant="h6" gutterBottom>
-        Common Configuration
+        Additional Configuration
       </Typography>
       <CommonConfigurationOptions
         selectedTarget={selectedTarget}
         updateCustomTarget={updateCustomTarget}
+        extensions={config.extensions}
+        onExtensionsChange={(extensions) => updateConfig('extensions', extensions)}
+        onValidationChange={(hasErrors) => {
+          setMissingFields((prev) =>
+            hasErrors
+              ? [...prev.filter((f) => f !== 'Extensions'), 'Extensions']
+              : prev.filter((f) => f !== 'Extensions'),
+          );
+        }}
       />
 
       {testingEnabled && (
