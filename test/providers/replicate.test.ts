@@ -1,7 +1,9 @@
-import type { Cache } from 'cache-manager';
 import Replicate from 'replicate';
-import { disableCache, enableCache, getCache, isCacheEnabled } from '../../src/cache';
-import { ReplicateModerationProvider } from '../../src/providers/replicate';
+import { disableCache, enableCache, isCacheEnabled } from '../../src/cache';
+import {
+  DefaultModerationProvider,
+  ReplicateModerationProvider,
+} from '../../src/providers/replicate';
 
 jest.mock('replicate');
 jest.mock('../../src/cache');
@@ -125,11 +127,9 @@ describe('ReplicateModerationProvider', () => {
       config: { apiKey: mockApiKey },
     });
 
-    // Disable caching
     disableCache();
     jest.mocked(isCacheEnabled).mockReturnValue(false);
 
-    // Multiple calls should all hit the API
     await provider.callModerationApi('test prompt', 'test response');
     await provider.callModerationApi('test prompt', 'test response');
     expect(mockRun).toHaveBeenCalledTimes(2);
@@ -138,11 +138,8 @@ describe('ReplicateModerationProvider', () => {
 
 describe('DefaultModerationProvider', () => {
   it('should be configured with the correct model', () => {
-    const provider = new ReplicateModerationProvider(
-      'replicate:moderation:meta/llama-guard-3-8b:146d1220d447cdcc639bc17c5f6137416042abee6ae153a2615e6ef5749205c8',
-    );
-    expect(provider.modelName).toBe(
-      'replicate:moderation:meta/llama-guard-3-8b:146d1220d447cdcc639bc17c5f6137416042abee6ae153a2615e6ef5749205c8',
+    expect(DefaultModerationProvider.modelName).toBe(
+      'meta/llama-guard-3-8b:146d1220d447cdcc639bc17c5f6137416042abee6ae153a2615e6ef5749205c8',
     );
   });
 });

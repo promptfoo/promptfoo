@@ -273,7 +273,7 @@ export class ReplicateModerationProvider
 }
 
 export const DefaultModerationProvider = new ReplicateModerationProvider(
-  'replicate:moderation:meta/llama-guard-3-8b:146d1220d447cdcc639bc17c5f6137416042abee6ae153a2615e6ef5749205c8',
+  'meta/llama-guard-3-8b:146d1220d447cdcc639bc17c5f6137416042abee6ae153a2615e6ef5749205c8',
 );
 
 interface ReplicateImageOptions {
