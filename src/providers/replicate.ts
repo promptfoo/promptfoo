@@ -361,3 +361,5 @@ export class ReplicateImageProvider extends ReplicateProvider {
     };
   }
 }
+
+export { LLAMAGUARD_DESCRIPTIONS };
