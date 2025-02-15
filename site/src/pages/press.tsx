@@ -93,10 +93,9 @@ const PressContent = () => {
                       link: 'https://techcrunch.com/2025/01/29/deepseeks-ai-avoids-answering-85-of-prompts-on-sensitive-topics-related-to-china/',
                     },
                     {
-                      publication: 'The Independent',
-                      title:
-                        'How DeepSeek users are forcing the AI to reveal the truth about Chinese executions',
-                      link: 'https://www.the-independent.com/tech/deepseek-ai-china-censorship-tiananmen-square-b2688390.html',
+                      publication: 'CyberNews',
+                      title: 'DeepSeek China censorship prompts output AI',
+                      link: 'https://cybernews.com/news/deepseek-china-censorship-promps-output-ai/',
                     },
                     {
                       publication: 'Gizmodo',
@@ -104,14 +103,30 @@ const PressContent = () => {
                       link: 'http://gizmodo.com/the-knives-are-coming-out-for-deepseek-ai-2000556375',
                     },
                     {
+                      publication: 'Stanford Cyber Policy Center',
+                      title: 'Taking Stock of the DeepSeek Shock',
+                      link: 'https://cyber.fsi.stanford.edu/publication/taking-stock-deepseek-shock',
+                    },
+                    {
+                      publication: 'The Independent',
+                      title:
+                        'How DeepSeek users are forcing the AI to reveal the truth about Chinese executions',
+                      link: 'https://www.the-independent.com/tech/deepseek-ai-china-censorship-tiananmen-square-b2688390.html',
+                    },
+                    {
                       publication: 'Washington Times',
                       title: 'Inside Ring: DeepSeek toes Chinese party line',
                       link: 'https://www.washingtontimes.com/news/2025/jan/29/inside-ring-deepseek-toes-chinese-party-line-xi-ta/',
                     },
                     {
-                      publication: 'Stanford Cyber Policy Center',
-                      title: 'Taking Stock of the DeepSeek Shock',
-                      link: 'https://cyber.fsi.stanford.edu/publication/taking-stock-deepseek-shock',
+                      publication: 'MSN',
+                      title: 'DeepSeek AI censors most prompts on sensitive topics for China',
+                      link: 'https://www.msn.com/en-us/news/technology/deepseek-ai-censors-most-prompts-on-sensitive-topics-for-china/ar-AA1ycVkf',
+                    },
+                    {
+                      publication: 'Yahoo Finance',
+                      title: 'DeepSeek Users Forcing AI to Reveal Censorship',
+                      link: 'https://finance.yahoo.com/news/deepseek-users-forcing-ai-reveal-151950834.html',
                     },
                     {
                       publication: 'Hacker News',
