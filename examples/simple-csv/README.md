@@ -1,19 +1,21 @@
 # Simple CSV Example
 
-This example demonstrates how to use CSV files for test cases, including working with JSON fields and structured prompts.
+This example demonstrates how to use CSV files for test cases, including working with JSON fields for language translation tasks.
 
 ## Features Demonstrated
 
-- CSV test case format with JSON fields
-- Multiple prompt variations
-- Style configuration via JSON
-- Test assertions
+- CSV test case format with JSON configuration fields
+- Multiple prompt variations for different translation styles
+- Style configuration via JSON fields (tone, length)
+- Case-insensitive test assertions (icontains)
 
 ## Files
 
 - `promptfooconfig.yaml`: Main configuration file
-- `prompts.txt`: Contains the prompt templates
-- `tests.csv`: Test cases with variables and style configuration
+- `prompts.txt`: Contains two prompt templates:
+  1. A formal translator prompt
+  2. A conversational language assistant prompt
+- `tests.csv`: Test cases for French and Pirate translations
 
 ## Usage
 
@@ -23,21 +25,18 @@ promptfoo eval
 
 ## CSV Format
 
-The `tests.csv` file shows how to:
+The `tests.csv` file demonstrates:
 
-- Use JSON fields in CSV (with proper quoting)
-- Configure style parameters
-- Include test assertions
-
-Example row:
+1. Basic structure:
 
 ```csv
 language,body,style_config,__expected
-French,"Hello world","{""tone"":""formal"",""length"":""brief""}","Must contain 'Bonjour'"
+French,"Hello world",{"tone":"formal","length":"brief"},"icontains:bonjour"
 ```
 
-Note: When including JSON in CSV fields, you need to:
+2. Fields:
 
-1. Quote the entire JSON string with double quotes
-2. Double up the quotes within the JSON itself
-   This ensures the CSV parser correctly handles the commas within the JSON object.
+- `language`: Target language for translation
+- `body`: Text to translate
+- `style_config`: JSON object with style parameters
+- `__expected`: Test assertion using icontains

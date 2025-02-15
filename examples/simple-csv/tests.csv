@@ -1,5 +1,5 @@
 language,body,style_config,__expected
 French,"Hello world","{""tone"":""formal"",""length"":""brief""}","icontains:bonjour"
-French,"I'm hungry","{""tone"":""casual"",""length"":""brief"",""formatting"":{""bullets"":true}}","icontains:faim"
+French,"I'm hungry","{""tone"":""casual"",""length"":""brief""}","icontains:faim"
 Pirate,"Hello world","{""tone"":""authentic"",""length"":""moderate""}","icontains:Ahoy"
-Pirate,"I'm hungry","{""tone"":""authentic"",""length"":""moderate"",""formatting"":{""bullets"":false}}","icontains:grub"
+Pirate,"I'm hungry","{""tone"":""authentic"",""length"":""moderate""}","icontains:grub"
