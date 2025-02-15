@@ -122,5 +122,3 @@ Provide your assessment in the following format:
     ];
   }
 }
-
-export { DEFAULT_EXAMPLES };
