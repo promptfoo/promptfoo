@@ -120,6 +120,10 @@ const sidebars = {
       type: 'doc',
       id: 'faq',
     },
+    {
+      type: 'doc',
+      id: 'glossary',
+    },
   ],
   redTeamSidebar: [
     {
