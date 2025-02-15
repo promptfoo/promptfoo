@@ -1,0 +1,87 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: 'Evaluation of Claude models for code analysis'
+
+prompts:
+  - label: 'Code Review'
+    raw: |
+      Review this code and suggest improvements:
+      ```{{language}}
+      {{code_sample}}
+      ```
+
+  - label: 'Code Analysis'
+    raw: |
+      Analyze this {{language}} code for potential issues and optimization opportunities:
+      ```{{language}}
+      {{code_sample}}
+      ```
+
+providers:
+  - id: vertex:claude-3-opus@20240229
+    config:
+      anthropic_version: 'vertex-2024-02-29'
+      max_tokens: 4096
+      temperature: 0.7
+      toolConfig:
+        functionCallingConfig:
+          mode: 'AUTO'
+          allowedFunctionNames: ['analyze_code']
+      tools:
+        - functionDeclarations:
+            - name: 'analyze_code'
+              description: 'Analyze code for potential issues'
+              parameters:
+                type: 'OBJECT'
+                properties:
+                  code:
+                    type: 'STRING'
+                    description: 'Code to analyze'
+                  language:
+                    type: 'STRING'
+                    description: 'Programming language'
+                required: ['code']
+
+  - id: vertex:claude-3-5-sonnet-v2@20241022
+    config:
+      anthropic_version: 'vertex-2023-10-16'
+      max_tokens: 2048
+      temperature: 0
+      context: 'You are an expert code reviewer focusing on performance and best practices'
+
+tests:
+  - description: Test with recursive function
+    vars:
+      code_sample: |
+        def fibonacci(n):
+            if n <= 0:
+                return []
+            elif n == 1:
+                return [0]
+            sequence = [0, 1]
+            for i in range(2, n):
+                sequence.append(sequence[i-1] + sequence[i-2])
+            return sequence
+      language: 'python'
+    assert:
+      - type: contains-json
+        value: 'analyze_code'
+      - type: contains
+        value: 'fibonacci'
+      - type: contains
+        value: 'performance'
+
+  - description: Test with simple function
+    vars:
+      code_sample: |
+        def calculate_average(numbers):
+            total = 0
+            for num in numbers:
+                total += num
+            return total / len(numbers)
+      language: 'python'
+    assert:
+      - type: contains-json
+        value: 'analyze_code'
+      - type: contains
+        value: 'division by zero'

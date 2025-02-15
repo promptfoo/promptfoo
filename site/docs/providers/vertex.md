@@ -8,7 +8,7 @@ You can use any of the available [model versions](https://cloud.google.com/verte
 
 ### Latest Gemini Models
 
-- `vertex:gemini-2.0-flash-001` - Next-gen workhorse model for all daily tasks, supports real-time streaming
+- `vertex:gemini-2.0-flash-001` - Next-gen workhorse model for all daily tasks
 - `vertex:gemini-2.0-pro-exp-02-05` - Strongest model quality, especially for code & world knowledge (2M context)
 - `vertex:gemini-2.0-flash-lite-preview-02-05` - Cost-effective offering for high throughput
 - `vertex:gemini-2.0-flash-thinking-exp-01-21` - Enhanced reasoning with thinking process in responses
@@ -26,6 +26,20 @@ Anthropic's Claude models are available with the following versions:
 - `vertex:claude-3-5-sonnet@20240620` - Balanced Claude 3.5 Sonnet
 - `vertex:claude-3-haiku@20240307` - Fast Claude 3 Haiku
 
+Note: Claude models support up to 200,000 tokens context length and include built-in safety features.
+
+### Llama Models (Preview)
+
+Meta's Llama models are available through Vertex AI with the following versions:
+
+- `vertex:llama-3.3-70b-instruct-maas` - Latest Llama 3.3 70B model (Preview)
+- `vertex:llama-3.2-90b-vision-instruct-maas` - Vision-capable Llama 3.2 90B (Preview)
+- `vertex:llama-3.1-405b-instruct-maas` - Llama 3.1 405B (GA)
+- `vertex:llama-3.1-70b-instruct-maas` - Llama 3.1 70B (Preview)
+- `vertex:llama-3.1-8b-instruct-maas` - Llama 3.1 8B (Preview)
+
+Note: Llama models support up to 128,000 tokens context length and include built-in safety features through Llama Guard.
+
 ### Gemma Models (Open Models)
 
 - `vertex:gemma` - Lightweight text model for generation and summarization
@@ -42,20 +56,6 @@ Anthropic's Claude models are available with the following versions:
 - `vertex:text-unicorn[@001]` - Specialized text model
 - `vertex:code-bison[@001|@002]` - Code completion
 - `vertex:code-bison-32k[@001|@002]` - Extended context code completion
-
-### Llama Models (Preview)
-
-Meta's Llama models are available through Vertex AI with the following versions:
-
-- `vertex:llama-3.3-70b-instruct-maas` - Latest Llama 3.3 70B model (Preview)
-- `vertex:llama-3.2-90b-vision-instruct-maas` - Vision-capable Llama 3.2 90B (Preview)
-- `vertex:llama-3.1-405b-instruct-maas` - Llama 3.1 405B (GA)
-- `vertex:llama-3.1-70b-instruct-maas` - Llama 3.1 70B (Preview)
-- `vertex:llama-3.1-8b-instruct-maas` - Llama 3.1 8B (Preview)
-
-Note: Llama models support up to 128,000 tokens context length and include built-in safety features through Llama Guard.
-
-Note: Claude models support up to 200,000 tokens context length and include built-in safety features.
 
 ### Embedding Models
 
@@ -86,6 +86,7 @@ npm install google-auth-library
 
 1. Enable the [Vertex AI API](https://console.cloud.google.com/apis/enableflow?apiid=aiplatform.googleapis.com) in your Google Cloud project
 2. Set your project in gcloud CLI:
+
    ```sh
    gcloud config set project PROJECT_ID
    ```
@@ -101,8 +102,10 @@ Choose one of these authentication methods:
    ```
 
 2. Service Account:
+
    - Option A: Use a machine with an authorized service account
    - Option B: Use service account credentials file:
+
      ```sh
      export GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json
      ```
@@ -125,7 +128,7 @@ Configure model behavior using the following options:
 ```yaml
 providers:
   # For Gemini models
-  - id: vertex:gemini-1.5-pro-002
+  - id: vertex:gemini-2.0-pro
     config:
       generationConfig:
         temperature: 0
@@ -139,7 +142,6 @@ providers:
       generationConfig:
         temperature: 0.7
         maxOutputTokens: 1024
-        stream: true
         extra_body:
           google:
             model_safety_settings:
@@ -151,7 +153,6 @@ providers:
     config:
       anthropic_version: 'vertex-2023-10-16'
       max_tokens: 1024
-      stream: true
 ```
 
 ### Safety Settings
@@ -185,7 +186,6 @@ See [Google's SafetySetting API documentation](https://ai.google.dev/api/generat
 - Tool use (function calling) capabilities
 - Available in multiple regions (us-east5, europe-west1, asia-southeast1)
 - Quota limits vary by model version (20-245 QPM)
-- Supports both streaming and non-streaming responses
 
 ## Advanced Usage
 
@@ -248,4 +248,100 @@ Re-authenticate using:
 
 ```sh
 gcloud auth application-default login
+```
+
+## Model Features and Capabilities
+
+### Function Calling and Tools
+
+Gemini and Claude models support function calling and tool use. Configure tools in your provider:
+
+```yaml
+providers:
+  - id: vertex:gemini-2.0-pro
+    config:
+      toolConfig:
+        functionCallingConfig:
+          mode: 'AUTO' # or "ANY", "NONE"
+          allowedFunctionNames: ['get_weather', 'search_places']
+      tools:
+        - functionDeclarations:
+            - name: 'get_weather'
+              description: 'Get weather information'
+              parameters:
+                type: 'OBJECT'
+                properties:
+                  location:
+                    type: 'STRING'
+                    description: 'City name'
+                required: ['location']
+```
+
+Tools can also be loaded from external files:
+
+```yaml
+providers:
+  - id: vertex:gemini-2.0-pro
+    config:
+      tools: 'file://tools.json' # Supports variable substitution
+```
+
+### System Instructions
+
+Configure system-level instructions for the model:
+
+```yaml
+providers:
+  - id: vertex:gemini-2.0-pro
+    config:
+      systemInstruction:
+        parts:
+          - text: 'You are a helpful assistant that {{role}}' # Supports Nunjucks templates
+```
+
+### Generation Configuration
+
+Fine-tune model behavior with these parameters:
+
+```yaml
+providers:
+  - id: vertex:gemini-2.0-pro
+    config:
+      generationConfig:
+        temperature: 0.7 # Controls randomness (0.0 to 1.0)
+        maxOutputTokens: 1024 # Limit response length
+        topP: 0.8 # Nucleus sampling
+        topK: 40 # Top-k sampling
+        stopSequences: ["\n"] # Stop generation at specific sequences
+```
+
+### Context and Examples
+
+Provide context and few-shot examples:
+
+```yaml
+providers:
+  - id: vertex:gemini-2.0-pro
+    config:
+      context: 'You are an expert in machine learning'
+      examples:
+        - input: 'What is regression?'
+          output: 'Regression is a statistical method...'
+```
+
+### Safety Settings
+
+Configure content filtering with granular control:
+
+```yaml
+providers:
+  - id: vertex:gemini-2.0-pro
+    config:
+      safetySettings:
+        - category: 'HARM_CATEGORY_HARASSMENT'
+          threshold: 'BLOCK_ONLY_HIGH'
+        - category: 'HARM_CATEGORY_HATE_SPEECH'
+          threshold: 'BLOCK_MEDIUM_AND_ABOVE'
+        - category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT'
+          threshold: 'BLOCK_LOW_AND_ABOVE'
 ```
