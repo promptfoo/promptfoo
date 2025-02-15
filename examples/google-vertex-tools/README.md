@@ -1,6 +1,6 @@
 # Google Vertex Tools
 
-This example demonstrates how to use Vertex AI models with function calling and tools.
+This example demonstrates how to use [Vertex AI models](https://www.promptfoo.dev/docs/providers/vertex/) with function calling and tools.
 
 ## Quick Start
 
@@ -65,7 +65,3 @@ This will create a new directory containing:
    ```sh
    promptfoo view
    ```
-
-## What's Next
-
-- Check out the [Vertex AI documentation](https://cloud.google.com/vertex-ai/docs) to learn more about available models and features
