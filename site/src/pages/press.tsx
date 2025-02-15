@@ -68,6 +68,9 @@ const PressContent = () => {
                 <Typography variant="h6" component="h4" gutterBottom>
                   DeepSeek AI Censorship Research
                 </Typography>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  January 2025
+                </Typography>
                 <Typography variant="body1" paragraph>
                   Our groundbreaking research on AI censorship and content filtering in DeepSeek
                   models has been widely covered by major technology and news publications.
@@ -186,6 +189,12 @@ const PressContent = () => {
           <Typography variant="h5" component="h4" gutterBottom mt={6}>
             Educational Resources
           </Typography>
+          <Typography variant="body1" paragraph>
+            Leading AI platforms have integrated Promptfoo into their official educational
+            materials, recognizing it as an essential tool for LLM application development,
+            evaluation, and security. These courses and workshops, developed in partnership with
+            industry leaders, provide comprehensive training on building reliable AI applications.
+          </Typography>
           <Grid container spacing={4} mb={6}>
             {/* OpenAI Build Hour */}
             <Grid item xs={12} md={6}>
@@ -205,7 +214,12 @@ const PressContent = () => {
                   really powerful because you can iterate on prompts, configure tests in YAML, and
                   view everything locally... it's faster and more straightforward."
                 </Typography>
-                <Link href="https://vimeo.com/1023317525">Watch video →</Link>
+                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mt: 'auto' }}>
+                  <Typography variant="caption" color="text.secondary">
+                    60 Minutes
+                  </Typography>
+                  <Link href="https://vimeo.com/1023317525">Watch video →</Link>
+                </Box>
               </Box>
             </Grid>
 
@@ -228,9 +242,14 @@ const PressContent = () => {
                   streamlined, out-of-the-box solution that can significantly reduce the time and
                   effort required for comprehensive prompt testing."
                 </Typography>
-                <Link href="https://github.com/anthropics/courses/tree/master/prompt_evaluations">
-                  View course materials →
-                </Link>
+                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mt: 'auto' }}>
+                  <Typography variant="caption" color="text.secondary">
+                    6 Hours
+                  </Typography>
+                  <Link href="https://github.com/anthropics/courses/tree/master/prompt_evaluations">
+                    View course →
+                  </Link>
+                </Box>
               </Box>
             </Grid>
 
@@ -245,7 +264,7 @@ const PressContent = () => {
                   AWS Workshop Studio: Mastering LLM Evaluation
                 </Typography>
                 <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                  Amazon Web Services • 2024
+                  Amazon Web Services • 2025
                 </Typography>
                 <Typography variant="body2" paragraph sx={{ flex: 1 }}>
                   A comprehensive workshop designed to equip you with the knowledge and practical
@@ -253,9 +272,14 @@ const PressContent = () => {
                   applications using Amazon Bedrock and Promptfoo. The course covers everything from
                   basic setup to advanced evaluation techniques.
                 </Typography>
-                <Link href="https://catalog.us-east-1.prod.workshops.aws/promptfoo/en-US">
-                  Access workshop →
-                </Link>
+                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mt: 'auto' }}>
+                  <Typography variant="caption" color="text.secondary">
+                    3 Hours
+                  </Typography>
+                  <Link href="https://catalog.us-east-1.prod.workshops.aws/promptfoo/en-US">
+                    View course →
+                  </Link>
+                </Box>
               </Box>
             </Grid>
 
@@ -279,10 +303,10 @@ const PressContent = () => {
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mt: 'auto' }}>
                   <Typography variant="caption" color="text.secondary">
-                    4.7/5 Rating • 2 Hours • Beginner Friendly
+                    2 Hours
                   </Typography>
                   <Link href="https://cognitiveclass.ai/courses/move-to-the-best-llm-model-for-your-app">
-                    Enroll for free →
+                    View course →
                   </Link>
                 </Box>
               </Box>
