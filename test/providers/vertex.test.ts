@@ -1,13 +1,52 @@
+import * as fs from 'fs';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
 import { getCache, isCacheEnabled } from '../../src/cache';
 import logger from '../../src/logger';
 import { VertexChatProvider } from '../../src/providers/vertex';
 import * as vertexUtil from '../../src/providers/vertexUtil';
 
+// Mock database
+jest.mock('better-sqlite3', () => {
+  return jest.fn().mockReturnValue({
+    prepare: jest.fn(),
+    transaction: jest.fn(),
+    exec: jest.fn(),
+    close: jest.fn(),
+  });
+});
+
+jest.mock('../../src/database', () => ({
+  getDb: jest.fn().mockReturnValue({
+    prepare: jest.fn(),
+    transaction: jest.fn(),
+    exec: jest.fn(),
+    close: jest.fn(),
+  }),
+}));
+
+jest.mock('csv-stringify/sync', () => ({
+  stringify: jest.fn().mockReturnValue('mocked,csv,output'),
+}));
+
+jest.mock('glob', () => ({
+  globSync: jest.fn().mockReturnValue([]),
+}));
+
+jest.mock('fs', () => ({
+  existsSync: jest.fn(),
+  readFileSync: jest.fn(),
+  writeFileSync: jest.fn(),
+  statSync: jest.fn(),
+}));
+
 jest.mock('../../src/cache', () => ({
   getCache: jest.fn().mockReturnValue({
     get: jest.fn(),
     set: jest.fn(),
+    wrap: jest.fn(),
+    del: jest.fn(),
+    reset: jest.fn(),
+    store: {} as any,
   }),
   isCacheEnabled: jest.fn(),
 }));
@@ -158,6 +197,240 @@ describe('VertexChatProvider.callGeminiApi', () => {
     expect(response).toEqual({
       error: 'Error 400: Bad Request',
     });
+  });
+
+  it('should handle function calling configuration', async () => {
+    const tools = [
+      {
+        functionDeclarations: [
+          {
+            name: 'get_weather',
+            description: 'Get weather information',
+            parameters: {
+              type: 'OBJECT' as const,
+              properties: {
+                location: {
+                  type: 'STRING' as const,
+                  description: 'City name',
+                },
+              },
+              required: ['location'],
+            },
+          },
+        ],
+      },
+    ];
+
+    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(tools));
+
+    provider = new VertexChatProvider('gemini-pro', {
+      config: {
+        toolConfig: {
+          functionCallingConfig: {
+            mode: 'AUTO',
+            allowedFunctionNames: ['get_weather'],
+          },
+        },
+        tools,
+      },
+    });
+
+    const mockResponse = {
+      data: [
+        {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    functionCall: {
+                      name: 'get_weather',
+                      args: { location: 'San Francisco' },
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+          usageMetadata: {
+            totalTokenCount: 15,
+            promptTokenCount: 8,
+            candidatesTokenCount: 7,
+          },
+        },
+      ],
+    };
+
+    const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+
+    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: {
+        request: mockRequest,
+      } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+
+    const response = await provider.callGeminiApi('What is the weather in San Francisco?');
+
+    expect(response).toEqual({
+      cached: false,
+      output: JSON.stringify({
+        functionCall: {
+          name: 'get_weather',
+          args: { location: 'San Francisco' },
+        },
+      }),
+      tokenUsage: {
+        total: 15,
+        prompt: 8,
+        completion: 7,
+      },
+    });
+
+    expect(mockRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          toolConfig: {
+            functionCallingConfig: {
+              mode: 'AUTO',
+              allowedFunctionNames: ['get_weather'],
+            },
+          },
+          tools,
+        }),
+      }),
+    );
+  });
+
+  it('should load tools from external file and render variables', async () => {
+    const mockExternalTools = [
+      {
+        functionDeclarations: [
+          {
+            name: 'get_weather',
+            description: 'Get weather in San Francisco',
+            parameters: {
+              type: 'OBJECT' as const,
+              properties: {
+                location: { type: 'STRING' as const },
+              },
+            },
+          },
+        ],
+      },
+    ];
+
+    // Mock file system operations
+    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockExternalTools));
+
+    provider = new VertexChatProvider('gemini-pro', {
+      config: {
+        tools: 'file://tools.json' as any,
+      },
+    });
+
+    const mockResponse = {
+      data: [
+        {
+          candidates: [
+            {
+              content: {
+                parts: [{ text: 'response with tools' }],
+              },
+            },
+          ],
+          usageMetadata: {
+            totalTokenCount: 10,
+            promptTokenCount: 5,
+            candidatesTokenCount: 5,
+          },
+        },
+      ],
+    };
+
+    const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+
+    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: {
+        request: mockRequest,
+      } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+
+    const response = await provider.callGeminiApi('test prompt', {
+      vars: { location: 'San Francisco' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    });
+
+    expect(response).toEqual({
+      cached: false,
+      output: 'response with tools',
+      tokenUsage: {
+        total: 10,
+        prompt: 5,
+        completion: 5,
+      },
+    });
+
+    expect(fs.existsSync).toHaveBeenCalledWith(expect.stringContaining('tools.json'));
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('tools.json'), 'utf8');
+    expect(mockRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          tools: mockExternalTools,
+        }),
+      }),
+    );
+  });
+
+  it('should use model name in cache key', async () => {
+    const mockResponse = {
+      data: [
+        {
+          candidates: [
+            {
+              content: {
+                parts: [{ text: 'response text' }],
+              },
+            },
+          ],
+          usageMetadata: {
+            totalTokenCount: 10,
+            promptTokenCount: 5,
+            candidatesTokenCount: 5,
+          },
+        },
+      ],
+    };
+
+    const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+    const mockCacheSet = jest.fn();
+
+    jest.mocked(getCache).mockReturnValue({
+      get: jest.fn(),
+      set: mockCacheSet,
+      wrap: jest.fn(),
+      del: jest.fn(),
+      reset: jest.fn(),
+      store: {} as any,
+    });
+
+    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: {
+        request: mockRequest,
+      } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+
+    provider = new VertexChatProvider('gemini-2.0-flash-001');
+    await provider.callGeminiApi('test prompt');
+
+    expect(mockCacheSet).toHaveBeenCalledWith(
+      expect.stringContaining('vertex:gemini-2.0-flash-001:'),
+      expect.any(String),
+    );
   });
 });
 
