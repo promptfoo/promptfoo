@@ -834,7 +834,6 @@ describe('readTests', () => {
 
     const result = await readTests(['file://products.yaml']);
 
-    // Verify it's using loadTestsFromGlob path (treating as test file) rather than readStandaloneTestsFile (which would treat as vars)
     expect(result).toEqual(yamlTests);
     expect(globSync).toHaveBeenCalledWith(
       expect.stringContaining('products.yaml'),
@@ -1074,14 +1073,12 @@ my_test_label,What is the date?,{"answer":""},file://../get_context.py`;
   });
 
   it('should propagate non-quote-related CSV errors', async () => {
-    // Mock the parse function to throw a non-quote error
     const mockParse = jest.fn().mockImplementation(() => {
       const error = new Error('Some other CSV error');
       (error as any).code = 'CSV_OTHER_ERROR';
       throw error;
     });
 
-    // Mock the module
     jest.mock('csv-parse/sync', () => ({
       parse: mockParse,
     }));
@@ -1090,8 +1087,6 @@ my_test_label,What is the date?,{"answer":""},file://../get_context.py`;
 my_test_label,What is the date?,"{\""answer\"":""""}",file://../get_context.py`;
 
     jest.spyOn(fs, 'readFileSync').mockReturnValue(csvContent);
-
-    // Re-import the module to use the new mock
     const { readStandaloneTestsFile } = await import('../../src/util/testCaseReader');
     await expect(readStandaloneTestsFile('dummy.csv')).rejects.toThrow('Some other CSV error');
 
