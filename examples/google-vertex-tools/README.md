@@ -4,47 +4,47 @@ This example demonstrates how to use [Vertex AI models](https://www.promptfoo.de
 
 ## Quick Start
 
-To get started with this example, run:
+Initialize this example in a new directory:
 
 ```sh
 promptfoo init --example google-vertex-tools
 ```
 
-This will create a new directory containing:
+This creates three files:
 
-- `promptfooconfig.yaml` - Configuration for your prompts and tests
-- `tools.json` - Function definitions for the tools
-- `README.md` - This documentation file
+- `promptfooconfig.yaml` - Your prompt testing configuration
+- `tools.json` - Function definitions for tool calling
+- `README.md` - This guide
 
 ## Prerequisites
 
-1. Install the required Google auth client:
+1. Install the Google Auth Library:
 
    ```sh
-   npm i google-auth-library
+   npm install google-auth-library
    ```
 
 2. Enable the Vertex AI API in your Google Cloud project
 
-3. Set your Google Cloud project:
+3. Configure your Google Cloud project:
 
    ```sh
    gcloud config set project PROJECT_ID
    ```
 
-4. Authenticate with Google Cloud using one of these methods:
+4. Set up authentication using one of these methods:
 
-   - Log in with your user account:
+   - Authenticate with your Google account:
 
      ```sh
      gcloud auth application-default login
      ```
 
-   - Use a machine with a service account that has the appropriate role
-   - Use service account credentials:
+   - Use a machine with an authorized service account
+   - Use service account credentials file:
 
-     1. Download the credentials JSON file
-     2. Set the environment variable:
+     1. Download your service account JSON
+     2. Set the credentials path:
 
         ```sh
         export GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json
@@ -52,7 +52,7 @@ This will create a new directory containing:
 
 ## Running the Example
 
-1. Review and customize `promptfooconfig.yaml` for your use case
+1. Review and customize the configuration in `promptfooconfig.yaml`
 
 2. Run the eval:
 
@@ -60,8 +60,14 @@ This will create a new directory containing:
    promptfoo eval
    ```
 
-3. View the results:
+3. Examine the results:
 
    ```sh
    promptfoo view
    ```
+
+## Learn More
+
+- [Vertex AI Provider Documentation](https://www.promptfoo.dev/docs/providers/vertex/)
+- [Google Cloud Vertex AI Documentation](https://cloud.google.com/vertex-ai/docs)
+- [promptfoo Documentation](https://www.promptfoo.dev/docs/)
