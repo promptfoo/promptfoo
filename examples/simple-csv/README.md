@@ -1,6 +1,14 @@
 # Simple CSV Example
 
-This example demonstrates how to use CSV files for test cases, including working with JSON fields for language translation tasks.
+This example demonstrates how to use CSV files for test cases in promptfoo, including working with JSON fields for language translation tasks.
+
+## Getting Started
+
+You can initialize this example in your project by running:
+
+```bash
+promptfoo init --example simple-csv
+```
 
 ## Features Demonstrated
 
@@ -9,7 +17,7 @@ This example demonstrates how to use CSV files for test cases, including working
 - Style configuration via JSON fields (tone, length)
 - Case-insensitive test assertions (icontains)
 
-## Files
+## Project Structure
 
 - `promptfooconfig.yaml`: Main configuration file
 - `prompts.txt`: Contains two prompt templates:
@@ -17,26 +25,18 @@ This example demonstrates how to use CSV files for test cases, including working
   2. A conversational language assistant prompt
 - `tests.csv`: Test cases for French and Pirate translations
 
-## Usage
+## Running the Tests
+
+From the root of this example, you can run the eval as:
 
 ```bash
 promptfoo eval
 ```
 
-## CSV Format
+To view the results in your browser:
 
-The `tests.csv` file demonstrates:
-
-1. Basic structure:
-
-```csv
-language,body,style_config,__expected
-French,"Hello world",{"tone":"formal","length":"brief"},"icontains:bonjour"
+```bash
+promptfoo view
 ```
 
-2. Fields:
-
-- `language`: Target language for translation
-- `body`: Text to translate
-- `style_config`: JSON object with style parameters
-- `__expected`: Test assertion using icontains
+For more details on using CSV files in promptfoo, see our [Import from CSV](https://www.promptfoo.dev/docs/configuration/parameters/#import-from-csv) documentation.
