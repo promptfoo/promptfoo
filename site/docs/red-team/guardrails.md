@@ -5,7 +5,13 @@ sidebar_position: 99
 
 # Guardrails
 
-The Guardrails API helps detect potential security risks in user inputs to language models, identify personally identifiable information (PII), and assess potential harm in content.
+Guardrails are an active mitigation solution to LLM security, implemented to control and monitor user interactions. They help prevent misuse, detect potential security risks, and ensure appropriate model behavior by filtering or blocking problematic inputs and outputs.
+
+Common guardrails include prompt injection/jailbreak detection, content moderation, and PII (personally identifiable information) detection.
+
+## Guardrails API
+
+The Guardrails API helps detect potential security risks in user inputs to LLMs, identify PII, and assess potential harm in content.
 
 The Guardrails API is focused on classification and detection. It returns a result, and your application can decide whether to warn, block, or otherwise respond to the input.
 
