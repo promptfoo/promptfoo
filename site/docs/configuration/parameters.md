@@ -475,15 +475,7 @@ You can load your tests from [Google Sheets](/docs/configuration/guide#loading-t
 
 #### CSV Files with JSON Fields
 
-When using CSV files for test cases, you may need to include JSON fields. There are two ways to handle this:
-
-```csv
-label,query,expected_json_format
-my_test_label,What is the date?,{"answer":""} # Simple JSON (no commas)
-my_test_label,What is the config?,"{""tone"":""formal"",""length"":""brief""}" # Escaped JSON with commas
-```
-
-By default, promptfoo will try to parse JSON fields in both formats. You can enforce strict CSV parsing (per RFC 4180, which requires properly escaped JSON) by setting `PROMPTFOO_CSV_STRICT=true`.
+CSV files can include JSON fields for structured data. Simple JSON can be unquoted (`{"answer":""}`), while JSON with commas should be escaped (`"{""key"":""value""}"`). By default, promptfoo will try to parse JSON fields in both formats. Set `PROMPTFOO_CSV_STRICT=true` to enforce RFC 4180 compliance. Use the `load` filter to parse JSON in prompts: `{{ (json_field | load).property }}`.
 
 ## Output File
 
