@@ -13,8 +13,8 @@ import type {
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../types';
+import type { EnvOverrides } from '../types/env';
 import { maybeLoadFromExternalFile } from '../util';
-import type { EnvOverrides } from '../validators/providers';
 import { outputFromMessage, parseMessages } from './anthropic';
 import { novaOutputFromMessage, novaParseMessages } from './bedrockUtil';
 import { parseChatPrompt } from './shared';

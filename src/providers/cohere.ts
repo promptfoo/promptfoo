@@ -8,7 +8,7 @@ import type {
   ApiEmbeddingProvider,
   ProviderEmbeddingResponse,
 } from '../types';
-import type { EnvOverrides } from '../validators/providers';
+import type { EnvOverrides } from '../types/env';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface CohereChatOptions {

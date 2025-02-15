@@ -11,8 +11,8 @@ import type {
   ProviderEmbeddingResponse,
   TokenUsage,
 } from '../types';
+import type { EnvOverrides } from '../types/env';
 import { getNunjucksEngine } from '../util/templates';
-import type { EnvOverrides } from '../validators/providers';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 import type { GeminiErrorResponse, GeminiFormat, Palm2ApiResponse } from './vertexUtil';
 import {

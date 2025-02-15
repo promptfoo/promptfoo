@@ -11,9 +11,9 @@ import type {
   ProviderModerationResponse,
   ProviderResponse,
 } from '../../types';
+import type { EnvOverrides } from '../../types/env';
 import { safeJsonStringify } from '../../util/json';
 import { ellipsize } from '../../util/text';
-import type { EnvOverrides } from '../../validators/providers';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import type { OpenAiSharedOptions } from './types';
 

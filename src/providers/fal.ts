@@ -3,8 +3,8 @@ import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../types';
+import type { EnvOverrides } from '../types/env';
 import { ellipsize } from '../util/text';
-import type { EnvOverrides } from '../validators/providers';
 
 type FalProviderOptions = {
   apiKey?: string;

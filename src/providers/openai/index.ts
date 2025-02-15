@@ -5,7 +5,7 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types';
-import type { EnvOverrides } from '../../validators/providers';
+import type { EnvOverrides } from '../../types/env';
 import type { OpenAiSharedOptions } from './types';
 
 export class OpenAiGenericProvider implements ApiProvider {

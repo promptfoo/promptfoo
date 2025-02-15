@@ -79,11 +79,11 @@ import RedteamImageIterativeProvider from './redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from './redteam/providers/iterativeTree';
 import RedteamPandamoniumProvider from './redteam/providers/pandamonium';
 import type { LoadApiProviderContext, TestSuiteConfig } from './types';
+import type { EnvOverrides } from './types/env';
 import type { ApiProvider, ProviderOptions, ProviderOptionsMap } from './types/providers';
 import { isJavascriptFile } from './util/file';
 import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
-import type { EnvOverrides } from './validators/providers';
 
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
 export async function loadApiProvider(

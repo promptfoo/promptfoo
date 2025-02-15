@@ -9,8 +9,8 @@ import type {
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../types';
+import type { EnvOverrides } from '../types/env';
 import invariant from '../util/invariant';
-import type { EnvOverrides } from '../validators/providers';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 /**

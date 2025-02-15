@@ -3,8 +3,8 @@ import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString, getEnvFloat, getEnvInt } from '../envars';
 import logger from '../logger';
 import type { ApiProvider, ProviderResponse, TokenUsage } from '../types';
+import type { EnvOverrides } from '../types/env';
 import { maybeLoadFromExternalFile } from '../util';
-import type { EnvOverrides } from '../validators/providers';
 import { calculateCost } from './shared';
 
 const ANTHROPIC_MODELS = [

@@ -17,10 +17,10 @@ import type {
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../types';
+import type { EnvOverrides } from '../types/env';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
 import invariant from '../util/invariant';
 import { sleep } from '../util/time';
-import type { EnvOverrides } from '../validators/providers';
 import { calculateCost, parseChatPrompt, REQUEST_TIMEOUT_MS, toTitleCase } from './shared';
 
 export const DEFAULT_AZURE_API_VERSION = '2024-12-01-preview';
