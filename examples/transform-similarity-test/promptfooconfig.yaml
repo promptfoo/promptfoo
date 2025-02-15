@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Testing similarity assertions with transformations'
+
+prompts:
+  - file://prompts.txt
+
+providers:
+  - id: openai:gpt-4o
+    config:
+      temperature: 0.7
+      max_tokens: 150
+
+defaultTest:
+  options:
+    transform: file://transform.py:get_transform
+  assert:
+    - type: is-json
+      metric: ValidJSON
+
+tests:
+  - description: Testing banana description transformation
+    vars:
+      input: 'Tell me about bananas'
+    assert:
+      - type: similar
+        value: 'yellow fruit'
+        threshold: 0.7
+        metric: ContentAccuracy
+
+  - description: Testing sky color transformation
+    vars:
+      input: 'What color is the sky?'
+    assert:
+      - type: similar
+        value: 'blue'
+        threshold: 0.7
+        metric: ContentAccuracy
+
+  - description: Testing cat description transformation
+    vars:
+      input: 'Describe a cat'
+    assert:
+      - type: similar
+        value: 'furry feline pet'
+        threshold: 0.7
+        metric: ContentAccuracy
+
+derivedMetrics:
+  - name: 'OverallAccuracy'
+    value: '(ValidJSON + ContentAccuracy) / 2'

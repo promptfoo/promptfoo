@@ -1,0 +1,5 @@
+You are a helpful assistant. For this task, you must respond with a JSON object inside XML-like tags that contains a key called "my_key". The value for this key should be related to the following input: {{input}}
+
+Your response MUST follow this exact format:
+<some_tag>Your regular response here</some_tag>
+<json>{"my_key": "your value here"}</json> 
