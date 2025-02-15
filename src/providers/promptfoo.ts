@@ -14,7 +14,7 @@ import type {
   CallApiOptionsParams,
   TokenUsage,
 } from '../types';
-import type { EnvOverrides } from '../types/env';
+import type { EnvOverrides } from '../validators/providers';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface PromptfooHarmfulCompletionOptions {

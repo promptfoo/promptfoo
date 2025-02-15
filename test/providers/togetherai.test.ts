@@ -3,7 +3,7 @@ import { OpenAiCompletionProvider } from '../../src/providers/openai/completion'
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import { createTogetherAiProvider } from '../../src/providers/togetherai';
 import type { ProviderOptions } from '../../src/types';
-import type { EnvOverrides } from '../../src/types/env';
+import type { EnvOverrides } from '../../src/validators/providers';
 
 jest.mock('../../src/providers/openai');
 

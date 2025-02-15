@@ -7,7 +7,7 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types';
-import type { EnvOverrides } from '../types/env';
+import type { EnvOverrides } from '../validators/providers';
 import { calculateCost, REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 const MISTRAL_CHAT_MODELS = [

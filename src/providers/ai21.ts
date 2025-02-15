@@ -2,7 +2,7 @@ import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import type { ApiProvider, ProviderResponse, TokenUsage } from '../types';
-import type { EnvOverrides } from '../types/env';
+import type { EnvOverrides } from '../validators/providers';
 import { calculateCost, REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 const AI21_CHAT_MODELS = [

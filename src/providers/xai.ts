@@ -1,6 +1,6 @@
 import type { ApiProvider, ProviderOptions } from '../types';
-import type { EnvOverrides } from '../types/env';
 import invariant from '../util/invariant';
+import type { EnvOverrides } from '../validators/providers';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
 export function createXAIProvider(

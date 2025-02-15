@@ -32,8 +32,8 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types';
-import type { EnvOverrides } from '../types/env';
 import { safeJsonStringify } from '../util/json';
+import type { EnvOverrides } from '../validators/providers';
 import { AnthropicMessagesProvider, calculateAnthropicCost } from './anthropic';
 import { AzureChatCompletionProvider, AzureEmbeddingProvider, calculateAzureCost } from './azure';
 import { GoogleChatProvider } from './google';

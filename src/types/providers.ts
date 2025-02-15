@@ -1,5 +1,5 @@
 import type winston from 'winston';
-import type { EnvOverrides } from './env';
+import type { EnvOverrides } from '../validators/providers';
 import type { Prompt } from './prompts';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
 

@@ -1,5 +1,5 @@
 import type { ApiProvider, ProviderOptions } from '../types';
-import type { EnvOverrides } from '../types/env';
+import type { EnvOverrides } from '../validators/providers';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';

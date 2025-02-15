@@ -7,8 +7,8 @@ import type {
   CallApiContextParams,
   GuardrailResponse,
 } from '../types';
-import type { EnvOverrides } from '../types/env';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
+import type { EnvOverrides } from '../validators/providers';
 import { CHAT_MODELS } from './googleShared';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 import { maybeCoerceToGeminiFormat } from './vertexUtil';
