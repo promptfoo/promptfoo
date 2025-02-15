@@ -33,6 +33,10 @@ export function getNunjucksEngine(
     env.addGlobal('env', process.env);
   }
 
+  env.addFilter('load', function (str) {
+    return JSON.parse(str);
+  });
+
   if (filters) {
     for (const [name, filter] of Object.entries(filters)) {
       env.addFilter(name, filter);

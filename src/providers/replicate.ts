@@ -173,15 +173,17 @@ export class ReplicateProvider implements ApiProvider {
 const LLAMAGUARD_DESCRIPTIONS: { [key: string]: string } = {
   S1: 'Violent Crimes',
   S2: 'Non-Violent Crimes',
-  S3: 'Sex-Related Crimes',
-  S4: 'Child Sexual Exploitation',
-  S5: 'Specialized Advice',
-  S6: 'Privacy',
-  S7: 'Intellectual Property',
-  S8: 'Indiscriminate Weapons',
-  S9: 'Hate',
-  S10: 'Suicide & Self-Harm',
-  S11: 'Sexual Content',
+  S3: 'Sex Crimes',
+  S4: 'Child Exploitation',
+  S5: 'Defamation',
+  S6: 'Specialized Advice',
+  S7: 'Privacy',
+  S8: 'Intellectual Property',
+  S9: 'Indiscriminate Weapons',
+  S10: 'Hate',
+  S11: 'Self-Harm',
+  S12: 'Sexual Content',
+  S13: 'Elections',
 };
 
 export class ReplicateModerationProvider
@@ -271,7 +273,7 @@ export class ReplicateModerationProvider
 }
 
 export const DefaultModerationProvider = new ReplicateModerationProvider(
-  'meta/meta-llama-guard-2-8b:b063023ee937f28e922982abdbf97b041ffe34ad3b35a53d33e1d74bb19b36c4',
+  'meta/llama-guard-3-8b:146d1220d447cdcc639bc17c5f6137416042abee6ae153a2615e6ef5749205c8',
 );
 
 interface ReplicateImageOptions {
@@ -359,3 +361,5 @@ export class ReplicateImageProvider extends ReplicateProvider {
     };
   }
 }
+
+export { LLAMAGUARD_DESCRIPTIONS };
