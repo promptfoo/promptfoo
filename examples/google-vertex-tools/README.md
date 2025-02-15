@@ -1,37 +1,71 @@
 # Google Vertex Tools
 
-This example shows how to use Vertex AI models with tools. To get started, you can run:
+This example demonstrates how to use Vertex AI models with function calling and tools.
+
+## Quick Start
+
+To get started with this example, run:
 
 ```sh
 promptfoo init --example google-vertex-tools
 ```
 
-This will create a new directory with a `promptfooconfig.yaml`, `tools.json` and this `README.md` file.
+This will create a new directory containing:
 
-To call Vertex AI models in Node, you'll need to install Google's official auth client as a peer dependency:
+- `promptfooconfig.yaml` - Configuration for your prompts and tests
+- `tools.json` - Function definitions for the tools
+- `README.md` - This documentation file
 
-```sh
-npm i google-auth-library
-```
+## Prerequisites
 
-Make sure the Vertex AI API is enabled for the relevant project in Google Cloud. Then, ensure that you've selected that project in the gcloud cli:
+1. Install the required Google auth client:
 
-```sh
-gcloud config set project PROJECT_ID
-```
+   ```sh
+   npm i google-auth-library
+   ```
 
-Next, make sure that you've authenticated to Google Cloud using one of these methods:
+2. Enable the Vertex AI API in your Google Cloud project
 
-- You are logged into an account using `gcloud auth application-default login`
-- You are running on a machine that uses a service account with the appropriate role
-- You have downloaded the credentials for a service account with the appropriate role and set the `GOOGLE_APPLICATION_CREDENTIALS` environment variable to the path of the credentials file.
+3. Set your Google Cloud project:
 
-Then, edit `promptfooconfig.yaml`
+   ```sh
+   gcloud config set project PROJECT_ID
+   ```
 
-Then run:
+4. Authenticate with Google Cloud using one of these methods:
 
-```
-promptfoo eval
-```
+   - Log in with your user account:
 
-Afterwards, you can view the results by running `promptfoo view`
+     ```sh
+     gcloud auth application-default login
+     ```
+
+   - Use a machine with a service account that has the appropriate role
+   - Use service account credentials:
+
+     1. Download the credentials JSON file
+     2. Set the environment variable:
+
+        ```sh
+        export GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json
+        ```
+
+## Running the Example
+
+1. Review and customize `promptfooconfig.yaml` for your use case
+
+2. Run the eval:
+
+   ```sh
+   promptfoo eval
+   ```
+
+3. View the results:
+
+   ```sh
+   promptfoo view
+   ```
+
+## What's Next
+
+- Check out the [Vertex AI documentation](https://cloud.google.com/vertex-ai/docs) to learn more about available models and features
