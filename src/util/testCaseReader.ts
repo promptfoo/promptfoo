@@ -17,10 +17,10 @@ import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
 import type {
   CsvRow,
+  ProviderOptions,
   TestCase,
   TestCaseWithVarsFile,
   TestSuiteConfig,
-  ProviderOptions,
 } from '../types';
 import { isJavascriptFile } from './file';
 
@@ -81,7 +81,7 @@ export async function readStandaloneTestsFile(
   const effectiveColonCount = isWindowsPath ? colonCount - 1 : colonCount;
 
   if (effectiveColonCount > 1) {
-    throw new Error(`Invalid Python test file path: ${varsPath}`);
+    throw new Error(`Too many colons. Invalid test file script path: ${varsPath}`);
   }
 
   const pathWithoutFunction =
