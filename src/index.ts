@@ -24,12 +24,27 @@ import type {
 import { readFilters, writeMultipleOutputs, writeOutput } from './util';
 import invariant from './util/invariant';
 import { readTests } from './util/testCaseReader';
+import { createShareableUrl } from './share';
 
 export * from './types';
 
 export { generateTable } from './table';
 
-async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
+// Type for sharing configuration
+type SharingConfig = boolean | {
+  apiBaseUrl?: string;
+  appBaseUrl?: string;
+};
+
+// Extend EvaluateTestSuite to include sharing options
+interface EvaluateTestSuiteWithSharing extends EvaluateTestSuite {
+  sharing?: SharingConfig;
+}
+
+async function evaluate(
+  testSuite: EvaluateTestSuiteWithSharing,
+  options: EvaluateOptions = {},
+): Promise<Eval & { shareUrl?: string | null }> {
   if (testSuite.writeLatestResults) {
     await runDbMigrations();
   }
@@ -116,16 +131,25 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     },
   );
 
+  // Generate shareable URL if sharing is enabled
+  // Check both the config and test suite for sharing flag
+  let shareUrl: string | null = null;
+  const isSharingEnabled = Boolean(testSuite.sharing) && Boolean(unifiedConfig.sharing);
+  if (isSharingEnabled) {
+    shareUrl = await createShareableUrl(evalRecord);
+  }
+
+  // Handle outputs after evaluation but before telemetry
   if (testSuite.outputPath) {
     if (typeof testSuite.outputPath === 'string') {
-      await writeOutput(testSuite.outputPath, evalRecord, null);
+      await writeOutput(testSuite.outputPath, evalRecord, shareUrl);
     } else if (Array.isArray(testSuite.outputPath)) {
-      await writeMultipleOutputs(testSuite.outputPath, evalRecord, null);
+      await writeMultipleOutputs(testSuite.outputPath, evalRecord, shareUrl);
     }
   }
 
   await telemetry.send();
-  return ret;
+  return Object.assign(ret, { shareUrl });
 }
 
 const redteam = {
