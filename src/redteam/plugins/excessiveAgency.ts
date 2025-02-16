@@ -139,3 +139,5 @@ export class ExcessiveAgencyGrader extends RedteamGraderBase {
     ];
   }
 }
+
+export { DEFAULT_EXAMPLES };
