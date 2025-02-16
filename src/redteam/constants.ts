@@ -141,6 +141,7 @@ export const ADDITIONAL_PLUGINS = [
   'cyberseceval',
   'debug-access',
   'divergent-repetition',
+  'extra-information',
   'harmbench',
   'imitation',
   'indirect-prompt-injection',
@@ -207,6 +208,7 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
       'pii:social',
       'harmful:privacy',
       'cross-session-leak',
+      'extra-information',
       'prompt-extraction',
     ],
     strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
@@ -671,6 +673,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
   'reasoning-dos':
     'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
+  'extra-information': 'Debug Information Exposure',
 };
 
 // These names are displayed in risk cards and in the table
@@ -758,6 +761,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   ssrf: 'SSRF Vulnerability',
   'system-prompt-override': 'System Prompt Override',
   'reasoning-dos': 'Reasoning DoS',
+  'extra-information': 'Excessive Information Exposure',
 };
 
 export enum Severity {
@@ -791,6 +795,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   default: Severity.Low,
   'divergent-repetition': Severity.Medium,
   'excessive-agency': Severity.Medium,
+  'extra-information': Severity.Low,
   foundation: Severity.Medium,
   hallucination: Severity.Medium,
   harmbench: Severity.Medium,
@@ -852,6 +857,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'bfla',
     'bola',
     'debug-access',
+    'extra-information',
     'hijacking',
     'indirect-prompt-injection',
     'rbac',
@@ -956,6 +962,7 @@ export const categoryAliases: Record<Plugin, string> = {
   default: 'Default',
   'divergent-repetition': 'DivergentRepetition',
   'excessive-agency': 'ExcessiveAgency',
+  'extra-information': 'Excessive Information Exposure',
   foundation: 'Foundation',
   hallucination: 'Hallucination',
   harmbench: 'Harmbench',
@@ -1036,6 +1043,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'divergent-repetition':
     'Tests repetitive patterns that can cause the model to diverge from normal behavior and leak training data',
   'excessive-agency': 'Evaluates system boundary enforcement and unauthorized action prevention',
+  'extra-information':
+    'Tests for exposure of debug information, embeddings, and internal system state in API responses',
   foundation: 'Tests a collection of plugins designed to run against foundation models',
   hallucination: 'Tests system resilience against false information generation and propagation',
   harmbench:

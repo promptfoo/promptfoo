@@ -633,19 +633,20 @@ providers:
 
 Supported config options:
 
-| Option            | Type                    | Description                                                                                                                                                                         |
-| ----------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| url               | string                  | The URL to send the HTTP request to. If not provided, the `id` of the provider will be used as the URL.                                                                             |
-| request           | string                  | A raw HTTP request to send. This will override the `url`, `method`, `headers`, `body`, and `queryParams` options.                                                                   |
-| method            | string                  | HTTP method (GET, POST, etc). Defaults to POST if body is provided, GET otherwise.                                                                                                  |
-| headers           | Record\<string, string> | Key-value pairs of HTTP headers to include in the request.                                                                                                                          |
-| body              | object \| string        | The request body. For POST requests, objects are automatically stringified as JSON.                                                                                                 |
-| queryParams       | Record\<string, string> | Key-value pairs of query parameters to append to the URL.                                                                                                                           |
-| transformRequest  | string \| Function      | A function, string template, or file path to transform the prompt before sending it to the API.                                                                                     |
-| transformResponse | string \| Function      | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field. |
-| maxRetries        | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                |
-| validateStatus    | Function                | A function that takes a status code and returns a boolean indicating if the response should be treated as successful. By default, accepts all status codes.                         |
-| signatureAuth     | object                  | Configuration for digital signature authentication. See Signature Auth Options below.                                                                                               |
+| Option             | Type                    | Description                                                                                                                                                                         |
+| ------------------ | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| url                | string                  | The URL to send the HTTP request to. If not provided, the `id` of the provider will be used as the URL.                                                                             |
+| request            | string                  | A raw HTTP request to send. This will override the `url`, `method`, `headers`, `body`, and `queryParams` options.                                                                   |
+| method             | string                  | HTTP method (GET, POST, etc). Defaults to POST if body is provided, GET otherwise.                                                                                                  |
+| headers            | Record\<string, string> | Key-value pairs of HTTP headers to include in the request.                                                                                                                          |
+| body               | object \| string        | The request body. For POST requests, objects are automatically stringified as JSON.                                                                                                 |
+| queryParams        | Record\<string, string> | Key-value pairs of query parameters to append to the URL.                                                                                                                           |
+| transformRequest   | string \| Function      | A function, string template, or file path to transform the prompt before sending it to the API.                                                                                     |
+| transformResponse  | string \| Function      | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field. |
+| maxRetries         | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                |
+| validateStatus     | Function                | A function that takes a status code and returns a boolean indicating if the response should be treated as successful. By default, accepts all status codes.                         |
+| signatureAuth      | object                  | Configuration for digital signature authentication. See Signature Auth Options below.                                                                                               |
+| includeRawResponse | boolean                 | Include the raw response in the response object. Defaults to false.                                                                                                                 |
 
 ### Signature Auth Options
 

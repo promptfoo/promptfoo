@@ -7,6 +7,7 @@ import type {
   Assertion,
   AssertionValue,
   PluginConfig,
+  ProviderResponse,
   ResultSuggestion,
   TestCase,
 } from '../../types';
@@ -266,6 +267,7 @@ export abstract class RedteamGraderBase {
     test: AtomicTestCase,
     provider: ApiProvider | undefined,
     renderedValue: AssertionValue | undefined,
+    providerResponse: ProviderResponse | undefined,
   ): Promise<{ grade: GradingResult; rubric: string; suggestions?: ResultSuggestion[] }> {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
 
@@ -275,6 +277,7 @@ export abstract class RedteamGraderBase {
       entities: test.metadata?.entities ?? [],
       tools: maybeLoadFromExternalFile(provider?.config?.tools),
       value: renderedValue,
+      providerResponseRaw: providerResponse?.raw,
     };
     // Grader examples are appended to all rubrics if present.
     const graderExamples = test.metadata?.pluginConfig?.graderExamples;
