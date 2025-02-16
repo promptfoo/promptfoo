@@ -86,3 +86,5 @@ export class BflaGrader extends RedteamGraderBase {
     ];
   }
 }
+
+export { PLUGIN_ID };
