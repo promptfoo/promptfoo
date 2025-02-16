@@ -21,32 +21,51 @@ import type {
   EvaluateTestSuite,
   ProviderOptions,
   Scenario,
+  UnifiedConfig,
+  EvaluateResult,
+  TokenUsage,
 } from './types';
+import type { EvaluateResultWithSharing } from './types/sharing';
 import { readFilters, writeMultipleOutputs, writeOutput } from './util';
 import invariant from './util/invariant';
 import { readTests } from './util/testCaseReader';
 
 export * from './types';
+export * from './types/sharing';
 
 export { generateTable } from './table';
 
-// Type for sharing configuration
-type SharingConfig =
-  | boolean
-  | {
-      apiBaseUrl?: string;
-      appBaseUrl?: string;
-    };
+/**
+ * Check if sharing is enabled in both test suite and unified configuration
+ */
+function isSharingEnabled(testSuite: EvaluateTestSuite, config: Partial<UnifiedConfig>): boolean {
+  return Boolean(testSuite.sharing) && Boolean(config.sharing);
+}
 
-// Extend EvaluateTestSuite to include sharing options
-interface EvaluateTestSuiteWithSharing extends EvaluateTestSuite {
-  sharing?: SharingConfig;
+/**
+ * Generate a shareable URL if sharing is enabled
+ */
+async function generateShareUrl(
+  testSuite: EvaluateTestSuite,
+  unifiedConfig: Partial<UnifiedConfig>,
+  evalRecord: Eval,
+): Promise<string | null> {
+  if (!isSharingEnabled(testSuite, unifiedConfig)) {
+    return null;
+  }
+
+  try {
+    return await createShareableUrl(evalRecord);
+  } catch (error) {
+    console.warn('Failed to generate shareable URL:', error);
+    return null;
+  }
 }
 
 async function evaluate(
-  testSuite: EvaluateTestSuiteWithSharing,
+  testSuite: EvaluateTestSuite,
   options: EvaluateOptions = {},
-): Promise<Eval & { shareUrl?: string | null }> {
+): Promise<EvaluateResultWithSharing> {
   if (testSuite.writeLatestResults) {
     await runDbMigrations();
   }
@@ -134,12 +153,7 @@ async function evaluate(
   );
 
   // Generate shareable URL if sharing is enabled
-  // Check both the config and test suite for sharing flag
-  let shareUrl: string | null = null;
-  const isSharingEnabled = Boolean(testSuite.sharing) && Boolean(unifiedConfig.sharing);
-  if (isSharingEnabled) {
-    shareUrl = await createShareableUrl(evalRecord);
-  }
+  const shareUrl = await generateShareUrl(testSuite, unifiedConfig, evalRecord);
 
   // Handle outputs after evaluation but before telemetry
   if (testSuite.outputPath) {
@@ -151,7 +165,116 @@ async function evaluate(
   }
 
   await telemetry.send();
-  return Object.assign(ret, { shareUrl });
+
+  // Default values for result mapping
+  const defaultValues = {
+    id: '',
+    provider: {
+      id: '',
+      label: undefined,
+    },
+    failureReason: 0,
+    success: false,
+    score: 0,
+    latencyMs: 0,
+    namedScores: {},
+    metadata: {},
+  };
+
+  // Convert EvalResult[] to EvaluateResult[]
+  const evaluateResults = ret.results.map(
+    (result) =>
+      ({
+        ...defaultValues,
+        ...result,
+        description: result.description === null ? undefined : result.description,
+        promptId: result.prompt.id || '',
+        provider: {
+          id: result.provider?.id || '',
+          label: result.provider?.label,
+        },
+        vars: result.testCase.vars || {},
+        error: result.error || undefined,
+        tokenUsage: result.response?.tokenUsage
+          ? {
+              ...result.response.tokenUsage,
+              numRequests: 1,
+              completionDetails: {
+                reasoning: 0,
+                acceptedPrediction: 0,
+                rejectedPrediction: 0,
+              },
+            }
+          : undefined,
+      }) as EvaluateResult,
+  );
+
+  // Calculate total token usage with a single reduce operation
+  const totalTokenUsage = evaluateResults.reduce(
+    (acc, result) => {
+      const tokenUsage = result.response?.tokenUsage;
+      if (!tokenUsage) {
+        return acc;
+      }
+
+      // Update base token counts
+      acc.total += tokenUsage.total || 0;
+      acc.prompt += tokenUsage.prompt || 0;
+      acc.completion += tokenUsage.completion || 0;
+      acc.cached += tokenUsage.cached || 0;
+      acc.numRequests += 1;
+
+      // Update completion details if present
+      const responseDetails = tokenUsage.completionDetails;
+      if (responseDetails && acc.completionDetails) {
+        // Initialize if not already set
+        if (!acc.completionDetails.reasoning) {
+          acc.completionDetails.reasoning = 0;
+        }
+        if (!acc.completionDetails.acceptedPrediction) {
+          acc.completionDetails.acceptedPrediction = 0;
+        }
+        if (!acc.completionDetails.rejectedPrediction) {
+          acc.completionDetails.rejectedPrediction = 0;
+        }
+
+        acc.completionDetails.reasoning += responseDetails.reasoning || 0;
+        acc.completionDetails.acceptedPrediction += responseDetails.acceptedPrediction || 0;
+        acc.completionDetails.rejectedPrediction += responseDetails.rejectedPrediction || 0;
+      }
+
+      return acc;
+    },
+    {
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      cached: 0,
+      numRequests: 0,
+      completionDetails: {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
+    } as Required<TokenUsage>,
+  );
+
+  // Calculate stats using array methods
+  const stats = {
+    successes: evaluateResults.filter((r) => r.success).length,
+    failures: evaluateResults.filter((r) => !r.success).length,
+    errors: evaluateResults.filter((r) => r.error).length,
+    tokenUsage: totalTokenUsage,
+  };
+
+  return {
+    version: 3,
+    timestamp: new Date().toISOString(),
+    results: evaluateResults,
+    prompts: ret.prompts || [],
+    stats,
+    shareUrl,
+  };
 }
 
 const redteam = {

@@ -21,6 +21,7 @@ import type { EnvOverrides } from './env';
 import type { Prompt, PromptFunction } from './prompts';
 import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
+import type { SharingOption } from './sharing';
 
 export * from './prompts';
 export * from './providers';
@@ -742,6 +743,9 @@ export const TestSuiteSchema = z.object({
 
   // Redteam configuration - used only when generating redteam tests
   redteam: z.custom<RedteamFileConfig>().optional(),
+
+  // Sharing configuration
+  sharing: z.custom<SharingOption>().optional(),
 });
 
 export type TestSuite = z.infer<typeof TestSuiteSchema>;
@@ -858,6 +862,12 @@ export interface EvalWithMetadata {
 export type EvaluateTestSuite = {
   prompts: (string | object | PromptFunction)[];
   writeLatestResults?: boolean;
+  /**
+   * Enable sharing functionality to generate a shareable URL.
+   * Can be a boolean or an object with custom endpoint configuration.
+   * Note: Sharing must be enabled in both the test suite and unified configuration.
+   */
+  sharing?: SharingOption;
 } & Omit<TestSuiteConfig, 'prompts'>;
 
 export type EvaluateTestSuiteWithEvaluateOptions = EvaluateTestSuite & {

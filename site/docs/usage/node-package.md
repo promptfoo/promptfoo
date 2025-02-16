@@ -25,11 +25,31 @@ const results = await promptfoo.evaluate(testSuite, options);
 
 The evaluate function takes the following parameters:
 
-- `testSuite`: the Javascript equivalent of the promptfooconfig.yaml as a [`TestSuiteConfiguration` object](/docs/configuration/reference#testsuiteconfiguration).
+- `testSuite`: the Javascript equivalent of the promptfooconfig.yaml as a [`TestSuiteConfiguration` object](/docs/configuration/reference#testsuiteconfiguration). The configuration can include:
+
+  - `sharing`: Enable sharing functionality to generate a shareable URL for the evaluation results. Can be:
+    - `boolean`: When `true`, generates a shareable URL using default settings
+    - `object`: Configure sharing with custom settings:
+      ```typescript
+      type SharingConfig = {
+        apiBaseUrl?: string; // Custom API endpoint for sharing service
+        appBaseUrl?: string; // Custom web viewer URL
+      };
+      ```
+      Note:
+    - Sharing must be enabled in both the test suite and unified configuration to generate a URL
+    - If sharing service is unavailable, `shareUrl` will be `null` and a warning will be logged
+    - When `writeLatestResults` is true, results will be saved to disk before generating the share URL
 
 - `options`: misc options related to how the test harness runs, as an [`EvaluateOptions` object](/docs/configuration/reference#evaluateoptions).
 
-The results of the evaluation are returned as an [`EvaluateSummary` object](/docs/configuration/reference#evaluatesummary).
+The evaluate function returns a Promise that resolves to an evaluation result object containing:
+
+- All properties from the [`EvaluateSummary` object](/docs/configuration/reference#evaluatesummary)
+- `shareUrl`: A string containing the shareable URL when sharing is enabled and successful, or null when:
+  - Sharing is disabled (either in test suite or unified config)
+  - Sharing service is unavailable
+  - URL generation fails
 
 ### Provider functions
 
@@ -87,7 +107,7 @@ For more info on different assertion types, see [assertions & metrics](/docs/con
 
 ## Example
 
-`promptfoo` exports an `evaluate` function that you can use to run prompt evaluations.
+Here's a complete example showing various features including sharing:
 
 ```js
 import promptfoo from 'promptfoo';
@@ -109,14 +129,24 @@ const results = await promptfoo.evaluate(
       },
     ],
     writeLatestResults: true, // write results to disk so they can be viewed in web viewer
+    sharing: {
+      // Optional: customize sharing endpoints
+      apiBaseUrl: 'https://api.example.com',
+      appBaseUrl: 'https://viewer.example.com'
+    },
   },
   {
     maxConcurrency: 2,
   },
 );
 
+// Access the shareable URL if sharing is enabled and successful
+if (results.shareUrl) {
+  console.log('View results at:', results.shareUrl);
+}
+
 console.log(results);
-````
+```
 
 This code imports the `promptfoo` library, defines the evaluation options, and then calls the `evaluate` function with these options.
 
@@ -168,9 +198,17 @@ import promptfoo from 'promptfoo';
         ],
       },
     ],
+    sharing: {
+      apiBaseUrl: 'https://api.example.com',
+      appBaseUrl: 'https://viewer.example.com'
+    },
   });
   console.log('RESULTS:');
   console.log(results);
+
+  if (results.shareUrl) {
+    console.log('View results at:', results.shareUrl);
+  }
 })();
 ```
 
@@ -237,3 +275,4 @@ Here's the example output in JSON format:
   ]
 }
 ```
+````

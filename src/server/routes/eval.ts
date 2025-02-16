@@ -58,8 +58,8 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
       const job = evalJobs.get(id);
       invariant(job, 'Job not found');
       job.status = 'complete';
-      job.result = await result.toEvaluateSummary();
-      job.evalId = result.id;
+      job.result = result;
+      job.evalId = result.results[0]?.id || null;
       console.log(`[${id}] Complete`);
     });
 
