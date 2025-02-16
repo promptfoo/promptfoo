@@ -13,6 +13,7 @@ import { GRADERS } from './redteam/graders';
 import { Plugins } from './redteam/plugins';
 import { RedteamPluginBase, RedteamGraderBase } from './redteam/plugins/base';
 import { Strategies } from './redteam/strategies';
+import { createShareableUrl } from './share';
 import telemetry from './telemetry';
 import type {
   EvaluateOptions,
@@ -24,17 +25,18 @@ import type {
 import { readFilters, writeMultipleOutputs, writeOutput } from './util';
 import invariant from './util/invariant';
 import { readTests } from './util/testCaseReader';
-import { createShareableUrl } from './share';
 
 export * from './types';
 
 export { generateTable } from './table';
 
 // Type for sharing configuration
-type SharingConfig = boolean | {
-  apiBaseUrl?: string;
-  appBaseUrl?: string;
-};
+type SharingConfig =
+  | boolean
+  | {
+      apiBaseUrl?: string;
+      appBaseUrl?: string;
+    };
 
 // Extend EvaluateTestSuite to include sharing options
 interface EvaluateTestSuiteWithSharing extends EvaluateTestSuite {

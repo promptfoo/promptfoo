@@ -4,6 +4,7 @@ import * as index from '../src/index';
 import { evaluate } from '../src/index';
 import Eval from '../src/models/eval';
 import { readProviderPromptMap } from '../src/prompts';
+import { createShareableUrl } from '../src/share';
 import { writeOutput, writeMultipleOutputs } from '../src/util';
 
 jest.mock('../src/cache');
@@ -29,6 +30,7 @@ jest.mock('../src/prompts', () => {
 });
 jest.mock('../src/telemetry');
 jest.mock('../src/util');
+jest.mock('../src/share');
 
 describe('index.ts exports', () => {
   const expectedNamedExports = [
@@ -358,5 +360,91 @@ describe('evaluate function', () => {
       expect.any(Eval),
       null,
     );
+  });
+
+  describe('sharing functionality', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should generate shareUrl when sharing is enabled', async () => {
+      const testSuite = {
+        prompts: ['test'],
+        providers: [],
+        sharing: true,
+      };
+
+      // Mock createShareableUrl to return a test URL
+      jest.mocked(createShareableUrl).mockResolvedValueOnce('https://example.com/share/123');
+
+      const result = await evaluate(testSuite);
+      expect(result.shareUrl).toBe('https://example.com/share/123');
+      expect(createShareableUrl).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not generate shareUrl when sharing is disabled', async () => {
+      const testSuite = {
+        prompts: ['test'],
+        providers: [],
+        sharing: false,
+      };
+
+      const result = await evaluate(testSuite);
+      expect(result.shareUrl).toBeNull();
+      expect(createShareableUrl).not.toHaveBeenCalled();
+    });
+
+    it('should pass shareUrl to writeOutput when outputPath is set', async () => {
+      const testSuite = {
+        prompts: ['test'],
+        providers: [],
+        sharing: true,
+        outputPath: 'test.json',
+      };
+
+      jest.mocked(createShareableUrl).mockResolvedValueOnce('https://example.com/share/123');
+
+      await evaluate(testSuite);
+      expect(writeOutput).toHaveBeenCalledWith(
+        'test.json',
+        expect.any(Eval),
+        'https://example.com/share/123',
+      );
+    });
+
+    it('should pass shareUrl to writeMultipleOutputs when outputPath is an array', async () => {
+      const testSuite = {
+        prompts: ['test'],
+        providers: [],
+        sharing: true,
+        outputPath: ['test1.json', 'test2.json'],
+      };
+
+      jest.mocked(createShareableUrl).mockResolvedValueOnce('https://example.com/share/123');
+
+      await evaluate(testSuite);
+      expect(writeMultipleOutputs).toHaveBeenCalledWith(
+        ['test1.json', 'test2.json'],
+        expect.any(Eval),
+        'https://example.com/share/123',
+      );
+    });
+
+    it('should handle sharing configuration object', async () => {
+      const testSuite = {
+        prompts: ['test'],
+        providers: [],
+        sharing: {
+          apiBaseUrl: 'https://api.example.com',
+          appBaseUrl: 'https://app.example.com',
+        },
+      };
+
+      jest.mocked(createShareableUrl).mockResolvedValueOnce('https://example.com/share/123');
+
+      const result = await evaluate(testSuite);
+      expect(result.shareUrl).toBe('https://example.com/share/123');
+      expect(createShareableUrl).toHaveBeenCalledTimes(1);
+    });
   });
 });
