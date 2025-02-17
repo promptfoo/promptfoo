@@ -5,19 +5,13 @@ image: /img/blog/owasp-red-team/ninja_panda.png
 
 # OWASP Red Teaming: A Practical Guide to Getting Started
 
-<figure>
-  <div style={{ textAlign: 'center' }}>
-    <img
-      src="/img/blog/owasp-red-team/ninja_panda.png"
-      alt="Promptfoo Ninja Panda"
-      style={{ width: '70%' }}
-    />
-  </div>
-</figure>
+![OWASP LLM Red Team](/img/blog/owasp-red-team/red-team-diagram.svg)
 
 Generative AI presents a new range of risks for companies alongside a new range of opportunities. Though companies have long developed robust cybersecurity policies and techniques for traditional applications, the risks of generative AI are substantially different from previous types of risks. As a result, security leaders need to rethink how they approach security for Generative AI.
 
 Luckily, organizations have OWASP (Open Web Application Security Project) to rely on. The non-profit has published cybersecurity guidelines for over two decades (including its famous OWASP Top 10 guides) that include industry standards for everything from web applications to cloud security.
+
+<!-- truncate -->
 
 OWASP has maintained its Top 10 list for Generative AI since 2023, but in January 2025 released [the first version](https://genai.owasp.org/resource/genai-red-teaming-guide/) of its Generative AI Red Teaming Guide. The purpose of the guide is to help practitioners in the field develop a comprehensive red teaming strategy that focuses on model evaluation, implementation testing, infrastructure assessment, and runtime behavior analysis.
 
@@ -41,11 +35,13 @@ Given the pace of Generative AI development, red teaming is a critical component
 
 ## Defining Objectives and Criteria for Success
 
+![OWASP LLM Red Team Objectives](/img/blog/owasp-red-team/red-team-objectives.svg)
+
 As the OWASP guide explains early on, "Traditional cybersecurity focuses on technical exploits (e.g., breaking into servers), but GenAI Red Teaming also examines how AI models can produce harmful or deceptive outputs."
 
 The very opportunities generative AI presents to create value also means generative AI applications can produce outputs that harm or deceive users, damage the company's reputation, lead to a data breach, or all of the above. AI security policies have to focus on what your AI applications are generating from the inside out, not just what attackers could exploit from the outside in.
 
-As the OWASP guide further explains, "AI systems shape critical decisions, [so] ensuring their safety and alignment with organizational values is crucial."
+As the OWASP guide further explains, "AI systems shape critical decisions, so ensuring their safety and alignment with organizational values is crucial."
 
 As a result, any generative AI red teaming strategy needs to start at a carefully planned, well-thought-out step zero: What are your objectives as you build and test your strategy, and what criteria will you use to measure the success of your strategy once you deploy and test it?
 
@@ -78,7 +74,7 @@ From there, you can develop specific, granular goals for every red teaming sessi
 
 Here, you can lean on the stakeholders you established contact with to help you distinguish between acceptable model variance and genuine risks. An expert on the brand or PR side might, for example, be better equipped to say whether a given output puts the brand in a bad light or not. Once you've received this feedback, you can customize the graders within a Promptfoo red team to better align with your organization's requirements:
 
-```
+```yaml
 plugins:
   - id: 'contracts'
     config:
@@ -96,6 +92,8 @@ plugins:
 Across these sessions, you can develop KPIs for safety and success, and keep your stakeholders in the loop as you track them. This can inform alignment with the KPIs and determine whether the KPIs themselves require iteration. Promptfoo's Enterprise platform allows you to track and share red team reports with stakeholders across teams, so they can also review the results and provide feedback.
 
 ## Timing Red Teaming Efforts in the SDLC
+
+![OWASP LLM evaluation phases](/img/blog/owasp-red-team/evaluation-phases.svg)
 
 Securing an LLM-based application is never a one-and-done problem. With your objectives and criteria in mind, work with your development and security teams to figure out where red teaming will occur in the SDLC and how often you should run red teaming sessions.
 
@@ -157,11 +155,11 @@ A major benefit of reading OWASP's guides is that OWASP is a recognized industry
 
 The OWASP red teaming guide identifies five common threat categories:
 
-- **Adversarial attacks**: These threats, such as prompt injection, come from malicious actors outside the company.
-- **Alignment risks**: These threats include any way AI applications could generate outputs that don't align with organizational values (ranging from subtle misalignments to PR disasters).
-- **Data risks**: These threats include any way AI applications could leak sensitive data or training data. This includes companies with user-facing AI applications that might ingest sensitive user data and internal AI applications that could use private company data for training purposes.
-- **Interaction risks**: These threats include all the ways users could accidentally generate outputs that are harmful or dangerous.
-- **Knowledge risks**: These threats include ways an AI application could generate misinformation and disinformation.
+1. **Adversarial attacks**: These threats, such as prompt injection, come from malicious actors outside the company.
+2. **Alignment risks**: These threats include any way AI applications could generate outputs that don't align with organizational values (ranging from subtle misalignments to PR disasters).
+3. **Data risks**: These threats include any way AI applications could leak sensitive data or training data. This includes companies with user-facing AI applications that might ingest sensitive user data and internal AI applications that could use private company data for training purposes.
+4. **Interaction risks**: These threats include all the ways users could accidentally generate outputs that are harmful or dangerous.
+5. **Knowledge risks**: These threats include ways an AI application could generate misinformation and disinformation.
 
 When identifying the threats that are most important to you, OWASP recommends asking the following questions:
 
@@ -170,7 +168,7 @@ When identifying the threats that are most important to you, OWASP recommends as
 3. What can undermine AI trustworthiness?
 4. How will we address these issues?
 
-The OWASP Top 10 for LLM applications can be a useful starting point for identifying could go wrong with your LLM application. The list currently includes:
+The [OWASP Top 10 for LLM applications](https://owasp.org/www-project-top-10-for-large-language-model-applications/) can be a useful starting point for identifying could go wrong with your LLM application. The list currently includes:
 
 1. Prompt Injection
 2. Sensitive Information Disclosure
