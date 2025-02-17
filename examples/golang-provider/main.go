@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/promptfoo/promptfoo/examples/golang-provider/core"
-	"github.com/promptfoo/promptfoo/examples/golang-provider/pkg1"
+	"golang-provider/core"
+	"golang-provider/pkg1"
 )
 
 func main() {
