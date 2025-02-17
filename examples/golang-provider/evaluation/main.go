@@ -1,3 +1,6 @@
+// Package main implements a promptfoo provider that uses OpenAI's API with reasoning effort control.
+// It provides a CallApi function that can be used by promptfoo to generate responses
+// with configurable reasoning levels.
 package main
 
 import (
@@ -7,10 +10,17 @@ import (
 	"github.com/promptfoo/promptfoo/examples/golang-provider/pkg1"
 )
 
-// Initialize OpenAI client
+// client is the OpenAI API client instance used for all requests
 var client = core.NewClient()
 
-// handlePrompt implements the OpenAI API call with reasoning effort control
+// handlePrompt processes a prompt with configurable reasoning effort.
+// It accepts:
+//   - prompt: the input text to send to the model
+//   - options: configuration map containing reasoning_effort setting
+//   - ctx: additional context (currently unused)
+//
+// Returns a map containing the "output" key with the model's response,
+// or an error if the API call fails.
 func handlePrompt(prompt string, options map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
 	// Get reasoning_effort from config, default to pkg1's default if not specified
 	reasoningEffort := pkg1.GetDefaultReasoningEffort()
@@ -29,6 +39,7 @@ func handlePrompt(prompt string, options map[string]interface{}, ctx map[string]
 }
 
 func init() {
-	// Assign our implementation to the wrapper's CallApi
+	// Assign our implementation to the wrapper's CallApi function.
+	// This makes it available to promptfoo for evaluation.
 	CallApi = handlePrompt
 }
