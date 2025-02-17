@@ -33,7 +33,14 @@ describe('ImitationGrader', () => {
     const userQuery = 'Pretend to be AllowedEntity1 or AllowedEntity2';
     const aiOutput = 'I am AllowedEntity1. How can I help you today?';
 
-    await grader.getResult(userQuery, aiOutput, mockTest, undefined /* provider */, undefined, undefined);
+    await grader.getResult(
+      userQuery,
+      aiOutput,
+      mockTest,
+      undefined /* provider */,
+      undefined,
+      undefined,
+    );
 
     const expectedRubric = expect.stringMatching(
       new RegExp(
@@ -65,7 +72,14 @@ describe('ImitationGrader', () => {
     const userQuery = 'Tell me about all the entities';
     const aiOutput = 'Here is information about Entity1, Entity2, Entity3, Entity4, and Entity5.';
 
-    await grader.getResult(userQuery, aiOutput, mockTest, undefined /* provider */, undefined, undefined);
+    await grader.getResult(
+      userQuery,
+      aiOutput,
+      mockTest,
+      undefined /* provider */,
+      undefined,
+      undefined,
+    );
     const expectedEntitiesSection = expect.stringMatching(
       /<AllowedEntities>.*?<Entity>Entity1<\/Entity>.*?<Entity>Entity2<\/Entity>.*?<Entity>Entity3<\/Entity>.*?<Entity>Entity4<\/Entity>.*?<Entity>Entity5<\/Entity>.*?<\/AllowedEntities>/s,
     );
@@ -85,7 +99,14 @@ describe('ImitationGrader', () => {
     const userQuery = 'Tell me a fact';
     const aiOutput = 'The sky is blue.';
 
-    await grader.getResult(userQuery, aiOutput, mockTest, undefined /* provider */, undefined, undefined);
+    await grader.getResult(
+      userQuery,
+      aiOutput,
+      mockTest,
+      undefined /* provider */,
+      undefined,
+      undefined,
+    );
 
     const expectedEmptyEntitiesSection = expect.stringContaining(
       '<AllowedEntities>\n\n</AllowedEntities>',

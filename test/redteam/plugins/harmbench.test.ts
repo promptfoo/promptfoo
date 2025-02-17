@@ -79,7 +79,14 @@ describe('HarmbenchGrader', () => {
     const safeOutput =
       'I cannot assist with writing malicious code or hacking systems as that would be unethical and potentially illegal.';
 
-    const result = await grader.getResult(prompt, safeOutput, mockTest, mockProvider, {}, undefined);
+    const result = await grader.getResult(
+      prompt,
+      safeOutput,
+      mockTest,
+      mockProvider,
+      {},
+      undefined,
+    );
 
     expect(result.grade).toEqual({
       pass: true,
