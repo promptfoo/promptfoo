@@ -42,71 +42,47 @@ describe('GolangProvider', () => {
     mockIsCacheEnabled.mockReturnValue(false);
     mockReadFileSync.mockReturnValue('mock file content');
 
-    // Mock path resolution to ensure consistent paths
     mockResolve.mockImplementation((p: string) => {
-      console.log('mockResolve called with:', p);
       if (!p) {
-        console.warn('mockResolve called with undefined path');
         return '/absolute/path/undefined';
       }
-      if (typeof p === 'string' && p.includes('script.go')) {
-        return '/absolute/path/to/script.go';
-      }
-      return p;
+      return typeof p === 'string' && p.includes('script.go') ? '/absolute/path/to/script.go' : p;
     });
 
-    // Mock path.dirname to handle path traversal
     const mockDirname = jest.mocked(path.dirname);
     mockDirname.mockImplementation((p: string) => {
-      console.log('mockDirname called with:', p);
-      if (p === '/absolute/path/to/script.go') {
-        return '/absolute/path/to';
-      }
-      if (p === '/absolute/path/to') {
-        return '/absolute/path';
-      }
-      if (p === '/absolute/path') {
-        return '/absolute';
-      }
-      if (p === '/absolute') {
-        return '/';
-      }
-      return p;
+      const paths = {
+        '/absolute/path/to/script.go': '/absolute/path/to',
+        '/absolute/path/to': '/absolute/path',
+        '/absolute/path': '/absolute',
+        '/absolute': '/',
+      };
+      return paths[p] || p;
     });
 
-    // Mock path.join to handle path joining
     const mockJoin = jest.mocked(path.join);
     mockJoin.mockImplementation((...paths: string[]) => {
-      console.log('mockJoin called with:', paths);
       const validPaths = paths.filter((p) => p !== undefined);
-      if (validPaths.length === 2 && validPaths[1] === 'go.mod') {
-        const dir = validPaths[0];
-        if (dir === '/absolute/path/to') {
-          return '/absolute/path/to/go.mod';
-        }
+      if (
+        validPaths.length === 2 &&
+        validPaths[1] === 'go.mod' &&
+        validPaths[0] === '/absolute/path/to'
+      ) {
+        return '/absolute/path/to/go.mod';
       }
       return validPaths.join('/').replace(/\/+/g, '/');
     });
 
     mockMkdtempSync.mockReturnValue('/tmp/golang-provider-xyz');
 
-    // Mock file existence checks
-    mockExistsSync.mockImplementation((p: fs.PathLike) => {
-      const path = p.toString();
-      console.log('mockExistsSync called with:', path);
-      // Mock go.mod file existence in the /absolute/path/to directory
-      if (path === '/absolute/path/to/go.mod') {
-        console.log('Found go.mod at:', path);
-        return true;
-      }
-      return true; // Default behavior for other files
-    });
+    mockExistsSync.mockImplementation(
+      (p: fs.PathLike) => p.toString() === '/absolute/path/to/go.mod' || true,
+    );
 
     mockReaddirSync.mockReturnValue([
       { name: 'test.go', isDirectory: () => false },
     ] as unknown as fs.Dirent[]);
 
-    // Mock exec behavior
     mockExec.mockImplementation(((cmd: string, callback: any) => {
       if (!callback) {
         return {} as any;
@@ -215,11 +191,14 @@ describe('GolangProvider', () => {
           return {} as any;
         }
         process.nextTick(() => {
-          if (cmd.includes('golang_wrapper')) {
-            callback(null, { stdout: '{"embedding":[0.1,0.2,0.3]}', stderr: '' }, '');
-          } else {
-            callback(null, { stdout: '', stderr: '' }, '');
-          }
+          callback(
+            null,
+            {
+              stdout: cmd.includes('golang_wrapper') ? '{"embedding":[0.1,0.2,0.3]}' : '',
+              stderr: '',
+            },
+            '',
+          );
         });
         return {} as any;
       }) as any);
@@ -237,11 +216,14 @@ describe('GolangProvider', () => {
           return {} as any;
         }
         process.nextTick(() => {
-          if (cmd.includes('golang_wrapper')) {
-            callback(null, { stdout: '{"classification":"test_class"}', stderr: '' }, '');
-          } else {
-            callback(null, { stdout: '', stderr: '' }, '');
-          }
+          callback(
+            null,
+            {
+              stdout: cmd.includes('golang_wrapper') ? '{"classification":"test_class"}' : '',
+              stderr: '',
+            },
+            '',
+          );
         });
         return {} as any;
       }) as any);
@@ -259,11 +241,14 @@ describe('GolangProvider', () => {
           return {} as any;
         }
         process.nextTick(() => {
-          if (cmd.includes('golang_wrapper')) {
-            callback(null, { stdout: '{"output":"test"}', stderr: 'warning: some go warning' }, '');
-          } else {
-            callback(null, { stdout: '', stderr: '' }, '');
-          }
+          callback(
+            null,
+            {
+              stdout: cmd.includes('golang_wrapper') ? '{"output":"test"}' : '',
+              stderr: 'warning: some go warning',
+            },
+            '',
+          );
         });
         return {} as any;
       }) as any);
@@ -275,7 +260,7 @@ describe('GolangProvider', () => {
 
   describe('findModuleRoot', () => {
     it('should throw error when go.mod is not found', async () => {
-      mockExistsSync.mockImplementation((p: fs.PathLike) => false);
+      mockExistsSync.mockImplementation(() => false);
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to' },
       });
@@ -286,44 +271,24 @@ describe('GolangProvider', () => {
     });
 
     it('should find go.mod in parent directory', async () => {
-      // Track all paths checked for debugging
       const checkedPaths: string[] = [];
 
       mockExistsSync.mockImplementation((p: fs.PathLike) => {
         const pathStr = p.toString();
         checkedPaths.push(pathStr);
-
-        // Match any path that ends with /absolute/path/to/go.mod
-        const isMatch = pathStr.endsWith('/absolute/path/to/go.mod');
-        console.log(`Checking path: ${pathStr}, isMatch: ${isMatch}`);
-        return isMatch;
+        return pathStr.endsWith('/absolute/path/to/go.mod');
       });
 
-      // Mock path.dirname to properly handle path traversal
       const mockDirname = jest.mocked(path.dirname);
-      mockDirname.mockImplementation((p: string) => {
-        console.log(`dirname called with: ${p}`);
-        const parts = p.split('/');
-        parts.pop();
-        return parts.join('/');
-      });
+      mockDirname.mockImplementation((p: string) => p.split('/').slice(0, -1).join('/'));
 
-      // Mock path.resolve to handle absolute paths
       const mockResolve = jest.mocked(path.resolve);
-      mockResolve.mockImplementation((p: string) => {
-        console.log(`resolve called with: ${p}`);
-        if (p.startsWith('/')) {
-          return p;
-        }
-        return `/absolute/path/to/${p}`;
-      });
+      mockResolve.mockImplementation((p: string) =>
+        p.startsWith('/') ? p : `/absolute/path/to/${p}`,
+      );
 
-      // Mock path.join to properly join paths
       const mockJoin = jest.mocked(path.join);
-      mockJoin.mockImplementation((...paths: string[]) => {
-        console.log(`join called with:`, paths);
-        return paths.join('/').replace(/\/+/g, '/');
-      });
+      mockJoin.mockImplementation((...paths: string[]) => paths.join('/').replace(/\/+/g, '/'));
 
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to/subdir' },
@@ -333,20 +298,13 @@ describe('GolangProvider', () => {
         if (!callback) {
           return {} as any;
         }
-        process.nextTick(() => {
-          callback(null, { stdout: '{"output":"test"}', stderr: '' }, '');
-        });
+        process.nextTick(() => callback(null, { stdout: '{"output":"test"}', stderr: '' }, ''));
         return {} as any;
       }) as any);
 
       const result = await provider.callApi('test prompt');
-
-      // Add debugging information
-      console.log('Paths checked:', checkedPaths);
-
       expect(result).toEqual({ output: 'test' });
 
-      // Verify that the correct paths were checked
       expect(checkedPaths).toContain('/absolute/path/to/go.mod');
       expect(mockExistsSync).toHaveBeenCalledWith(
         expect.stringContaining('/absolute/path/to/go.mod'),
@@ -364,11 +322,14 @@ describe('GolangProvider', () => {
           return {} as any;
         }
         process.nextTick(() => {
-          if (cmd.includes('golang_wrapper')) {
-            callback(null, { stdout: 'invalid json', stderr: '' }, '');
-          } else {
-            callback(null, { stdout: '', stderr: '' }, '');
-          }
+          callback(
+            null,
+            {
+              stdout: cmd.includes('golang_wrapper') ? 'invalid json' : '',
+              stderr: '',
+            },
+            '',
+          );
         });
         return {} as any;
       }) as any);
@@ -397,9 +358,7 @@ describe('GolangProvider', () => {
         if (cmd.includes('golang_wrapper')) {
           executedCommand = cmd;
         }
-        process.nextTick(() => {
-          callback(null, { stdout: '{"output":"test"}', stderr: '' }, '');
-        });
+        process.nextTick(() => callback(null, { stdout: '{"output":"test"}', stderr: '' }, ''));
         return {} as any;
       }) as any);
 
@@ -424,9 +383,7 @@ describe('GolangProvider', () => {
         if (cmd.includes('go build')) {
           buildCommand = cmd;
         }
-        process.nextTick(() => {
-          callback(null, { stdout: '{"output":"test"}', stderr: '' }, '');
-        });
+        process.nextTick(() => callback(null, { stdout: '{"output":"test"}', stderr: '' }, ''));
         return {} as any;
       }) as any);
 
