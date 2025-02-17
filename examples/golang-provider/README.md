@@ -15,9 +15,10 @@ golang-provider/
 ├── pkg2/                  # Example package 2 (for future use)
 ├── evaluation/           # Provider implementation
 │   ├── main.go          # Provider that imports from parent
-│   └── promptfooconfig.yaml
+│   └── promptfooconfig.yml
 ├── main.go               # Root example using the provider
-└── promptfooconfig.yaml  # Root config using evaluation provider
+├── promptfooconfig.yml   # Root config using evaluation provider
+└── vendor/              # Vendored dependencies
 ```
 
 This structure demonstrates:
