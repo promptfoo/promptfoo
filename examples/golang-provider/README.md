@@ -1,20 +1,30 @@
 # Golang Provider Examples
 
-This directory demonstrates how to use Go with promptfoo, showing:
-
-1. How to implement a basic provider
-2. How to run promptfoo from different directories using the same provider
+This directory demonstrates how to use Go with promptfoo, specifically addressing the module resolution issue described in [#3057](https://github.com/promptfoo/promptfoo/issues/3057).
 
 ## Directory Structure
 
 ```
 golang-provider/
-├── go.mod                  # Module definition
-├── provider.go             # Provider implementation
-├── promptfooconfig.yaml    # Root config example
-└── nested-config/          # Example of referencing provider from subdirectory
-    └── promptfooconfig.yaml
+├── go.mod                  # Root module definition
+├── go.sum
+├── main.go                # Root example using the provider
+├── promptfooconfig.yaml   # Root config using core/evaluation provider
+├── core/                  # Core functionality
+│   ├── openai.go         # OpenAI client wrapper
+│   └── evaluation/       # Provider implementation
+│       ├── main.go      # Provider that imports from parent
+│       └── promptfooconfig.yaml
+├── pkg1/                  # Example package 1
+│   └── utils.go          # Utility functions
+└── pkg2/                  # Example package 2 (for future use)
 ```
+
+This structure demonstrates:
+
+1. How to implement a provider that imports packages from parent directories
+2. How to handle Go module resolution when running `promptfoo eval` from subdirectories
+3. How to structure a Go project with shared packages
 
 ## Prerequisites
 
@@ -30,67 +40,76 @@ golang-provider/
 
 ## Usage Examples
 
-### 1. Basic Provider
+### Running from Core/Evaluation Directory
 
-Run the main example from the root directory:
+This example demonstrates the module resolution issue when running from a subdirectory:
+
+```sh
+cd core/evaluation
+npx promptfoo eval  # This will fail with "go.mod file not found"
+```
+
+This shows:
+
+- The issue where promptfoo cannot find the root go.mod
+- How imports from parent directories should work
+- The need to fix module resolution in promptfoo
+
+### Running from Root Directory
+
+This works correctly:
 
 ```sh
 npx promptfoo eval
 ```
 
-### 2. Nested Config
+## Implementation Details
 
-Demonstrates how to reference a provider from a subdirectory:
+### Core Package (`core/openai.go`)
 
-```sh
-cd nested-config
-npx promptfoo eval
-```
+- Wraps the OpenAI client
+- Provides temperature control
+- Imported by evaluation provider
 
-This shows how to:
+### Utility Package (`pkg1/utils.go`)
 
-- Reference a provider in a parent directory
-- Run promptfoo from different locations
-- Use the same provider with different configurations
+- Provides shared utility functions
+- Demonstrates cross-package imports
+- Used by both core and evaluation packages
 
-## Provider Implementation
+### Evaluation Provider (`core/evaluation/main.go`)
 
-The provider (`provider.go`) shows:
+- Located in core/evaluation to match issue #3057
+- Imports packages from parent directories
+- Shows proper module import patterns
 
-- Basic OpenAI chat completion
-- Temperature configuration
-- Simple error handling
+## Configuration Examples
 
-## Configuration
-
-Each directory has its own `promptfooconfig.yaml` showing different ways to use the provider:
-
-1. Root config (basic example):
+1. Root config (works):
 
 ```yaml
 providers:
-  - id: golang:provider.go:CallApi
+  - id: file://core/evaluation/main.go:CallApi
     config:
       temperature: 0.7
 ```
 
-2. Nested config (referencing parent provider):
+2. Evaluation config (fails):
 
 ```yaml
 providers:
-  - id: file://../provider.go:CallApi
+  - id: file://main.go:CallApi
     config:
       temperature: 0.2
 ```
 
-## Development Notes
-
-1. No manual compilation needed
-2. Works on all platforms (Windows, Linux, macOS)
-3. Each config can have its own test cases and settings
-
 ## Troubleshooting
 
 1. Ensure `OPENAI_API_KEY` is set correctly
-2. For nested configs, check that the provider path is correct relative to the config file
-3. Run `go mod tidy` if you get module errors
+2. Module errors from subdirectories:
+   - This is a known issue (#3057)
+   - The root cause is promptfoo assuming go.mod is in the same directory as the script
+   - A fix is needed in promptfoo/src/providers/golangCompletion.ts
+3. For provider paths:
+   - From root: use `file://core/evaluation/main.go`
+   - From evaluation dir: use `file://main.go` (but this will fail due to #3057)

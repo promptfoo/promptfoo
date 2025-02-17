@@ -1,19 +1,14 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Golang provider example'
+description: 'Example demonstrating Go module resolution issue (#3057)'
 
 prompts:
   - 'Write a creative story about {{topic}}'
 
 providers:
-  - id: file://provider.go:CallApi
-    label: 'Low Temperature'
+  - id: 'file://core/evaluation/main.go:CallApi'
+    label: 'Provider from core/evaluation'
     config:
-      temperature: 0.2
-
-  - id: golang:provider.go:CallApi
-    label: 'High Temperature'
-    config:
-      temperature: 0.9
+      temperature: 0.7
 
 tests:
   - vars:
@@ -21,6 +16,7 @@ tests:
     assert:
       - type: contains
         value: space
+
   - vars:
       topic: underwater cities
     assert:
