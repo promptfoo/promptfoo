@@ -63,7 +63,7 @@ Red teaming a Generative AI application means identifying technical vulnerabilit
 
 Next, integrate the AI code of conduct into your goals and metrics as you develop them. As your generative AI red teaming approach matures, the code of conduct will serve as a reference point that you can return to again and again.
 
-Promptfoo supports red teaming against AI codes of conduct through [custom policies](https://www.promptfoo.dev/docs/red-team/plugins/policy/), which you can use to test the specific requirements or constraints of your particular application. You can configure custom policies in your Promptfoo config file through the following syntax:
+Promptfoo supports red teaming against AI codes of conduct through [custom policies](/docs/red-team/plugins/policy/), which you can use to test the specific requirements or constraints of your particular application. You can configure custom policies in your Promptfoo config file through the following syntax:
 
 ```yaml
 redteam:
@@ -103,7 +103,7 @@ At a high level, the choice is binary: Will you run your red teaming sessions pr
 
 ### Model Evaluations
 
-The OWASP red teaming guide recommends running red teams against foundation models and fine-tuned models to test their inherent weaknesses. We have previous covered the [security risks](https://www.promptfoo.dev/blog/foundation-model-security/) that are present in foundation models and have a preset collection of tests for evaluation them. You can you conduct a complete red team against a foundation model using a config similar to this one:
+The OWASP red teaming guide recommends running red teams against foundation models and fine-tuned models to test their inherent weaknesses. We have previous covered the [security risks](/blog/foundation-model-security/) that are present in foundation models and have a preset collection of tests for evaluation them. You can you conduct a complete red team against a foundation model using a config similar to this one:
 
 ```yaml
 description: Your Foundation Model Red Team
@@ -183,7 +183,7 @@ The OWASP Top 10 for LLM applications can be a useful starting point for identif
 9. Misinformation
 10. Unbounded Consumption
 
-Promptfoo covers these risks in its [OWASP Top 10 guide](https://www.promptfoo.dev/docs/red-team/owasp-llm-top-10/) for you to easily identify potential vulnerabilities when running red teams. You can run a red team specifically against the OWASP Top 10 using the OWASP shorthand in your Promptfoo config: 
+Promptfoo covers these risks in its [OWASP Top 10 guide](/docs/red-team/owasp-llm-top-10/) for you to easily identify potential vulnerabilities when running red teams. You can run a red team specifically against the OWASP Top 10 using the OWASP shorthand in your Promptfoo config:
 
 ```yaml
 redteam:
@@ -241,7 +241,7 @@ When red teaming a RAG application, you should ask the following questions:
 - Is the response supported by the context?
 - Is the answer relevant to the question?
 
-Promptfoo can help you test the RAG Triad through its evaluation framework, which supports [evaluations of RAG pipelines](https://www.promptfoo.dev/docs/guides/evaluate-rag/) to test for factuality, relevance, and groundedness. You can also use Promptfoo to red team RAG applications through the [data poisoning plugin](https://www.promptfoo.dev/docs/red-team/plugins/rag-poisoning/#background), and even [identify risks](https://www.promptfoo.dev/docs/red-team/plugins/hallucination/) for hallucinations.
+Promptfoo can help you test the RAG Triad through its evaluation framework, which supports [evaluations of RAG pipelines](/docs/guides/evaluate-rag/) to test for factuality, relevance, and groundedness. You can also use Promptfoo to red team RAG applications through the [data poisoning plugin](/docs/red-team/plugins/rag-poisoning/#background), and even [identify risks](/docs/red-team/plugins/hallucination/) for hallucinations.
 
 ## Assessing Risks in Agents
 
@@ -253,7 +253,7 @@ OWASP highly encourages organizations to robustly test agents and multi-agent sy
 - Data poisoning across model chains.
 - Permission and access control bypass through agent interactions.
 
-Any agent that relies on "reasoning engines" should be thoroughly red-teamed to ensure that the agent is not susceptible to manipulation or coercion. It should also be tested for risks of data exfiltration and excessive permissions. You can red team agents using Promptfoo's [how-to guide](https://www.promptfoo.dev/docs/red-team/agents/), which walks through the best plugins to identify vulnerabilities in agentic systems.
+Any agent that relies on "reasoning engines" should be thoroughly red-teamed to ensure that the agent is not susceptible to manipulation or coercion. It should also be tested for risks of data exfiltration and excessive permissions. You can red team agents using Promptfoo's [how-to guide](/docs/red-team/agents/), which walks through the best plugins to identify vulnerabilities in agentic systems.
 
 Agents that rely on reasoning engines may also be more susceptible to Denial of Wallet (DoW) attacks because of the higher inference costs required.
 
@@ -261,7 +261,7 @@ Agents that rely on reasoning engines may also be more susceptible to Denial of 
 When red teaming autonomous agents, consider the technical and organizational controls that would be in place to mitigate the risks for employees, such as the principles of least privilege and separation of duties. Whatever controls you have in place for employees should be enforced and tested against for autonomous agents.
 :::
 
-Promptfoo has written more about the key security concerns in AI agents [here](https://www.promptfoo.dev/blog/agent-security/).
+Promptfoo has written more about the key security concerns in AI agents [here](/blog/agent-security/).
 
 ## Securing Generative AI Applications with Promptfoo
 
@@ -269,6 +269,6 @@ OWASP provides a perfect starting point for AI security. The practices form a so
 
 That said, OWASP is not the beginning and end of AI security broadly or generative AI red teaming more narrowly. To learn more, check out the [MITRE ATLAS](https://atlas.mitre.org/matrices/ATLAS) for threat modeling and the [EU AI Act](https://artificialintelligenceact.eu/). arXiv, an open-access archive of scholarly research, is also a good source for new studies if you [search for relevant terms](https://arxiv.org/search/?query=Red+Teaming+for+Generative+AI&searchtype=all&abstracts=show&order=-announced_date_first&size=50).
 
-Of course, we'll provide as much information as possible, too. [Join our Discord](https://discord.com/invite/promptfoo) or [check out our blog](https://www.promptfoo.dev/blog/) to keep up with the latest on generative AI red teaming.
+Of course, we'll provide as much information as possible, too. [Join our Discord](https://discord.com/invite/promptfoo) or [check out our blog](/blog/) to keep up with the latest on generative AI red teaming.
 
-Interested in learning more about Promptfoo? [Schedule a demo](https://www.promptfoo.dev/contact/) with our team to learn more about how Promptfoo can help you secure your generative AI applications.
+Interested in learning more about Promptfoo? [Schedule a demo](/contact/) with our team to learn more about how Promptfoo can help you secure your generative AI applications.
