@@ -1,16 +1,18 @@
 # Golang Provider Examples
 
-This directory demonstrates how to use Go with promptfoo, showing common patterns for implementing custom providers.
+This directory demonstrates how to use Go with promptfoo, showing:
+
+1. How to implement a basic provider
+2. How to run promptfoo from different directories using the same provider
 
 ## Directory Structure
 
 ```
 golang-provider/
 ├── go.mod                  # Module definition
-├── provider.go             # Main provider example
-├── promptfooconfig.yaml    # Main config
-└── subprovider/           # Nested provider example
-    ├── provider.go        # Alternative implementation
+├── provider.go             # Provider implementation
+├── promptfooconfig.yaml    # Root config example
+└── nested-config/          # Example of referencing provider from subdirectory
     └── promptfooconfig.yaml
 ```
 
@@ -30,72 +32,65 @@ golang-provider/
 
 ### 1. Basic Provider
 
-The main `provider.go` shows a simple OpenAI implementation:
+Run the main example from the root directory:
 
 ```sh
 npx promptfoo eval
 ```
 
-### 2. Nested Provider
+### 2. Nested Config
 
-The `subprovider` demonstrates how to use a provider in a subdirectory:
+Demonstrates how to reference a provider from a subdirectory:
 
 ```sh
-cd subprovider
+cd nested-config
 npx promptfoo eval
 ```
 
-## Provider Implementations
+This shows how to:
 
-1. **Main Provider** (`provider.go`):
+- Reference a provider in a parent directory
+- Run promptfoo from different locations
+- Use the same provider with different configurations
 
-   - Basic OpenAI chat completion
-   - Configurable system prompts
-   - Example of a simple provider
+## Provider Implementation
 
-2. **Nested Provider** (`subprovider/provider.go`):
-   - Different system prompt
-   - Shows how to use providers in subdirectories
-   - Demonstrates module path resolution
+The provider (`provider.go`) shows:
+
+- Basic OpenAI chat completion
+- Temperature configuration
+- Simple error handling
 
 ## Configuration
 
-Each provider has its own `promptfooconfig.yaml` showing different configurations:
+Each directory has its own `promptfooconfig.yaml` showing different ways to use the provider:
 
-1. Root config (marketing focus):
+1. Root config (basic example):
 
 ```yaml
 providers:
-  - id: golang:provider.go
+  - id: golang:provider.go:CallApi
     config:
-      systemPrompt: 'You are a marketer...'
+      temperature: 0.7
 ```
 
-2. Subprovider config (different focus):
+2. Nested config (referencing parent provider):
 
 ```yaml
 providers:
-  - id: golang:provider.go
+  - id: file://../provider.go:CallApi
     config:
-      systemPrompt: 'You are a technical writer...'
+      temperature: 0.2
 ```
 
 ## Development Notes
 
 1. No manual compilation needed
 2. Works on all platforms (Windows, Linux, macOS)
-3. Each provider can have its own config and test cases
+3. Each config can have its own test cases and settings
 
 ## Troubleshooting
 
-1. If you get module errors in a subdirectory, ensure the root `go.mod` is being found
-2. For nested providers, run `promptfoo eval` from that directory
-3. Check that `OPENAI_API_KEY` is set correctly
-
-## Contributing
-
-Feel free to add more provider examples or improve the existing ones. Keep in mind:
-
-1. Focus on promptfoo-specific usage
-2. Keep implementations simple and clear
-3. Add appropriate test cases in configs
+1. Ensure `OPENAI_API_KEY` is set correctly
+2. For nested configs, check that the provider path is correct relative to the config file
+3. Run `go mod tidy` if you get module errors

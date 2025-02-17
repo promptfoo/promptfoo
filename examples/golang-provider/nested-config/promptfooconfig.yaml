@@ -1,16 +1,16 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Simple Golang subprovider example with temperature control'
+description: 'Example of running promptfoo from a subdirectory'
 
 prompts:
   - 'Write a creative story about {{topic}}'
 
 providers:
-  - id: 'file://provider.go:CallApi'
+  - id: 'file://../provider.go:CallApi'
     label: 'Low Temperature'
     config:
       temperature: 0.2
 
-  - id: 'file://provider.go:CallApi'
+  - id: 'file://../provider.go:CallApi'
     label: 'High Temperature'
     config:
       temperature: 0.9
