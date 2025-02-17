@@ -8,25 +8,27 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
+// Initialize OpenAI client
 var client *openai.Client
 
 func init() {
 	client = openai.NewClient(os.Getenv("OPENAI_API_KEY"))
 }
 
-func CallApi(prompt string, options map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
-	// Get config values
-	// someOption := options["config"].(map[string]interface{})["someOption"].(string)
+// handlePrompt implements the OpenAI API call with temperature control
+func handlePrompt(prompt string, options map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
+	// Get temperature from config, default to 0.7 if not specified
+	temperature := float32(0.7)
+	if temp, ok := options["config"].(map[string]interface{})["temperature"].(float64); ok {
+		temperature = float32(temp)
+	}
 
 	resp, err := client.CreateChatCompletion(
 		context.Background(),
 		openai.ChatCompletionRequest{
-			Model: openai.GPT4,
+			Model:       openai.GPT4,
+			Temperature: temperature,
 			Messages: []openai.ChatCompletionMessage{
-				{
-					Role:    openai.ChatMessageRoleSystem,
-					Content: "You are a marketer working for a startup called Acme.",
-				},
 				{
 					Role:    openai.ChatMessageRoleUser,
 					Content: prompt,
@@ -44,12 +46,7 @@ func CallApi(prompt string, options map[string]interface{}, ctx map[string]inter
 	}, nil
 }
 
-func SomeOtherFunction(prompt string, options map[string]interface{}, context map[string]interface{}) (map[string]interface{}, error) {
-	return CallApi(prompt+"\nWrite in ALL CAPS", options, context)
-}
-
-func AsyncProvider(prompt string, options map[string]interface{}, context map[string]interface{}) (map[string]interface{}, error) {
-	// In Go, we don't have async/await syntax, but we can use goroutines and channels for concurrency
-	// For this example, we'll just call the regular function
-	return CallApi(prompt, options, context)
-}
+func init() {
+	// Assign our implementation to the wrapper's CallApi
+	CallApi = handlePrompt
+} 

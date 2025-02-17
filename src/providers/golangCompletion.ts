@@ -38,6 +38,8 @@ export class GolangProvider implements ApiProvider {
       options?.config.basePath || '',
       runPath,
     );
+    console.log('providerPath', providerPath);
+    console.log('functionName', functionName);
     this.scriptPath = path.relative(options?.config.basePath || '', providerPath);
     this.functionName = functionName || null;
     this.id = () => options?.id ?? `golang:${this.scriptPath}:${this.functionName || 'default'}`;

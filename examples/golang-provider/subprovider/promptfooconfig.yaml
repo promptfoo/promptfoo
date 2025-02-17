@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Golang subprovider example - Technical Documentation'
+
+prompts:
+  - 'Explain how {{topic}} works'
+
+providers:
+  - id: 'file://provider.go#CallApi' # Default technical writer
+    label: 'Technical Writer'
+    config:
+      systemPrompt: 'You are a technical writer creating clear and concise documentation.'
+
+  - id: 'file://provider.go#SomeOtherFunction' # Formatted as technical docs
+    label: 'Technical Docs Formatter'
+    config:
+      systemPrompt: 'You are a documentation specialist focused on structure and clarity.'
+
+tests:
+  - vars:
+      topic: Docker containers
+    assert:
+      - type: contains
+        value: container
+        provider: Technical Writer
+      - type: contains
+        value: DOCUMENTATION
+        provider: Technical Docs Formatter
+
+  - vars:
+      topic: REST APIs
+    assert:
+      - type: contains
+        value: HTTP
+        provider: Technical Writer
+      - type: contains
+        value: ENDPOINT
+        provider: Technical Docs Formatter

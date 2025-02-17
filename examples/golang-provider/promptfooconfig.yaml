@@ -1,27 +1,28 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Golang example'
+description: 'Golang provider example'
 
 prompts:
-  - 'Write an introductory sentence for a classroom lesson on {{topic}}'
+  - 'Write a creative story about {{topic}}'
 
 providers:
-  - id: golang:provider.go # defaults to CallApi function
+  - id: file://provider.go:CallApi
+    label: 'Low Temperature'
     config:
-      someOption: foobar
+      temperature: 0.2
+
+  - id: golang:provider.go:CallApi
+    label: 'High Temperature'
+    config:
+      temperature: 0.9
 
 tests:
   - vars:
-      topic: quantum mechanics
+      topic: space exploration
     assert:
       - type: contains
-        value: physics
+        value: space
   - vars:
-      topic: the animal kingdom
+      topic: underwater cities
     assert:
-      - type: llm-rubric
-        value: mentions at least 1 animal
-  - vars:
-      topic: turtles
-    assert:
-      - type: llm-rubric
-        value: is funny
+      - type: contains
+        value: water
