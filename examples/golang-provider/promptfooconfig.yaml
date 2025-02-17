@@ -5,8 +5,8 @@ prompts:
   - 'Write a creative story about {{topic}}'
 
 providers:
-  - id: 'file://core/evaluation/main.go:CallApi'
-    label: 'Provider from core/evaluation'
+  - id: 'file://evaluation/main.go:CallApi'
+    label: 'Provider from evaluation'
     config:
       temperature: 0.7
 

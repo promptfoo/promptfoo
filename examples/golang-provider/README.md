@@ -8,16 +8,16 @@ This directory demonstrates how to use Go with promptfoo, specifically addressin
 golang-provider/
 ├── go.mod                  # Root module definition
 ├── go.sum
-├── main.go                # Root example using the provider
-├── promptfooconfig.yaml   # Root config using core/evaluation provider
 ├── core/                  # Core functionality
-│   ├── openai.go         # OpenAI client wrapper
-│   └── evaluation/       # Provider implementation
-│       ├── main.go      # Provider that imports from parent
-│       └── promptfooconfig.yaml
+│   └── openai.go         # OpenAI client wrapper
 ├── pkg1/                  # Example package 1
 │   └── utils.go          # Utility functions
-└── pkg2/                  # Example package 2 (for future use)
+├── pkg2/                  # Example package 2 (for future use)
+├── evaluation/           # Provider implementation
+│   ├── main.go          # Provider that imports from parent
+│   └── promptfooconfig.yaml
+├── main.go               # Root example using the provider
+└── promptfooconfig.yaml  # Root config using evaluation provider
 ```
 
 This structure demonstrates:
@@ -40,12 +40,12 @@ This structure demonstrates:
 
 ## Usage Examples
 
-### Running from Core/Evaluation Directory
+### Running from Evaluation Directory
 
 This example demonstrates the module resolution issue when running from a subdirectory:
 
 ```sh
-cd core/evaluation
+cd evaluation
 npx promptfoo eval  # This will fail with "go.mod file not found"
 ```
 
@@ -77,9 +77,9 @@ npx promptfoo eval
 - Demonstrates cross-package imports
 - Used by both core and evaluation packages
 
-### Evaluation Provider (`core/evaluation/main.go`)
+### Evaluation Provider (`evaluation/main.go`)
 
-- Located in core/evaluation to match issue #3057
+- Located in evaluation directory to match issue #3057
 - Imports packages from parent directories
 - Shows proper module import patterns
 
@@ -89,7 +89,7 @@ npx promptfoo eval
 
 ```yaml
 providers:
-  - id: file://core/evaluation/main.go:CallApi
+  - id: file://evaluation/main.go:CallApi
     config:
       temperature: 0.7
 ```
@@ -111,5 +111,5 @@ providers:
    - The root cause is promptfoo assuming go.mod is in the same directory as the script
    - A fix is needed in promptfoo/src/providers/golangCompletion.ts
 3. For provider paths:
-   - From root: use `file://core/evaluation/main.go`
+   - From root: use `file://evaluation/main.go`
    - From evaluation dir: use `file://main.go` (but this will fail due to #3057)
