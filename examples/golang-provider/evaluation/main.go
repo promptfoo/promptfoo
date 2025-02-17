@@ -10,15 +10,15 @@ import (
 // Initialize OpenAI client
 var client = core.NewClient()
 
-// handlePrompt implements the OpenAI API call with temperature control
+// handlePrompt implements the OpenAI API call with reasoning effort control
 func handlePrompt(prompt string, options map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
-	// Get temperature from config, default to pkg1's default if not specified
-	temperature := pkg1.GetDefaultTemperature()
-	if temp, ok := options["config"].(map[string]interface{})["temperature"].(float64); ok {
-		temperature = float32(temp)
+	// Get reasoning_effort from config, default to pkg1's default if not specified
+	reasoningEffort := pkg1.GetDefaultReasoningEffort()
+	if mode, ok := options["config"].(map[string]interface{})["reasoning_effort"].(string); ok {
+		reasoningEffort = mode
 	}
 
-	output, err := client.CreateCompletion(prompt, temperature)
+	output, err := client.CreateCompletion(prompt, reasoningEffort)
 	if err != nil {
 		return nil, fmt.Errorf("completion error: %v", err)
 	}

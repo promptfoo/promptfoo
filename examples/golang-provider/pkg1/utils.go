@@ -1,11 +1,11 @@
 package pkg1
 
-// GetDefaultTemperature returns the default temperature for the OpenAI API
-func GetDefaultTemperature() float32 {
-	return 0.7
+// GetDefaultReasoningEffort returns the default reasoning effort setting
+func GetDefaultReasoningEffort() string {
+	return "low"
 }
 
-// GetModel returns the default model to use
+// GetModel returns the model to use
 func GetModel() string {
-	return "gpt-4"
+	return "o3-mini"
 } 

@@ -21,19 +21,19 @@ func NewClient() *Client {
 	}
 }
 
-// CreateCompletion generates a completion with temperature control
-func (c *Client) CreateCompletion(prompt string, temperature float32) (string, error) {
+// CreateCompletion generates a completion with reasoning effort control
+func (c *Client) CreateCompletion(prompt string, reasoningEffort string) (string, error) {
 	resp, err := c.api.CreateChatCompletion(
 		context.Background(),
 		openai.ChatCompletionRequest{
-			Model:       pkg1.GetModel(),
-			Temperature: temperature,
+			Model: pkg1.GetModel(),
 			Messages: []openai.ChatCompletionMessage{
 				{
 					Role:    openai.ChatMessageRoleUser,
 					Content: prompt,
 				},
 			},
+			ReasoningEffort: reasoningEffort,
 		},
 	)
 
