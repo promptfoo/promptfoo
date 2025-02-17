@@ -1,17 +1,15 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Example demonstrating reasoning effort levels with mathematical pattern recognition'
+description: 'Example comparing providers in different directories'
 
 prompts:
   - 'Given the sequence {{sequence}}, what are the next two numbers and explain your reasoning?'
 
 providers:
   - id: 'file://evaluation/main.go:CallApi'
-    label: 'Low Reasoning Effort'
-    config:
-      reasoning_effort: 'low'
+    label: 'Provider in evaluation/'
 
-  - id: 'file://evaluation/main.go:CallApi'
-    label: 'High Reasoning Effort'
+  - id: 'file://main.go:CallApi'
+    label: 'Provider in root'
     config:
       reasoning_effort: 'high'
 
