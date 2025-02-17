@@ -625,7 +625,7 @@ describe('util', () => {
         extension: '.go',
         functionName: 'CallApi',
         isPathPattern: false,
-        filePath: '/absolute/path/script.go',
+        filePath: expect.stringMatching(/^[/\\]absolute[/\\]path[/\\]script\.go$/),
       });
     });
   });
