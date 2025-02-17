@@ -4,11 +4,33 @@ sidebar_label: Custom Go (Golang)
 
 # Custom Go Provider
 
-The Go (`golang`) provider allows you to use a Go script as an API provider for evaluating prompts. This is useful when you have custom logic or models implemented in Go that you want to integrate with your test suite.
+The Go (`golang`) provider allows you to use Go code as an API provider for evaluating prompts. This is useful when you have custom logic, API clients, or models implemented in Go that you want to integrate with your test suite.
 
 :::info
 The golang provider currently experimental
 :::
+
+## Quick Start
+
+You can initialize a new Go provider project using:
+
+```sh
+promptfoo init --example golang-provider
+```
+
+## Provider Interface
+
+Your Go code must implement the `CallApi` function with this signature:
+
+```go
+func CallApi(prompt string, options map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error)
+```
+
+The function should:
+
+- Accept a prompt string and configuration options
+- Return a map containing an "output" key with the response
+- Return an error if the operation fails
 
 ## Configuration
 
@@ -22,49 +44,48 @@ providers:
       additionalOption: 123
 ```
 
-## Go Script
+## Example Implementation
 
-Your Go script should implement a `CallApi` function that accepts a prompt, options, and context as arguments. It should return a `map[string]interface{}` containing at least an `output` field.
-
-Here's an example of a Go script that could be used with the Go provider:
+Here's a complete example using the OpenAI API:
 
 ```go
+// Package main implements a promptfoo provider that uses OpenAI's API.
 package main
 
 import (
-    "context"
     "fmt"
     "os"
-
     "github.com/sashabaranov/go-openai"
 )
 
-var client *openai.Client
+// client is the shared OpenAI client instance.
+var client = openai.NewClient(os.Getenv("OPENAI_API_KEY"))
 
-func init() {
-    client = openai.NewClient(os.Getenv("OPENAI_API_KEY"))
-}
-
+// CallApi processes prompts with configurable options.
 func CallApi(prompt string, options map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
+    // Extract configuration
+    temp := 0.7
+    if val, ok := options["config"].(map[string]interface{})["temperature"].(float64); ok {
+        temp = val
+    }
+
+    // Call the API
     resp, err := client.CreateChatCompletion(
         context.Background(),
         openai.ChatCompletionRequest{
-            Model: openai.GPT4,
+            Model: openai.GPT4o,
             Messages: []openai.ChatCompletionMessage{
-                {
-                    Role:    openai.ChatMessageRoleSystem,
-                    Content: "You are a marketer working for a startup called Acme.",
-                },
                 {
                     Role:    openai.ChatMessageRoleUser,
                     Content: prompt,
                 },
             },
+            Temperature: float32(temp),
         },
     )
 
     if err != nil {
-        return nil, fmt.Errorf("ChatCompletion error: %v", err)
+        return nil, fmt.Errorf("chat completion error: %v", err)
     }
 
     return map[string]interface{}{
