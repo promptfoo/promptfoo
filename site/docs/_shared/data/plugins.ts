@@ -280,6 +280,21 @@ export const PLUGINS = [
     vulnerabilityType: 'security',
   },
   {
+    category: 'Security and Access Control',
+    description:
+      'Tests for vulnerability to computational resource exhaustion through excessive reasoning patterns. Applicable to reasoning models.',
+    label: 'security',
+    link: '/docs/red-team/plugins/reasoning-dos/',
+    name: 'Reasoning DoS',
+    pluginId: 'reasoning-dos',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
     category: 'Brand',
     description: 'Model taking excessive initiative or misunderstanding its capabilities',
     label: 'brand',

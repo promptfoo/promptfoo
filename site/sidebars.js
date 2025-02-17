@@ -175,6 +175,7 @@ const sidebars = {
             'red-team/plugins/pii',
             'red-team/plugins/prompt-extraction',
             'red-team/plugins/rbac',
+            'red-team/plugins/reasoning-dos',
             'red-team/plugins/shell-injection',
             'red-team/plugins/sql-injection',
             'red-team/plugins/ssrf',
