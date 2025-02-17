@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"golang-provider/pkg1"
+	"github.com/promptfoo/promptfoo/examples/golang-provider/pkg1"
 	"github.com/sashabaranov/go-openai"
 )
 

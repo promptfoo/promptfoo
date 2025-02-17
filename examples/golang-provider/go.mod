@@ -1,4 +1,4 @@
-module golang-provider
+module github.com/promptfoo/promptfoo/examples/golang-provider
 
 go 1.21
 
