@@ -1,37 +1,29 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Golang subprovider example - Technical Documentation'
+description: 'Simple Golang subprovider example with temperature control'
 
 prompts:
-  - 'Explain how {{topic}} works'
+  - 'Write a creative story about {{topic}}'
 
 providers:
-  - id: 'file://provider.go#CallApi' # Default technical writer
-    label: 'Technical Writer'
+  - id: 'file://provider.go:CallApi'
+    label: 'Low Temperature'
     config:
-      systemPrompt: 'You are a technical writer creating clear and concise documentation.'
+      temperature: 0.2
 
-  - id: 'file://provider.go#SomeOtherFunction' # Formatted as technical docs
-    label: 'Technical Docs Formatter'
+  - id: 'file://provider.go:CallApi'
+    label: 'High Temperature'
     config:
-      systemPrompt: 'You are a documentation specialist focused on structure and clarity.'
+      temperature: 0.9
 
 tests:
   - vars:
-      topic: Docker containers
+      topic: space exploration
     assert:
       - type: contains
-        value: container
-        provider: Technical Writer
-      - type: contains
-        value: DOCUMENTATION
-        provider: Technical Docs Formatter
+        value: space
 
   - vars:
-      topic: REST APIs
+      topic: underwater cities
     assert:
       - type: contains
-        value: HTTP
-        provider: Technical Writer
-      - type: contains
-        value: ENDPOINT
-        provider: Technical Docs Formatter
+        value: water

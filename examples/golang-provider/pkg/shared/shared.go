@@ -13,22 +13,31 @@ func NewClient() *openai.Client {
 	return openai.NewClient(os.Getenv("OPENAI_API_KEY"))
 }
 
-// CreateCompletion creates a chat completion with the given prompt
-func CreateCompletion(client *openai.Client, prompt string, systemPrompt string) (string, error) {
+// CreateCompletion creates a chat completion with the given prompt and temperature
+func CreateCompletion(client *openai.Client, prompt string, systemPrompt string, temperature float32) (string, error) {
+	messages := []openai.ChatCompletionMessage{
+		{
+			Role:    openai.ChatMessageRoleUser,
+			Content: prompt,
+		},
+	}
+
+	// Add system prompt if provided
+	if systemPrompt != "" {
+		messages = append([]openai.ChatCompletionMessage{
+			{
+				Role:    openai.ChatMessageRoleSystem,
+				Content: systemPrompt,
+			},
+		}, messages...)
+	}
+
 	resp, err := client.CreateChatCompletion(
 		context.Background(),
 		openai.ChatCompletionRequest{
-			Model: openai.GPT4,
-			Messages: []openai.ChatCompletionMessage{
-				{
-					Role:    openai.ChatMessageRoleSystem,
-					Content: systemPrompt,
-				},
-				{
-					Role:    openai.ChatMessageRoleUser,
-					Content: prompt,
-				},
-			},
+			Model:       openai.GPT4,
+			Temperature: temperature,
+			Messages:    messages,
 		},
 	)
 
