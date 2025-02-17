@@ -183,7 +183,7 @@ The OWASP Top 10 for LLM applications can be a useful starting point for identif
 9. Misinformation
 10. Unbounded Consumption
 
-Promptfoo covers these risks in its [OWASP Top 10 guide](https://www.promptfoo.dev/docs/red-team/owasp-llm-top-10/) for you to easily identify potential vulnerabilities when running red teams. You can run a red team specifically against the OWASP Top 10 using the OWASP shorthand in your Promptfoo config: :
+Promptfoo covers these risks in its [OWASP Top 10 guide](https://www.promptfoo.dev/docs/red-team/owasp-llm-top-10/) for you to easily identify potential vulnerabilities when running red teams. You can run a red team specifically against the OWASP Top 10 using the OWASP shorthand in your Promptfoo config: 
 
 ```yaml
 redteam:
