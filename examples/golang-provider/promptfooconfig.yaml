@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Example demonstrating Go module resolution issue (#3057)'
+
+prompts:
+  - 'Write a creative story about {{topic}}'
+
+providers:
+  - id: 'file://evaluation/main.go:CallApi'
+    label: 'Provider from evaluation'
+    config:
+      temperature: 0.7
+
+tests:
+  - vars:
+      topic: space exploration
+    assert:
+      - type: contains
+        value: space
+
+  - vars:
+      topic: underwater cities
+    assert:
+      - type: contains
+        value: water
