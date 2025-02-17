@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import type { Assertion, ApiProvider, TestCase, AtomicTestCase, GradingResult } from '../../types';
+import type { ApiProvider, Assertion, AssertionValue, AtomicTestCase, GradingResult, ProviderResponse, ResultSuggestion, TestCase } from '../../types';
 import invariant from '../../util/invariant';
 import { RedteamPluginBase, RedteamGraderBase } from './base';
 
@@ -96,7 +96,9 @@ export class PolicyViolationGrader extends RedteamGraderBase {
     llmOutput: string,
     test: AtomicTestCase,
     provider: ApiProvider | undefined,
-  ): Promise<{ grade: GradingResult; rubric: string }> {
+    renderedValue: AssertionValue | undefined,
+    providerResponse: ProviderResponse | undefined,
+  ): Promise<{ grade: GradingResult; rubric: string; suggestions?: ResultSuggestion[] }> {
     const { policy, ...restMetadata } = test.metadata || {};
     return super.getResult(
       prompt,
@@ -109,7 +111,8 @@ export class PolicyViolationGrader extends RedteamGraderBase {
         },
       },
       provider,
-      undefined,
+      renderedValue,
+      providerResponse,
     );
   }
 }

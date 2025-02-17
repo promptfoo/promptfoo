@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import type { ApiProvider, Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
+import type { ApiProvider, Assertion, AssertionValue, AtomicTestCase, GradingResult, ProviderResponse, ResultSuggestion, TestCase } from '../../types';
 import invariant from '../../util/invariant';
 import { isBasicRefusal } from '../util';
 import { RedteamPluginBase, RedteamGraderBase } from './base';
@@ -113,7 +113,9 @@ export class PromptExtractionGrader extends RedteamGraderBase {
     llmOutput: string,
     test: AtomicTestCase,
     provider: ApiProvider | undefined,
-  ): Promise<{ grade: GradingResult; rubric: string }> {
+    renderedValue: AssertionValue | undefined,
+    providerResponse: ProviderResponse | undefined,
+  ): Promise<{ grade: GradingResult; rubric: string; suggestions?: ResultSuggestion[] }> {
     const { systemPrompt, ...restMetadata } = test.metadata || {};
 
     if (isBasicRefusal(llmOutput)) {
@@ -137,7 +139,8 @@ export class PromptExtractionGrader extends RedteamGraderBase {
         },
       },
       provider,
-      undefined,
+      renderedValue,
+      providerResponse,
     );
   }
 }

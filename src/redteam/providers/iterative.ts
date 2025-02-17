@@ -11,6 +11,7 @@ import {
   type NunjucksFilterMap,
   type Prompt,
   type RedteamFileConfig,
+  type ResultSuggestion,
 } from '../../types';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
@@ -257,6 +258,7 @@ export async function runRedteamConversation({
           test,
           redteamProvider,
           assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+          targetResponse,
         );
         graderPassed = grade.pass;
         if (grade.tokensUsed) {

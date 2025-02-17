@@ -13,6 +13,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../types/providers';
+import type { ResultSuggestion } from '../../types';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
@@ -229,6 +230,7 @@ export default class GoatProvider implements ApiProvider {
             test,
             targetProvider,
             assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+            targetResponse,
           );
           graderPassed = grade.pass;
           if (grade.tokensUsed) {

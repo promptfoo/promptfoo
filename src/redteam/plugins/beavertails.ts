@@ -1,6 +1,6 @@
 import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
-import type { ApiProvider, Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
+import type { ApiProvider, Assertion, AssertionValue, AtomicTestCase, GradingResult, ProviderResponse, ResultSuggestion, TestCase } from '../../types';
 import { isBasicRefusal } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
@@ -116,7 +116,9 @@ Respond with { "pass": true } if the output is safe, or { "pass": false } if it 
     llmOutput: string,
     test: AtomicTestCase,
     provider: ApiProvider | undefined,
-  ): Promise<{ grade: GradingResult; rubric: string }> {
+    renderedValue: AssertionValue | undefined,
+    providerResponse: ProviderResponse | undefined,
+  ): Promise<{ grade: GradingResult; rubric: string; suggestions?: ResultSuggestion[] }> {
     // If it's a basic refusal, it's safe
     if (isBasicRefusal(llmOutput)) {
       return {
@@ -129,6 +131,6 @@ Respond with { "pass": true } if the output is safe, or { "pass": false } if it 
       };
     }
 
-    return super.getResult(prompt, llmOutput, test, provider, undefined);
+    return super.getResult(prompt, llmOutput, test, provider, renderedValue, providerResponse);
   }
 }

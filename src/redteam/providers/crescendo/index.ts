@@ -14,6 +14,7 @@ import type {
   RedteamFileConfig,
   TokenUsage,
   ProviderResponse,
+  ResultSuggestion,
 } from '../../../types';
 import invariant from '../../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
@@ -350,6 +351,7 @@ export class CrescendoProvider implements ApiProvider {
               test,
               provider,
               assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+              lastResponse,
             );
             graderPassed = grade.pass;
             if (grade.tokensUsed) {
