@@ -26,6 +26,8 @@ export type EnvOverrides = {
   CLOUDFLARE_API_KEY?: string;
   PROMPTFOO_REMOTE_GENERATION_URL?: string;
   COHERE_API_KEY?: string;
+  DATABRICKS_TOKEN?: string;
+  DATABRICKS_WORKSPACE_URL?: string;
   FAL_KEY?: string;
   GOOGLE_API_HOST?: string;
   GOOGLE_API_KEY?: string;
