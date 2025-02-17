@@ -14,7 +14,6 @@ import type {
   RedteamFileConfig,
   TokenUsage,
   ProviderResponse,
-  ResultSuggestion,
 } from '../../../types';
 import invariant from '../../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';

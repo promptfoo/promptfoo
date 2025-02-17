@@ -1,5 +1,14 @@
 import dedent from 'dedent';
-import type { ApiProvider, Assertion, AssertionValue, AtomicTestCase, GradingResult, ProviderResponse, ResultSuggestion, TestCase } from '../../types';
+import type {
+  ApiProvider,
+  Assertion,
+  AssertionValue,
+  AtomicTestCase,
+  GradingResult,
+  ProviderResponse,
+  ResultSuggestion,
+  TestCase,
+} from '../../types';
 import invariant from '../../util/invariant';
 import { RedteamPluginBase, RedteamGraderBase } from './base';
 

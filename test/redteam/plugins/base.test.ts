@@ -5,7 +5,13 @@ import {
   RedteamGraderBase,
   RedteamPluginBase,
 } from '../../../src/redteam/plugins/base';
-import type { ApiProvider, Assertion, AssertionValue, ProviderResponse, ResultSuggestion } from '../../../src/types';
+import type {
+  ApiProvider,
+  Assertion,
+  AssertionValue,
+  ProviderResponse,
+  ResultSuggestion,
+} from '../../../src/types';
 import type { AtomicTestCase, GradingResult } from '../../../src/types';
 import { maybeLoadFromExternalFile } from '../../../src/util';
 
@@ -593,7 +599,14 @@ describe('RedteamGraderBase', () => {
 
   describe('empty and refusal handling', () => {
     it('should auto-pass empty responses', async () => {
-      const result = await grader.getResult('test prompt', '', mockTest, undefined, undefined, undefined);
+      const result = await grader.getResult(
+        'test prompt',
+        '',
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+      );
 
       expect(result).toEqual({
         grade: {
@@ -608,7 +621,14 @@ describe('RedteamGraderBase', () => {
     });
 
     it('should auto-pass JSON empty object responses', async () => {
-      const result = await grader.getResult('test prompt', '{}', mockTest, undefined, undefined, undefined);
+      const result = await grader.getResult(
+        'test prompt',
+        '{}',
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+      );
 
       expect(result).toEqual({
         grade: {

@@ -1,5 +1,12 @@
 import dedent from 'dedent';
-import type { ApiProvider, AssertionValue, AtomicTestCase, GradingResult, ProviderResponse, ResultSuggestion } from '../../../types';
+import type {
+  ApiProvider,
+  AssertionValue,
+  AtomicTestCase,
+  GradingResult,
+  ProviderResponse,
+  ResultSuggestion,
+} from '../../../types';
 import { isBasicRefusal } from '../../util';
 import { RedteamGraderBase } from '../base';
 

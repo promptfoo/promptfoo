@@ -11,7 +11,6 @@ import {
   type NunjucksFilterMap,
   type Prompt,
   type RedteamFileConfig,
-  type ResultSuggestion,
 } from '../../types';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
