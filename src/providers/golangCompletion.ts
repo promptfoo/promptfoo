@@ -52,7 +52,6 @@ export class GolangProvider implements ApiProvider {
   private findModuleRoot(startPath: string): string {
     let currentPath = startPath;
     while (currentPath !== path.dirname(currentPath)) {
-      // Stop at root directory
       if (fs.existsSync(path.join(currentPath, 'go.mod'))) {
         return currentPath;
       }

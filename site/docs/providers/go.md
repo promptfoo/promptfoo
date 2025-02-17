@@ -32,36 +32,6 @@ The function should:
 - Return a map containing an "output" key with the response
 - Return an error if the operation fails
 
-## Directory Structure
-
-You can organize your Go provider in two ways:
-
-### Simple Structure
-
-For basic providers:
-
-```
-my-provider/
-├── go.mod
-├── main.go           # Provider implementation
-└── promptfooconfig.yml
-```
-
-### Module Structure
-
-For providers that share code:
-
-```
-my-provider/
-├── go.mod            # Root module definition
-├── main.go           # Root provider implementation
-├── core/             # Supporting packages
-│   └── client.go
-├── evaluation/       # Alternative implementations
-│   └── main.go
-└── promptfooconfig.yml
-```
-
 ## Configuration
 
 To configure the Go provider, you need to specify the path to your Go script and any additional options you want to pass to the script. Here's an example configuration in YAML format:

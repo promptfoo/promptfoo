@@ -1,4 +1,4 @@
-# Golang Provider Examples
+# Golang Provider Example
 
 This example demonstrates how to structure a Go-based provider for promptfoo. For detailed documentation, see [Go Provider](https://www.promptfoo.dev/docs/providers/go/) documentation.
 

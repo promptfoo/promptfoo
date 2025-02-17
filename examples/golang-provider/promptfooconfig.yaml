@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Example comparing providers in different directories'
+description: 'Golang provider example'
 
 prompts:
   - 'Given the sequence {{sequence}}, what are the next two numbers and explain your reasoning?'
