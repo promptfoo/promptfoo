@@ -21,6 +21,7 @@ import { BrowserProvider } from './providers/browser';
 import { ClouderaAiChatCompletionProvider } from './providers/cloudera';
 import * as CloudflareAiProviders from './providers/cloudflare-ai';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './providers/cohere';
+import { DatabricksMosaicAiChatCompletionProvider } from './providers/databricks';
 import { FalImageGenerationProvider } from './providers/fal';
 import { GolangProvider } from './providers/golangCompletion';
 import { GoogleChatProvider } from './providers/google';
@@ -127,8 +128,16 @@ export async function loadApiProvider(
       callApi: async (input: string) => ({ output: input }),
     };
   } else if (providerPath.startsWith('cloudera:')) {
-    const modelName = providerPath.split(':')[1];
+    const splits = providerPath.split(':');
+    const modelName = splits.slice(1).join(':');
     ret = new ClouderaAiChatCompletionProvider(modelName, {
+      ...providerOptions,
+      config: providerOptions.config || {},
+    });
+  } else if (providerPath.startsWith('databricks:')) {
+    const splits = providerPath.split(':');
+    const modelName = splits.slice(1).join(':');
+    ret = new DatabricksMosaicAiChatCompletionProvider(modelName, {
       ...providerOptions,
       config: providerOptions.config || {},
     });
@@ -691,6 +700,7 @@ export default {
   AzureCompletionProvider,
   AzureEmbeddingProvider,
   ClouderaAiChatCompletionProvider,
+  DatabricksMosaicAiChatCompletionProvider,
 
   // Backwards compatibility for Azure rename 2024-11-09 / 0.96.0
   AzureOpenAiAssistantProvider: AzureAssistantProvider,

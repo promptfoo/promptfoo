@@ -138,6 +138,12 @@
                             "COHERE_CLIENT_NAME": {
                               "type": "string"
                             },
+                            "DATABRICKS_TOKEN": {
+                              "type": "string"
+                            },
+                            "DATABRICKS_WORKSPACE_URL": {
+                              "type": "string"
+                            },
                             "FAL_KEY": {
                               "type": "string"
                             },
