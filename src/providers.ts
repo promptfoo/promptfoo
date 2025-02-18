@@ -85,6 +85,708 @@ import { isJavascriptFile } from './util/file';
 import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
 
+interface ProviderFactory {
+  test: (providerPath: string) => boolean;
+  create: (
+    providerPath: string,
+    providerOptions: ProviderOptions,
+    context: LoadApiProviderContext,
+  ) => Promise<ApiProvider>;
+}
+
+const providerMap: ProviderFactory[] = [
+  {
+    test: (providerPath: string) =>
+      providerPath.startsWith('file://') &&
+      (providerPath.endsWith('.yaml') ||
+        providerPath.endsWith('.yml') ||
+        providerPath.endsWith('.json')),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const filePath = providerPath.slice('file://'.length);
+      const modulePath = path.isAbsolute(filePath)
+        ? filePath
+        : path.join(context.basePath || process.cwd(), filePath);
+      let fileContent: ProviderOptions;
+      if (providerPath.endsWith('.json')) {
+        fileContent = JSON.parse(fs.readFileSync(modulePath, 'utf8')) as ProviderOptions;
+      } else {
+        fileContent = yaml.load(fs.readFileSync(modulePath, 'utf8')) as ProviderOptions;
+      }
+      invariant(fileContent, `Provider config ${filePath} is undefined`);
+      invariant(fileContent.id, `Provider config ${filePath} must have an id`);
+      logger.info(`Loaded provider ${fileContent.id} from ${filePath}`);
+      return loadApiProvider(fileContent.id, { ...context, options: fileContent });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('adaline:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      if (splits.length < 4) {
+        throw new Error(
+          `Invalid adaline provider path: ${providerPath}. path format should be 'adaline:<provider_name>:<model_type>:<model_name>' eg. 'adaline:openai:chat:gpt-4o'`,
+        );
+      }
+      const providerName = splits[1];
+      const modelType = splits[2];
+      const modelName = splits[3];
+      const { AdalineGatewayChatProvider, AdalineGatewayEmbeddingProvider } = await import(
+        './providers/adaline.gateway'
+      );
+      if (modelType === 'embedding' || modelType === 'embeddings') {
+        return new AdalineGatewayEmbeddingProvider(providerName, modelName, providerOptions);
+      } else {
+        return new AdalineGatewayChatProvider(providerName, modelName, providerOptions);
+      }
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('ai21:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const modelName = providerPath.split(':')[1];
+      return new AI21ChatCompletionProvider(modelName, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) =>
+      providerPath.startsWith('alibaba:') ||
+      providerPath.startsWith('alicloud:') ||
+      providerPath.startsWith('aliyun:') ||
+      providerPath.startsWith('dashscope:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const modelType = splits[1];
+      const modelName = splits.slice(2).join(':');
+
+      if (modelType === 'embedding' || modelType === 'embeddings') {
+        return new AlibabaEmbeddingProvider(modelName || modelType, providerOptions);
+      } else {
+        return new AlibabaChatCompletionProvider(modelName || modelType, providerOptions);
+      }
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('anthropic:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const modelType = splits[1];
+      const modelName = splits[2];
+
+      if (modelType === 'messages') {
+        return new AnthropicMessagesProvider(modelName, providerOptions);
+      } else if (modelType === 'completion') {
+        return new AnthropicCompletionProvider(modelName, providerOptions);
+      } else if (AnthropicCompletionProvider.ANTHROPIC_COMPLETION_MODELS.includes(modelType)) {
+        return new AnthropicCompletionProvider(modelType, providerOptions);
+      } else {
+        throw new Error(
+          `Unknown Anthropic model type: ${modelType}. Use one of the following providers: anthropic:messages:<model name>, anthropic:completion:<model name>`,
+        );
+      }
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('bam:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const modelType = splits[1];
+      const modelName = splits.slice(2).join(':');
+      if (modelType === 'chat') {
+        return new BAMChatProvider(modelName || 'ibm/granite-13b-chat-v2', providerOptions);
+      } else {
+        throw new Error(
+          `Invalid BAM provider: ${providerPath}. Use one of the following providers: bam:chat:<model name>`,
+        );
+      }
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('bedrock:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const modelType = splits[1];
+      const modelName = splits.slice(2).join(':');
+
+      if (modelType === 'completion') {
+        // Backwards compatibility: `completion` used to be required
+        return new AwsBedrockCompletionProvider(modelName, providerOptions);
+      } else if (modelType === 'embeddings' || modelType === 'embedding') {
+        return new AwsBedrockEmbeddingProvider(modelName, providerOptions);
+      } else {
+        return new AwsBedrockCompletionProvider(
+          `${modelType}${modelName ? `:${modelName}` : ''}`,
+          providerOptions,
+        );
+      }
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('cloudera:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const modelName = providerPath.split(':')[1];
+      return new ClouderaAiChatCompletionProvider(modelName, {
+        ...providerOptions,
+        config: providerOptions.config || {},
+      });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('cloudflare-ai:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      // Load Cloudflare AI
+      const splits = providerPath.split(':');
+      const modelType = splits[1];
+      const deploymentName = splits[2];
+
+      if (modelType === 'chat') {
+        return new CloudflareAiProviders.CloudflareAiChatCompletionProvider(
+          deploymentName,
+          providerOptions,
+        );
+      } else if (modelType === 'embedding' || modelType === 'embeddings') {
+        return new CloudflareAiProviders.CloudflareAiEmbeddingProvider(
+          deploymentName,
+          providerOptions,
+        );
+      } else if (modelType === 'completion') {
+        return new CloudflareAiProviders.CloudflareAiCompletionProvider(
+          deploymentName,
+          providerOptions,
+        );
+      } else {
+        throw new Error(
+          `Unknown Cloudflare AI model type: ${modelType}. Use one of the following providers: cloudflare-ai:chat:<model name>, cloudflare-ai:completion:<model name>, cloudflare-ai:embedding:`,
+        );
+      }
+    },
+  },
+
+  {
+    test: (providerPath: string) => providerPath.startsWith('cohere:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const modelType = splits[1];
+      const modelName = splits.slice(2).join(':');
+
+      if (modelType === 'embedding' || modelType === 'embeddings') {
+        return new CohereEmbeddingProvider(modelName, providerOptions);
+      } else if (modelType === 'chat' || modelType === undefined) {
+        return new CohereChatCompletionProvider(modelName || modelType, providerOptions);
+      } else {
+        // Default to chat provider for any other model type
+        return new CohereChatCompletionProvider(
+          providerPath.substring('cohere:'.length),
+          providerOptions,
+        );
+      }
+    },
+  },
+
+  {
+    test: (providerPath: string) => providerPath.startsWith('deepseek:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const modelName = splits.slice(1).join(':') || 'deepseek-chat';
+      return new OpenAiChatCompletionProvider(modelName, {
+        ...providerOptions,
+        config: {
+          ...providerOptions.config,
+          apiBaseUrl: 'https://api.deepseek.com/v1',
+          apiKeyEnvar: 'DEEPSEEK_API_KEY',
+        },
+      });
+    },
+  },
+
+  {
+    test: (providerPath: string) => providerPath === 'echo',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return {
+        id: () => 'echo',
+        callApi: async (input: string) => ({ output: input }),
+      };
+    },
+  },
+
+  {
+    test: (providerPath: string) => providerPath.startsWith('exec:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      // Load script module
+      const scriptPath = providerPath.split(':')[1];
+      return new ScriptCompletionProvider(scriptPath, providerOptions);
+    },
+  },
+
+  {
+    test: (providerPath: string) => providerPath.startsWith('f5:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      let endpoint = splits.slice(1).join(':');
+      if (endpoint.startsWith('/')) {
+        endpoint = endpoint.slice(1);
+      }
+      return new OpenAiChatCompletionProvider(endpoint, {
+        ...providerOptions,
+        config: {
+          ...providerOptions.config,
+          apiBaseUrl: providerOptions.config?.apiBaseUrl + '/' + endpoint,
+          apiKeyEnvar: 'F5_API_KEY',
+        },
+      });
+    },
+  },
+
+  {
+    test: (providerPath: string) => providerPath.startsWith('fal:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const [_, modelType, modelName] = providerPath.split(':');
+      if (modelType === 'image') {
+        return new FalImageGenerationProvider(modelName, providerOptions);
+      } else {
+        throw new Error(
+          `Invalid fal provider path: ${providerPath}. Use one of the following providers: fal:image:<model name>`,
+        );
+      }
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('fireworks:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const modelName = splits.slice(1).join(':');
+      return new OpenAiChatCompletionProvider(modelName, {
+        ...providerOptions,
+        config: {
+          ...providerOptions.config,
+          apiBaseUrl: 'https://api.fireworks.ai/inference/v1',
+          apiKeyEnvar: 'FIREWORKS_API_KEY',
+        },
+      });
+    },
+  },
+
+  {
+    test: (providerPath: string) => providerPath.startsWith('github:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const modelName = splits.slice(1).join(':');
+      return new OpenAiChatCompletionProvider(modelName, {
+        ...providerOptions,
+        config: {
+          ...providerOptions.config,
+          apiBaseUrl: 'https://models.inference.ai.azure.com',
+          apiKeyEnvar: 'GITHUB_TOKEN',
+        },
+      });
+    },
+  },
+  {
+    test: (providerPath: string) =>
+      providerPath.startsWith('golang:') ||
+      (providerPath.startsWith('file://') &&
+        (providerPath.endsWith('.go') || providerPath.includes('.go:'))),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const scriptPath = providerPath.startsWith('file://')
+        ? providerPath.slice('file://'.length)
+        : providerPath.split(':').slice(1).join(':');
+      return new GolangProvider(scriptPath, providerOptions);
+    },
+  },
+
+  {
+    test: (providerPath: string) => providerPath.startsWith('groq:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const modelName = providerPath.split(':')[1];
+      return new GroqProvider(modelName, providerOptions);
+    },
+  },
+
+  {
+    test: (providerPath: string) => providerPath.startsWith('hyperbolic:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const modelName = splits.slice(1).join(':');
+      return new OpenAiChatCompletionProvider(modelName, {
+        ...providerOptions,
+        config: {
+          ...providerOptions.config,
+          apiBaseUrl: 'https://api.hyperbolic.xyz/v1',
+          apiKeyEnvar: 'HYPERBOLIC_API_KEY',
+        },
+      });
+    },
+  },
+
+  {
+    test: (providerPath: string) => providerPath.startsWith('localai:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const modelType = splits[1];
+      const modelName = splits[2];
+      if (modelType === 'chat') {
+        return new LocalAiChatProvider(modelName, providerOptions);
+      } else if (modelType === 'completion') {
+        return new LocalAiCompletionProvider(modelName, providerOptions);
+      } else if (modelType === 'embedding' || modelType === 'embeddings') {
+        return new LocalAiEmbeddingProvider(modelName, providerOptions);
+      } else {
+        return new LocalAiChatProvider(modelType, providerOptions);
+      }
+    },
+  },
+
+  {
+    test: (providerPath: string) => providerPath.startsWith('mistral:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const modelType = splits[1];
+      const modelName = splits.slice(2).join(':');
+      if (modelType === 'embedding' || modelType === 'embeddings') {
+        return new MistralEmbeddingProvider(providerOptions);
+      } else {
+        return new MistralChatCompletionProvider(modelName || modelType, providerOptions);
+      }
+    },
+  },
+
+  {
+    test: (providerPath: string) => providerPath.startsWith('ollama:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const firstPart = splits[1];
+      if (firstPart === 'chat') {
+        const modelName = splits.slice(2).join(':');
+        return new OllamaChatProvider(modelName, providerOptions);
+      } else if (firstPart === 'completion') {
+        const modelName = splits.slice(2).join(':');
+        return new OllamaCompletionProvider(modelName, providerOptions);
+      } else if (firstPart === 'embedding' || firstPart === 'embeddings') {
+        const modelName = splits.slice(2).join(':');
+        return new OllamaEmbeddingProvider(modelName, providerOptions);
+      } else {
+        // Default to completion provider
+        const modelName = splits.slice(1).join(':');
+        return new OllamaCompletionProvider(modelName, providerOptions);
+      }
+    },
+  },
+
+  {
+    test: (providerPath: string) => providerPath.startsWith('openai:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      // Load OpenAI module
+      const splits = providerPath.split(':');
+      const modelType = splits[1];
+      const modelName = splits.slice(2).join(':');
+
+      if (modelType === 'chat') {
+        return new OpenAiChatCompletionProvider(modelName || 'gpt-4o-mini', providerOptions);
+      } else if (modelType === 'embedding' || modelType === 'embeddings') {
+        return new OpenAiEmbeddingProvider(modelName || 'text-embedding-3-large', providerOptions);
+      } else if (modelType === 'completion') {
+        return new OpenAiCompletionProvider(modelName || 'gpt-3.5-turbo-instruct', providerOptions);
+      } else if (modelType === 'moderation') {
+        return new OpenAiModerationProvider(modelName || 'omni-moderation-latest', providerOptions);
+      } else if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
+        return new OpenAiChatCompletionProvider(modelType, providerOptions);
+      } else if (OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelType)) {
+        return new OpenAiCompletionProvider(modelType, providerOptions);
+      } else if (modelType === 'assistant') {
+        return new OpenAiAssistantProvider(modelName, providerOptions);
+      } else if (modelType === 'image') {
+        return new OpenAiImageProvider(modelName, providerOptions);
+      } else {
+        // Assume user did not provide model type, and it's a chat model
+        logger.warn(
+          `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>`,
+        );
+        return new OpenAiChatCompletionProvider(modelType, providerOptions);
+      }
+    },
+  },
+
+  {
+    test: (providerPath: string) => providerPath.startsWith('openrouter:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const modelName = splits.slice(1).join(':');
+      return new OpenAiChatCompletionProvider(modelName, {
+        ...providerOptions,
+        config: {
+          ...providerOptions.config,
+          apiBaseUrl: 'https://openrouter.ai/api/v1',
+          apiKeyEnvar: 'OPENROUTER_API_KEY',
+          passthrough: {
+            // Pass through OpenRouter-specific options
+            // https://openrouter.ai/docs/requests
+            ...(providerOptions.config.transforms && {
+              transforms: providerOptions.config.transforms,
+            }),
+            ...(providerOptions.config.models && { models: providerOptions.config.models }),
+            ...(providerOptions.config.route && { route: providerOptions.config.route }),
+            ...(providerOptions.config.provider && { provider: providerOptions.config.provider }),
+            ...(providerOptions.config.passthrough && {
+              passthrough: providerOptions.config.passthrough,
+            }),
+          },
+        },
+      });
+    },
+  },
+
+  {
+    test: (providerPath: string) => providerPath.startsWith('package:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return parsePackageProvider(providerPath, context.basePath || process.cwd(), providerOptions);
+    },
+  },
+
+  {
+    test: (providerPath: string) => providerPath.startsWith('perplexity:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const modelName = splits.slice(1).join(':');
+      return new OpenAiChatCompletionProvider(modelName, {
+        ...providerOptions,
+        config: {
+          ...providerOptions.config,
+          apiBaseUrl: 'https://api.perplexity.ai',
+          apiKeyEnvar: 'PERPLEXITY_API_KEY',
+        },
+      });
+    },
+  },
+
+  {
+    test: (providerPath: string) => providerPath.startsWith('portkey:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const modelName = splits.slice(1).join(':');
+      return new PortkeyChatCompletionProvider(modelName, providerOptions);
+    },
+  },
+
+  {
+    test: (providerPath: string) => providerPath.startsWith('replicate:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const modelType = splits[1];
+      const modelName = splits.slice(2).join(':');
+      if (modelType === 'moderation') {
+        return new ReplicateModerationProvider(modelName, providerOptions);
+      } else if (modelType === 'image') {
+        return new ReplicateImageProvider(modelName, providerOptions);
+      } else {
+        // By default, there is no model type.
+        return new ReplicateProvider(
+          modelName ? modelType + ':' + modelName : modelType,
+          providerOptions,
+        );
+      }
+    },
+  },
+
+  {
+    test: (providerPath: string) => providerPath.startsWith('togetherai:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createTogetherAiProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
+    },
+  },
+
+  {
+    test: (providerPath: string) => providerPath.startsWith('vertex:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const firstPart = splits[1];
+      if (firstPart === 'chat') {
+        return new VertexChatProvider(splits.slice(2).join(':'), providerOptions);
+      } else if (firstPart === 'embedding' || firstPart === 'embeddings') {
+        return new VertexEmbeddingProvider(splits.slice(2).join(':'), providerOptions);
+      } else {
+        // Default to chat provider
+        return new VertexChatProvider(splits.slice(1).join(':'), providerOptions);
+      }
+    },
+  },
+
+  {
+    test: (providerPath: string) => providerPath.startsWith('voyage:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return new VoyageEmbeddingProvider(providerPath.split(':')[1], providerOptions);
+    },
+  },
+
+  {
+    test: (providerPath: string) => providerPath.startsWith('watsonx:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const modelName = splits.slice(1).join(':');
+      return new WatsonXProvider(modelName, providerOptions);
+    },
+  },
+
+  {
+    test: (providerPath: string) => providerPath.startsWith('webhook:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const webhookUrl = providerPath.substring('webhook:'.length);
+      return new WebhookProvider(webhookUrl, providerOptions);
+    },
+  },
+
+  {
+    test: (providerPath: string) => providerPath.startsWith('xai:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createXAIProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
+    },
+  },
+];
+
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
 export async function loadApiProvider(
   providerPath: string,
@@ -101,41 +803,33 @@ export async function loadApiProvider(
   };
   let ret: ApiProvider;
   providerPath = getNunjucksEngine().renderString(providerPath, {});
-  if (
-    providerPath.startsWith('file://') &&
-    (providerPath.endsWith('.yaml') ||
-      providerPath.endsWith('.yml') ||
-      providerPath.endsWith('.json'))
-  ) {
-    const filePath = providerPath.slice('file://'.length);
-    const modulePath = path.isAbsolute(filePath)
-      ? filePath
-      : path.join(basePath || process.cwd(), filePath);
-    let fileContent: ProviderOptions;
-    if (providerPath.endsWith('.json')) {
-      fileContent = JSON.parse(fs.readFileSync(modulePath, 'utf8')) as ProviderOptions;
-    } else {
-      fileContent = yaml.load(fs.readFileSync(modulePath, 'utf8')) as ProviderOptions;
-    }
-    invariant(fileContent, `Provider config ${filePath} is undefined`);
-    invariant(fileContent.id, `Provider config ${filePath} must have an id`);
-    logger.info(`Loaded provider ${fileContent.id} from ${filePath}`);
-    ret = await loadApiProvider(fileContent.id, { ...context, options: fileContent });
-  } else if (providerPath === 'echo') {
-    ret = {
-      id: () => 'echo',
-      callApi: async (input: string) => ({ output: input }),
-    };
-  } else if (providerPath.startsWith('cloudera:')) {
-    const modelName = providerPath.split(':')[1];
-    ret = new ClouderaAiChatCompletionProvider(modelName, {
-      ...providerOptions,
-      config: providerOptions.config || {},
-    });
-  } else if (providerPath.startsWith('exec:')) {
-    // Load script module
-    const scriptPath = providerPath.split(':')[1];
-    ret = new ScriptCompletionProvider(scriptPath, providerOptions);
+
+  if (providerPath === 'browser') {
+    ret = new BrowserProvider(providerPath, providerOptions);
+  } else if (providerPath === 'promptfoo:manual-input') {
+    ret = new ManualInputProvider(providerOptions);
+  } else if (providerPath === 'promptfoo:redteam:crescendo') {
+    ret = new RedteamCrescendoProvider(providerOptions.config);
+  } else if (providerPath === 'promptfoo:redteam:goat') {
+    ret = new RedteamGoatProvider(providerOptions.config);
+  } else if (providerPath === 'promptfoo:redteam:best-of-n') {
+    ret = new RedteamBestOfNProvider(providerOptions.config);
+  } else if (providerPath === 'promptfoo:redteam:iterative') {
+    ret = new RedteamIterativeProvider(providerOptions.config);
+  } else if (providerPath === 'promptfoo:redteam:iterative:image') {
+    ret = new RedteamImageIterativeProvider(providerOptions.config);
+  } else if (providerPath === 'promptfoo:redteam:iterative:tree') {
+    ret = new RedteamIterativeTreeProvider(providerOptions.config);
+  } else if (providerPath === 'promptfoo:redteam:pandamonium') {
+    ret = new RedteamPandamoniumProvider(providerOptions.config);
+  } else if (providerPath === 'promptfoo:simulated-user') {
+    ret = new SimulatedUser(providerOptions);
+  } else if (providerPath === 'sequence') {
+    ret = new SequenceProvider(providerOptions);
+  } else if (providerPath.startsWith('jfrog:') || providerPath.startsWith('qwak:')) {
+    const splits = providerPath.split(':');
+    const modelName = splits.slice(1).join(':');
+    ret = new JfrogMlChatCompletionProvider(modelName, providerOptions);
   } else if (
     providerPath.startsWith('python:') ||
     (providerPath.startsWith('file://') &&
@@ -145,35 +839,6 @@ export async function loadApiProvider(
       ? providerPath.slice('file://'.length)
       : providerPath.split(':').slice(1).join(':');
     ret = new PythonProvider(scriptPath, providerOptions);
-  } else if (providerPath.startsWith('openai:')) {
-    // Load OpenAI module
-    const splits = providerPath.split(':');
-    const modelType = splits[1];
-    const modelName = splits.slice(2).join(':');
-
-    if (modelType === 'chat') {
-      ret = new OpenAiChatCompletionProvider(modelName || 'gpt-4o-mini', providerOptions);
-    } else if (modelType === 'embedding' || modelType === 'embeddings') {
-      ret = new OpenAiEmbeddingProvider(modelName || 'text-embedding-3-large', providerOptions);
-    } else if (modelType === 'completion') {
-      ret = new OpenAiCompletionProvider(modelName || 'gpt-3.5-turbo-instruct', providerOptions);
-    } else if (modelType === 'moderation') {
-      ret = new OpenAiModerationProvider(modelName || 'omni-moderation-latest', providerOptions);
-    } else if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
-      ret = new OpenAiChatCompletionProvider(modelType, providerOptions);
-    } else if (OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelType)) {
-      ret = new OpenAiCompletionProvider(modelType, providerOptions);
-    } else if (modelType === 'assistant') {
-      ret = new OpenAiAssistantProvider(modelName, providerOptions);
-    } else if (modelType === 'image') {
-      ret = new OpenAiImageProvider(modelName, providerOptions);
-    } else {
-      // Assume user did not provide model type, and it's a chat model
-      logger.warn(
-        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>`,
-      );
-      ret = new OpenAiChatCompletionProvider(modelType, providerOptions);
-    }
   } else if (providerPath.startsWith('azure:') || providerPath.startsWith('azureopenai:')) {
     // Load Azure OpenAI module
     const splits = providerPath.split(':');
@@ -191,140 +856,6 @@ export async function loadApiProvider(
     } else {
       throw new Error(
         `Unknown Azure model type: ${modelType}. Use one of the following providers: azure:chat:<model name>, azure:assistant:<assistant id>, azure:completion:<model name>`,
-      );
-    }
-  } else if (providerPath.startsWith('openrouter:')) {
-    const splits = providerPath.split(':');
-    const modelName = splits.slice(1).join(':');
-    ret = new OpenAiChatCompletionProvider(modelName, {
-      ...providerOptions,
-      config: {
-        ...providerOptions.config,
-        apiBaseUrl: 'https://openrouter.ai/api/v1',
-        apiKeyEnvar: 'OPENROUTER_API_KEY',
-        passthrough: {
-          // Pass through OpenRouter-specific options
-          // https://openrouter.ai/docs/requests
-          ...(providerOptions.config.transforms && {
-            transforms: providerOptions.config.transforms,
-          }),
-          ...(providerOptions.config.models && { models: providerOptions.config.models }),
-          ...(providerOptions.config.route && { route: providerOptions.config.route }),
-          ...(providerOptions.config.provider && { provider: providerOptions.config.provider }),
-          ...(providerOptions.config.passthrough && {
-            passthrough: providerOptions.config.passthrough,
-          }),
-        },
-      },
-    });
-  } else if (providerPath.startsWith('github:')) {
-    const splits = providerPath.split(':');
-    const modelName = splits.slice(1).join(':');
-    ret = new OpenAiChatCompletionProvider(modelName, {
-      ...providerOptions,
-      config: {
-        ...providerOptions.config,
-        apiBaseUrl: 'https://models.inference.ai.azure.com',
-        apiKeyEnvar: 'GITHUB_TOKEN',
-      },
-    });
-  } else if (providerPath.startsWith('perplexity:')) {
-    const splits = providerPath.split(':');
-    const modelName = splits.slice(1).join(':');
-    ret = new OpenAiChatCompletionProvider(modelName, {
-      ...providerOptions,
-      config: {
-        ...providerOptions.config,
-        apiBaseUrl: 'https://api.perplexity.ai',
-        apiKeyEnvar: 'PERPLEXITY_API_KEY',
-      },
-    });
-  } else if (providerPath.startsWith('hyperbolic:')) {
-    const splits = providerPath.split(':');
-    const modelName = splits.slice(1).join(':');
-    ret = new OpenAiChatCompletionProvider(modelName, {
-      ...providerOptions,
-      config: {
-        ...providerOptions.config,
-        apiBaseUrl: 'https://api.hyperbolic.xyz/v1',
-        apiKeyEnvar: 'HYPERBOLIC_API_KEY',
-      },
-    });
-  } else if (providerPath.startsWith('deepseek:')) {
-    const splits = providerPath.split(':');
-    const modelName = splits.slice(1).join(':') || 'deepseek-chat';
-    ret = new OpenAiChatCompletionProvider(modelName, {
-      ...providerOptions,
-      config: {
-        ...providerOptions.config,
-        apiBaseUrl: 'https://api.deepseek.com/v1',
-        apiKeyEnvar: 'DEEPSEEK_API_KEY',
-      },
-    });
-  } else if (providerPath.startsWith('f5')) {
-    const splits = providerPath.split(':');
-    let endpoint = splits.slice(1).join(':');
-    if (endpoint.startsWith('/')) {
-      endpoint = endpoint.slice(1);
-    }
-    ret = new OpenAiChatCompletionProvider(endpoint, {
-      ...providerOptions,
-      config: {
-        ...providerOptions.config,
-        apiBaseUrl: providerOptions.config?.apiBaseUrl + '/' + endpoint,
-        apiKeyEnvar: 'F5_API_KEY',
-      },
-    });
-  } else if (providerPath.startsWith('togetherai:')) {
-    ret = createTogetherAiProvider(providerPath, {
-      config: providerOptions,
-      env: context.env,
-    });
-  } else if (providerPath.startsWith('xai:')) {
-    ret = createXAIProvider(providerPath, {
-      config: providerOptions,
-      env: context.env,
-    });
-  } else if (providerPath.startsWith('portkey:')) {
-    const splits = providerPath.split(':');
-    const modelName = splits.slice(1).join(':');
-    ret = new PortkeyChatCompletionProvider(modelName, providerOptions);
-  } else if (providerPath.startsWith('anthropic:')) {
-    const splits = providerPath.split(':');
-    const modelType = splits[1];
-    const modelName = splits[2];
-
-    if (modelType === 'messages') {
-      ret = new AnthropicMessagesProvider(modelName, providerOptions);
-    } else if (modelType === 'completion') {
-      ret = new AnthropicCompletionProvider(modelName, providerOptions);
-    } else if (AnthropicCompletionProvider.ANTHROPIC_COMPLETION_MODELS.includes(modelType)) {
-      ret = new AnthropicCompletionProvider(modelType, providerOptions);
-    } else {
-      throw new Error(
-        `Unknown Anthropic model type: ${modelType}. Use one of the following providers: anthropic:messages:<model name>, anthropic:completion:<model name>`,
-      );
-    }
-  } else if (providerPath.startsWith('voyage:')) {
-    ret = new VoyageEmbeddingProvider(providerPath.split(':')[1], providerOptions);
-  } else if (providerPath.startsWith('watsonx:')) {
-    const splits = providerPath.split(':');
-    const modelName = splits.slice(1).join(':');
-    ret = new WatsonXProvider(modelName, providerOptions);
-  } else if (providerPath.startsWith('bedrock:')) {
-    const splits = providerPath.split(':');
-    const modelType = splits[1];
-    const modelName = splits.slice(2).join(':');
-
-    if (modelType === 'completion') {
-      // Backwards compatibility: `completion` used to be required
-      ret = new AwsBedrockCompletionProvider(modelName, providerOptions);
-    } else if (modelType === 'embeddings' || modelType === 'embedding') {
-      ret = new AwsBedrockEmbeddingProvider(modelName, providerOptions);
-    } else {
-      ret = new AwsBedrockCompletionProvider(
-        `${modelType}${modelName ? `:${modelName}` : ''}`,
-        providerOptions,
       );
     }
   } else if (providerPath.startsWith('huggingface:') || providerPath.startsWith('hf:')) {
@@ -350,161 +881,12 @@ export async function loadApiProvider(
         `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:feature-extraction:<model name>, huggingface:text-generation:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>`,
       );
     }
-  } else if (providerPath.startsWith('replicate:')) {
-    const splits = providerPath.split(':');
-    const modelType = splits[1];
-    const modelName = splits.slice(2).join(':');
-    if (modelType === 'moderation') {
-      ret = new ReplicateModerationProvider(modelName, providerOptions);
-    } else if (modelType === 'image') {
-      ret = new ReplicateImageProvider(modelName, providerOptions);
-    } else {
-      // By default, there is no model type.
-      ret = new ReplicateProvider(
-        modelName ? modelType + ':' + modelName : modelType,
-        providerOptions,
-      );
-    }
-  } else if (providerPath.startsWith('fal:')) {
-    const [_, modelType, modelName] = providerPath.split(':');
-    if (modelType === 'image') {
-      ret = new FalImageGenerationProvider(modelName, providerOptions);
-    } else {
-      throw new Error(
-        `Invalid fal provider path: ${providerPath}. Use one of the following providers: fal:image:<model name>`,
-      );
-    }
-  } else if (providerPath.startsWith('bam:')) {
-    const splits = providerPath.split(':');
-    const modelType = splits[1];
-    const modelName = splits.slice(2).join(':');
-    if (modelType === 'chat') {
-      ret = new BAMChatProvider(modelName || 'ibm/granite-13b-chat-v2', providerOptions);
-    } else {
-      throw new Error(
-        `Invalid BAM provider: ${providerPath}. Use one of the following providers: bam:chat:<model name>`,
-      );
-    }
-  } else if (providerPath.startsWith('cloudflare-ai:')) {
-    // Load Cloudflare AI
-    const splits = providerPath.split(':');
-    const modelType = splits[1];
-    const deploymentName = splits[2];
-
-    if (modelType === 'chat') {
-      ret = new CloudflareAiProviders.CloudflareAiChatCompletionProvider(
-        deploymentName,
-        providerOptions,
-      );
-    } else if (modelType === 'embedding' || modelType === 'embeddings') {
-      ret = new CloudflareAiProviders.CloudflareAiEmbeddingProvider(
-        deploymentName,
-        providerOptions,
-      );
-    } else if (modelType === 'completion') {
-      ret = new CloudflareAiProviders.CloudflareAiCompletionProvider(
-        deploymentName,
-        providerOptions,
-      );
-    } else {
-      throw new Error(
-        `Unknown Cloudflare AI model type: ${modelType}. Use one of the following providers: cloudflare-ai:chat:<model name>, cloudflare-ai:completion:<model name>, cloudflare-ai:embedding:`,
-      );
-    }
-  } else if (providerPath.startsWith('webhook:')) {
-    const webhookUrl = providerPath.substring('webhook:'.length);
-    ret = new WebhookProvider(webhookUrl, providerOptions);
   } else if (providerPath === 'llama' || providerPath.startsWith('llama:')) {
     const modelName = providerPath.split(':')[1];
     ret = new LlamaProvider(modelName, providerOptions);
-  } else if (providerPath.startsWith('ollama:')) {
-    const splits = providerPath.split(':');
-    const firstPart = splits[1];
-    if (firstPart === 'chat') {
-      const modelName = splits.slice(2).join(':');
-      ret = new OllamaChatProvider(modelName, providerOptions);
-    } else if (firstPart === 'completion') {
-      const modelName = splits.slice(2).join(':');
-      ret = new OllamaCompletionProvider(modelName, providerOptions);
-    } else if (firstPart === 'embedding' || firstPart === 'embeddings') {
-      const modelName = splits.slice(2).join(':');
-      ret = new OllamaEmbeddingProvider(modelName, providerOptions);
-    } else {
-      // Default to completion provider
-      const modelName = splits.slice(1).join(':');
-      ret = new OllamaCompletionProvider(modelName, providerOptions);
-    }
   } else if (providerPath.startsWith('google:') || providerPath.startsWith('palm:')) {
     const modelName = providerPath.split(':')[1];
     ret = new GoogleChatProvider(modelName, providerOptions);
-  } else if (providerPath.startsWith('vertex:')) {
-    const splits = providerPath.split(':');
-    const firstPart = splits[1];
-    if (firstPart === 'chat') {
-      ret = new VertexChatProvider(splits.slice(2).join(':'), providerOptions);
-    } else if (firstPart === 'embedding' || firstPart === 'embeddings') {
-      ret = new VertexEmbeddingProvider(splits.slice(2).join(':'), providerOptions);
-    } else {
-      // Default to chat provider
-      ret = new VertexChatProvider(splits.slice(1).join(':'), providerOptions);
-    }
-  } else if (providerPath.startsWith('mistral:')) {
-    const splits = providerPath.split(':');
-    const modelType = splits[1];
-    const modelName = splits.slice(2).join(':');
-    if (modelType === 'embedding' || modelType === 'embeddings') {
-      ret = new MistralEmbeddingProvider(providerOptions);
-    } else {
-      ret = new MistralChatCompletionProvider(modelName || modelType, providerOptions);
-    }
-  } else if (providerPath.startsWith('cohere:')) {
-    const splits = providerPath.split(':');
-    const modelType = splits[1];
-    const modelName = splits.slice(2).join(':');
-
-    if (modelType === 'embedding' || modelType === 'embeddings') {
-      ret = new CohereEmbeddingProvider(modelName, providerOptions);
-    } else if (modelType === 'chat' || modelType === undefined) {
-      ret = new CohereChatCompletionProvider(modelName || modelType, providerOptions);
-    } else {
-      // Default to chat provider for any other model type
-      ret = new CohereChatCompletionProvider(
-        providerPath.substring('cohere:'.length),
-        providerOptions,
-      );
-    }
-  } else if (providerPath.startsWith('localai:')) {
-    const splits = providerPath.split(':');
-    const modelType = splits[1];
-    const modelName = splits[2];
-
-    if (modelType === 'chat') {
-      ret = new LocalAiChatProvider(modelName, providerOptions);
-    } else if (modelType === 'completion') {
-      ret = new LocalAiCompletionProvider(modelName, providerOptions);
-    } else if (modelType === 'embedding' || modelType === 'embeddings') {
-      ret = new LocalAiEmbeddingProvider(modelName, providerOptions);
-    } else {
-      ret = new LocalAiChatProvider(modelType, providerOptions);
-    }
-  } else if (providerPath.startsWith('adaline:')) {
-    const splits = providerPath.split(':');
-    if (splits.length < 4) {
-      throw new Error(
-        `Invalid adaline provider path: ${providerPath}. path format should be 'adaline:<provider_name>:<model_type>:<model_name>' eg. 'adaline:openai:chat:gpt-4o'`,
-      );
-    }
-    const providerName = splits[1];
-    const modelType = splits[2];
-    const modelName = splits[3];
-    const { AdalineGatewayChatProvider, AdalineGatewayEmbeddingProvider } = await import(
-      './providers/adaline.gateway'
-    );
-    if (modelType === 'embedding' || modelType === 'embeddings') {
-      ret = new AdalineGatewayEmbeddingProvider(providerName, modelName, providerOptions);
-    } else {
-      ret = new AdalineGatewayChatProvider(providerName, modelName, providerOptions);
-    }
   } else if (
     providerPath.startsWith('http:') ||
     providerPath.startsWith('https:') ||
@@ -520,45 +902,6 @@ export async function loadApiProvider(
     providerPath === 'wss'
   ) {
     ret = new WebSocketProvider(providerPath, providerOptions);
-  } else if (providerPath === 'browser') {
-    ret = new BrowserProvider(providerPath, providerOptions);
-  } else if (providerPath === 'promptfoo:manual-input') {
-    ret = new ManualInputProvider(providerOptions);
-  } else if (providerPath === 'promptfoo:redteam:crescendo') {
-    ret = new RedteamCrescendoProvider(providerOptions.config);
-  } else if (providerPath === 'promptfoo:redteam:goat') {
-    ret = new RedteamGoatProvider(providerOptions.config);
-  } else if (providerPath === 'promptfoo:redteam:best-of-n') {
-    ret = new RedteamBestOfNProvider(providerOptions.config);
-  } else if (providerPath === 'promptfoo:redteam:iterative') {
-    ret = new RedteamIterativeProvider(providerOptions.config);
-  } else if (providerPath === 'promptfoo:redteam:iterative:image') {
-    ret = new RedteamImageIterativeProvider(providerOptions.config);
-  } else if (providerPath === 'promptfoo:redteam:iterative:tree') {
-    ret = new RedteamIterativeTreeProvider(providerOptions.config);
-  } else if (providerPath === 'promptfoo:redteam:pandamonium') {
-    ret = new RedteamPandamoniumProvider(providerOptions.config);
-  } else if (providerPath === 'promptfoo:simulated-user') {
-    ret = new SimulatedUser(providerOptions);
-  } else if (providerPath === 'sequence') {
-    ret = new SequenceProvider(providerOptions);
-  } else if (providerPath.startsWith('groq:')) {
-    const modelName = providerPath.split(':')[1];
-    ret = new GroqProvider(modelName, providerOptions);
-  } else if (providerPath.startsWith('ai21:')) {
-    const modelName = providerPath.split(':')[1];
-    ret = new AI21ChatCompletionProvider(modelName, providerOptions);
-  } else if (
-    providerPath.startsWith('golang:') ||
-    (providerPath.startsWith('file://') &&
-      (providerPath.endsWith('.go') || providerPath.includes('.go:')))
-  ) {
-    const scriptPath = providerPath.startsWith('file://')
-      ? providerPath.slice('file://'.length)
-      : providerPath.split(':').slice(1).join(':');
-    ret = new GolangProvider(scriptPath, providerOptions);
-  } else if (providerPath.startsWith('package:')) {
-    ret = await parsePackageProvider(providerPath, basePath || process.cwd(), providerOptions);
   } else if (isJavascriptFile(providerPath)) {
     if (providerPath.startsWith('file://')) {
       providerPath = providerPath.slice('file://'.length);
@@ -570,36 +913,6 @@ export async function loadApiProvider(
 
     const CustomApiProvider = await importModule(modulePath);
     ret = new CustomApiProvider(options);
-  } else if (providerPath.startsWith('jfrog:') || providerPath.startsWith('qwak:')) {
-    const splits = providerPath.split(':');
-    const modelName = splits.slice(1).join(':');
-    ret = new JfrogMlChatCompletionProvider(modelName, providerOptions);
-  } else if (
-    providerPath.startsWith('alibaba:') ||
-    providerPath.startsWith('alicloud:') ||
-    providerPath.startsWith('aliyun:') ||
-    providerPath.startsWith('dashscope:')
-  ) {
-    const splits = providerPath.split(':');
-    const modelType = splits[1];
-    const modelName = splits.slice(2).join(':');
-
-    if (modelType === 'embedding' || modelType === 'embeddings') {
-      ret = new AlibabaEmbeddingProvider(modelName || modelType, providerOptions);
-    } else {
-      ret = new AlibabaChatCompletionProvider(modelName || modelType, providerOptions);
-    }
-  } else if (providerPath.startsWith('fireworks:')) {
-    const splits = providerPath.split(':');
-    const modelName = splits.slice(1).join(':');
-    ret = new OpenAiChatCompletionProvider(modelName, {
-      ...providerOptions,
-      config: {
-        ...providerOptions.config,
-        apiBaseUrl: 'https://api.fireworks.ai/inference/v1',
-        apiKeyEnvar: 'FIREWORKS_API_KEY',
-      },
-    });
   } else {
     logger.error(dedent`
       Could not identify provider: ${chalk.bold(providerPath)}.
