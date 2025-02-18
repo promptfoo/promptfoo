@@ -28,7 +28,7 @@ describe('Databricks Mosaic AI Provider', () => {
   });
 
   describe('DatabricksMosaicAiChatCompletionProvider', () => {
-    it('should create provider for %s model', () => {
+    it('should create provider for a specific model', () => {
       const provider = new DatabricksMosaicAiChatCompletionProvider(
         'meta-llama-3.3-70b-instruct',
         defaultOptions,
