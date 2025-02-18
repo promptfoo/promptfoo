@@ -43,59 +43,62 @@ export default function Setup({ open, onClose }: SetupProps) {
         </IconButton>
       </DialogTitle>
       <DialogContent dividers>
-        <Typography variant="body1">
-          You are about to set up several components that define how your AI system will be tested:
-        </Typography>
-        <ul>
-          <li>
-            <strong>Application:</strong> Metadata used to tailor the adversarial inputs to your
-            application.
-          </li>
-          <li>
-            <strong>Targets:</strong> The specific endpoints, models, or components of your AI
-            system that will be tested.
-          </li>
-          <li>
-            <strong>Plugins:</strong> Modules that generate diverse adversarial inputs, simulating
-            various types of attacks or edge cases.
-          </li>
-          <li>
-            <strong>Strategies:</strong> Define how adversarial inputs are delivered to your system,
-            including techniques like jailbreaking and prompt injection.
-          </li>
-        </ul>
-        <Grid item xs={12}>
-          <Box
-            sx={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              mt: 4,
-            }}
-          >
-            <Link
-              href="https://www.promptfoo.dev/docs/red-team/"
-              target="_blank"
-              rel="noopener noreferrer"
-              sx={{ textDecoration: 'none', color: theme.palette.primary.main }}
-            >
-              Learn more about LLM red teaming
-            </Link>
-            <Button
-              variant="contained"
-              endIcon={<KeyboardArrowRightIcon />}
-              onClick={onClose}
+        <Box sx={{ mt: 8 }}>
+          <Typography variant="body1">
+            You are about to set up several components that define how your AI system will be
+            tested:
+          </Typography>
+          <ul>
+            <li>
+              <strong>Application:</strong> Metadata used to tailor the adversarial inputs to your
+              application.
+            </li>
+            <li>
+              <strong>Targets:</strong> The specific endpoints, models, or components of your AI
+              system that will be tested.
+            </li>
+            <li>
+              <strong>Plugins:</strong> Modules that generate diverse adversarial inputs, simulating
+              various types of attacks or edge cases.
+            </li>
+            <li>
+              <strong>Strategies:</strong> Define how adversarial inputs are delivered to your
+              system, including techniques like jailbreaking and prompt injection.
+            </li>
+          </ul>
+          <Grid item xs={12}>
+            <Box
               sx={{
-                backgroundColor: theme.palette.primary.main,
-                '&:hover': { backgroundColor: theme.palette.primary.dark },
-                px: 4,
-                py: 1,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                mt: 4,
               }}
             >
-              Get Started
-            </Button>
-          </Box>
-        </Grid>
+              <Link
+                href="https://www.promptfoo.dev/docs/red-team/"
+                target="_blank"
+                rel="noopener noreferrer"
+                sx={{ textDecoration: 'none', color: theme.palette.primary.main }}
+              >
+                Learn more about LLM red teaming
+              </Link>
+              <Button
+                variant="contained"
+                endIcon={<KeyboardArrowRightIcon />}
+                onClick={onClose}
+                sx={{
+                  backgroundColor: theme.palette.primary.main,
+                  '&:hover': { backgroundColor: theme.palette.primary.dark },
+                  px: 4,
+                  py: 1,
+                }}
+              >
+                Get Started
+              </Button>
+            </Box>
+          </Grid>
+        </Box>
       </DialogContent>
     </Dialog>
   );
