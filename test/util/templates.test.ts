@@ -216,7 +216,6 @@ describe('getNunjucksEngine', () => {
       };
       const engine = getNunjucksEngine();
       const rendered = engine.renderString('{{ env.PROCESS_VAR }}', {});
-      console.log('Rendered value:', rendered);
       expect(rendered).toBe('overridden_value');
       expect(engine.renderString('{{ env.CONFIG_VAR }}', {})).toBe('config_value');
       cliState.config = initialConfig;
