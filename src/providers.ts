@@ -350,10 +350,13 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      return {
+      const provider: ApiProvider = {
         id: () => 'echo',
-        callApi: async (input: string) => ({ output: input }),
+        async callApi(input: string, options?: Record<string, any>, context?: any) {
+          return { output: input };
+        },
       };
+      return provider;
     },
   },
   {
@@ -1044,7 +1047,7 @@ export async function loadApiProvider(
     const filePath = renderedProviderPath.slice('file://'.length);
     const modulePath = path.isAbsolute(filePath)
       ? filePath
-      : path.join(context.basePath || process.cwd(), filePath);
+      : path.join(basePath || process.cwd(), filePath);
     let fileContent: ProviderOptions;
     if (renderedProviderPath.endsWith('.json')) {
       fileContent = JSON.parse(fs.readFileSync(modulePath, 'utf8')) as ProviderOptions;
