@@ -20,6 +20,33 @@ import { ellipsize } from '../../../../../util/text';
 import ChatMessages, { type Message } from './ChatMessages';
 import type { GradingResult } from './types';
 
+function generateRawHttpRequest(config: any, prompt: string): string | null {
+  let url;
+  try {
+    url = new URL(config.url);
+  } catch {
+    return null;
+  }
+
+  const method = config.method || 'POST';
+  const headers = config.headers || {};
+  let body = config.body;
+
+  if (typeof body === 'string') {
+    body = body.replace(/\$\{prompt\}/g, prompt);
+  } else if (typeof body === 'object') {
+    body = JSON.stringify(body);
+  }
+
+  return (
+    `${method} ${url.toString()} HTTP/1.1\n` +
+    Object.entries(headers)
+      .map(([key, value]) => `${key}: ${value}`)
+      .join('\n') +
+    (body ? `\n\n${body}` : '')
+  );
+}
+
 function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[] }) {
   const [expandedValues, setExpandedValues] = useState<{ [key: number]: boolean }>({});
 
@@ -112,10 +139,14 @@ export default function EvalOutputPromptDialog({
 }: EvalOutputPromptDialogProps) {
   const [copied, setCopied] = useState(false);
   const [expandedMetadata, setExpandedMetadata] = useState<ExpandedMetadataState>({});
+  const [rawRequest, setRawRequest] = useState<string | null>(null);
 
   useEffect(() => {
     setCopied(false);
-  }, [prompt]);
+    if (metadata?.config) {
+      setRawRequest(generateRawHttpRequest(metadata.config, prompt));
+    }
+  }, [prompt, metadata]);
 
   const copyToClipboard = async (text: string) => {
     await navigator.clipboard.writeText(text);
@@ -190,6 +221,19 @@ export default function EvalOutputPromptDialog({
         )}
         <AssertionResults gradingResults={gradingResults} />
         {parsedMessages && parsedMessages.length > 0 && <ChatMessages messages={parsedMessages} />}
+        {rawRequest && (
+          <Box my={2}>
+            <Typography variant="subtitle1" style={{ marginBottom: '1rem', marginTop: '1rem' }}>
+              Raw HTTP Request
+            </Typography>
+            <TextareaAutosize
+              readOnly
+              maxRows={20}
+              value={rawRequest}
+              style={{ width: '100%', padding: '0.75rem' }}
+            />
+          </Box>
+        )}
         {metadata && Object.keys(metadata).length > 0 && (
           <Box my={2}>
             <Typography variant="subtitle1" style={{ marginBottom: '1rem', marginTop: '1rem' }}>
