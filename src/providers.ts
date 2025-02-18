@@ -1067,14 +1067,16 @@ export async function loadApiProvider(
     }
   }
 
-  throw new Error(dedent`
+  const errorMessage = dedent`
     Could not identify provider: ${chalk.bold(providerPath)}.
 
     ${chalk.white(dedent`
       Please check your configuration and ensure the provider is correctly specified.
 
       For more information on supported providers, visit: `)} ${chalk.cyan('https://promptfoo.dev/docs/providers/')}
-  `);
+  `;
+  logger.error(errorMessage);
+  throw new Error(errorMessage);
 }
 
 export async function loadApiProviders(
