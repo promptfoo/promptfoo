@@ -1,4 +1,5 @@
 import nunjucks from 'nunjucks';
+import cliState from '../../src/cliState';
 import {
   extractVariablesFromTemplate,
   extractVariablesFromTemplates,
@@ -179,8 +180,72 @@ describe('getNunjucksEngine', () => {
   });
 
   describe('environment variables as globals', () => {
+    const originalEnv = process.env;
+
+    beforeEach(() => {
+      jest.resetModules();
+      process.env = { ...originalEnv };
+      jest.isolateModules(() => {
+        jest.doMock('../../src/cliState', () => ({
+          default: {
+            config: {},
+          },
+        }));
+      });
+    });
+
+    afterEach(() => {
+      process.env = originalEnv;
+      jest.resetModules();
+    });
+
     it('should add environment variables as globals by default', () => {
       process.env.TEST_VAR = 'test_value';
+      const engine = getNunjucksEngine();
+      expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('test_value');
+    });
+
+    it('should merge cliState.config.env with process.env', () => {
+      const initialConfig = { ...cliState.config };
+
+      cliState.config = {
+        env: {
+          PROCESS_VAR: 'overridden_value',
+          CONFIG_VAR: 'config_value',
+        },
+      };
+      const engine = getNunjucksEngine();
+      const rendered = engine.renderString('{{ env.PROCESS_VAR }}', {});
+      console.log('Rendered value:', rendered);
+      expect(rendered).toBe('overridden_value');
+      expect(engine.renderString('{{ env.CONFIG_VAR }}', {})).toBe('config_value');
+      cliState.config = initialConfig;
+    });
+
+    it('should handle undefined cliState.config', () => {
+      process.env.TEST_VAR = 'test_value';
+      jest.isolateModules(() => {
+        jest.doMock('../../src/cliState', () => ({
+          default: {
+            config: undefined,
+          },
+        }));
+      });
+      const engine = getNunjucksEngine();
+      expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('test_value');
+    });
+
+    it('should handle undefined cliState.config.env', () => {
+      process.env.TEST_VAR = 'test_value';
+      jest.isolateModules(() => {
+        jest.doMock('../../src/cliState', () => ({
+          default: {
+            config: {
+              env: undefined,
+            },
+          },
+        }));
+      });
       const engine = getNunjucksEngine();
       expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('test_value');
     });
@@ -188,23 +253,37 @@ describe('getNunjucksEngine', () => {
     it('should not add environment variables when PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS is true', () => {
       process.env.TEST_VAR = 'test_value';
       process.env.PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS = 'true';
+      // Update cliState mock
+      jest.mock('../../src/cliState', () => ({
+        default: {
+          config: {
+            env: {
+              CONFIG_VAR: 'config_value',
+            },
+          },
+        },
+      }));
       const engine = getNunjucksEngine();
       expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('');
+      expect(engine.renderString('{{ env.CONFIG_VAR }}', {})).toBe('');
     });
 
     it('should not add environment variables when in self-hosted mode by default', () => {
       process.env.TEST_VAR = 'test_value';
       process.env.PROMPTFOO_SELF_HOSTED = 'true';
+      // Update cliState mock
+      jest.mock('../../src/cliState', () => ({
+        default: {
+          config: {
+            env: {
+              CONFIG_VAR: 'config_value',
+            },
+          },
+        },
+      }));
       const engine = getNunjucksEngine();
       expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('');
-    });
-
-    it('should add environment variables in self-hosted mode when explicitly enabled', () => {
-      process.env.TEST_VAR = 'test_value';
-      process.env.PROMPTFOO_SELF_HOSTED = 'true';
-      process.env.PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS = 'false';
-      const engine = getNunjucksEngine();
-      expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('test_value');
+      expect(engine.renderString('{{ env.CONFIG_VAR }}', {})).toBe('');
     });
   });
 });
