@@ -1,89 +1,77 @@
-import chalk from 'chalk';
-import dedent from 'dedent';
-import fs from 'fs';
-import yaml from 'js-yaml';
 import path from 'path';
-import cliState from './cliState';
-import { importModule } from './esm';
-import logger from './logger';
-import { AI21ChatCompletionProvider } from './providers/ai21';
-import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './providers/alibaba';
-import { AnthropicCompletionProvider, AnthropicMessagesProvider } from './providers/anthropic';
+import { importModule } from '../esm';
+import logger from '../logger';
+import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
+import RedteamCrescendoProvider from '../redteam/providers/crescendo';
+import RedteamGoatProvider from '../redteam/providers/goat';
+import RedteamIterativeProvider from '../redteam/providers/iterative';
+import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
+import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree';
+import RedteamPandamoniumProvider from '../redteam/providers/pandamonium';
+import type { LoadApiProviderContext } from '../types';
+import type { ApiProvider, ProviderOptions } from '../types/providers';
+import { isJavascriptFile } from '../util/file';
+import { AI21ChatCompletionProvider } from './ai21';
+import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
+import { AnthropicCompletionProvider, AnthropicMessagesProvider } from './anthropic';
 import {
   AzureAssistantProvider,
   AzureChatCompletionProvider,
   AzureCompletionProvider,
   AzureEmbeddingProvider,
-} from './providers/azure';
-import { BAMChatProvider, BAMEmbeddingProvider } from './providers/bam';
-import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './providers/bedrock';
-import { BrowserProvider } from './providers/browser';
-import { ClouderaAiChatCompletionProvider } from './providers/cloudera';
-import * as CloudflareAiProviders from './providers/cloudflare-ai';
-import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './providers/cohere';
-import { FalImageGenerationProvider } from './providers/fal';
-import { GolangProvider } from './providers/golangCompletion';
-import { GoogleChatProvider } from './providers/google';
-import { GroqProvider } from './providers/groq';
-import { HttpProvider } from './providers/http';
+} from './azure';
+import { BAMChatProvider } from './bam';
+import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock';
+import { BrowserProvider } from './browser';
+import { ClouderaAiChatCompletionProvider } from './cloudera';
+import * as CloudflareAiProviders from './cloudflare-ai';
+import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere';
+import { FalImageGenerationProvider } from './fal';
+import { GolangProvider } from './golangCompletion';
+import { GoogleChatProvider } from './google';
+import { GroqProvider } from './groq';
+import { HttpProvider } from './http';
 import {
   HuggingfaceFeatureExtractionProvider,
   HuggingfaceSentenceSimilarityProvider,
   HuggingfaceTextClassificationProvider,
   HuggingfaceTextGenerationProvider,
   HuggingfaceTokenExtractionProvider,
-} from './providers/huggingface';
-import { JfrogMlChatCompletionProvider } from './providers/jfrog';
-import { LlamaProvider } from './providers/llama';
+} from './huggingface';
+import { JfrogMlChatCompletionProvider } from './jfrog';
+import { LlamaProvider } from './llama';
 import {
   LocalAiCompletionProvider,
   LocalAiChatProvider,
   LocalAiEmbeddingProvider,
-} from './providers/localai';
-import { ManualInputProvider } from './providers/manualInput';
-import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './providers/mistral';
-import {
-  OllamaEmbeddingProvider,
-  OllamaCompletionProvider,
-  OllamaChatProvider,
-} from './providers/ollama';
-import { OpenAiAssistantProvider } from './providers/openai/assistant';
-import { OpenAiChatCompletionProvider } from './providers/openai/chat';
-import { OpenAiCompletionProvider } from './providers/openai/completion';
-import { OpenAiEmbeddingProvider } from './providers/openai/embedding';
-import { OpenAiImageProvider } from './providers/openai/image';
-import { OpenAiModerationProvider } from './providers/openai/moderation';
-import { parsePackageProvider } from './providers/packageParser';
-import { PortkeyChatCompletionProvider } from './providers/portkey';
-import { PythonProvider } from './providers/pythonCompletion';
+} from './localai';
+import { ManualInputProvider } from './manualInput';
+import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
+import { OllamaEmbeddingProvider, OllamaCompletionProvider, OllamaChatProvider } from './ollama';
+import { OpenAiAssistantProvider } from './openai/assistant';
+import { OpenAiChatCompletionProvider } from './openai/chat';
+import { OpenAiCompletionProvider } from './openai/completion';
+import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { OpenAiImageProvider } from './openai/image';
+import { OpenAiModerationProvider } from './openai/moderation';
+import { parsePackageProvider } from './packageParser';
+import { PortkeyChatCompletionProvider } from './portkey';
+import { PythonProvider } from './pythonCompletion';
 import {
   ReplicateImageProvider,
   ReplicateModerationProvider,
   ReplicateProvider,
-} from './providers/replicate';
-import { ScriptCompletionProvider } from './providers/scriptCompletion';
-import { SequenceProvider } from './providers/sequence';
-import { SimulatedUser } from './providers/simulatedUser';
-import { createTogetherAiProvider } from './providers/togetherai';
-import { VertexChatProvider, VertexEmbeddingProvider } from './providers/vertex';
-import { VoyageEmbeddingProvider } from './providers/voyage';
-import { WatsonXProvider } from './providers/watsonx';
-import { WebhookProvider } from './providers/webhook';
-import { WebSocketProvider } from './providers/websocket';
-import { createXAIProvider } from './providers/xai';
-import RedteamBestOfNProvider from './redteam/providers/bestOfN';
-import RedteamCrescendoProvider from './redteam/providers/crescendo';
-import RedteamGoatProvider from './redteam/providers/goat';
-import RedteamIterativeProvider from './redteam/providers/iterative';
-import RedteamImageIterativeProvider from './redteam/providers/iterativeImage';
-import RedteamIterativeTreeProvider from './redteam/providers/iterativeTree';
-import RedteamPandamoniumProvider from './redteam/providers/pandamonium';
-import type { LoadApiProviderContext, TestSuiteConfig } from './types';
-import type { EnvOverrides } from './types/env';
-import type { ApiProvider, ProviderOptions, ProviderOptionsMap } from './types/providers';
-import { isJavascriptFile } from './util/file';
-import invariant from './util/invariant';
-import { getNunjucksEngine } from './util/templates';
+} from './replicate';
+import { ScriptCompletionProvider } from './scriptCompletion';
+import { SequenceProvider } from './sequence';
+import { SimulatedUser } from './simulatedUser';
+import { createTogetherAiProvider } from './togetherai';
+import { VertexChatProvider, VertexEmbeddingProvider } from './vertex';
+import { VoyageEmbeddingProvider } from './voyage';
+import { WatsonXProvider } from './watsonx';
+import { WebhookProvider } from './webhook';
+import { WebSocketProvider } from './websocket';
+import { createXAIProvider } from './xai';
 
 interface ProviderFactory {
   test: (providerPath: string) => boolean;
@@ -112,7 +100,7 @@ export const providerMap: ProviderFactory[] = [
       const modelType = splits[2];
       const modelName = splits[3];
       const { AdalineGatewayChatProvider, AdalineGatewayEmbeddingProvider } = await import(
-        './providers/adaline.gateway'
+        './adaline.gateway'
       );
       if (modelType === 'embedding' || modelType === 'embeddings') {
         return new AdalineGatewayEmbeddingProvider(providerName, modelName, providerOptions);
@@ -1020,175 +1008,3 @@ export const providerMap: ProviderFactory[] = [
     },
   },
 ];
-
-// FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
-export async function loadApiProvider(
-  providerPath: string,
-  context: LoadApiProviderContext = {},
-): Promise<ApiProvider> {
-  const { options = {}, basePath, env } = context;
-  const providerOptions: ProviderOptions = {
-    id: options.id,
-    config: {
-      ...options.config,
-      basePath,
-    },
-    env,
-  };
-
-  const renderedProviderPath = getNunjucksEngine().renderString(providerPath, {});
-
-  if (
-    renderedProviderPath.startsWith('file://') &&
-    (renderedProviderPath.endsWith('.yaml') ||
-      renderedProviderPath.endsWith('.yml') ||
-      renderedProviderPath.endsWith('.json'))
-  ) {
-    const filePath = renderedProviderPath.slice('file://'.length);
-    const modulePath = path.isAbsolute(filePath)
-      ? filePath
-      : path.join(basePath || process.cwd(), filePath);
-    let fileContent: ProviderOptions;
-    if (renderedProviderPath.endsWith('.json')) {
-      fileContent = JSON.parse(fs.readFileSync(modulePath, 'utf8')) as ProviderOptions;
-    } else {
-      fileContent = yaml.load(fs.readFileSync(modulePath, 'utf8')) as ProviderOptions;
-    }
-    invariant(fileContent, `Provider config ${filePath} is undefined`);
-    invariant(fileContent.id, `Provider config ${filePath} must have an id`);
-    logger.info(`Loaded provider ${fileContent.id} from ${filePath}`);
-    return loadApiProvider(fileContent.id, { ...context, options: fileContent });
-  }
-
-  for (const factory of providerMap) {
-    if (factory.test(renderedProviderPath)) {
-      const ret = await factory.create(renderedProviderPath, providerOptions, context);
-      ret.transform = options.transform;
-      ret.delay = options.delay;
-      ret.label ||= getNunjucksEngine().renderString(String(options.label || ''), {});
-      return ret;
-    }
-  }
-
-  const errorMessage = dedent`
-    Could not identify provider: ${chalk.bold(providerPath)}.
-
-    ${chalk.white(dedent`
-      Please check your configuration and ensure the provider is correctly specified.
-
-      For more information on supported providers, visit: `)} ${chalk.cyan('https://promptfoo.dev/docs/providers/')}
-  `;
-  logger.error(errorMessage);
-  throw new Error(errorMessage);
-}
-
-export async function loadApiProviders(
-  providerPaths: TestSuiteConfig['providers'],
-  options: {
-    basePath?: string;
-    env?: EnvOverrides;
-  } = {},
-): Promise<ApiProvider[]> {
-  const { basePath } = options;
-  const env = options.env || cliState.config?.env;
-  if (typeof providerPaths === 'string') {
-    return [await loadApiProvider(providerPaths, { basePath, env })];
-  } else if (typeof providerPaths === 'function') {
-    return [
-      {
-        id: () => 'custom-function',
-        callApi: providerPaths,
-      },
-    ];
-  } else if (Array.isArray(providerPaths)) {
-    return Promise.all(
-      providerPaths.map((provider, idx) => {
-        if (typeof provider === 'string') {
-          return loadApiProvider(provider, { basePath, env });
-        }
-        if (typeof provider === 'function') {
-          return {
-            id: provider.label ? () => provider.label! : () => `custom-function-${idx}`,
-            callApi: provider,
-          };
-        }
-        if (provider.id) {
-          // List of ProviderConfig objects
-          return loadApiProvider((provider as ProviderOptions).id!, {
-            options: provider,
-            basePath,
-            env,
-          });
-        }
-        // List of { id: string, config: ProviderConfig } objects
-        const id = Object.keys(provider)[0];
-        const providerObject = (provider as ProviderOptionsMap)[id];
-        const context = { ...providerObject, id: providerObject.id || id };
-        return loadApiProvider(id, { options: context, basePath, env });
-      }),
-    );
-  }
-  throw new Error('Invalid providers list');
-}
-
-export default {
-  AI21ChatCompletionProvider,
-  AnthropicCompletionProvider,
-  AnthropicMessagesProvider,
-  AwsBedrockCompletionProvider,
-  AwsBedrockEmbeddingProvider,
-  AzureAssistantProvider,
-  AzureChatCompletionProvider,
-  AzureCompletionProvider,
-  AzureEmbeddingProvider,
-  BAMChatProvider,
-  BAMEmbeddingProvider,
-  BrowserProvider,
-  ClouderaAiChatCompletionProvider,
-  CohereChatCompletionProvider,
-  CohereEmbeddingProvider,
-  FalImageGenerationProvider,
-  GolangProvider,
-  GoogleChatProvider,
-  GroqProvider,
-  HttpProvider,
-  HuggingfaceFeatureExtractionProvider,
-  HuggingfaceSentenceSimilarityProvider,
-  HuggingfaceTextClassificationProvider,
-  HuggingfaceTextGenerationProvider,
-  HuggingfaceTokenExtractionProvider,
-  LlamaProvider,
-  loadApiProvider,
-  LocalAiChatProvider,
-  LocalAiCompletionProvider,
-  LocalAiEmbeddingProvider,
-  ManualInputProvider,
-  MistralChatCompletionProvider,
-  MistralEmbeddingProvider,
-  OllamaChatProvider,
-  OllamaCompletionProvider,
-  OllamaEmbeddingProvider,
-  OpenAiAssistantProvider,
-  OpenAiChatCompletionProvider,
-  OpenAiCompletionProvider,
-  OpenAiEmbeddingProvider,
-  OpenAiImageProvider,
-  OpenAiModerationProvider,
-  PortkeyChatCompletionProvider,
-  PythonProvider,
-  ReplicateImageProvider,
-  ReplicateModerationProvider,
-  ReplicateProvider,
-  ScriptCompletionProvider,
-  VertexChatProvider,
-  VertexEmbeddingProvider,
-  VoyageEmbeddingProvider,
-  WatsonXProvider,
-  WebhookProvider,
-
-  // Backwards compatibility for Azure rename 2024-11-09 / 0.96.0
-  AzureOpenAiAssistantProvider: AzureAssistantProvider,
-  AzureOpenAiChatCompletionProvider: AzureChatCompletionProvider,
-  AzureOpenAiCompletionProvider: AzureCompletionProvider,
-  AzureOpenAiEmbeddingProvider: AzureEmbeddingProvider,
-};
