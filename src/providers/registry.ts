@@ -26,6 +26,7 @@ import { BrowserProvider } from './browser';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
 import * as CloudflareAiProviders from './cloudflare-ai';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere';
+import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
 import { FalImageGenerationProvider } from './fal';
 import { GolangProvider } from './golangCompletion';
 import { GoogleChatProvider } from './google';
@@ -310,6 +311,21 @@ export const providerMap: ProviderFactory[] = [
         providerPath.substring('cohere:'.length),
         providerOptions,
       );
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('databricks:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const modelName = splits.slice(1).join(':');
+      return new DatabricksMosaicAiChatCompletionProvider(modelName, {
+        ...providerOptions,
+        config: providerOptions.config || {},
+      });
     },
   },
   {
