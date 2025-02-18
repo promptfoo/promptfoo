@@ -1,4 +1,4 @@
-export const ATTACKER_MODEL = 'gpt-4o-2024-05-13';
+export const ATTACKER_MODEL = 'o3-mini-2025-01-31';
 
 export const ATTACKER_MODEL_SMALL = 'gpt-4o-mini';
 
