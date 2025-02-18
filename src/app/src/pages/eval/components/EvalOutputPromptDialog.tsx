@@ -8,17 +8,69 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
+import Tab from '@mui/material/Tab';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
+import Tabs from '@mui/material/Tabs';
 import TextareaAutosize from '@mui/material/TextareaAutosize';
 import Typography from '@mui/material/Typography';
 import { ellipsize } from '../../../../../util/text';
 import ChatMessages, { type Message } from './ChatMessages';
+import { useStore } from './store';
 import type { GradingResult } from './types';
+import { isProviderOptions } from './types';
+
+function generateCurlCommand(config: any, prompt: string): string {
+  const url = config.url;
+  const method = config.method || 'POST';
+  const headers = config.headers || {};
+  let body = config.body;
+
+  // Replace {{prompt}} in the body
+  if (body) {
+    if (typeof body === 'string') {
+      body = body.replace(/{{prompt}}/g, prompt);
+    } else if (typeof body === 'object') {
+      const bodyStr = JSON.stringify(body);
+      body = JSON.parse(bodyStr.replace(/"{{prompt}}"/g, JSON.stringify(prompt)));
+    }
+  }
+
+  // Helper function to escape special characters in shell arguments
+  const escapeShellArg = (arg: string): string => {
+    if (arg === undefined || arg === null) {
+      return "''";
+    }
+    const str = String(arg);
+    if (str === '') {
+      return "''";
+    }
+    if (/[^A-Za-z0-9_\/:=-]/.test(str)) {
+      return `'${str.replace(/'/g, "'\\''")}'`;
+    }
+    return str;
+  };
+
+  const parts: string[] = ['curl'];
+  parts.push('-X', escapeShellArg(method));
+  parts.push(escapeShellArg(url));
+
+  Object.entries(headers).forEach(([key, value]) => {
+    const processedValue = String(value).replace(/{{prompt}}/g, prompt);
+    parts.push('-H', escapeShellArg(`${key}: ${processedValue}`));
+  });
+
+  if (body !== undefined && body !== null) {
+    const bodyStr = typeof body === 'string' ? body : JSON.stringify(body);
+    parts.push('-d', escapeShellArg(bodyStr));
+  }
+
+  return parts.join(' ');
+}
 
 function generateRawHttpRequest(config: any, prompt: string): string | null {
   let url;
@@ -140,17 +192,31 @@ export default function EvalOutputPromptDialog({
   const [copied, setCopied] = useState(false);
   const [expandedMetadata, setExpandedMetadata] = useState<ExpandedMetadataState>({});
   const [rawRequest, setRawRequest] = useState<string | null>(null);
+  const [curlCopied, setCurlCopied] = useState(false);
+  const [rawRequestCopied, setRawRequestCopied] = useState(false);
+  const [requestTab, setRequestTab] = useState(0);
+  const { config } = useStore();
+
+  let target = Array.isArray(config?.providers) ? config.providers[0] : undefined;
+  target = target || (Array.isArray(config?.targets) ? config.targets[0] : undefined);
+  const isRedteamHttp =
+    config?.redteam && isProviderOptions(target) && target.id?.startsWith('http');
+
+  const curlCommand =
+    isRedteamHttp && isProviderOptions(target) ? generateCurlCommand(target.config, prompt) : null;
 
   useEffect(() => {
     setCopied(false);
+    setCurlCopied(false);
+    setRawRequestCopied(false);
     if (metadata?.config) {
       setRawRequest(generateRawHttpRequest(metadata.config, prompt));
     }
   }, [prompt, metadata]);
 
-  const copyToClipboard = async (text: string) => {
+  const copyToClipboard = async (text: string, setCopyState: (copied: boolean) => void) => {
     await navigator.clipboard.writeText(text);
-    setCopied(true);
+    setCopyState(true);
   };
 
   const handleMetadataClick = (key: string) => {
@@ -187,7 +253,7 @@ export default function EvalOutputPromptDialog({
             maxRows={20}
           />
           <IconButton
-            onClick={() => copyToClipboard(prompt)}
+            onClick={() => copyToClipboard(prompt, setCopied)}
             style={{ position: 'absolute', right: '10px', top: '10px' }}
           >
             {copied ? <CheckIcon /> : <ContentCopyIcon />}
@@ -223,15 +289,49 @@ export default function EvalOutputPromptDialog({
         {parsedMessages && parsedMessages.length > 0 && <ChatMessages messages={parsedMessages} />}
         {rawRequest && (
           <Box my={2}>
-            <Typography variant="subtitle1" style={{ marginBottom: '1rem', marginTop: '1rem' }}>
-              Raw HTTP Request
-            </Typography>
-            <TextareaAutosize
-              readOnly
-              maxRows={20}
-              value={rawRequest}
-              style={{ width: '100%', padding: '0.75rem' }}
-            />
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+              <Typography variant="subtitle1">HTTP Request</Typography>
+            </Box>
+            <Tabs
+              value={requestTab}
+              onChange={(_, newValue) => setRequestTab(newValue)}
+              sx={{ mb: 2 }}
+            >
+              <Tab label="Raw" />
+              <Tab label="cURL" />
+            </Tabs>
+            {requestTab === 0 && (
+              <Box position="relative">
+                <IconButton
+                  onClick={() => copyToClipboard(rawRequest || '', setRawRequestCopied)}
+                  sx={{ position: 'absolute', right: 1, top: 1 }}
+                >
+                  {rawRequestCopied ? <CheckIcon /> : <ContentCopyIcon />}
+                </IconButton>
+                <TextareaAutosize
+                  readOnly
+                  value={rawRequest || ''}
+                  style={{ width: '100%', padding: '0.75rem', fontFamily: 'monospace' }}
+                  maxRows={20}
+                />
+              </Box>
+            )}
+            {requestTab === 1 && (
+              <Box position="relative">
+                <IconButton
+                  onClick={() => copyToClipboard(curlCommand || '', setCurlCopied)}
+                  sx={{ position: 'absolute', right: 1, top: 1 }}
+                >
+                  {curlCopied ? <CheckIcon /> : <ContentCopyIcon />}
+                </IconButton>
+                <TextareaAutosize
+                  readOnly
+                  value={curlCommand || ''}
+                  style={{ width: '100%', padding: '0.75rem', fontFamily: 'monospace' }}
+                  maxRows={20}
+                />
+              </Box>
+            )}
           </Box>
         )}
         {metadata && Object.keys(metadata).length > 0 && (
