@@ -1,4 +1,4 @@
-import { getEnvString } from 'src/envars';
+import { getEnvString } from '../envars';
 import type { ProviderOptions } from '../types/providers';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import type { OpenAiCompletionOptions } from './openai/types';
