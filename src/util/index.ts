@@ -1018,15 +1018,6 @@ export function parsePathOrGlob(
   }
   const filePath = path.resolve(basePath, promptPath);
 
-  let stats;
-  try {
-    stats = fs.statSync(filePath);
-  } catch (err) {
-    if (getEnvBool('PROMPTFOO_STRICT_FILES')) {
-      throw err;
-    }
-  }
-
   let filename = path.relative(basePath, filePath);
   let functionName: string | undefined;
 
@@ -1037,6 +1028,16 @@ export function parsePathOrGlob(
       (isJavascriptFile(splits[0]) || splits[0].endsWith('.py') || splits[0].endsWith('.go'))
     ) {
       [filename, functionName] = splits;
+    }
+  }
+
+  // verify that filename without function exists
+  let stats;
+  try {
+    stats = fs.statSync(path.join(basePath, filename));
+  } catch (err) {
+    if (getEnvBool('PROMPTFOO_STRICT_FILES')) {
+      throw err;
     }
   }
 
