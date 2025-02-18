@@ -475,6 +475,12 @@ describe('util', () => {
       delete process.env.PROMPTFOO_STRICT_FILES;
     });
 
+    it('should properly test file existence when function name in the path', () => {
+      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      parsePathOrGlob('/base', 'script.py:myFunction');
+      expect(fs.statSync).toHaveBeenCalledWith(path.join('/base', 'script.py'));
+    });
+
     it('should return empty extension for files without extension', () => {
       jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
       expect(parsePathOrGlob('/base', 'file')).toEqual({
