@@ -263,17 +263,40 @@ gcloud auth application-default login
 
 ### Claude Model Access Errors
 
-If you encounter an error like:
+If you encounter errors like:
 
 ```
 API call error: Error: Project is not allowed to use Publisher Model `projects/.../publishers/anthropic/models/claude-*`
 ```
 
-You need to enable access to Claude models:
+or
 
-1. Visit the [Vertex AI Model Garden](https://console.cloud.google.com/vertex-ai/publishers)
-2. Search for "Claude"
-3. Click "Enable" on the specific Claude models you want to use
+```
+API call error: Error: Publisher Model is not servable in region us-central1
+```
+
+You need to:
+
+1. Enable access to Claude models:
+
+   - Visit the [Vertex AI Model Garden](https://console.cloud.google.com/vertex-ai/publishers)
+   - Search for "Claude"
+   - Click "Enable" on the specific Claude models you want to use
+
+2. Use a supported region. Claude models are only available in:
+   - `us-east5`
+   - `europe-west1`
+
+Example configuration with correct region:
+
+```yaml
+providers:
+  - id: vertex:claude-3-5-sonnet-v2@20241022
+    config:
+      region: us-east5 # or europe-west1
+      anthropic_version: 'vertex-2023-10-16'
+      max_tokens: 1024
+```
 
 ## Model Features and Capabilities
 
