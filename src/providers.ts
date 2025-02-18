@@ -94,34 +94,7 @@ interface ProviderFactory {
   ) => Promise<ApiProvider>;
 }
 
-const providerMap: ProviderFactory[] = [
-  {
-    test: (providerPath: string) =>
-      providerPath.startsWith('file://') &&
-      (providerPath.endsWith('.yaml') ||
-        providerPath.endsWith('.yml') ||
-        providerPath.endsWith('.json')),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      const filePath = providerPath.slice('file://'.length);
-      const modulePath = path.isAbsolute(filePath)
-        ? filePath
-        : path.join(context.basePath || process.cwd(), filePath);
-      let fileContent: ProviderOptions;
-      if (providerPath.endsWith('.json')) {
-        fileContent = JSON.parse(fs.readFileSync(modulePath, 'utf8')) as ProviderOptions;
-      } else {
-        fileContent = yaml.load(fs.readFileSync(modulePath, 'utf8')) as ProviderOptions;
-      }
-      invariant(fileContent, `Provider config ${filePath} is undefined`);
-      invariant(fileContent.id, `Provider config ${filePath} must have an id`);
-      logger.info(`Loaded provider ${fileContent.id} from ${filePath}`);
-      return loadApiProvider(fileContent.id, { ...context, options: fileContent });
-    },
-  },
+export const providerMap: ProviderFactory[] = [
   {
     test: (providerPath: string) => providerPath.startsWith('adaline:'),
     create: async (
@@ -201,6 +174,36 @@ const providerMap: ProviderFactory[] = [
       } else {
         throw new Error(
           `Unknown Anthropic model type: ${modelType}. Use one of the following providers: anthropic:messages:<model name>, anthropic:completion:<model name>`,
+        );
+      }
+    },
+  },
+  {
+    test: (providerPath: string) =>
+      providerPath.startsWith('azure:') || providerPath.startsWith('azureopenai:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const modelType = splits[1];
+      const deploymentName = splits[2];
+
+      if (modelType === 'chat') {
+        return new AzureChatCompletionProvider(deploymentName, providerOptions);
+      } else if (modelType === 'assistant') {
+        return new AzureAssistantProvider(deploymentName, providerOptions);
+      } else if (modelType === 'embedding' || modelType === 'embeddings') {
+        return new AzureEmbeddingProvider(
+          deploymentName || 'text-embedding-ada-002',
+          providerOptions,
+        );
+      } else if (modelType === 'completion') {
+        return new AzureCompletionProvider(deploymentName, providerOptions);
+      } else {
+        throw new Error(
+          `Unknown Azure model type: ${modelType}. Use one of the following providers: azure:chat:<model name>, azure:assistant:<assistant id>, azure:completion:<model name>`,
         );
       }
     },
@@ -296,7 +299,6 @@ const providerMap: ProviderFactory[] = [
       }
     },
   },
-
   {
     test: (providerPath: string) => providerPath.startsWith('cohere:'),
     create: async (
@@ -321,7 +323,6 @@ const providerMap: ProviderFactory[] = [
       }
     },
   },
-
   {
     test: (providerPath: string) => providerPath.startsWith('deepseek:'),
     create: async (
@@ -341,7 +342,6 @@ const providerMap: ProviderFactory[] = [
       });
     },
   },
-
   {
     test: (providerPath: string) => providerPath === 'echo',
     create: async (
@@ -355,7 +355,6 @@ const providerMap: ProviderFactory[] = [
       };
     },
   },
-
   {
     test: (providerPath: string) => providerPath.startsWith('exec:'),
     create: async (
@@ -368,7 +367,6 @@ const providerMap: ProviderFactory[] = [
       return new ScriptCompletionProvider(scriptPath, providerOptions);
     },
   },
-
   {
     test: (providerPath: string) => providerPath.startsWith('f5:'),
     create: async (
@@ -391,7 +389,6 @@ const providerMap: ProviderFactory[] = [
       });
     },
   },
-
   {
     test: (providerPath: string) => providerPath.startsWith('fal:'),
     create: async (
@@ -428,7 +425,6 @@ const providerMap: ProviderFactory[] = [
       });
     },
   },
-
   {
     test: (providerPath: string) => providerPath.startsWith('github:'),
     create: async (
@@ -464,7 +460,6 @@ const providerMap: ProviderFactory[] = [
       return new GolangProvider(scriptPath, providerOptions);
     },
   },
-
   {
     test: (providerPath: string) => providerPath.startsWith('groq:'),
     create: async (
@@ -476,7 +471,6 @@ const providerMap: ProviderFactory[] = [
       return new GroqProvider(modelName, providerOptions);
     },
   },
-
   {
     test: (providerPath: string) => providerPath.startsWith('hyperbolic:'),
     create: async (
@@ -496,7 +490,6 @@ const providerMap: ProviderFactory[] = [
       });
     },
   },
-
   {
     test: (providerPath: string) => providerPath.startsWith('localai:'),
     create: async (
@@ -518,7 +511,6 @@ const providerMap: ProviderFactory[] = [
       }
     },
   },
-
   {
     test: (providerPath: string) => providerPath.startsWith('mistral:'),
     create: async (
@@ -536,7 +528,6 @@ const providerMap: ProviderFactory[] = [
       }
     },
   },
-
   {
     test: (providerPath: string) => providerPath.startsWith('ollama:'),
     create: async (
@@ -562,7 +553,6 @@ const providerMap: ProviderFactory[] = [
       }
     },
   },
-
   {
     test: (providerPath: string) => providerPath.startsWith('openai:'),
     create: async (
@@ -600,7 +590,6 @@ const providerMap: ProviderFactory[] = [
       }
     },
   },
-
   {
     test: (providerPath: string) => providerPath.startsWith('openrouter:'),
     create: async (
@@ -633,7 +622,6 @@ const providerMap: ProviderFactory[] = [
       });
     },
   },
-
   {
     test: (providerPath: string) => providerPath.startsWith('package:'),
     create: async (
@@ -644,7 +632,6 @@ const providerMap: ProviderFactory[] = [
       return parsePackageProvider(providerPath, context.basePath || process.cwd(), providerOptions);
     },
   },
-
   {
     test: (providerPath: string) => providerPath.startsWith('perplexity:'),
     create: async (
@@ -664,7 +651,6 @@ const providerMap: ProviderFactory[] = [
       });
     },
   },
-
   {
     test: (providerPath: string) => providerPath.startsWith('portkey:'),
     create: async (
@@ -677,7 +663,6 @@ const providerMap: ProviderFactory[] = [
       return new PortkeyChatCompletionProvider(modelName, providerOptions);
     },
   },
-
   {
     test: (providerPath: string) => providerPath.startsWith('replicate:'),
     create: async (
@@ -701,7 +686,6 @@ const providerMap: ProviderFactory[] = [
       }
     },
   },
-
   {
     test: (providerPath: string) => providerPath.startsWith('togetherai:'),
     create: async (
@@ -715,7 +699,6 @@ const providerMap: ProviderFactory[] = [
       });
     },
   },
-
   {
     test: (providerPath: string) => providerPath.startsWith('vertex:'),
     create: async (
@@ -735,7 +718,6 @@ const providerMap: ProviderFactory[] = [
       }
     },
   },
-
   {
     test: (providerPath: string) => providerPath.startsWith('voyage:'),
     create: async (
@@ -746,7 +728,6 @@ const providerMap: ProviderFactory[] = [
       return new VoyageEmbeddingProvider(providerPath.split(':')[1], providerOptions);
     },
   },
-
   {
     test: (providerPath: string) => providerPath.startsWith('watsonx:'),
     create: async (
@@ -759,7 +740,6 @@ const providerMap: ProviderFactory[] = [
       return new WatsonXProvider(modelName, providerOptions);
     },
   },
-
   {
     test: (providerPath: string) => providerPath.startsWith('webhook:'),
     create: async (
@@ -771,7 +751,6 @@ const providerMap: ProviderFactory[] = [
       return new WebhookProvider(webhookUrl, providerOptions);
     },
   },
-
   {
     test: (providerPath: string) => providerPath.startsWith('xai:'),
     create: async (
@@ -783,6 +762,248 @@ const providerMap: ProviderFactory[] = [
         config: providerOptions,
         env: context.env,
       });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'browser',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return new BrowserProvider(providerPath, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) =>
+      providerPath.startsWith('google:') || providerPath.startsWith('palm:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const modelName = providerPath.split(':')[1];
+      return new GoogleChatProvider(modelName, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) =>
+      providerPath.startsWith('http:') ||
+      providerPath.startsWith('https:') ||
+      providerPath === 'http' ||
+      providerPath === 'https',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return new HttpProvider(providerPath, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => isJavascriptFile(providerPath),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      if (providerPath.startsWith('file://')) {
+        providerPath = providerPath.slice('file://'.length);
+      }
+      // Load custom module
+      const modulePath = path.isAbsolute(providerPath)
+        ? providerPath
+        : path.join(context.basePath || process.cwd(), providerPath);
+
+      const CustomApiProvider = await importModule(modulePath);
+      return new CustomApiProvider(providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) =>
+      providerPath.startsWith('jfrog:') || providerPath.startsWith('qwak:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const modelName = splits.slice(1).join(':');
+      return new JfrogMlChatCompletionProvider(modelName, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'llama' || providerPath.startsWith('llama:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const modelName = providerPath.split(':')[1];
+      return new LlamaProvider(modelName, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'promptfoo:manual-input',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return new ManualInputProvider(providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'promptfoo:redteam:best-of-n',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return new RedteamBestOfNProvider(providerOptions.config);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'promptfoo:redteam:crescendo',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return new RedteamCrescendoProvider(providerOptions.config);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'promptfoo:redteam:goat',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return new RedteamGoatProvider(providerOptions.config);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'promptfoo:redteam:iterative',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return new RedteamIterativeProvider(providerOptions.config);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'promptfoo:redteam:iterative:image',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return new RedteamImageIterativeProvider(providerOptions.config);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'promptfoo:redteam:iterative:tree',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return new RedteamIterativeTreeProvider(providerOptions.config);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'promptfoo:redteam:pandamonium',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return new RedteamPandamoniumProvider(providerOptions.config);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'promptfoo:simulated-user',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return new SimulatedUser(providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'sequence',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return new SequenceProvider(providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) =>
+      providerPath.startsWith('ws:') ||
+      providerPath.startsWith('wss:') ||
+      providerPath === 'websocket' ||
+      providerPath === 'ws' ||
+      providerPath === 'wss',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return new WebSocketProvider(providerPath, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) =>
+      providerPath.startsWith('huggingface:') || providerPath.startsWith('hf:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      if (splits.length < 3) {
+        throw new Error(
+          `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:feature-extraction:<model name>, huggingface:text-generation:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>`,
+        );
+      }
+      const modelName = splits.slice(2).join(':');
+      if (splits[1] === 'feature-extraction') {
+        return new HuggingfaceFeatureExtractionProvider(modelName, providerOptions);
+      } else if (splits[1] === 'sentence-similarity') {
+        return new HuggingfaceSentenceSimilarityProvider(modelName, providerOptions);
+      } else if (splits[1] === 'text-generation') {
+        return new HuggingfaceTextGenerationProvider(modelName, providerOptions);
+      } else if (splits[1] === 'text-classification') {
+        return new HuggingfaceTextClassificationProvider(modelName, providerOptions);
+      } else if (splits[1] === 'token-classification') {
+        return new HuggingfaceTokenExtractionProvider(modelName, providerOptions);
+      } else {
+        throw new Error(
+          `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:feature-extraction:<model name>, huggingface:text-generation:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>`,
+        );
+      }
+    },
+  },
+  {
+    test: (providerPath: string) =>
+      providerPath.startsWith('python:') ||
+      (providerPath.startsWith('file://') &&
+        (providerPath.endsWith('.py') || providerPath.includes('.py:'))),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const scriptPath = providerPath.startsWith('file://')
+        ? providerPath.slice('file://'.length)
+        : providerPath.split(':').slice(1).join(':');
+      return new PythonProvider(scriptPath, providerOptions);
     },
   },
 ];
@@ -801,133 +1022,50 @@ export async function loadApiProvider(
     },
     env,
   };
-  let ret: ApiProvider;
-  providerPath = getNunjucksEngine().renderString(providerPath, {});
 
-  if (providerPath === 'browser') {
-    ret = new BrowserProvider(providerPath, providerOptions);
-  } else if (providerPath === 'promptfoo:manual-input') {
-    ret = new ManualInputProvider(providerOptions);
-  } else if (providerPath === 'promptfoo:redteam:crescendo') {
-    ret = new RedteamCrescendoProvider(providerOptions.config);
-  } else if (providerPath === 'promptfoo:redteam:goat') {
-    ret = new RedteamGoatProvider(providerOptions.config);
-  } else if (providerPath === 'promptfoo:redteam:best-of-n') {
-    ret = new RedteamBestOfNProvider(providerOptions.config);
-  } else if (providerPath === 'promptfoo:redteam:iterative') {
-    ret = new RedteamIterativeProvider(providerOptions.config);
-  } else if (providerPath === 'promptfoo:redteam:iterative:image') {
-    ret = new RedteamImageIterativeProvider(providerOptions.config);
-  } else if (providerPath === 'promptfoo:redteam:iterative:tree') {
-    ret = new RedteamIterativeTreeProvider(providerOptions.config);
-  } else if (providerPath === 'promptfoo:redteam:pandamonium') {
-    ret = new RedteamPandamoniumProvider(providerOptions.config);
-  } else if (providerPath === 'promptfoo:simulated-user') {
-    ret = new SimulatedUser(providerOptions);
-  } else if (providerPath === 'sequence') {
-    ret = new SequenceProvider(providerOptions);
-  } else if (providerPath.startsWith('jfrog:') || providerPath.startsWith('qwak:')) {
-    const splits = providerPath.split(':');
-    const modelName = splits.slice(1).join(':');
-    ret = new JfrogMlChatCompletionProvider(modelName, providerOptions);
-  } else if (
-    providerPath.startsWith('python:') ||
-    (providerPath.startsWith('file://') &&
-      (providerPath.endsWith('.py') || providerPath.includes('.py:')))
+  const renderedProviderPath = getNunjucksEngine().renderString(providerPath, {});
+
+  if (
+    renderedProviderPath.startsWith('file://') &&
+    (renderedProviderPath.endsWith('.yaml') ||
+      renderedProviderPath.endsWith('.yml') ||
+      renderedProviderPath.endsWith('.json'))
   ) {
-    const scriptPath = providerPath.startsWith('file://')
-      ? providerPath.slice('file://'.length)
-      : providerPath.split(':').slice(1).join(':');
-    ret = new PythonProvider(scriptPath, providerOptions);
-  } else if (providerPath.startsWith('azure:') || providerPath.startsWith('azureopenai:')) {
-    // Load Azure OpenAI module
-    const splits = providerPath.split(':');
-    const modelType = splits[1];
-    const deploymentName = splits[2];
-
-    if (modelType === 'chat') {
-      ret = new AzureChatCompletionProvider(deploymentName, providerOptions);
-    } else if (modelType === 'assistant') {
-      ret = new AzureAssistantProvider(deploymentName, providerOptions);
-    } else if (modelType === 'embedding' || modelType === 'embeddings') {
-      ret = new AzureEmbeddingProvider(deploymentName || 'text-embedding-ada-002', providerOptions);
-    } else if (modelType === 'completion') {
-      ret = new AzureCompletionProvider(deploymentName, providerOptions);
+    const filePath = renderedProviderPath.slice('file://'.length);
+    const modulePath = path.isAbsolute(filePath)
+      ? filePath
+      : path.join(context.basePath || process.cwd(), filePath);
+    let fileContent: ProviderOptions;
+    if (renderedProviderPath.endsWith('.json')) {
+      fileContent = JSON.parse(fs.readFileSync(modulePath, 'utf8')) as ProviderOptions;
     } else {
-      throw new Error(
-        `Unknown Azure model type: ${modelType}. Use one of the following providers: azure:chat:<model name>, azure:assistant:<assistant id>, azure:completion:<model name>`,
-      );
+      fileContent = yaml.load(fs.readFileSync(modulePath, 'utf8')) as ProviderOptions;
     }
-  } else if (providerPath.startsWith('huggingface:') || providerPath.startsWith('hf:')) {
-    const splits = providerPath.split(':');
-    if (splits.length < 3) {
-      throw new Error(
-        `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:feature-extraction:<model name>, huggingface:text-generation:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>`,
-      );
-    }
-    const modelName = splits.slice(2).join(':');
-    if (splits[1] === 'feature-extraction') {
-      ret = new HuggingfaceFeatureExtractionProvider(modelName, providerOptions);
-    } else if (splits[1] === 'sentence-similarity') {
-      ret = new HuggingfaceSentenceSimilarityProvider(modelName, providerOptions);
-    } else if (splits[1] === 'text-generation') {
-      ret = new HuggingfaceTextGenerationProvider(modelName, providerOptions);
-    } else if (splits[1] === 'text-classification') {
-      ret = new HuggingfaceTextClassificationProvider(modelName, providerOptions);
-    } else if (splits[1] === 'token-classification') {
-      ret = new HuggingfaceTokenExtractionProvider(modelName, providerOptions);
-    } else {
-      throw new Error(
-        `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:feature-extraction:<model name>, huggingface:text-generation:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>`,
-      );
-    }
-  } else if (providerPath === 'llama' || providerPath.startsWith('llama:')) {
-    const modelName = providerPath.split(':')[1];
-    ret = new LlamaProvider(modelName, providerOptions);
-  } else if (providerPath.startsWith('google:') || providerPath.startsWith('palm:')) {
-    const modelName = providerPath.split(':')[1];
-    ret = new GoogleChatProvider(modelName, providerOptions);
-  } else if (
-    providerPath.startsWith('http:') ||
-    providerPath.startsWith('https:') ||
-    providerPath === 'http' ||
-    providerPath === 'https'
-  ) {
-    ret = new HttpProvider(providerPath, providerOptions);
-  } else if (
-    providerPath.startsWith('ws:') ||
-    providerPath.startsWith('wss:') ||
-    providerPath === 'websocket' ||
-    providerPath === 'ws' ||
-    providerPath === 'wss'
-  ) {
-    ret = new WebSocketProvider(providerPath, providerOptions);
-  } else if (isJavascriptFile(providerPath)) {
-    if (providerPath.startsWith('file://')) {
-      providerPath = providerPath.slice('file://'.length);
-    }
-    // Load custom module
-    const modulePath = path.isAbsolute(providerPath)
-      ? providerPath
-      : path.join(basePath || process.cwd(), providerPath);
-
-    const CustomApiProvider = await importModule(modulePath);
-    ret = new CustomApiProvider(options);
-  } else {
-    logger.error(dedent`
-      Could not identify provider: ${chalk.bold(providerPath)}.
-
-      ${chalk.white(dedent`
-        Please check your configuration and ensure the provider is correctly specified.
-
-        For more information on supported providers, visit: `)} ${chalk.cyan('https://promptfoo.dev/docs/providers/')}
-    `);
-    process.exit(1);
+    invariant(fileContent, `Provider config ${filePath} is undefined`);
+    invariant(fileContent.id, `Provider config ${filePath} must have an id`);
+    logger.info(`Loaded provider ${fileContent.id} from ${filePath}`);
+    return loadApiProvider(fileContent.id, { ...context, options: fileContent });
   }
-  ret.transform = options.transform;
-  ret.delay = options.delay;
-  ret.label ||= getNunjucksEngine().renderString(String(options.label || ''), {});
-  return ret;
+
+  for (const factory of providerMap) {
+    if (factory.test(renderedProviderPath)) {
+      const ret = await factory.create(renderedProviderPath, providerOptions, context);
+      ret.transform = options.transform;
+      ret.delay = options.delay;
+      ret.label ||= getNunjucksEngine().renderString(String(options.label || ''), {});
+      return ret;
+    }
+  }
+
+  logger.error(dedent`
+    Could not identify provider: ${chalk.bold(providerPath)}.
+
+    ${chalk.white(dedent`
+      Please check your configuration and ensure the provider is correctly specified.
+
+      For more information on supported providers, visit: `)} ${chalk.cyan('https://promptfoo.dev/docs/providers/')}
+  `);
+  process.exit(1);
 }
 
 export async function loadApiProviders(
