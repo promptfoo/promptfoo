@@ -475,12 +475,10 @@ describe('util', () => {
       delete process.env.PROMPTFOO_STRICT_FILES;
     });
 
-    it('should handle files with colons in the path including when PROMPTFOO_STRICT_FILES is true', () => {
-      process.env.PROMPTFOO_STRICT_FILES = 'false';
-      jest.spyOn(fs, 'statSync');
+    it('should properly test file existence with colons in the path', () => {
+      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
       parsePathOrGlob('/base', 'script.py:myFunction');
       expect(fs.statSync).toHaveBeenCalledWith(path.join('/base', 'script.py'));
-      delete process.env.PROMPTFOO_STRICT_FILES;
     });
 
     it('should return empty extension for files without extension', () => {
