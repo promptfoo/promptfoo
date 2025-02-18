@@ -7,7 +7,7 @@ type DatabricksMosaicAiCompletionOptions = OpenAiCompletionOptions & {
   workspaceUrl?: string;
 };
 
-type DatabricksMosaicAiProviderOptions = ProviderOptions & {
+export type DatabricksMosaicAiProviderOptions = ProviderOptions & {
   config: DatabricksMosaicAiCompletionOptions;
 };
 

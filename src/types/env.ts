@@ -57,4 +57,12 @@ export type EnvOverrides = {
   WATSONX_AI_AUTH_TYPE?: string;
   PROMPTFOO_CA_CERT_PATH?: string;
   PROMPTFOO_INSECURE_SSL?: string;
+  AZURE_OPENAI_API_VERSION?: string;
+  AZURE_OPENAI_ENDPOINT?: string;
+  OPENAI_API_BASE?: string;
+  OPENAI_API_VERSION?: string;
+  OPENAI_API_TYPE?: string;
+  TOGETHER_API_KEY?: string;
+  GOOGLE_API_VERSION?: string;
+  GOOGLE_PROJECT_ID?: string;
 };
