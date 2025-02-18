@@ -287,32 +287,32 @@ describe('Provider Registry', () => {
     });
 
     it('should handle ollama providers correctly', async () => {
-      const factory = providerMap.find((f) => f.test('ollama:llama2'));
+      const factory = providerMap.find((f) => f.test('ollama:llama-3.3'));
       expect(factory).toBeDefined();
 
       const defaultProvider = await factory!.create(
-        'ollama:llama2',
+        'ollama:llama-3.3',
         mockProviderOptions,
         mockContext,
       );
       expect(defaultProvider).toBeDefined();
 
       const chatProvider = await factory!.create(
-        'ollama:chat:llama2',
+        'ollama:chat:llama-3.3',
         mockProviderOptions,
         mockContext,
       );
       expect(chatProvider).toBeDefined();
 
       const completionProvider = await factory!.create(
-        'ollama:completion:llama2',
+        'ollama:completion:llama-3.3',
         mockProviderOptions,
         mockContext,
       );
       expect(completionProvider).toBeDefined();
 
       const embeddingProvider = await factory!.create(
-        'ollama:embedding:llama2',
+        'ollama:embedding:llama-3.3',
         mockProviderOptions,
         mockContext,
       );
