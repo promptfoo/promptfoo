@@ -175,6 +175,18 @@ These hooks provide powerful extensibility to your promptfoo evaluations, allowi
 
 ## Provider-related types
 
+### Guardrails
+
+GuardrailResponse is an object that represents the GuardrailResponse from a provider. It includes flags indicating if prompt or output failed guardrails.
+
+```typescript
+interface GuardrailResponse {
+  flagged?: boolean;
+  flaggedInput?: boolean;
+  flaggedOutput?: boolean;
+}
+```
+
 ### ProviderFunction
 
 A ProviderFunction is a function that takes a prompt as an argument and returns a Promise that resolves to a ProviderResponse. It allows you to define custom logic for calling an API.
@@ -207,18 +219,6 @@ interface ProviderOptions {
 
   // Sleep this long before each request
   delay?: number;
-}
-```
-
-### Guardrails
-
-GuardrailResponse is an object that represents the GuardrailResponse from a provider. It includes flags indicating if prompt or output failed guardrails.
-
-```typescript
-interface GuardrailResponse {
-  flagged?: boolean;
-  flaggedInput?: boolean;
-  flaggedOutput?: boolean;
 }
 ```
 

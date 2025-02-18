@@ -1014,7 +1014,7 @@ export function parsePathOrGlob(
   filePath: string;
 } {
   if (promptPath.startsWith('file://')) {
-    promptPath = promptPath.slice(7);
+    promptPath = promptPath.slice('file://'.length);
   }
   const filePath = path.resolve(basePath, promptPath);
 
@@ -1032,7 +1032,10 @@ export function parsePathOrGlob(
 
   if (filename.includes(':')) {
     const splits = filename.split(':');
-    if (splits[0] && (isJavascriptFile(splits[0]) || splits[0].endsWith('.py'))) {
+    if (
+      splits[0] &&
+      (isJavascriptFile(splits[0]) || splits[0].endsWith('.py') || splits[0].endsWith('.go'))
+    ) {
       [filename, functionName] = splits;
     }
   }

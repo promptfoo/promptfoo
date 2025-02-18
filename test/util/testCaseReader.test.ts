@@ -3,17 +3,17 @@ import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import { testCaseFromCsvRow } from '../../src/csv';
-import { getEnvString, getEnvBool } from '../../src/envars';
+import { getEnvBool, getEnvString } from '../../src/envars';
 import { fetchCsvFromGoogleSheet } from '../../src/googleSheets';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers';
 import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../../src/types';
 import {
+  loadTestsFromGlob,
   readStandaloneTestsFile,
   readTest,
   readTests,
   readVarsFiles,
-  loadTestsFromGlob,
 } from '../../src/util/testCaseReader';
 
 jest.mock('proxy-agent', () => ({
@@ -301,14 +301,9 @@ describe('readStandaloneTestsFile', () => {
     );
   });
 
-  it('should throw error for invalid Python file path', async () => {
-    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
-    mockRunPython.mockRejectedValueOnce(
-      new Error('Invalid Python test file path: test.py:invalid:extra'),
-    );
-
+  it('should handle Python files with invalid function name in readStandaloneTestsFile', async () => {
     await expect(readStandaloneTestsFile('test.py:invalid:extra')).rejects.toThrow(
-      'Invalid Python test file path: test.py:invalid:extra',
+      'Too many colons. Invalid test file script path: test.py:invalid:extra',
     );
   });
 });
@@ -792,15 +787,8 @@ describe('readTests', () => {
   });
 
   it('should handle Python files with invalid function name in readTests', async () => {
-    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
-    mockRunPython.mockReset();
-    mockRunPython.mockRejectedValueOnce(
-      new Error('Invalid Python test file path: test.py:invalid:extra'),
-    );
-    jest.mocked(globSync).mockReturnValueOnce(['test.py']);
-
     await expect(readTests(['test.py:invalid:extra'])).rejects.toThrow(
-      'Invalid Python test file path: test.py:invalid:extra',
+      'Too many colons. Invalid test file script path: test.py:invalid:extra',
     );
   });
 
