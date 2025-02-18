@@ -635,7 +635,7 @@ export class HttpProvider implements ApiProvider {
     // Transform prompt using request transform
     const transformedPrompt = await (await this.transformRequest)(prompt);
     logger.debug(
-      `[HTTP Provider]: Transformed prompt: ${transformedPrompt}. Original prompt: ${prompt}`,
+      `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
     );
 
     const renderedConfig: Partial<HttpProviderConfig> = {
@@ -692,13 +692,15 @@ export class HttpProvider implements ApiProvider {
       this.config.maxRetries,
     );
 
-    logger.debug(`[HTTP Provider]: Response: ${response.data}`);
+    logger.debug(`[HTTP Provider]: Response: ${safeJsonStringify(response.data)}`);
     if (!(await this.validateStatus)(response.status)) {
       throw new Error(
         `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
       );
     }
-    logger.debug(`[HTTP Provider]: Response (HTTP ${response.status}): ${response.data}`);
+    logger.debug(
+      `[HTTP Provider]: Response (HTTP ${response.status}): ${safeJsonStringify(response.data)}`,
+    );
 
     const ret: ProviderResponse = {};
     if (context?.debug) {
@@ -754,7 +756,9 @@ export class HttpProvider implements ApiProvider {
       `${protocol}://${parsedRequest.headers['host']}`,
     ).toString();
 
-    logger.debug(`[HTTP Provider]: Calling ${url} with raw request: ${parsedRequest}`);
+    logger.debug(
+      `[HTTP Provider]: Calling ${url} with raw request: ${safeJsonStringify(parsedRequest)}`,
+    );
     const response = await fetchWithCache(
       url,
       {
@@ -768,7 +772,7 @@ export class HttpProvider implements ApiProvider {
       this.config.maxRetries,
     );
 
-    logger.debug(`[HTTP Provider]: Response: ${response.data}`);
+    logger.debug(`[HTTP Provider]: Response: ${safeJsonStringify(response.data)}`);
 
     if (!(await this.validateStatus)(response.status)) {
       throw new Error(
