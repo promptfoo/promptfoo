@@ -116,9 +116,8 @@ export const providerMap: ProviderFactory[] = [
       );
       if (modelType === 'embedding' || modelType === 'embeddings') {
         return new AdalineGatewayEmbeddingProvider(providerName, modelName, providerOptions);
-      } else {
-        return new AdalineGatewayChatProvider(providerName, modelName, providerOptions);
       }
+      return new AdalineGatewayChatProvider(providerName, modelName, providerOptions);
     },
   },
   {
@@ -149,9 +148,8 @@ export const providerMap: ProviderFactory[] = [
 
       if (modelType === 'embedding' || modelType === 'embeddings') {
         return new AlibabaEmbeddingProvider(modelName || modelType, providerOptions);
-      } else {
-        return new AlibabaChatCompletionProvider(modelName || modelType, providerOptions);
       }
+      return new AlibabaChatCompletionProvider(modelName || modelType, providerOptions);
     },
   },
   {
@@ -167,15 +165,16 @@ export const providerMap: ProviderFactory[] = [
 
       if (modelType === 'messages') {
         return new AnthropicMessagesProvider(modelName, providerOptions);
-      } else if (modelType === 'completion') {
-        return new AnthropicCompletionProvider(modelName, providerOptions);
-      } else if (AnthropicCompletionProvider.ANTHROPIC_COMPLETION_MODELS.includes(modelType)) {
-        return new AnthropicCompletionProvider(modelType, providerOptions);
-      } else {
-        throw new Error(
-          `Unknown Anthropic model type: ${modelType}. Use one of the following providers: anthropic:messages:<model name>, anthropic:completion:<model name>`,
-        );
       }
+      if (modelType === 'completion') {
+        return new AnthropicCompletionProvider(modelName, providerOptions);
+      }
+      if (AnthropicCompletionProvider.ANTHROPIC_COMPLETION_MODELS.includes(modelType)) {
+        return new AnthropicCompletionProvider(modelType, providerOptions);
+      }
+      throw new Error(
+        `Unknown Anthropic model type: ${modelType}. Use one of the following providers: anthropic:messages:<model name>, anthropic:completion:<model name>`,
+      );
     },
   },
   {
@@ -192,20 +191,22 @@ export const providerMap: ProviderFactory[] = [
 
       if (modelType === 'chat') {
         return new AzureChatCompletionProvider(deploymentName, providerOptions);
-      } else if (modelType === 'assistant') {
+      }
+      if (modelType === 'assistant') {
         return new AzureAssistantProvider(deploymentName, providerOptions);
-      } else if (modelType === 'embedding' || modelType === 'embeddings') {
+      }
+      if (modelType === 'embedding' || modelType === 'embeddings') {
         return new AzureEmbeddingProvider(
           deploymentName || 'text-embedding-ada-002',
           providerOptions,
         );
-      } else if (modelType === 'completion') {
-        return new AzureCompletionProvider(deploymentName, providerOptions);
-      } else {
-        throw new Error(
-          `Unknown Azure model type: ${modelType}. Use one of the following providers: azure:chat:<model name>, azure:assistant:<assistant id>, azure:completion:<model name>`,
-        );
       }
+      if (modelType === 'completion') {
+        return new AzureCompletionProvider(deploymentName, providerOptions);
+      }
+      throw new Error(
+        `Unknown Azure model type: ${modelType}. Use one of the following providers: azure:chat:<model name>, azure:assistant:<assistant id>, azure:completion:<model name>`,
+      );
     },
   },
   {
@@ -220,11 +221,10 @@ export const providerMap: ProviderFactory[] = [
       const modelName = splits.slice(2).join(':');
       if (modelType === 'chat') {
         return new BAMChatProvider(modelName || 'ibm/granite-13b-chat-v2', providerOptions);
-      } else {
-        throw new Error(
-          `Invalid BAM provider: ${providerPath}. Use one of the following providers: bam:chat:<model name>`,
-        );
       }
+      throw new Error(
+        `Invalid BAM provider: ${providerPath}. Use one of the following providers: bam:chat:<model name>`,
+      );
     },
   },
   {
@@ -241,14 +241,14 @@ export const providerMap: ProviderFactory[] = [
       if (modelType === 'completion') {
         // Backwards compatibility: `completion` used to be required
         return new AwsBedrockCompletionProvider(modelName, providerOptions);
-      } else if (modelType === 'embeddings' || modelType === 'embedding') {
-        return new AwsBedrockEmbeddingProvider(modelName, providerOptions);
-      } else {
-        return new AwsBedrockCompletionProvider(
-          `${modelType}${modelName ? `:${modelName}` : ''}`,
-          providerOptions,
-        );
       }
+      if (modelType === 'embeddings' || modelType === 'embedding') {
+        return new AwsBedrockEmbeddingProvider(modelName, providerOptions);
+      }
+      return new AwsBedrockCompletionProvider(
+        `${modelType}${modelName ? `:${modelName}` : ''}`,
+        providerOptions,
+      );
     },
   },
   {
@@ -282,21 +282,22 @@ export const providerMap: ProviderFactory[] = [
           deploymentName,
           providerOptions,
         );
-      } else if (modelType === 'embedding' || modelType === 'embeddings') {
+      }
+      if (modelType === 'embedding' || modelType === 'embeddings') {
         return new CloudflareAiProviders.CloudflareAiEmbeddingProvider(
           deploymentName,
           providerOptions,
         );
-      } else if (modelType === 'completion') {
+      }
+      if (modelType === 'completion') {
         return new CloudflareAiProviders.CloudflareAiCompletionProvider(
           deploymentName,
           providerOptions,
         );
-      } else {
-        throw new Error(
-          `Unknown Cloudflare AI model type: ${modelType}. Use one of the following providers: cloudflare-ai:chat:<model name>, cloudflare-ai:completion:<model name>, cloudflare-ai:embedding:`,
-        );
       }
+      throw new Error(
+        `Unknown Cloudflare AI model type: ${modelType}. Use one of the following providers: cloudflare-ai:chat:<model name>, cloudflare-ai:completion:<model name>, cloudflare-ai:embedding:`,
+      );
     },
   },
   {
@@ -312,15 +313,15 @@ export const providerMap: ProviderFactory[] = [
 
       if (modelType === 'embedding' || modelType === 'embeddings') {
         return new CohereEmbeddingProvider(modelName, providerOptions);
-      } else if (modelType === 'chat' || modelType === undefined) {
-        return new CohereChatCompletionProvider(modelName || modelType, providerOptions);
-      } else {
-        // Default to chat provider for any other model type
-        return new CohereChatCompletionProvider(
-          providerPath.substring('cohere:'.length),
-          providerOptions,
-        );
       }
+      if (modelType === 'chat' || modelType === undefined) {
+        return new CohereChatCompletionProvider(modelName || modelType, providerOptions);
+      }
+      // Default to chat provider for any other model type
+      return new CohereChatCompletionProvider(
+        providerPath.substring('cohere:'.length),
+        providerOptions,
+      );
     },
   },
   {
@@ -399,11 +400,10 @@ export const providerMap: ProviderFactory[] = [
       const [_, modelType, modelName] = providerPath.split(':');
       if (modelType === 'image') {
         return new FalImageGenerationProvider(modelName, providerOptions);
-      } else {
-        throw new Error(
-          `Invalid fal provider path: ${providerPath}. Use one of the following providers: fal:image:<model name>`,
-        );
       }
+      throw new Error(
+        `Invalid fal provider path: ${providerPath}. Use one of the following providers: fal:image:<model name>`,
+      );
     },
   },
   {
@@ -502,13 +502,14 @@ export const providerMap: ProviderFactory[] = [
       const modelName = splits[2];
       if (modelType === 'chat') {
         return new LocalAiChatProvider(modelName, providerOptions);
-      } else if (modelType === 'completion') {
-        return new LocalAiCompletionProvider(modelName, providerOptions);
-      } else if (modelType === 'embedding' || modelType === 'embeddings') {
-        return new LocalAiEmbeddingProvider(modelName, providerOptions);
-      } else {
-        return new LocalAiChatProvider(modelType, providerOptions);
       }
+      if (modelType === 'completion') {
+        return new LocalAiCompletionProvider(modelName, providerOptions);
+      }
+      if (modelType === 'embedding' || modelType === 'embeddings') {
+        return new LocalAiEmbeddingProvider(modelName, providerOptions);
+      }
+      return new LocalAiChatProvider(modelType, providerOptions);
     },
   },
   {
@@ -523,9 +524,8 @@ export const providerMap: ProviderFactory[] = [
       const modelName = splits.slice(2).join(':');
       if (modelType === 'embedding' || modelType === 'embeddings') {
         return new MistralEmbeddingProvider(providerOptions);
-      } else {
-        return new MistralChatCompletionProvider(modelName || modelType, providerOptions);
       }
+      return new MistralChatCompletionProvider(modelName || modelType, providerOptions);
     },
   },
   {
@@ -540,17 +540,18 @@ export const providerMap: ProviderFactory[] = [
       if (firstPart === 'chat') {
         const modelName = splits.slice(2).join(':');
         return new OllamaChatProvider(modelName, providerOptions);
-      } else if (firstPart === 'completion') {
+      }
+      if (firstPart === 'completion') {
         const modelName = splits.slice(2).join(':');
-        return new OllamaCompletionProvider(modelName, providerOptions);
-      } else if (firstPart === 'embedding' || firstPart === 'embeddings') {
-        const modelName = splits.slice(2).join(':');
-        return new OllamaEmbeddingProvider(modelName, providerOptions);
-      } else {
-        // Default to completion provider
-        const modelName = splits.slice(1).join(':');
         return new OllamaCompletionProvider(modelName, providerOptions);
       }
+      if (firstPart === 'embedding' || firstPart === 'embeddings') {
+        const modelName = splits.slice(2).join(':');
+        return new OllamaEmbeddingProvider(modelName, providerOptions);
+      }
+      // Default to completion provider
+      const modelName = splits.slice(1).join(':');
+      return new OllamaCompletionProvider(modelName, providerOptions);
     },
   },
   {
@@ -567,27 +568,33 @@ export const providerMap: ProviderFactory[] = [
 
       if (modelType === 'chat') {
         return new OpenAiChatCompletionProvider(modelName || 'gpt-4o-mini', providerOptions);
-      } else if (modelType === 'embedding' || modelType === 'embeddings') {
+      }
+      if (modelType === 'embedding' || modelType === 'embeddings') {
         return new OpenAiEmbeddingProvider(modelName || 'text-embedding-3-large', providerOptions);
-      } else if (modelType === 'completion') {
+      }
+      if (modelType === 'completion') {
         return new OpenAiCompletionProvider(modelName || 'gpt-3.5-turbo-instruct', providerOptions);
-      } else if (modelType === 'moderation') {
+      }
+      if (modelType === 'moderation') {
         return new OpenAiModerationProvider(modelName || 'omni-moderation-latest', providerOptions);
-      } else if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
-        return new OpenAiChatCompletionProvider(modelType, providerOptions);
-      } else if (OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelType)) {
-        return new OpenAiCompletionProvider(modelType, providerOptions);
-      } else if (modelType === 'assistant') {
-        return new OpenAiAssistantProvider(modelName, providerOptions);
-      } else if (modelType === 'image') {
-        return new OpenAiImageProvider(modelName, providerOptions);
-      } else {
-        // Assume user did not provide model type, and it's a chat model
-        logger.warn(
-          `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>`,
-        );
+      }
+      if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
         return new OpenAiChatCompletionProvider(modelType, providerOptions);
       }
+      if (OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelType)) {
+        return new OpenAiCompletionProvider(modelType, providerOptions);
+      }
+      if (modelType === 'assistant') {
+        return new OpenAiAssistantProvider(modelName, providerOptions);
+      }
+      if (modelType === 'image') {
+        return new OpenAiImageProvider(modelName, providerOptions);
+      }
+      // Assume user did not provide model type, and it's a chat model
+      logger.warn(
+        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>`,
+      );
+      return new OpenAiChatCompletionProvider(modelType, providerOptions);
     },
   },
   {
@@ -675,15 +682,15 @@ export const providerMap: ProviderFactory[] = [
       const modelName = splits.slice(2).join(':');
       if (modelType === 'moderation') {
         return new ReplicateModerationProvider(modelName, providerOptions);
-      } else if (modelType === 'image') {
-        return new ReplicateImageProvider(modelName, providerOptions);
-      } else {
-        // By default, there is no model type.
-        return new ReplicateProvider(
-          modelName ? modelType + ':' + modelName : modelType,
-          providerOptions,
-        );
       }
+      if (modelType === 'image') {
+        return new ReplicateImageProvider(modelName, providerOptions);
+      }
+      // By default, there is no model type.
+      return new ReplicateProvider(
+        modelName ? modelType + ':' + modelName : modelType,
+        providerOptions,
+      );
     },
   },
   {
@@ -710,12 +717,12 @@ export const providerMap: ProviderFactory[] = [
       const firstPart = splits[1];
       if (firstPart === 'chat') {
         return new VertexChatProvider(splits.slice(2).join(':'), providerOptions);
-      } else if (firstPart === 'embedding' || firstPart === 'embeddings') {
-        return new VertexEmbeddingProvider(splits.slice(2).join(':'), providerOptions);
-      } else {
-        // Default to chat provider
-        return new VertexChatProvider(splits.slice(1).join(':'), providerOptions);
       }
+      if (firstPart === 'embedding' || firstPart === 'embeddings') {
+        return new VertexEmbeddingProvider(splits.slice(2).join(':'), providerOptions);
+      }
+      // Default to chat provider
+      return new VertexChatProvider(splits.slice(1).join(':'), providerOptions);
     },
   },
   {
@@ -975,19 +982,22 @@ export const providerMap: ProviderFactory[] = [
       const modelName = splits.slice(2).join(':');
       if (splits[1] === 'feature-extraction') {
         return new HuggingfaceFeatureExtractionProvider(modelName, providerOptions);
-      } else if (splits[1] === 'sentence-similarity') {
-        return new HuggingfaceSentenceSimilarityProvider(modelName, providerOptions);
-      } else if (splits[1] === 'text-generation') {
-        return new HuggingfaceTextGenerationProvider(modelName, providerOptions);
-      } else if (splits[1] === 'text-classification') {
-        return new HuggingfaceTextClassificationProvider(modelName, providerOptions);
-      } else if (splits[1] === 'token-classification') {
-        return new HuggingfaceTokenExtractionProvider(modelName, providerOptions);
-      } else {
-        throw new Error(
-          `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:feature-extraction:<model name>, huggingface:text-generation:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>`,
-        );
       }
+      if (splits[1] === 'sentence-similarity') {
+        return new HuggingfaceSentenceSimilarityProvider(modelName, providerOptions);
+      }
+      if (splits[1] === 'text-generation') {
+        return new HuggingfaceTextGenerationProvider(modelName, providerOptions);
+      }
+      if (splits[1] === 'text-classification') {
+        return new HuggingfaceTextClassificationProvider(modelName, providerOptions);
+      }
+      if (splits[1] === 'token-classification') {
+        return new HuggingfaceTokenExtractionProvider(modelName, providerOptions);
+      }
+      throw new Error(
+        `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:feature-extraction:<model name>, huggingface:text-generation:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>`,
+      );
     },
   },
   {
@@ -1091,25 +1101,26 @@ export async function loadApiProviders(
       providerPaths.map((provider, idx) => {
         if (typeof provider === 'string') {
           return loadApiProvider(provider, { basePath, env });
-        } else if (typeof provider === 'function') {
+        }
+        if (typeof provider === 'function') {
           return {
             id: provider.label ? () => provider.label! : () => `custom-function-${idx}`,
             callApi: provider,
           };
-        } else if (provider.id) {
+        }
+        if (provider.id) {
           // List of ProviderConfig objects
           return loadApiProvider((provider as ProviderOptions).id!, {
             options: provider,
             basePath,
             env,
           });
-        } else {
-          // List of { id: string, config: ProviderConfig } objects
-          const id = Object.keys(provider)[0];
-          const providerObject = (provider as ProviderOptionsMap)[id];
-          const context = { ...providerObject, id: providerObject.id || id };
-          return loadApiProvider(id, { options: context, basePath, env });
         }
+        // List of { id: string, config: ProviderConfig } objects
+        const id = Object.keys(provider)[0];
+        const providerObject = (provider as ProviderOptionsMap)[id];
+        const context = { ...providerObject, id: providerObject.id || id };
+        return loadApiProvider(id, { options: context, basePath, env });
       }),
     );
   }
@@ -1117,45 +1128,25 @@ export async function loadApiProviders(
 }
 
 export default {
-  OpenAiCompletionProvider,
-  OpenAiChatCompletionProvider,
-  OpenAiAssistantProvider,
-  OpenAiEmbeddingProvider,
-  OpenAiImageProvider,
-  OpenAiModerationProvider,
+  AI21ChatCompletionProvider,
   AnthropicCompletionProvider,
   AnthropicMessagesProvider,
-  ReplicateProvider,
-  ReplicateImageProvider,
-  ReplicateModerationProvider,
-  LocalAiCompletionProvider,
-  LocalAiChatProvider,
-  LocalAiEmbeddingProvider,
-  BAMChatProvider,
-  BAMEmbeddingProvider,
-  GroqProvider,
-  MistralChatCompletionProvider,
-  MistralEmbeddingProvider,
-  AI21ChatCompletionProvider,
+  AwsBedrockCompletionProvider,
+  AwsBedrockEmbeddingProvider,
   AzureAssistantProvider,
   AzureChatCompletionProvider,
   AzureCompletionProvider,
   AzureEmbeddingProvider,
-  ClouderaAiChatCompletionProvider,
-
-  // Backwards compatibility for Azure rename 2024-11-09 / 0.96.0
-  AzureOpenAiAssistantProvider: AzureAssistantProvider,
-  AzureOpenAiChatCompletionProvider: AzureChatCompletionProvider,
-  AzureOpenAiCompletionProvider: AzureCompletionProvider,
-  AzureOpenAiEmbeddingProvider: AzureEmbeddingProvider,
-
-  AwsBedrockCompletionProvider,
-  AwsBedrockEmbeddingProvider,
+  BAMChatProvider,
+  BAMEmbeddingProvider,
   BrowserProvider,
+  ClouderaAiChatCompletionProvider,
   CohereChatCompletionProvider,
   CohereEmbeddingProvider,
   FalImageGenerationProvider,
   GolangProvider,
+  GoogleChatProvider,
+  GroqProvider,
   HttpProvider,
   HuggingfaceFeatureExtractionProvider,
   HuggingfaceSentenceSimilarityProvider,
@@ -1163,19 +1154,38 @@ export default {
   HuggingfaceTextGenerationProvider,
   HuggingfaceTokenExtractionProvider,
   LlamaProvider,
+  loadApiProvider,
+  LocalAiChatProvider,
+  LocalAiCompletionProvider,
+  LocalAiEmbeddingProvider,
   ManualInputProvider,
-  OllamaEmbeddingProvider,
-  OllamaCompletionProvider,
+  MistralChatCompletionProvider,
+  MistralEmbeddingProvider,
   OllamaChatProvider,
-  GoogleChatProvider,
+  OllamaCompletionProvider,
+  OllamaEmbeddingProvider,
+  OpenAiAssistantProvider,
+  OpenAiChatCompletionProvider,
+  OpenAiCompletionProvider,
+  OpenAiEmbeddingProvider,
+  OpenAiImageProvider,
+  OpenAiModerationProvider,
   PortkeyChatCompletionProvider,
   PythonProvider,
+  ReplicateImageProvider,
+  ReplicateModerationProvider,
+  ReplicateProvider,
   ScriptCompletionProvider,
   VertexChatProvider,
   VertexEmbeddingProvider,
   VoyageEmbeddingProvider,
+  WatsonXProvider,
   WebhookProvider,
   WebSocketProvider,
-  loadApiProvider,
-  WatsonXProvider,
+
+  // Backwards compatibility for Azure rename 2024-11-09 / 0.96.0
+  AzureOpenAiAssistantProvider: AzureAssistantProvider,
+  AzureOpenAiChatCompletionProvider: AzureChatCompletionProvider,
+  AzureOpenAiCompletionProvider: AzureCompletionProvider,
+  AzureOpenAiEmbeddingProvider: AzureEmbeddingProvider,
 };
