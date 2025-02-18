@@ -165,16 +165,9 @@ describe('loadApiProvider', () => {
   });
 
   it('should handle unidentified provider', async () => {
-    const _mockProvider = {
-      id: () => 'unknown',
-      callApi: async () => ({ output: '' }),
-    };
-    jest.mocked(process.exit).mockImplementation(() => {
-      throw new Error('Process exit');
-    });
-
-    await expect(loadApiProvider('unknown:provider')).rejects.toThrow('Process exit');
-    expect(process.exit).toHaveBeenCalledWith(1);
+    await expect(loadApiProvider('unknown:provider')).rejects.toThrow(
+      'Could not identify provider',
+    );
   });
 
   it('should load JFrog ML provider', async () => {

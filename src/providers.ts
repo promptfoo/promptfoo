@@ -1067,7 +1067,7 @@ export async function loadApiProvider(
     }
   }
 
-  logger.error(dedent`
+  throw new Error(dedent`
     Could not identify provider: ${chalk.bold(providerPath)}.
 
     ${chalk.white(dedent`
@@ -1075,7 +1075,6 @@ export async function loadApiProvider(
 
       For more information on supported providers, visit: `)} ${chalk.cyan('https://promptfoo.dev/docs/providers/')}
   `);
-  process.exit(1);
 }
 
 export async function loadApiProviders(
@@ -1181,7 +1180,6 @@ export default {
   VoyageEmbeddingProvider,
   WatsonXProvider,
   WebhookProvider,
-  WebSocketProvider,
 
   // Backwards compatibility for Azure rename 2024-11-09 / 0.96.0
   AzureOpenAiAssistantProvider: AzureAssistantProvider,
