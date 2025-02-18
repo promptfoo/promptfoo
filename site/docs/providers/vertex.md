@@ -20,11 +20,15 @@ You can use any of the available [model versions](https://cloud.google.com/verte
 
 Anthropic's Claude models are available with the following versions:
 
-- `vertex:claude-3-5-sonnet-v2@20241022` - Latest Claude 3.5 Sonnet v2
-- `vertex:claude-3-5-haiku@20241022` - Fast and efficient Claude 3.5 Haiku
-- `vertex:claude-3-opus@20240229` - Most capable Claude 3 model
-- `vertex:claude-3-5-sonnet@20240620` - Balanced Claude 3.5 Sonnet
 - `vertex:claude-3-haiku@20240307` - Fast Claude 3 Haiku
+- `vertex:claude-3-sonnet@20240229` - Claude 3 Sonnet
+- `vertex:claude-3-opus@20240229` - Claude 3 Opus (Public Preview)
+- `vertex:claude-3-5-haiku@20241022` - Claude 3.5 Haiku
+- `vertex:claude-3-5-sonnet-v2@20241022` - Claude 3.5 Sonnet
+
+:::note
+Claude models require explicit access enablement through the [Vertex AI Model Garden](https://console.cloud.google.com/vertex-ai/publishers). Navigate to the Model Garden, search for "Claude", and enable the specific models you need.
+:::
 
 Note: Claude models support up to 200,000 tokens context length and include built-in safety features.
 
@@ -85,8 +89,11 @@ npm install google-auth-library
 ### 2. Enable API Access
 
 1. Enable the [Vertex AI API](https://console.cloud.google.com/apis/enableflow?apiid=aiplatform.googleapis.com) in your Google Cloud project
-2. Set your project in gcloud CLI:
-
+2. For Claude models, request access through the [Vertex AI Model Garden](https://console.cloud.google.com/vertex-ai/publishers) by:
+   - Navigating to "Model Garden"
+   - Searching for "Claude"
+   - Clicking "Enable" on the models you want to use
+3. Set your project in gcloud CLI:
    ```sh
    gcloud config set project PROJECT_ID
    ```
@@ -98,6 +105,10 @@ Choose one of these authentication methods:
 1. User Account (recommended for development):
 
    ```sh
+   # First, authenticate with Google Cloud
+   gcloud auth login
+
+   # Then, set up application default credentials
    gcloud auth application-default login
    ```
 
@@ -173,14 +184,14 @@ See [Google's SafetySetting API documentation](https://ai.google.dev/api/generat
 
 ## Model-Specific Features
 
-### Llama Models
+### Llama Model Features
 
 - Support for text and vision tasks (Llama 3.2)
 - Built-in safety with Llama Guard (enabled by default)
 - Available in `us-central1` region
 - Quota limits vary by model version (30-60 QPM)
 
-### Claude Models
+### Claude Model Features
 
 - Support for text, code, and analysis tasks
 - Tool use (function calling) capabilities
@@ -249,6 +260,20 @@ Re-authenticate using:
 ```sh
 gcloud auth application-default login
 ```
+
+### Claude Model Access Errors
+
+If you encounter an error like:
+
+```
+API call error: Error: Project is not allowed to use Publisher Model `projects/.../publishers/anthropic/models/claude-*`
+```
+
+You need to enable access to Claude models:
+
+1. Visit the [Vertex AI Model Garden](https://console.cloud.google.com/vertex-ai/publishers)
+2. Search for "Claude"
+3. Click "Enable" on the specific Claude models you want to use
 
 ## Model Features and Capabilities
 

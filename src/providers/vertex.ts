@@ -16,6 +16,7 @@ import { renderVarsInObject } from '../util';
 import { maybeLoadFromExternalFile } from '../util';
 import { getNunjucksEngine } from '../util/templates';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+import { calculateCost } from './shared';
 import type { GeminiErrorResponse, GeminiFormat, Palm2ApiResponse } from './vertexUtil';
 import {
   getGoogleClient,
@@ -23,6 +24,36 @@ import {
   type GeminiApiResponse,
   type GeminiResponseData,
 } from './vertexUtil';
+
+interface TextBlock {
+  type: 'text';
+  text: string;
+}
+
+interface ImageBlock {
+  type: 'image';
+  source: {
+    type: 'base64' | 'url';
+    media_type: string;
+    data: string;
+  };
+}
+
+interface ToolUseBlock {
+  type: 'tool_use';
+  id: string;
+  name: string;
+  input: unknown;
+}
+
+interface ToolResponseBlock {
+  type: 'tool_response';
+  id: string;
+  name: string;
+  output: unknown;
+}
+
+type ContentBlock = TextBlock | ImageBlock | ToolUseBlock | ToolResponseBlock;
 
 interface Blob {
   mimeType: string;
@@ -92,6 +123,36 @@ interface Tool {
   googleSearch?: object;
 }
 
+interface VertexMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
+interface ParsedMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string | ContentBlock[];
+}
+
+interface ClaudeInstance {
+  messages: VertexMessage[];
+  system?: string;
+}
+
+interface ClaudeResponse {
+  predictions?: Array<{
+    content: string;
+    usage?: {
+      total_tokens: number;
+      prompt_tokens: number;
+      completion_tokens: number;
+    };
+  }>;
+  error?: {
+    code: string;
+    message: string;
+  };
+}
+
 interface VertexCompletionOptions {
   apiKey?: string;
   apiHost?: string;
@@ -99,6 +160,10 @@ interface VertexCompletionOptions {
   region?: string;
   publisher?: string;
   apiVersion?: string;
+  cost?: {
+    input?: number;
+    output?: number;
+  };
 
   // https://ai.google.dev/api/rest/v1beta/models/streamGenerateContent#request-body
   context?: string;
@@ -133,6 +198,43 @@ interface VertexCompletionOptions {
 }
 
 const clone = Clone();
+
+const VERTEX_CLAUDE_MODELS = [
+  ...['claude-3-haiku@20240307', 'claude-3-haiku-latest'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.00025 / 1000,
+      output: 0.00125 / 1000,
+    },
+  })),
+  ...['claude-3-opus@20240229', 'claude-3-opus-latest'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.015 / 1000,
+      output: 0.075 / 1000,
+    },
+  })),
+  ...['claude-3-5-haiku@20241022', 'claude-3-5-haiku-latest'].map((model) => ({
+    id: model,
+    cost: {
+      input: 1 / 1e6,
+      output: 5 / 1e6,
+    },
+  })),
+  ...[
+    'claude-3-sonnet@20240229',
+    'claude-3-sonnet-latest',
+    'claude-3-5-sonnet@20240620',
+    'claude-3-5-sonnet@20241022',
+    'claude-3-5-sonnet-latest',
+  ].map((model) => ({
+    id: model,
+    cost: {
+      input: 3 / 1e6,
+      output: 15 / 1e6,
+    },
+  })),
+];
 
 class VertexGenericProvider implements ApiProvider {
   modelName: string;
@@ -215,8 +317,6 @@ class VertexGenericProvider implements ApiProvider {
 }
 
 export class VertexChatProvider extends VertexGenericProvider {
-  // TODO(ian): Completion models
-  // https://cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versioning#gemini-model-versions
   constructor(
     modelName: string,
     options: { config?: VertexCompletionOptions; id?: string; env?: EnvOverrides } = {},
@@ -225,6 +325,9 @@ export class VertexChatProvider extends VertexGenericProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    if (this.modelName.includes('claude')) {
+      return this.#callClaudeApi(prompt, context);
+    }
     if (this.modelName.includes('gemini')) {
       return this.callGeminiApi(prompt, context);
     }
@@ -512,6 +615,122 @@ export class VertexChatProvider extends VertexGenericProvider {
       };
     }
   }
+
+  #callClaudeApi = async (
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> => {
+    // Convert the messages to a simpler format that Vertex expects
+    const parsedMessages = parseChatPrompt(prompt, [
+      {
+        role: 'user' as const,
+        content: prompt,
+      },
+    ]) as ParsedMessage[];
+
+    const instance: ClaudeInstance = {
+      messages: parsedMessages.map((msg) => ({
+        role: msg.role,
+        content:
+          typeof msg.content === 'string'
+            ? msg.content
+            : msg.content
+                .map((c: ContentBlock) => (c.type === 'text' ? c.text : JSON.stringify(c)))
+                .join('\n'),
+      })),
+    };
+
+    const body = {
+      instances: [instance],
+      parameters: {
+        temperature: this.config.temperature,
+        maxOutputTokens: this.config.maxOutputTokens,
+        topP: this.config.topP,
+        topK: this.config.topK,
+        stopSequences: this.config.stopSequence,
+      },
+    };
+
+    logger.debug(`Preparing to call Google Vertex API (Claude) with body: ${JSON.stringify(body)}`);
+
+    const cache = await getCache();
+    const cacheKey = `vertex:${this.modelName}:${JSON.stringify(body)}`;
+
+    let cachedResponse;
+    if (isCacheEnabled()) {
+      cachedResponse = await cache.get(cacheKey);
+      if (cachedResponse) {
+        const parsedCachedResponse = JSON.parse(cachedResponse as string);
+        const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
+        if (tokenUsage) {
+          tokenUsage.cached = tokenUsage.total;
+        }
+        logger.debug(`Returning cached response: ${cachedResponse}`);
+        return { ...parsedCachedResponse, cached: true };
+      }
+    }
+
+    try {
+      const { client, projectId } = await getGoogleClient();
+      const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/anthropic/models/${this.modelName}:predict`;
+
+      const res = await client.request<ClaudeResponse>({
+        url,
+        method: 'POST',
+        data: body,
+        timeout: REQUEST_TIMEOUT_MS,
+      });
+
+      const data = res.data;
+      logger.debug(`Claude API response: ${JSON.stringify(data)}`);
+
+      if (data.error) {
+        return {
+          error: `Error ${data.error.code}: ${data.error.message}`,
+        };
+      }
+
+      const prediction = data.predictions?.[0];
+      if (!prediction) {
+        return {
+          error: 'No prediction found in response',
+        };
+      }
+
+      const modelConfig = VERTEX_CLAUDE_MODELS.find((m) => m.id === this.modelName);
+      const response = {
+        output: prediction.content,
+        cached: false,
+        tokenUsage: prediction.usage
+          ? {
+              total: prediction.usage.total_tokens,
+              prompt: prediction.usage.prompt_tokens,
+              completion: prediction.usage.completion_tokens,
+            }
+          : undefined,
+        cost: modelConfig
+          ? calculateCost(
+              this.modelName,
+              { cost: modelConfig.cost.input },
+              prediction.usage?.prompt_tokens,
+              prediction.usage?.completion_tokens,
+              VERTEX_CLAUDE_MODELS,
+            )
+          : undefined,
+      };
+
+      if (isCacheEnabled()) {
+        await cache.set(cacheKey, JSON.stringify(response));
+      }
+
+      return response;
+    } catch (err) {
+      logger.debug(`Claude API error: ${String(err)}`);
+      return {
+        error: `API call error: ${String(err)}`,
+      };
+    }
+  };
 }
 
 export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
