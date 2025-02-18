@@ -847,7 +847,17 @@
           }
         },
         "env": {
-          "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/1/additionalProperties/properties/env"
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/1/additionalProperties/properties/env"
+            },
+            {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          ]
         },
         "derivedMetrics": {
           "type": "array",
