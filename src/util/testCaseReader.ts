@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
-import { parse as parsePath } from 'path';
+import { parsePathWithFunction } from './file';
 import { testCaseFromCsvRow } from '../csv';
 import { getEnvBool, getEnvString } from '../envars';
 import { importModule } from '../esm';
@@ -72,23 +72,7 @@ export async function readStandaloneTestsFile(
   basePath: string = '',
 ): Promise<TestCase[]> {
   const resolvedVarsPath = path.resolve(basePath, varsPath.replace(/^file:\/\//, ''));
-  // Split on the last colon to handle Windows drive letters correctly
-  const colonCount = resolvedVarsPath.split(':').length - 1;
-  const lastColonIndex = resolvedVarsPath.lastIndexOf(':');
-
-  // For Windows paths, we need to account for the drive letter colon
-  const isWindowsPath = /^[A-Za-z]:/.test(resolvedVarsPath);
-  const effectiveColonCount = isWindowsPath ? colonCount - 1 : colonCount;
-
-  if (effectiveColonCount > 1) {
-    throw new Error(`Too many colons. Invalid test file script path: ${varsPath}`);
-  }
-
-  const pathWithoutFunction =
-    lastColonIndex > 1 ? resolvedVarsPath.slice(0, lastColonIndex) : resolvedVarsPath;
-  const maybeFunctionName =
-    lastColonIndex > 1 ? resolvedVarsPath.slice(lastColonIndex + 1) : undefined;
-  const fileExtension = parsePath(pathWithoutFunction).ext.slice(1);
+  const { path: pathWithoutFunction, functionName: maybeFunctionName, extension: fileExtension } = parsePathWithFunction(resolvedVarsPath, varsPath);
 
   if (varsPath.startsWith('huggingface://datasets/')) {
     telemetry.recordAndSendOnce('feature_used', {
