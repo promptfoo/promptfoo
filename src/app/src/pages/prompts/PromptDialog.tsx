@@ -28,20 +28,12 @@ interface PromptDialogProps {
   selectedPrompt: PromptWithMetadata & { recentEvalDate: string };
 }
 
-interface EvalMetrics {
-  passCount: number;
-  failCount: number;
-  errorCount: number;
-  passRate: string;
-  score?: number;
-}
-
 const PromptDialog: React.FC<PromptDialogProps> = ({ openDialog, handleClose, selectedPrompt }) => {
   const [copySnackbar, setCopySnackbar] = React.useState(false);
 
   const sortedEvals = useMemo(
     () =>
-      [...(selectedPrompt?.evals || [])] // Create a shallow copy to avoid mutation
+      [...(selectedPrompt?.evals || [])]
         .sort((a, b) => b.id.localeCompare(a.id))
         .map((evalData) => {
           const passCount = evalData.metrics?.testPassCount ?? 0;
@@ -49,17 +41,15 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ openDialog, handleClose, se
           const errorCount = evalData.metrics?.testErrorCount ?? 0;
           const total = passCount + failCount + errorCount;
 
-          const metrics: EvalMetrics = {
-            passCount,
-            failCount,
-            errorCount,
-            passRate: total > 0 ? ((passCount / total) * 100.0).toFixed(1) + '%' : '-',
-            score: evalData.metrics?.score,
-          };
-
           return {
             ...evalData,
-            metrics,
+            metrics: {
+              passCount,
+              failCount,
+              errorCount,
+              passRate: total > 0 ? ((passCount / total) * 100.0).toFixed(1) + '%' : '-',
+              score: evalData.metrics?.score,
+            },
           };
         }),
     [selectedPrompt?.evals],
@@ -74,9 +64,17 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ openDialog, handleClose, se
     }
   }, [selectedPrompt?.prompt?.raw]);
 
-  const handleCloseSnackbar = useCallback(() => {
-    setCopySnackbar(false);
-  }, []);
+  const handleCloseSnackbar = useCallback(() => setCopySnackbar(false), []);
+
+  const commonCellStyles = {
+    width: '12%',
+    pr: 2,
+  };
+
+  const commonTypographyStyles = {
+    variant: 'body2' as const,
+    sx: { display: 'block', textAlign: 'right' },
+  };
 
   return (
     <>
@@ -115,15 +113,15 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ openDialog, handleClose, se
                 px: 1.5,
                 py: 0.75,
                 borderRadius: 1.5,
-                bgcolor:
-                  theme.palette.mode === 'dark'
-                    ? alpha(theme.palette.primary.main, 0.15)
-                    : alpha(theme.palette.primary.main, 0.08),
+                bgcolor: alpha(
+                  theme.palette.primary.main,
+                  theme.palette.mode === 'dark' ? 0.15 : 0.08,
+                ),
                 border: 1,
-                borderColor:
-                  theme.palette.mode === 'dark'
-                    ? alpha(theme.palette.primary.main, 0.3)
-                    : alpha(theme.palette.primary.main, 0.15),
+                borderColor: alpha(
+                  theme.palette.primary.main,
+                  theme.palette.mode === 'dark' ? 0.3 : 0.15,
+                ),
               })}
             >
               <Typography
@@ -147,10 +145,10 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ openDialog, handleClose, se
               transition: theme.transitions.create(['background-color', 'color']),
               '&:hover': {
                 color: 'error.main',
-                bgcolor:
-                  theme.palette.mode === 'dark'
-                    ? alpha(theme.palette.error.main, 0.15)
-                    : alpha(theme.palette.error.main, 0.08),
+                bgcolor: alpha(
+                  theme.palette.error.main,
+                  theme.palette.mode === 'dark' ? 0.15 : 0.08,
+                ),
               },
             })}
           >
@@ -179,10 +177,10 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ openDialog, handleClose, se
                         transition: theme.transitions.create(['background-color', 'color']),
                         '&:hover': {
                           color: 'primary.main',
-                          bgcolor:
-                            theme.palette.mode === 'dark'
-                              ? alpha(theme.palette.primary.main, 0.15)
-                              : alpha(theme.palette.primary.main, 0.08),
+                          bgcolor: alpha(
+                            theme.palette.primary.main,
+                            theme.palette.mode === 'dark' ? 0.15 : 0.08,
+                          ),
                         },
                       })}
                     >
@@ -193,15 +191,17 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ openDialog, handleClose, se
                 sx: (theme) => ({
                   fontFamily: 'monospace',
                   fontSize: '0.875rem',
-                  bgcolor:
-                    theme.palette.mode === 'dark'
-                      ? alpha(theme.palette.common.black, 0.15)
-                      : alpha(theme.palette.common.black, 0.03),
+                  bgcolor: alpha(
+                    theme.palette.common.black,
+                    theme.palette.mode === 'dark' ? 0.15 : 0.03,
+                  ),
                   '& .MuiOutlinedInput-notchedOutline': {
-                    borderColor:
+                    borderColor: alpha(
                       theme.palette.mode === 'dark'
-                        ? alpha(theme.palette.common.white, 0.15)
-                        : alpha(theme.palette.common.black, 0.1),
+                        ? theme.palette.common.white
+                        : theme.palette.common.black,
+                      theme.palette.mode === 'dark' ? 0.15 : 0.1,
+                    ),
                   },
                 }),
               }}
@@ -210,30 +210,24 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ openDialog, handleClose, se
             />
           </Box>
 
-          <Box
-            sx={{
-              px: 3,
-              pb: 1.5,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1.5,
-            }}
-          >
+          <Box sx={{ px: 3, pb: 1.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <Typography variant="h6" sx={{ fontSize: '1rem', fontWeight: 600 }}>
               Eval History
             </Typography>
             <Typography
               variant="body2"
-              sx={{
+              sx={(theme) => ({
                 color: 'text.secondary',
-                bgcolor: (theme) =>
+                bgcolor: alpha(
                   theme.palette.mode === 'dark'
-                    ? alpha(theme.palette.common.white, 0.05)
-                    : alpha(theme.palette.common.black, 0.05),
+                    ? theme.palette.common.white
+                    : theme.palette.common.black,
+                  theme.palette.mode === 'dark' ? 0.05 : 0.05,
+                ),
                 px: 1,
                 py: 0.5,
                 borderRadius: 1,
-              }}
+              })}
             >
               {sortedEvals.length} evals
             </Typography>
@@ -255,19 +249,19 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ openDialog, handleClose, se
                   <TableRow>
                     <TableCell sx={{ width: '25%' }}>Eval ID</TableCell>
                     <TableCell sx={{ width: '15%' }}>Dataset ID</TableCell>
-                    <TableCell align="right" sx={{ width: '12%', pr: 2 }}>
+                    <TableCell align="right" sx={commonCellStyles}>
                       Raw Score
                     </TableCell>
-                    <TableCell align="right" sx={{ width: '12%', pr: 2 }}>
+                    <TableCell align="right" sx={commonCellStyles}>
                       Pass Rate
                     </TableCell>
-                    <TableCell align="right" sx={{ width: '12%', pr: 2 }}>
+                    <TableCell align="right" sx={commonCellStyles}>
                       Pass Count
                     </TableCell>
-                    <TableCell align="right" sx={{ width: '12%', pr: 2 }}>
+                    <TableCell align="right" sx={commonCellStyles}>
                       Fail Count
                     </TableCell>
-                    <TableCell align="right" sx={{ width: '12%', pr: 2 }}>
+                    <TableCell align="right" sx={commonCellStyles}>
                       Error Count
                     </TableCell>
                   </TableRow>
@@ -333,40 +327,45 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ openDialog, handleClose, se
                           </Typography>
                         </Link>
                       </TableCell>
-                      <TableCell align="right" sx={{ width: '12%', pr: 2 }}>
-                        <Typography variant="body2">
-                          {evalData.metrics.score?.toFixed(1) ?? '-'}
+                      <TableCell align="right" sx={commonCellStyles}>
+                        <Typography {...commonTypographyStyles}>
+                          {evalData.metrics.score?.toFixed(2) ?? '-'}
                         </Typography>
                       </TableCell>
-                      <TableCell align="right" sx={{ width: '12%', pr: 2 }}>
-                        <Typography variant="body2">{evalData.metrics.passRate}</Typography>
+                      <TableCell align="right" sx={commonCellStyles}>
+                        <Typography {...commonTypographyStyles}>
+                          {evalData.metrics.passRate}
+                        </Typography>
                       </TableCell>
-                      <TableCell align="right" sx={{ width: '12%', pr: 2 }}>
-                        <Typography variant="body2" color="success.main" fontWeight={500}>
+                      <TableCell align="right" sx={commonCellStyles}>
+                        <Typography
+                          {...commonTypographyStyles}
+                          color="success.main"
+                          fontWeight={500}
+                        >
                           {evalData.metrics.passCount}
                         </Typography>
                       </TableCell>
-                      <TableCell align="right" sx={{ width: '12%', pr: 2 }}>
-                        <Typography variant="body2" color="warning.main" fontWeight={500}>
+                      <TableCell align="right" sx={commonCellStyles}>
+                        <Typography
+                          {...commonTypographyStyles}
+                          color="warning.main"
+                          fontWeight={500}
+                        >
                           {evalData.metrics.failCount}
                         </Typography>
                       </TableCell>
-                      <TableCell align="right" sx={{ width: '12%', pr: 2 }}>
+                      <TableCell align="right" sx={commonCellStyles}>
                         {evalData.metrics.errorCount > 0 ? (
                           <Typography
-                            variant="body2"
+                            {...commonTypographyStyles}
                             color="error.main"
                             fontWeight={500}
-                            sx={{ display: 'block', textAlign: 'right' }}
                           >
                             {evalData.metrics.errorCount}
                           </Typography>
                         ) : (
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            sx={{ display: 'block', textAlign: 'right' }}
-                          >
+                          <Typography {...commonTypographyStyles} color="text.secondary">
                             -
                           </Typography>
                         )}
@@ -385,20 +384,19 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ openDialog, handleClose, se
             py: 2.5,
             borderTop: 1,
             borderColor: 'divider',
-            bgcolor:
+            bgcolor: alpha(
               theme.palette.mode === 'dark'
-                ? alpha(theme.palette.common.black, 0.15)
-                : alpha(theme.palette.background.paper, 0.8),
+                ? theme.palette.common.black
+                : theme.palette.background.paper,
+              theme.palette.mode === 'dark' ? 0.15 : 0.8,
+            ),
           })}
         >
           <Button
             onClick={handleClose}
             variant="outlined"
             size="medium"
-            sx={{
-              minWidth: 120,
-              textTransform: 'none',
-            }}
+            sx={{ minWidth: 120, textTransform: 'none' }}
           >
             Close
           </Button>

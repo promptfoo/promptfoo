@@ -28,7 +28,7 @@ type PromptRowType = PromptWithMetadata & {
   raw: string;
 };
 
-type SortableField = 'raw' | 'date' | 'count' | null;
+type SortableField = 'id' | 'raw' | 'date' | 'count' | null;
 
 interface SortState {
   field: SortableField;
@@ -113,12 +113,21 @@ export default function Prompts() {
       if (sort.field === 'raw') {
         aValue = a.prompt.raw;
         bValue = b.prompt.raw;
+      } else if (sort.field === 'date') {
+        aValue = a.recentEvalDate ? new Date(a.recentEvalDate).getTime() : 0;
+        bValue = b.recentEvalDate ? new Date(b.recentEvalDate).getTime() : 0;
+      } else if (sort.field === 'id') {
+        aValue = a.id;
+        bValue = b.id;
       } else {
         aValue = a[sort.field];
         bValue = b[sort.field];
       }
 
       const compareResult = sort.order === 'asc' ? 1 : -1;
+      if (aValue === bValue) {
+        return 0;
+      }
       return aValue > bValue ? compareResult : -compareResult;
     });
   }, [prompts, sort]);
@@ -158,13 +167,31 @@ export default function Prompts() {
   const pageCount = useMemo(() => Math.ceil(prompts.length / ROWS_PER_PAGE), [prompts.length]);
 
   return (
-    <Box sx={{ height: 'calc(100vh - 64px)', bgcolor: 'background.default' }}>
+    <Box
+      sx={{
+        position: 'absolute',
+        top: 64,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        bgcolor: (theme) =>
+          theme.palette.mode === 'dark'
+            ? alpha(theme.palette.common.black, 0.2)
+            : alpha(theme.palette.grey[50], 0.5),
+        p: 3,
+      }}
+    >
       <Paper
         elevation={0}
         sx={{
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
+          borderTop: 1,
+          borderColor: (theme) => alpha(theme.palette.divider, 0.1),
+          boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.common.black, 0.05)}`,
+          bgcolor: 'background.paper',
+          borderRadius: 1,
         }}
       >
         {error ? (
@@ -203,17 +230,22 @@ export default function Prompts() {
           </Box>
         ) : (
           <>
-            <Box sx={{ overflow: 'auto', flex: 1 }}>
+            <Box sx={{ flex: 1, overflow: 'auto', px: 3, pt: 3 }}>
               <Table
                 size="medium"
                 stickyHeader
                 sx={{
-                  minWidth: 650,
+                  minWidth: { xs: 350, sm: 650 },
                   '& th': {
                     bgcolor: 'background.paper',
                     fontWeight: 600,
+                    position: 'sticky',
+                    top: 0,
+                    zIndex: 1,
                   },
-                  '& td, & th': { p: 2 },
+                  '& td, & th': {
+                    p: { xs: 1.5, sm: 2 },
+                  },
                   '& tr:hover': {
                     bgcolor: 'action.hover',
                   },
@@ -221,10 +253,16 @@ export default function Prompts() {
               >
                 <TableHead>
                   <TableRow>
-                    <TableCell width="8%">
-                      <Typography variant="subtitle2">ID</Typography>
+                    <TableCell width="15%" sx={{ minWidth: { xs: 80, sm: 100 } }}>
+                      <TableSortLabel
+                        active={sort.field === 'id'}
+                        direction={sort.field === 'id' ? sort.order : 'asc'}
+                        onClick={() => handleSort('id')}
+                      >
+                        <Typography variant="subtitle2">ID</Typography>
+                      </TableSortLabel>
                     </TableCell>
-                    <TableCell>
+                    <TableCell sx={{ minWidth: { xs: 200, sm: 300 } }}>
                       <TableSortLabel
                         active={sort.field === 'raw'}
                         direction={sort.field === 'raw' ? sort.order : 'asc'}
@@ -233,7 +271,13 @@ export default function Prompts() {
                         <Typography variant="subtitle2">Prompt</Typography>
                       </TableSortLabel>
                     </TableCell>
-                    <TableCell width="17%" sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
+                    <TableCell
+                      width="20%"
+                      sx={{
+                        display: { xs: 'none', sm: 'table-cell' },
+                        minWidth: 150,
+                      }}
+                    >
                       <Tooltip title="The date of the most recent eval for this prompt">
                         <TableSortLabel
                           active={sort.field === 'date'}
@@ -244,7 +288,13 @@ export default function Prompts() {
                         </TableSortLabel>
                       </Tooltip>
                     </TableCell>
-                    <TableCell width="8%" align="right">
+                    <TableCell
+                      width="15%"
+                      align="right"
+                      sx={{
+                        minWidth: 80,
+                      }}
+                    >
                       <TableSortLabel
                         active={sort.field === 'count'}
                         direction={sort.field === 'count' ? sort.order : 'asc'}
@@ -267,12 +317,30 @@ export default function Prompts() {
                         sx={{ cursor: 'pointer' }}
                       >
                         <TableCell>
-                          <Typography variant="body2" color="text.secondary" fontFamily="monospace">
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            fontFamily="monospace"
+                            sx={{
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
                             {promptRow.id.slice(0, 6)}
                           </Typography>
                         </TableCell>
                         <TableCell>
-                          <Typography variant="body2" noWrap title={promptRow.prompt.raw}>
+                          <Typography
+                            variant="body2"
+                            noWrap
+                            title={promptRow.prompt.raw}
+                            sx={{
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              maxWidth: { xs: '200px', sm: '300px', md: '500px' },
+                            }}
+                          >
                             {promptRow.prompt.raw}
                           </Typography>
                         </TableCell>
@@ -286,7 +354,12 @@ export default function Prompts() {
                                 variant="body2"
                                 color="primary"
                                 fontFamily="monospace"
-                                sx={{ '&:hover': { textDecoration: 'underline' } }}
+                                sx={{
+                                  '&:hover': { textDecoration: 'underline' },
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}
                               >
                                 {promptRow.recentEvalDate}
                               </Typography>
