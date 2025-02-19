@@ -212,4 +212,152 @@ describe('AssertionsResult', () => {
       });
     });
   });
+
+  it('handles redteam guardrails', async () => {
+    const redteamGuardrailResult = {
+      pass: false,
+      score: 0,
+      reason: 'Failed guardrail check',
+      tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0 },
+      assertion: {
+        type: 'guardrails',
+        config: {
+          purpose: 'redteam',
+        },
+      },
+    };
+
+    assertionsResult.addResult({
+      index: 0,
+      result: redteamGuardrailResult,
+    });
+
+    const result = await assertionsResult.testResult();
+    expect(result.pass).toBe(true);
+    expect(result.reason).toBe('Content failed guardrail safety checks');
+  });
+
+  it('handles multiple named scores from different sources', async () => {
+    const resultWithNamedScores = {
+      pass: true,
+      score: 1,
+      reason: 'Test passed',
+      tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0 },
+      namedScores: {
+        'metric-1': 0.8,
+        'metric-2': 0.9,
+      },
+    };
+
+    assertionsResult.addResult({
+      index: 0,
+      metric: 'metric-3',
+      result: resultWithNamedScores,
+    });
+
+    const result = await assertionsResult.testResult();
+    expect(result.namedScores).toEqual({
+      'metric-1': 0.8,
+      'metric-2': 0.9,
+      'metric-3': 1,
+    });
+  });
+
+  it('handles scoring function errors', async () => {
+    const mockScoringFunction = jest.fn().mockImplementation(() => {
+      throw new Error('Scoring function failed');
+    });
+
+    assertionsResult.addResult({
+      index: 0,
+      result: succeedingResult,
+    });
+
+    const result = await assertionsResult.testResult(mockScoringFunction);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toBe('Scoring function error: Scoring function failed');
+  });
+
+  it('handles invalid scoring function return value', async () => {
+    const mockScoringFunction = jest.fn().mockReturnValue('invalid');
+
+    assertionsResult.addResult({
+      index: 0,
+      result: succeedingResult,
+    });
+
+    const result = await assertionsResult.testResult(mockScoringFunction);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toBe(
+      'Scoring function error: assertion scoring function must return a GradingResult',
+    );
+  });
+
+  it('handles named scores with undefined metric', async () => {
+    const resultWithNamedScores = {
+      pass: true,
+      score: 1,
+      reason: 'Test passed',
+      tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0 },
+      namedScores: {
+        'metric-1': 0.8,
+        'metric-2': undefined,
+      },
+    };
+
+    assertionsResult.addResult({
+      index: 0,
+      result: resultWithNamedScores,
+    });
+
+    const result = await assertionsResult.testResult();
+    expect(result.namedScores).toEqual({
+      'metric-1': 0.8,
+      'metric-2': NaN,
+    });
+  });
+
+  it('handles scoring function with async GradingResult', async () => {
+    const mockScoringFunction = jest.fn().mockResolvedValue({
+      pass: true,
+      score: 0.9,
+      reason: 'Async scoring result',
+    });
+
+    assertionsResult.addResult({
+      index: 0,
+      result: succeedingResult,
+    });
+
+    const result = await assertionsResult.testResult(mockScoringFunction);
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(0.9);
+    expect(result.reason).toBe('Async scoring result');
+  });
+
+  it('handles multiple named scores with undefined metrics', async () => {
+    const resultWithNamedScores = {
+      pass: true,
+      score: 1,
+      reason: 'Test passed',
+      tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0 },
+      namedScores: {
+        'metric-1': 0.8,
+        'metric-2': undefined,
+      },
+    };
+
+    assertionsResult.addResult({
+      index: 0,
+      result: resultWithNamedScores,
+    });
+
+    const result = await assertionsResult.testResult();
+    expect(result.namedScores).toEqual({
+      'metric-1': 0.8,
+      'metric-2': NaN,
+    });
+  });
 });
