@@ -458,7 +458,6 @@ describe('fetchWithProxy', () => {
       const debugCalls = jest.mocked(logger.debug).mock.calls;
       const normalizedCalls = debugCalls.map((call) => call[0].replace(/\/$/, ''));
 
-      // On Windows, environment variables are case-insensitive
       const isWindows = process.platform === 'win32';
       const expectedEnvVar = Object.keys(testCase.env)[0];
       const expectedUrl = testCase.expected.url;
@@ -648,7 +647,8 @@ describe('fetchWithRetries', () => {
   });
 
   it('should make retries+1 total attempts', async () => {
-    jest.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
+    const error = new Error('Network error');
+    jest.mocked(global.fetch).mockRejectedValue(error);
 
     await expect(fetchWithRetries('https://example.com', {}, 1000, 2)).rejects.toThrow(
       'Request failed after 2 retries: Error: Network error',
@@ -659,7 +659,8 @@ describe('fetchWithRetries', () => {
   });
 
   it('should not sleep after the final attempt', async () => {
-    jest.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
+    const error = new Error('Network error');
+    jest.mocked(global.fetch).mockRejectedValue(error);
 
     await expect(fetchWithRetries('https://example.com', {}, 1000, 1)).rejects.toThrow(
       'Request failed after 1 retries: Error: Network error',
@@ -718,7 +719,8 @@ describe('fetchWithRetries', () => {
   });
 
   it('should respect maximum retry count', async () => {
-    const mockFetch = jest.fn().mockRejectedValue(new Error('Network error'));
+    const error = new Error('Network error');
+    const mockFetch = jest.fn().mockRejectedValue(error);
     global.fetch = mockFetch;
 
     await expect(fetchWithRetries('https://example.com', {}, 1000, 2)).rejects.toThrow(
