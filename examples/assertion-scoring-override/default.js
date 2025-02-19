@@ -1,7 +1,5 @@
 // Default scoring function that weights metrics by geometric mean
 module.exports = (namedScores, context) => {
-  console.log('Default scoring function (JavaScript):', namedScores);
-
   const scores = {};
   for (const [key, value] of Object.entries(namedScores)) {
     scores[key] = value || 0;
@@ -12,8 +10,10 @@ module.exports = (namedScores, context) => {
     1 / Object.keys(scores).length,
   );
 
+  console.log('Default scoring function (JavaScript):', namedScores, 'Total score:', totalScore);
+  const threshold = context?.threshold ?? 0.7;
   return {
-    pass: totalScore >= (context?.threshold || 0.7),
+    pass: totalScore >= threshold,
     score: totalScore,
     reason: `Weighted score calculation: ${Object.entries(scores)
       .map(([key, value]) => `${key}: ${value}`)
