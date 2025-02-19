@@ -181,3 +181,5 @@ export class AssertionsResult {
     return this.result;
   }
 }
+
+export { DEFAULT_TOKENS_USED };
