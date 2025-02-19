@@ -297,19 +297,19 @@ export async function runAssertion({
 }
 
 export async function runAssertions({
+  assertScoringFunction,
+  latencyMs,
   prompt,
   provider,
   providerResponse,
   test,
-  latencyMs,
-  assertScoringFunction,
 }: {
+  assertScoringFunction?: ScoringFunction;
+  latencyMs?: number;
   prompt?: string;
   provider?: ApiProvider;
   providerResponse: ProviderResponse;
   test: AtomicTestCase;
-  latencyMs?: number;
-  assertScoringFunction?: ScoringFunction;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
