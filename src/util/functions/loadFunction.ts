@@ -5,7 +5,6 @@ import logger from '../../logger';
 import { runPython } from '../../python/pythonUtils';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../file';
 
-// Cache for loaded functions
 const functionCache: Record<string, Function> = {};
 
 export interface LoadFunctionOptions {
@@ -74,15 +73,8 @@ export async function loadFunction<T extends Function>({
       }
       func = moduleFunc as T;
     } else {
-      const result = (namedScores: Record<string, number>) =>
-        runPython(resolvedPath, functionName || defaultFunctionName, [namedScores]);
-      if (typeof result !== 'function') {
-        throw new Error(
-          functionName
-            ? `Python file must export a "${functionName}" function`
-            : `Python file must export a function named "${defaultFunctionName}"`,
-        );
-      }
+      const result = (...args: any[]) =>
+        runPython(resolvedPath, functionName || defaultFunctionName, args);
       func = result as unknown as T;
     }
 
