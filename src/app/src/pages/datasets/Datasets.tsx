@@ -1,6 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import Pagination from '@mui/material/Pagination';
@@ -17,70 +16,98 @@ import DatasetDialog from './DatasetDialog';
 
 const rowsPerPage = 10;
 
-export default function Datasets() {
-  const [searchParams] = useSearchParams();
+type SortableField = 'id' | 'raw' | 'date' | 'count' | 'evalId' | null;
 
-  const [testCases, setTestCases] = useState<
-    (TestCasesWithMetadata & { recentEvalDate: string })[]
-  >([]);
-  const [sortField, setSortField] = useState<string | null>('date');
+interface DatasetsProps {
+  data: (TestCasesWithMetadata & { recentEvalDate: string })[];
+  isLoading: boolean;
+  error: string | null;
+}
+
+export default function Datasets({ data, isLoading, error }: DatasetsProps) {
+  const [searchParams] = useSearchParams();
+  const [sortField, setSortField] = useState<SortableField>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(1);
   const [openDialog, setOpenDialog] = useState(false);
   const [dialogTestCaseIndex, setDialogTestCaseIndex] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
   const hasShownPopup = useRef(false);
 
-  const handleSort = (field: string) => {
+  const handleSort = (field: SortableField) => {
     const order = sortField === field && sortOrder === 'asc' ? 'desc' : 'asc';
     setSortField(field);
     setSortOrder(order);
   };
 
-  useEffect(() => {
-    (async () => {
-      setIsLoading(true);
-      try {
-        const response = await callApi(`/datasets`);
-        const data = await response.json();
-        const sortedData = [...data.data].sort((a, b) => {
-          if (sortField === null) {
-            return 0;
-          }
-          if (sortOrder === 'asc') {
-            return a[sortField] > b[sortField] ? 1 : -1;
-          }
-          return a[sortField] < b[sortField] ? 1 : -1;
-        });
-        setTestCases(sortedData);
-      } finally {
-        setIsLoading(false);
-      }
-    })();
-  }, [sortField, sortOrder, page]);
+  const sortedData = [...data].sort((a, b) => {
+    if (sortField === null) {
+      return 0;
+    }
+
+    let aValue: string | number;
+    let bValue: string | number;
+
+    switch (sortField) {
+      case 'date':
+        aValue = a.recentEvalDate || '';
+        bValue = b.recentEvalDate || '';
+        break;
+      case 'count':
+        aValue = a.count || 0;
+        bValue = b.count || 0;
+        break;
+      case 'evalId':
+        aValue = a.recentEvalId || '';
+        bValue = b.recentEvalId || '';
+        break;
+      case 'id':
+        aValue = a.id;
+        bValue = b.id;
+        break;
+      case 'raw':
+        aValue = a.testCases.length.toString();
+        bValue = b.testCases.length.toString();
+        break;
+      default:
+        return 0;
+    }
+
+    if (sortOrder === 'asc') {
+      return aValue > bValue ? 1 : -1;
+    }
+    return aValue < bValue ? 1 : -1;
+  });
 
   const handleClickOpen = (index: number) => {
     setDialogTestCaseIndex(index);
     setOpenDialog(true);
   };
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (hasShownPopup.current) {
       return;
     }
     const testCaseId = searchParams.get('id');
     if (testCaseId) {
-      const testCaseIndex = testCases.findIndex((testCase) => testCase.id.startsWith(testCaseId));
+      const testCaseIndex = sortedData.findIndex((testCase) => testCase.id.startsWith(testCaseId));
       if (testCaseIndex !== -1) {
         handleClickOpen(testCaseIndex);
         hasShownPopup.current = true;
       }
     }
-  }, [testCases, searchParams]);
+  }, [sortedData, searchParams]);
 
   const handleClose = () => {
     setOpenDialog(false);
   };
+
+  if (error) {
+    return (
+      <Box paddingX={2}>
+        <div>Error: {error}</div>
+      </Box>
+    );
+  }
 
   return (
     <Box paddingX={2}>
@@ -133,7 +160,7 @@ export default function Datasets() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {testCases
+            {sortedData
               .slice((page - 1) * rowsPerPage, page * rowsPerPage)
               .map((testCasesData, index) => (
                 <TableRow
@@ -178,18 +205,18 @@ export default function Datasets() {
               ))}
           </TableBody>
         </Table>
-        {Math.ceil(testCases.length / rowsPerPage) > 1 && (
+        {Math.ceil(sortedData.length / rowsPerPage) > 1 && (
           <Pagination
-            count={Math.ceil(testCases.length / rowsPerPage)}
+            count={Math.ceil(sortedData.length / rowsPerPage)}
             page={page}
             onChange={(event, value) => setPage(value)}
           />
         )}
-        {testCases[dialogTestCaseIndex] && (
+        {sortedData[dialogTestCaseIndex] && (
           <DatasetDialog
             openDialog={openDialog}
             handleClose={handleClose}
-            testCase={testCases[dialogTestCaseIndex]}
+            testCase={sortedData[dialogTestCaseIndex]}
           />
         )}
       </TableContainer>
