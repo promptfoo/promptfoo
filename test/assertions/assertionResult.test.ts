@@ -220,7 +220,7 @@ describe('AssertionsResult', () => {
       reason: 'Failed guardrail check',
       tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0 },
       assertion: {
-        type: 'guardrails',
+        type: 'guardrails' as const,
         config: {
           purpose: 'redteam',
         },
@@ -303,8 +303,7 @@ describe('AssertionsResult', () => {
       tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0 },
       namedScores: {
         'metric-1': 0.8,
-        'metric-2': undefined,
-      },
+      } as Record<string, number>,
     };
 
     assertionsResult.addResult({
@@ -315,7 +314,6 @@ describe('AssertionsResult', () => {
     const result = await assertionsResult.testResult();
     expect(result.namedScores).toEqual({
       'metric-1': 0.8,
-      'metric-2': NaN,
     });
   });
 
@@ -345,8 +343,7 @@ describe('AssertionsResult', () => {
       tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0 },
       namedScores: {
         'metric-1': 0.8,
-        'metric-2': undefined,
-      },
+      } as Record<string, number>,
     };
 
     assertionsResult.addResult({
@@ -357,7 +354,6 @@ describe('AssertionsResult', () => {
     const result = await assertionsResult.testResult();
     expect(result.namedScores).toEqual({
       'metric-1': 0.8,
-      'metric-2': NaN,
     });
   });
 });
