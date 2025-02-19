@@ -203,7 +203,7 @@ If weight is set to 0, the assertion automatically passes.
 
 ### Custom assertion scoring
 
-By default, test cases use weighted averaging to combine assertion scores. However, you can define custom scoring functions to implement more complex logic, such as:
+By default, test cases use weighted averaging to combine assertion scores. You can define custom scoring functions to implement more complex logic, such as:
 
 - Failing if any critical metric falls below a threshold
 - Implementing non-linear scoring combinations
@@ -211,189 +211,55 @@ By default, test cases use weighted averaging to combine assertion scores. Howev
 
 #### Prerequisites
 
-Custom scoring functions only work with **named metrics**. Each assertion you want to include in the custom scoring must have a `metric` field:
+Custom scoring functions require **named metrics**. Each assertion must have a `metric` field:
 
 ```yaml
 assert:
   - type: equals
     value: 'Hello'
-    metric: accuracy # Required for custom scoring
+    metric: accuracy
   - type: contains
     value: 'world'
-    metric: completeness # Required for custom scoring
+    metric: completeness
 ```
-
-Assertions without a `metric` field will not be available to the scoring function.
 
 #### Configuration
 
-Custom scoring functions can be defined at two levels:
-
-- Globally in the `defaultTest` block (applies to all test cases)
-- Per test case using `assertScoringFunction` (overrides the default)
-
-The scoring function must be a JavaScript file referenced with the `file://` prefix:
+Define scoring functions at two levels:
 
 ```yaml
 defaultTest:
-  assertScoringFunction: file://scoring.js # Applied to all test cases
+  assertScoringFunction: file://scoring.js # Global default
 
 tests:
-  - description: 'High-stakes test case'
-    assertScoringFunction: file://strict-scoring.js # Override for this test
+  - description: 'Custom scoring for this test'
+    assertScoringFunction: file://custom.js # Test-specific override
 ```
+
+The scoring function can be JavaScript or Python, referenced with `file://` prefix. For named exports, use `file://path/to/file.js:functionName`.
 
 #### Function Interface
 
-The scoring function receives two arguments:
-
-1. `namedScores`: A map of metric names to their scores (0-1)
-2. `context`: Additional information about the test case
-
 ```typescript
-function func(
-  namedScores: Record<string, number>,
+type ScoringFunction = (
+  namedScores: Record<string, number>, // Map of metric names to scores (0-1)
   context: {
-    threshold: number,           // Test case threshold (if set)
-    parentAssertionSet?: {      // Present if this is part of an assertion set
-      index: number,
-      assertionSet: AssertionSet
-    },
-    componentResults: GradingResult[],  // Individual assertion results
-    tokensUsed: {               // Token usage if available
-      total: number,
-      prompt: number,
-      completion: number
-    }
-  }
-) => GradingResult
-```
-
-The function must return a `GradingResult`:
-
-```typescript
-{
-  pass: boolean,    // Whether the test case passes
-  score: number,    // Final score (0-1)
-  reason: string    // Explanation of the score
-}
-```
-
-#### Example Implementation
-
-Here's a scoring function that:
-
-- Requires all critical metrics to meet minimum thresholds
-- Uses different weights for different metrics
-- Provides detailed failure reasons
-
-```javascript
-module.exports = {
-  func: (namedScores, context) => {
-    // Define critical thresholds
-    const CRITICAL_METRICS = {
-      accuracy: 0.9,
-      safety: 0.95,
-    };
-
-    // Check critical metrics first
-    for (const [metric, threshold] of Object.entries(CRITICAL_METRICS)) {
-      const score = namedScores[metric];
-      if (score === undefined) {
-        return {
-          pass: false,
-          score: 0,
-          reason: `Critical metric "${metric}" not found. Ensure all required metrics are defined.`,
-        };
-      }
-      if (score < threshold) {
-        return {
-          pass: false,
-          score: score,
-          reason: `${metric} score (${score.toFixed(2)}) below critical threshold ${threshold}`,
-        };
-      }
-    }
-
-    // Calculate weighted score for non-critical metrics
-    const weights = {
-      accuracy: 0.4,
-      safety: 0.3,
-      style: 0.2,
-      efficiency: 0.1,
-    };
-
-    let totalScore = 0;
-    let totalWeight = 0;
-
-    for (const [metric, weight] of Object.entries(weights)) {
-      const score = namedScores[metric];
-      if (score !== undefined) {
-        totalScore += score * weight;
-        totalWeight += weight;
-      }
-    }
-
-    // Normalize score if we have valid metrics
-    const finalScore = totalWeight > 0 ? totalScore / totalWeight : 0;
-
-    // Use context.threshold if available, otherwise default to 0.7
-    const threshold = context.threshold ?? 0.7;
-
-    return {
-      pass: finalScore >= threshold,
-      score: finalScore,
-      reason: `Final score: ${finalScore.toFixed(2)} (threshold: ${threshold})`,
+    threshold?: number; // Test case threshold if set
+    tokensUsed?: {
+      // Token usage if available
+      total: number;
+      prompt: number;
+      completion: number;
     };
   },
+) => {
+  pass: boolean; // Whether the test case passes
+  score: number; // Final score (0-1)
+  reason: string; // Explanation of the score
 };
 ```
 
-#### Edge Cases and Limitations
-
-1. **Missing Metrics**: If a metric referenced in the scoring function is not present in `namedScores`, its value will be `undefined`. Your function should handle this case appropriately.
-
-2. **Assertion Sets**: When used with assertion sets, the scoring function is called for each set separately. The `parentAssertionSet` field in the context indicates if this is part of a set.
-
-3. **Score Range**: The function should return a score between 0 and 1. Values outside this range may cause unexpected behavior.
-
-4. **Error Handling**: If the scoring function throws an error, the test case will fail with a score of 0.
-
-5. **Token Usage**: The `tokensUsed` field in the context may be undefined if token usage information is not available from the provider.
-
-#### Best Practices
-
-1. **Validate Inputs**: Check for required metrics before using them:
-
-```javascript
-if (!namedScores.hasOwnProperty('accuracy')) {
-  return {
-    pass: false,
-    score: 0,
-    reason: 'Required metric "accuracy" not found',
-  };
-}
-```
-
-2. **Provide Clear Reasons**: Include specific details in the reason field to help debug failures:
-
-```javascript
-reason: `Failed due to low accuracy (${scores.accuracy}) and safety (${scores.safety})`,
-```
-
-3. **Use Context**: Consider the test case threshold when determining pass/fail:
-
-```javascript
-const threshold = context.threshold ?? defaultThreshold;
-```
-
-4. **Handle Edge Cases**: Ensure your function works with missing or partial data:
-
-```javascript
-const score = namedScores[metric] ?? 0; // Default to 0 if missing
-```
-
-See the [custom assertion scoring example](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-assert-scoring) for a complete implementation.
+See the [custom assertion scoring example](https://github.com/promptfoo/promptfoo/tree/main/examples/assertion-scoring-override) for complete implementations in JavaScript and Python.
 
 ## Load assertions from external file
 
