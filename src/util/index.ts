@@ -42,7 +42,6 @@ import {
   type ResultsFile,
   type TestCase,
   type TestCasesWithMetadata,
-  type TestCasesWithMetadataPrompt,
   type UnifiedConfig,
   type OutputFile,
   type CompletedPrompt,
@@ -638,41 +637,58 @@ export async function getTestCasesWithPredicate(
       const datasetId = sha256(JSON.stringify(testCases));
 
       if (datasetId in groupedTestCases) {
+        // Update the evaluation date if this eval is more recent
         groupedTestCases[datasetId].recentEvalDate = new Date(
           Math.max(groupedTestCases[datasetId].recentEvalDate.getTime(), eval_.createdAt),
         );
         groupedTestCases[datasetId].count += 1;
+
+        // Get new prompts from this evaluation
         const newPrompts = eval_.getPrompts().map((prompt) => ({
-          id: sha256(prompt.raw),
+          id: sha256(JSON.stringify({ raw: prompt.raw, evalId })),
           prompt,
           evalId,
         }));
-        const promptsById: Record<string, TestCasesWithMetadataPrompt> = {};
-        for (const prompt of groupedTestCases[datasetId].prompts.concat(newPrompts)) {
-          if (!(prompt.id in promptsById)) {
-            promptsById[prompt.id] = prompt;
+
+        // Create a map of existing prompts by their content hash (not just ID)
+        const existingPromptsByContent = new Map(
+          groupedTestCases[datasetId].prompts.map((p) => [
+            sha256(JSON.stringify({ raw: p.prompt.raw, provider: p.prompt.provider })),
+            p,
+          ]),
+        );
+
+        // Add new prompts, preserving the most recent evaluation for each unique prompt content
+        for (const newPrompt of newPrompts) {
+          const contentHash = sha256(
+            JSON.stringify({ raw: newPrompt.prompt.raw, provider: newPrompt.prompt.provider }),
+          );
+          const existing = existingPromptsByContent.get(contentHash);
+
+          // Compare eval timestamps instead of prompt timestamps
+          if (
+            !existing ||
+            new Date(eval_.createdAt) > new Date(groupedTestCases[datasetId].recentEvalDate)
+          ) {
+            existingPromptsByContent.set(contentHash, newPrompt);
           }
         }
-        groupedTestCases[datasetId].prompts = Object.values(promptsById);
+
+        groupedTestCases[datasetId].prompts = Array.from(existingPromptsByContent.values());
       } else {
         const newPrompts = eval_.getPrompts().map((prompt) => ({
-          id: sha256(prompt.raw),
+          id: sha256(JSON.stringify({ raw: prompt.raw, evalId })),
           prompt,
           evalId,
         }));
-        const promptsById: Record<string, TestCasesWithMetadataPrompt> = {};
-        for (const prompt of newPrompts) {
-          if (!(prompt.id in promptsById)) {
-            promptsById[prompt.id] = prompt;
-          }
-        }
+
         groupedTestCases[datasetId] = {
           id: datasetId,
           count: 1,
           testCases,
           recentEvalDate: new Date(createdAt),
           recentEvalId: evalId,
-          prompts: Object.values(promptsById),
+          prompts: newPrompts,
         };
       }
     }

@@ -144,7 +144,7 @@ const DatasetTableHeader: React.FC<{
           direction={sortField === 'raw' ? sortOrder : 'asc'}
           onClick={() => onSort('raw')}
         >
-          Info
+          Test Cases
           {sortField === 'raw' ? (
             <Box component="span" sx={visuallyHidden}>
               {sortOrder === 'desc' ? 'sorted descending' : 'sorted ascending'}
@@ -159,7 +159,7 @@ const DatasetTableHeader: React.FC<{
           direction={sortField === 'count' ? sortOrder : 'asc'}
           onClick={() => onSort('count')}
         >
-          Total # evals
+          Total Evals
           {sortField === 'count' ? (
             <Box component="span" sx={visuallyHidden}>
               {sortOrder === 'desc' ? 'sorted descending' : 'sorted ascending'}
@@ -167,6 +167,7 @@ const DatasetTableHeader: React.FC<{
           ) : null}
         </TableSortLabel>
       </TableCell>
+      <TableCell align="right">Total Prompts</TableCell>
       <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>
         <Tooltip title="The date of the most recent eval for this set of test cases">
           <TableSortLabel
@@ -174,7 +175,7 @@ const DatasetTableHeader: React.FC<{
             direction={sortField === 'date' ? sortOrder : 'asc'}
             onClick={() => onSort('date')}
           >
-            Most recent eval date
+            Latest Eval Date
             {sortField === 'date' ? (
               <Box component="span" sx={visuallyHidden}>
                 {sortOrder === 'desc' ? 'sorted descending' : 'sorted ascending'}
@@ -190,7 +191,7 @@ const DatasetTableHeader: React.FC<{
             direction={sortField === 'evalId' ? sortOrder : 'asc'}
             onClick={() => onSort('evalId')}
           >
-            Most recent eval ID
+            Latest Eval ID
             {sortField === 'evalId' ? (
               <Box component="span" sx={visuallyHidden}>
                 {sortOrder === 'desc' ? 'sorted descending' : 'sorted ascending'}
@@ -260,6 +261,11 @@ const DatasetTableRow: React.FC<{
       <TableCell>
         <Typography variant="body2" fontWeight="medium">
           {testCasesData.count}
+        </Typography>
+      </TableCell>
+      <TableCell align="right">
+        <Typography variant="body2" fontWeight="medium">
+          {testCasesData.prompts?.length || 0}
         </Typography>
       </TableCell>
       <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>
