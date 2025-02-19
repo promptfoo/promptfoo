@@ -756,6 +756,8 @@ export class HttpProvider implements ApiProvider {
       `${protocol}://${parsedRequest.headers['host']}`,
     ).toString();
 
+    delete parsedRequest.headers['content-length'];
+
     logger.debug(
       `[HTTP Provider]: Calling ${url} with raw request: ${safeJsonStringify(parsedRequest)}`,
     );
