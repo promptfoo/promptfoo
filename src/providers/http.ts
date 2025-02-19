@@ -629,7 +629,7 @@ export class HttpProvider implements ApiProvider {
     }
 
     if (this.config.request) {
-      return this.callApiWithRawRequest(vars);
+      return this.callApiWithRawRequest(vars, context);
     }
 
     const defaultHeaders = this.getDefaultHeaders(this.config.body);
@@ -749,7 +749,10 @@ export class HttpProvider implements ApiProvider {
     };
   }
 
-  private async callApiWithRawRequest(vars: Record<string, any>): Promise<ProviderResponse> {
+  private async callApiWithRawRequest(
+    vars: Record<string, any>,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     invariant(this.config.request, 'Expected request to be set in http provider config');
     const renderedRequest = nunjucks.renderString(this.config.request, vars);
     const parsedRequest = parseRawRequest(renderedRequest.trim());
@@ -775,7 +778,7 @@ export class HttpProvider implements ApiProvider {
       },
       REQUEST_TIMEOUT_MS,
       'text',
-      undefined,
+      context?.debug,
       this.config.maxRetries,
     );
 
@@ -794,12 +797,24 @@ export class HttpProvider implements ApiProvider {
     } catch {
       parsedData = null;
     }
+    const ret: ProviderResponse = {};
+    if (context?.debug) {
+      ret.raw = response.data;
+      ret.metadata = {
+        headers: response.headers,
+      };
+    }
 
     const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
     if (parsedOutput?.output) {
-      return parsedOutput;
+      return {
+        ...ret,
+        ...parsedOutput,
+      };
     }
+
     return {
+      ...ret,
       output: parsedOutput,
     };
   }
