@@ -7,7 +7,7 @@ prompts:
 
 defaultTest:
   # Default scoring function (JavaScript) that weights metrics differently
-  assertScoringFunction: file://default_scoring.js
+  assertScoringFunction: file://default.js
   assert:
     - type: llm-rubric
       value: Rate the accuracy of the translation of {{text}} from English to {{language}}
@@ -33,11 +33,11 @@ tests:
     vars:
       language: French
       text: The weather is beautiful today.
-    assertScoringFunction: file://override_scoring.py
+    assertScoringFunction: file://override.py:calculate_score
 
   # Test using JavaScript scoring function override (style focus)
   - description: Using JavaScript scoring override (style/fluency focus)
     vars:
       language: German
       text: I love learning new languages.
-    assertScoringFunction: file://override_scoring.js:overrideScoring
+    assertScoringFunction: file://override.js:overrideScoring
