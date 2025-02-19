@@ -94,7 +94,7 @@ export default function Progress({ data, isLoading, error }: ProgressProps) {
     const blob = new Blob([dataStr], { type: `text/${format};charset=utf-8;` });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `progress_export.${format}`;
+    link.download = `cols_export.${format}`;
     link.click();
     URL.revokeObjectURL(link.href);
     setAnchorEl(null);
