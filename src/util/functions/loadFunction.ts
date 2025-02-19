@@ -5,7 +5,7 @@ import logger from '../../logger';
 import { runPython } from '../../python/pythonUtils';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../file';
 
-const functionCache: Record<string, Function> = {};
+export const functionCache: Record<string, Function> = {};
 
 export interface LoadFunctionOptions {
   filePath: string;

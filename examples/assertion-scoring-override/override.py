@@ -1,6 +1,9 @@
-from typing import Dict, Any, Optional, Union
+from typing import Any, Dict, Optional, Union
 
-def calculate_score(named_scores: Dict[str, float], context: Optional[Dict[str, Any]] = None) -> Dict[str, Union[bool, float, str]]:
+
+def calculate_score(
+    named_scores: Dict[str, float], context: Optional[Dict[str, Any]] = None
+) -> Dict[str, Union[bool, float, str]]:
     print("Override scoring function (Python):", named_scores)
     accuracy_score = named_scores.get("accuracy", 0)
     return {
