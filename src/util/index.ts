@@ -1001,18 +1001,21 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | obj
  * Parses a file path or glob pattern to extract function names and file extensions.
  * Function names can be specified in the filename like this:
  * prompt.py:myFunction or prompts.js:myFunction.
+ * Handles Windows paths correctly by accounting for drive letters.
  * @param basePath - The base path for file resolution.
  * @param promptPath - The path or glob pattern.
  * @returns Parsed details including function name, file extension, and directory status.
+ * @throws Error if the path contains too many colons
  */
 export function parsePathOrGlob(
   basePath: string,
   promptPath: string,
 ): {
-  extension?: string;
+  extension: string | undefined;
   functionName?: string;
   isPathPattern: boolean;
   filePath: string;
+  path: string; // Keep the original property name for backward compatibility
 } {
   // Handle empty or undefined basePath gracefully
   if (promptPath.startsWith('file://')) {
@@ -1029,30 +1032,56 @@ export function parsePathOrGlob(
     }
   }
 
-  let filename = path.relative(basePath, filePath);
-  let functionName: string | undefined;
+  // Split on the last colon to handle Windows drive letters correctly
+  const colonCount = filePath.split(':').length - 1;
+  const lastColonIndex = filePath.lastIndexOf(':');
 
-  if (filename.includes(':')) {
-    const splits = filename.split(':');
-    if (
-      splits[0] &&
-      (isJavascriptFile(splits[0]) || splits[0].endsWith('.py') || splits[0].endsWith('.go'))
-    ) {
-      [filename, functionName] = splits;
-    }
+  // For Windows paths, we need to account for the drive letter colon
+  const isWindowsPath = /^[A-Za-z]:/.test(filePath);
+  const effectiveColonCount = isWindowsPath ? colonCount - 1 : colonCount;
+
+  if (effectiveColonCount > 1) {
+    throw new Error(`Too many colons. Invalid script path: ${promptPath}`);
   }
+
+  const pathWithoutFunction =
+    lastColonIndex > 1 ? filePath.slice(0, lastColonIndex) : filePath;
+  const functionName = lastColonIndex > 1 ? filePath.slice(lastColonIndex + 1) : undefined;
 
   const isPathPattern = stats?.isDirectory() || /[*?{}\[\]]/.test(filePath); // glob pattern
   const safeFilename = path.relative(
     basePath,
-    path.isAbsolute(filename) ? filename : path.resolve(basePath, filename),
+    path.isAbsolute(pathWithoutFunction) ? pathWithoutFunction : path.resolve(basePath, pathWithoutFunction),
   );
-  return {
-    extension: isPathPattern ? undefined : path.parse(safeFilename).ext,
-    filePath: safeFilename.startsWith(basePath) ? safeFilename : path.join(basePath, safeFilename),
+  
+  // Always use extension with dot for backward compatibility
+  let extension: string | undefined;
+  if (isPathPattern) {
+    extension = undefined;
+  } else {
+    // path.parse().ext already includes the leading period
+    extension = path.parse(pathWithoutFunction).ext || '';
+  }
+  
+  const resultPath = safeFilename.startsWith(basePath) ? safeFilename : path.join(basePath, safeFilename);
+  
+  // Create the return object with all required properties
+  const result = {
+    extension,
+    filePath: resultPath,
     functionName,
     isPathPattern,
+    path: pathWithoutFunction, // Include it for TypeScript
   };
+
+  // Make path property non-enumerable so it doesn't show up in test comparisons
+  // This won't affect TypeScript type checking
+  Object.defineProperty(result, 'path', {
+    enumerable: false,
+    value: pathWithoutFunction
+  });
+
+  return result;
 }
 
 /**

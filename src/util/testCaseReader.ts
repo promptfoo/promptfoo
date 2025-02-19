@@ -21,7 +21,7 @@ import type {
   TestCaseWithVarsFile,
   TestSuiteConfig,
 } from '../types';
-import { parsePathWithFunction } from './file';
+import { parsePathOrGlob } from './index';
 import { isJavascriptFile } from './file';
 
 export async function readVarsFiles(
@@ -76,7 +76,7 @@ export async function readStandaloneTestsFile(
     path: pathWithoutFunction,
     functionName: maybeFunctionName,
     extension: fileExtension,
-  } = parsePathWithFunction(resolvedVarsPath, varsPath);
+  } = parsePathOrGlob(basePath, varsPath);
 
   if (varsPath.startsWith('huggingface://datasets/')) {
     telemetry.recordAndSendOnce('feature_used', {
@@ -91,7 +91,7 @@ export async function readStandaloneTestsFile(
     const mod = await importModule(pathWithoutFunction, maybeFunctionName);
     return typeof mod === 'function' ? await mod() : mod;
   }
-  if (fileExtension === 'py') {
+  if (fileExtension === '.py') {
     telemetry.recordAndSendOnce('feature_used', {
       feature: 'python tests file',
     });
@@ -111,7 +111,7 @@ export async function readStandaloneTestsFile(
       feature: 'csv tests file - google sheet',
     });
     rows = await fetchCsvFromGoogleSheet(varsPath);
-  } else if (fileExtension === 'csv') {
+  } else if (fileExtension === '.csv') {
     telemetry.recordAndSendOnce('feature_used', {
       feature: 'csv tests file - local',
     });
@@ -155,12 +155,12 @@ export async function readStandaloneTestsFile(
       }
       throw e;
     }
-  } else if (fileExtension === 'json') {
+  } else if (fileExtension === '.json') {
     telemetry.recordAndSendOnce('feature_used', {
       feature: 'json tests file',
     });
     rows = yaml.load(fs.readFileSync(resolvedVarsPath, 'utf-8')) as unknown as any;
-  } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
+  } else if (fileExtension === '.yaml' || fileExtension === '.yml') {
     telemetry.recordAndSendOnce('feature_used', {
       feature: 'yaml tests file',
     });
