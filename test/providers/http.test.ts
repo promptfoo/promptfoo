@@ -382,6 +382,50 @@ describe('HttpProvider', () => {
         'Error parsing raw HTTP request',
       );
     });
+
+    it('should remove content-length header from raw request', async () => {
+      const rawRequest = dedent`
+        POST /api/submit HTTP/1.1
+        Host: example.com
+        Content-Type: application/json
+        Content-Length: 1234
+
+        {"data": "test"}
+      `;
+      const provider = new HttpProvider('https', {
+        config: {
+          request: rawRequest,
+          transformResponse: (data: any) => data,
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'received' }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      await provider.callApi('test prompt');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://example.com/api/submit',
+        expect.objectContaining({
+          method: 'POST',
+          headers: {
+            host: 'example.com',
+            'content-type': 'application/json',
+            // content-length should not be present
+          },
+          body: '{"data": "test"}',
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+    });
   });
 
   describe('processJsonBody', () => {
