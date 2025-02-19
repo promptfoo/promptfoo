@@ -249,6 +249,7 @@ export async function runEval({
     if (response.error) {
       ret.error = response.error;
       ret.failureReason = ResultFailureReason.ERROR;
+      ret.success = false;
     } else if (response.output === null || response.output === undefined) {
       // NOTE: empty output often indicative of guardrails, so behavior differs for red teams.
       if (isRedteam) {
