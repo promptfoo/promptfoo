@@ -1,5 +1,6 @@
 import { getEnvBool } from '../envars';
 import type { AssertionSet, GradingResult, ScoringFunction } from '../types';
+import { isGradingResult } from '../types';
 
 const DEFAULT_TOKENS_USED = {
   total: 0,
@@ -163,10 +164,13 @@ export class AssertionsResult {
           componentResults: flattenedComponentResults,
           tokensUsed: this.tokensUsed,
         });
-
-        this.result.pass = scoringResult.pass;
-        this.result.score = scoringResult.score;
-        this.result.reason = scoringResult.reason;
+        if (!isGradingResult(scoringResult)) {
+          throw new Error('assertion scoring function must return a GradingResult');
+        }
+        this.result = {
+          ...this.result,
+          ...scoringResult,
+        };
       } catch (err) {
         this.result.pass = false;
         this.result.score = 0;

@@ -12,7 +12,7 @@ tests:
   - vars:
       language: french
       prompt: 'Hello, world!'
-    assertScoringFunction: file://func.js
+    assertScoringFunction: file://./func.js
     assert:
       - type: llm-rubric
         value: Is an accurate translation of {{prompt}} in {{language}}

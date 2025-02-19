@@ -1,0 +1,41 @@
+description: Example showing how to override scoring functions
+providers:
+  - openai:gpt-4o-mini
+
+prompts:
+  - 'Translate the following text to {{language}}: {{text}}'
+
+defaultTest:
+  # Default scoring function (JavaScript) that weights metrics differently
+  assertScoringFunction: file://default_scoring.js
+  assert:
+    - type: llm-rubric
+      value: Rate the accuracy of the translation
+      metric: accuracy
+    - type: llm-rubric
+      value: Rate the fluency of the translation
+      metric: fluency
+    - type: llm-rubric
+      value: Rate the grammar of the translation
+      metric: grammar
+
+tests:
+  # Test using default scoring function
+  - description: Using default scoring (balanced with accuracy emphasis)
+    vars:
+      language: Spanish
+      text: Hello, how are you today?
+
+  # Test using Python scoring function override (accuracy focus)
+  - description: Using Python scoring override (accuracy focus only)
+    vars:
+      language: French
+      text: The weather is beautiful today.
+    assertScoringFunction: file://override_scoring.py
+
+  # Test using JavaScript scoring function override (style focus)
+  - description: Using JavaScript scoring override (style/fluency focus)
+    vars:
+      language: German
+      text: I love learning new languages.
+    assertScoringFunction: file://override_scoring.js
