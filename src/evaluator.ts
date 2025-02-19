@@ -394,15 +394,6 @@ export function generateVarCombinations(
   return combinations;
 }
 
-// Load and validate a scoring function from a file path
-export async function loadScoringFunction(filePath: string): Promise<ScoringFunction> {
-  const { filePath: resolvedPath, functionName } = parseFileUrl(filePath);
-  return loadFunction<ScoringFunction>({
-    filePath: resolvedPath,
-    functionName,
-  });
-}
-
 class Evaluator {
   evalRecord: Eval;
   testSuite: TestSuite;
@@ -600,10 +591,6 @@ class Evaluator {
     for (const testCase of tests) {
       testCase.vars = { ...testSuite.defaultTest?.vars, ...testCase?.vars };
 
-      if (typeof testCase.assertScoringFunction === 'string') {
-        testCase.assertScoringFunction = await loadScoringFunction(testCase.assertScoringFunction);
-      }
-
       if (testCase.vars) {
         const varWithSpecialColsRemoved: Vars = {};
         const inputTransformForIndividualTest = testCase.options?.transformVars;
@@ -657,6 +644,15 @@ class Evaluator {
       testCase.assertScoringFunction =
         testCase.assertScoringFunction || testSuite.defaultTest?.assertScoringFunction;
 
+      if (typeof testCase.assertScoringFunction === 'string') {
+        const { filePath: resolvedPath, functionName } = parseFileUrl(
+          testCase.assertScoringFunction,
+        );
+        testCase.assertScoringFunction = await loadFunction<ScoringFunction>({
+          filePath: resolvedPath,
+          functionName,
+        });
+      }
       const prependToPrompt =
         testCase.options?.prefix || testSuite.defaultTest?.options?.prefix || '';
       const appendToPrompt =
