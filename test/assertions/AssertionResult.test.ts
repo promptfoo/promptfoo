@@ -1,4 +1,4 @@
-import { AssertionsResult } from '../../src/assertions/AssertionsResult';
+import { AssertionsResult } from '../../src/assertions/assertionsResult1';
 import type { AssertionSet, GradingResult } from '../../src/types';
 
 describe('AssertionsResult', () => {

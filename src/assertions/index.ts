@@ -39,8 +39,8 @@ import { isJavascriptFile } from '../util/file';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { transform } from '../util/transform';
-import { AssertionsResult } from './AssertionsResult';
 import { handleAnswerRelevance } from './answerRelevance';
+import { AssertionsResult } from './assertionsResult1';
 import { handleBleuScore } from './bleu';
 import { handleClassifier } from './classifier';
 import {
