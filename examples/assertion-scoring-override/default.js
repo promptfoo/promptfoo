@@ -1,17 +1,22 @@
-// Default scoring function that weights metrics differently
+// Default scoring function that weights metrics by geometric mean
 module.exports = (namedScores, context) => {
   console.log('Default scoring function (JavaScript):', namedScores);
 
-  // Weight accuracy metrics more heavily
-  const accuracyScore = (namedScores.accuracy || 0) * 1.5;
-  const fluencyScore = namedScores.fluency || 0;
-  const grammarScore = namedScores.grammar || 0;
+  const scores = {};
+  for (const [key, value] of Object.entries(namedScores)) {
+    scores[key] = value || 0;
+  }
 
-  const totalScore = (accuracyScore + fluencyScore + grammarScore) / 3;
+  const totalScore = Math.pow(
+    Object.values(scores).reduce((acc, score) => acc * score, 1),
+    1 / Object.keys(scores).length,
+  );
 
   return {
-    pass: totalScore >= 0.7,
+    pass: totalScore >= (context?.threshold || 0.7),
     score: totalScore,
-    reason: `Weighted score calculation: accuracy(1.5x): ${accuracyScore}, fluency: ${fluencyScore}, grammar: ${grammarScore}`,
+    reason: `Weighted score calculation: ${Object.entries(scores)
+      .map(([key, value]) => `${key}: ${value}`)
+      .join(', ')}`,
   };
 };

@@ -7,7 +7,7 @@ prompts:
 
 defaultTest:
   # Default scoring function (JavaScript) that weights metrics differently
-  assertScoringFunction: file://default.js
+  assertScoringFunction: file://./default.js
   assert:
     - type: llm-rubric
       value: Rate the accuracy of the translation of {{text}} from English to {{language}}
@@ -19,7 +19,9 @@ defaultTest:
       value: Rate the grammar of the translation of {{text}} from English to {{language}}
       metric: grammar
   options:
-    provider: openai:gpt-4o-mini
+    provider:
+      text: openai:gpt-4o-mini
+      embedding: openai:embedding:text-embedding-3-small
 
 tests:
   # Test using default scoring function
@@ -27,17 +29,26 @@ tests:
     vars:
       language: Spanish
       text: Hello, how are you today?
+    assert:
+      - type: similar
+        value: Como estas?
+        metric: similar
+    assertScoringFunction: file://./default.js
 
   # Test using Python scoring function override (accuracy focus)
   - description: Using Python scoring override (accuracy focus only)
     vars:
       language: French
       text: The weather is beautiful today.
-    assertScoringFunction: file://override.py:calculate_score
+    assertScoringFunction: file://./override.py:calculate_score
 
   # Test using JavaScript scoring function override (style focus)
   - description: Using JavaScript scoring override (style/fluency focus)
     vars:
       language: German
       text: I love learning new languages.
-    assertScoringFunction: file://override.js:overrideScoring
+    assert:
+      - type: contains
+        value: Bananas
+        metric: banana
+    assertScoringFunction: file://./override.js:overrideScoring
