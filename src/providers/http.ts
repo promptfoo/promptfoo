@@ -756,6 +756,9 @@ export class HttpProvider implements ApiProvider {
       `${protocol}://${parsedRequest.headers['host']}`,
     ).toString();
 
+    // Remove content-length header from raw request if the user added it, it will be added by fetch with the correct value
+    delete parsedRequest.headers['content-length'];
+
     logger.debug(
       `[HTTP Provider]: Calling ${url} with raw request: ${safeJsonStringify(parsedRequest)}`,
     );
