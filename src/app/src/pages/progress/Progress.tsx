@@ -1,6 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { callApi } from '@app/utils/api';
 import DownloadIcon from '@mui/icons-material/Download';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
@@ -20,32 +19,21 @@ import TextField from '@mui/material/TextField';
 import type { PromptMetrics } from '@promptfoo/types';
 import type { StandaloneEval } from '@promptfoo/util';
 
-export default function Cols() {
-  const [cols, setCols] = useState<StandaloneEval[]>([]);
+interface ProgressProps {
+  data: StandaloneEval[];
+  isLoading: boolean;
+  error: string | null;
+}
+
+export default function Progress({ data, isLoading, error }: ProgressProps) {
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [page, setPage] = React.useState(1);
   const [filter, setFilter] = useState({ evalId: '', datasetId: '', provider: '', promptId: '' });
-  const [isLoading, setIsLoading] = useState(true);
 
   const rowsPerPage = 25;
   const open = Boolean(anchorEl);
-
-  useEffect(() => {
-    (async () => {
-      setIsLoading(true);
-      try {
-        const response = await callApi(`/progress`);
-        const data = await response.json();
-        if (data && data.data) {
-          setCols(data.data);
-        }
-      } finally {
-        setIsLoading(false);
-      }
-    })();
-  }, []);
 
   const handleSort = (field: string) => {
     const isAsc = sortField === field && sortOrder === 'asc';
@@ -102,7 +90,7 @@ export default function Cols() {
   };
 
   const handleExport = (format: string) => {
-    const dataStr = format === 'json' ? JSON.stringify(cols) : convertToCSV(cols);
+    const dataStr = format === 'json' ? JSON.stringify(data) : convertToCSV(data);
     const blob = new Blob([dataStr], { type: `text/${format};charset=utf-8;` });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
@@ -124,14 +112,14 @@ export default function Cols() {
   };
 
   const filteredCols = React.useMemo(() => {
-    return cols.filter(
+    return data.filter(
       (col) =>
         (filter.evalId ? col.evalId?.includes(filter.evalId) : true) &&
         (filter.datasetId ? col.datasetId?.startsWith(filter.datasetId) : true) &&
         (filter.provider ? col.provider?.includes(filter.provider) : true) &&
         (filter.promptId ? col.promptId?.startsWith(filter.promptId) : true),
     );
-  }, [cols, filter]);
+  }, [data, filter]);
 
   const sortedCols = React.useMemo(() => {
     return filteredCols.sort((a, b) => {
@@ -161,20 +149,20 @@ export default function Cols() {
   }, [filteredCols, sortField, sortOrder]);
 
   const evalIdOptions = React.useMemo(
-    () => Array.from(new Set(cols.map((col) => col.evalId))),
-    [cols],
+    () => Array.from(new Set(data.map((col) => col.evalId))),
+    [data],
   );
   const datasetIdOptions = React.useMemo(
-    () => Array.from(new Set(cols.map((col) => col.datasetId))),
-    [cols],
+    () => Array.from(new Set(data.map((col) => col.datasetId))),
+    [data],
   );
   const providerOptions = React.useMemo(
-    () => Array.from(new Set(cols.map((col) => col.provider))),
-    [cols],
+    () => Array.from(new Set(data.map((col) => col.provider))),
+    [data],
   );
   const promptIdOptions = React.useMemo(
-    () => Array.from(new Set(cols.map((col) => col.promptId))),
-    [cols],
+    () => Array.from(new Set(data.map((col) => col.promptId))),
+    [data],
   );
 
   return (
