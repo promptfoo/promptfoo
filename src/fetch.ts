@@ -225,8 +225,8 @@ export async function fetchWithRetries(
         const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
         await sleep(waitTime);
       }
-      lastError = error;
+      lastError = errorMessage;
     }
   }
-  throw new Error(`Request failed after ${maxRetries} retries: ${(lastError as Error).message}`);
+  throw new Error(`Request failed after ${maxRetries} retries: ${lastError}`);
 }
