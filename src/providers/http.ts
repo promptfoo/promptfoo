@@ -65,6 +65,10 @@ export const HttpProviderConfigSchema = z.object({
   method: z.string().optional(),
   queryParams: z.record(z.string()).optional(),
   request: z.string().optional(),
+  useHttps: z
+    .boolean()
+    .optional()
+    .describe('Use HTTPS for the request. This only works with the raw request option'),
   sessionParser: z.union([z.string(), z.function()]).optional(),
   transformRequest: z.union([z.string(), z.function()]).optional(),
   transformResponse: z.union([z.string(), z.function()]).optional(),
@@ -750,7 +754,7 @@ export class HttpProvider implements ApiProvider {
     const renderedRequest = nunjucks.renderString(this.config.request, vars);
     const parsedRequest = parseRawRequest(renderedRequest.trim());
 
-    const protocol = this.url.startsWith('https') ? 'https' : 'http';
+    const protocol = this.url.startsWith('https') || this.config.useHttps ? 'https' : 'http';
     const url = new URL(
       parsedRequest.url,
       `${protocol}://${parsedRequest.headers['host']}`,
@@ -760,7 +764,7 @@ export class HttpProvider implements ApiProvider {
     delete parsedRequest.headers['content-length'];
 
     logger.debug(
-      `[HTTP Provider]: Calling ${url} with raw request: ${safeJsonStringify(parsedRequest)}`,
+      `[HTTP Provider]: Calling ${url} with raw request: ${parsedRequest.method}  ${safeJsonStringify(parsedRequest.body)} \n headers: ${safeJsonStringify(parsedRequest.headers)}`,
     );
     const response = await fetchWithCache(
       url,
