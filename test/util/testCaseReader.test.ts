@@ -303,7 +303,7 @@ describe('readStandaloneTestsFile', () => {
 
   it('should handle Python files with invalid function name in readStandaloneTestsFile', async () => {
     await expect(readStandaloneTestsFile('test.py:invalid:extra')).rejects.toThrow(
-      'Too many colons. Invalid test file script path: test.py:invalid:extra',
+      'Too many colons. Invalid script path: test.py:invalid:extra',
     );
   });
 });
@@ -788,7 +788,7 @@ describe('readTests', () => {
 
   it('should handle Python files with invalid function name in readTests', async () => {
     await expect(readTests(['test.py:invalid:extra'])).rejects.toThrow(
-      'Too many colons. Invalid test file script path: test.py:invalid:extra',
+      'Too many colons. Invalid script path: test.py:invalid:extra',
     );
   });
 
