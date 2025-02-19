@@ -1874,6 +1874,45 @@ describe('evaluator', () => {
     Eval.prototype.addResult = originalAddResult;
     errorSpy.mockRestore();
   });
+
+  it('evaluate with provider error response', async () => {
+    const mockApiProviderWithError: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-error'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Some output',
+        error: 'API error occurred',
+        tokenUsage: { total: 5, prompt: 5, completion: 0, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderWithError],
+      prompts: [toPrompt('Test prompt')],
+      tests: [],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary).toEqual(
+      expect.objectContaining({
+        stats: expect.objectContaining({
+          successes: 0,
+          errors: 1,
+          failures: 0,
+        }),
+        results: expect.arrayContaining([
+          expect.objectContaining({
+            error: 'API error occurred',
+            failureReason: ResultFailureReason.ERROR,
+            success: false,
+            score: 0,
+          }),
+        ]),
+      }),
+    );
+    expect(mockApiProviderWithError.callApi).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('generateVarCombinations', () => {
