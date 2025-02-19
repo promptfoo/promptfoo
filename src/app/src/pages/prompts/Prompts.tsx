@@ -128,7 +128,7 @@ export default function Prompts() {
       if (aValue === bValue) {
         return 0;
       }
-      return aValue > bValue ? compareResult : -compareResult;
+      return aValue === bValue ? 0 : (aValue > bValue ? compareResult : -compareResult);
     });
   }, [prompts, sort]);
 
