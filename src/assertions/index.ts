@@ -40,7 +40,7 @@ import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { transform } from '../util/transform';
 import { handleAnswerRelevance } from './answerRelevance';
-import { AssertionsResult } from './assertionsResult1';
+import { AssertionsResult } from './assertionsResult';
 import { handleBleuScore } from './bleu';
 import { handleClassifier } from './classifier';
 import {
