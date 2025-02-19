@@ -5,7 +5,6 @@ import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
-import { parsePathWithFunction } from './file';
 import { testCaseFromCsvRow } from '../csv';
 import { getEnvBool, getEnvString } from '../envars';
 import { importModule } from '../esm';
@@ -22,6 +21,7 @@ import type {
   TestCaseWithVarsFile,
   TestSuiteConfig,
 } from '../types';
+import { parsePathWithFunction } from './file';
 import { isJavascriptFile } from './file';
 
 export async function readVarsFiles(
@@ -72,7 +72,11 @@ export async function readStandaloneTestsFile(
   basePath: string = '',
 ): Promise<TestCase[]> {
   const resolvedVarsPath = path.resolve(basePath, varsPath.replace(/^file:\/\//, ''));
-  const { path: pathWithoutFunction, functionName: maybeFunctionName, extension: fileExtension } = parsePathWithFunction(resolvedVarsPath, varsPath);
+  const {
+    path: pathWithoutFunction,
+    functionName: maybeFunctionName,
+    extension: fileExtension,
+  } = parsePathWithFunction(resolvedVarsPath, varsPath);
 
   if (varsPath.startsWith('huggingface://datasets/')) {
     telemetry.recordAndSendOnce('feature_used', {

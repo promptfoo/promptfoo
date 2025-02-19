@@ -1,3 +1,5 @@
+import { parse as parsePath } from 'path';
+
 /**
  * Checks if a file is a JavaScript or TypeScript file based on its extension.
  *
@@ -7,8 +9,6 @@
 export function isJavascriptFile(filePath: string): boolean {
   return /\.(js|cjs|mjs|ts|cts|mts)$/.test(filePath);
 }
-
-import { parse as parsePath } from 'path';
 
 interface PathWithFunction {
   path: string;
@@ -25,10 +25,7 @@ interface PathWithFunction {
  * @returns Object containing the path, optional function name, and file extension
  * @throws Error if the path contains too many colons
  */
-export function parsePathWithFunction(
-  resolvedPath: string,
-  givenPath: string,
-): PathWithFunction {
+export function parsePathWithFunction(resolvedPath: string, givenPath: string): PathWithFunction {
   // Split on the last colon to handle Windows drive letters correctly
   const colonCount = resolvedPath.split(':').length - 1;
   const lastColonIndex = resolvedPath.lastIndexOf(':');
@@ -41,7 +38,8 @@ export function parsePathWithFunction(
     throw new Error(`Too many colons. Invalid script path: ${givenPath}`);
   }
 
-  const pathWithoutFunction = lastColonIndex > 1 ? resolvedPath.slice(0, lastColonIndex) : resolvedPath;
+  const pathWithoutFunction =
+    lastColonIndex > 1 ? resolvedPath.slice(0, lastColonIndex) : resolvedPath;
   const functionName = lastColonIndex > 1 ? resolvedPath.slice(lastColonIndex + 1) : undefined;
   const extension = parsePath(pathWithoutFunction).ext.slice(1);
 

@@ -31,6 +31,7 @@ import logger from '../logger';
 import Eval, { createEvalId, getSummaryOfLatestEvals } from '../models/eval';
 import type EvalResult from '../models/evalResult';
 import { generateIdFromPrompt } from '../models/prompt';
+import { runPython } from '../python/pythonUtils';
 import type { Vars } from '../types';
 import {
   type EvalWithMetadata,
@@ -1013,6 +1014,7 @@ export function parsePathOrGlob(
   isPathPattern: boolean;
   filePath: string;
 } {
+  // Handle empty or undefined basePath gracefully
   if (promptPath.startsWith('file://')) {
     promptPath = promptPath.slice('file://'.length);
   }
@@ -1059,16 +1061,20 @@ export function parsePathOrGlob(
  *
  * @param filePath - The input to process. Can be a file path string starting with "file://",
  * an array of file paths, or any other type of data.
+ * @param defaultFunctionName - Optional default function name to use when executing Python/JS files
  * @returns The loaded content if the input was a file path, otherwise the original input.
  * For JSON and YAML files, the content is parsed into an object.
  * For other file types, the raw file content is returned as a string.
  *
  * @throws {Error} If the specified file does not exist.
  */
-export function maybeLoadFromExternalFile(filePath: string | object | Function | undefined | null) {
+export function maybeLoadFromExternalFile(
+  filePath: string | object | Function | undefined | null,
+  defaultFunctionName?: string,
+) {
   if (Array.isArray(filePath)) {
     return filePath.map((path) => {
-      const content: any = maybeLoadFromExternalFile(path);
+      const content: any = maybeLoadFromExternalFile(path, defaultFunctionName);
       return content;
     });
   }
@@ -1084,9 +1090,21 @@ export function maybeLoadFromExternalFile(filePath: string | object | Function |
   const renderedFilePath = getNunjucksEngine().renderString(filePath, {});
 
   const finalPath = path.resolve(cliState.basePath || '', renderedFilePath.slice('file://'.length));
+
   if (!fs.existsSync(finalPath)) {
     throw new Error(`File does not exist: ${finalPath}`);
   }
+
+  // For JS and Python files, we need to parse the path to get function names
+  // const { filePath: pathWithoutFunction, functionName, extension } = parsePathOrGlob(cliState.basePath || '', renderedFilePath);
+  // if (isJavascriptFile(pathWithoutFunction)) {
+  //   const mod = await importModule(pathWithoutFunction, functionName ?? defaultFunctionName);
+  //   return typeof mod === 'function' ? await mod() : mod;
+  // }
+  // if (extension === '.py') {
+  //   const result = await runPython(pathWithoutFunction, functionName ?? defaultFunctionName ?? 'get_tools', []);
+  //   return result;
+  // }
 
   const contents = fs.readFileSync(finalPath, 'utf8');
   if (finalPath.endsWith('.json')) {
@@ -1104,6 +1122,19 @@ export function maybeLoadFromExternalFile(filePath: string | object | Function |
     return records;
   }
   return contents;
+}
+
+/**
+ * Wrapper around maybeLoadFromExternalFile that sets a default function name of 'get_tools'
+ * for loading Python and JavaScript files.
+ *
+ * @param filePath - The input to process
+ * @returns The loaded content
+ */
+export function maybeLoadToolsFromExternalFile(
+  filePath: string | object | Function | undefined | null,
+) {
+  return maybeLoadFromExternalFile(filePath, 'get_tools');
 }
 
 export function isRunningUnderNpx(): boolean {
