@@ -73,7 +73,7 @@ export async function readStandaloneTestsFile(
 ): Promise<TestCase[]> {
   const resolvedVarsPath = path.resolve(basePath, varsPath.replace(/^file:\/\//, ''));
   const {
-    path: pathWithoutFunction,
+    filePath: pathWithoutFunction,
     functionName: maybeFunctionName,
     extension: fileExtension,
   } = parsePathOrGlob(basePath, varsPath);

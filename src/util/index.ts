@@ -1015,7 +1015,6 @@ export function parsePathOrGlob(
   functionName?: string;
   isPathPattern: boolean;
   filePath: string;
-  path: string; // Keep the original property name for backward compatibility
 } {
   // Handle empty or undefined basePath gracefully
   if (promptPath.startsWith('file://')) {
@@ -1066,22 +1065,12 @@ export function parsePathOrGlob(
   const resultPath = safeFilename.startsWith(basePath) ? safeFilename : path.join(basePath, safeFilename);
   
   // Create the return object with all required properties
-  const result = {
+  return {
     extension,
     filePath: resultPath,
     functionName,
     isPathPattern,
-    path: pathWithoutFunction, // Include it for TypeScript
   };
-
-  // Make path property non-enumerable so it doesn't show up in test comparisons
-  // This won't affect TypeScript type checking
-  Object.defineProperty(result, 'path', {
-    enumerable: false,
-    value: pathWithoutFunction
-  });
-
-  return result;
 }
 
 /**
