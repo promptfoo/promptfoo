@@ -6,7 +6,6 @@ prompts:
   - 'Translate the following text to {{language}}: {{text}}'
 
 defaultTest:
-  # Default scoring function (JavaScript) that weights metrics differently
   assertScoringFunction: file://./default.js
   assert:
     - type: llm-rubric
@@ -24,8 +23,7 @@ defaultTest:
       embedding: openai:embedding:text-embedding-3-small
 
 tests:
-  # Test using default scoring function
-  - description: Using default scoring (balanced with accuracy emphasis)
+  - description: Default scoring function (geometric mean)
     vars:
       language: Spanish
       text: Hello, how are you today?
@@ -33,17 +31,14 @@ tests:
       - type: similar
         value: Como estas?
         metric: similar
-    assertScoringFunction: file://./default.js
 
-  # Test using Python scoring function override (accuracy focus)
-  - description: Using Python scoring override (accuracy focus only)
+  - description: Python scoring function (accuracy only)
     vars:
       language: French
       text: The weather is beautiful today.
     assertScoringFunction: file://./override.py:calculate_score
 
-  # Test using JavaScript scoring function override (style focus)
-  - description: Using JavaScript scoring override (style/fluency focus)
+  - description: JavaScript scoring function (minimum score)
     vars:
       language: German
       text: I love learning new languages.

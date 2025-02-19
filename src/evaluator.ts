@@ -396,10 +396,6 @@ export function generateVarCombinations(
 
 // Load and validate a scoring function from a file path
 export async function loadScoringFunction(filePath: string): Promise<ScoringFunction> {
-  if (!filePath.startsWith('file://')) {
-    throw new Error('Scoring function path must start with file://');
-  }
-
   const { filePath: resolvedPath, functionName } = parseFileUrl(filePath);
   return loadFunction<ScoringFunction>({
     filePath: resolvedPath,
@@ -658,6 +654,8 @@ class Evaluator {
       testCase.options = { ...testSuite.defaultTest?.options, ...testCase.options };
       testCase.metadata = { ...testSuite.defaultTest?.metadata, ...testCase.metadata };
       testCase.provider = testCase.provider || testSuite.defaultTest?.provider;
+      testCase.assertScoringFunction =
+        testCase.assertScoringFunction || testSuite.defaultTest?.assertScoringFunction;
 
       const prependToPrompt =
         testCase.options?.prefix || testSuite.defaultTest?.options?.prefix || '';
