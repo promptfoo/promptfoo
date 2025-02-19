@@ -410,7 +410,7 @@ export default function Prompts() {
         <PromptDialog
           openDialog={dialogState.open}
           handleClose={handleClose}
-          selectedPrompt={prompts[dialogState.selectedIndex]}
+          selectedPrompt={paginatedPrompts[dialogState.selectedIndex]}
         />
       )}
     </Box>
