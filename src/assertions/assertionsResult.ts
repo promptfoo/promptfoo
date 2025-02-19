@@ -2,7 +2,7 @@ import { getEnvBool } from '../envars';
 import type { AssertionSet, GradingResult, ScoringFunction } from '../types';
 import { isGradingResult } from '../types';
 
-const DEFAULT_TOKENS_USED = {
+export const DEFAULT_TOKENS_USED = {
   total: 0,
   prompt: 0,
   completion: 0,
@@ -181,5 +181,3 @@ export class AssertionsResult {
     return this.result;
   }
 }
-
-export { DEFAULT_TOKENS_USED };
