@@ -7,17 +7,13 @@ import type {
   RedteamFileConfig,
   StrategyConfig,
 } from '../redteam/types';
+import type { EnvOverrides } from '../types/env';
+import { ProviderEnvOverridesSchema } from '../types/env';
 import { isJavascriptFile } from '../util/file';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
-import {
-  ApiProviderSchema,
-  ProviderEnvOverridesSchema,
-  ProviderOptionsSchema,
-  ProvidersSchema,
-} from '../validators/providers';
+import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
 import { RedteamConfigSchema } from '../validators/redteam';
 import { NunjucksFilterMapSchema, TokenUsageSchema } from '../validators/shared';
-import type { EnvOverrides } from './env';
 import type { Prompt, PromptFunction } from './prompts';
 import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
@@ -27,7 +23,7 @@ export * from './providers';
 export * from '../redteam/types';
 export * from './shared';
 
-export type { EnvOverrides } from './env';
+export type { EnvOverrides };
 
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
@@ -804,7 +800,7 @@ export const TestSuiteConfigSchema = z.object({
   nunjucksFilters: z.record(z.string(), z.string()).optional(),
 
   // Envvar overrides
-  env: ProviderEnvOverridesSchema.optional(),
+  env: z.union([ProviderEnvOverridesSchema, z.record(z.string(), z.string())]).optional(),
 
   // Metrics to calculate after the eval has been completed
   derivedMetrics: z.array(DerivedMetricSchema).optional(),

@@ -224,77 +224,81 @@ export default function SuggestionsDialog({
                   {getActionTitle(suggestion.action || '')}
                 </Typography>
                 {getExplanation(suggestion.type)}
-                {suggestion.action === 'replace-prompt' && (
-                  <Accordion
-                    sx={{
-                      boxShadow: 'none',
-                    }}
-                  >
-                    <AccordionSummary
-                      expandIcon={<ExpandMoreIcon />}
+                {suggestion.action === 'note' ? (
+                  <Typography variant="body1">{suggestion.value}</Typography>
+                ) : (
+                  suggestion.action === 'replace-prompt' && (
+                    <Accordion
                       sx={{
-                        px: 1,
-                        py: 0,
+                        boxShadow: 'none',
                       }}
                     >
-                      <Typography variant="body2">View suggested prompt</Typography>
-                    </AccordionSummary>
-                    <AccordionDetails
-                      sx={{
-                        px: 1,
-                        py: 0,
-                        position: 'relative',
-                        '&:hover .copy-icon': {
-                          display: 'block',
-                        },
-                      }}
-                    >
-                      <Box
-                        component="pre"
+                      <AccordionSummary
+                        expandIcon={<ExpandMoreIcon />}
                         sx={{
-                          fontFamily: 'monospace',
-                          whiteSpace: 'pre-wrap',
-                          wordBreak: 'break-word',
-                          p: 0,
-                          pr: 6,
-                          fontSize: '0.875rem',
+                          px: 1,
+                          py: 0,
                         }}
                       >
-                        {suggestion.value}
-                      </Box>
-                      <IconButton
-                        onClick={() => handleCopy(suggestion.value, index)}
-                        className="copy-icon"
+                        <Typography variant="body2">View suggested prompt</Typography>
+                      </AccordionSummary>
+                      <AccordionDetails
                         sx={{
-                          position: 'absolute',
-                          top: 8,
-                          right: 8,
-                          backgroundColor: theme.palette.background.paper,
-                          display: 'none', // Initially hide the button
-                          '&:hover': {
-                            backgroundColor: theme.palette.action.hover,
+                          px: 1,
+                          py: 0,
+                          position: 'relative',
+                          '&:hover .copy-icon': {
+                            display: 'block',
                           },
                         }}
                       >
-                        <ContentCopyIcon fontSize="small" />
-                      </IconButton>
-                      {copiedIndex === index && (
-                        <Typography
-                          variant="caption"
+                        <Box
+                          component="pre"
                           sx={{
-                            position: 'absolute',
-                            top: 14,
-                            right: 48,
-                            backgroundColor: theme.palette.background.paper,
-                            padding: '2px 4px',
-                            borderRadius: 1,
+                            fontFamily: 'monospace',
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word',
+                            p: 0,
+                            pr: 6,
+                            fontSize: '0.875rem',
                           }}
                         >
-                          Copied!
-                        </Typography>
-                      )}
-                    </AccordionDetails>
-                  </Accordion>
+                          {suggestion.value}
+                        </Box>
+                        <IconButton
+                          onClick={() => handleCopy(suggestion.value, index)}
+                          className="copy-icon"
+                          sx={{
+                            position: 'absolute',
+                            top: 8,
+                            right: 8,
+                            backgroundColor: theme.palette.background.paper,
+                            display: 'none', // Initially hide the button
+                            '&:hover': {
+                              backgroundColor: theme.palette.action.hover,
+                            },
+                          }}
+                        >
+                          <ContentCopyIcon fontSize="small" />
+                        </IconButton>
+                        {copiedIndex === index && (
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              position: 'absolute',
+                              top: 14,
+                              right: 48,
+                              backgroundColor: theme.palette.background.paper,
+                              padding: '2px 4px',
+                              borderRadius: 1,
+                            }}
+                          >
+                            Copied!
+                          </Typography>
+                        )}
+                      </AccordionDetails>
+                    </Accordion>
+                  )
                 )}
               </CardContent>
             </Card>

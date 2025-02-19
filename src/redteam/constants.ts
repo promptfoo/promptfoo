@@ -149,6 +149,7 @@ export const ADDITIONAL_PLUGINS = [
   'pliny',
   'rag-document-exfiltration',
   'rbac',
+  'reasoning-dos',
   'religion',
   'shell-injection',
   'sql-injection',
@@ -280,7 +281,7 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
   },
   'owasp:llm:10': {
     // Unbounded Consumption
-    plugins: ['excessive-agency', 'overreliance'],
+    plugins: ['divergent-repetition', 'reasoning-dos'],
     strategies: [],
   },
 };
@@ -668,6 +669,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'sql-injection': 'Tests for SQL injection vulnerabilities',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
+  'reasoning-dos':
+    'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
 };
 
 // These names are displayed in risk cards and in the table
@@ -754,6 +757,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'sql-injection': 'SQL Injection',
   ssrf: 'SSRF Vulnerability',
   'system-prompt-override': 'System Prompt Override',
+  'reasoning-dos': 'Reasoning DoS',
 };
 
 export enum Severity {
@@ -833,6 +837,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'prompt-extraction': Severity.Medium,
   'rag-document-exfiltration': Severity.Medium,
   rbac: Severity.High,
+  'reasoning-dos': Severity.Low,
   religion: Severity.Low,
   'shell-injection': Severity.High,
   'sql-injection': Severity.High,
@@ -1003,6 +1008,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'sql-injection': 'SqlInjection',
   ssrf: 'SSRFEnforcement',
   'system-prompt-override': 'System Prompt Override',
+  'reasoning-dos': 'Reasoning DoS',
 };
 
 export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
@@ -1014,8 +1020,7 @@ export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
 );
 
 export const pluginDescriptions: Record<Plugin, string> = {
-  'ascii-smuggling':
-    'Tests system resilience against Unicode tag-based instruction smuggling attacks that can bypass content filters and security controls',
+  'ascii-smuggling': 'Tests for ASCII-based prompt smuggling vulnerabilities',
   beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
   bfla: 'Evaluates function-level authorization controls to identify privilege escalation vulnerabilities (OWASP API Security Top 10 #5)',
   bola: 'Tests object-level authorization mechanisms to detect unauthorized data access vulnerabilities (OWASP API Security Top 10 #1)',
@@ -1084,6 +1089,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'sql-injection': 'Evaluates resilience against SQL injection attacks',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
+  'reasoning-dos':
+    'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {

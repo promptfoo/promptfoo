@@ -21,6 +21,7 @@ export interface Config {
   };
   entities: string[];
   defaultTest?: TestCase;
+  extensions?: string[];
 }
 
 export interface ProviderOptions {
