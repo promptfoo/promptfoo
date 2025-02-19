@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useSearchParams } from 'react-router-dom';
-import { callApi } from '@app/utils/api';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import Box from '@mui/material/Box';
 import Pagination from '@mui/material/Pagination';
@@ -21,18 +20,17 @@ import PromptDialog from './PromptDialog';
 
 const ROWS_PER_PAGE = 10;
 
-type PromptRowType = PromptWithMetadata & {
-  recentEvalDate: string;
-  date: string;
-  count: number;
-  raw: string;
-};
-
 type SortableField = 'id' | 'raw' | 'date' | 'count' | null;
 
 interface SortState {
   field: SortableField;
   order: 'asc' | 'desc';
+}
+
+interface PromptsProps {
+  data: (PromptWithMetadata & { recentEvalDate: string })[];
+  isLoading: boolean;
+  error: string | null;
 }
 
 const LoadingSkeleton = () => (
@@ -56,17 +54,14 @@ const LoadingSkeleton = () => (
   </TableBody>
 );
 
-export default function Prompts() {
+export default function Prompts({ data, isLoading, error }: PromptsProps) {
   const [searchParams] = useSearchParams();
-  const [prompts, setPrompts] = useState<PromptRowType[]>([]);
   const [sort, setSort] = useState<SortState>({ field: 'date', order: 'desc' });
   const [page, setPage] = useState(1);
   const [dialogState, setDialogState] = useState<{ open: boolean; selectedIndex: number }>({
     open: false,
     selectedIndex: 0,
   });
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const hasShownPopup = useRef(false);
 
   const handleSort = useCallback((field: SortableField) => {
@@ -76,33 +71,12 @@ export default function Prompts() {
     }));
   }, []);
 
-  const fetchPrompts = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const response = await callApi('/prompts');
-      const data = await response.json();
-      if (data?.data) {
-        setPrompts(data.data);
-      }
-    } catch (error) {
-      setError('Failed to load prompts. Please try again.');
-      console.error('Failed to fetch prompts:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchPrompts();
-  }, [fetchPrompts]);
-
   const sortedPrompts = useMemo(() => {
     if (!sort.field) {
-      return prompts;
+      return data;
     }
 
-    return [...prompts].sort((a, b) => {
+    return [...data].sort((a, b) => {
       if (sort.field === null) {
         return 0;
       }
@@ -130,7 +104,7 @@ export default function Prompts() {
       }
       return aValue === bValue ? 0 : aValue > bValue ? compareResult : -compareResult;
     });
-  }, [prompts, sort]);
+  }, [data, sort]);
 
   const handleClickOpen = useCallback((index: number) => {
     setDialogState({ open: true, selectedIndex: index });
@@ -151,20 +125,20 @@ export default function Prompts() {
 
     const promptId = searchParams.get('id');
     if (promptId) {
-      const promptIndex = prompts.findIndex((prompt) => prompt.id.startsWith(promptId));
+      const promptIndex = data.findIndex((prompt) => prompt.id.startsWith(promptId));
       if (promptIndex !== -1) {
         handleClickOpen(promptIndex);
         hasShownPopup.current = true;
       }
     }
-  }, [prompts, searchParams, handleClickOpen]);
+  }, [data, searchParams, handleClickOpen]);
 
   const paginatedPrompts = useMemo(() => {
     const startIndex = (page - 1) * ROWS_PER_PAGE;
     return sortedPrompts.slice(startIndex, startIndex + ROWS_PER_PAGE);
   }, [sortedPrompts, page]);
 
-  const pageCount = useMemo(() => Math.ceil(prompts.length / ROWS_PER_PAGE), [prompts.length]);
+  const pageCount = useMemo(() => Math.ceil(data.length / ROWS_PER_PAGE), [data.length]);
 
   return (
     <Box
@@ -210,7 +184,7 @@ export default function Prompts() {
             <ErrorOutlineIcon fontSize="small" />
             <Typography variant="body2">{error}</Typography>
           </Box>
-        ) : prompts.length === 0 && !isLoading ? (
+        ) : data.length === 0 && !isLoading ? (
           <Box
             sx={{
               flex: 1,
@@ -406,7 +380,7 @@ export default function Prompts() {
         )}
       </Paper>
 
-      {prompts[dialogState.selectedIndex] && (
+      {data[dialogState.selectedIndex] && (
         <PromptDialog
           openDialog={dialogState.open}
           handleClose={handleClose}
