@@ -277,8 +277,6 @@ export async function runEval({
         });
       }
 
-      logger.warn(`test: ${test.assertScoringFunction}`);
-
       invariant(processedResponse.output != null, 'Response output should not be null');
       const checkResult = await runAssertions({
         prompt: renderedPrompt,
@@ -288,8 +286,6 @@ export async function runEval({
         latencyMs: response.cached ? undefined : latencyMs,
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,
       });
-
-      logger.warn(`checkResult: ${JSON.stringify(checkResult)}`);
 
       if (!checkResult.pass) {
         ret.error = checkResult.reason;
@@ -676,8 +672,7 @@ class Evaluator {
       testCase.vars = { ...testSuite.defaultTest?.vars, ...testCase?.vars };
 
       if (typeof testCase.assertScoringFunction === 'string') {
-        const scoringFunction = await loadScoringFunction(testCase.assertScoringFunction);
-        testCase.assertScoringFunction = scoringFunction;
+        testCase.assertScoringFunction = await loadScoringFunction(testCase.assertScoringFunction);
       }
 
       if (testCase.vars) {

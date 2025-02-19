@@ -392,9 +392,6 @@ export async function runAssertions({
     });
   });
 
-  logger.error(`assertScoringFunction: ${assertScoringFunction}`);
-  logger.error(`mainAssertResult:\n${JSON.stringify(mainAssertResult, null, 2)}`);
-
   return mainAssertResult.testResult(assertScoringFunction);
 }
 

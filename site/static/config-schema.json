@@ -564,8 +564,13 @@
                         }
                       },
                       "assertScoringFunction": {
-                        "type": "string",
-                        "pattern": "^file\\:\\/\\/"
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^file\\:\\/\\/"
+                          },
+                          {}
+                        ]
                       },
                       "options": {
                         "allOf": [
