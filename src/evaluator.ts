@@ -11,13 +11,11 @@ import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';
 import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, isCI } from './envars';
-import { importModule } from './esm';
 import { renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureUtil';
-import { runPython } from './python/pythonUtils';
 import type RedteamPandamoniumProvider from './redteam/providers/pandamonium';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
@@ -36,7 +34,7 @@ import {
   type TestSuite,
 } from './types';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
-import { isJavascriptFile } from './util/file';
+import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify } from './util/json';
 import { sleep } from './util/time';
@@ -396,82 +394,17 @@ export function generateVarCombinations(
   return combinations;
 }
 
-// Cache for loaded scoring functions
-const scoringFunctionCache: Record<string, ScoringFunction> = {};
-
 // Load and validate a scoring function from a file path
 export async function loadScoringFunction(filePath: string): Promise<ScoringFunction> {
-  // Check cache first
-  if (scoringFunctionCache[filePath]) {
-    return scoringFunctionCache[filePath];
-  }
-
   if (!filePath.startsWith('file://')) {
     throw new Error('Scoring function path must start with file://');
   }
 
-  const pathWithoutPrefix = filePath.slice('file://'.length);
-  const lastColonIndex = pathWithoutPrefix.lastIndexOf(':');
-  const pathWithoutFunction =
-    lastColonIndex > 1 ? pathWithoutPrefix.slice(0, lastColonIndex) : pathWithoutPrefix;
-  const functionName = lastColonIndex > 1 ? pathWithoutPrefix.slice(lastColonIndex + 1) : undefined;
-
-  // Resolve path relative to basePath if it exists
-  const resolvedPath = cliState.basePath
-    ? path.resolve(cliState.basePath, pathWithoutFunction)
-    : pathWithoutFunction;
-
-  if (!isJavascriptFile(resolvedPath) && !resolvedPath.endsWith('.py')) {
-    throw new Error('Scoring function must be a JavaScript or Python file');
-  }
-
-  try {
-    let func: ScoringFunction;
-    if (isJavascriptFile(resolvedPath)) {
-      const module = await importModule(resolvedPath, functionName);
-      let moduleFunc: any;
-
-      if (functionName) {
-        // If a function name was specified, use that function
-        moduleFunc = module;
-      } else {
-        // Try to get the function from various possible locations
-        moduleFunc =
-          typeof module === 'function'
-            ? module // Direct function export
-            : module?.default?.default || // Double wrapped default (e.g., from TypeScript)
-              module?.default || // Normal default export
-              module?.func || // Named 'func' export
-              module; // The module itself
-      }
-
-      if (typeof moduleFunc !== 'function') {
-        throw new Error(
-          functionName
-            ? `JavaScript file must export a "${functionName}" function`
-            : 'JavaScript file must export a function (as default export or named export "func")',
-        );
-      }
-      func = moduleFunc as ScoringFunction;
-    } else {
-      const result = await runPython(resolvedPath, functionName || 'func', []);
-      if (typeof result !== 'function') {
-        throw new Error(
-          functionName
-            ? `Python file must export a "${functionName}" function`
-            : 'Python file must export a function named "func"',
-        );
-      }
-      func = result as ScoringFunction;
-    }
-
-    // Cache the loaded function
-    scoringFunctionCache[filePath] = func;
-    return func;
-  } catch (err) {
-    logger.error(`Failed to load scoring function: ${(err as Error).message}`);
-    throw err;
-  }
+  const { filePath: resolvedPath, functionName } = parseFileUrl(filePath);
+  return loadFunction<ScoringFunction>({
+    filePath: resolvedPath,
+    functionName,
+  });
 }
 
 class Evaluator {
