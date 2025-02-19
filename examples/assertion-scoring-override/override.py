@@ -6,5 +6,5 @@ def calculate_score(named_scores: Dict[str, float], context: Optional[Dict[str, 
     return {
         "pass": accuracy_score >= context.get("threshold", 0.7),
         "score": accuracy_score,
-        "reason": f"Accuracy-focused score (2x weight): {accuracy_score}",
+        "reason": f"Accuracy-only score: {accuracy_score}",
     }
