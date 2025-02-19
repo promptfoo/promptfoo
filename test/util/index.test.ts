@@ -1,3 +1,5 @@
+import { type Database } from 'better-sqlite3';
+import { type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import * as path from 'path';
@@ -21,6 +23,7 @@ import {
   varsMatch,
   writeMultipleOutputs,
   writeOutput,
+  getEvalsWithPredicate,
 } from '../../src/util';
 import { TestGrader } from './utils';
 
@@ -651,6 +654,96 @@ describe('util', () => {
           total: 10,
         },
       });
+    });
+  });
+});
+
+describe('getEvalsWithPredicate', () => {
+  const mockEvals = [
+    {
+      id: 'eval-1',
+      createdAt: new Date('2024-01-01').getTime(),
+      author: 'test-author',
+      results: { score: 0.9 },
+      config: { description: 'Test eval 1' },
+      description: 'First eval',
+    },
+    {
+      id: 'eval-2',
+      createdAt: new Date('2024-01-02').getTime(),
+      author: 'test-author',
+      results: { score: 0.8 },
+      config: { description: 'Test eval 2' },
+      description: 'Second eval',
+    },
+  ];
+
+  const createMockDb = (results = mockEvals) => {
+    const queryBuilder = {
+      from: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      all: jest.fn().mockReturnValue(results),
+    };
+    return {
+      select: jest.fn().mockReturnValue(queryBuilder),
+    } as unknown as BetterSQLite3Database<Record<string, unknown>> & { $client: Database };
+  };
+
+  let mockDb: BetterSQLite3Database<Record<string, unknown>> & { $client: Database };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockDb = createMockDb();
+    jest.mocked(getDb).mockReturnValue(mockDb);
+  });
+
+  it('should return all evals when predicate is always true', async () => {
+    const evals = await getEvalsWithPredicate(() => true, 10);
+    expect(evals).toHaveLength(2);
+    expect(evals[0].id).toBe('eval-1');
+    expect(evals[1].id).toBe('eval-2');
+  });
+
+  it('should filter evals based on predicate', async () => {
+    const evals = await getEvalsWithPredicate(
+      (result) => result.config.description === 'Test eval 1',
+      10,
+    );
+    expect(evals).toHaveLength(1);
+    expect(evals[0].id).toBe('eval-1');
+  });
+
+  it('should respect the limit parameter', async () => {
+    await getEvalsWithPredicate(() => true, 5);
+    const queryBuilder = jest.mocked(mockDb.select).mock.results[0].value;
+    expect(jest.mocked(queryBuilder.limit)).toHaveBeenCalledWith(5);
+  });
+
+  it('should order results by creation date descending', async () => {
+    await getEvalsWithPredicate(() => true, 10);
+    const queryBuilder = jest.mocked(mockDb.select).mock.results[0].value;
+    expect(jest.mocked(queryBuilder.orderBy)).toHaveBeenCalledWith(expect.any(Object));
+  });
+
+  it('should handle empty results', async () => {
+    const emptyDb = createMockDb([]);
+    jest.mocked(getDb).mockReturnValue(emptyDb);
+
+    const evals = await getEvalsWithPredicate(() => true, 10);
+    expect(evals).toHaveLength(0);
+  });
+
+  it('should transform eval data correctly', async () => {
+    const evals = await getEvalsWithPredicate(() => true, 10);
+    const firstEval = evals[0];
+
+    expect(firstEval).toMatchObject({
+      id: 'eval-1',
+      date: new Date('2024-01-01'),
+      config: { description: 'Test eval 1' },
+      results: { score: 0.9 },
+      description: 'First eval',
     });
   });
 });

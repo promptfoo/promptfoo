@@ -625,73 +625,126 @@ export async function getTestCasesWithPredicate(
   limit: number,
 ): Promise<TestCasesWithMetadata[]> {
   const evals_ = await Eval.getMany(limit);
+  logger.debug(`Processing ${evals_.length} evaluations`);
 
   const groupedTestCases: { [hash: string]: TestCasesWithMetadata } = {};
 
   for (const eval_ of evals_) {
-    const createdAt = new Date(eval_.createdAt).toISOString();
+    const createdAt = new Date(eval_.createdAt);
     const resultWrapper: ResultsFile = await eval_.toResultsFile();
     const testCases = resultWrapper.config.tests;
-    if (testCases && predicate(resultWrapper)) {
-      const evalId = eval_.id;
-      const datasetId = sha256(JSON.stringify(testCases));
 
-      if (datasetId in groupedTestCases) {
-        // Update the evaluation date if this eval is more recent
-        groupedTestCases[datasetId].recentEvalDate = new Date(
-          Math.max(groupedTestCases[datasetId].recentEvalDate.getTime(), eval_.createdAt),
+    if (testCases && Array.isArray(testCases) && predicate(resultWrapper)) {
+      // Normalize test cases by sorting and stringifying consistently
+      const normalizedTestCases = testCases.map((testCase) => {
+        const tc = testCase as TestCase;
+        return {
+          ...tc,
+          vars: tc.vars ? Object.fromEntries(Object.entries(tc.vars).sort()) : undefined,
+        };
+      });
+
+      // Create a stable hash that considers both test case content and structure
+      const testCasesContent = JSON.stringify(
+        normalizedTestCases,
+        Object.keys(normalizedTestCases[0] || {}).sort(),
+      );
+      const datasetId = sha256(testCasesContent);
+
+      logger.debug(`Processing eval ${eval_.id} with dataset ${datasetId.slice(0, 6)}`);
+      logger.debug(`Test cases count: ${testCases.length}`);
+
+      // Extract and log variables for debugging
+      const firstTestCase = testCases[0] as TestCase;
+      const vars = firstTestCase?.vars;
+      if (vars) {
+        logger.debug(`Extracted variables: ${JSON.stringify(vars)}`);
+      }
+
+      // Get prompts from evaluation
+      const prompts = eval_.getPrompts();
+      logger.debug(`Found ${prompts.length} prompts in evaluation`);
+
+      const existingDataset = groupedTestCases[datasetId];
+      if (existingDataset) {
+        logger.debug(`Updating existing dataset ${datasetId.slice(0, 6)}`);
+        existingDataset.count++;
+        logger.debug(`Current prompt count: ${existingDataset.prompts.length}`);
+      } else {
+        logger.debug(`Creating new dataset entry ${datasetId.slice(0, 6)}`);
+        groupedTestCases[datasetId] = {
+          id: datasetId,
+          testCases: normalizedTestCases,
+          count: 1,
+          prompts: [],
+          recentEvalId: eval_.id,
+          recentEvalDate: createdAt,
+        };
+        logger.debug(`Initial prompt count: 0`);
+      }
+
+      // Update prompts array with deduplication
+      if (prompts.length > 0) {
+        const dataset = groupedTestCases[datasetId];
+        const existingPromptHashes = new Set(
+          dataset.prompts.map((p) =>
+            sha256(
+              JSON.stringify({
+                raw: p.prompt.raw,
+                provider: p.prompt.provider,
+              }),
+            ),
+          ),
         );
-        groupedTestCases[datasetId].count += 1;
 
-        // Get new prompts from this evaluation
-        const newPrompts = eval_.getPrompts().map((prompt) => ({
-          id: sha256(JSON.stringify({ raw: prompt.raw, evalId })),
-          prompt,
-          evalId,
-        }));
-
-        // Create a map of existing prompts by their content hash (not just ID)
-        const existingPromptsByContent = new Map(
-          groupedTestCases[datasetId].prompts.map((p) => [
-            sha256(JSON.stringify({ raw: p.prompt.raw, provider: p.prompt.provider })),
-            p,
-          ]),
-        );
-
-        // Add new prompts, preserving the most recent evaluation for each unique prompt content
-        for (const newPrompt of newPrompts) {
-          const contentHash = sha256(
-            JSON.stringify({ raw: newPrompt.prompt.raw, provider: newPrompt.prompt.provider }),
+        for (const prompt of prompts) {
+          const promptHash = sha256(
+            JSON.stringify({
+              raw: prompt.raw,
+              provider: prompt.provider,
+            }),
           );
-          const existing = existingPromptsByContent.get(contentHash);
 
-          // Compare eval timestamps instead of prompt timestamps
-          if (
-            !existing ||
-            new Date(eval_.createdAt) > new Date(groupedTestCases[datasetId].recentEvalDate)
-          ) {
-            existingPromptsByContent.set(contentHash, newPrompt);
+          const promptIdPrefix = prompt.id ? prompt.id.slice(0, 6) : 'unknown';
+          logger.debug(`Processing prompt ${promptIdPrefix} from eval ${eval_.id}`);
+
+          const isNewPrompt = !existingPromptHashes.has(promptHash);
+          if (isNewPrompt) {
+            logger.debug(`Adding new unique prompt with hash ${promptHash.slice(0, 6)}`);
+            dataset.prompts.push({
+              id: prompt.id || sha256(promptHash),
+              prompt,
+              evalId: eval_.id,
+            });
+            existingPromptHashes.add(promptHash);
+          } else {
+            logger.debug(`Found existing prompt with same content hash ${promptHash.slice(0, 6)}`);
           }
         }
 
-        groupedTestCases[datasetId].prompts = Array.from(existingPromptsByContent.values());
-      } else {
-        const newPrompts = eval_.getPrompts().map((prompt) => ({
-          id: sha256(JSON.stringify({ raw: prompt.raw, evalId })),
-          prompt,
-          evalId,
-        }));
+        logger.debug(`Updated prompt count: ${dataset.prompts.length}`);
+      }
 
-        groupedTestCases[datasetId] = {
-          id: datasetId,
-          count: 1,
-          testCases,
-          recentEvalDate: new Date(createdAt),
-          recentEvalId: evalId,
-          prompts: newPrompts,
-        };
+      // Update recent eval info if this eval is newer
+      const dataset = groupedTestCases[datasetId];
+      const existingDate = dataset.recentEvalDate;
+      logger.debug(
+        `Comparing dates - Current: ${createdAt.toISOString()}, Existing: ${existingDate.toISOString()}`,
+      );
+
+      if (createdAt > existingDate) {
+        dataset.recentEvalId = eval_.id;
+        dataset.recentEvalDate = createdAt;
       }
     }
+  }
+
+  // Log final statistics
+  logger.debug(`Final dataset count: ${Object.keys(groupedTestCases).length}`);
+  for (const [datasetId, dataset] of Object.entries(groupedTestCases)) {
+    logger.debug(
+      `Dataset ${datasetId.slice(0, 6)}: ${dataset.prompts.length} prompts, ${dataset.count} evals`,
+    );
   }
 
   return Object.values(groupedTestCases);
@@ -756,10 +809,10 @@ export async function getEvalsWithPredicate(
       results: eval_.results,
       config: eval_.config,
     };
+
     if (predicate(resultWrapper)) {
-      const evalId = eval_.id;
       ret.push({
-        id: evalId,
+        id: eval_.id,
         date: new Date(eval_.createdAt),
         config: eval_.config,
         // @ts-ignore
