@@ -1,5 +1,5 @@
 // Override scoring function that focuses on grammar and fluency
-module.exports = (namedScores, context) => {
+const overrideScoring = (namedScores, context) => {
   console.log('Override scoring function (JavaScript):', namedScores);
 
   // Prioritize grammar and fluency over accuracy
@@ -14,4 +14,8 @@ module.exports = (namedScores, context) => {
     score: totalScore,
     reason: `Style-focused score: accuracy: ${accuracyScore}, fluency(1.5x): ${fluencyScore}, grammar(1.5x): ${grammarScore}`,
   };
+};
+
+module.exports = {
+  overrideScoring,
 };

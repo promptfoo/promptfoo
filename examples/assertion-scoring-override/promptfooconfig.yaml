@@ -10,14 +10,16 @@ defaultTest:
   assertScoringFunction: file://default_scoring.js
   assert:
     - type: llm-rubric
-      value: Rate the accuracy of the translation
+      value: Rate the accuracy of the translation of {{text}} from English to {{language}}
       metric: accuracy
     - type: llm-rubric
-      value: Rate the fluency of the translation
+      value: Rate the fluency of the translation of {{text}} from English to {{language}}
       metric: fluency
     - type: llm-rubric
-      value: Rate the grammar of the translation
+      value: Rate the grammar of the translation of {{text}} from English to {{language}}
       metric: grammar
+  options:
+    provider: openai:gpt-4o-mini
 
 tests:
   # Test using default scoring function
@@ -38,4 +40,4 @@ tests:
     vars:
       language: German
       text: I love learning new languages.
-    assertScoringFunction: file://override_scoring.js
+    assertScoringFunction: file://override_scoring.js:overrideScoring
