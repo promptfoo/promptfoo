@@ -35,22 +35,22 @@ describe('AssertionsResult', () => {
     assertionsResult = new AssertionsResult();
   });
 
-  it('can return a succeeding testResult', () => {
+  it('can return a succeeding testResult', async () => {
     assertionsResult.addResult({
       index: 0,
       result: succeedingResult,
     });
 
-    expect(assertionsResult.testResult()).toEqual(testResult);
+    await expect(assertionsResult.testResult()).resolves.toEqual(testResult);
   });
 
-  it('can return a failing testResult', () => {
+  it('can return a failing testResult', async () => {
     assertionsResult.addResult({
       index: 0,
       result: failingResult,
     });
 
-    expect(assertionsResult.testResult()).toEqual({
+    await expect(assertionsResult.testResult()).resolves.toEqual({
       ...testResult,
       pass: false,
       reason: failingResult.reason,
@@ -69,7 +69,7 @@ describe('AssertionsResult', () => {
     ).toThrow(new Error(failingResult.reason));
   });
 
-  it('handles named metrics', () => {
+  it('handles named metrics', async () => {
     const metric = 'metric-name';
 
     assertionsResult.addResult({
@@ -78,7 +78,7 @@ describe('AssertionsResult', () => {
       result: succeedingResult,
     });
 
-    expect(assertionsResult.testResult()).toEqual({
+    await expect(assertionsResult.testResult()).resolves.toEqual({
       ...testResult,
       namedScores: {
         [metric]: 1,
@@ -86,7 +86,7 @@ describe('AssertionsResult', () => {
     });
   });
 
-  it('handles result without tokensUsed', () => {
+  it('handles result without tokensUsed', async () => {
     const resultWithoutTokensUsed = {
       ...succeedingResult,
       tokensUsed: undefined,
@@ -97,14 +97,14 @@ describe('AssertionsResult', () => {
       result: resultWithoutTokensUsed,
     });
 
-    expect(assertionsResult.testResult()).toEqual({
+    await expect(assertionsResult.testResult()).resolves.toEqual({
       ...testResult,
       componentResults: [resultWithoutTokensUsed],
       tokensUsed: { total: 0, prompt: 0, completion: 0, cached: 0 },
     });
   });
 
-  it('respects succeeding threshold', () => {
+  it('respects succeeding threshold', async () => {
     const threshold = 0.5;
 
     assertionsResult = new AssertionsResult({ threshold });
@@ -114,13 +114,13 @@ describe('AssertionsResult', () => {
       result: succeedingResult,
     });
 
-    expect(assertionsResult.testResult()).toEqual({
+    await expect(assertionsResult.testResult()).resolves.toEqual({
       ...testResult,
       reason: 'Aggregate score 1.00 ≥ 0.5 threshold',
     });
   });
 
-  it('respects failing threshold', () => {
+  it('respects failing threshold', async () => {
     const threshold = 0.5;
     const failingResult = {
       ...succeedingResult,
@@ -134,7 +134,7 @@ describe('AssertionsResult', () => {
       result: failingResult,
     });
 
-    expect(assertionsResult.testResult()).toEqual({
+    await expect(assertionsResult.testResult()).resolves.toEqual({
       ...testResult,
       pass: false,
       reason: 'Aggregate score 0.40 < 0.5 threshold',
