@@ -136,6 +136,7 @@ Content-Type: application/json
         updateCustomTarget('method', 'POST');
         updateCustomTarget('headers', {});
         updateCustomTarget('body', '');
+        updateCustomTarget('useHttps', false);
       }
     },
     [updateCustomTarget, setBodyError, setUrlError],
@@ -351,6 +352,19 @@ ${exampleRequest}`;
             },
           }}
         >
+          <FormControlLabel
+            control={
+              <Switch
+                checked={selectedTarget.config.useHttps}
+                onChange={(e) => {
+                  const enabled = e.target.checked;
+                  updateCustomTarget('useHttps', enabled);
+                }}
+              />
+            }
+            label="Use HTTPS"
+            sx={{ mb: 2, display: 'block' }}
+          />
           <Editor
             value={selectedTarget.config.request || ''}
             onValueChange={handleRawRequestChange}
