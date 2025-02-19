@@ -166,10 +166,11 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     ret = dereferencedConfig;
   } else if (isJavascriptFile(configPath)) {
     const imported = await importModule(configPath);
-    try {
-      await UnifiedConfigSchema.parseAsync(imported);
-    } catch (error) {
-      logger.warn(`Invalid configuration file ${configPath}:\n${fromError(error).message}`);
+    const validationResult = UnifiedConfigSchema.safeParse(imported);
+    if (!validationResult.success) {
+      logger.warn(
+        `Invalid configuration file ${configPath}:\n${fromError(validationResult.error).message}`,
+      );
     }
     ret = imported as UnifiedConfig;
   } else {
