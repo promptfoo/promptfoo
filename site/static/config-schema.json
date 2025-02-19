@@ -563,6 +563,10 @@
                           ]
                         }
                       },
+                      "assertScoringFunction": {
+                        "type": "string",
+                        "pattern": "^file\\:\\/\\/"
+                      },
                       "options": {
                         "allOf": [
                           {
@@ -752,6 +756,9 @@
                         "assert": {
                           "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assert"
                         },
+                        "assertScoringFunction": {
+                          "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assertScoringFunction"
+                        },
                         "options": {
                           "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/options"
                         },
@@ -795,6 +802,9 @@
             },
             "assert": {
               "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assert"
+            },
+            "assertScoringFunction": {
+              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assertScoringFunction"
             },
             "options": {
               "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/options"

@@ -1,6 +1,5 @@
 import { getEnvBool } from '../envars';
-import type { AssertionSet, GradingResult } from '../types';
-import { loadFromJavaScriptFile } from './utils';
+import type { AssertionSet, GradingResult, ScoringFunction } from '../types';
 
 const DEFAULT_TOKENS_USED = {
   total: 0,
@@ -105,7 +104,7 @@ export class AssertionsResult {
     }
   }
 
-  async testResult(assertScoringFunction?: string): Promise<GradingResult> {
+  async testResult(scoringFunction?: ScoringFunction): Promise<GradingResult> {
     if (this.result) {
       return this.result;
     }
@@ -113,7 +112,6 @@ export class AssertionsResult {
     const score = this.totalWeight > 0 ? this.totalScore / this.totalWeight : 0;
 
     let pass = !this.failedReason;
-
     let reason = this.failedReason ? this.failedReason : 'All assertions passed';
 
     if (this.threshold) {
@@ -157,17 +155,23 @@ export class AssertionsResult {
       assertion: null,
     };
 
-    if (assertScoringFunction) {
-      const scoringFunctionResult: {
-        pass: boolean;
-        score: number;
-        reason: string;
-      } = await loadFromJavaScriptFile(assertScoringFunction.replace(/^file:\/\//, ''), 'func', [
-        this.namedScores,
-      ]);
-      this.result.pass = scoringFunctionResult.pass;
-      this.result.score = scoringFunctionResult.score;
-      this.result.reason = scoringFunctionResult.reason;
+    if (scoringFunction) {
+      try {
+        const scoringResult = await scoringFunction(this.namedScores, {
+          threshold: this.threshold,
+          parentAssertionSet: this._parentAssertionSet,
+          componentResults: flattenedComponentResults,
+          tokensUsed: this.tokensUsed,
+        });
+
+        this.result.pass = scoringResult.pass;
+        this.result.score = scoringResult.score;
+        this.result.reason = scoringResult.reason;
+      } catch (err) {
+        this.result.pass = false;
+        this.result.score = 0;
+        this.result.reason = `Scoring function error: ${(err as Error).message}`;
+      }
     }
 
     return this.result;

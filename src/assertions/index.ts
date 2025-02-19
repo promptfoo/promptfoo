@@ -26,6 +26,7 @@ import type {
   AssertionValueFunctionContext,
   BaseAssertionTypes,
   ProviderResponse,
+  ScoringFunction,
 } from '../types';
 import {
   type ApiProvider,
@@ -308,7 +309,7 @@ export async function runAssertions({
   providerResponse: ProviderResponse;
   test: AtomicTestCase;
   latencyMs?: number;
-  assertScoringFunction?: string;
+  assertScoringFunction?: ScoringFunction;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
