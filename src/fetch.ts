@@ -183,7 +183,7 @@ export async function fetchWithRetries(
 ): Promise<Response> {
   const maxRetries = Math.max(0, retries);
 
-  let lastError;
+  let lastErrorMessage: string | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
 
   for (let i = 0; i <= maxRetries; i++) {
@@ -225,8 +225,8 @@ export async function fetchWithRetries(
         const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
         await sleep(waitTime);
       }
-      lastError = error;
+      lastErrorMessage = errorMessage;
     }
   }
-  throw new Error(`Request failed after ${maxRetries} retries: ${(lastError as Error).message}`);
+  throw new Error(`Request failed after ${maxRetries} retries: ${lastErrorMessage}`);
 }
