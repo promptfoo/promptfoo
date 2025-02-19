@@ -76,28 +76,7 @@ const mockContext: AssertionValueFunctionContext = {
 describe('OpenAI assertions', () => {
   beforeEach(() => {
     jest.resetAllMocks();
-    // Mock path.resolve to maintain proper path resolution but be platform-independent
-    mockedPath.resolve.mockImplementation((...args) => {
-      // This is critical - we ensure path.resolve always returns a valid string for tests
-      if (!args || args.length === 0) return './test/fixtures/default.yaml';
-      // Join all path segments with forward slashes and ensure we never return empty string
-      const result = args.filter(Boolean).join('/').replace(/\/+/g, '/');
-      return result || './test/fixtures/default.yaml';
-    });
-
-    // Mock path.relative to never return undefined
-    mockedPath.relative.mockImplementation((from, to) => {
-      // Always return a valid path for test cases
-      return to || './test/fixtures/default.yaml';
-    });
-    // Ensure path.parse always returns valid object
-    mockedPath.parse.mockImplementation((p) => ({
-      root: '/',
-      dir: '/',
-      base: p || 'file',
-      ext: '.yaml',
-      name: 'file',
-    }));
+    mockedPath.resolve.mockImplementation((...args) => args[args.length - 1]);
     mockedFs.existsSync.mockReturnValue(true);
   });
 
