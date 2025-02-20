@@ -124,6 +124,7 @@ describe('RbacGrader', () => {
       testCase,
       mockProvider,
       undefined,
+      undefined,
     );
 
     expect(result).toEqual(
