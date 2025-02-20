@@ -9,7 +9,7 @@ import type {
 } from '../redteam/types';
 import type { EnvOverrides } from '../types/env';
 import { ProviderEnvOverridesSchema } from '../types/env';
-import { isJavascriptFile } from '../util/file';
+import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/file';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
 import { RedteamConfigSchema } from '../validators/redteam';
@@ -556,6 +556,23 @@ export const VarsSchema = z.record(
 
 export type Vars = z.infer<typeof VarsSchema>;
 
+export type ScoringFunction = (
+  namedScores: Record<string, number>,
+  context?: {
+    threshold?: number;
+    parentAssertionSet?: {
+      index: number;
+      assertionSet: AssertionSet;
+    };
+    componentResults?: GradingResult[];
+    tokensUsed?: {
+      total: number;
+      prompt: number;
+      completion: number;
+    };
+  },
+) => Promise<GradingResult> | GradingResult;
+
 // Each test case is graded pass/fail with a score.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.
 // HEADS UP: When you add a property here, you probably need to load it from `defaultTest` in evaluator.ts.
 export const TestCaseSchema = z.object({
@@ -573,6 +590,16 @@ export const TestCaseSchema = z.object({
 
   // Optional list of automatic checks to run on the LLM output
   assert: z.array(z.union([AssertionSetSchema, AssertionSchema])).optional(),
+
+  // Optional scoring function to run on the LLM output
+  assertScoringFunction: z
+    .union([
+      z
+        .string()
+        .regex(new RegExp(`^file://.*\\.(${JAVASCRIPT_EXTENSIONS.join('|')}|py)(?::[\\w.]+)?$`)),
+      z.custom<ScoringFunction>(),
+    ])
+    .optional(),
 
   // Additional configuration settings for the prompt
   options: z
