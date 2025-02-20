@@ -6,6 +6,7 @@ import type {
   ProviderResponse,
 } from '../../types';
 import type { EnvOverrides } from '../../types/env';
+import { normalizeApiUrl } from '../../util/url';
 import type { OpenAiSharedOptions } from './types';
 
 export class OpenAiGenericProvider implements ApiProvider {
@@ -51,16 +52,17 @@ export class OpenAiGenericProvider implements ApiProvider {
     const apiHost =
       this.config.apiHost || this.env?.OPENAI_API_HOST || getEnvString('OPENAI_API_HOST');
     if (apiHost) {
-      return `https://${apiHost}/v1`;
+      return normalizeApiUrl(`https://${apiHost}`, 'v1');
     }
-    return (
+    const baseUrl =
       this.config.apiBaseUrl ||
       this.env?.OPENAI_API_BASE_URL ||
       this.env?.OPENAI_BASE_URL ||
       getEnvString('OPENAI_API_BASE_URL') ||
       getEnvString('OPENAI_BASE_URL') ||
-      this.getApiUrlDefault()
-    );
+      this.getApiUrlDefault();
+
+    return normalizeApiUrl(baseUrl, 'v1');
   }
 
   getApiKey(): string | undefined {
