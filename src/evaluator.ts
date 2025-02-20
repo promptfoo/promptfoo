@@ -789,7 +789,7 @@ class Evaluator {
         }
 
         if (testSuite.derivedMetrics) {
-          const math = await import('mathjs'); // TODO: move this
+          const math = await import('mathjs');
           for (const metric of testSuite.derivedMetrics) {
             if (metrics.namedScores[metric.name] === undefined) {
               metrics.namedScores[metric.name] = 0;
