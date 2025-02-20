@@ -388,7 +388,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     const choices: { name: string; value: (string | object)[] }[] = [
       { name: `I'll choose later`, value: ['openai:gpt-4o-mini', 'openai:gpt-4o'] },
       {
-        name: '[OpenAI] GPT 4o, GPT 4o-mini, GPT-3.5, ...',
+        name: '[OpenAI] o1, o3, GPT 4o, GPT 4o-mini, GPT-3.5, ...',
         value:
           action === 'agent'
             ? [
@@ -461,7 +461,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         name: '[Cohere] Command R, Command R+, ...',
         value: ['cohere:command-r', 'cohere:command-r-plus'],
       },
-      { name: '[Google] Gemini Pro, Gemini Ultra, ...', value: ['vertex:gemini-pro'] },
+      { name: '[Google] Gemini 1.5 Pro, ...', value: ['vertex:gemini-1.5-pro'] },
       {
         name: '[Ollama] Llama 3, Mixtral, ...',
         value: ['ollama:chat:llama3', 'ollama:chat:mixtral:8x22b'],

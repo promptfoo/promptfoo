@@ -19,7 +19,7 @@ import { maybeEmitAzureOpenAiWarning } from './providers/azureUtil';
 import type RedteamPandamoniumProvider from './redteam/providers/pandamonium';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
-import type { EvalConversations, EvalRegisters, TokenUsage, Vars } from './types';
+import type { EvalConversations, EvalRegisters, ScoringFunction, TokenUsage, Vars } from './types';
 import {
   type ApiProvider,
   type Assertion,
@@ -34,6 +34,7 @@ import {
   type TestSuite,
 } from './types';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
+import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify } from './util/json';
 import { sleep } from './util/time';
@@ -248,6 +249,8 @@ export async function runEval({
 
     if (response.error) {
       ret.error = response.error;
+      ret.failureReason = ResultFailureReason.ERROR;
+      ret.success = false;
     } else if (response.output === null || response.output === undefined) {
       // NOTE: empty output often indicative of guardrails, so behavior differs for red teams.
       if (isRedteam) {
@@ -281,6 +284,7 @@ export async function runEval({
         providerResponse: processedResponse,
         test,
         latencyMs: response.cached ? undefined : latencyMs,
+        assertScoringFunction: test.assertScoringFunction as ScoringFunction,
       });
 
       if (!checkResult.pass) {
@@ -588,6 +592,7 @@ class Evaluator {
     const inputTransformDefault = testSuite?.defaultTest?.options?.transformVars;
     for (const testCase of tests) {
       testCase.vars = { ...testSuite.defaultTest?.vars, ...testCase?.vars };
+
       if (testCase.vars) {
         const varWithSpecialColsRemoved: Vars = {};
         const inputTransformForIndividualTest = testCase.options?.transformVars;
@@ -638,7 +643,18 @@ class Evaluator {
       testCase.options = { ...testSuite.defaultTest?.options, ...testCase.options };
       testCase.metadata = { ...testSuite.defaultTest?.metadata, ...testCase.metadata };
       testCase.provider = testCase.provider || testSuite.defaultTest?.provider;
+      testCase.assertScoringFunction =
+        testCase.assertScoringFunction || testSuite.defaultTest?.assertScoringFunction;
 
+      if (typeof testCase.assertScoringFunction === 'string') {
+        const { filePath: resolvedPath, functionName } = parseFileUrl(
+          testCase.assertScoringFunction,
+        );
+        testCase.assertScoringFunction = await loadFunction<ScoringFunction>({
+          filePath: resolvedPath,
+          functionName,
+        });
+      }
       const prependToPrompt =
         testCase.options?.prefix || testSuite.defaultTest?.options?.prefix || '';
       const appendToPrompt =

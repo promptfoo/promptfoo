@@ -26,6 +26,7 @@ import type {
   AssertionValueFunctionContext,
   BaseAssertionTypes,
   ProviderResponse,
+  ScoringFunction,
 } from '../types';
 import {
   type ApiProvider,
@@ -38,8 +39,8 @@ import { isJavascriptFile } from '../util/file';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { transform } from '../util/transform';
-import { AssertionsResult } from './AssertionsResult';
 import { handleAnswerRelevance } from './answerRelevance';
+import { AssertionsResult } from './assertionsResult';
 import { handleBleuScore } from './bleu';
 import { handleClassifier } from './classifier';
 import {
@@ -296,17 +297,19 @@ export async function runAssertion({
 }
 
 export async function runAssertions({
+  assertScoringFunction,
+  latencyMs,
   prompt,
   provider,
   providerResponse,
   test,
-  latencyMs,
 }: {
+  assertScoringFunction?: ScoringFunction;
+  latencyMs?: number;
   prompt?: string;
   provider?: ApiProvider;
   providerResponse: ProviderResponse;
   test: AtomicTestCase;
-  latencyMs?: number;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
@@ -374,8 +377,8 @@ export async function runAssertions({
     },
   );
 
-  subAssertResults.forEach((subAssertResult) => {
-    const result = subAssertResult.testResult();
+  await async.forEach(subAssertResults, async (subAssertResult) => {
+    const result = await subAssertResult.testResult();
     const {
       index,
       assertionSet: { metric, weight },
@@ -389,7 +392,7 @@ export async function runAssertions({
     });
   });
 
-  return mainAssertResult.testResult();
+  return mainAssertResult.testResult(assertScoringFunction);
 }
 
 export async function runCompareAssertion(

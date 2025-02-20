@@ -52,12 +52,58 @@ describe('renderPrompt', () => {
     expect(renderedPrompt).toBe('Test prompt value1');
   });
 
+  it('should render nested variables in non-JSON prompts', async () => {
+    const prompt = toPrompt('Test {{ outer[inner] }}');
+    const renderedPrompt = await renderPrompt(
+      prompt,
+      { outer: { key1: 'value1' }, inner: 'key1' },
+      {},
+    );
+    expect(renderedPrompt).toBe('Test value1');
+  });
+
+  it('should handle complex variable substitutions in non-JSON prompts', async () => {
+    const prompt = toPrompt('{{ var1[var2] }}');
+    const renderedPrompt = await renderPrompt(
+      prompt,
+      {
+        var1: { hello: 'world' },
+        var2: 'hello',
+      },
+      {},
+    );
+    expect(renderedPrompt).toBe('world');
+  });
+
   it('should render a JSON prompt', async () => {
     const prompt = toPrompt('[{"text": "Test prompt "}, {"text": "{{ var1 }}"}]');
     const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
     expect(renderedPrompt).toBe(
       JSON.stringify(JSON.parse('[{"text":"Test prompt "},{"text":"value1"}]'), null, 2),
     );
+  });
+
+  it('should render nested variables in JSON prompts', async () => {
+    const prompt = toPrompt('{"text": "{{ outer[inner] }}"}');
+    const renderedPrompt = await renderPrompt(
+      prompt,
+      { outer: { key1: 'value1' }, inner: 'key1' },
+      {},
+    );
+    expect(renderedPrompt).toBe(JSON.stringify({ text: 'value1' }, null, 2));
+  });
+
+  it('should handle complex variable substitutions in JSON prompts', async () => {
+    const prompt = toPrompt('{"message": "{{ var1[var2] }}"}');
+    const renderedPrompt = await renderPrompt(
+      prompt,
+      {
+        var1: { hello: 'world' },
+        var2: 'hello',
+      },
+      {},
+    );
+    expect(renderedPrompt).toBe(JSON.stringify({ message: 'world' }, null, 2));
   });
 
   it('should render a JSON prompt and escape the var string', async () => {

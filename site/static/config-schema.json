@@ -72,15 +72,6 @@
                             "AWS_BEDROCK_REGION": {
                               "type": "string"
                             },
-                            "AZURE_OPENAI_API_BASE_URL": {
-                              "type": "string"
-                            },
-                            "AZURE_OPENAI_API_HOST": {
-                              "type": "string"
-                            },
-                            "AZURE_OPENAI_API_KEY": {
-                              "type": "string"
-                            },
                             "AZURE_API_BASE_URL": {
                               "type": "string"
                             },
@@ -90,10 +81,28 @@
                             "AZURE_API_KEY": {
                               "type": "string"
                             },
+                            "AZURE_AUTHORITY_HOST": {
+                              "type": "string"
+                            },
+                            "AZURE_CLIENT_ID": {
+                              "type": "string"
+                            },
+                            "AZURE_CLIENT_SECRET": {
+                              "type": "string"
+                            },
                             "AZURE_DEPLOYMENT_NAME": {
                               "type": "string"
                             },
                             "AZURE_EMBEDDING_DEPLOYMENT_NAME": {
+                              "type": "string"
+                            },
+                            "AZURE_OPENAI_API_BASE_URL": {
+                              "type": "string"
+                            },
+                            "AZURE_OPENAI_API_HOST": {
+                              "type": "string"
+                            },
+                            "AZURE_OPENAI_API_KEY": {
                               "type": "string"
                             },
                             "AZURE_OPENAI_BASE_URL": {
@@ -105,16 +114,7 @@
                             "AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME": {
                               "type": "string"
                             },
-                            "AZURE_CLIENT_SECRET": {
-                              "type": "string"
-                            },
-                            "AZURE_CLIENT_ID": {
-                              "type": "string"
-                            },
                             "AZURE_TENANT_ID": {
-                              "type": "string"
-                            },
-                            "AZURE_AUTHORITY_HOST": {
                               "type": "string"
                             },
                             "AZURE_TOKEN_SCOPE": {
@@ -132,10 +132,16 @@
                             "CLOUDFLARE_API_KEY": {
                               "type": "string"
                             },
-                            "PROMPTFOO_REMOTE_GENERATION_URL": {
+                            "COHERE_API_KEY": {
                               "type": "string"
                             },
-                            "COHERE_API_KEY": {
+                            "COHERE_CLIENT_NAME": {
+                              "type": "string"
+                            },
+                            "DATABRICKS_TOKEN": {
+                              "type": "string"
+                            },
+                            "DATABRICKS_WORKSPACE_URL": {
                               "type": "string"
                             },
                             "FAL_KEY": {
@@ -150,6 +156,27 @@
                             "GROQ_API_KEY": {
                               "type": "string"
                             },
+                            "HELICONE_API_KEY": {
+                              "type": "string"
+                            },
+                            "HF_API_TOKEN": {
+                              "type": "string"
+                            },
+                            "HF_TOKEN": {
+                              "type": "string"
+                            },
+                            "LANGFUSE_HOST": {
+                              "type": "string"
+                            },
+                            "LANGFUSE_PUBLIC_KEY": {
+                              "type": "string"
+                            },
+                            "LANGFUSE_SECRET_KEY": {
+                              "type": "string"
+                            },
+                            "LLAMA_BASE_URL": {
+                              "type": "string"
+                            },
                             "LOCALAI_BASE_URL": {
                               "type": "string"
                             },
@@ -160,6 +187,12 @@
                               "type": "string"
                             },
                             "MISTRAL_API_KEY": {
+                              "type": "string"
+                            },
+                            "OLLAMA_API_KEY": {
+                              "type": "string"
+                            },
+                            "OLLAMA_BASE_URL": {
                               "type": "string"
                             },
                             "OPENAI_API_BASE_URL": {
@@ -183,6 +216,15 @@
                             "PALM_API_KEY": {
                               "type": "string"
                             },
+                            "PORTKEY_API_KEY": {
+                              "type": "string"
+                            },
+                            "PROMPTFOO_CA_CERT_PATH": {
+                              "type": "string"
+                            },
+                            "PROMPTFOO_INSECURE_SSL": {
+                              "type": "string"
+                            },
                             "REPLICATE_API_KEY": {
                               "type": "string"
                             },
@@ -195,6 +237,9 @@
                             "VERTEX_API_KEY": {
                               "type": "string"
                             },
+                            "VERTEX_API_VERSION": {
+                              "type": "string"
+                            },
                             "VERTEX_PROJECT_ID": {
                               "type": "string"
                             },
@@ -204,22 +249,22 @@
                             "VERTEX_REGION": {
                               "type": "string"
                             },
+                            "VOYAGE_API_BASE_URL": {
+                              "type": "string"
+                            },
+                            "VOYAGE_API_KEY": {
+                              "type": "string"
+                            },
                             "WATSONX_AI_APIKEY": {
-                              "type": "string"
-                            },
-                            "WATSONX_AI_PROJECT_ID": {
-                              "type": "string"
-                            },
-                            "WATSONX_AI_BEARER_TOKEN": {
                               "type": "string"
                             },
                             "WATSONX_AI_AUTH_TYPE": {
                               "type": "string"
                             },
-                            "PROMPTFOO_CA_CERT_PATH": {
+                            "WATSONX_AI_BEARER_TOKEN": {
                               "type": "string"
                             },
-                            "PROMPTFOO_INSECURE_SSL": {
+                            "WATSONX_AI_PROJECT_ID": {
                               "type": "string"
                             }
                           },
@@ -518,6 +563,15 @@
                           ]
                         }
                       },
+                      "assertScoringFunction": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^file:\\/\\/.*\\.(js|cjs|mjs|ts|cts|mts|py)(?::[\\w.]+)?$"
+                          },
+                          {}
+                        ]
+                      },
                       "options": {
                         "allOf": [
                           {
@@ -707,6 +761,9 @@
                         "assert": {
                           "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assert"
                         },
+                        "assertScoringFunction": {
+                          "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assertScoringFunction"
+                        },
                         "options": {
                           "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/options"
                         },
@@ -750,6 +807,9 @@
             },
             "assert": {
               "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assert"
+            },
+            "assertScoringFunction": {
+              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assertScoringFunction"
             },
             "options": {
               "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/options"
@@ -802,7 +862,17 @@
           }
         },
         "env": {
-          "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/1/additionalProperties/properties/env"
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/1/additionalProperties/properties/env"
+            },
+            {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          ]
         },
         "derivedMetrics": {
           "type": "array",
@@ -1000,6 +1070,7 @@
                           "prompt-extraction",
                           "rag-document-exfiltration",
                           "rbac",
+                          "reasoning-dos",
                           "religion",
                           "shell-injection",
                           "sql-injection",
@@ -1137,6 +1208,7 @@
                               "prompt-extraction",
                               "rag-document-exfiltration",
                               "rbac",
+                              "reasoning-dos",
                               "religion",
                               "shell-injection",
                               "sql-injection",

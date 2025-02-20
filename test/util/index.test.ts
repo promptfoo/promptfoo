@@ -434,6 +434,16 @@ describe('util', () => {
       });
     });
 
+    it('should parse a Go file path with function name', () => {
+      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      expect(parsePathOrGlob('/base', 'script.go:CallApi')).toEqual({
+        extension: '.go',
+        functionName: 'CallApi',
+        isPathPattern: false,
+        filePath: path.join('/base', 'script.go'),
+      });
+    });
+
     it('should parse a directory path', () => {
       jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => true } as fs.Stats);
       expect(parsePathOrGlob('/base', 'dir')).toEqual({
@@ -463,6 +473,12 @@ describe('util', () => {
       });
       expect(() => parsePathOrGlob('/base', 'nonexistent.js')).toThrow('File does not exist');
       delete process.env.PROMPTFOO_STRICT_FILES;
+    });
+
+    it('should properly test file existence when function name in the path', () => {
+      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      parsePathOrGlob('/base', 'script.py:myFunction');
+      expect(fs.statSync).toHaveBeenCalledWith(path.join('/base', 'script.py'));
     });
 
     it('should return empty extension for files without extension', () => {
@@ -599,21 +615,41 @@ describe('util', () => {
       });
     });
 
-    describe('Grader', () => {
-      it('should have an id and callApi attributes', async () => {
-        const Grader = new TestGrader();
-        expect(Grader.id()).toBe('TestGradingProvider');
-        await expect(Grader.callApi()).resolves.toEqual({
-          output: JSON.stringify({
-            pass: true,
-            reason: 'Test grading output',
-          }),
-          tokenUsage: {
-            completion: 5,
-            prompt: 5,
-            total: 10,
-          },
-        });
+    it('should handle file:// prefix with Go function', () => {
+      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      expect(parsePathOrGlob('/base', 'file://script.go:CallApi')).toEqual({
+        extension: '.go',
+        functionName: 'CallApi',
+        isPathPattern: false,
+        filePath: path.join('/base', 'script.go'),
+      });
+    });
+
+    it('should handle file:// prefix with absolute path and Go function', () => {
+      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      expect(parsePathOrGlob('/base', 'file:///absolute/path/script.go:CallApi')).toEqual({
+        extension: '.go',
+        functionName: 'CallApi',
+        isPathPattern: false,
+        filePath: expect.stringMatching(/^[/\\]absolute[/\\]path[/\\]script\.go$/),
+      });
+    });
+  });
+
+  describe('Grader', () => {
+    it('should have an id and callApi attributes', async () => {
+      const Grader = new TestGrader();
+      expect(Grader.id()).toBe('TestGradingProvider');
+      await expect(Grader.callApi()).resolves.toEqual({
+        output: JSON.stringify({
+          pass: true,
+          reason: 'Test grading output',
+        }),
+        tokenUsage: {
+          completion: 5,
+          prompt: 5,
+          total: 10,
+        },
       });
     });
   });

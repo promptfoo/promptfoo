@@ -1136,13 +1136,13 @@ describe('loadApiProvider', () => {
   });
 
   it('throws an error for unidentified providers', async () => {
-    const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
-      throw new Error('process.exit called');
-    });
+    const mockError = jest.spyOn(logger, 'error');
     const unknownProviderPath = 'unknown:provider';
 
-    await expect(loadApiProvider(unknownProviderPath)).rejects.toThrow('process.exit called');
-    expect(logger.error).toHaveBeenCalledWith(
+    await expect(loadApiProvider(unknownProviderPath)).rejects.toThrow(
+      `Could not identify provider: ${chalk.bold(unknownProviderPath)}`,
+    );
+    expect(mockError).toHaveBeenCalledWith(
       dedent`
         Could not identify provider: ${chalk.bold(unknownProviderPath)}.
 
@@ -1152,8 +1152,7 @@ describe('loadApiProvider', () => {
           For more information on supported providers, visit: `)} ${chalk.cyan('https://promptfoo.dev/docs/providers/')}
       `,
     );
-    expect(mockExit).toHaveBeenCalledWith(1);
-    mockExit.mockRestore();
+    mockError.mockRestore();
   });
 
   it('renders label using Nunjucks', async () => {

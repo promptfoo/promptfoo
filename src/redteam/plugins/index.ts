@@ -222,6 +222,7 @@ const remotePlugins: PluginFactory[] = [
   'harmful:specialized-advice',
   'hijacking',
   'rag-document-exfiltration',
+  'reasoning-dos',
   'religion',
   'ssrf',
   'system-prompt-override',

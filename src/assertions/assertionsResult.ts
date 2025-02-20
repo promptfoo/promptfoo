@@ -1,7 +1,8 @@
 import { getEnvBool } from '../envars';
-import type { AssertionSet, GradingResult } from '../types';
+import type { AssertionSet, GradingResult, ScoringFunction } from '../types';
+import { isGradingResult } from '../types';
 
-const DEFAULT_TOKENS_USED = {
+export const DEFAULT_TOKENS_USED = {
   total: 0,
   prompt: 0,
   completion: 0,
@@ -104,7 +105,7 @@ export class AssertionsResult {
     }
   }
 
-  testResult(): GradingResult {
+  async testResult(scoringFunction?: ScoringFunction): Promise<GradingResult> {
     if (this.result) {
       return this.result;
     }
@@ -112,7 +113,6 @@ export class AssertionsResult {
     const score = this.totalWeight > 0 ? this.totalScore / this.totalWeight : 0;
 
     let pass = !this.failedReason;
-
     let reason = this.failedReason ? this.failedReason : 'All assertions passed';
 
     if (this.threshold) {
@@ -155,6 +155,28 @@ export class AssertionsResult {
       componentResults: flattenedComponentResults,
       assertion: null,
     };
+
+    if (scoringFunction) {
+      try {
+        const scoringResult = await scoringFunction(this.namedScores, {
+          threshold: this.threshold,
+          parentAssertionSet: this._parentAssertionSet,
+          componentResults: flattenedComponentResults,
+          tokensUsed: this.tokensUsed,
+        });
+        if (!isGradingResult(scoringResult)) {
+          throw new Error('assertion scoring function must return a GradingResult');
+        }
+        this.result = {
+          ...this.result,
+          ...scoringResult,
+        };
+      } catch (err) {
+        this.result.pass = false;
+        this.result.score = 0;
+        this.result.reason = `Scoring function error: ${(err as Error).message}`;
+      }
+    }
 
     return this.result;
   }

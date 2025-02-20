@@ -165,21 +165,72 @@ describe('loadApiProvider', () => {
   });
 
   it('should handle unidentified provider', async () => {
-    const _mockProvider = {
-      id: () => 'unknown',
-      callApi: async () => ({ output: '' }),
-    };
-    jest.mocked(process.exit).mockImplementation(() => {
-      throw new Error('Process exit');
-    });
-
-    await expect(loadApiProvider('unknown:provider')).rejects.toThrow('Process exit');
-    expect(process.exit).toHaveBeenCalledWith(1);
+    await expect(loadApiProvider('unknown:provider')).rejects.toThrow(
+      'Could not identify provider',
+    );
   });
 
   it('should load JFrog ML provider', async () => {
     const provider = await loadApiProvider('jfrog:test-model');
     expect(provider).toBeDefined();
+  });
+
+  it('should handle invalid file path for yaml/json config', async () => {
+    jest.mocked(fs.readFileSync).mockImplementation(() => {
+      throw new Error('File not found');
+    });
+    await expect(loadApiProvider('file://invalid.yaml')).rejects.toThrow('File not found');
+  });
+
+  it('should handle invalid yaml content', async () => {
+    jest.mocked(fs.readFileSync).mockReturnValue('invalid: yaml: content:');
+    jest.mocked(yaml.load).mockReturnValue(null);
+    await expect(loadApiProvider('file://invalid.yaml')).rejects.toThrow('Provider config');
+  });
+
+  it('should handle yaml config without id', async () => {
+    jest.mocked(fs.readFileSync).mockReturnValue('config:\n  key: value');
+    jest.mocked(yaml.load).mockReturnValue({ config: { key: 'value' } });
+    await expect(loadApiProvider('file://invalid.yaml')).rejects.toThrow('must have an id');
+  });
+
+  it('should handle provider with custom base path', async () => {
+    const mockProvider = {
+      id: () => 'python:script.py',
+      config: {
+        basePath: '/custom/path',
+      },
+      callApi: async (input: string) => ({ output: input }),
+    };
+    jest.mocked(PythonProvider).mockImplementation(() => mockProvider as any);
+
+    const provider = await loadApiProvider('python:script.py', {
+      basePath: '/custom/path',
+      options: {
+        config: {},
+      },
+    });
+    expect(provider.config.basePath).toBe('/custom/path');
+  });
+
+  it('should handle provider with delay', async () => {
+    const provider = await loadApiProvider('echo', {
+      options: {
+        delay: 1000,
+      },
+    });
+    expect(provider.delay).toBe(1000);
+  });
+
+  it('should handle provider with custom label template', async () => {
+    process.env.CUSTOM_LABEL = 'my-label';
+    const provider = await loadApiProvider('echo', {
+      options: {
+        label: '{{ env.CUSTOM_LABEL }}',
+      },
+    });
+    expect(provider.label).toBe('my-label');
+    delete process.env.CUSTOM_LABEL;
   });
 });
 
@@ -245,5 +296,37 @@ describe('loadApiProviders', () => {
 
   it('should throw error for invalid providers list', async () => {
     await expect(loadApiProviders({} as any)).rejects.toThrow('Invalid providers list');
+  });
+
+  it('should handle loadApiProviders with empty array', async () => {
+    const providers = await loadApiProviders([]);
+    expect(providers).toHaveLength(0);
+  });
+
+  it('should handle loadApiProviders with mixed provider types', async () => {
+    const customFunction = async (prompt: string) => ({ output: prompt });
+    const providers = await loadApiProviders([
+      'echo',
+      customFunction,
+      { id: 'openai:chat', config: {} },
+      { 'openai:completion': { config: {} } },
+    ]);
+    expect(providers).toHaveLength(4);
+  });
+
+  it('should handle provider with null config', async () => {
+    const provider = await loadApiProvider('echo', {
+      options: {
+        config: null,
+      },
+    });
+    expect(provider).toBeDefined();
+  });
+
+  it('should handle provider with undefined options', async () => {
+    const provider = await loadApiProvider('echo', {
+      options: undefined,
+    });
+    expect(provider).toBeDefined();
   });
 });
