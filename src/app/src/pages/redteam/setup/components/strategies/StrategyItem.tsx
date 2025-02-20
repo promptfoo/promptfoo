@@ -126,3 +126,6 @@ export function StrategyItem({ strategy, isSelected, onToggle, onConfigClick }: 
     </Paper>
   );
 }
+
+
+export { CONFIGURABLE_STRATEGIES };
