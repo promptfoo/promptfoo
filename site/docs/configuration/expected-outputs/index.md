@@ -453,41 +453,85 @@ See [named metrics example](https://github.com/promptfoo/promptfoo/tree/main/exa
 
 ## Creating derived metrics
 
-Derived metrics, also known as composite or calculated metrics, are computed at runtime based on other metrics. They are aggregated and displayed as named metrics (see above).
-
-Derived metrics are calculated after all individual test evaluations are completed. They can be defined using mathematical expressions or custom functions that aggregate or transform the named scores collected during the tests.
+Derived metrics are computed at runtime based on other metrics and displayed as named metrics (see above). They are calculated after all individual test evaluations are completed using either mathematical expressions (powered by [mathjs](https://mathjs.org/)) or custom functions.
 
 ### Configuring derived metrics
 
-To configure derived metrics in your test suite, you add a `derivedMetrics` array to the `TestSuite` object. Each entry in this array is an object that specifies the name of the metric and the formula or function used to calculate it.
+Add a `derivedMetrics` array to your config. Each entry needs:
 
-#### Usage
+- **name**: Identifier for the metric in output results
+- **value**: Either:
+  - A mathematical expression string (using [mathjs syntax](https://mathjs.org/docs/expressions/syntax.html))
+  - A JavaScript function that returns a numeric value
 
-Each derived metric has the following properties:
+#### Examples
 
-- **name**: The name of the metric. This is used as the identifier in the output results.
-- **value**: The calculation method for the metric. This can be a string representing a mathematical expression or a function that takes the current scores and the evaluation context as arguments and returns a numeric value.
-
-#### Example
-
-Here's an example of how to define derived metrics in a test suite configuration:
+Using mathematical expressions:
 
 ```yaml
 derivedMetrics:
-  - name: 'EfficiencyAdjustedPerformance'
-    value: '(PerformanceScore / InferenceTime) * EfficiencyFactor'
-  # - ...
+  # Average score across tests
+  - name: 'AverageScore'
+    value: 'sum(scores) / length(scores)'
+
+  # Weighted scoring with multiple components
+  - name: 'WeightedScore'
+    value: '(accuracy * 0.6 + relevance * 0.3 + speed * 0.1)'
+
+  # Composite metric using previous calculations
+  - name: 'EfficiencyScore'
+    value: 'WeightedScore / (cost + 1)' # Add 1 to avoid division by zero
 ```
 
-In this example, `EfficiencyAdjustedPerformance` is calculated using a simple mathematical expression that uses existing named scores.
+Using a JavaScript function for complex logic:
+
+```yaml
+derivedMetrics:
+  - name: 'CustomScore'
+    value: (namedScores, context) => {
+      // Access to all named metrics and test context
+      const { accuracy = 0, speed = 0, cost = 1 } = namedScores;
+      const { threshold, test } = context;
+
+      // Can access test-specific data
+      if (test.vars.difficulty === 'hard') {
+        return accuracy * 2;
+      }
+
+      return accuracy > threshold ? speed / cost : 0;
+    }
+```
+
+#### Available Functions and Data
+
+In mathematical expressions:
+
+- All [mathjs functions](https://mathjs.org/docs/reference/functions.html) (sum, mean, std, etc.)
+- Any named metrics from your assertions
+- Previously defined derived metrics
+
+In JavaScript functions:
+
+- **namedScores**: Object containing all metric values
+- **context**: Object containing:
+  - `threshold`: Test case threshold if set
+  - `test`: Current test case data
+  - `vars`: Test variables
+  - `tokensUsed`: Token usage information
 
 :::info
 Good to know:
 
-- Derived metrics are calculated in the order they are provided. You can reference previous derived metrics.
-- In order to reference a basic metric, you must name it (see named scores above).
-- In order to be used in a mathematical expression, named scores must not have any spaces or special characters in them.
+- Metrics are calculated in the order defined
+- Later metrics can reference earlier ones
+- Basic metrics must be named using the `metric` property in assertions
+- Metric names in expressions cannot contain spaces or special characters
+- Mathjs expressions run in a safe sandbox environment
+- Missing metrics default to 0 in expressions
+- Use default values in JavaScript functions to handle missing metrics
   :::
+
+See the [F-score example](https://github.com/promptfoo/promptfoo/tree/main/examples/f-score) for a complete implementation using derived metrics.
 
 ## Running assertions directly on outputs
 
