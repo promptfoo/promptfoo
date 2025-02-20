@@ -453,7 +453,7 @@ Vars are substituted by [Nunjucks](https://mozilla.github.io/nunjucks/) templati
 
 Example of a tests file (`tests.csv`):
 
-```csv
+```csv title="tests.csv"
 language,input
 German,"Hello, world!"
 Spanish,Where is the library?
@@ -476,6 +476,36 @@ You can load your tests from [Google Sheets](/docs/configuration/guide#loading-t
 #### CSV Files with JSON Fields
 
 CSV files can include JSON fields for structured data. Simple JSON can be unquoted (`{"answer":""}`), while JSON with commas should be escaped (`"{""key"":""value""}"`). By default, promptfoo will try to parse JSON fields in both formats. Set `PROMPTFOO_CSV_STRICT=true` to enforce RFC 4180 compliance. Use the `load` filter to parse JSON in prompts: `{{ (json_field | load).property }}`.
+
+#### Passing Configuration to Custom Assertions
+
+Custom assertions (Python, JavaScript, etc.) can receive configuration data through additional CSV columns. These columns become available in the assertion's context under `vars`.
+
+Example CSV with configuration data:
+
+```csv title="tests.csv"
+question,__expected,groundTruthValue,configKey
+What is the difference between supervised and unsupervised learning?,"python: file://custom_assertion.py","reference answer","some value"
+```
+
+The custom assertion can access these values through the context:
+
+```python title="custom_assertion.py"
+def custom_assertion(output, context):
+    # Access configuration from CSV columns
+    vars = context.get('vars', {})
+    ground_truth = vars.get('groundTruthValue')
+    config_value = vars.get('configKey')
+    # ... rest of assertion logic
+```
+
+```javascript title="custom_assertion.js"
+module.exports = (output, { vars }) => {
+  const groundTruth = vars.groundTruthValue;
+  const configValue = vars.configKey;
+  // ... rest of assertion logic
+};
+```
 
 ## Output File
 
