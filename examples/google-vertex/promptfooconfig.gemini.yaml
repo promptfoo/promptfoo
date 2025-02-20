@@ -1,0 +1,210 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: 'Evaluation of Gemini 2.0 models with function calling capabilities'
+
+prompts:
+  - label: 'Direct Question'
+    raw: |
+      What's the weather like in {{city}} and what are some good restaurants there?
+
+  - label: 'Detailed Query'
+    raw: |
+      I'm planning to visit {{city}}. Could you help me understand:
+      1. The current weather conditions
+      2. Some recommended places to eat, focusing on {{cuisine}} restaurants
+
+providers:
+  - id: vertex:gemini-2.0-pro-exp-02-05
+    config:
+      generationConfig:
+        temperature: 0.7
+        maxOutputTokens: 1024
+      toolConfig:
+        functionCallingConfig:
+          mode: 'AUTO'
+      tools:
+        - functionDeclarations:
+            - name: 'get_weather'
+              description: 'Get weather information for a location'
+              parameters:
+                type: 'OBJECT'
+                properties:
+                  location:
+                    type: 'STRING'
+                    description: 'City name'
+                required: ['location']
+            - name: 'search_places'
+              description: 'Search for places of interest'
+              parameters:
+                type: 'OBJECT'
+                properties:
+                  query:
+                    type: 'STRING'
+                    description: 'Search query'
+                  type:
+                    type: 'STRING'
+                    description: 'Type of place'
+                    enum: ['restaurant', 'hotel', 'attraction']
+                required: ['query']
+
+  - id: vertex:gemini-2.0-flash-001
+    config:
+      generationConfig:
+        temperature: 0
+        maxOutputTokens: 2048
+      toolConfig:
+        functionCallingConfig:
+          mode: 'AUTO'
+      tools:
+        - functionDeclarations:
+            - name: 'get_weather'
+              description: 'Get weather information for a location'
+              parameters:
+                type: 'OBJECT'
+                properties:
+                  location:
+                    type: 'STRING'
+                    description: 'City name'
+                required: ['location']
+            - name: 'search_places'
+              description: 'Search for places of interest'
+              parameters:
+                type: 'OBJECT'
+                properties:
+                  query:
+                    type: 'STRING'
+                    description: 'Search query'
+                  type:
+                    type: 'STRING'
+                    description: 'Type of place'
+                    enum: ['restaurant', 'hotel', 'attraction']
+                required: ['query']
+
+tests:
+  - description: Test with major city
+    vars:
+      city: 'San Francisco'
+      cuisine: 'Italian'
+    assert:
+      - type: contains-json
+        value: |
+          {
+            "type": "object",
+            "required": ["functionCall"],
+            "properties": {
+              "functionCall": {
+                "type": "object",
+                "required": ["name", "args"],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "enum": ["get_weather"]
+                  },
+                  "args": {
+                    "type": "object",
+                    "required": ["location"],
+                    "properties": {
+                      "location": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+      - type: contains-json
+        value: |
+          {
+            "type": "object",
+            "required": ["functionCall"],
+            "properties": {
+              "functionCall": {
+                "type": "object",
+                "required": ["name", "args"],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "enum": ["search_places"]
+                  },
+                  "args": {
+                    "type": "object",
+                    "required": ["query", "type"],
+                    "properties": {
+                      "query": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string",
+                        "enum": ["restaurant"]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+  - description: Test with smaller city
+    vars:
+      city: 'Boulder, Colorado'
+      cuisine: 'Mexican'
+    assert:
+      - type: contains-json
+        value: |
+          {
+            "type": "object",
+            "required": ["functionCall"],
+            "properties": {
+              "functionCall": {
+                "type": "object",
+                "required": ["name", "args"],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "enum": ["get_weather"]
+                  },
+                  "args": {
+                    "type": "object",
+                    "required": ["location"],
+                    "properties": {
+                      "location": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+      - type: contains-json
+        value: |
+          {
+            "type": "object",
+            "required": ["functionCall"],
+            "properties": {
+              "functionCall": {
+                "type": "object",
+                "required": ["name", "args"],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "enum": ["search_places"]
+                  },
+                  "args": {
+                    "type": "object",
+                    "required": ["query", "type"],
+                    "properties": {
+                      "query": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string",
+                        "enum": ["restaurant"]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }

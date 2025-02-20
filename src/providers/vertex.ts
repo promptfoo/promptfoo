@@ -12,10 +12,12 @@ import type {
   TokenUsage,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { renderVarsInObject } from '../util';
-import { maybeLoadFromExternalFile } from '../util';
+import { renderVarsInObject, maybeLoadFromExternalFile } from '../util';
 import { getNunjucksEngine } from '../util/templates';
+import { parseMessages } from './anthropic';
+import { formatClaudeMessages, formatClaudeResponse, type ClaudeResponse } from './claudeUtil';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+import { calculateCost } from './shared';
 import type { GeminiErrorResponse, GeminiFormat, Palm2ApiResponse } from './vertexUtil';
 import {
   getGoogleClient,
@@ -24,32 +26,13 @@ import {
   type GeminiResponseData,
 } from './vertexUtil';
 
-interface Blob {
-  mimeType: string;
-  data: string; // base64-encoded string
-}
-
-interface FunctionCall {
-  name: string;
-  args?: { [key: string]: any };
-}
-
-interface FunctionResponse {
-  name: string;
-  response: { [key: string]: any };
-}
-
-interface FileData {
-  mimeType?: string;
-  fileUri: string;
-}
-
+// Simplified interfaces
 interface Part {
   text?: string;
-  inlineData?: Blob;
-  functionCall?: FunctionCall;
-  functionResponse?: FunctionResponse;
-  fileData?: FileData;
+  inlineData?: { mimeType: string; data: string };
+  functionCall?: { name: string; args?: Record<string, any> };
+  functionResponse?: { name: string; response: Record<string, any> };
+  fileData?: { mimeType?: string; fileUri: string };
 }
 
 interface Content {
@@ -65,84 +48,91 @@ interface Schema {
   enum?: string[];
   maxItems?: string;
   minItems?: string;
-  properties?: { [key: string]: Schema };
+  properties?: Record<string, Schema>;
   required?: string[];
   propertyOrdering?: string[];
   items?: Schema;
 }
 
-interface FunctionDeclaration {
-  name: string;
-  description: string;
-  parameters?: Schema;
-  response?: Schema;
-}
-
-interface GoogleSearchRetrieval {
-  dynamicRetrievalConfig: {
-    mode?: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
-    dynamicThreshold?: number;
-  };
-}
-
 interface Tool {
-  functionDeclarations?: FunctionDeclaration[];
-  googleSearchRetrieval?: GoogleSearchRetrieval;
+  functionDeclarations?: Array<{
+    name: string;
+    description: string;
+    parameters?: Schema;
+    response?: Schema;
+  }>;
+  googleSearchRetrieval?: {
+    dynamicRetrievalConfig: {
+      mode?: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
+      dynamicThreshold?: number;
+    };
+  };
   codeExecution?: object;
   googleSearch?: object;
 }
 
-interface VertexCompletionOptions {
+interface VertexConfig {
   apiKey?: string;
   apiHost?: string;
   projectId?: string;
   region?: string;
   publisher?: string;
   apiVersion?: string;
-
-  // https://ai.google.dev/api/rest/v1beta/models/streamGenerateContent#request-body
+  cost?: { input?: number; output?: number };
   context?: string;
-  examples?: { input: string; output: string }[];
-  safetySettings?: { category: string; probability: string }[];
+  examples?: Array<{ input: string; output: string }>;
+  safetySettings?: Array<{ category: string; probability: string }>;
   stopSequence?: string[];
   temperature?: number;
   maxOutputTokens?: number;
   topP?: number;
   topK?: number;
-
   generationConfig?: {
     context?: string;
-    examples?: { input: string; output: string }[];
+    examples?: Array<{ input: string; output: string }>;
     stopSequence?: string[];
     temperature?: number;
     maxOutputTokens?: number;
     topP?: number;
     topK?: number;
   };
-
   toolConfig?: {
     functionCallingConfig?: {
       mode?: 'MODE_UNSPECIFIED' | 'AUTO' | 'ANY' | 'NONE';
       allowedFunctionNames?: string[];
     };
   };
-
   tools?: Tool[];
-
   systemInstruction?: Content;
 }
 
 const clone = Clone();
 
-class VertexGenericProvider implements ApiProvider {
-  modelName: string;
+// Consolidated model costs
+const CLAUDE_MODEL_COSTS = {
+  'claude-3-haiku': { input: 0.00025 / 1000, output: 0.00125 / 1000 },
+  'claude-3-opus': { input: 0.015 / 1000, output: 0.075 / 1000 },
+  'claude-3-5-haiku': { input: 1 / 1e6, output: 5 / 1e6 },
+  'claude-3-sonnet': { input: 3 / 1e6, output: 15 / 1e6 },
+  'claude-3-5-sonnet': { input: 3 / 1e6, output: 15 / 1e6 },
+};
 
-  config: VertexCompletionOptions;
-  env?: EnvOverrides;
+const VERTEX_CLAUDE_MODELS = [
+  ...Object.entries(CLAUDE_MODEL_COSTS).flatMap(([baseModel, costs]) => [
+    { id: `${baseModel}@20240307`, cost: costs },
+    { id: `${baseModel}-latest`, cost: costs },
+  ]),
+];
+
+// Base provider with common functionality
+class VertexGenericProvider implements ApiProvider {
+  protected modelName: string;
+  public config: VertexConfig;
+  protected env?: EnvOverrides;
 
   constructor(
     modelName: string,
-    options: { config?: VertexCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: { config?: VertexConfig; id?: string; env?: EnvOverrides } = {},
   ) {
     const { config, id, env } = options;
     this.env = env;
@@ -159,26 +149,26 @@ class VertexGenericProvider implements ApiProvider {
     return `[Google Vertex Provider ${this.modelName}]`;
   }
 
-  getApiHost(): string | undefined {
+  protected getConfig(key: keyof EnvOverrides, defaultValue?: string): string {
     return (
-      this.config.apiHost ||
-      this.env?.VERTEX_API_HOST ||
-      getEnvString('VERTEX_API_HOST') ||
-      `${this.getRegion()}-aiplatform.googleapis.com`
+      (this.config[key as keyof VertexConfig] as string) ||
+      this.env?.[key] ||
+      getEnvString(key) ||
+      defaultValue ||
+      ''
     );
   }
 
-  async getProjectId() {
-    return (
-      (await getGoogleClient()).projectId ||
-      this.config.projectId ||
-      this.env?.VERTEX_PROJECT_ID ||
-      getEnvString('VERTEX_PROJECT_ID')
-    );
+  getApiHost(): string {
+    return this.getConfig('VERTEX_API_HOST') || `${this.getRegion()}-aiplatform.googleapis.com`;
+  }
+
+  async getProjectId(): Promise<string> {
+    return (await getGoogleClient()).projectId || this.getConfig('VERTEX_PROJECT_ID');
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || this.env?.VERTEX_API_KEY || getEnvString('VERTEX_API_KEY');
+    return this.getConfig('VERTEX_API_KEY');
   }
 
   getRegion(): string {
@@ -190,41 +180,58 @@ class VertexGenericProvider implements ApiProvider {
     );
   }
 
-  getPublisher(): string | undefined {
-    return (
-      this.config.publisher ||
-      this.env?.VERTEX_PUBLISHER ||
-      getEnvString('VERTEX_PUBLISHER') ||
-      'google'
-    );
+  getPublisher(): string {
+    return this.getConfig('VERTEX_PUBLISHER', 'google');
   }
 
   getApiVersion(): string {
-    return (
-      this.config.apiVersion ||
-      this.env?.VERTEX_API_VERSION ||
-      getEnvString('VERTEX_API_VERSION') ||
-      'v1'
-    );
+    return this.getConfig('VERTEX_API_VERSION', 'v1');
   }
 
-  // @ts-ignore: Prompt is not used in this implementation
   async callApi(prompt: string): Promise<ProviderResponse> {
     throw new Error('Not implemented');
+  }
+
+  protected async handleCachedResponse(cacheKey: string): Promise<ProviderResponse | null> {
+    if (!isCacheEnabled()) {
+      return null;
+    }
+
+    const cache = await getCache();
+    const cachedResponse = await cache.get(cacheKey);
+    if (!cachedResponse) {
+      return null;
+    }
+
+    const parsedResponse = JSON.parse(cachedResponse as string);
+    const tokenUsage = parsedResponse.tokenUsage as TokenUsage;
+    if (tokenUsage) {
+      tokenUsage.cached = tokenUsage.total;
+    }
+    return { ...parsedResponse, cached: true };
+  }
+
+  protected async cacheResponse(cacheKey: string, response: ProviderResponse): Promise<void> {
+    if (!isCacheEnabled()) {
+      return;
+    }
+    const cache = await getCache();
+    await cache.set(cacheKey, JSON.stringify(response));
   }
 }
 
 export class VertexChatProvider extends VertexGenericProvider {
-  // TODO(ian): Completion models
-  // https://cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versioning#gemini-model-versions
   constructor(
     modelName: string,
-    options: { config?: VertexCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: { config?: VertexConfig; id?: string; env?: EnvOverrides } = {},
   ) {
     super(modelName, options);
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    if (this.modelName.includes('claude')) {
+      return this.#callClaudeApi(prompt, context);
+    }
     if (this.modelName.includes('gemini')) {
       return this.callGeminiApi(prompt, context);
     }
@@ -287,21 +294,10 @@ export class VertexChatProvider extends VertexGenericProvider {
     };
     logger.debug(`Preparing to call Google Vertex API (Gemini) with body: ${JSON.stringify(body)}`);
 
-    const cache = await getCache();
     const cacheKey = `vertex:${this.modelName}:${JSON.stringify(body)}`;
-
-    let cachedResponse;
-    if (isCacheEnabled()) {
-      cachedResponse = await cache.get(cacheKey);
-      if (cachedResponse) {
-        const parsedCachedResponse = JSON.parse(cachedResponse as string);
-        const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
-        if (tokenUsage) {
-          tokenUsage.cached = tokenUsage.total;
-        }
-        logger.debug(`Returning cached response: ${cachedResponse}`);
-        return { ...parsedCachedResponse, cached: true };
-      }
+    const cachedResponse = await this.handleCachedResponse(cacheKey);
+    if (cachedResponse) {
+      return cachedResponse;
     }
 
     let data;
@@ -409,9 +405,7 @@ export class VertexChatProvider extends VertexGenericProvider {
         tokenUsage,
       };
 
-      if (isCacheEnabled()) {
-        await cache.set(cacheKey, JSON.stringify(response));
-      }
+      await this.cacheResponse(cacheKey, response);
 
       return response;
     } catch (err) {
@@ -448,21 +442,10 @@ export class VertexChatProvider extends VertexGenericProvider {
     };
     logger.debug(`Calling Vertex Palm2 API: ${JSON.stringify(body)}`);
 
-    const cache = await getCache();
     const cacheKey = `vertex:palm2:${JSON.stringify(body)}`;
-
-    let cachedResponse;
-    if (isCacheEnabled()) {
-      cachedResponse = await cache.get(cacheKey);
-      if (cachedResponse) {
-        const parsedCachedResponse = JSON.parse(cachedResponse as string);
-        const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
-        if (tokenUsage) {
-          tokenUsage.cached = tokenUsage.total;
-        }
-        logger.debug(`Returning cached response: ${cachedResponse}`);
-        return { ...parsedCachedResponse, cached: true };
-      }
+    const cachedResponse = await this.handleCachedResponse(cacheKey);
+    if (cachedResponse) {
+      return cachedResponse;
     }
 
     let data: Palm2ApiResponse;
@@ -501,14 +484,113 @@ export class VertexChatProvider extends VertexGenericProvider {
         cached: false,
       };
 
-      if (isCacheEnabled()) {
-        await cache.set(cacheKey, JSON.stringify(response));
-      }
+      await this.cacheResponse(cacheKey, response);
 
       return response;
     } catch (err) {
       return {
         error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
+      };
+    }
+  }
+
+  async #callClaudeApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    // Parse messages using the same format as Anthropic/Bedrock
+    const { system, extractedMessages } = parseMessages(prompt);
+    const instance = formatClaudeMessages(extractedMessages, system);
+
+    const body = {
+      instances: [
+        {
+          messages: instance.messages,
+          context: instance.system,
+        },
+      ],
+      parameters: {
+        temperature: this.config.temperature,
+        maxOutputTokens: this.config.maxOutputTokens,
+        topP: this.config.topP,
+        topK: this.config.topK,
+        stopSequences: this.config.stopSequence,
+      },
+    };
+
+    logger.debug(`Preparing to call Google Vertex API (Claude) with body: ${JSON.stringify(body)}`);
+
+    const cacheKey = `vertex:${this.modelName}:${JSON.stringify(body)}`;
+    const cachedResponse = await this.handleCachedResponse(cacheKey);
+    if (cachedResponse) {
+      return cachedResponse;
+    }
+
+    try {
+      const { client, projectId } = await getGoogleClient();
+      const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/anthropic/models/${this.modelName}:predict`;
+
+      let apiResponse;
+      let retryCount = 0;
+      const maxRetries = 3;
+
+      while (retryCount <= maxRetries) {
+        try {
+          apiResponse = await client.request<ClaudeResponse>({
+            url,
+            method: 'POST',
+            data: body,
+            timeout: REQUEST_TIMEOUT_MS,
+          });
+          break;
+        } catch (err: any) {
+          if (err.status === 429 || err.response?.status === 429) {
+            if (retryCount === maxRetries) {
+              throw err;
+            }
+            logger.debug(`Rate limited by Vertex API, attempt ${retryCount + 1}/${maxRetries}`);
+            // Use exponential backoff with jitter
+            const waitTime = Math.min(1000 * Math.pow(2, retryCount) + Math.random() * 1000, 60000);
+            await new Promise((resolve) => setTimeout(resolve, waitTime));
+            retryCount++;
+            continue;
+          }
+          throw err;
+        }
+      }
+
+      if (!apiResponse) {
+        throw new Error('Failed to get response from Vertex API after retries');
+      }
+
+      const data = apiResponse.data;
+      logger.debug(`Claude API response: ${JSON.stringify(data)}`);
+
+      const formattedResponse = formatClaudeResponse(data);
+      if ('error' in formattedResponse) {
+        return formattedResponse;
+      }
+
+      const modelConfig = VERTEX_CLAUDE_MODELS.find((m) => m.id === this.modelName);
+      const response = {
+        ...formattedResponse,
+        cached: false,
+        cost:
+          modelConfig && formattedResponse.tokenUsage
+            ? calculateCost(
+                this.modelName,
+                { cost: modelConfig.cost.input },
+                formattedResponse.tokenUsage.prompt,
+                formattedResponse.tokenUsage.completion,
+                VERTEX_CLAUDE_MODELS,
+              )
+            : undefined,
+      };
+
+      await this.cacheResponse(cacheKey, response);
+
+      return response;
+    } catch (err) {
+      logger.error(`Claude API error: ${String(err)} ${JSON.stringify(err)}`);
+      return {
+        error: `API call error: ${String(err)} ${JSON.stringify(err)}`,
       };
     }
   }

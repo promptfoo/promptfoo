@@ -1,0 +1,64 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: 'Evaluation of Llama vision models for e-commerce product analysis'
+
+prompts:
+  - label: 'Product Description'
+    raw: |
+      Analyze this product image and provide a detailed description suitable for an e-commerce listing:
+      [Image]({{image_url}})
+
+  - label: 'Quality Check'
+    raw: |
+      Review this product image and identify any issues that would make it unsuitable for an e-commerce listing:
+      1. Image quality (blur, lighting, resolution)
+      2. Background and presentation
+      3. Product visibility and completeness
+      [Image]({{image_url}})
+
+providers:
+  - id: vertex:llama-3.2-90b-vision-instruct-maas
+    config:
+      generationConfig:
+        temperature: 0.7
+        maxOutputTokens: 1024
+      context: 'You are a professional e-commerce product photographer and quality assurance specialist.'
+      extra_body:
+        google:
+          model_safety_settings:
+            enabled: true
+            llama_guard_settings: {}
+
+tests:
+  - description: Test with good product image
+    vars:
+      image_url: 'https://storage.googleapis.com/vertex-ai-samples/product-images/coffee-mug-white.jpg'
+    assert:
+      - type: contains-all
+        value:
+          - 'resolution'
+          - 'lighting'
+          - 'background'
+      - type: contains-any
+        value:
+          - 'high quality'
+          - 'clear'
+          - 'well-lit'
+      - type: not-contains-any
+        value:
+          - 'blurry'
+          - 'poor quality'
+          - 'unclear'
+
+  - description: Test with poor quality image
+    vars:
+      image_url: 'https://storage.googleapis.com/vertex-ai-samples/product-images/coffee-mug-blurry.jpg'
+    assert:
+      - type: contains-any
+        value:
+          - 'blurry'
+          - 'poor lighting'
+          - 'low resolution'
+          - 'unclear'
+      - type: contains
+        value: 'improvement'

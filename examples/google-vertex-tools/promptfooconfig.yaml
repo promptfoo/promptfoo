@@ -8,6 +8,7 @@ prompts:
   - What is the weather in {{location}}?
 
 providers:
+  # See https://www.promptfoo.dev/docs/providers/vertex/
   - id: 'vertex:gemini-2.0-flash-001'
     config:
       tools: file://tools.json
@@ -24,6 +25,12 @@ defaultTest:
       threshold: 0.9
       # This transform returns only the parsed location argument.
       transform: JSON.parse(output).functionCall.args.location
+
+  options:
+    # This overrides the default grading providers with Vertex AI models.
+    providers:
+      embedding: 'vertex:embedding:text-embedding-005'
+      text: 'vertex:gemini-2.0-flash-001'
 
 tests:
   - vars:
