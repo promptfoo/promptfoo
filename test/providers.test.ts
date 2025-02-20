@@ -376,7 +376,6 @@ describe('loadApiProvider', () => {
 describe('loadApiProviders', () => {
   beforeEach(() => {
     jest.resetAllMocks();
-    // Reset cliState.config before each test
     cliState.config = undefined;
   });
 
