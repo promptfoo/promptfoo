@@ -98,7 +98,12 @@ assert:
 
 ## Using test context
 
-The `context` variable contains information about the test case and execution environment:
+The function receives two parameters:
+
+1. `output`: The LLM output to validate
+2. `context`: Information about the test case and execution environment
+
+The `context` variable contains:
 
 ```ts
 interface AssertionValueFunctionContext {
@@ -122,6 +127,9 @@ interface AssertionValueFunctionContext {
 
   // The complete provider response
   providerResponse: ProviderResponse | undefined;
+
+  // The current assertion being evaluated
+  currentAssertion?: Assertion;
 }
 ```
 
@@ -147,6 +155,42 @@ tests:
     assert:
       - type: javascript
         value: 'output.length >= context.vars.min_length'
+```
+
+You can also access the current assertion's configuration directly:
+
+```yaml
+tests:
+  - description: 'Test with multiple assertions'
+    vars:
+      example: 'Example text'
+    assert:
+      - type: javascript
+        value: file://assert.js
+        config:
+          threshold: 0.5
+      - type: javascript
+        value: file://assert.js
+        config:
+          threshold: 0.8
+```
+
+And in your JavaScript script:
+
+```javascript
+module.exports = (output, context) => {
+  // Get the threshold from the current assertion's config
+  const threshold = context.config?.threshold ?? 0.5;
+
+  // Calculate score based on output
+  const score = calculateScore(output);
+
+  return {
+    pass: score >= threshold,
+    score,
+    reason: `Score ${score} compared to threshold ${threshold}`,
+  };
+};
 ```
 
 ## External script
@@ -228,24 +272,7 @@ You can also return complete [`GradingResult`](/docs/configuration/reference/#gr
 
 ```js
 module.exports = (output, context) => {
-  console.log('Prompt:', context.prompt);
-  console.log('Vars', context.vars.topic);
-
-  // You can return a bool...
-  // return output.toLowerCase().includes('bananas');
-
-  // A score (where 0 = Fail)...
-  // return 0.5;
-
-  // Or an entire grading result, which can be simple...
-  let result = {
-    pass: output.toLowerCase().includes('bananas'),
-    score: 0.5,
-    reason: 'Contains banana',
-  };
-
-  // Or include nested assertions...
-  result = {
+  return {
     pass: true,
     score: 0.75,
     reason: 'Looks good to me',
@@ -268,8 +295,6 @@ module.exports = (output, context) => {
       },
     ],
   };
-
-  return result;
 };
 ```
 

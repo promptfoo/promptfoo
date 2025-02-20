@@ -398,3 +398,54 @@ describe('Python file references', () => {
     });
   });
 });
+
+describe('Python assertion index', () => {
+  it('should pass the correct assertion index to the Python script', async () => {
+    const pythonAssertion: Assertion = {
+      type: 'python',
+      value: `
+def main(output, context, assert_index):
+    return {
+        'pass': True,
+        'score': 1.0,
+        'reason': f'Assertion index is {assert_index}'
+    }
+`,
+    };
+
+    const result = await runAssertion({
+      assertion: pythonAssertion,
+      test: {},
+      providerResponse: { output: 'test output' },
+      assertIndex: 2,
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1.0);
+    expect(result.reason).toBe('Assertion index is 2');
+  });
+
+  it('should handle missing assertion index gracefully', async () => {
+    const pythonAssertion: Assertion = {
+      type: 'python',
+      value: `
+def main(output, context, assert_index):
+    return {
+        'pass': True,
+        'score': 1.0,
+        'reason': f'Assertion index is {assert_index}'
+    }
+`,
+    };
+
+    const result = await runAssertion({
+      assertion: pythonAssertion,
+      test: {},
+      providerResponse: { output: 'test output' },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1.0);
+    expect(result.reason).toBe('Assertion index is None');
+  });
+});

@@ -140,6 +140,7 @@ export async function runAssertion({
     logProbs,
     provider,
     providerResponse,
+    currentAssertion: assertion,
     ...(assertion.config ? { config: structuredClone(assertion.config) } : {}),
   };
 

@@ -733,3 +733,52 @@ describe('JavaScript file references', () => {
     });
   });
 });
+
+describe('Javascript assertion index', () => {
+  it('should pass the correct assertion index to the Javascript function', async () => {
+    const javascriptAssertion: Assertion = {
+      type: 'javascript',
+      value: `(output, context, assertIndex) => {
+        return {
+          pass: true,
+          score: 1.0,
+          reason: \`Assertion index is \${assertIndex}\`
+        };
+      }`,
+    };
+
+    const result = await runAssertion({
+      assertion: javascriptAssertion,
+      test: {},
+      providerResponse: { output: 'test output' },
+      assertIndex: 2,
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1.0);
+    expect(result.reason).toBe('Assertion index is 2');
+  });
+
+  it('should handle missing assertion index gracefully', async () => {
+    const javascriptAssertion: Assertion = {
+      type: 'javascript',
+      value: `(output, context, assertIndex) => {
+        return {
+          pass: true,
+          score: 1.0,
+          reason: \`Assertion index is \${assertIndex}\`
+        };
+      }`,
+    };
+
+    const result = await runAssertion({
+      assertion: javascriptAssertion,
+      test: {},
+      providerResponse: { output: 'test output' },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1.0);
+    expect(result.reason).toBe('Assertion index is undefined');
+  });
+});

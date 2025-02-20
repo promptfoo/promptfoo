@@ -490,13 +490,29 @@ export const AssertionSchema = z.object({
 export type Assertion = z.infer<typeof AssertionSchema>;
 
 export interface AssertionValueFunctionContext {
+  // Raw prompt sent to LLM
   prompt: string | undefined;
+
+  // Test case variables
   vars: Record<string, string | object>;
-  test: AtomicTestCase<Record<string, string | object>>;
+
+  // The complete test case
+  test: AtomicTestCase;
+
+  // Log probabilities from the LLM response, if available
   logProbs: number[] | undefined;
+
+  // Configuration passed to the assertion
   config?: Record<string, any>;
+
+  // The provider that generated the response
   provider: ApiProvider | undefined;
+
+  // The complete provider response
   providerResponse: ProviderResponse | undefined;
+
+  // The current assertion being evaluated
+  currentAssertion?: Assertion;
 }
 
 export type AssertionValueFunction = (

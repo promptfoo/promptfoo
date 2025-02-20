@@ -47,7 +47,12 @@ assert:
 
 ## Using test context
 
-A `context` object is available in the Python function. Here is its type definition:
+The function receives two parameters:
+
+1. `output`: The LLM output to validate
+2. `context`: Information about the test case and execution environment
+
+The `context` variable contains:
 
 ```py
 from typing import Any, Dict, Optional, TypedDict, Union
@@ -73,6 +78,9 @@ class AssertionValueFunctionContext(TypedDict):
 
     # The complete provider response
     providerResponse: Optional[Any]  # ProviderResponse type
+
+    # The current assertion being evaluated
+    currentAssertion: Optional[Dict[str, Any]]  # Assertion type
 ```
 
 For example, if the test case has a var `example`, access it in Python like this:
@@ -85,6 +93,41 @@ tests:
     assert:
       - type: python
         value: 'context["vars"]["example"] in output'
+```
+
+You can also access the current assertion's configuration directly:
+
+```yaml
+tests:
+  - description: 'Test with multiple assertions'
+    vars:
+      example: 'Example text'
+    assert:
+      - type: python
+        value: file://assert.py
+        config:
+          threshold: 0.5
+      - type: python
+        value: file://assert.py
+        config:
+          threshold: 0.8
+```
+
+And in your Python script:
+
+```python
+def get_assert(output, context):
+    # Get the threshold from the current assertion's config
+    threshold = context.get('config', {}).get('threshold', 0.5)
+
+    # Calculate score based on output
+    score = calculate_score(output)
+
+    return {
+        'pass': score >= threshold,
+        'score': score,
+        'reason': f'Score {score} compared to threshold {threshold}'
+    }
 ```
 
 ## External .py
@@ -146,20 +189,30 @@ def get_assert(output: str, context) -> Union[bool, float, Dict[str, Any]]:
 You can also return nested metrics and assertions via a `GradingResult` object:
 
 ```py
-{
-    'pass': True,
-    'score': 0.75,
-    'reason': 'Looks good to me',
-    'componentResults': [{
-        'pass': 'bananas' in output.lower(),
-        'score': 0.5,
-        'reason': 'Contains banana',
-    }, {
-        'pass': 'yellow' in output.lower(),
-        'score': 0.5,
-        'reason': 'Contains yellow',
-    }]
-}
+def get_assert(output: str, context) -> Dict[str, Any]:
+    return {
+        'pass': True,
+        'score': 0.75,
+        'reason': 'Looks good to me',
+        'componentResults': [
+            {
+                'pass': 'bananas' in output.lower(),
+                'score': 0.5,
+                'reason': 'Contains banana',
+                'namedScores': {
+                    'Uses banana': 1.0,
+                },
+            },
+            {
+                'pass': 'yellow' in output.lower(),
+                'score': 0.5,
+                'reason': 'Contains yellow',
+                'namedScores': {
+                    'Yellowish': 0.66,
+                },
+            },
+        ],
+    }
 ```
 
 ### GradingResult types
