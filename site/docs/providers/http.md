@@ -74,6 +74,7 @@ Here's an example of how to use the raw HTTP request feature:
 providers:
   - id: https
     config:
+      useHttps: true
       request: |
         POST /v1/completions HTTP/1.1
         Host: api.example.com
@@ -91,8 +92,9 @@ providers:
 In this example:
 
 1. The `request` property contains a raw HTTP request, including the method, path, headers, and body.
-2. You can use template variables like `{{api_key}}` and `{{prompt}}` within the raw request. These will be replaced with actual values when the request is sent.
-3. The `transformResponse` property is used to extract the desired information from the JSON response.
+2. The `useHttps` property is set to `true`, so the request will be sent over HTTPS.
+3. You can use template variables like `{{api_key}}` and `{{prompt}}` within the raw request. These will be replaced with actual values when the request is sent.
+4. The `transformResponse` property is used to extract the desired information from the JSON response.
 
 You can also load the raw request from an external file using the `file://` prefix:
 
