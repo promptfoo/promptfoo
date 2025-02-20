@@ -65,6 +65,10 @@ export const HttpProviderConfigSchema = z.object({
   method: z.string().optional(),
   queryParams: z.record(z.string()).optional(),
   request: z.string().optional(),
+  useHttps: z
+    .boolean()
+    .optional()
+    .describe('Use HTTPS for the request. This only works with the raw request option'),
   sessionParser: z.union([z.string(), z.function()]).optional(),
   transformRequest: z.union([z.string(), z.function()]).optional(),
   transformResponse: z.union([z.string(), z.function()]).optional(),
@@ -625,7 +629,7 @@ export class HttpProvider implements ApiProvider {
     }
 
     if (this.config.request) {
-      return this.callApiWithRawRequest(vars);
+      return this.callApiWithRawRequest(vars, context);
     }
 
     const defaultHeaders = this.getDefaultHeaders(this.config.body);
@@ -635,7 +639,7 @@ export class HttpProvider implements ApiProvider {
     // Transform prompt using request transform
     const transformedPrompt = await (await this.transformRequest)(prompt);
     logger.debug(
-      `[HTTP Provider]: Transformed prompt: ${transformedPrompt}. Original prompt: ${prompt}`,
+      `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
     );
 
     const renderedConfig: Partial<HttpProviderConfig> = {
@@ -692,13 +696,15 @@ export class HttpProvider implements ApiProvider {
       this.config.maxRetries,
     );
 
-    logger.debug(`[HTTP Provider]: Response: ${response.data}`);
+    logger.debug(`[HTTP Provider]: Response: ${safeJsonStringify(response.data)}`);
     if (!(await this.validateStatus)(response.status)) {
       throw new Error(
         `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
       );
     }
-    logger.debug(`[HTTP Provider]: Response (HTTP ${response.status}): ${response.data}`);
+    logger.debug(
+      `[HTTP Provider]: Response (HTTP ${response.status}): ${safeJsonStringify(response.data)}`,
+    );
 
     const ret: ProviderResponse = {};
     if (context?.debug) {
@@ -743,18 +749,26 @@ export class HttpProvider implements ApiProvider {
     };
   }
 
-  private async callApiWithRawRequest(vars: Record<string, any>): Promise<ProviderResponse> {
+  private async callApiWithRawRequest(
+    vars: Record<string, any>,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     invariant(this.config.request, 'Expected request to be set in http provider config');
     const renderedRequest = nunjucks.renderString(this.config.request, vars);
     const parsedRequest = parseRawRequest(renderedRequest.trim());
 
-    const protocol = this.url.startsWith('https') ? 'https' : 'http';
+    const protocol = this.url.startsWith('https') || this.config.useHttps ? 'https' : 'http';
     const url = new URL(
       parsedRequest.url,
       `${protocol}://${parsedRequest.headers['host']}`,
     ).toString();
 
-    logger.debug(`[HTTP Provider]: Calling ${url} with raw request: ${parsedRequest}`);
+    // Remove content-length header from raw request if the user added it, it will be added by fetch with the correct value
+    delete parsedRequest.headers['content-length'];
+
+    logger.debug(
+      `[HTTP Provider]: Calling ${url} with raw request: ${parsedRequest.method}  ${safeJsonStringify(parsedRequest.body)} \n headers: ${safeJsonStringify(parsedRequest.headers)}`,
+    );
     const response = await fetchWithCache(
       url,
       {
@@ -764,11 +778,11 @@ export class HttpProvider implements ApiProvider {
       },
       REQUEST_TIMEOUT_MS,
       'text',
-      undefined,
+      context?.debug,
       this.config.maxRetries,
     );
 
-    logger.debug(`[HTTP Provider]: Response: ${response.data}`);
+    logger.debug(`[HTTP Provider]: Response: ${safeJsonStringify(response.data)}`);
 
     if (!(await this.validateStatus)(response.status)) {
       throw new Error(
@@ -783,12 +797,24 @@ export class HttpProvider implements ApiProvider {
     } catch {
       parsedData = null;
     }
+    const ret: ProviderResponse = {};
+    if (context?.debug) {
+      ret.raw = response.data;
+      ret.metadata = {
+        headers: response.headers,
+      };
+    }
 
     const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
     if (parsedOutput?.output) {
-      return parsedOutput;
+      return {
+        ...ret,
+        ...parsedOutput,
+      };
     }
+
     return {
+      ...ret,
       output: parsedOutput,
     };
   }

@@ -201,6 +201,66 @@ If the LLM outputs `Goodbye world`, the `equals` assertion fails but the `contai
 If weight is set to 0, the assertion automatically passes.
 :::
 
+### Custom assertion scoring
+
+By default, test cases use weighted averaging to combine assertion scores. You can define custom scoring functions to implement more complex logic, such as:
+
+- Failing if any critical metric falls below a threshold
+- Implementing non-linear scoring combinations
+- Using different scoring logic for different test cases
+
+#### Prerequisites
+
+Custom scoring functions require **named metrics**. Each assertion must have a `metric` field:
+
+```yaml
+assert:
+  - type: equals
+    value: 'Hello'
+    metric: accuracy
+  - type: contains
+    value: 'world'
+    metric: completeness
+```
+
+#### Configuration
+
+Define scoring functions at two levels:
+
+```yaml
+defaultTest:
+  assertScoringFunction: file://scoring.js # Global default
+
+tests:
+  - description: 'Custom scoring for this test'
+    assertScoringFunction: file://custom.js # Test-specific override
+```
+
+The scoring function can be JavaScript or Python, referenced with `file://` prefix. For named exports, use `file://path/to/file.js:functionName`.
+
+#### Function Interface
+
+```typescript
+type ScoringFunction = (
+  namedScores: Record<string, number>, // Map of metric names to scores (0-1)
+  context: {
+    threshold?: number; // Test case threshold if set
+    tokensUsed?: {
+      // Token usage if available
+      total: number;
+      prompt: number;
+      completion: number;
+    };
+  },
+) => {
+  pass: boolean; // Whether the test case passes
+  score: number; // Final score (0-1)
+  reason: string; // Explanation of the score
+};
+```
+
+See the [custom assertion scoring example](https://github.com/promptfoo/promptfoo/tree/main/examples/assertion-scoring-override) for complete implementations in JavaScript and Python.
+
 ## Load assertions from external file
 
 #### Raw files

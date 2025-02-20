@@ -1,4 +1,4 @@
-import { isGradingResult } from '../../src/types';
+import { isGradingResult, TestCaseSchema } from '../../src/types';
 
 describe('isGradingResult', () => {
   it('should return true for valid grading result object', () => {
@@ -63,5 +63,84 @@ describe('isGradingResult', () => {
         comment: 123,
       }),
     ).toBe(false);
+  });
+});
+
+describe('TestCaseSchema assertScoringFunction', () => {
+  it('should validate test case with valid file-based scoring function', () => {
+    const testCase = {
+      description: 'Test with file scoring',
+      assertScoringFunction: 'file://path/to/score.js:scoreFunc',
+      vars: { input: 'test' },
+    };
+    expect(() => TestCaseSchema.parse(testCase)).not.toThrow();
+  });
+
+  it('should validate test case with valid custom scoring function', () => {
+    const testCase = {
+      description: 'Test with custom scoring',
+      assertScoringFunction: async (scores: Record<string, number>) => {
+        return {
+          pass: scores.accuracy > 0.8,
+          score: scores.accuracy,
+          reason: 'Custom scoring applied',
+        };
+      },
+      vars: { input: 'test' },
+    };
+    expect(() => TestCaseSchema.parse(testCase)).not.toThrow();
+  });
+
+  it('should validate test case with missing assertScoringFunction', () => {
+    const testCase = {
+      description: 'No scoring function',
+      vars: { input: 'test' },
+    };
+    expect(() => TestCaseSchema.parse(testCase)).not.toThrow();
+  });
+
+  it('should validate test case with python file scoring function', () => {
+    const testCase = {
+      description: 'Python scoring function',
+      assertScoringFunction: 'file://path/to/score.py:score_func',
+      vars: { input: 'test' },
+    };
+    expect(() => TestCaseSchema.parse(testCase)).not.toThrow();
+  });
+
+  it('should validate test case with typescript file scoring function', () => {
+    const testCase = {
+      description: 'TypeScript scoring function',
+      assertScoringFunction: 'file://path/to/score.ts:scoreFunc',
+      vars: { input: 'test' },
+    };
+    expect(() => TestCaseSchema.parse(testCase)).not.toThrow();
+  });
+
+  it('should validate test case with file path containing dots', () => {
+    const testCase = {
+      description: 'File path with dots',
+      assertScoringFunction: 'file://path/to/my.score.js:myNamespace.scoreFunc',
+      vars: { input: 'test' },
+    };
+    expect(() => TestCaseSchema.parse(testCase)).not.toThrow();
+  });
+
+  it('should validate test case with absolute file path', () => {
+    const testCase = {
+      description: 'Absolute file path',
+      assertScoringFunction: 'file:///absolute/path/to/score.js:scoreFunc',
+      vars: { input: 'test' },
+    };
+    expect(() => TestCaseSchema.parse(testCase)).not.toThrow();
+  });
+
+  it('should validate test case with relative file path', () => {
+    const testCase = {
+      description: 'Relative file path',
+      assertScoringFunction: 'file://./relative/path/score.js:scoreFunc',
+      vars: { input: 'test' },
+    };
+    expect(() => TestCaseSchema.parse(testCase)).not.toThrow();
   });
 });
