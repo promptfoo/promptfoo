@@ -85,7 +85,11 @@ export async function loadApiProviders(
   } = {},
 ): Promise<ApiProvider[]> {
   const { basePath } = options;
-  const env = options.env || cliState.config?.env;
+
+  const env = {
+    ...cliState.config?.env,
+    ...options.env,
+  };
 
   if (typeof providerPaths === 'string') {
     // Check if the string path points to a file

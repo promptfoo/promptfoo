@@ -1,6 +1,7 @@
 import fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
+import cliState from '../src/cliState';
 import { loadApiProvider, loadApiProviders } from '../src/providers';
 import { HttpProvider } from '../src/providers/http';
 import { OpenAiChatCompletionProvider } from '../src/providers/openai/chat';
@@ -348,11 +349,35 @@ describe('loadApiProvider', () => {
       }),
     );
   });
+
+  it('should handle provider with undefined options', async () => {
+    const provider = await loadApiProvider('echo', {
+      options: undefined,
+    });
+    expect(provider).toBeDefined();
+  });
+
+  it('should throw error for invalid providerPaths type', async () => {
+    // Test with a number, which is an invalid type
+    await expect(loadApiProviders(42 as any)).rejects.toThrow('Invalid providers list');
+
+    // Test with an object that doesn't match any valid format
+    await expect(loadApiProviders({ foo: 'bar' } as any)).rejects.toThrow('Invalid providers list');
+  });
+
+  it('should handle non-yaml/json file paths', async () => {
+    // Test with a text file path
+    await expect(loadApiProviders('file://test.txt')).rejects.toThrow(
+      /Could not identify provider/,
+    );
+  });
 });
 
 describe('loadApiProviders', () => {
   beforeEach(() => {
     jest.resetAllMocks();
+    // Reset cliState.config before each test
+    cliState.config = undefined;
   });
 
   it('should load single provider from string', async () => {
@@ -444,5 +469,76 @@ describe('loadApiProviders', () => {
       options: undefined,
     });
     expect(provider).toBeDefined();
+  });
+
+  it('should handle relative file paths', async () => {
+    const yamlContent: ProviderOptions = {
+      id: 'openai:chat:gpt-4',
+      config: { apiKey: 'test-key' },
+    };
+    jest.mocked(fs.readFileSync).mockReturnValue('yaml content');
+    jest.mocked(yaml.load).mockReturnValue(yamlContent);
+
+    const relativePath = 'relative/path/to/providers.yaml';
+    const providers = await loadApiProviders(`file://${relativePath}`, {
+      basePath: '/test/base/path',
+    });
+
+    expect(providers).toHaveLength(1);
+    expect(fs.readFileSync).toHaveBeenCalledWith(
+      path.join('/test/base/path', relativePath),
+      'utf8',
+    );
+  });
+
+  it('should handle absolute file paths in loadApiProviders', async () => {
+    const yamlContent: ProviderOptions = {
+      id: 'openai:chat:gpt-4',
+      config: { apiKey: 'test-key' },
+    };
+    jest.mocked(fs.readFileSync).mockReturnValue('yaml content');
+    jest.mocked(yaml.load).mockReturnValue(yamlContent);
+
+    const absolutePath = path.resolve('/absolute/path/to/providers.yaml');
+    const providers = await loadApiProviders(`file://${absolutePath}`);
+
+    expect(providers).toHaveLength(1);
+    expect(fs.readFileSync).toHaveBeenCalledWith(absolutePath, 'utf8');
+    expect(yaml.load).toHaveBeenCalledWith('yaml content');
+  });
+
+  it('should use env values from cliState.config', async () => {
+    // Set up dummy config with env block
+    cliState.config = {
+      env: {
+        TEST_API_KEY: 'test-key-from-cli-state',
+        OTHER_VAR: 'other-value',
+      },
+    };
+
+    const yamlContent: ProviderOptions = {
+      id: 'openai:chat:gpt-4',
+      config: {
+        apiKey: '{{ env.TEST_API_KEY }}',
+      },
+    };
+    jest.mocked(fs.readFileSync).mockReturnValue('yaml content');
+    jest.mocked(yaml.load).mockReturnValue(yamlContent);
+
+    const providers = await loadApiProviders('file://test.yaml');
+
+    expect(providers).toHaveLength(1);
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
+      'gpt-4',
+      expect.objectContaining({
+        config: expect.objectContaining({
+          apiKey: expect.any(String),
+        }),
+        env: expect.objectContaining({
+          TEST_API_KEY: 'test-key-from-cli-state',
+          OTHER_VAR: 'other-value',
+        }),
+      }),
+    );
   });
 });
