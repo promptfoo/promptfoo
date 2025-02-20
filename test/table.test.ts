@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import Table from 'cli-table3';
+import { TERMINAL_MAX_WIDTH } from '../src/constants';
 import { generateTable, wrapTable } from '../src/table';
 import { ResultFailureReason, type EvaluateTable } from '../src/types';
 

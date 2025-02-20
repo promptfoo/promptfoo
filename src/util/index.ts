@@ -1091,14 +1091,7 @@ export function maybeLoadFromExternalFile(filePath: string | object | Function |
 
   const contents = fs.readFileSync(finalPath, 'utf8');
   if (finalPath.endsWith('.json')) {
-    // First render any Nunjucks templates in the JSON content
-    const renderedContents = getNunjucksEngine().renderString(contents, {});
-    try {
-      return JSON.parse(renderedContents);
-    } catch {
-      // If JSON parsing fails, return the rendered content as a string
-      return renderedContents;
-    }
+    return JSON.parse(contents);
   }
   if (finalPath.endsWith('.yaml') || finalPath.endsWith('.yml')) {
     return yaml.load(contents);
