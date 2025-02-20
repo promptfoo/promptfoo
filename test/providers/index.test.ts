@@ -1135,6 +1135,46 @@ describe('loadApiProvider', () => {
     delete process.env.MY_PORT;
   });
 
+  it('loadApiProvider with yaml filepath containing multiple providers', async () => {
+    const mockYamlContent = dedent`
+    - id: 'openai:gpt-4o-mini'
+      config:
+        key: 'value1'
+    - id: 'anthropic:messages:claude-3-5-sonnet-20241022'
+      config:
+        key: 'value2'`;
+    const mockReadFileSync = jest.mocked(fs.readFileSync);
+    mockReadFileSync.mockReturnValue(mockYamlContent);
+
+    const providers = await loadApiProviders('file://path/to/mock-providers-file.yaml');
+    expect(providers).toHaveLength(2);
+    expect(providers[0].id()).toBe('openai:gpt-4o-mini');
+    expect(providers[1].id()).toBe('anthropic:messages:claude-3-5-sonnet-20241022');
+    expect(mockReadFileSync).toHaveBeenCalledWith(
+      expect.stringMatching(/path[\\\/]to[\\\/]mock-providers-file\.yaml/),
+      'utf8',
+    );
+  });
+
+  it('loadApiProvider with json filepath containing multiple providers', async () => {
+    const mockJsonContent = JSON.stringify([
+      {
+        id: 'openai:gpt-4o-mini',
+        config: { key: 'value1' },
+      },
+      {
+        id: 'anthropic:messages:claude-3-5-sonnet-20241022',
+        config: { key: 'value2' },
+      },
+    ]);
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(mockJsonContent);
+
+    const providers = await loadApiProviders('file://path/to/mock-providers-file.json');
+    expect(providers).toHaveLength(2);
+    expect(providers[0].id()).toBe('openai:gpt-4o-mini');
+    expect(providers[1].id()).toBe('anthropic:messages:claude-3-5-sonnet-20241022');
+  });
+
   it('throws an error for unidentified providers', async () => {
     const mockError = jest.spyOn(logger, 'error');
     const unknownProviderPath = 'unknown:provider';

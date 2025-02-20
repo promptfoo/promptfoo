@@ -61,12 +61,14 @@ describe('loadApiProvider', () => {
       },
     };
     jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(jsonContent));
+    jest.mocked(yaml.load).mockReturnValue(jsonContent);
 
     const provider = await loadApiProvider('file://test.json', {
       basePath: '/test',
     });
 
     expect(fs.readFileSync).toHaveBeenCalledWith(path.join('/test', 'test.json'), 'utf8');
+    expect(yaml.load).toHaveBeenCalledWith(JSON.stringify(jsonContent));
     expect(provider).toBeDefined();
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', expect.any(Object));
   });

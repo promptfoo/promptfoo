@@ -39,13 +39,17 @@ export async function loadApiProvider(
     const modulePath = path.isAbsolute(filePath)
       ? filePath
       : path.join(basePath || process.cwd(), filePath);
-    let fileContent: ProviderOptions;
-    if (renderedProviderPath.endsWith('.json')) {
-      fileContent = JSON.parse(fs.readFileSync(modulePath, 'utf8')) as ProviderOptions;
-    } else {
-      fileContent = yaml.load(fs.readFileSync(modulePath, 'utf8')) as ProviderOptions;
-    }
+    const fileContent = yaml.load(fs.readFileSync(modulePath, 'utf8')) as ProviderOptions;
     invariant(fileContent, `Provider config ${filePath} is undefined`);
+
+    // If fileContent is an array, it contains multiple providers
+    if (Array.isArray(fileContent)) {
+      // This is handled by loadApiProviders, so we'll throw an error here
+      throw new Error(
+        `Multiple providers found in ${filePath}. Use loadApiProviders instead of loadApiProvider.`,
+      );
+    }
+
     invariant(fileContent.id, `Provider config ${filePath} must have an id`);
     logger.info(`Loaded provider ${fileContent.id} from ${filePath}`);
     return loadApiProvider(fileContent.id, { ...context, options: fileContent });
@@ -82,7 +86,31 @@ export async function loadApiProviders(
 ): Promise<ApiProvider[]> {
   const { basePath } = options;
   const env = options.env || cliState.config?.env;
+
   if (typeof providerPaths === 'string') {
+    // Check if the string path points to a file
+    if (
+      providerPaths.startsWith('file://') &&
+      (providerPaths.endsWith('.yaml') ||
+        providerPaths.endsWith('.yml') ||
+        providerPaths.endsWith('.json'))
+    ) {
+      const filePath = providerPaths.slice('file://'.length);
+      const modulePath = path.isAbsolute(filePath)
+        ? filePath
+        : path.join(basePath || process.cwd(), filePath);
+      const fileContent = yaml.load(fs.readFileSync(modulePath, 'utf8')) as
+        | ProviderOptions
+        | ProviderOptions[];
+      invariant(fileContent, `Provider config ${filePath} is undefined`);
+      const configs = [fileContent].flat() as ProviderOptions[];
+      return Promise.all(
+        configs.map((config) => {
+          invariant(config.id, `Provider config in ${filePath} must have an id`);
+          return loadApiProvider(config.id, { options: config, basePath, env });
+        }),
+      );
+    }
     return [await loadApiProvider(providerPaths, { basePath, env })];
   } else if (typeof providerPaths === 'function') {
     return [
