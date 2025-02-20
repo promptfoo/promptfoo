@@ -20,7 +20,7 @@ import {
   AzureCompletionProvider,
   AzureEmbeddingProvider,
 } from './azure';
-import { BAMChatProvider } from './bam';
+import { BAMChatProvider, BAMEmbeddingProvider } from './bam';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock';
 import { BrowserProvider } from './browser';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
@@ -1024,3 +1024,66 @@ export const providerMap: ProviderFactory[] = [
     },
   },
 ];
+
+export default {
+  AI21ChatCompletionProvider,
+  AnthropicCompletionProvider,
+  AnthropicMessagesProvider,
+  AwsBedrockCompletionProvider,
+  AwsBedrockEmbeddingProvider,
+  AzureAssistantProvider,
+  AzureChatCompletionProvider,
+  AzureCompletionProvider,
+  AzureEmbeddingProvider,
+  /** @deprecated Use AzureAssistantProvider instead (renamed in 0.96.0) */
+  AzureOpenAiAssistantProvider: AzureAssistantProvider,
+  /** @deprecated Use AzureChatCompletionProvider instead (renamed in 0.96.0) */
+  AzureOpenAiChatCompletionProvider: AzureChatCompletionProvider,
+  /** @deprecated Use AzureCompletionProvider instead (renamed in 0.96.0) */
+  AzureOpenAiCompletionProvider: AzureCompletionProvider,
+  /** @deprecated Use AzureEmbeddingProvider instead (renamed in 0.96.0) */
+  AzureOpenAiEmbeddingProvider: AzureEmbeddingProvider,
+  BAMChatProvider,
+  BAMEmbeddingProvider,
+  BrowserProvider,
+  ClouderaAiChatCompletionProvider,
+  CohereChatCompletionProvider,
+  CohereEmbeddingProvider,
+  FalImageGenerationProvider,
+  GolangProvider,
+  GoogleChatProvider,
+  GroqProvider,
+  HttpProvider,
+  HuggingfaceFeatureExtractionProvider,
+  HuggingfaceSentenceSimilarityProvider,
+  HuggingfaceTextClassificationProvider,
+  HuggingfaceTextGenerationProvider,
+  HuggingfaceTokenExtractionProvider,
+  LlamaProvider,
+  LocalAiChatProvider,
+  LocalAiCompletionProvider,
+  LocalAiEmbeddingProvider,
+  ManualInputProvider,
+  MistralChatCompletionProvider,
+  MistralEmbeddingProvider,
+  OllamaChatProvider,
+  OllamaCompletionProvider,
+  OllamaEmbeddingProvider,
+  OpenAiAssistantProvider,
+  OpenAiChatCompletionProvider,
+  OpenAiCompletionProvider,
+  OpenAiEmbeddingProvider,
+  OpenAiImageProvider,
+  OpenAiModerationProvider,
+  PortkeyChatCompletionProvider,
+  PythonProvider,
+  ReplicateImageProvider,
+  ReplicateModerationProvider,
+  ReplicateProvider,
+  ScriptCompletionProvider,
+  VertexChatProvider,
+  VertexEmbeddingProvider,
+  VoyageEmbeddingProvider,
+  WatsonXProvider,
+  WebhookProvider,
+};
