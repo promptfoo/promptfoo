@@ -69,8 +69,8 @@ const useSortableData = (data: DatasetsProps['data']) => {
           bValue = b.id;
           break;
         case 'raw':
-          aValue = a.testCases.length.toString();
-          bValue = b.testCases.length.toString();
+          aValue = a.testCases.length;
+          bValue = b.testCases.length;
           break;
         default:
           return 0;
