@@ -4,19 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"reflect"
+	"plugin"
 )
 
 // Function type definitions for the API functions
 type ApiFunc func(string, map[string]interface{}, map[string]interface{}) (map[string]interface{}, error)
-
-// Variable to hold the function implementation, allowing it to be replaced in tests
-var CallApi = defaultCallApi
-
-// Default implementation that will be replaced by the actual provider
-func defaultCallApi(prompt string, options map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
-	return nil, fmt.Errorf("CallApi not implemented")
-}
 
 func main() {
 	if len(os.Args) != 4 {
@@ -24,7 +16,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	functionName := os.Args[2]
+	scriptPath := os.Args[1]
+	// functionName is not used since we always look for "CallApi"
 	jsonArgs := os.Args[3]
 
 	// Parse the JSON arguments
@@ -35,31 +28,40 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Get the function by name using reflection
-	f := reflect.ValueOf(nil)
-	switch functionName {
-	case "call_api", "CallApi":
-		f = reflect.ValueOf(CallApi)
-	default:
-		fmt.Printf("Unknown function: %s\n", functionName)
+	// Load the plugin (user's Go script)
+	p, err := plugin.Open(scriptPath)
+	if err != nil {
+		fmt.Printf("Error loading plugin: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Look up the CallApi function
+	symbol, err := p.Lookup("CallApi")
+	if err != nil {
+		fmt.Printf("Error finding CallApi function: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Convert the symbol to a function
+	callApi, ok := symbol.(func(string, map[string]interface{}, map[string]interface{}) (map[string]interface{}, error))
+	if !ok {
+		fmt.Println("Invalid CallApi function signature")
 		os.Exit(1)
 	}
 
 	// Call the function
-	result := f.Call([]reflect.Value{
-		reflect.ValueOf(args[0].(string)),
-		reflect.ValueOf(args[1]),
-		reflect.ValueOf(args[2]),
-	})
-
-	// Check for errors
-	if !result[1].IsNil() {
-		fmt.Printf("Error calling function: %v\n", result[1].Interface())
+	result, err := callApi(
+		args[0].(string),
+		args[1].(map[string]interface{}),
+		args[2].(map[string]interface{}),
+	)
+	if err != nil {
+		fmt.Printf("Error calling function: %v\n", err)
 		os.Exit(1)
 	}
 
 	// Marshal the result to JSON
-	jsonResult, err := json.Marshal(result[0].Interface())
+	jsonResult, err := json.Marshal(result)
 	if err != nil {
 		fmt.Printf("Error marshaling result to JSON: %v\n", err)
 		os.Exit(1)

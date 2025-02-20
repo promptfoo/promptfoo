@@ -4,6 +4,8 @@ import os from 'os';
 import path from 'path';
 import util from 'util';
 import { getCache, isCacheEnabled } from '../cache';
+import { getEnvString } from '../envars';
+import { validateGoPath } from '../golang/golangUtils';
 import logger from '../logger';
 import type {
   ApiProvider,
@@ -29,6 +31,7 @@ export class GolangProvider implements ApiProvider {
   private scriptPath: string;
   private functionName: string | null;
   public label: string | undefined;
+  private goExecutablePath: string | null = null;
 
   constructor(
     runPath: string,
@@ -58,6 +61,17 @@ export class GolangProvider implements ApiProvider {
       currentPath = path.dirname(currentPath);
     }
     throw new Error('Could not find go.mod file in any parent directory');
+  }
+
+  private async getGoExecutable(): Promise<string> {
+    if (this.goExecutablePath) {
+      return this.goExecutablePath;
+    }
+
+    const customPath = this.config.goExecutable || getEnvString('PROMPTFOO_GO');
+    const goPath = customPath || 'go';
+    this.goExecutablePath = await validateGoPath(goPath, typeof customPath === 'string');
+    return this.goExecutablePath;
   }
 
   private async executeGolangScript(
@@ -129,17 +143,24 @@ export class GolangProvider implements ApiProvider {
         fs.mkdirSync(scriptDir, { recursive: true });
         fs.copyFileSync(path.join(__dirname, '../golang/wrapper.go'), tempWrapperPath);
 
-        const executablePath = path.join(tempDir, 'golang_wrapper');
-        const tempScriptPath = path.join(tempDir, relativeScriptPath);
+        const pluginPath = path.join(tempDir, 'plugin.so');
 
-        // Build from the script directory
-        const compileCommand = `cd ${scriptDir} && ${this.config.goExecutable || 'go'} build -o ${executablePath} wrapper.go ${path.basename(relativeScriptPath)}`;
+        // Get validated Go executable path
+        const goExecutable = await this.getGoExecutable();
+
+        // Build the script as a plugin
+        const compileCommand = `cd ${scriptDir} && ${goExecutable} build -buildmode=plugin -o ${pluginPath} ${path.basename(relativeScriptPath)}`;
         await execAsync(compileCommand);
+
+        // Build the wrapper
+        const wrapperPath = path.join(tempDir, 'golang_wrapper');
+        const buildWrapperCommand = `cd ${scriptDir} && ${goExecutable} build -o ${wrapperPath} wrapper.go`;
+        await execAsync(buildWrapperCommand);
 
         const jsonArgs = safeJsonStringify(args) || '[]';
         // Escape single quotes in the JSON string
         const escapedJsonArgs = jsonArgs.replace(/'/g, "'\\''");
-        const command = `${executablePath} ${tempScriptPath} ${functionName} '${escapedJsonArgs}'`;
+        const command = `${wrapperPath} ${pluginPath} ${functionName} '${escapedJsonArgs}'`;
         logger.debug(`Running command: ${command}`);
 
         const { stdout, stderr } = await execAsync(command);
