@@ -33,6 +33,8 @@ You can use it by specifying any of the available stable or latest [model versio
 - `vertex:gemini-1.5-flash-preview-0514`
 - `vertex:gemini-1.5-flash-001`
 - `vertex:gemini-2.0-flash-001`
+- `vertex:gemini-2.0-flash`
+- `vertex:gemini-2.0-flash-002`
 - `vertex:aqa`
 
 Embeddings models such as `vertex:embedding:text-embedding-004` are also supported.
