@@ -153,6 +153,26 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ));
 
       if (status < 200 || status >= 300) {
+        // Check for content filtering errors in HTTP error response
+        try {
+          const errorData = typeof data === 'string' ? JSON.parse(data) : data;
+          if (
+            errorData?.error?.code === 'invalid_prompt' &&
+            errorData?.error?.type === 'invalid_request_error'
+          ) {
+            return {
+              output: errorData.error.message,
+              guardrails: {
+                flagged: true,
+                flaggedInput: true,
+                flaggedOutput: false,
+              },
+            };
+          }
+        } catch (e) {
+          // If we can't parse the error, fall back to generic error handling
+          logger.debug(`Failed to parse error response: ${e}`);
+        }
         return {
           error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
         };
