@@ -1438,6 +1438,9 @@
             "watch": {
               "type": "boolean"
             },
+            "filterErrorsOnly": {
+              "type": "string"
+            },
             "filterFailing": {
               "type": "string"
             },

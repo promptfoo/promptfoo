@@ -33,6 +33,7 @@ import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import invariant from '../util/invariant';
 import { filterProviders } from './eval/filterProviders';
+import type { FilterOptions } from './eval/filterTests';
 import { filterTests } from './eval/filterTests';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
@@ -133,13 +134,16 @@ export async function doEval(
       );
     }
 
-    testSuite.tests = await filterTests(testSuite, {
+    const filterOptions: FilterOptions = {
       failing: cmdObj.filterFailing,
+      errorsOnly: cmdObj.filterErrorsOnly,
       firstN: cmdObj.filterFirstN,
       metadata: cmdObj.filterMetadata,
       pattern: cmdObj.filterPattern,
       sample: cmdObj.filterSample,
-    });
+    };
+
+    testSuite.tests = await filterTests(testSuite, filterOptions);
 
     if (
       config.redteam &&
@@ -296,7 +300,7 @@ export async function doEval(
       if (shareableUrl) {
         logger.info(`${chalk.green('✔')} Evaluation complete: ${shareableUrl}`);
       } else {
-        logger.info(`${chalk.green('✔')} Evaluation complete.\n`);
+        logger.info(`${chalk.green('✔')} Evaluation complete. ID: ${chalk.cyan(evalRecord.id)}\n`);
         logger.info(
           `» Run ${chalk.greenBright.bold('promptfoo view')} to use the local web viewer`,
         );
@@ -530,8 +534,14 @@ export function evalCommand(
       'Only run tests with these providers (regex match)',
     )
     .option('--filter-sample <number>', 'Only run a random sample of N tests')
-    .option('--filter-failing <path>', 'Path to json output file')
-    .option('--filter-errors-only <path>', 'Path to json output file with error tests')
+    .option(
+      '--filter-failing <path or id>',
+      'Path to json output file or eval ID to filter failing tests from',
+    )
+    .option(
+      '--filter-errors-only <path or id>',
+      'Path to json output file or eval ID to filter error tests from',
+    )
     .option(
       '--filter-metadata <key=value>',
       'Only run tests whose metadata matches the key=value pair (e.g. --filter-metadata pluginId=debug-access)',
