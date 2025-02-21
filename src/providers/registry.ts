@@ -20,7 +20,7 @@ import {
   AzureCompletionProvider,
   AzureEmbeddingProvider,
 } from './azure';
-import { BAMChatProvider } from './bam';
+import { BAMProvider } from './bam';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock';
 import { BrowserProvider } from './browser';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
@@ -209,7 +209,7 @@ export const providerMap: ProviderFactory[] = [
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
       if (modelType === 'chat') {
-        return new BAMChatProvider(modelName || 'ibm/granite-13b-chat-v2', providerOptions);
+        return new BAMProvider(modelName || 'ibm/granite-13b-chat-v2', providerOptions);
       }
       throw new Error(
         `Invalid BAM provider: ${providerPath}. Use one of the following providers: bam:chat:<model name>`,
