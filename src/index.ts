@@ -6,7 +6,6 @@ import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
 import { readProviderPromptMap, processPrompts } from './prompts';
 import { loadApiProvider, loadApiProviders } from './providers';
-import providers from './providers/registry';
 import { extractEntities } from './redteam/extraction/entities';
 import { extractSystemPurpose } from './redteam/extraction/purpose';
 import { GRADERS } from './redteam/graders';
@@ -142,18 +141,13 @@ const redteam = {
   },
 };
 
-const providersWithLoader = {
-  ...providers,
-  loadApiProvider,
-} as const;
-
-export { assertions, cache, evaluate, providersWithLoader as providers, redteam, guardrails };
+export { assertions, cache, evaluate, loadApiProvider, redteam, guardrails };
 
 export default {
   assertions,
   cache,
   evaluate,
-  providers: providersWithLoader,
+  loadApiProvider,
   redteam,
   guardrails,
 };
