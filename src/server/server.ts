@@ -194,7 +194,7 @@ export function createApp() {
       await telemetry.recordAndSend(event, properties);
       res.status(200).json({ success: true });
     } catch (error) {
-      console.error('Error processing telemetry request:', error);
+      logger.error(`Error processing telemetry request: ${error}`);
       res.status(500).json({ error: 'Failed to process telemetry request' });
     }
   });

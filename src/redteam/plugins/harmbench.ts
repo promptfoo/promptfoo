@@ -13,73 +13,59 @@ const DATASET_URL =
 
 interface HarmbenchInput {
   Behavior: string;
-  ContextString?: string; // Optional since it may not always be present
+  ContextString?: string;
 }
 
-export async function fetchDataset(limit: number): Promise<TestCase[]> {
+async function fetchDataset(limit: number): Promise<HarmbenchInput[]> {
   try {
     const response = await fetchWithTimeout(DATASET_URL, {}, REQUEST_TIMEOUT_MS);
     if (!response.ok) {
-      throw new Error(`[harmbench] HTTP status: ${response.status} ${response.statusText}`);
+      throw new Error(`HTTP status: ${response.status} ${response.statusText}`);
     }
 
     const text = await response.text();
-
-    // Use csvParse to parse the CSV data
-    const records = csvParse(text, { columns: true });
+    const records: HarmbenchInput[] = csvParse(text, { columns: true });
 
     logger.debug(`[harmbench] Parsed ${records.length} entries from CSV`);
 
-    // Convert the raw data to test cases and shuffle them
-    const testCases = records
-      .map(
-        (record: HarmbenchInput): TestCase => ({
-          vars: {
-            behavior: record.Behavior,
-            contextString: record.ContextString || '',
-          },
-        }),
-      )
-      .sort(() => Math.random() - 0.5) // Shuffle the array
-      .slice(0, limit); // Take the first n items after shuffling
+    // Shuffle and limit the records
+    const shuffledRecords = records.sort(() => Math.random() - 0.5).slice(0, limit);
 
-    logger.debug(`[harmbench] Generated ${testCases.length} test cases`);
-    if (testCases.length === 0) {
-      throw new Error(`[harmbench] No test cases generated`);
+    if (shuffledRecords.length === 0) {
+      throw new Error('No records generated');
     }
 
-    return testCases;
+    logger.debug(`[harmbench] Selected ${shuffledRecords.length} records`);
+    return shuffledRecords;
   } catch (error) {
-    logger.error(
-      `[harmbench] Error fetching dataset: [harmbench] No test cases generated: ${error}`,
-    );
+    if (error instanceof TypeError) {
+      logger.error(`[harmbench] Network error: ${error.message}`);
+    } else {
+      logger.error(`[harmbench] Error fetching dataset: ${error}`);
+    }
     return [];
   }
 }
 
-// Stub for the plugin class
 export class HarmbenchPlugin extends RedteamPluginBase {
   async getTemplate(): Promise<string> {
     throw new Error('Not implemented');
   }
 
-  async generateTests(n: number, delayMs = 0): Promise<TestCase[]> {
-    const testCases = await fetchDataset(n);
+  async generateTests(n: number, delayMs: number = 0): Promise<TestCase[]> {
+    const records = await fetchDataset(n);
 
-    return testCases.map(
-      (test: TestCase): TestCase => ({
+    return records.map(
+      (record): TestCase => ({
         vars: {
           [this.injectVar]: dedent`
-          ${test?.vars?.behavior || ''}
-
-          Context: ${test?.vars?.contextString || ''}
-        `,
+          ${record.Behavior}
+          ${record.ContextString ? `\nContext: ${record.ContextString}` : ''}
+        `.trim(),
         },
-        assert: this.getAssertions(
-          typeof test?.vars?.behavior === 'string' ? test?.vars?.behavior : '',
-        ),
+        assert: this.getAssertions(record.Behavior),
         metadata: {
-          harmbenchBehavior: test?.vars?.behavior,
+          harmbenchBehavior: record.Behavior,
         },
       }),
     );
