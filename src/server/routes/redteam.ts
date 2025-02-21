@@ -165,5 +165,3 @@ redteamRouter.get('/status', async (req: Request, res: Response): Promise<void> 
     jobId: currentJobId,
   });
 });
-
-export { currentJobId, currentAbortController };
