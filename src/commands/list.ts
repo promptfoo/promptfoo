@@ -4,8 +4,9 @@ import logger from '../logger';
 import Eval, { EvalQueries } from '../models/eval';
 import { wrapTable } from '../table';
 import telemetry from '../telemetry';
-import { getPrompts, getTestCases, printBorder, setupEnv } from '../util';
+import { printBorder, setupEnv } from '../util';
 import { sha256 } from '../util/createHash';
+import { getPrompts, getTestCases } from '../util/database';
 
 export function listCommand(program: Command) {
   const listCommand = program.command('list').description('List various resources');
