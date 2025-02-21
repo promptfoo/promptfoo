@@ -20,7 +20,6 @@ interface HarmbenchMetadata {
   harmbenchBehavior: string;
 }
 
-// Private function - only used within this file
 async function fetchDataset(limit: number): Promise<HarmbenchInput[]> {
   try {
     const response = await fetchWithTimeout(DATASET_URL, {}, REQUEST_TIMEOUT_MS);
