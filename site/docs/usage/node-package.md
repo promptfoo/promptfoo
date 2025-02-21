@@ -15,7 +15,7 @@ npm install promptfoo
 
 ## Usage
 
-Use `promptfoo` as a library in your project by importing the `evaluate` function:
+Use `promptfoo` as a library in your project by importing the `evaluate` function and other utilities:
 
 ```ts
 import promptfoo from 'promptfoo';
@@ -34,6 +34,21 @@ The results of the evaluation are returned as an [`EvaluateSummary` object](/doc
 ### Provider functions
 
 A `ProviderFunction` is a Javascript function that implements an LLM API call. It takes a prompt string and a context. It returns the LLM response or an error. See [`ProviderFunction` type](/docs/configuration/reference#providerfunction).
+
+You can load providers using the `loadApiProvider` function:
+
+```ts
+// Load a provider with default options
+const provider = await loadApiProvider('openai:o3-mini');
+
+// Load a provider with custom options
+const providerWithOptions = await loadApiProvider('azure:chat:test', {
+  options: {
+    apiHost: 'test-host',
+    apiKey: 'test-key',
+  },
+});
+```
 
 ### Assertion functions
 
