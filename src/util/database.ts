@@ -621,3 +621,5 @@ export async function getStandaloneEvals({
   standaloneEvalCache.set(cacheKey, standaloneEvals);
   return standaloneEvals;
 }
+
+export { DEFAULT_QUERY_LIMIT, standaloneEvalCache };
