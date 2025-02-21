@@ -33,7 +33,8 @@ import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import invariant from '../util/invariant';
 import { filterProviders } from './eval/filterProviders';
-import { FilterOptions, filterTests } from './eval/filterTests';
+import type { FilterOptions } from './eval/filterTests';
+import { filterTests } from './eval/filterTests';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
   help: z.boolean().optional(),
