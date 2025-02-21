@@ -38,6 +38,8 @@ A `ProviderFunction` is a Javascript function that implements an LLM API call. I
 You can load providers using the `loadApiProvider` function:
 
 ```ts
+import { loadApiProvider } from 'promptfoo';
+
 // Load a provider with default options
 const provider = await loadApiProvider('openai:o3-mini');
 
