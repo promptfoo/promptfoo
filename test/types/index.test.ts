@@ -1,4 +1,4 @@
-import { isGradingResult, TestCaseSchema } from '../../src/types';
+import { isGradingResult, TestCaseSchema, CommandLineOptionsSchema } from '../../src/types';
 
 describe('isGradingResult', () => {
   it('should return true for valid grading result object', () => {
@@ -73,7 +73,7 @@ describe('TestCaseSchema assertScoringFunction', () => {
       assertScoringFunction: 'file://path/to/score.js:scoreFunc',
       vars: { input: 'test' },
     };
-    expect(() => TestCaseSchema.parse(testCase)).not.toThrow();
+    expect(() => TestCaseSchema.parse(testCase)).not.toThrow('Invalid test case schema');
   });
 
   it('should validate test case with valid custom scoring function', () => {
@@ -88,7 +88,7 @@ describe('TestCaseSchema assertScoringFunction', () => {
       },
       vars: { input: 'test' },
     };
-    expect(() => TestCaseSchema.parse(testCase)).not.toThrow();
+    expect(() => TestCaseSchema.parse(testCase)).not.toThrow('Invalid test case schema');
   });
 
   it('should validate test case with missing assertScoringFunction', () => {
@@ -96,7 +96,7 @@ describe('TestCaseSchema assertScoringFunction', () => {
       description: 'No scoring function',
       vars: { input: 'test' },
     };
-    expect(() => TestCaseSchema.parse(testCase)).not.toThrow();
+    expect(() => TestCaseSchema.parse(testCase)).not.toThrow('Invalid test case schema');
   });
 
   it('should validate test case with python file scoring function', () => {
@@ -105,7 +105,7 @@ describe('TestCaseSchema assertScoringFunction', () => {
       assertScoringFunction: 'file://path/to/score.py:score_func',
       vars: { input: 'test' },
     };
-    expect(() => TestCaseSchema.parse(testCase)).not.toThrow();
+    expect(() => TestCaseSchema.parse(testCase)).not.toThrow('Invalid test case schema');
   });
 
   it('should validate test case with typescript file scoring function', () => {
@@ -114,7 +114,7 @@ describe('TestCaseSchema assertScoringFunction', () => {
       assertScoringFunction: 'file://path/to/score.ts:scoreFunc',
       vars: { input: 'test' },
     };
-    expect(() => TestCaseSchema.parse(testCase)).not.toThrow();
+    expect(() => TestCaseSchema.parse(testCase)).not.toThrow('Invalid test case schema');
   });
 
   it('should validate test case with file path containing dots', () => {
@@ -123,7 +123,7 @@ describe('TestCaseSchema assertScoringFunction', () => {
       assertScoringFunction: 'file://path/to/my.score.js:myNamespace.scoreFunc',
       vars: { input: 'test' },
     };
-    expect(() => TestCaseSchema.parse(testCase)).not.toThrow();
+    expect(() => TestCaseSchema.parse(testCase)).not.toThrow('Invalid test case schema');
   });
 
   it('should validate test case with absolute file path', () => {
@@ -132,7 +132,7 @@ describe('TestCaseSchema assertScoringFunction', () => {
       assertScoringFunction: 'file:///absolute/path/to/score.js:scoreFunc',
       vars: { input: 'test' },
     };
-    expect(() => TestCaseSchema.parse(testCase)).not.toThrow();
+    expect(() => TestCaseSchema.parse(testCase)).not.toThrow('Invalid test case schema');
   });
 
   it('should validate test case with relative file path', () => {
@@ -141,6 +141,105 @@ describe('TestCaseSchema assertScoringFunction', () => {
       assertScoringFunction: 'file://./relative/path/score.js:scoreFunc',
       vars: { input: 'test' },
     };
-    expect(() => TestCaseSchema.parse(testCase)).not.toThrow();
+    expect(() => TestCaseSchema.parse(testCase)).not.toThrow('Invalid test case schema');
+  });
+});
+
+describe('CommandLineOptionsSchema', () => {
+  it('should validate options with filterErrorsOnly string', () => {
+    const options = {
+      providers: ['provider1'],
+      output: ['output1'],
+      filterErrorsOnly: 'true',
+    };
+    expect(() => CommandLineOptionsSchema.parse(options)).not.toThrow(
+      'Invalid command line options',
+    );
+  });
+
+  it('should validate options without filterErrorsOnly', () => {
+    const options = {
+      providers: ['provider1'],
+      output: ['output1'],
+    };
+    expect(() => CommandLineOptionsSchema.parse(options)).not.toThrow(
+      'Invalid command line options',
+    );
+  });
+
+  it('should validate options with empty filterErrorsOnly string', () => {
+    const options = {
+      providers: ['provider1'],
+      output: ['output1'],
+      filterErrorsOnly: '',
+    };
+    expect(() => CommandLineOptionsSchema.parse(options)).not.toThrow(
+      'Invalid command line options',
+    );
+  });
+
+  it('should validate options with non-boolean filterErrorsOnly string', () => {
+    const options = {
+      providers: ['provider1'],
+      output: ['output1'],
+      filterErrorsOnly: 'errors-only',
+    };
+    expect(() => CommandLineOptionsSchema.parse(options)).not.toThrow(
+      'Invalid command line options',
+    );
+  });
+
+  it('should reject options with non-string filterErrorsOnly', () => {
+    const options = {
+      providers: ['provider1'],
+      output: ['output1'],
+      filterErrorsOnly: true,
+    };
+    expect(() => CommandLineOptionsSchema.parse(options)).toThrow(
+      'Expected string, received boolean',
+    );
+  });
+
+  it('should validate options with filterErrorsOnly and other filter options', () => {
+    const options = {
+      providers: ['provider1'],
+      output: ['output1'],
+      filterErrorsOnly: 'true',
+      filterFailing: 'true',
+      filterFirstN: 5,
+      filterMetadata: 'meta',
+    };
+    expect(() => CommandLineOptionsSchema.parse(options)).not.toThrow(
+      'Invalid command line options',
+    );
+  });
+
+  it('should validate options with filterErrorsOnly and minimal required fields', () => {
+    const options = {
+      providers: ['provider1'],
+      output: ['output1'],
+      filterErrorsOnly: 'true',
+    };
+    expect(() => CommandLineOptionsSchema.parse(options)).not.toThrow(
+      'Invalid command line options',
+    );
+  });
+
+  it('should validate options with all possible filter combinations', () => {
+    const options = {
+      providers: ['provider1'],
+      output: ['output1'],
+      filterErrorsOnly: 'true',
+      filterFailing: 'true',
+      filterFirstN: 10,
+      filterMetadata: 'metadata',
+      filterPattern: 'pattern',
+      filterProviders: 'provider1',
+      filterSample: 5,
+      filterTargets: 'target1',
+    };
+    expect(() => CommandLineOptionsSchema.parse(options)).not.toThrow(
+      'Invalid command line options',
+    );
   });
 });
