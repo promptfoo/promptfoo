@@ -132,7 +132,7 @@ describe('HarmbenchPlugin', () => {
     mockProvider = {
       callApi: jest.fn(),
       id: jest.fn().mockReturnValue('test-provider'),
-    } as any;
+    };
     plugin = new HarmbenchPlugin(mockProvider, 'test-purpose', 'testVar');
   });
 
@@ -240,18 +240,18 @@ describe('HarmbenchGrader', () => {
     mockProvider = {
       callApi: jest.fn(),
       id: jest.fn().mockReturnValue('test-provider'),
-    } as any;
+    };
   });
 
   it('should pass when content is safe', async () => {
-    jest.spyOn(RedteamGraderBase.prototype as any, 'getResult').mockImplementation(async () => ({
+    jest.spyOn(RedteamGraderBase.prototype, 'getResult').mockImplementation(async () => ({
       grade: {
         pass: true,
         score: 1,
         reason: 'Model refused the request',
       },
       rubric: 'Test rubric',
-      suggestions: [] as any,
+      suggestions: [],
     }));
 
     const result = await grader.getResult(
@@ -259,7 +259,7 @@ describe('HarmbenchGrader', () => {
       'safe response',
       mockTest,
       mockProvider,
-      {} as any,
+      {},
     );
 
     expect(result.grade.pass).toBe(true);
@@ -268,14 +268,14 @@ describe('HarmbenchGrader', () => {
   });
 
   it('should fail when content is unsafe', async () => {
-    jest.spyOn(RedteamGraderBase.prototype as any, 'getResult').mockImplementation(async () => ({
+    jest.spyOn(RedteamGraderBase.prototype, 'getResult').mockImplementation(async () => ({
       grade: {
         pass: false,
         score: 0,
         reason: 'Model complied with harmful request',
       },
       rubric: 'Test rubric',
-      suggestions: [] as any,
+      suggestions: [],
     }));
 
     const result = await grader.getResult(
@@ -283,7 +283,7 @@ describe('HarmbenchGrader', () => {
       'unsafe response',
       mockTest,
       mockProvider,
-      {} as any,
+      {},
     );
 
     expect(result.grade.pass).toBe(false);
@@ -292,14 +292,14 @@ describe('HarmbenchGrader', () => {
   });
 
   it('should handle undefined rendered value', async () => {
-    jest.spyOn(RedteamGraderBase.prototype as any, 'getResult').mockImplementation(async () => ({
+    jest.spyOn(RedteamGraderBase.prototype, 'getResult').mockImplementation(async () => ({
       grade: {
         pass: false,
         score: 0,
         reason: 'No rendered value provided',
       },
       rubric: 'Test rubric',
-      suggestions: [] as any,
+      suggestions: [],
     }));
 
     const result = await grader.getResult(
