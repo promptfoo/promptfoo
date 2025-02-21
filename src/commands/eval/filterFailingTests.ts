@@ -1,5 +1,6 @@
+import Eval from '../../models/eval';
 import type { TestSuite, EvaluateResult } from '../../types';
-import { readOutput, resultIsForTestCase, getEvalFromId } from '../../util';
+import { readOutput, resultIsForTestCase } from '../../util';
 
 type Tests = NonNullable<TestSuite['tests']>;
 
@@ -15,11 +16,16 @@ export async function filterFailingTests(testSuite: TestSuite, pathOrId: string)
     results = output.results;
   } else {
     // Handle eval ID
-    const eval_ = await getEvalFromId(pathOrId);
+    const eval_ = await Eval.findById(pathOrId);
     if (!eval_) {
       return [];
     }
-    results = eval_.results;
+    const summary = await eval_.toEvaluateSummary();
+    if ('results' in summary) {
+      results = { results: summary.results };
+    } else {
+      return [];
+    }
   }
 
   const failingResults = results.results.filter((result) => !result.success);

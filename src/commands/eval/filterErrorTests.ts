@@ -1,6 +1,7 @@
+import Eval from '../../models/eval';
 import type { TestSuite, EvaluateResult } from '../../types';
 import { ResultFailureReason } from '../../types';
-import { readOutput, resultIsForTestCase, getEvalFromId } from '../../util';
+import { readOutput, resultIsForTestCase } from '../../util';
 
 type Tests = NonNullable<TestSuite['tests']>;
 
@@ -18,16 +19,19 @@ export async function filterErrorTests(testSuite: TestSuite, pathOrId: string): 
     results = output.results;
   } else {
     // Handle eval ID
-    const eval_ = await getEvalFromId(pathOrId);
+    const eval_ = await Eval.findById(pathOrId);
     if (!eval_) {
       return [];
     }
-    console.error(`Eval ID: ${eval_.id}`);
-    console.error(`Eval results: ${JSON.stringify(eval_.results, null, 2)}`);
-    results = eval_.results;
+    const summary = await eval_.toEvaluateSummary();
+    if ('results' in summary) {
+      results = { results: summary.results };
+    } else {
+      return [];
+    }
   }
 
-  const errorResults = (results.results || []).filter(
+  const errorResults = results.results.filter(
     (result) => result.failureReason === ResultFailureReason.ERROR,
   );
 

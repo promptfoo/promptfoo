@@ -756,11 +756,11 @@ export async function getEvalsWithPredicate(
   return ret;
 }
 
-export async function getEvals(limit: number = DEFAULT_QUERY_LIMIT) {
+export async function getEvals(limit: number = DEFAULT_QUERY_LIMIT): Promise<EvalWithMetadata[]> {
   return getEvalsWithPredicate(() => true, limit);
 }
 
-export async function getEvalFromId(hash: string) {
+export async function getEvalFromId(hash: string): Promise<EvalWithMetadata | undefined> {
   const evals_ = await getEvals();
   for (const eval_ of evals_) {
     if (eval_.id.startsWith(hash)) {

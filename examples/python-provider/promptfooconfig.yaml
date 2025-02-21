@@ -16,10 +16,110 @@ tests:
   - vars:
       topic: fruits
     assert:
-      - type: llm-rubric
-        value: includes at least one emoji
+      - type: contains
+        value: 🍎
   - vars:
       topic: turtles
     assert:
-      - type: llm-rubric
-        value: is funny
+      - type: contains
+        value: haha
+  - vars:
+      topic: pizza
+    assert:
+      - type: contains
+        value: cheese
+  - vars:
+      topic: cats
+    assert:
+      - type: contains
+        value: purr
+  - vars:
+      topic: coffee
+    assert:
+      - type: contains
+        value: caffeine
+  - vars:
+      topic: mondays
+    assert:
+      - type: contains
+        value: ugh
+  - vars:
+      topic: technology
+    assert:
+      - type: contains
+        value: AI
+  - vars:
+      topic: weather
+    assert:
+      - type: contains
+        value: rain
+  - vars:
+      topic: exercise
+    assert:
+      - type: contains
+        value: gym
+  - vars:
+      topic: dating
+    assert:
+      - type: contains
+        value: Tinder
+  - vars:
+      topic: food
+    assert:
+      - type: contains
+        value: eat
+  - vars:
+      topic: sleep
+    assert:
+      - type: contains
+        value: zzz
+  - vars:
+      topic: shopping
+    assert:
+      - type: contains
+        value: buy
+  - vars:
+      topic: social media
+    assert:
+      - type: contains
+        value: Instagram
+  - vars:
+      topic: work
+    assert:
+      - type: contains
+        value: office
+  - vars:
+      topic: holidays
+    assert:
+      - type: contains
+        value: season
+  - vars:
+      topic: travel
+    assert:
+      - type: contains
+        value: airport
+  - vars:
+      topic: cooking
+    assert:
+      - type: contains
+        value: kitchen
+  - vars:
+      topic: pets
+    assert:
+      - type: contains
+        value: dog
+  - vars:
+      topic: movies
+    assert:
+      - type: contains
+        value: film
+  - vars:
+      topic: music
+    assert:
+      - type: contains
+        value: song
+  - vars:
+      topic: sports
+    assert:
+      - type: contains
+        value: game
