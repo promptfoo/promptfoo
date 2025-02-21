@@ -52,6 +52,8 @@ Note: Llama models support up to 128,000 tokens context length and include built
 
 ### PaLM 2 (Bison) Models
 
+Please note the PaLM (Bison) models are [scheduled for deprecation (April 2025)](https://cloud.google.com/vertex-ai/generative-ai/docs/legacy/legacy-models) and it's recommended to migrate to the Gemini models.
+
 - `vertex:chat-bison[@001|@002]` - Chat model
 - `vertex:chat-bison-32k[@001|@002]` - Extended context chat
 - `vertex:codechat-bison[@001|@002]` - Code-specialized chat
