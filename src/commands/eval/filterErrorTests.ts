@@ -10,8 +10,6 @@ export async function filterErrorTests(testSuite: TestSuite, pathOrId: string): 
     return [];
   }
 
-  console.error(`PathOrId: ${pathOrId}`);
-
   let results: { results: EvaluateResult[] };
   if (pathOrId.endsWith('.json') || pathOrId.endsWith('.jsonl')) {
     // Handle file path

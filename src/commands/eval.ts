@@ -143,9 +143,6 @@ export async function doEval(
       sample: cmdObj.filterSample,
     };
 
-    console.error(`Filter options: ${JSON.stringify(filterOptions, null, 2)}`);
-    console.error(`cmdObj: ${JSON.stringify(cmdObj, null, 2)}`);
-
     testSuite.tests = await filterTests(testSuite, filterOptions);
 
     if (
@@ -586,7 +583,6 @@ export function evalCommand(
     .option('--verbose', 'Show debug logs', defaultConfig?.commandLineOptions?.verbose)
     .option('--no-progress-bar', 'Do not show progress bar')
     .action(async (opts: EvalCommandOptions, command: Command) => {
-      console.error(`Opts: ${JSON.stringify(opts, null, 2)}`);
       let validatedOpts: z.infer<typeof EvalCommandSchema>;
       try {
         validatedOpts = EvalCommandSchema.parse(opts);
@@ -635,9 +631,6 @@ export function evalCommand(
           `Unsupported output file format: ${maybeFilePath}. Please use one of: ${OutputFileExtension.options.join(', ')}.`,
         );
       }
-
-      console.error(`Opts: ${JSON.stringify(opts, null, 2)}`);
-      console.error(`Validated opts: ${JSON.stringify(validatedOpts, null, 2)}`);
 
       doEval(
         validatedOpts as Partial<CommandLineOptions & Command>,

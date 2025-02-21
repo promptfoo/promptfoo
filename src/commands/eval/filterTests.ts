@@ -55,7 +55,6 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
   }
 
   if (options.errorsOnly) {
-    console.error(`Filtering for errors only: ${options.errorsOnly}`);
     tests = await filterErrorTests(testSuite, options.errorsOnly);
   }
 
