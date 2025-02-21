@@ -5,21 +5,16 @@ import { readOutput, resultIsForTestCase } from '../../util';
 type Tests = NonNullable<TestSuite['tests']>;
 
 /**
- * A function that determines whether a test result should be included in the filtered results.
- * @param result - The eval result to check
- * @returns True if the result should be included, false otherwise
+ * Predicate function for filtering test results
  */
 type ResultFilterFn = (result: EvaluateResult) => boolean;
 
 /**
- * Filters a test suite based on results from a previous eval.
- * Can handle both file paths to JSON results and eval IDs.
- *
- * @param testSuite - The test suite containing all tests
- * @param pathOrId - Either a file path to a JSON results file or an eval ID
- * @param filterFn - A function that determines which results to include
- * @returns A filtered array of tests based on the filter function
- * @throws {Error} If the file path is invalid or if the eval ID doesn't exist
+ * Filters tests based on previous evaluation results
+ * @param testSuite - Test suite to filter
+ * @param pathOrId - JSON results file path or eval ID
+ * @param filterFn - Predicate to determine which results to include
+ * @returns Filtered array of tests
  */
 export async function filterTestsByResults(
   testSuite: TestSuite,
@@ -33,7 +28,6 @@ export async function filterTestsByResults(
   let results: { results: EvaluateResult[] };
   try {
     if (pathOrId.endsWith('.json')) {
-      // Handle file path
       const output = await readOutput(pathOrId);
       results = output.results;
     } else {
