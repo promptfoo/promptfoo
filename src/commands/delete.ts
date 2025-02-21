@@ -75,3 +75,5 @@ export function deleteCommand(program: Command) {
       }
     });
 }
+
+export { handleEvalDelete, handleEvalDeleteAll };
