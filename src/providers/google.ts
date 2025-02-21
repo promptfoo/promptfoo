@@ -8,7 +8,8 @@ import type {
   GuardrailResponse,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
+import { renderVarsInObject } from '../util';
+import { maybeLoadFromExternalFile } from '../util/file';
 import { CHAT_MODELS } from './googleShared';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 import { maybeCoerceToGeminiFormat } from './vertexUtil';

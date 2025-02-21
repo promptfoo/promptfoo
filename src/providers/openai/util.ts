@@ -1,7 +1,8 @@
 import Ajv from 'ajv';
 import OpenAI from 'openai';
 import type { TokenUsage } from '../../types';
-import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
+import { renderVarsInObject } from '../../util';
+import { maybeLoadFromExternalFile } from '../../util/file';
 import { safeJsonStringify } from '../../util/json';
 import type { ProviderConfig } from '../shared';
 import { calculateCost } from '../shared';

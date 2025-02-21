@@ -18,7 +18,8 @@ import type {
   ProviderResponse,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
+import { renderVarsInObject } from '../util';
+import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { sleep } from '../util/time';
 import { calculateCost, parseChatPrompt, REQUEST_TIMEOUT_MS, toTitleCase } from './shared';
@@ -713,7 +714,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       if (output == null) {
         if (choice.finish_reason === 'content_filter') {
           output =
-            'The generated content was filtered due to triggering Azure OpenAI Service’s content filtering system.';
+            "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.";
         } else {
           // Restore tool_calls and function_call handling
           output = message.tool_calls ?? message.function_call;

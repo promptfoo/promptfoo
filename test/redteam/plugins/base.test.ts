@@ -7,15 +7,19 @@ import {
 } from '../../../src/redteam/plugins/base';
 import type { ApiProvider, Assertion } from '../../../src/types';
 import type { AtomicTestCase, GradingResult } from '../../../src/types';
-import { maybeLoadFromExternalFile } from '../../../src/util';
+import { maybeLoadFromExternalFile } from '../../../src/util/file';
 
 jest.mock('../../../src/matchers', () => ({
   matchesLlmRubric: jest.fn(),
 }));
 
-jest.mock('../../../src/util', () => ({
-  maybeLoadFromExternalFile: jest.fn(),
-}));
+jest.mock('../../../src/util/file', () => {
+  const actual = jest.requireActual('../../../src/util/file');
+  return {
+    ...actual,
+    maybeLoadFromExternalFile: jest.fn(),
+  };
+});
 
 class TestPlugin extends RedteamPluginBase {
   protected async getTemplate(): Promise<string> {

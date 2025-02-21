@@ -12,8 +12,6 @@ import {
   type TestCase,
 } from '../../src/types';
 import {
-  maybeLoadFromExternalFile,
-  parsePathOrGlob,
   providerToIdentifier,
   readFilters,
   readOutput,
@@ -22,6 +20,7 @@ import {
   writeMultipleOutputs,
   writeOutput,
 } from '../../src/util';
+import { maybeLoadFromExternalFile, parsePathOrGlob } from '../../src/util/file';
 import { TestGrader } from './utils';
 
 jest.mock('../../src/database', () => ({

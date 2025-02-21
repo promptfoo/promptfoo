@@ -14,7 +14,7 @@ import type {
   ProviderResponse,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { maybeLoadFromExternalFile } from '../util';
+import { maybeLoadFromExternalFile } from '../util/file';
 import { outputFromMessage, parseMessages } from './anthropic';
 import { novaOutputFromMessage, novaParseMessages } from './bedrockUtil';
 import { parseChatPrompt } from './shared';

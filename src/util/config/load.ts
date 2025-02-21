@@ -26,10 +26,11 @@ import {
   type TestSuite,
   type UnifiedConfig,
 } from '../../types';
-import { maybeLoadFromExternalFile, readFilters } from '../../util';
 import { isJavascriptFile } from '../../util/file';
 import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
+import { maybeLoadFromExternalFile } from '../file';
+import { readFilters } from '../index';
 import { readTest, readTests } from '../testCaseReader';
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {

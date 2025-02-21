@@ -14,7 +14,7 @@ import {
   processJsonBody,
 } from '../../src/providers/http';
 import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared';
-import { maybeLoadFromExternalFile } from '../../src/util';
+import { maybeLoadFromExternalFile } from '../../src/util/file';
 
 jest.mock('../../src/cache', () => ({
   ...jest.requireActual('../../src/cache'),
@@ -27,8 +27,8 @@ jest.mock('../../src/fetch', () => ({
   fetchWithTimeout: jest.fn(),
 }));
 
-jest.mock('../../src/util', () => ({
-  ...jest.requireActual('../../src/util'),
+jest.mock('../../src/util/file', () => ({
+  ...jest.requireActual('../../src/util/file'),
   maybeLoadFromExternalFile: jest.fn((input) => input),
 }));
 

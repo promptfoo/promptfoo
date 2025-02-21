@@ -4,7 +4,7 @@ import { getEnvString, getEnvFloat, getEnvInt } from '../envars';
 import logger from '../logger';
 import type { ApiProvider, ProviderResponse, TokenUsage } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { maybeLoadFromExternalFile } from '../util';
+import { maybeLoadFromExternalFile } from '../util/file';
 import { calculateCost } from './shared';
 
 const ANTHROPIC_MODELS = [

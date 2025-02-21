@@ -416,7 +416,7 @@ describe('AzureOpenAiChatCompletionProvider', () => {
 
       const result = await provider.callApi('test prompt');
       expect(result.output).toBe(
-        'The generated content was filtered due to triggering Azure OpenAI Service’s content filtering system.',
+        "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
       );
     });
 

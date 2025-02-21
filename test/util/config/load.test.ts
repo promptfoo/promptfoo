@@ -7,13 +7,13 @@ import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import type { UnifiedConfig } from '../../../src/types';
-import { maybeLoadFromExternalFile } from '../../../src/util';
 import {
   dereferenceConfig,
   readConfig,
   resolveConfigs,
   combineConfigs,
 } from '../../../src/util/config/load';
+import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import { readTests } from '../../../src/util/testCaseReader';
 
 jest.mock('../../../src/database', () => ({
@@ -37,8 +37,8 @@ jest.mock('fs', () => ({
   mkdirSync: jest.fn(),
 }));
 
-jest.mock('../../../src/util', () => {
-  const originalModule = jest.requireActual('../../../src/util');
+jest.mock('../../../src/util/file', () => {
+  const originalModule = jest.requireActual('../../../src/util/file');
   return {
     ...originalModule,
     maybeLoadFromExternalFile: jest.fn(originalModule.maybeLoadFromExternalFile),
