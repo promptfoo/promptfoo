@@ -38,9 +38,9 @@ const createAppTheme = (darkMode: boolean) =>
     palette: {
       mode: darkMode ? 'dark' : 'light',
       primary: {
-        main: '#2563eb', // Modern blue
-        light: '#3b82f6',
-        dark: '#1d4ed8',
+        main: darkMode ? '#3b82f6' : '#2563eb', // Lighter blue for dark mode
+        light: darkMode ? '#60a5fa' : '#3b82f6',
+        dark: darkMode ? '#2563eb' : '#1d4ed8',
         contrastText: '#ffffff',
       },
       secondary: {
@@ -50,12 +50,12 @@ const createAppTheme = (darkMode: boolean) =>
         contrastText: '#ffffff',
       },
       background: {
-        default: darkMode ? '#0f172a' : '#f8fafc',
-        paper: darkMode ? '#1e293b' : '#ffffff',
+        default: darkMode ? '#121212' : '#f8fafc',
+        paper: darkMode ? '#1e1e1e' : '#ffffff',
       },
       text: {
-        primary: darkMode ? '#f1f5f9' : '#0f172a',
-        secondary: darkMode ? '#94a3b8' : '#475569',
+        primary: darkMode ? '#ffffff' : '#0f172a',
+        secondary: darkMode ? '#a0a0a0' : '#475569',
       },
     },
     components: {
@@ -82,9 +82,9 @@ const createAppTheme = (darkMode: boolean) =>
       MuiCard: {
         styleOverrides: {
           root: {
-            backgroundColor: darkMode ? '#1e293b' : '#ffffff',
+            backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
             borderRadius: '16px',
-            border: `1px solid ${darkMode ? '#2d3748' : '#e2e8f0'}`,
+            border: `1px solid ${darkMode ? '#2c2c2c' : '#e2e8f0'}`,
             transition: 'all 0.2s ease-in-out',
             boxShadow: darkMode
               ? 'none'
@@ -100,19 +100,19 @@ const createAppTheme = (darkMode: boolean) =>
       MuiTableContainer: {
         styleOverrides: {
           root: {
-            backgroundColor: darkMode ? '#1e293b' : '#ffffff',
+            backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
             boxShadow: darkMode
               ? 'none'
               : '0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.1)',
             borderRadius: '12px',
-            border: `1px solid ${darkMode ? '#2d3748' : '#e2e8f0'}`,
+            border: `1px solid ${darkMode ? '#2c2c2c' : '#e2e8f0'}`,
           },
         },
       },
       MuiTableHead: {
         styleOverrides: {
           root: {
-            backgroundColor: darkMode ? '#334155' : '#f8fafc',
+            backgroundColor: darkMode ? '#1e1e1e' : '#f8fafc',
           },
         },
       },
@@ -120,22 +120,22 @@ const createAppTheme = (darkMode: boolean) =>
         styleOverrides: {
           head: {
             backgroundColor: 'inherit',
-            color: darkMode ? '#f1f5f9' : '#0f172a',
+            color: darkMode ? '#ffffff' : '#0f172a',
             fontWeight: 600,
             fontSize: '0.875rem',
           },
           stickyHeader: {
-            backgroundColor: darkMode ? '#334155' : '#f8fafc',
+            backgroundColor: darkMode ? '#1e1e1e' : '#f8fafc',
           },
           root: {
-            borderBottom: `1px solid ${darkMode ? '#2d3748' : '#e2e8f0'}`,
+            borderBottom: `1px solid ${darkMode ? '#2c2c2c' : '#e2e8f0'}`,
           },
         },
       },
       MuiInputBase: {
         styleOverrides: {
           root: {
-            backgroundColor: darkMode ? '#1e293b' : '#ffffff',
+            backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
             borderRadius: '8px',
             transition: 'all 0.2s ease-in-out',
           },
@@ -163,9 +163,9 @@ const createAppTheme = (darkMode: boolean) =>
       MuiAppBar: {
         styleOverrides: {
           root: {
-            backgroundColor: darkMode ? '#1e293b' : '#ffffff',
+            backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
             boxShadow: 'none',
-            borderBottom: `1px solid ${darkMode ? '#2d3748' : '#e2e8f0'}`,
+            borderBottom: `1px solid ${darkMode ? '#2c2c2c' : '#e2e8f0'}`,
           },
         },
       },
@@ -173,9 +173,9 @@ const createAppTheme = (darkMode: boolean) =>
         styleOverrides: {
           root: {
             backgroundImage: 'none',
-            backgroundColor: darkMode ? '#1e293b' : '#ffffff',
+            backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
             boxShadow: darkMode ? 'none' : '0 1px 2px rgba(0, 0, 0, 0.05)',
-            border: `1px solid ${darkMode ? '#2d3748' : '#e2e8f0'}`,
+            border: `1px solid ${darkMode ? '#2c2c2c' : '#e2e8f0'}`,
             '&[class*="elevation"]': {
               boxShadow: darkMode ? 'none' : '0 1px 2px rgba(0, 0, 0, 0.05)',
             },
@@ -217,10 +217,10 @@ const createAppTheme = (darkMode: boolean) =>
           },
           track: {
             borderRadius: 22 / 2,
-            backgroundColor: darkMode ? '#475569' : '#cbd5e1',
+            backgroundColor: darkMode ? '#404040' : '#cbd5e1',
           },
           thumb: {
-            backgroundColor: darkMode ? '#f1f5f9' : '#ffffff',
+            backgroundColor: darkMode ? '#ffffff' : '#ffffff',
           },
         },
       },
