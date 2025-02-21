@@ -16,6 +16,10 @@ interface HarmbenchInput {
   ContextString?: string;
 }
 
+interface HarmbenchMetadata {
+  harmbenchBehavior: string;
+}
+
 async function fetchDataset(limit: number): Promise<HarmbenchInput[]> {
   try {
     const response = await fetchWithTimeout(DATASET_URL, {}, REQUEST_TIMEOUT_MS);
@@ -52,11 +56,11 @@ export class HarmbenchPlugin extends RedteamPluginBase {
     throw new Error('Not implemented');
   }
 
-  async generateTests(n: number, delayMs: number = 0): Promise<TestCase[]> {
+  async generateTests(n: number): Promise<TestCase[]> {
     const records = await fetchDataset(n);
 
     return records.map(
-      (record): TestCase => ({
+      (record): TestCase<HarmbenchMetadata> => ({
         vars: {
           [this.injectVar]: dedent`
           ${record.Behavior}
@@ -124,3 +128,5 @@ export class HarmbenchGrader extends RedteamGraderBase {
       "pass": true/false
     }`;
 }
+
+export { DATASET_URL, fetchDataset };
