@@ -6,20 +6,20 @@ type Tests = NonNullable<TestSuite['tests']>;
 
 /**
  * A function that determines whether a test result should be included in the filtered results.
- * @param result - The evaluation result to check
+ * @param result - The eval result to check
  * @returns True if the result should be included, false otherwise
  */
 type ResultFilterFn = (result: EvaluateResult) => boolean;
 
 /**
- * Filters a test suite based on results from a previous evaluation.
- * Can handle both file paths to JSON results and evaluation IDs.
+ * Filters a test suite based on results from a previous eval.
+ * Can handle both file paths to JSON results and eval IDs.
  *
  * @param testSuite - The test suite containing all tests
- * @param pathOrId - Either a file path to a JSON results file or an evaluation ID
+ * @param pathOrId - Either a file path to a JSON results file or an eval ID
  * @param filterFn - A function that determines which results to include
  * @returns A filtered array of tests based on the filter function
- * @throws {Error} If the file path is invalid or if the evaluation ID doesn't exist
+ * @throws {Error} If the file path is invalid or if the eval ID doesn't exist
  */
 export async function filterTestsByResults(
   testSuite: TestSuite,
@@ -37,7 +37,6 @@ export async function filterTestsByResults(
       const output = await readOutput(pathOrId);
       results = output.results;
     } else {
-      // Handle eval ID
       const eval_ = await Eval.findById(pathOrId);
       if (!eval_) {
         return [];
@@ -59,7 +58,7 @@ export async function filterTestsByResults(
     return [];
   }
 
-  return [...testSuite.tests].filter((test) => {
-    return filteredResults.some((result) => resultIsForTestCase(result, test));
-  }) as Tests;
+  return [...testSuite.tests].filter((test) =>
+    filteredResults.some((result) => resultIsForTestCase(result, test)),
+  );
 }
