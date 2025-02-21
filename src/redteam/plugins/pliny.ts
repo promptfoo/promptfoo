@@ -74,3 +74,5 @@ export class PlinyPlugin extends RedteamPluginBase {
     }));
   }
 }
+
+export { URLS, fetchAndParseUrl, fetchAllTexts };
