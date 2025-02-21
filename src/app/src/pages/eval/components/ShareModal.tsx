@@ -28,7 +28,7 @@ const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, evalId, onShare 
 
   useEffect(() => {
     const handleShare = async () => {
-      if (!open || !evalId) {
+      if (!open || !evalId || shareUrl) {
         return;
       }
 
