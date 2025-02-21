@@ -7,11 +7,6 @@ providers:
     config:
       someOption: foobar
 
-  - id: file://provider.py:some_other_function
-
-  - id: file://provider.py:async_provider
-    label: async provider
-
 tests:
   - vars:
       topic: bananas

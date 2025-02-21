@@ -3,7 +3,7 @@ import type { TestSuite } from '../../types';
 import { filterErrorTests } from './filterErrorTests';
 import { filterFailingTests } from './filterFailingTests';
 
-interface FilterOptions {
+export interface FilterOptions {
   failing?: string;
   firstN?: number | string;
   metadata?: string;

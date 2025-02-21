@@ -1,10 +1,15 @@
 from openai import AsyncOpenAI, OpenAI
+import random
 
 async_client = AsyncOpenAI()
 client = OpenAI()
 
 
 def call_api(prompt, options, context):
+    # Randomly throw error 30% of the time
+    if random.random() < 0.5:
+        raise Exception("Random error thrown for testing purposes")
+
     # Get config values
     # some_option = options.get("config").get("someOption")
 
@@ -12,7 +17,7 @@ def call_api(prompt, options, context):
         messages=[
             {
                 "role": "system",
-                "content": "You are a marketer working for a startup called Bananamax.",
+                "content": "You are a marketer working for a startup called Bananamax!",
             },
             {
                 "role": "user",
