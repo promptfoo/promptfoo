@@ -305,8 +305,10 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     ['goat', 'crescendo'].includes(getStrategyId(s)),
   );
 
-  const hasSessionParser = Boolean(
-    config.target.config.sessionParser || config.target.config.sessionSource === 'client',
+  const stateManagementConfigured = Boolean(
+    config.target.config.sessionParser ||
+      config.target.config.sessionSource === 'client' ||
+      config.target.config.setSessionContext,
   );
 
   // ----------------------------------------------
@@ -384,7 +386,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         <SystemConfiguration
           isStatefulValue={isStatefulValue}
           onStatefulChange={handleStatefulChange}
-          hasSessionParser={hasSessionParser}
+          stateManagementConfigured={stateManagementConfigured}
         />
       )}
 
