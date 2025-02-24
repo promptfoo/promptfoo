@@ -8,13 +8,15 @@ You can use any of the available [model versions](https://cloud.google.com/verte
 
 ### Latest Gemini Models
 
-- `vertex:gemini-2.0-flash-001` - Next-gen workhorse model for all daily tasks
-- `vertex:gemini-2.0-pro-exp-02-05` - Strongest model quality, especially for code & world knowledge (2M context)
-- `vertex:gemini-2.0-flash-lite-preview-02-05` - Cost-effective offering for high throughput
-- `vertex:gemini-2.0-flash-thinking-exp-01-21` - Enhanced reasoning with thinking process in responses
-- `vertex:gemini-1.5-flash` - Speed and efficiency for high-volume applications
-- `vertex:gemini-1.5-pro` - Long-context understanding and general-purpose use
-- `vertex:gemini-1.5-pro-latest` - Latest Gemini 1.5 Pro model
+- `vertex:gemini-2.0-flash-001` - Next-gen workhorse model for all daily tasks. Supports text, code, images, audio, video, video with audio, and PDF inputs.
+- `vertex:gemini-2.0-pro-exp-02-05` - Strongest model quality, especially for code & world knowledge (2M context). Supports text, images, video, audio, and PDF inputs.
+- `vertex:gemini-2.0-flash-lite-preview-02-05` - Cost-effective offering for high throughput. Supports text, images, video, audio, and PDF inputs.
+- `vertex:gemini-2.0-flash-thinking-exp-01-21` - Enhanced reasoning with thinking process in responses. Supports text and images.
+- `vertex:gemini-1.5-flash` - Speed and efficiency for high-volume applications. Supports text, code, images, audio, video, video with audio, and PDF inputs.
+- `vertex:gemini-1.5-pro` - Long-context understanding and general-purpose use. Supports text, code, images, audio, video, video with audio, and PDF inputs.
+- `vertex:gemini-1.5-pro-latest` - Latest Gemini 1.5 Pro model with same capabilities as gemini-1.5-pro
+- `vertex:gemini-1.0-pro` - Best performing model for text-only tasks (deprecated)
+- `vertex:gemini-1.0-pro-vision` - Best performing image and video understanding model (deprecated)
 
 ### Claude Models
 
