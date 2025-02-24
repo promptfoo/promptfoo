@@ -65,13 +65,6 @@ const ANTHROPIC_MODELS = [
       output: 15 / 1e6,
     },
   })),
-  ...['claude-3-7-sonnet-20250219', 'claude-3-7-sonnet-latest'].map((model) => ({
-    id: model,
-    cost: {
-      input: 4 / 1e6, // Placeholder cost - update with actual costs when available
-      output: 20 / 1e6,
-    },
-  })),
 ];
 
 interface AnthropicMessageOptions {
@@ -298,7 +291,10 @@ export class AnthropicMessagesProvider implements ApiProvider {
       max_tokens: this.config?.max_tokens || getEnvInt('ANTHROPIC_MAX_TOKENS', 1024),
       messages: extractedMessages,
       stream: false,
-      temperature: this.config.temperature || getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
+      temperature:
+        (this.config.thinking || thinking) && !this.config.temperature
+          ? 1
+          : this.config.temperature || getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
       ...(this.config.tools ? { tools: maybeLoadFromExternalFile(this.config.tools) } : {}),
       ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
       ...(this.config.thinking || thinking ? { thinking: this.config.thinking || thinking } : {}),
@@ -349,8 +345,9 @@ export class AnthropicMessagesProvider implements ApiProvider {
     }
 
     try {
-      const response = await this.anthropic.messages.create(params, { headers });
-
+      const response = await this.anthropic.messages.create(params, {
+        ...(typeof headers === 'object' && Object.keys(headers).length > 0 ? { headers } : {}),
+      });
       logger.debug(`Anthropic Messages API response: ${JSON.stringify(response)}`);
 
       if (isCacheEnabled()) {

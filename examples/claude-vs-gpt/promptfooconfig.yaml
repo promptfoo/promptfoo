@@ -5,7 +5,15 @@ prompts:
   - file://prompt.yaml
 
 providers:
-  - anthropic:messages:claude-3-7-sonnet-latest
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    label: 'Claude 3.7 Sonnet No Thinking'
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    label: 'Claude 3.7 Sonnet With Thinking'
+    config:
+      max_tokens: 2500
+      thinking:
+        type: 'enabled'
+        budget_tokens: 2048
   - openai:chat:gpt-4o
 
 defaultTest:
@@ -21,14 +29,12 @@ tests:
   - vars:
       riddle: 'I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?'
     assert:
-      # Make sure the LLM output contains this word
       - type: icontains
         value: echo
-      # Use model-graded assertions to enforce free-form instructions
       - type: llm-rubric
         value: Do not apologize
   - vars:
-      riddle: 'You see a boat filled with people. It has not sunk, but when you look again you don’t see a single person on the boat. Why?'
+      riddle: "You see a boat filled with people. It has not sunk, but when you look again you don't see a single person on the boat. Why?"
     assert:
       - type: llm-rubric
         value: explains that the people are below deck, or they are all in a relationship
@@ -38,9 +44,7 @@ tests:
       - type: icontains
         value: darkness
   - vars:
-      riddle: >-
-        I have keys but no locks. I have space but no room. You can enter, but
-        can’t go outside. What am I?
+      riddle: "I have keys but no locks. I have space but no room. You can enter, but can't go outside. What am I?"
     assert:
       - type: icontains
         value: keyboard
@@ -107,7 +111,7 @@ tests:
         value: David
   - vars:
       riddle: >-
-        I am light as a feather, but even the world's strongest man couldn’t
+        I am light as a feather, but even the world's strongest man couldn't
         hold me for much longer than a minute. What am I?
     assert:
       - type: icontains
