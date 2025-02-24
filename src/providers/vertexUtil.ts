@@ -148,6 +148,40 @@ export function maybeCoerceToGeminiFormat(contents: any): {
       parts: [{ text: item.content }],
     }));
     coerced = true;
+  } else if (Array.isArray(contents) && contents.every((item) => item.role && item.content)) {
+    // This looks like an OpenAI chat format with content that might be an array or object
+    coercedContents = contents.map((item) => {
+      if (Array.isArray(item.content)) {
+        // Handle array content
+        const parts = item.content.map((contentItem: any) => {
+          if (typeof contentItem === 'string') {
+            return { text: contentItem };
+          } else if (contentItem.type === 'text') {
+            return { text: contentItem.text };
+          } else {
+            // Handle other content types if needed
+            return contentItem;
+          }
+        });
+        return {
+          role: item.role as 'user' | 'model' | undefined,
+          parts,
+        };
+      } else if (typeof item.content === 'object') {
+        // Handle object content
+        return {
+          role: item.role as 'user' | 'model' | undefined,
+          parts: [item.content],
+        };
+      } else {
+        // Handle string content
+        return {
+          role: item.role as 'user' | 'model' | undefined,
+          parts: [{ text: item.content }],
+        };
+      }
+    });
+    coerced = true;
   } else if (typeof contents === 'object' && 'parts' in contents) {
     // This might be a single content object
     coercedContents = [contents as z.infer<typeof ContentSchema>];

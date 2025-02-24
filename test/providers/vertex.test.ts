@@ -251,4 +251,100 @@ describe('maybeCoerceToGeminiFormat', () => {
     });
     expect(loggerSpy).toHaveBeenCalledWith(`Unknown format for Gemini: ${JSON.stringify(input)}`);
   });
+
+  it('should handle OpenAI chat format with content as an array of objects', () => {
+    const input = [
+      {
+        role: 'system',
+        content: 'You are a helpful AI assistant.',
+      },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: 'What is {{thing}}?',
+          },
+        ],
+      },
+    ];
+
+    const result = vertexUtil.maybeCoerceToGeminiFormat(input);
+
+    expect(result).toEqual({
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              text: 'What is {{thing}}?',
+            },
+          ],
+        },
+      ],
+      coerced: true,
+      systemInstruction: {
+        parts: [{ text: 'You are a helpful AI assistant.' }],
+      },
+    });
+  });
+
+  it('should handle string content', () => {
+    // This simulates the parsed YAML format
+    const input = [
+      {
+        role: 'system',
+        content: 'You are a helpful AI assistant.',
+      },
+      {
+        role: 'user',
+        content: 'What is {{thing}}?',
+      },
+    ];
+
+    const result = vertexUtil.maybeCoerceToGeminiFormat(input);
+
+    expect(result).toEqual({
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: 'What is {{thing}}?' }],
+        },
+      ],
+      coerced: true,
+      systemInstruction: {
+        parts: [{ text: 'You are a helpful AI assistant.' }],
+      },
+    });
+  });
+
+  it('should handle mixed content types', () => {
+    const input = [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'First part' },
+          'Second part as string',
+          { type: 'image', url: 'https://example.com/image.jpg' },
+        ],
+      },
+    ];
+
+    const result = vertexUtil.maybeCoerceToGeminiFormat(input);
+
+    expect(result).toEqual({
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: 'First part' },
+            { text: 'Second part as string' },
+            { type: 'image', url: 'https://example.com/image.jpg' },
+          ],
+        },
+      ],
+      coerced: true,
+      systemInstruction: undefined,
+    });
+  });
 });
