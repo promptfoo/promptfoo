@@ -191,7 +191,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         } else {
           output = message;
         }
-      } else if (message.content === null || message.content === undefined) {
+      } else if (
+        message.content === null ||
+        message.content === undefined ||
+        (message.content === '' && message.tool_calls)
+      ) {
         output = message.function_call || message.tool_calls;
       } else {
         output = message.content;
