@@ -1,6 +1,7 @@
 import path from 'path';
 import { importModule } from '../esm';
 import logger from '../logger';
+import { getEnvBool } from '../envars';
 import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
 import RedteamCrescendoProvider from '../redteam/providers/crescendo';
 import RedteamGoatProvider from '../redteam/providers/goat';
@@ -49,7 +50,6 @@ import {
 import { ManualInputProvider } from './manualInput';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
 import { OllamaEmbeddingProvider, OllamaCompletionProvider, OllamaChatProvider } from './ollama';
-import { OpenAiAssistantProvider } from './openai/assistant';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
@@ -81,6 +81,21 @@ interface ProviderFactory {
     providerOptions: ProviderOptions,
     context: LoadApiProviderContext,
   ) => Promise<ApiProvider>;
+}
+
+// Add flag to track if we've shown the OpenAI Assistant warning
+let hasShownOpenAiAssistantWarning = false;
+
+export async function loadOpenAiAssistantProvider() {
+  try {
+    const { OpenAiAssistantProvider } = await import('./openai/assistant');
+    return OpenAiAssistantProvider;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('Cannot find module')) {
+      throw new Error('The OpenAI Assistant provider requires the npm package "openai". Install it with: npm install openai');
+    }
+    throw error;
+  }
 }
 
 export const providerMap: ProviderFactory[] = [
@@ -592,6 +607,12 @@ export const providerMap: ProviderFactory[] = [
         return new OpenAiCompletionProvider(modelType, providerOptions);
       }
       if (modelType === 'assistant') {
+        const OpenAiAssistantProvider = await loadOpenAiAssistantProvider();
+
+        if (!hasShownOpenAiAssistantWarning && !getEnvBool('PROMPTFOO_DISABLE_OPENAI_WARNING')) {
+          logger.warn('The OpenAI Assistant provider requires the npm package "openai". In a future version, it will become an optional peer dependency that you must install separately with: npm install openai');
+          hasShownOpenAiAssistantWarning = true;
+        }
         return new OpenAiAssistantProvider(modelName, providerOptions);
       }
       if (modelType === 'image') {

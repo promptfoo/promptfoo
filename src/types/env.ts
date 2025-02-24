@@ -55,6 +55,7 @@ export const ProviderEnvOverridesSchema = z.object({
   PALM_API_KEY: z.string().optional(),
   PORTKEY_API_KEY: z.string().optional(),
   PROMPTFOO_CA_CERT_PATH: z.string().optional(),
+  PROMPTFOO_DISABLE_OPENAI_WARNING: z.string().optional(),
   PROMPTFOO_INSECURE_SSL: z.string().optional(),
   REPLICATE_API_KEY: z.string().optional(),
   REPLICATE_API_TOKEN: z.string().optional(),

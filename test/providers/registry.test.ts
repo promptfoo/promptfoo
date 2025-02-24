@@ -2,6 +2,12 @@ import path from 'path';
 import { providerMap } from '../../src/providers/registry';
 import type { LoadApiProviderContext } from '../../src/types';
 import type { ProviderOptions } from '../../src/types/providers';
+import { getEnvBool } from '../../src/envars';
+import logger from '../../src/logger';
+
+const mockOpenAiAssistantProvider = jest.fn().mockImplementation((assistantId) => ({
+  id: () => `openai:assistant:${assistantId}`,
+}));
 
 jest.mock('../../src/providers/adaline.gateway', () => ({
   AdalineGatewayChatProvider: jest.fn().mockImplementation((providerName, modelName) => ({
@@ -19,6 +25,20 @@ jest.mock('../../src/providers/pythonCompletion', () => {
     })),
   };
 });
+
+// Mock dynamic imports
+jest.mock('../../src/providers/openai/assistant', () => ({
+  OpenAiAssistantProvider: mockOpenAiAssistantProvider,
+}), { virtual: true });
+
+jest.mock('../../src/esm', () => ({
+  importModule: jest.fn().mockImplementation(async (modulePath) => {
+    if (modulePath.includes('openai/assistant')) {
+      return { OpenAiAssistantProvider: mockOpenAiAssistantProvider };
+    }
+    throw new Error(`Unexpected module path: ${modulePath}`);
+  }),
+}));
 
 describe('Provider Registry', () => {
   describe('Provider Factories', () => {
@@ -46,8 +66,20 @@ describe('Provider Registry', () => {
       },
     };
 
+    let factory: (typeof providerMap)[0];
+    let warnSpy: jest.SpyInstance;
+
     beforeEach(() => {
+      factory = providerMap.find((f) => f.test('openai:chat:gpt-4'))!;
+      process.env.PROMPTFOO_DISABLE_OPENAI_WARNING = '';
+      warnSpy = jest.spyOn(logger, 'warn');
       jest.clearAllMocks();
+    });
+
+    afterEach(() => {
+      delete process.env.PROMPTFOO_DISABLE_OPENAI_WARNING;
+      warnSpy.mockRestore();
+      jest.resetModules();
     });
 
     it('should handle adaline provider paths correctly', async () => {
@@ -317,6 +349,87 @@ describe('Provider Registry', () => {
         mockContext,
       );
       expect(embeddingProvider).toBeDefined();
+    });
+
+    describe('openai providers', () => {
+      beforeEach(() => {
+        // Reset module mocks before each test
+        jest.resetModules();
+      });
+
+      it('should handle chat provider correctly', async () => {
+        const chatProvider = await factory.create(
+          'openai:chat:gpt-4',
+          mockProviderOptions,
+          mockContext,
+        );
+        expect(chatProvider).toBeDefined();
+      });
+
+      it('should show warning once for assistant provider', async () => {
+        // First call should show warning
+        const provider1 = await factory.create(
+          'openai:assistant:asst_123',
+          mockProviderOptions,
+          mockContext,
+        );
+        expect(provider1).toBeDefined();
+        expect(warnSpy).toHaveBeenCalledWith('The OpenAI Assistant provider requires the npm package "openai". In a future version, it will become an optional peer dependency that you must install separately with: npm install openai');
+        expect(warnSpy).toHaveBeenCalledTimes(1);
+
+        // Second call should not show warning
+        warnSpy.mockClear();
+        const provider2 = await factory.create(
+          'openai:assistant:asst_456',
+          mockProviderOptions,
+          mockContext,
+        );
+        expect(provider2).toBeDefined();
+        expect(warnSpy).not.toHaveBeenCalled();
+      });
+
+      it('should not show warning when PROMPTFOO_DISABLE_OPENAI_WARNING is set', async () => {
+        process.env.PROMPTFOO_DISABLE_OPENAI_WARNING = '1';
+        expect(getEnvBool('PROMPTFOO_DISABLE_OPENAI_WARNING')).toBe(true);
+
+        const provider = await factory.create(
+          'openai:assistant:asst_123',
+          mockProviderOptions,
+          mockContext,
+        );
+        expect(provider).toBeDefined();
+        expect(warnSpy).not.toHaveBeenCalled();
+      });
+
+      it('should handle missing openai package', async () => {
+        const importModuleMock = jest.fn().mockRejectedValue(new Error('Cannot find module \'openai\''));
+        jest.doMock('../../src/esm', () => ({
+          importModule: importModuleMock,
+        }));
+
+        // Re-import to get the updated mock
+        const { providerMap: updatedProviderMap } = await import('../../src/providers/registry');
+        const updatedFactory = updatedProviderMap.find((f) => f.test('openai:chat:gpt-4'))!;
+
+        await expect(
+          updatedFactory.create('openai:assistant:asst_456', mockProviderOptions, mockContext)
+        ).rejects.toThrow('The OpenAI Assistant provider requires the npm package "openai". Install it with: npm install openai');
+      });
+
+      it('should handle other errors from openai package', async () => {
+        const importModuleMock = jest.fn().mockRejectedValue(new Error('Some other error'));
+        jest.doMock('../../src/esm', () => ({
+          importModule: importModuleMock,
+        }));
+
+        // Re-import to get the updated mock
+        const { providerMap: updatedProviderMap } = await import('../../src/providers/registry');
+        const updatedFactory = updatedProviderMap.find((f) => f.test('openai:chat:gpt-4'))!;
+
+        await expect(
+          updatedFactory.create('openai:assistant:asst_456', mockProviderOptions, mockContext)
+        ).rejects.toThrow('Some other error');
+      });
     });
   });
 });
