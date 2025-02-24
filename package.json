@@ -138,7 +138,6 @@
     "cloudflare": "3.4.0",
     "concurrently": "^9.1.2",
     "drizzle-kit": "^0.30.4",
-    "esbuild": "^0.25.0",
     "eslint": "^9.21.0",
     "eslint-plugin-jest": "^28.11.0",
     "eslint-plugin-react-hooks": "^5.1.0",
@@ -146,7 +145,6 @@
     "eslint-plugin-unicorn": "^57.0.0",
     "eslint-plugin-unused-imports": "^4.1.4",
     "jest": "^29.7.0",
-    "jest-watch-typeahead": "^2.2.2",
     "madge": "^8.0.0",
     "nock": "^13.5.6",
     "nodemon": "^3.1.9",
@@ -154,7 +152,6 @@
     "shx": "^0.3.4",
     "supertest": "^7.0.0",
     "ts-node": "^10.9.2",
-    "tsconfig-paths": "^4.2.0",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.24.1",
     "zod-to-json-schema": "^3.24.3"
