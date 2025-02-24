@@ -389,13 +389,22 @@ describe('Anthropic', () => {
 
       const result = await provider.callApi('What is 2+2?');
       expect(provider.anthropic.messages.create).toHaveBeenCalledWith(
-        expect.objectContaining({
+        {
+          model: 'claude-3-7-sonnet-20250219',
+          max_tokens: 2048,
+          messages: [
+            {
+              role: 'user',
+              content: [{ type: 'text', text: 'What is 2+2?' }],
+            },
+          ],
+          stream: false,
+          temperature: undefined,
           thinking: {
             type: 'enabled',
             budget_tokens: 2048,
           },
-          temperature: 1,
-        }),
+        },
         {},
       );
       expect(result.output).toBe(
@@ -425,70 +434,81 @@ describe('Anthropic', () => {
       expect(result.output).toBe('Redacted Thinking: encrypted-data\n\nFinal answer');
     });
 
-    it('should validate thinking configuration', async () => {
+    it('should handle API errors for thinking configuration', async () => {
       const provider = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219');
 
-      // Test invalid budget
-      await expect(
-        provider.callApi(
-          JSON.stringify([
-            {
-              role: 'user',
-              content: 'test',
-              thinking: {
-                type: 'enabled',
-                budget_tokens: 500,
-              },
+      // Mock API error for invalid budget
+      const mockApiError = Object.create(APIError.prototype);
+      Object.assign(mockApiError, {
+        name: 'APIError',
+        message: 'API Error',
+        status: 400,
+        error: {
+          error: {
+            message: 'Thinking budget must be at least 1024 tokens when enabled',
+            type: 'invalid_request_error',
+          },
+        },
+      });
+
+      jest.spyOn(provider.anthropic.messages, 'create').mockRejectedValue(mockApiError);
+
+      const result = await provider.callApi(
+        JSON.stringify([
+          {
+            role: 'user',
+            content: 'test',
+            thinking: {
+              type: 'enabled',
+              budget_tokens: 512,
             },
-          ]),
-        ),
-      ).rejects.toThrow('Thinking budget must be at least 1024 tokens when enabled');
+          },
+        ]),
+      );
+
+      expect(result.error).toBe(
+        'API call error: Thinking budget must be at least 1024 tokens when enabled, status 400, type invalid_request_error',
+      );
 
       // Test budget exceeding max_tokens
       const providerWithMaxTokens = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219', {
         config: {
-          max_tokens: 1500,
+          max_tokens: 2048,
         },
       });
-      await expect(
-        providerWithMaxTokens.callApi(
-          JSON.stringify([
-            {
-              role: 'user',
-              content: 'test',
-              thinking: {
-                type: 'enabled',
-                budget_tokens: 2048,
-              },
-            },
-          ]),
-        ),
-      ).rejects.toThrow('Thinking budget must be less than max_tokens');
-    });
 
-    it('should set temperature to 1 when thinking is enabled', async () => {
-      const provider = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219', {
-        config: {
-          thinking: {
-            type: 'enabled',
-            budget_tokens: 2048,
+      const mockMaxTokensError = Object.create(APIError.prototype);
+      Object.assign(mockMaxTokensError, {
+        name: 'APIError',
+        message: 'API Error',
+        status: 400,
+        error: {
+          error: {
+            message: 'Thinking budget must be less than max_tokens',
+            type: 'invalid_request_error',
           },
         },
       });
 
       jest
-        .spyOn(provider.anthropic.messages, 'create')
-        .mockImplementation()
-        .mockResolvedValue({
-          content: [{ type: 'text', text: 'Test response' }],
-        } as Anthropic.Messages.Message);
+        .spyOn(providerWithMaxTokens.anthropic.messages, 'create')
+        .mockRejectedValue(mockMaxTokensError);
 
-      await provider.callApi('Test prompt');
-      expect(provider.anthropic.messages.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          temperature: 1,
-        }),
-        {},
+      const result2 = await providerWithMaxTokens.callApi(
+        JSON.stringify([
+          {
+            role: 'user',
+            content: 'test',
+            thinking: {
+              type: 'enabled',
+              budget_tokens: 3000,
+            },
+          },
+        ]),
+      );
+
+      expect(result2.error).toBe(
+        'API call error: Thinking budget must be less than max_tokens, status 400, type invalid_request_error',
       );
     });
 
@@ -512,9 +532,22 @@ describe('Anthropic', () => {
 
       await provider.callApi('Test prompt');
       expect(provider.anthropic.messages.create).toHaveBeenCalledWith(
-        expect.objectContaining({
+        {
+          model: 'claude-3-7-sonnet-20250219',
+          max_tokens: 2048,
+          messages: [
+            {
+              role: 'user',
+              content: [{ type: 'text', text: 'Test prompt' }],
+            },
+          ],
+          stream: false,
           temperature: 0.7,
-        }),
+          thinking: {
+            type: 'enabled',
+            budget_tokens: 2048,
+          },
+        },
         {},
       );
     });

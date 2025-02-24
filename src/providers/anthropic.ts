@@ -275,25 +275,17 @@ export class AnthropicMessagesProvider implements ApiProvider {
 
     const { system, extractedMessages, thinking } = parseMessages(prompt);
 
-    // Validate thinking configuration
-    if (thinking && 'type' in thinking && thinking.type === 'enabled') {
-      if (!thinking.budget_tokens || thinking.budget_tokens < 1024) {
-        throw new Error('Thinking budget must be at least 1024 tokens when enabled');
-      }
-      if (this.config?.max_tokens && thinking.budget_tokens >= this.config.max_tokens) {
-        throw new Error('Thinking budget must be less than max_tokens');
-      }
-    }
-
     const params: Anthropic.MessageCreateParams = {
       model: this.modelName,
       ...(system ? { system } : {}),
-      max_tokens: this.config?.max_tokens || getEnvInt('ANTHROPIC_MAX_TOKENS', 1024),
+      max_tokens:
+        this.config?.max_tokens ||
+        getEnvInt('ANTHROPIC_MAX_TOKENS', this.config.thinking || thinking ? 2048 : 1024),
       messages: extractedMessages,
       stream: false,
       temperature:
-        (this.config.thinking || thinking) && !this.config.temperature
-          ? 1
+        this.config.thinking || thinking
+          ? this.config.temperature
           : this.config.temperature || getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
       ...(this.config.tools ? { tools: maybeLoadFromExternalFile(this.config.tools) } : {}),
       ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
