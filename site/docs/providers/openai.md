@@ -510,6 +510,17 @@ These OpenAI-related environment variables are supported:
 
 To test out an Assistant via OpenAI's Assistants API, first create an Assistant in the [API playground](https://platform.openai.com/playground).
 
+:::note
+The OpenAI Assistant provider requires the `openai` npm package. In a future version, this will become an optional peer dependency. You can disable the warning about this requirement by setting `PROMPTFOO_DISABLE_OPENAI_WARNING=1`.
+
+Install it with:
+
+```sh
+npm install --save openai
+```
+
+:::
+
 Set functions, code interpreter, and files for retrieval as necessary.
 
 Then, include the assistant in your config:
