@@ -316,23 +316,6 @@ When using extended output:
 - For thinking budgets above 32K, batch processing is recommended
 - The model may not use the entire allocated thinking budget
 
-#### Token Usage and Pricing
-
-Extended thinking tokens:
-
-- Count towards the context window
-- Are billed as output tokens
-- Count towards rate limits
-- Previous turn thinking blocks don't count as input tokens
-- Include a 28-29 token system prompt
-
-For Claude 3.7 Sonnet pricing:
-
-- Input tokens: $3 / MTok
-- Output tokens (including thinking): $15 / MTok
-- Prompt caching write: $3.75 / MTok
-- Prompt caching read: $0.30 / MTok
-
 See [Anthropic's Extended Thinking Guide](https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking) for more details on requirements and best practices.
 
 ## Model-Graded Tests
