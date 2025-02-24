@@ -1,7 +1,7 @@
 import path from 'path';
+import { getEnvBool } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { getEnvBool } from '../envars';
 import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
 import RedteamCrescendoProvider from '../redteam/providers/crescendo';
 import RedteamGoatProvider from '../redteam/providers/goat';
@@ -92,7 +92,9 @@ export async function loadOpenAiAssistantProvider() {
     return OpenAiAssistantProvider;
   } catch (error) {
     if (error instanceof Error && error.message.includes('Cannot find module')) {
-      throw new Error('The OpenAI Assistant provider requires the npm package "openai". Install it with: npm install openai');
+      throw new Error(
+        'The OpenAI Assistant provider requires the npm package "openai". Install it with: npm install openai',
+      );
     }
     throw error;
   }
@@ -610,7 +612,9 @@ export const providerMap: ProviderFactory[] = [
         const OpenAiAssistantProvider = await loadOpenAiAssistantProvider();
 
         if (!hasShownOpenAiAssistantWarning && !getEnvBool('PROMPTFOO_DISABLE_OPENAI_WARNING')) {
-          logger.warn('The OpenAI Assistant provider requires the npm package "openai". In a future version, it will become an optional peer dependency that you must install separately with: npm install openai');
+          logger.warn(
+            'The OpenAI Assistant provider requires the npm package "openai". In a future version, it will become an optional peer dependency that you must install separately with: npm install openai',
+          );
           hasShownOpenAiAssistantWarning = true;
         }
         return new OpenAiAssistantProvider(modelName, providerOptions);

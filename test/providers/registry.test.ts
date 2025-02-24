@@ -1,9 +1,9 @@
 import path from 'path';
+import { getEnvBool } from '../../src/envars';
+import logger from '../../src/logger';
 import { providerMap } from '../../src/providers/registry';
 import type { LoadApiProviderContext } from '../../src/types';
 import type { ProviderOptions } from '../../src/types/providers';
-import { getEnvBool } from '../../src/envars';
-import logger from '../../src/logger';
 
 const mockOpenAiAssistantProvider = jest.fn().mockImplementation((assistantId) => ({
   id: () => `openai:assistant:${assistantId}`,
@@ -27,9 +27,13 @@ jest.mock('../../src/providers/pythonCompletion', () => {
 });
 
 // Mock dynamic imports
-jest.mock('../../src/providers/openai/assistant', () => ({
-  OpenAiAssistantProvider: mockOpenAiAssistantProvider,
-}), { virtual: true });
+jest.mock(
+  '../../src/providers/openai/assistant',
+  () => ({
+    OpenAiAssistantProvider: mockOpenAiAssistantProvider,
+  }),
+  { virtual: true },
+);
 
 jest.mock('../../src/esm', () => ({
   importModule: jest.fn().mockImplementation(async (modulePath) => {
@@ -374,7 +378,9 @@ describe('Provider Registry', () => {
           mockContext,
         );
         expect(provider1).toBeDefined();
-        expect(warnSpy).toHaveBeenCalledWith('The OpenAI Assistant provider requires the npm package "openai". In a future version, it will become an optional peer dependency that you must install separately with: npm install openai');
+        expect(warnSpy).toHaveBeenCalledWith(
+          'The OpenAI Assistant provider requires the npm package "openai". In a future version, it will become an optional peer dependency that you must install separately with: npm install openai',
+        );
         expect(warnSpy).toHaveBeenCalledTimes(1);
 
         // Second call should not show warning
@@ -402,32 +408,42 @@ describe('Provider Registry', () => {
       });
 
       it('should handle missing openai package', async () => {
-        const importModuleMock = jest.fn().mockRejectedValue(new Error('Cannot find module \'openai\''));
-        jest.doMock('../../src/esm', () => ({
-          importModule: importModuleMock,
-        }));
+        // Mock the OpenAI Assistant module to throw an error
+        jest.mock(
+          '../../src/providers/openai/assistant',
+          () => {
+            throw new Error("Cannot find module 'openai'");
+          },
+          { virtual: true },
+        );
 
         // Re-import to get the updated mock
         const { providerMap: updatedProviderMap } = await import('../../src/providers/registry');
         const updatedFactory = updatedProviderMap.find((f) => f.test('openai:chat:gpt-4'))!;
 
         await expect(
-          updatedFactory.create('openai:assistant:asst_456', mockProviderOptions, mockContext)
-        ).rejects.toThrow('The OpenAI Assistant provider requires the npm package "openai". Install it with: npm install openai');
+          updatedFactory.create('openai:assistant:asst_456', mockProviderOptions, mockContext),
+        ).rejects.toThrow(
+          'The OpenAI Assistant provider requires the npm package "openai". Install it with: npm install openai',
+        );
       });
 
       it('should handle other errors from openai package', async () => {
-        const importModuleMock = jest.fn().mockRejectedValue(new Error('Some other error'));
-        jest.doMock('../../src/esm', () => ({
-          importModule: importModuleMock,
-        }));
+        // Mock the OpenAI Assistant module to throw an error
+        jest.mock(
+          '../../src/providers/openai/assistant',
+          () => {
+            throw new Error('Some other error');
+          },
+          { virtual: true },
+        );
 
         // Re-import to get the updated mock
         const { providerMap: updatedProviderMap } = await import('../../src/providers/registry');
         const updatedFactory = updatedProviderMap.find((f) => f.test('openai:chat:gpt-4'))!;
 
         await expect(
-          updatedFactory.create('openai:assistant:asst_456', mockProviderOptions, mockContext)
+          updatedFactory.create('openai:assistant:asst_456', mockProviderOptions, mockContext),
         ).rejects.toThrow('Some other error');
       });
     });
