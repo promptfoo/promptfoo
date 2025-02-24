@@ -59,6 +59,7 @@ export default function Purpose({ onNext }: PromptsProps) {
     } else {
       recordEvent('feature_used', { feature: 'redteam_config_example' });
       setTestMode('application');
+      setExternalSystemEnabled(true);
       setFullConfig(EXAMPLE_CONFIG);
     }
   };
@@ -66,6 +67,7 @@ export default function Purpose({ onNext }: PromptsProps) {
   const handleConfirmLoadExample = () => {
     recordEvent('feature_used', { feature: 'redteam_config_example' });
     setTestMode('application');
+    setExternalSystemEnabled(true);
     setFullConfig(EXAMPLE_CONFIG);
     setConfirmDialogOpen(false);
   };
