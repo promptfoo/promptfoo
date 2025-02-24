@@ -17,6 +17,8 @@
   flex-direction: column;
   gap: 2rem;
   margin: 4rem 0 6rem 0;
+  overflow-x: hidden;
+  width: 100%;
 }
 
 .infoContainer h2 {
@@ -33,6 +35,16 @@
   color: #333;
 }
 
+.configToWebview {
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  margin-top: 3rem;
+  gap: 2rem;
+  padding: 0 1rem;
+  max-width: 100%;
+}
+
 .codeExample,
 .webviewExample {
   flex: 1;
@@ -41,13 +53,6 @@
   border-radius: var(--border-radius-lg);
   overflow: hidden;
   transition: all var(--transition-duration) var(--transition-timing);
-}
-
-.codeExample {
-  padding: 1.5rem;
-}
-
-.webviewExample {
   padding: 1.5rem;
 }
 
@@ -56,15 +61,20 @@
   font-size: 0.95rem;
   line-height: 1.5;
   border-radius: 8px;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre-wrap !important;
+  word-wrap: break-word !important;
 }
 
-.configToWebview {
-  display: flex;
-  justify-content: center;
-  align-items: stretch;
-  margin-top: 3rem;
-  gap: 2rem;
-  padding: 0 1rem;
+.codeBlock > code {
+  white-space: pre-wrap !important;
+  word-wrap: break-word !important;
+}
+
+.codeBlock pre {
+  white-space: pre-wrap !important;
+  word-wrap: break-word !important;
 }
 
 .featureTitle {
@@ -94,12 +104,26 @@
   .configToWebview {
     flex-direction: column;
     gap: 2rem;
+    padding: 0 1rem;
   }
 
   .codeExample,
   .webviewExample {
     max-width: 100%;
-    padding: 1.25rem;
+    padding: 1rem;
+  }
+
+  .exampleTab {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+  }
+
+  .codeBlock {
+    font-size: 0.85rem;
+  }
+
+  .featureTitle {
+    font-size: 1.1rem;
   }
 
   [data-theme='dark'] .codeExample,
@@ -117,12 +141,20 @@
   display: flex;
   justify-content: center;
   gap: 0.5rem;
-  margin: 2.5rem 0 2rem;
+  margin: 2.5rem auto 2rem;
   padding: 0.375rem;
   background: rgba(0, 0, 0, 0.03);
   border-radius: var(--border-radius-pill);
   width: fit-content;
-  margin-inline: auto;
+  max-width: calc(100% - 2rem);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.exampleTabs::-webkit-scrollbar {
+  display: none;
 }
 
 .exampleTab {
@@ -137,6 +169,7 @@
   color: #666;
   position: relative;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .exampleTabActive {

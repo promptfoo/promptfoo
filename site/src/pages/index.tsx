@@ -5,6 +5,7 @@ import { useColorMode } from '@docusaurus/theme-common';
 import CompareIcon from '@mui/icons-material/Compare';
 import DescriptionIcon from '@mui/icons-material/Description';
 import SecurityIcon from '@mui/icons-material/Security';
+import { Box, Button, Container, Stack, Typography } from '@mui/material';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
 import HomepageInfo from '@site/src/components/HomepageInfo';
 import LogoContainer from '@site/src/components/LogoContainer';
@@ -15,23 +16,67 @@ import styles from './index.module.css';
 
 function HomepageHeader({ getStartedUrl }: { getStartedUrl: string }) {
   return (
-    <header className={clsx('hero hero--primary', styles.heroBanner)}>
-      <div className="container">
-        <h1>Test & secure your LLM apps</h1>
-        <p>Open-source LLM testing used by 60,000+ developers</p>
-        <div className={styles.buttons}>
-          <Link className="button button--primary button--lg" to={getStartedUrl}>
+    <Box
+      component="header"
+      className={clsx('hero hero--primary', styles.heroBanner)}
+      sx={{
+        padding: { xs: '2rem 1rem', md: '4rem 0' },
+        textAlign: 'center',
+        position: 'relative',
+        overflow: 'hidden',
+      }}
+    >
+      <Container>
+        <Typography
+          component="h1"
+          sx={{
+            fontSize: { xs: '2.5rem', md: '3.5rem' },
+            mb: { xs: 2, md: 4 },
+          }}
+        >
+          Test & secure your LLM apps
+        </Typography>
+        <Typography
+          sx={{
+            fontSize: { xs: '1.125rem', md: '1.25rem' },
+            mb: { xs: 2, md: 4 },
+            fontWeight: 'normal',
+          }}
+        >
+          Open-source LLM testing used by 60,000+ developers
+        </Typography>
+        <Stack
+          direction={{ xs: 'column', sm: 'row' }}
+          spacing={2}
+          alignItems="center"
+          justifyContent="center"
+        >
+          <Button
+            component={Link}
+            to={getStartedUrl}
+            variant="contained"
+            size="large"
+            className="button button--primary button--lg"
+          >
             Get Started
-          </Link>
-          <Link
-            className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
+          </Button>
+          <Button
+            component={Link}
             to="/contact/"
+            variant="outlined"
+            size="large"
+            className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
+            sx={{
+              '&.MuiButton-outlined': {
+                borderColor: 'currentColor',
+              },
+            }}
           >
             Request a Demo
-          </Link>
-        </div>
-      </div>
-    </header>
+          </Button>
+        </Stack>
+      </Container>
+    </Box>
   );
 }
 
@@ -136,47 +181,141 @@ function HomepageWalkthrough() {
     },
   ];
 
-  const selectedStepData = steps.find((step) => step.id === selectedStep);
   return (
-    <div className={styles.walkthroughContainer}>
-      <div className={styles.walkthroughTabs}>
+    <Box
+      sx={{
+        maxWidth: 'min(1400px, 95%)',
+        mx: 'auto',
+        my: { xs: 2, md: 4 },
+        pb: 0.5,
+        borderBottom: '1px solid',
+        borderColor: 'divider',
+      }}
+    >
+      {/* Desktop Tabs */}
+      <Stack
+        direction="row"
+        sx={{
+          display: { xs: 'none', md: 'flex' },
+          justifyContent: 'center',
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          mb: 2,
+        }}
+      >
         {steps.map((step) => (
-          <button
+          <Button
             key={step.id}
-            className={clsx(
-              styles.walkthroughTab,
-              selectedStep === step.id && styles.walkthroughTabActive,
-            )}
             onClick={() => setSelectedStep(step.id)}
+            sx={{
+              py: 2,
+              px: 3,
+              fontSize: '1.25rem',
+              borderBottom: selectedStep === step.id ? '2px solid #1890ff' : 'none',
+              color: selectedStep === step.id ? '#1890ff' : 'inherit',
+              '&:hover': {
+                backgroundColor: 'transparent',
+                color: selectedStep === step.id ? '#1890ff' : 'rgba(24, 144, 255, 0.7)',
+              },
+            }}
           >
             {step.caption}
-          </button>
+          </Button>
         ))}
-      </div>
-      <div className={styles.walkthroughContent}>
-        <div className={styles.walkthroughImageContainer}>
-          <Link to={selectedStepData?.destinationUrl || '#'}>
-            <img
-              src={
-                isDarkTheme && selectedStepData?.imageDark
-                  ? selectedStepData.imageDark
-                  : selectedStepData?.image
-              }
-              srcSet={
-                isDarkTheme && selectedStepData?.image2xDark
-                  ? `${selectedStepData.imageDark} 1x, ${selectedStepData.image2xDark} 2x`
-                  : `${selectedStepData?.image} 1x, ${selectedStepData?.image2x} 2x`
-              }
-              alt={`Walkthrough step ${selectedStep}`}
-              className={styles.walkthroughImage}
-            />
-          </Link>
-        </div>
-        <div className={styles.walkthroughDescription}>
-          {steps.find((step) => step.id === selectedStep)?.description}
-        </div>
-      </div>
-    </div>
+      </Stack>
+
+      {/* Desktop Content */}
+      <Box sx={{ display: { xs: 'none', md: 'block' } }}>
+        <Stack
+          direction="row"
+          spacing={3}
+          sx={{
+            alignItems: 'flex-start',
+          }}
+        >
+          <Box sx={{ width: '70%', pr: 2 }}>
+            <Link to={steps.find((step) => step.id === selectedStep)?.destinationUrl || '#'}>
+              <img
+                src={
+                  isDarkTheme && steps.find((step) => step.id === selectedStep)?.imageDark
+                    ? steps.find((step) => step.id === selectedStep)?.imageDark
+                    : steps.find((step) => step.id === selectedStep)?.image
+                }
+                srcSet={
+                  isDarkTheme && steps.find((step) => step.id === selectedStep)?.image2xDark
+                    ? `${steps.find((step) => step.id === selectedStep)?.imageDark} 1x, ${steps.find((step) => step.id === selectedStep)?.image2xDark} 2x`
+                    : `${steps.find((step) => step.id === selectedStep)?.image} 1x, ${steps.find((step) => step.id === selectedStep)?.image2x} 2x`
+                }
+                alt={`Walkthrough step ${selectedStep}`}
+                style={{
+                  width: '100%',
+                  borderRadius: '8px',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                }}
+              />
+            </Link>
+          </Box>
+          <Box sx={{ width: '30%' }}>
+            {steps.find((step) => step.id === selectedStep)?.description}
+          </Box>
+        </Stack>
+      </Box>
+
+      {/* Mobile Content - Vertical Layout */}
+      <Stack
+        spacing={6}
+        sx={{
+          display: { xs: 'flex', md: 'none' },
+          pt: 2,
+        }}
+      >
+        {steps.map((step) => (
+          <Box key={step.id}>
+            <Stack
+              direction="row"
+              spacing={1}
+              alignItems="center"
+              sx={{
+                mb: 2,
+                borderBottom: '1px solid',
+                borderColor: 'divider',
+                pb: 2,
+              }}
+            >
+              {step.icon}
+              <Typography
+                variant="h3"
+                sx={{
+                  fontSize: '1.5rem',
+                  fontWeight: 600,
+                }}
+              >
+                {step.caption}
+              </Typography>
+            </Stack>
+            <Box sx={{ mb: 3 }}>
+              <Link to={step.destinationUrl}>
+                <img
+                  src={isDarkTheme && step.imageDark ? step.imageDark : step.image}
+                  srcSet={
+                    isDarkTheme && step.image2xDark
+                      ? `${step.imageDark} 1x, ${step.image2xDark} 2x`
+                      : `${step.image} 1x, ${step.image2x} 2x`
+                  }
+                  alt={step.caption}
+                  style={{
+                    width: '100%',
+                    borderRadius: '8px',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                  }}
+                />
+              </Link>
+            </Box>
+            <Box>{step.description}</Box>
+          </Box>
+        ))}
+      </Stack>
+    </Box>
   );
 }
 
@@ -259,33 +398,66 @@ export default function Home(): JSX.Element {
       </Head>
       <HomepageHeader getStartedUrl={getStartedUrl} />
       <HomepageWalkthrough />
-      <main>
-        <section className={styles.logoSection}>
-          <div className="container">
-            <h2>Trusted by developers at</h2>
+      <Box component="main" sx={{ overflowX: 'hidden' }}>
+        <Box component="section" className={styles.logoSection}>
+          <Container>
+            <Typography
+              variant="h2"
+              sx={{
+                textAlign: 'center',
+                fontSize: { xs: '1.75rem', md: '2rem' },
+                mb: 3,
+              }}
+            >
+              Trusted by developers at
+            </Typography>
             <LogoContainer noBackground noBorder />
-          </div>
-        </section>
+          </Container>
+        </Box>
         <HomepageFeatures />
         <HomepageInfo />
         <AsSeenOnSection />
 
-        <div className={styles.ctaSection}>
-          <h2>Make your LLM app reliable & secure</h2>
-          <div className={styles.buttons}>
-            <Link className="button button--primary button--lg" to={getStartedUrl}>
-              Read Start Guide
-            </Link>
-            <Link
-              className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
-              to="/contact/"
+        <Box className={styles.ctaSection}>
+          <Container>
+            <Typography
+              variant="h2"
+              sx={{
+                fontSize: { xs: '1.75rem', md: '2rem' },
+                mb: { xs: 2, md: 3 },
+              }}
             >
-              Contact Us
-            </Link>
-          </div>
-        </div>
+              Make your LLM app reliable & secure
+            </Typography>
+            <Stack
+              direction={{ xs: 'column', sm: 'row' }}
+              spacing={2}
+              justifyContent="center"
+              sx={{ px: { xs: 2, sm: 0 } }}
+            >
+              <Button
+                component={Link}
+                to={getStartedUrl}
+                variant="contained"
+                size="large"
+                className="button button--primary button--lg"
+              >
+                Read Start Guide
+              </Button>
+              <Button
+                component={Link}
+                to="/contact/"
+                variant="outlined"
+                size="large"
+                className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
+              >
+                Contact Us
+              </Button>
+            </Stack>
+          </Container>
+        </Box>
         <NewsletterForm />
-      </main>
+      </Box>
     </Layout>
   );
 }

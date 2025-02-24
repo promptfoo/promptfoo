@@ -22,22 +22,12 @@ export default function LogoContainer({
         className,
       )}
     >
-      <img
-        style={{ maxWidth: '100px' }}
-        className={styles.shopify}
-        src="/img/brands/shopify-logo.svg"
-        alt="Shopify"
-      />
+      <img className={styles.shopify} src="/img/brands/shopify-logo.svg" alt="Shopify" />
       <img src="/img/brands/discord-logo-blue.svg" alt="Discord" />
-      <img
-        style={{ maxWidth: '110px' }}
-        className={styles.anthropic}
-        src="/img/brands/anthropic-logo.svg"
-        alt="Anthropic"
-      />
-      <img style={{ maxWidth: '100px' }} src="/img/brands/microsoft-logo.svg" alt="Microsoft" />
-      <img style={{ maxHeight: '50px' }} src="/img/brands/doordash-logo.svg" alt="Doordash" />
-      <img style={{ maxHeight: '120px' }} src="/img/brands/carvana-logo.svg" alt="Carvana" />
+      <img className={styles.anthropic} src="/img/brands/anthropic-logo.svg" alt="Anthropic" />
+      <img className={styles.microsoft} src="/img/brands/microsoft-logo.svg" alt="Microsoft" />
+      <img src="/img/brands/doordash-logo.svg" alt="Doordash" />
+      <img className={styles.carvana} src="/img/brands/carvana-logo.svg" alt="Carvana" />
     </div>
   );
 }

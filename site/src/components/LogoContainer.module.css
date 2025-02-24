@@ -22,6 +22,16 @@
   max-width: 150px;
   transition: all 0.3s ease;
   opacity: 0.9;
+  height: auto;
+  width: auto;
+}
+
+.microsoft {
+  max-width: 180px !important;
+}
+
+.carvana {
+  max-width: 180px !important;
 }
 
 .logoContainer img:hover {
@@ -46,4 +56,79 @@
 [data-theme='dark'] .shopify,
 [data-theme='dark'] .anthropic {
   filter: brightness(0) invert(0.9);
+}
+
+/* Mobile styles */
+@media screen and (max-width: 768px) {
+  .logoContainer {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    grid-auto-rows: 1fr;
+    gap: 4rem;
+    padding: 2rem;
+    overflow-x: visible;
+    width: 100%;
+    max-width: 600px;
+    margin: 0 auto;
+    place-items: center;
+  }
+
+  .logoContainer img {
+    max-width: 140px;
+    width: auto;
+    height: 38px;
+    object-fit: contain;
+    margin: 0 auto;
+    display: block;
+  }
+
+  .microsoft {
+    height: 48px !important;
+    max-width: 200px !important;
+  }
+
+  .carvana {
+    height: 48px !important;
+    max-width: 200px !important;
+  }
+
+  .shopify {
+    height: 42px !important;
+  }
+
+  .anthropic {
+    height: 42px !important;
+  }
+}
+
+/* Small mobile styles */
+@media screen and (max-width: 480px) {
+  .logoContainer {
+    gap: 3rem;
+    padding: 1.5rem;
+    max-width: 100%;
+  }
+
+  .logoContainer img {
+    max-width: 120px;
+    height: 32px;
+  }
+
+  .microsoft {
+    height: 40px !important;
+    max-width: 160px !important;
+  }
+
+  .carvana {
+    height: 40px !important;
+    max-width: 160px !important;
+  }
+
+  .shopify {
+    height: 36px !important;
+  }
+
+  .anthropic {
+    height: 36px !important;
+  }
 }

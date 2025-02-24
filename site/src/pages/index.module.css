@@ -21,8 +21,6 @@
 }
 
 .heroBanner {
-  padding: 4rem 0;
-  text-align: center;
   position: relative;
   overflow: hidden;
 }
@@ -36,12 +34,6 @@
   font-size: 1.25rem;
   font-weight: normal;
   margin-bottom: 2rem;
-}
-
-@media screen and (max-width: 996px) {
-  .heroBanner {
-    padding: 1rem;
-  }
 }
 
 .buttons {
@@ -182,15 +174,26 @@
 
 .logoSection {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
   align-items: center;
-  gap: 2rem;
   padding: 4rem 0;
 }
 
 .logoSection h2 {
   text-align: center;
   font-size: 2rem;
+  margin-bottom: 3rem;
+}
+
+@media screen and (max-width: 768px) {
+  .logoSection {
+    padding: 3rem 1rem;
+  }
+
+  .logoSection h2 {
+    margin-bottom: 2rem;
+    font-size: 1.75rem;
+  }
 }
 
 .actionOrientedSection {
@@ -220,59 +223,12 @@
   background-color: var(--ifm-background-surface-color);
   text-align: center;
   padding: 6rem 0;
-  /*
-  background-color: #f8f9fa;
-  */
   margin: 4rem 0;
 }
 
 .ctaSection h2 {
   font-size: 2rem;
   margin-bottom: 2rem;
-}
-
-@media screen and (max-width: 768px) {
-  .heroBanner h1 {
-    font-size: 2.5rem;
-    margin: 2rem 0;
-  }
-
-  .walkthroughContainer {
-    flex-direction: column;
-  }
-
-  .walkthroughButtons,
-  .walkthroughImageContainer {
-    width: 100%;
-  }
-
-  .walkthroughButtons {
-    margin-bottom: 2rem;
-  }
-
-  .walkthroughButton {
-    align-items: center;
-  }
-
-  .actionOrientedSection {
-    padding: 4rem 0;
-  }
-
-  .actionOrientedSection h2 {
-    font-size: 2rem;
-  }
-
-  .imageSection {
-    padding: 2rem 0;
-  }
-
-  .ctaSection {
-    padding: 4rem 0;
-  }
-
-  .ctaSection h3 {
-    font-size: 1.5rem;
-  }
 }
 
 .asSeenOnSection {
@@ -284,6 +240,7 @@
   text-align: center;
   font-size: 2rem;
   margin-bottom: 3rem;
+  color: white;
 }
 
 .asSeenOnGrid {
@@ -317,25 +274,6 @@
 .asSeenOnGrid a:hover {
   text-decoration: none;
   color: inherit;
-}
-
-.asSeenOnLogo {
-  height: 40px;
-  margin-bottom: 1.5rem;
-  filter: grayscale(100%);
-  transition: filter 0.3s ease;
-}
-
-[data-theme='dark'] .asSeenOnLogo {
-  filter: invert(100%);
-}
-
-.asSeenOnCard:hover .asSeenOnLogo {
-  filter: grayscale(0%);
-}
-
-[data-theme='dark'] .asSeenOnCard:hover .asSeenOnLogo {
-  filter: invert(100%);
 }
 
 .asSeenOnContent {
@@ -395,10 +333,6 @@
   background: var(--ifm-card-background-color);
 }
 
-[data-theme='dark'] .asSeenOnSection h2 {
-  color: white;
-}
-
 @media screen and (max-width: 768px) {
   .asSeenOnSection {
     padding: 3rem 0;
@@ -408,4 +342,46 @@
     grid-template-columns: 1fr;
     gap: 1.5rem;
   }
+}
+
+[data-theme='dark'] select {
+  background-color: var(--ifm-background-surface-color);
+  border-color: var(--ifm-color-emphasis-300);
+  color: var(--ifm-color-emphasis-100);
+}
+
+[data-theme='dark'] select option {
+  background-color: var(--ifm-background-surface-color);
+  color: var(--ifm-color-emphasis-100);
+}
+
+/* Override any conflicting styles */
+[data-theme='dark'] .asSeenOnContent p {
+  color: var(--ifm-color-gray-200) !important;
+}
+
+[data-theme='dark'] Typography {
+  color: var(--ifm-color-gray-200) !important;
+}
+
+.buttonSecondary {
+  border: 1px solid var(--ifm-color-emphasis-500);
+  color: var(--ifm-color-emphasis-800);
+}
+
+.buttonSecondary:hover {
+  border-color: var(--ifm-color-emphasis-700);
+  color: var(--ifm-color-emphasis-900);
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+[data-theme='dark'] .buttonSecondary {
+  border-color: var(--ifm-color-emphasis-500);
+  color: var(--ifm-color-emphasis-300);
+}
+
+[data-theme='dark'] .buttonSecondary:hover {
+  border-color: var(--ifm-color-emphasis-400);
+  color: var(--ifm-color-emphasis-200);
+  background-color: rgba(255, 255, 255, 0.05);
 }

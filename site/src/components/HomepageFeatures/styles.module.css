@@ -1,5 +1,7 @@
 .features {
   padding: 4rem 0;
+  width: 100%;
+  overflow-x: hidden;
 }
 
 .featuresTitle {
@@ -12,12 +14,14 @@
   display: flex;
   flex-direction: column;
   gap: 4rem;
+  padding: 0 1rem;
 }
 
 .featureItem {
   display: flex;
   align-items: center;
   gap: 2rem;
+  max-width: 100%;
 }
 
 .featureItem:nth-child(even) {
@@ -26,23 +30,29 @@
 
 .featureContent {
   flex: 1;
+  min-width: 0; /* Prevents flex item from overflowing */
 }
 
 .featureContent h3 {
   font-size: 1.8rem;
   margin-bottom: 1rem;
+  word-wrap: break-word;
 }
 
 .featureContent p {
   font-size: 1.1rem;
   margin-bottom: 1.5rem;
+  word-wrap: break-word;
 }
 
 .featureImageWrapper {
   flex: 1;
+  min-width: 0; /* Prevents flex item from overflowing */
 }
 
 .featureImage {
+  width: 100%;
+  height: auto;
   max-width: 100%;
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
@@ -54,13 +64,44 @@
 }
 
 @media screen and (max-width: 768px) {
+  .features {
+    padding: 2rem 0;
+  }
+
+  .featuresList {
+    gap: 3rem;
+  }
+
   .featureItem,
   .featureItem:nth-child(even) {
     flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .featureContent h3 {
+    font-size: 1.5rem;
+  }
+
+  .featureContent p {
+    font-size: 1rem;
   }
 
   .featureContent,
   .featureImageWrapper {
     width: 100%;
+  }
+}
+
+@media screen and (max-width: 480px) {
+  .features {
+    padding: 1.5rem 0;
+  }
+
+  .featuresList {
+    gap: 2rem;
+  }
+
+  .featureContent h3 {
+    font-size: 1.3rem;
   }
 }

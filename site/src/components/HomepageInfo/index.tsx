@@ -3,6 +3,7 @@ import AssessmentIcon from '@mui/icons-material/Assessment';
 import SettingsIcon from '@mui/icons-material/Settings';
 import CodeBlock from '@theme/CodeBlock';
 import styles from './styles.module.css';
+import tabStyles from './tabs.module.css';
 
 export default function HomepageInfo(): JSX.Element {
   const [activeTab, setActiveTab] = useState('security');
@@ -71,16 +72,18 @@ targets:
     <div className={styles.infoContainer}>
       <section className={styles.section}>
         <h2>Easy abstractions for complex LLM testing</h2>
-        <div className={styles.exampleTabs}>
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              className={`${styles.exampleTab} ${activeTab === tab.id ? styles.exampleTabActive : ''}`}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              {tab.label}
-            </button>
-          ))}
+        <div className={tabStyles.tabsContainer}>
+          <div className={tabStyles.tabsScroller}>
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                className={`${tabStyles.tab} ${activeTab === tab.id ? tabStyles.tabActive : ''}`}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
         <div className={styles.configToWebview}>
           <div className={styles.codeExample}>
