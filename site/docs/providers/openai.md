@@ -4,6 +4,17 @@ sidebar_position: 1
 
 # OpenAI
 
+:::note
+The OpenAI Assistant, Image, and Moderation providers require the `openai` npm package. Install it with:
+
+```sh
+npm install openai
+```
+
+In a future version, this will become an optional peer dependency.
+You can disable the warning about this requirement by setting `PROMPTFOO_DISABLE_OPENAI_WARNING=1`.
+:::
+
 To use the OpenAI API, set the `OPENAI_API_KEY` environment variable, specify via `apiKey` field in the configuration file or pass the API key as an argument to the constructor.
 
 Example:
@@ -15,13 +26,15 @@ export OPENAI_API_KEY=your_api_key_here
 The OpenAI provider supports the following model formats:
 
 - `openai:chat` - defaults to `gpt-4o-mini`
-- `openai:completion` - defaults to `text-davinci-003`
+- `openai:completion` - defaults to `gpt-3.5-turbo-instruct`
 - `openai:<model name>` - uses a specific model name (mapped automatically to chat or completion endpoint)
 - `openai:chat:<model name>` - uses any model name against the `/v1/chat/completions` endpoint
 - `openai:chat:ft:gpt-4o-mini:company-name:ID` - example of a fine-tuned chat completion model
 - `openai:completion:<model name>` - uses any model name against the `/v1/completions` endpoint
 - `openai:embeddings:<model name>` - uses any model name against the `/v1/embeddings` endpoint
 - `openai:assistant:<assistant id>` - use an assistant
+- `openai:image:<model name>` - use image generation models like DALL-E
+- `openai:moderation` - use OpenAI's moderation endpoint
 
 The `openai:<endpoint>:<model name>` construction is useful if OpenAI releases a new model,
 or if you have a custom model.
@@ -509,17 +522,6 @@ These OpenAI-related environment variables are supported:
 ## Evaluating assistants
 
 To test out an Assistant via OpenAI's Assistants API, first create an Assistant in the [API playground](https://platform.openai.com/playground).
-
-:::note
-The OpenAI Assistant provider requires the `openai` npm package. In a future version, this will become an optional peer dependency. You can disable the warning about this requirement by setting `PROMPTFOO_DISABLE_OPENAI_WARNING=1`.
-
-Install it with:
-
-```sh
-npm install --save openai
-```
-
-:::
 
 Set functions, code interpreter, and files for retrieval as necessary.
 

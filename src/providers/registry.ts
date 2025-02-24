@@ -53,8 +53,6 @@ import { OllamaEmbeddingProvider, OllamaCompletionProvider, OllamaChatProvider }
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
-import { OpenAiImageProvider } from './openai/image';
-import { OpenAiModerationProvider } from './openai/moderation';
 import { parsePackageProvider } from './packageParser';
 import { PortkeyChatCompletionProvider } from './portkey';
 import { PythonProvider } from './pythonCompletion';
@@ -83,19 +81,43 @@ interface ProviderFactory {
   ) => Promise<ApiProvider>;
 }
 
-let hasShownOpenAiAssistantWarning = false;
+// Use module-level state that persists until explicitly reset
+let hasShownOpenAiWarning = false;
 
-export async function loadOpenAiAssistantProvider() {
+export function resetOpenAiWarningState() {
+  hasShownOpenAiWarning = false;
+}
+
+function showOpenAiWarning() {
+  if (!hasShownOpenAiWarning && !getEnvBool('PROMPTFOO_DISABLE_OPENAI_WARNING')) {
+    logger.warn(
+      'The OpenAI provider requires the npm package "openai". In a future version, it will become an optional peer dependency that you must install separately with: npm install openai',
+    );
+    hasShownOpenAiWarning = true;
+  }
+}
+
+type OpenAiProviderType = 'Assistant' | 'Moderation' | 'Image';
+
+async function handleOpenAiModuleError(
+  error: Error,
+  providerType: OpenAiProviderType,
+): Promise<never> {
+  if (error instanceof Error && error.message.includes('Cannot find module')) {
+    throw new Error(
+      `The OpenAI ${providerType} provider requires the npm package "openai". Install it with: npm install openai`,
+    );
+  }
+  throw error;
+}
+
+async function loadOpenAiProvider(type: OpenAiProviderType) {
   try {
-    const { OpenAiAssistantProvider } = await import('./openai/assistant');
-    return OpenAiAssistantProvider;
+    const module = await import(`./openai/${type.toLowerCase()}`);
+    const providerKey = `OpenAi${type}Provider` as const;
+    return module[providerKey];
   } catch (error) {
-    if (error instanceof Error && error.message.includes('Cannot find module')) {
-      throw new Error(
-        'The OpenAI Assistant provider requires the npm package "openai". Install it with: npm install openai',
-      );
-    }
-    throw error;
+    return handleOpenAiModuleError(error as Error, type);
   }
 }
 
@@ -599,6 +621,8 @@ export const providerMap: ProviderFactory[] = [
         return new OpenAiCompletionProvider(modelName || 'gpt-3.5-turbo-instruct', providerOptions);
       }
       if (modelType === 'moderation') {
+        showOpenAiWarning();
+        const OpenAiModerationProvider = await loadOpenAiProvider('Moderation');
         return new OpenAiModerationProvider(modelName || 'omni-moderation-latest', providerOptions);
       }
       if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
@@ -608,17 +632,13 @@ export const providerMap: ProviderFactory[] = [
         return new OpenAiCompletionProvider(modelType, providerOptions);
       }
       if (modelType === 'assistant') {
-        const OpenAiAssistantProvider = await loadOpenAiAssistantProvider();
-
-        if (!hasShownOpenAiAssistantWarning && !getEnvBool('PROMPTFOO_DISABLE_OPENAI_WARNING')) {
-          logger.warn(
-            'The OpenAI Assistant provider requires the npm package "openai". In a future version, it will become an optional peer dependency that you must install separately with: npm install openai',
-          );
-          hasShownOpenAiAssistantWarning = true;
-        }
+        showOpenAiWarning();
+        const OpenAiAssistantProvider = await loadOpenAiProvider('Assistant');
         return new OpenAiAssistantProvider(modelName, providerOptions);
       }
       if (modelType === 'image') {
+        showOpenAiWarning();
+        const OpenAiImageProvider = await loadOpenAiProvider('Image');
         return new OpenAiImageProvider(modelName, providerOptions);
       }
       // Assume user did not provide model type, and it's a chat model
