@@ -11,7 +11,7 @@ You should test these models on tasks that are relevant to your specific use cas
 
 This guide will walk you through setting up a comparison between Anthropic's Claude 3.7 and OpenAI's GPT-4o using `promptfoo`. The end result is a side-by-side evaluation of how these models perform on custom tasks:
 
-![Claude 3.5 vs GPT-4o comparison](/img/docs/claude3.5-vs-gpt4o.png)
+![Claude 3.7 vs GPT-4o comparison](/img/docs/claude3.7-vs-gpt4o.png)
 
 ## Prerequisites
 
@@ -152,7 +152,7 @@ With the evaluation complete, it's time to dig into the results and see how the 
 
 Some key things to look for:
 
-- Which model had a higher overall pass rate on the test assertions? In this case, both models did equally well in terms of getting the answer, which is great - these riddles often trip up less powerful models like GPT 3.5 and Claude 2.
+- Which model had a higher overall pass rate on the test assertions? In this case, both models did equally well in terms of getting the answer, which is great - these riddles often trip up less powerful models like GPT 3.7 and Claude 2.
 - Were there specific test cases where one model significantly outperformed the other?
 - How did the models compare on other output quality metrics.
 - Consider model properties like speed and cost in addition to quality.
