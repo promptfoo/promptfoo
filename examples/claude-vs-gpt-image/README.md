@@ -4,21 +4,11 @@ This example compares an image analysis task using:
 
 - gpt-4o via OpenAI
 - claude-3 via Amazon Bedrock
-- claude-3.7 via Anthropic
+- claude-3.5 via Anthropic
 
 GPT-4o and Claude have different prompt formats. We use custom provider functions in Python and JavaScript to dynamically format the prompt based on context about the provider.
 
-## Quick Start
-
-Run this example directly:
-
-```sh
-npx promptfoo@latest --example claude-vs-gpt-image
-```
-
-## Manual Setup
-
-To run the example manually, set your environment variables:
+To get started, set your environment variables:
 
 - `OPENAI_API_KEY`
 - `ANTHROPIC_API_KEY`

@@ -5,7 +5,7 @@ prompts: code_generation_prompt.txt
 
 providers:
   - openai:gpt-4
-  - anthropic:messages:claude-3-7-sonnet-20250219
+  - anthropic:messages:claude-3-5-sonnet-20241022
 
 tests:
   - vars:

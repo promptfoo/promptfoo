@@ -1,4 +1,4 @@
-Getting Started with Claude 3.7 Sonnet via Anthropic and/or AWS Bedrock
+Getting Started with claude 3.5 sonnet via Anthropic and/or AWS Bedrock
 
 To get started, set your environment variables:
 

@@ -56,7 +56,6 @@ async function formatImagePrompt(context) {
   // The ID always exists
   if (
     context.provider.id.startsWith('bedrock:anthropic') ||
-    context.provider.id === 'anthropic:messages:claude-3-7-sonnet-20250219' ||
     context.provider.id === 'anthropic:messages:claude-3-5-sonnet-20241022'
   ) {
     return [

@@ -55,7 +55,6 @@ def format_image_prompt(context: PromptFunctionContext) -> list[dict[str, typing
     """
     if (
         context["provider"]["id"].startswith("bedrock:anthropic")
-        or context["provider"]["id"] == "anthropic:messages:claude-3-7-sonnet-20250219"
         or context["provider"]["id"] == "anthropic:messages:claude-3-5-sonnet-20241022"
     ):
         return [
