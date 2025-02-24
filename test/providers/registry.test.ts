@@ -26,7 +26,6 @@ jest.mock('../../src/providers/pythonCompletion', () => {
   };
 });
 
-// Mock dynamic imports
 jest.mock(
   '../../src/providers/openai/assistant',
   () => ({
@@ -354,10 +353,8 @@ describe('Provider Registry', () => {
       );
       expect(embeddingProvider).toBeDefined();
     });
-
     describe('openai providers', () => {
       beforeEach(() => {
-        // Reset module mocks before each test
         jest.resetModules();
       });
 
@@ -371,7 +368,6 @@ describe('Provider Registry', () => {
       });
 
       it('should show warning once for assistant provider', async () => {
-        // First call should show warning
         const provider1 = await factory.create(
           'openai:assistant:asst_123',
           mockProviderOptions,
@@ -383,7 +379,6 @@ describe('Provider Registry', () => {
         );
         expect(warnSpy).toHaveBeenCalledTimes(1);
 
-        // Second call should not show warning
         warnSpy.mockClear();
         const provider2 = await factory.create(
           'openai:assistant:asst_456',
@@ -408,7 +403,6 @@ describe('Provider Registry', () => {
       });
 
       it('should handle missing openai package', async () => {
-        // Mock the OpenAI Assistant module to throw an error
         jest.mock(
           '../../src/providers/openai/assistant',
           () => {
@@ -417,7 +411,6 @@ describe('Provider Registry', () => {
           { virtual: true },
         );
 
-        // Re-import to get the updated mock
         const { providerMap: updatedProviderMap } = await import('../../src/providers/registry');
         const updatedFactory = updatedProviderMap.find((f) => f.test('openai:chat:gpt-4'))!;
 
@@ -429,7 +422,6 @@ describe('Provider Registry', () => {
       });
 
       it('should handle other errors from openai package', async () => {
-        // Mock the OpenAI Assistant module to throw an error
         jest.mock(
           '../../src/providers/openai/assistant',
           () => {
@@ -438,7 +430,6 @@ describe('Provider Registry', () => {
           { virtual: true },
         );
 
-        // Re-import to get the updated mock
         const { providerMap: updatedProviderMap } = await import('../../src/providers/registry');
         const updatedFactory = updatedProviderMap.find((f) => f.test('openai:chat:gpt-4'))!;
 

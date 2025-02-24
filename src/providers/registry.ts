@@ -83,7 +83,6 @@ interface ProviderFactory {
   ) => Promise<ApiProvider>;
 }
 
-// Add flag to track if we've shown the OpenAI Assistant warning
 let hasShownOpenAiAssistantWarning = false;
 
 export async function loadOpenAiAssistantProvider() {
