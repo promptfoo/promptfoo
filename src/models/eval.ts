@@ -125,7 +125,7 @@ export default class Eval {
     return evalInstance;
   }
 
-  static async getMany(limit: number = DEFAULT_QUERY_LIMIT) {
+  static async getMany(limit: number = DEFAULT_QUERY_LIMIT): Promise<Eval[]> {
     const db = getDb();
     const evals = await db
       .select()

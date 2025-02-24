@@ -14,11 +14,14 @@ import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
+import TablePagination from '@mui/material/TablePagination';
 import TableRow from '@mui/material/TableRow';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import fuzzysearch from 'fuzzysearch';
 import type { ResultLightweightWithLabel } from './types';
+
+const ROWS_PER_PAGE = 50;
 
 interface EvalSelectorDialogProps {
   open: boolean;
@@ -39,6 +42,8 @@ const EvalSelectorDialog: React.FC<EvalSelectorDialogProps> = ({
 }) => {
   const [searchText, setSearchText] = useState<string>('');
   const [focusedIndex, setFocusedIndex] = useState<number>(-1);
+  const [page, setPage] = useState(0);
+  const rowsPerPage = ROWS_PER_PAGE;
   const searchInputRef = React.useRef<HTMLInputElement>(null);
   const tableContainerRef = React.useRef<HTMLDivElement>(null);
 
@@ -46,6 +51,7 @@ const EvalSelectorDialog: React.FC<EvalSelectorDialogProps> = ({
     onClose();
     setSearchText('');
     setFocusedIndex(-1);
+    setPage(0);
   };
 
   const filteredEvals = recentEvals.filter(
@@ -54,6 +60,8 @@ const EvalSelectorDialog: React.FC<EvalSelectorDialogProps> = ({
       (typeof _eval.description === 'string' &&
         fuzzysearch(searchText.toLowerCase(), String(_eval.description).toLowerCase())),
   );
+
+  const paginatedEvals = filteredEvals.slice(page * rowsPerPage, (page + 1) * rowsPerPage);
 
   const handleSelectEval = (evalId: string) => {
     onRecentEvalSelected(evalId);
@@ -101,6 +109,12 @@ const EvalSelectorDialog: React.FC<EvalSelectorDialogProps> = ({
         handleClose();
         break;
     }
+  };
+
+  const handleChangePage = (event: unknown, newPage: number) => {
+    setPage(newPage);
+    const newIndex = newPage * rowsPerPage;
+    setFocusedIndex(Math.min(newIndex, filteredEvals.length - 1));
   };
 
   React.useEffect(() => {
@@ -169,8 +183,8 @@ const EvalSelectorDialog: React.FC<EvalSelectorDialogProps> = ({
                 </TableRow>
               </TableHead>
               <TableBody>
-                {filteredEvals.length > 0 ? (
-                  filteredEvals.map((_eval, index) => (
+                {paginatedEvals.length > 0 ? (
+                  paginatedEvals.map((_eval, index) => (
                     <TableRow
                       key={_eval.evalId}
                       hover
@@ -204,6 +218,16 @@ const EvalSelectorDialog: React.FC<EvalSelectorDialogProps> = ({
               </TableBody>
             </Table>
           </TableContainer>
+          {filteredEvals.length > rowsPerPage && (
+            <TablePagination
+              component="div"
+              count={filteredEvals.length}
+              page={page}
+              onPageChange={handleChangePage}
+              rowsPerPage={rowsPerPage}
+              rowsPerPageOptions={[ROWS_PER_PAGE]}
+            />
+          )}
         </Box>
       </DialogContent>
       <DialogActions>

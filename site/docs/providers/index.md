@@ -98,8 +98,31 @@ Providers are specified using various syntax options:
 
 3. File-based configuration:
 
-   ```yaml
-   - file://path/to/provider_config.yaml
+   Load a single provider:
+
+   ```yaml title="provider.yaml"
+   id: openai:chat:gpt-4o-mini
+   config:
+     temperature: 0.7
+   ```
+
+   Or multiple providers:
+
+   ```yaml title="providers.yaml"
+   - id: openai:gpt-4o-mini
+     config:
+       temperature: 0.7
+   - id: anthropic:messages:claude-3-5-sonnet-20241022
+     config:
+       max_tokens: 1000
+   ```
+
+   Reference in your configuration:
+
+   ```yaml title="promptfooconfig.yaml"
+   providers:
+     - file://provider.yaml # single provider as an object
+     - file://providers.yaml # multiple providers as an array
    ```
 
 ## Configuring Providers

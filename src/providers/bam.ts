@@ -92,7 +92,7 @@ export function convertResponse(response: TextGenerationCreateOutput): ProviderR
   return providerResponse;
 }
 
-export class BAMChatProvider implements ApiProvider {
+export class BAMProvider implements ApiProvider {
   modelName: string;
   config?: BAMGenerationParameters;
   moderations?: BAMModerations;
@@ -191,5 +191,3 @@ export class BAMChatProvider implements ApiProvider {
     }
   }
 }
-
-export class BAMEmbeddingProvider extends BAMChatProvider {}

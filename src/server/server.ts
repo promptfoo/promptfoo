@@ -17,6 +17,7 @@ import Eval from '../models/eval';
 import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
 import telemetry, { TelemetryEventSchema } from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCase/synthesis';
+import { checkRemoteHealth } from '../util/apiHealth';
 import {
   getLatestEval,
   getPrompts,
@@ -25,8 +26,7 @@ import {
   getTestCases,
   listPreviousResults,
   readResult,
-} from '../util';
-import { checkRemoteHealth } from '../util/apiHealth';
+} from '../util/database';
 import invariant from '../util/invariant';
 import { BrowserBehavior, openBrowser } from '../util/server';
 import { configsRouter } from './routes/configs';
@@ -194,7 +194,7 @@ export function createApp() {
       await telemetry.recordAndSend(event, properties);
       res.status(200).json({ success: true });
     } catch (error) {
-      console.error('Error processing telemetry request:', error);
+      logger.error(`Error processing telemetry request: ${error}`);
       res.status(500).json({ error: 'Failed to process telemetry request' });
     }
   });

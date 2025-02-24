@@ -393,7 +393,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                   sx={{
                     p: 2,
                     height: '100%',
-                    borderRadius: 2,
                     border: (theme) => {
                       if (selectedPlugins.has(plugin)) {
                         if (
@@ -404,7 +403,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                         }
                         return `1px solid ${theme.palette.primary.main}`;
                       }
-                      return '1px solid transparent';
+                      return undefined;
                     },
                     backgroundColor: (theme) =>
                       selectedPlugins.has(plugin)
