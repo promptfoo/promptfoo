@@ -100,7 +100,7 @@ export function createApp() {
     res.json({ data: allPrompts });
   });
 
-  app.get('/api/progress', async (req: Request, res: Response): Promise<void> => {
+  app.get('/api/history', async (req: Request, res: Response): Promise<void> => {
     const { tagName, tagValue, description } = req.query;
     const tag =
       tagName && tagValue ? { key: tagName as string, value: tagValue as string } : undefined;
