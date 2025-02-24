@@ -11,6 +11,7 @@ import HomepageInfo from '@site/src/components/HomepageInfo';
 import LogoContainer from '@site/src/components/LogoContainer';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
+import FeaturedCard from '../components/FeaturedCard';
 import NewsletterForm from '../components/NewsletterForm';
 import ResponsiveImage from '../components/ResponsiveImage';
 import WalkthroughTab from '../components/WalkthroughTab';
@@ -274,59 +275,66 @@ function HomepageWalkthrough() {
 
 function AsSeenOnSection() {
   return (
-    <section className={styles.asSeenOnSection}>
-      <div className="container">
-        <h2>Featured In</h2>
-        <div className={styles.asSeenOnGrid}>
-          <a
-            href="https://vimeo.com/1023317525/be082a1029"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={styles.asSeenOnCard}
-          >
-            <div className={styles.asSeenOnContent}>
-              <h3>
-                <img
-                  src="/img/brands/openai-logo.svg"
-                  alt="OpenAI"
-                  className={styles.asSeenOnLogoInline}
-                />
-                Build Hours
-              </h3>
-              <p>
-                "Promptfoo is really powerful because you can iterate on prompts, configure tests in
-                YAML, and view everything locally... it's faster and more straightforward"
-              </p>
-              <span className={styles.watchNow}>Watch the Video →</span>
-            </div>
-          </a>
-
-          <a
-            href="https://github.com/anthropics/courses/tree/master/prompt_evaluations"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={styles.asSeenOnCard}
-          >
-            <div className={styles.asSeenOnContent}>
-              <h3>
-                <img
-                  src="/img/brands/anthropic-logo.svg"
-                  alt="Anthropic"
-                  className={styles.asSeenOnLogoInline}
-                  style={{ maxWidth: 175 }}
-                />
-                Courses
-              </h3>
-              <p>
-                "Promptfoo offers a streamlined, out-of-the-box solution that can significantly
-                reduce the time and effort required for comprehensive prompt testing."
-              </p>
-              <span className={styles.watchNow}>See the Course →</span>
-            </div>
-          </a>
-        </div>
-      </div>
-    </section>
+    <Box
+      component="section"
+      className={styles.asSeenOnSection}
+      sx={{
+        py: { xs: 3, md: 6 },
+        backgroundColor: 'var(--ifm-background-surface-color)',
+      }}
+    >
+      <Container maxWidth="lg">
+        <Typography
+          variant="h2"
+          component="h2"
+          sx={{
+            textAlign: 'center',
+            fontSize: { xs: '1.75rem', md: '2rem' },
+            mb: { xs: 3, md: 4 },
+            color: 'white',
+          }}
+        >
+          Featured In
+        </Typography>
+        <Grid
+          container
+          spacing={3}
+          sx={{
+            maxWidth: '1200px',
+            mx: 'auto',
+            px: { xs: 1, md: 2 },
+          }}
+        >
+          <Grid item xs={12} md={6}>
+            <FeaturedCard
+              href="https://vimeo.com/1023317525/be082a1029"
+              logo={{
+                src: '/img/brands/openai-logo.svg',
+                alt: 'OpenAI',
+              }}
+              title="Build Hours"
+              quote="Promptfoo is really powerful because you can iterate on prompts, configure tests in YAML, and view everything locally... it's faster and more straightforward"
+              ctaText="Watch the Video →"
+              ariaLabel="Watch OpenAI Build Hours video"
+            />
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <FeaturedCard
+              href="https://github.com/anthropics/courses/tree/master/prompt_evaluations"
+              logo={{
+                src: '/img/brands/anthropic-logo.svg',
+                alt: 'Anthropic',
+                maxWidth: 175,
+              }}
+              title="Courses"
+              quote="Promptfoo offers a streamlined, out-of-the-box solution that can significantly reduce the time and effort required for comprehensive prompt testing."
+              ctaText="See the Course →"
+              ariaLabel="View Anthropic Courses"
+            />
+          </Grid>
+        </Grid>
+      </Container>
+    </Box>
   );
 }
 
