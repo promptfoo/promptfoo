@@ -63,6 +63,13 @@ const ANTHROPIC_MODELS = [
       output: 15 / 1e6,
     },
   })),
+  ...['claude-3-7-sonnet-20250219', 'claude-3-7-sonnet-latest'].map((model) => ({
+    id: model,
+    cost: {
+      input: 4 / 1e6, // Placeholder cost - update with actual costs when available
+      output: 20 / 1e6,
+    },
+  })),
 ];
 
 interface AnthropicMessageOptions {
@@ -74,6 +81,7 @@ interface AnthropicMessageOptions {
   max_tokens?: number;
   model?: string;
   temperature?: number;
+  thinking?: Anthropic.Messages.ThinkingConfigParam;
   tool_choice?:
     | Anthropic.MessageCreateParams.ToolChoiceAny
     | Anthropic.MessageCreateParams.ToolChoiceAuto
@@ -81,6 +89,7 @@ interface AnthropicMessageOptions {
   tools?: Anthropic.Tool[];
   top_k?: number;
   top_p?: number;
+  beta?: string[]; // For features like 'output-128k-2025-02-19'
 }
 
 function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
@@ -101,11 +110,19 @@ function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
 
 export function outputFromMessage(message: Anthropic.Messages.Message) {
   const hasToolUse = message.content.some((block) => block.type === 'tool_use');
-  if (hasToolUse) {
+  const hasThinking = message.content.some(
+    (block) => block.type === 'thinking' || block.type === 'redacted_thinking',
+  );
+
+  if (hasToolUse || hasThinking) {
     return message.content
       .map((block) => {
         if (block.type === 'text') {
           return block.text;
+        } else if (block.type === 'thinking') {
+          return `Thinking: ${block.thinking}\nSignature: ${block.signature}`;
+        } else if (block.type === 'redacted_thinking') {
+          return `Redacted Thinking: ${block.data}`;
         }
         return JSON.stringify(block);
       })
@@ -121,11 +138,13 @@ export function outputFromMessage(message: Anthropic.Messages.Message) {
 export function parseMessages(messages: string): {
   system?: Anthropic.TextBlockParam[];
   extractedMessages: Anthropic.MessageParam[];
+  thinking?: Anthropic.ThinkingConfigParam;
 } {
   try {
     const parsed = JSON.parse(messages);
     if (Array.isArray(parsed)) {
       const systemMessage = parsed.find((msg) => msg.role === 'system');
+      const thinking = parsed.find((msg) => msg.thinking)?.thinking;
       return {
         extractedMessages: parsed
           .filter((msg) => msg.role !== 'system')
@@ -140,6 +159,7 @@ export function parseMessages(messages: string): {
             ? systemMessage.content
             : [{ type: 'text', text: systemMessage.content }]
           : undefined,
+        thinking,
       };
     }
   } catch {
@@ -150,6 +170,7 @@ export function parseMessages(messages: string): {
     .map((line) => line.trim())
     .filter((line) => line);
   let system: Anthropic.TextBlockParam[] | undefined;
+  let thinking: Anthropic.ThinkingConfigParam | undefined;
   const extractedMessages: Anthropic.MessageParam[] = [];
   let currentRole: 'user' | 'assistant' | null = null;
   let currentContent: string[] = [];
@@ -167,6 +188,12 @@ export function parseMessages(messages: string): {
   for (const line of lines) {
     if (line.startsWith('system:')) {
       system = [{ type: 'text', text: line.slice(7).trim() }];
+    } else if (line.startsWith('thinking:')) {
+      try {
+        thinking = JSON.parse(line.slice(9).trim());
+      } catch {
+        // Invalid thinking config, ignore
+      }
     } else if (line.startsWith('user:') || line.startsWith('assistant:')) {
       pushMessage();
       currentRole = line.startsWith('user:') ? 'user' : 'assistant';
@@ -189,7 +216,7 @@ export function parseMessages(messages: string): {
     });
   }
 
-  return { system, extractedMessages };
+  return { system, extractedMessages, thinking };
 }
 
 export function calculateAnthropicCost(
@@ -251,7 +278,18 @@ export class AnthropicMessagesProvider implements ApiProvider {
       );
     }
 
-    const { system, extractedMessages } = parseMessages(prompt);
+    const { system, extractedMessages, thinking } = parseMessages(prompt);
+
+    // Validate thinking configuration
+    if (thinking && 'type' in thinking && thinking.type === 'enabled') {
+      if (!thinking.budget_tokens || thinking.budget_tokens < 1024) {
+        throw new Error('Thinking budget must be at least 1024 tokens when enabled');
+      }
+      if (this.config?.max_tokens && thinking.budget_tokens >= this.config.max_tokens) {
+        throw new Error('Thinking budget must be less than max_tokens');
+      }
+    }
+
     const params: Anthropic.MessageCreateParams = {
       model: this.modelName,
       ...(system ? { system } : {}),
@@ -261,12 +299,22 @@ export class AnthropicMessagesProvider implements ApiProvider {
       temperature: this.config.temperature || getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
       ...(this.config.tools ? { tools: maybeLoadFromExternalFile(this.config.tools) } : {}),
       ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
+      ...(this.config.thinking || thinking ? { thinking: this.config.thinking || thinking } : {}),
       ...(typeof this.config?.extra_body === 'object' && this.config.extra_body
         ? this.config.extra_body
         : {}),
     };
 
     logger.debug(`Calling Anthropic Messages API: ${JSON.stringify(params)}`);
+
+    const headers: Record<string, string> = {
+      ...(this.config.headers || {}),
+    };
+
+    // Add beta features header if specified
+    if (this.config.beta?.length) {
+      headers['anthropic-beta'] = this.config.beta.join(',');
+    }
 
     const cache = await getCache();
     const cacheKey = `anthropic:${JSON.stringify(params)}`;
@@ -280,7 +328,13 @@ export class AnthropicMessagesProvider implements ApiProvider {
           const parsedCachedResponse = JSON.parse(cachedResponse) as Anthropic.Messages.Message;
           return {
             output: outputFromMessage(parsedCachedResponse),
-            tokenUsage: {},
+            tokenUsage: getTokenUsage(parsedCachedResponse, true),
+            cost: calculateAnthropicCost(
+              this.modelName,
+              this.config,
+              parsedCachedResponse.usage?.input_tokens,
+              parsedCachedResponse.usage?.output_tokens,
+            ),
           };
         } catch {
           // Could be an old cache item, which was just the text content from TextBlock.
@@ -293,9 +347,7 @@ export class AnthropicMessagesProvider implements ApiProvider {
     }
 
     try {
-      const response = await this.anthropic.messages.create(params, {
-        ...(this.config.headers ? { headers: this.config.headers } : {}),
-      });
+      const response = await this.anthropic.messages.create(params, { headers });
 
       logger.debug(`Anthropic Messages API response: ${JSON.stringify(response)}`);
 
@@ -305,6 +357,14 @@ export class AnthropicMessagesProvider implements ApiProvider {
         } catch (err) {
           logger.error(`Failed to cache response: ${String(err)}`);
         }
+      }
+
+      if ('stream' in response) {
+        // Handle streaming response
+        return {
+          output: 'Streaming response not supported in this context',
+          error: 'Streaming should be disabled for this use case',
+        };
       }
 
       return {
