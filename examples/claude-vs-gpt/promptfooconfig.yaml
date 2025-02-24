@@ -1,11 +1,11 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Claude 3.5 vs GPT 4o'
+description: 'Claude 3.7 vs GPT 4o'
 
 prompts:
   - file://prompt.yaml
 
 providers:
-  - anthropic:messages:claude-3-5-sonnet-20241022
+  - anthropic:messages:claude-3-7-sonnet-latest
   - openai:chat:gpt-4o
 
 defaultTest:
