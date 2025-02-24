@@ -72,8 +72,7 @@
     "whatwg-url": "14.1.0",
     "*": {
       "whatwg-url": "14.1.0",
-      "chokidar": "4.0.3",
-      "dompurify": "^3.2.4"
+      "chokidar": "4.0.3"
     }
   },
   "peerDependencies": {
