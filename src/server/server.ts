@@ -259,3 +259,5 @@ export async function startServer(
       }
     });
 }
+
+export { allPrompts };
