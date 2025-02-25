@@ -477,7 +477,7 @@ export class VertexChatProvider extends VertexGenericProvider {
           tokenUsage.cached = tokenUsage.total;
         }
         logger.debug(`Returning cached response: ${cachedResponse}`);
-        response =  { ...parsedCachedResponse, cached: true };
+        response = { ...parsedCachedResponse, cached: true };
       }
     }
 
@@ -601,11 +601,15 @@ export class VertexChatProvider extends VertexGenericProvider {
         const structured_output = JSON.parse(response.output);
         if (structured_output.functionCall) {
           const results = [];
-          const functionName = structured_output.functionCall.name
+          const functionName = structured_output.functionCall.name;
           if (this.config.functionToolCallbacks[functionName]) {
             try {
               const functionResult = await this.config.functionToolCallbacks[functionName](
-                JSON.stringify(structured_output.functionCall.args),
+                JSON.stringify(
+                  typeof structured_output.functionCall.args === 'string'
+                    ? JSON.parse(structured_output.functionCall.args)
+                    : structured_output.functionCall.args,
+                ),
               );
               results.push(functionResult);
             } catch (error) {
@@ -617,13 +621,13 @@ export class VertexChatProvider extends VertexGenericProvider {
               cached: response.cached,
               output: results.join('\n'),
               tokenUsage: response.tokenUsage,
-            }
+            };
           }
         }
       }
     } catch (err) {
       return {
-        error: `Tool callback error: ${String(err)}.}`,
+        error: `Tool callback error: ${String(err)}.`,
       };
     }
     return response;
