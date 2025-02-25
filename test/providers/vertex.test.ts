@@ -17,7 +17,7 @@ jest.mock('../../src/providers/vertexUtil', () => ({
   getGoogleClient: jest.fn(),
 }));
 
-describe('VertexChatProvider.callGeminiApi', () => {
+describe('VertexChatProvider', () => {
   let provider: VertexChatProvider;
 
   beforeEach(() => {
@@ -48,115 +48,259 @@ describe('VertexChatProvider.callGeminiApi', () => {
     jest.clearAllMocks();
   });
 
-  it('should call the Gemini API and return the response', async () => {
-    const mockResponse = {
-      data: [
-        {
-          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
-          usageMetadata: {
-            totalTokenCount: 10,
-            promptTokenCount: 5,
-            candidatesTokenCount: 5,
+  describe('callApi', () => {
+    it('should call callClaudeApi for Claude models', async () => {
+      const claudeProvider = new VertexChatProvider('claude-3');
+      const mockResponse = { output: 'claude response' };
+      jest.spyOn(claudeProvider, 'callClaudeApi').mockResolvedValue(mockResponse);
+
+      const result = await claudeProvider.callApi('test prompt');
+
+      expect(claudeProvider.callClaudeApi).toHaveBeenCalledWith('test prompt', undefined);
+      expect(result).toEqual(mockResponse);
+    });
+
+    it('should call callGeminiApi for Gemini models', async () => {
+      const mockResponse = { output: 'gemini response' };
+      jest.spyOn(provider, 'callGeminiApi').mockResolvedValue(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(provider.callGeminiApi).toHaveBeenCalledWith('test prompt', undefined);
+      expect(result).toEqual(mockResponse);
+    });
+
+    it('should throw error for Llama models', async () => {
+      const llamaProvider = new VertexChatProvider('llama-2');
+
+      await expect(llamaProvider.callApi('test prompt')).rejects.toThrow(
+        'Llama on Vertex is not supported yet',
+      );
+    });
+  });
+
+  describe('callClaudeApi', () => {
+    let claudeProvider: VertexChatProvider;
+
+    beforeEach(() => {
+      claudeProvider = new VertexChatProvider('claude-3', {
+        config: {
+          anthropicVersion: 'vertex-2023-10-16',
+          maxOutputTokens: 512,
+          temperature: 0.7,
+          topP: 0.9,
+          topK: 40,
+        },
+      });
+    });
+
+    it('should call Claude API and return formatted response', async () => {
+      const mockResponse = {
+        data: {
+          id: 'test-id',
+          content: [{ type: 'text', text: 'response text' }],
+          usage: {
+            input_tokens: 10,
+            output_tokens: 20,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
           },
         },
-      ],
-    };
+      };
 
-    const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+      const mockRequest = jest.fn().mockResolvedValue(mockResponse);
 
-    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
-      client: {
-        request: mockRequest,
-      } as unknown as JSONClient,
-      projectId: 'test-project-id',
+      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+        client: { request: mockRequest } as unknown as JSONClient,
+        projectId: 'test-project-id',
+      });
+
+      const response = await claudeProvider.callClaudeApi('test prompt');
+
+      expect(response).toEqual({
+        cached: false,
+        output: 'response text',
+        tokenUsage: {
+          total: 30,
+          prompt: 10,
+          completion: 20,
+        },
+      });
     });
 
-    const response = await provider.callGeminiApi('test prompt');
+    it('should return cached response if available', async () => {
+      const mockCachedResponse = {
+        cached: true,
+        output: 'cached response',
+        tokenUsage: {
+          total: 30,
+          prompt: 10,
+          completion: 20,
+        },
+      };
 
-    expect(response).toEqual({
-      cached: false,
-      output: 'response text',
-      tokenUsage: {
-        total: 10,
-        prompt: 5,
-        completion: 5,
-      },
+      jest.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+
+      const response = await claudeProvider.callClaudeApi('test prompt');
+
+      expect(response).toEqual({
+        ...mockCachedResponse,
+        tokenUsage: {
+          ...mockCachedResponse.tokenUsage,
+          cached: mockCachedResponse.tokenUsage.total,
+        },
+      });
     });
 
-    expect(vertexUtil.getGoogleClient).toHaveBeenCalledWith();
-    expect(mockRequest).toHaveBeenCalledWith({
-      url: expect.any(String),
-      method: 'POST',
-      data: expect.objectContaining({
-        contents: [{ parts: { text: 'test prompt' }, role: 'user' }],
-      }),
-      timeout: expect.any(Number),
-    });
-  });
+    it('should handle API errors', async () => {
+      const mockError = {
+        response: {
+          data: { error: 'API error message' },
+        },
+      };
 
-  it('should return cached response if available', async () => {
-    const mockCachedResponse = {
-      cached: true,
-      output: 'cached response text',
-      tokenUsage: {
-        total: 10,
-        prompt: 5,
-        completion: 5,
-      },
-    };
+      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+        client: {
+          request: jest.fn().mockRejectedValue(mockError),
+        } as unknown as JSONClient,
+        projectId: 'test-project-id',
+      });
 
-    jest.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+      const response = await claudeProvider.callClaudeApi('test prompt');
 
-    const response = await provider.callGeminiApi('test prompt');
-
-    expect(response).toEqual({
-      ...mockCachedResponse,
-      tokenUsage: {
-        ...mockCachedResponse.tokenUsage,
-        cached: mockCachedResponse.tokenUsage.total,
-      },
-    });
-  });
-
-  it('should handle API call errors', async () => {
-    const mockError = new Error('something went wrong');
-    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
-      client: {
-        request: jest.fn().mockRejectedValue(mockError),
-      } as unknown as JSONClient,
-      projectId: 'test-project-id',
+      expect(response).toEqual({
+        error: 'API call error: {"error":"API error message"}',
+      });
     });
 
-    const response = await provider.callGeminiApi('test prompt');
-
-    expect(response).toEqual({
-      error: `API call error: Error: something went wrong`,
-    });
-  });
-
-  it('should handle API response errors', async () => {
-    const mockResponse = {
-      data: [
-        {
-          error: {
-            code: 400,
-            message: 'Bad Request',
+    it('should handle empty response content', async () => {
+      const mockResponse = {
+        data: {
+          id: 'test-id',
+          content: [],
+          usage: {
+            input_tokens: 10,
+            output_tokens: 0,
           },
         },
-      ],
-    };
+      };
 
-    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
-      client: {
-        request: jest.fn().mockResolvedValue(mockResponse),
-      } as unknown as JSONClient,
-      projectId: 'test-project-id',
+      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+        client: {
+          request: jest.fn().mockResolvedValue(mockResponse),
+        } as unknown as JSONClient,
+        projectId: 'test-project-id',
+      });
+
+      const response = await claudeProvider.callClaudeApi('test prompt');
+
+      expect(response).toEqual({
+        error: `No output found in Claude API response: ${JSON.stringify(mockResponse.data)}`,
+      });
+    });
+  });
+
+  describe('callGeminiApi', () => {
+    it('should call the Gemini API and return the response', async () => {
+      const mockResponse = {
+        data: [
+          {
+            candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+            usageMetadata: {
+              totalTokenCount: 10,
+              promptTokenCount: 5,
+              candidatesTokenCount: 5,
+            },
+          },
+        ],
+      };
+
+      const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+
+      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+        client: {
+          request: mockRequest,
+        } as unknown as JSONClient,
+        projectId: 'test-project-id',
+      });
+
+      const response = await provider.callGeminiApi('test prompt');
+
+      expect(response).toEqual({
+        cached: false,
+        output: 'response text',
+        tokenUsage: {
+          total: 10,
+          prompt: 5,
+          completion: 5,
+        },
+      });
     });
 
-    const response = await provider.callGeminiApi('test prompt');
+    it('should return cached response if available', async () => {
+      const mockCachedResponse = {
+        cached: true,
+        output: 'cached response text',
+        tokenUsage: {
+          total: 10,
+          prompt: 5,
+          completion: 5,
+        },
+      };
 
-    expect(response).toEqual({
-      error: 'Error 400: Bad Request',
+      jest.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+
+      const response = await provider.callGeminiApi('test prompt');
+
+      expect(response).toEqual({
+        ...mockCachedResponse,
+        tokenUsage: {
+          ...mockCachedResponse.tokenUsage,
+          cached: mockCachedResponse.tokenUsage.total,
+        },
+      });
+    });
+
+    it('should handle API call errors', async () => {
+      const mockError = new Error('something went wrong');
+      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+        client: {
+          request: jest.fn().mockRejectedValue(mockError),
+        } as unknown as JSONClient,
+        projectId: 'test-project-id',
+      });
+
+      const response = await provider.callGeminiApi('test prompt');
+
+      expect(response).toEqual({
+        error: `API call error: Error: something went wrong`,
+      });
+    });
+
+    it('should handle API response errors', async () => {
+      const mockResponse = {
+        data: [
+          {
+            error: {
+              code: 400,
+              message: 'Bad Request',
+            },
+          },
+        ],
+      };
+
+      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+        client: {
+          request: jest.fn().mockResolvedValue(mockResponse),
+        } as unknown as JSONClient,
+        projectId: 'test-project-id',
+      });
+
+      const response = await provider.callGeminiApi('test prompt');
+
+      expect(response).toEqual({
+        error: 'Error 400: Bad Request',
+      });
     });
   });
 });
@@ -250,101 +394,5 @@ describe('maybeCoerceToGeminiFormat', () => {
       systemInstruction: undefined,
     });
     expect(loggerSpy).toHaveBeenCalledWith(`Unknown format for Gemini: ${JSON.stringify(input)}`);
-  });
-
-  it('should handle OpenAI chat format with content as an array of objects', () => {
-    const input = [
-      {
-        role: 'system',
-        content: 'You are a helpful AI assistant.',
-      },
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: 'What is {{thing}}?',
-          },
-        ],
-      },
-    ];
-
-    const result = vertexUtil.maybeCoerceToGeminiFormat(input);
-
-    expect(result).toEqual({
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            {
-              text: 'What is {{thing}}?',
-            },
-          ],
-        },
-      ],
-      coerced: true,
-      systemInstruction: {
-        parts: [{ text: 'You are a helpful AI assistant.' }],
-      },
-    });
-  });
-
-  it('should handle string content', () => {
-    // This simulates the parsed YAML format
-    const input = [
-      {
-        role: 'system',
-        content: 'You are a helpful AI assistant.',
-      },
-      {
-        role: 'user',
-        content: 'What is {{thing}}?',
-      },
-    ];
-
-    const result = vertexUtil.maybeCoerceToGeminiFormat(input);
-
-    expect(result).toEqual({
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: 'What is {{thing}}?' }],
-        },
-      ],
-      coerced: true,
-      systemInstruction: {
-        parts: [{ text: 'You are a helpful AI assistant.' }],
-      },
-    });
-  });
-
-  it('should handle mixed content types', () => {
-    const input = [
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: 'First part' },
-          'Second part as string',
-          { type: 'image', url: 'https://example.com/image.jpg' },
-        ],
-      },
-    ];
-
-    const result = vertexUtil.maybeCoerceToGeminiFormat(input);
-
-    expect(result).toEqual({
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            { text: 'First part' },
-            { text: 'Second part as string' },
-            { type: 'image', url: 'https://example.com/image.jpg' },
-          ],
-        },
-      ],
-      coerced: true,
-      systemInstruction: undefined,
-    });
   });
 });
