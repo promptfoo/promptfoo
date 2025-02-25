@@ -132,4 +132,61 @@ describe('renderRedteamConfig', () => {
       },
     });
   });
+
+  it('should handle updated Anthropic model names', () => {
+    const input = {
+      purpose: 'Test Anthropic models',
+      numTests: 1,
+      plugins: [],
+      strategies: [],
+      prompts: ['Test'],
+      providers: [
+        'anthropic:messages:claude-3-7-sonnet-20250219',
+        'anthropic:messages:claude-3-5-sonnet-20241022',
+      ],
+      descriptions: {},
+    };
+
+    const renderedConfig = renderRedteamConfig(input);
+    const parsedConfig = yaml.load(renderedConfig) as {
+      targets: string[];
+    };
+
+    expect(parsedConfig.targets).toContain('anthropic:messages:claude-3-7-sonnet-20250219');
+    expect(parsedConfig.targets).toContain('anthropic:messages:claude-3-5-sonnet-20241022');
+  });
+
+  it('should handle mixed provider types including updated Anthropic models', () => {
+    const input = {
+      purpose: 'Test mixed providers',
+      numTests: 1,
+      plugins: [],
+      strategies: [],
+      prompts: ['Test'],
+      providers: [
+        'openai:gpt-4',
+        'anthropic:messages:claude-3-7-sonnet-20250219',
+        {
+          id: 'custom-api',
+          label: 'Custom',
+          config: { url: 'https://api.example.com' },
+        },
+      ],
+      descriptions: {},
+    };
+
+    const renderedConfig = renderRedteamConfig(input);
+    const parsedConfig = yaml.load(renderedConfig) as {
+      targets: Array<string | { id: string; label: string; config: Record<string, string> }>;
+    };
+
+    expect(parsedConfig.targets).toHaveLength(3);
+    expect(parsedConfig.targets).toContain('openai:gpt-4');
+    expect(parsedConfig.targets).toContain('anthropic:messages:claude-3-7-sonnet-20250219');
+    expect(parsedConfig.targets).toContainEqual({
+      id: 'custom-api',
+      label: 'Custom',
+      config: { url: 'https://api.example.com' },
+    });
+  });
 });
