@@ -14,6 +14,7 @@ import type {
 import type { EnvOverrides } from '../types/env';
 import { renderVarsInObject } from '../util';
 import { maybeLoadFromExternalFile } from '../util';
+import { isValidJson } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 import type { GeminiErrorResponse, GeminiFormat, Palm2ApiResponse } from './vertexUtil';
@@ -436,33 +437,33 @@ export class VertexChatProvider extends VertexGenericProvider {
     }
     try {
       // Handle function tool callbacks
-      let tool_callback_output;
-      const structured_output = JSON.parse(response.output);
-      if (structured_output.functionCall && this.config.functionToolCallbacks) {
-        const results = [];
-        const functionName = structured_output.functionCall.name
-        if (this.config.functionToolCallbacks[functionName]) {
-          try {
-            const functionResult = await this.config.functionToolCallbacks[functionName](
-              JSON.stringify(structured_output.functionCall.args),
-            );
-            results.push(functionResult);
-          } catch (error) {
-            logger.error(`Error executing function ${functionName}: ${error}`);
+      if (this.config.functionToolCallbacks && isValidJson(response.output)) {
+        const structured_output = JSON.parse(response.output);
+        if (structured_output.functionCall) {
+          const results = [];
+          const functionName = structured_output.functionCall.name
+          if (this.config.functionToolCallbacks[functionName]) {
+            try {
+              const functionResult = await this.config.functionToolCallbacks[functionName](
+                JSON.stringify(structured_output.functionCall.args),
+              );
+              results.push(functionResult);
+            } catch (error) {
+              logger.error(`Error executing function ${functionName}: ${error}`);
+            }
+          }
+          if (results.length > 0) {
+            response = {
+              cached: response.cached,
+              output: results.join('\n'),
+              tokenUsage: response.tokenUsage,
+            }
           }
         }
-        if (results.length > 0) {
-          tool_callback_output = results.join('\n');
-        }
       }
-      response = {
-        cached: response.cached,
-        output: tool_callback_output || response.output,
-        tokenUsage: response.tokenUsage,
-      };
     } catch (err) {
       return {
-        error: `Tool callback error: ${String(err)}.}`,
+        error: `Tool callback error: ${String(err)}. Func ${String(this.config.functionToolCallbacks)}}`,
       };
     }
     return response;
