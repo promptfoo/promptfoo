@@ -243,3 +243,5 @@ export async function hasGoogleDefaultCredentials() {
     return false;
   }
 }
+
+export { PartSchema, ContentSchema, GeminiFormatSchema, cachedAuth };
