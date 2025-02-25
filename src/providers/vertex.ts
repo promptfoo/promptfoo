@@ -78,6 +78,14 @@ interface FunctionDeclaration {
   response?: Schema;
 }
 
+export type FunctionParameters = Record<string, unknown>;
+
+interface FunctionDefinition {
+  name: string;
+  description: string;
+  parameters?: FunctionParameters;
+}
+
 interface GoogleSearchRetrieval {
   dynamicRetrievalConfig: {
     mode?: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
@@ -128,6 +136,12 @@ interface VertexCompletionOptions {
   };
 
   tools?: Tool[];
+
+  /**
+   * If set, automatically call these functions when the assistant activates
+   * these function tools.
+   */
+  functionToolCallbacks?: Record<FunctionDefinition['name'], (arg: string) => Promise<string>>;
 
   systemInstruction?: Content;
 }
@@ -395,6 +409,27 @@ export class VertexChatProvider extends VertexGenericProvider {
         return {
           error: `No output found in response: ${JSON.stringify(data)}`,
         };
+      }
+
+      // Handle function tool callbacks
+      const structured_output = JSON.parse(output);
+      if (structured_output.functionCall && this.config.functionToolCallbacks) {
+        const results = [];
+        const functionName = structured_output.functionCall.name
+        if (this.config.functionToolCallbacks[functionName]) {
+          logger.error(`Output: ${JSON.stringify(structured_output.functionCall.args)})`)
+          try {
+            const functionResult = await this.config.functionToolCallbacks[functionName](
+              JSON.stringify(structured_output.functionCall.args),
+            );
+            results.push(functionResult);
+          } catch (error) {
+            logger.error(`Error executing function ${functionName}: ${error}`);
+          }
+        }
+        if (results.length > 0) {
+          output = results.join('\n');
+        }
       }
 
       const lastData = dataWithResponse[dataWithResponse.length - 1];
