@@ -14,4 +14,4 @@ tests:
   - vars:
       question: 'Solve 3*x^3-5*x=1'
   - vars:
-      question: What's the weather in New York?
+      question: "What's the weather in New York?"
