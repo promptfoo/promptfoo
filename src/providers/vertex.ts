@@ -463,7 +463,7 @@ export class VertexChatProvider extends VertexGenericProvider {
       }
     } catch (err) {
       return {
-        error: `Tool callback error: ${String(err)}. Func ${String(this.config.functionToolCallbacks)}}`,
+        error: `Tool callback error: ${String(err)}.}`,
       };
     }
     return response;
