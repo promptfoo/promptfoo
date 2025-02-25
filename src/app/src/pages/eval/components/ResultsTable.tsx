@@ -8,7 +8,7 @@ import {
 import * as React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useToast } from '@app/hooks/useToast';
 import {
   type EvaluateTableRow,
@@ -350,11 +350,96 @@ function ResultsTable({
     searchRegex,
   ]);
 
-  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 50 });
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Initialize pagination from URL parameters
+  const [pagination, setPaginationState] = React.useState(() => {
+    const pageParam = searchParams.get('page');
+    const pageSizeParam = searchParams.get('page_size');
+
+    return {
+      pageIndex: pageParam ? Math.max(0, Number.parseInt(pageParam, 10) - 1) : 0, // URL is 1-indexed, state is 0-indexed
+      pageSize:
+        pageSizeParam && [10, 50, 100, 500, 1000].includes(Number.parseInt(pageSizeParam, 10))
+          ? Number.parseInt(pageSizeParam, 10)
+          : 50,
+    };
+  });
+
+  // Effect to handle hash navigation when URL contains a fragment
+  React.useEffect(() => {
+    // Get hash without the # symbol
+    const hash = window.location.hash.substring(1);
+    if (hash) {
+      // Give time for the table to render
+      setTimeout(() => {
+        const element = document.getElementById(hash);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+          // Add a temporary highlight
+          element.classList.add('highlighted-row');
+          setTimeout(() => {
+            element.classList.remove('highlighted-row');
+          }, 2000);
+        }
+      }, 100);
+    }
+  }, [filteredBody, pagination.pageIndex, pagination.pageSize]);
+
+  // Custom function to update pagination and URL params
+  const setPagination = React.useCallback(
+    (
+      newPaginationOrUpdater:
+        | { pageIndex: number; pageSize: number }
+        | ((prev: { pageIndex: number; pageSize: number }) => {
+            pageIndex: number;
+            pageSize: number;
+          }),
+    ) => {
+      const newPagination =
+        typeof newPaginationOrUpdater === 'function'
+          ? newPaginationOrUpdater(pagination)
+          : newPaginationOrUpdater;
+
+      setPaginationState(newPagination);
+
+      // Update URL parameters (1-indexed for page in URL)
+      setSearchParams(
+        (prevParams) => {
+          const newParams = new URLSearchParams(prevParams);
+          newParams.set('page', String(newPagination.pageIndex + 1));
+          newParams.set('page_size', String(newPagination.pageSize));
+          return newParams;
+        },
+        { replace: true },
+      );
+    },
+    [pagination, setSearchParams],
+  );
+
+  // Use a ref to track the current search state to avoid infinite loops
+  const searchStateRef = useRef({ filterMode, failureFilter, searchText });
 
   React.useEffect(() => {
-    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-  }, [failureFilter, filterMode, searchText]);
+    // Only reset to page 1 when search criteria actually change
+    const prevState = searchStateRef.current;
+    const searchChanged =
+      prevState.filterMode !== filterMode ||
+      prevState.searchText !== searchText ||
+      JSON.stringify(prevState.failureFilter) !== JSON.stringify(failureFilter);
+
+    if (searchChanged) {
+      searchStateRef.current = { filterMode, failureFilter, searchText };
+      // Only reset if we're not already on the first page
+      if (pagination.pageIndex !== 0) {
+        setPagination((prev: { pageIndex: number; pageSize: number }) => ({
+          ...prev,
+          pageIndex: 0,
+        }));
+      }
+    }
+  }, [failureFilter, filterMode, searchText, pagination.pageIndex, setPagination]);
 
   // TODO(ian): Switch this to use prompt.metrics field once most clients have updated.
   const numGoodTests = React.useMemo(
@@ -394,7 +479,7 @@ function ResultsTable({
       }, 0),
     [numGoodTests],
   );
-  const highestPassingCount = numGoodTests[highestPassingIndex];
+  const _highestPassingCount = numGoodTests[highestPassingIndex];
 
   const columnHelper = React.useMemo(() => createColumnHelper<EvaluateTableRow>(), []);
 
@@ -443,6 +528,36 @@ function ResultsTable({
     }
     return [];
   }, [columnHelper, head.vars, maxTextLength, renderMarkdown]);
+
+  const { isCollapsed } = useScrollHandler();
+  const { stickyHeader, setStickyHeader } = useResultsViewStore();
+
+  // Function to copy row permalink to clipboard
+  const copyRowPermalink = React.useCallback(
+    (rowId: string) => {
+      // Create URL with current parameters and hash fragment
+      const url = new URL(window.location.href);
+
+      // Remove any existing hash
+      url.hash = '';
+
+      // Add the hash fragment with the row ID
+      url.hash = rowId;
+
+      // Copy to clipboard
+      navigator.clipboard
+        .writeText(url.toString())
+        .then(() => {
+          // Show toast message
+          showToast('Permalink copied to clipboard!', 'success');
+        })
+        .catch((err) => {
+          console.error('Failed to copy permalink: ', err);
+          showToast('Failed to copy permalink', 'error');
+        });
+    },
+    [showToast],
+  );
 
   const getOutput = React.useCallback(
     (rowIndex: number, promptIndex: number) => {
@@ -655,6 +770,7 @@ function ResultsTable({
                   showDiffs={filterMode === 'different'}
                   searchText={searchText}
                   showStats={showStats}
+                  onCopyPermalink={copyRowPermalink}
                 />
               ) : (
                 <div style={{ padding: '20px' }}>'Test still in progress...'</div>
@@ -674,7 +790,6 @@ function ResultsTable({
     getOutput,
     handleRating,
     head.prompts,
-    highestPassingCount,
     maxTextLength,
     metricTotals,
     numAsserts,
@@ -684,6 +799,7 @@ function ResultsTable({
     onSearchTextChange,
     searchText,
     showStats,
+    copyRowPermalink,
   ]);
 
   const descriptionColumn = React.useMemo(() => {
@@ -725,11 +841,14 @@ function ResultsTable({
     },
   });
 
-  const { isCollapsed } = useScrollHandler();
-  const { stickyHeader, setStickyHeader } = useResultsViewStore();
-
   return (
     <div>
+      <style>{`
+        .highlighted-row {
+          background-color: rgba(100, 149, 237, 0.2);
+          transition: background-color 0.5s ease;
+        }
+      `}</style>
       <table
         className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
         style={{
@@ -774,8 +893,12 @@ function ResultsTable({
         <tbody>
           {reactTable.getRowModel().rows.map((row, rowIndex) => {
             let colBorderDrawn = false;
+
+            // Simplify row ID to just use row number
+            const rowId = `row-${rowIndex}`;
+
             return (
-              <tr key={row.id}>
+              <tr key={`row-${rowIndex}`} id={rowId}>
                 {row.getVisibleCells().map((cell) => {
                   const isMetadataCol =
                     cell.column.id.startsWith('Variable') || cell.column.id === 'description';
@@ -847,7 +970,10 @@ function ResultsTable({
         <Box className="pagination" mx={1} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Button
             onClick={() => {
-              setPagination((old) => ({ ...old, pageIndex: Math.max(old.pageIndex - 1, 0) }));
+              setPagination((old: { pageIndex: number; pageSize: number }) => ({
+                ...old,
+                pageIndex: Math.max(old.pageIndex - 1, 0),
+              }));
               window.scrollTo(0, 0);
             }}
             disabled={reactTable.getState().pagination.pageIndex === 0}
@@ -863,7 +989,7 @@ function ResultsTable({
               value={reactTable.getState().pagination.pageIndex + 1}
               onChange={(e) => {
                 const page = e.target.value ? Number(e.target.value) - 1 : 0;
-                setPagination((old) => ({
+                setPagination((old: { pageIndex: number; pageSize: number }) => ({
                   ...old,
                   pageIndex: Math.min(Math.max(page, 0), reactTable.getPageCount() - 1),
                 }));
@@ -877,7 +1003,7 @@ function ResultsTable({
           </Typography>
           <Button
             onClick={() => {
-              setPagination((old) => ({
+              setPagination((old: { pageIndex: number; pageSize: number }) => ({
                 ...old,
                 pageIndex: Math.min(old.pageIndex + 1, reactTable.getPageCount() - 1),
               }));
@@ -892,7 +1018,8 @@ function ResultsTable({
             <Select
               value={pagination.pageSize}
               onChange={(e) => {
-                setPagination({ pageIndex: 0, pageSize: Number(e.target.value) });
+                const newPageSize = Number(e.target.value);
+                setPagination({ pageIndex: 0, pageSize: newPageSize });
                 window.scrollTo(0, 0);
               }}
               displayEmpty

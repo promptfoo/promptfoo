@@ -32,6 +32,7 @@ export interface EvalOutputCellProps {
   promptIndex: number;
   showStats: boolean;
   onRating: (isPass?: boolean, score?: number, comment?: string) => void;
+  onCopyPermalink?: (rowId: string) => void;
 }
 
 function EvalOutputCell({
@@ -44,6 +45,7 @@ function EvalOutputCell({
   showDiffs,
   searchText,
   showStats,
+  onCopyPermalink,
 }: EvalOutputCellProps & {
   firstOutput: EvaluateTableOutput;
   showDiffs: boolean;
@@ -372,6 +374,13 @@ function EvalOutputCell({
   ) : null;
 
   const shiftKeyPressed = useShiftKey();
+
+  // Helper to create a variable ID for permalink
+  const getRowId = React.useCallback(() => {
+    // Simple row-based ID
+    return `row-${rowIndex}`;
+  }, [rowIndex]);
+
   const actions = (
     <div className="cell-actions">
       {shiftKeyPressed && (
@@ -391,6 +400,18 @@ function EvalOutputCell({
             </Tooltip>
           </span>
         </>
+      )}
+      {/* Permalink button outside shift key condition so it's always visible */}
+      {onCopyPermalink && (
+        <span
+          className="action"
+          onClick={() => onCopyPermalink(getRowId())}
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          <Tooltip title="Copy permalink to this row">
+            <span>🔗</span>
+          </Tooltip>
+        </span>
       )}
       {output.prompt && (
         <>
