@@ -9,6 +9,9 @@ interface CliState {
 
   // Indicates we're running in web UI mode
   webUI?: boolean;
+
+  // Indicates we're running redteam mode
+  isRedteam?: boolean;
 }
 
 const state: CliState = {};
