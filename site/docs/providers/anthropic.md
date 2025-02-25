@@ -6,7 +6,7 @@ sidebar_position: 2
 
 This provider supports the [Anthropic Claude](https://www.anthropic.com/claude) series of models.
 
-> **Note:** Anthropic models can also be accessed through Amazon Bedrock. For information on using Anthropic models via Bedrock, please refer to our [AWS Bedrock documentation](/docs/providers/aws-bedrock).
+> **Note:** Anthropic models can also be accessed through [AWS Bedrock](/docs/providers/aws-bedrock/) and [Google Vertex](/docs/providers/vertex/).
 
 ## Setup
 
