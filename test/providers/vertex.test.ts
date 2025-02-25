@@ -1,5 +1,6 @@
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
-import { getCache, isCacheEnabled } from '../../src/cache';
+import { getCache, isCacheEnabled, fetchWithCache } from '../../src/cache';
+import cliState from '../../src/cliState';
 import logger from '../../src/logger';
 import { VertexChatProvider } from '../../src/providers/vertex';
 import * as vertexUtil from '../../src/providers/vertexUtil';
@@ -10,6 +11,7 @@ jest.mock('../../src/cache', () => ({
     set: jest.fn(),
   }),
   isCacheEnabled: jest.fn(),
+  fetchWithCache: jest.fn(),
 }));
 
 jest.mock('../../src/providers/vertexUtil', () => ({
@@ -345,6 +347,124 @@ describe('maybeCoerceToGeminiFormat', () => {
       ],
       coerced: true,
       systemInstruction: undefined,
+    });
+  });
+});
+
+describe('Vertex Provider', () => {
+  let originalState: Partial<typeof cliState>;
+
+  beforeAll(() => {
+    originalState = { ...cliState };
+  });
+
+  afterAll(() => {
+    // Restore cliState
+    Object.keys(cliState).forEach((key) => {
+      delete (cliState as any)[key];
+    });
+    Object.assign(cliState, originalState);
+  });
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    // Reset cliState between tests
+    Object.keys(cliState).forEach((key) => {
+      delete (cliState as any)[key];
+    });
+  });
+
+  describe('Safety filtering handling', () => {
+    it('should return output instead of error for safety blocks in redteam mode', async () => {
+      // Set redteam mode
+      cliState.isRedteam = true;
+
+      // Create a provider
+      const provider = new VertexChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          projectId: 'test-project',
+        },
+      });
+
+      // The provider doesn't use the callApi directly for Gemini models
+      // It redirects to callGeminiApi, so we'll spy on that
+      const callGeminiApiSpy = jest.spyOn(provider, 'callGeminiApi');
+      callGeminiApiSpy.mockResolvedValue({
+        output: 'Content was blocked due to safety settings.',
+      });
+
+      // Call the API
+      const result = await provider.callApi('Prompt that triggers safety filter');
+
+      // Verify we get an output, not an error
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Content was blocked due to safety settings.');
+    });
+
+    it('should return error for safety blocks in non-redteam mode', async () => {
+      // Make sure redteam mode is off
+      cliState.isRedteam = false;
+
+      // Create a provider
+      const provider = new VertexChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          projectId: 'test-project',
+        },
+      });
+
+      // The provider doesn't use the callApi directly for Gemini models
+      // It redirects to callGeminiApi, so we'll spy on that
+      const callGeminiApiSpy = jest.spyOn(provider, 'callGeminiApi');
+      callGeminiApiSpy.mockResolvedValue({
+        error: 'Content was blocked due to safety settings.',
+      });
+
+      // Call the API
+      const result = await provider.callApi('Prompt that triggers safety filter');
+
+      // Verify we get an error
+      expect(result.error).toBe('Content was blocked due to safety settings.');
+      expect(result.output).toBeUndefined();
+    });
+
+    it('should handle promptFeedback blocks in redteam mode', async () => {
+      // Set redteam mode
+      cliState.isRedteam = true;
+
+      // Create a provider
+      const provider = new VertexChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          projectId: 'test-project',
+        },
+      });
+
+      // Mock getGoogleClient
+      const mockRequest = jest.fn().mockResolvedValue({
+        data: [
+          {
+            promptFeedback: {
+              blockReason: 'SAFETY',
+            },
+          },
+        ],
+      });
+
+      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+        client: {
+          request: mockRequest,
+        } as unknown as JSONClient,
+        projectId: 'test-project-id',
+      });
+
+      // Call the API
+      const result = await provider.callApi('Prompt that triggers safety filter');
+
+      // Verify we get an output, not an error
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBeDefined();
     });
   });
 });

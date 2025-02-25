@@ -527,7 +527,7 @@ export class VertexChatProvider extends VertexGenericProvider {
             }
           }
         } else if (datum.candidates && datum.candidates[0]?.finishReason === 'SAFETY') {
-          if (cliState.config?.redteam) {
+          if (cliState.isRedteam) {
             // Refusals are not errors during redteams, they're actually successes.
             return {
               output: 'Content was blocked due to safety settings.',
@@ -540,7 +540,7 @@ export class VertexChatProvider extends VertexGenericProvider {
       }
 
       if ('promptFeedback' in data[0] && data[0].promptFeedback?.blockReason) {
-        if (cliState.config?.redteam) {
+        if (cliState.isRedteam) {
           // Refusals are not errors during redteams, they're actually successes.
           return {
             output: `Content was blocked due to safety settings: ${data[0].promptFeedback.blockReason}`,

@@ -797,8 +797,8 @@ describe('matchesLlmRubric', () => {
       },
     };
 
-    // Give it a redteam config
-    cliState.config = { redteam: {} };
+    // Set redteam mode
+    cliState.isRedteam = true;
 
     await matchesLlmRubric(rubric, llmOutput, grading);
 
@@ -821,8 +821,8 @@ describe('matchesLlmRubric', () => {
       },
     };
 
-    // Give it a redteam config
-    cliState.config = { redteam: {} };
+    // Set redteam mode
+    cliState.isRedteam = true;
 
     await matchesLlmRubric(rubric, llmOutput, grading);
 

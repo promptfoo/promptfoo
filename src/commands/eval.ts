@@ -80,7 +80,7 @@ export async function doEval(
       name: 'eval - started',
       watch: Boolean(cmdObj.watch),
       // Only set when redteam is enabled for sure, because we don't know if config is loaded yet
-      ...(Boolean(config?.redteam) && { isRedteam: true }),
+      ...(cliState.isRedteam && { isRedteam: true }),
     });
     await telemetry.send();
 
@@ -146,8 +146,8 @@ export async function doEval(
     testSuite.tests = await filterTests(testSuite, filterOptions);
 
     if (
-      config.redteam &&
-      config.redteam.plugins &&
+      cliState.isRedteam &&
+      config.redteam?.plugins &&
       config.redteam.plugins.length > 0 &&
       testSuite.tests &&
       testSuite.tests.length > 0

@@ -192,7 +192,7 @@ export async function matchesSimilarity(
   inverse: boolean = false,
   grading?: GradingConfig,
 ): Promise<Omit<GradingResult, 'assertion'>> {
-  if (cliState.config?.redteam && shouldGenerateRemote()) {
+  if (cliState.isRedteam && shouldGenerateRemote()) {
     try {
       return doRemoteGrading({
         task: 'similar',
@@ -415,7 +415,7 @@ export async function matchesLlmRubric(
     );
   }
 
-  if (!grading.rubricPrompt && cliState.config?.redteam && shouldGenerateRemote()) {
+  if (!grading.rubricPrompt && cliState.isRedteam && shouldGenerateRemote()) {
     return doRemoteGrading({
       task: 'llm-rubric',
       rubric,
