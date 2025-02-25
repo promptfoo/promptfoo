@@ -317,7 +317,7 @@ export async function doEval(
 
     printBorder();
 
-    const isRedteam = Boolean(config.redteam);
+    const isRedteam = cliState.isRedteam;
 
     logger.info(chalk.green.bold(`Successes: ${successes}`));
     logger.info(chalk.red.bold(`Failures: ${failures}`));
@@ -337,7 +337,7 @@ export async function doEval(
       name: 'eval',
       watch: Boolean(cmdObj.watch),
       duration: Math.round((Date.now() - startTime) / 1000),
-      isRedteam,
+      isRedteam: Boolean(cliState.isRedteam),
     });
     await telemetry.send();
 
