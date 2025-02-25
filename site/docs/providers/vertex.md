@@ -1,8 +1,13 @@
 # Google Vertex
 
-The `vertex` provider is compatible with Google's [Vertex AI](https://cloud.google.com/vertex-ai) offering, which offers access to models such as Gemini and Bison.
+The `vertex` provider is compatible with Google's [Vertex AI](https://cloud.google.com/vertex-ai) offering, which offers access to models such as Gemini, Claude, and Llama.
 
-You can use it by specifying any of the available stable or latest [model versions](https://cloud.google.com/vertex-ai/docs/generative-ai/learn/model-versioning) offered by Vertex AI. These include:
+You can use it by specifying any of the available stable or latest [model versions](https://cloud.google.com/vertex-ai/docs/generative-ai/learn/model-versioning) offered by Vertex AI.
+
+<details>
+<summary>
+Supported models include:
+</summary>
 
 - `vertex:chat-bison`
 - `vertex:chat-bison@001`
@@ -36,6 +41,10 @@ You can use it by specifying any of the available stable or latest [model versio
 - `vertex:gemini-2.0-flash`
 - `vertex:gemini-2.0-flash-002`
 - `vertex:aqa`
+- `vertex:claude-3-7-sonnet`
+- `vertex:claude-3-5-sonnet-v2`
+- `vertex:claude-3-5-haiku`
+</details>
 
 Embeddings models such as `vertex:embedding:text-embedding-004` are also supported.
 
@@ -83,6 +92,23 @@ providers:
         maxOutputTokens: 1024
 ```
 
+## Claude models on Vertex AI
+
+Claude models are available through Vertex AI and can be used with the `vertex:` prefix. For Claude models, you can configure the Anthropic API version using the `anthropicVersion` parameter:
+
+```yaml
+providers:
+  - id: vertex:claude-3-5-sonnet-v2
+    config:
+      anthropicVersion: vertex-2023-10-16
+      temperature: 0.5
+      maxOutputTokens: 1024
+      topP: 0.95
+      topK: 1
+```
+
+The default Anthropic API version is `vertex-2023-10-16`.
+
 ## Safety settings
 
 AI safety settings can be configured using the `safetySettings` key. For example:
@@ -125,6 +151,7 @@ defaultTest:
 | `projectId`                        | gcloud project ID.                                                                                       | None                                 |
 | `region`                           | gcloud region.                                                                                           | `us-central1`                        |
 | `publisher`                        | Model publisher.                                                                                         | `google`                             |
+| `anthropicVersion`                 | Anthropic API version for Claude models.                                                                 | `vertex-2023-10-16`                  |
 | `context`                          | Context for the model to consider when generating responses.                                             | None                                 |
 | `examples`                         | Examples to prime the model.                                                                             | None                                 |
 | `safetySettings`                   | [Safety settings](https://ai.google.dev/api/generate-content#safetysetting) to filter generated content. | None                                 |

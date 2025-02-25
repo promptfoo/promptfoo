@@ -100,6 +100,7 @@ interface VertexCompletionOptions {
   region?: string;
   publisher?: string;
   apiVersion?: string;
+  anthropicVersion?: string;
 
   // https://ai.google.dev/api/rest/v1beta/models/streamGenerateContent#request-body
   context?: string;
@@ -290,7 +291,7 @@ export class VertexChatProvider extends VertexGenericProvider {
 
     // Prepare the request body
     const body: ClaudeRequest = {
-      anthropic_version: 'vertex-2023-10-16',
+      anthropic_version: this.config.anthropicVersion || 'vertex-2023-10-16',
       stream: false,
       max_tokens: this.config.maxOutputTokens || 512,
       temperature: this.config.temperature,
