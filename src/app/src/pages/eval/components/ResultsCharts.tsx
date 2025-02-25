@@ -447,7 +447,9 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
       }
 
       try {
-        const res = await callApi(`/history?description=${encodeURIComponent(config.description)}`);
+        const res = await callApi(
+          `/history?description=${encodeURIComponent(config.description)}`,
+        );
         const data = await res.json();
         setProgressData(data.data);
       } catch (error) {
@@ -687,3 +689,6 @@ function ResultsCharts({ columnVisibility, recentEvals }: ResultsChartsProps) {
 }
 
 export default React.memo(ResultsCharts);
+
+
+export { COLOR_PALETTE, HistogramChart, PassRateChart, ScatterChart, MetricChart, PerformanceOverTimeChart, ResultsCharts, scores, scoreSet, chartWidth };
