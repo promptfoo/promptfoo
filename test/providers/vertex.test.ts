@@ -1,5 +1,5 @@
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
-import { getCache, isCacheEnabled, fetchWithCache } from '../../src/cache';
+import { getCache, isCacheEnabled } from '../../src/cache';
 import cliState from '../../src/cliState';
 import logger from '../../src/logger';
 import { VertexChatProvider } from '../../src/providers/vertex';
@@ -358,20 +358,20 @@ describe('Vertex Provider', () => {
     originalState = { ...cliState };
   });
 
-  afterAll(() => {
-    // Restore cliState
-    Object.keys(cliState).forEach((key) => {
-      delete (cliState as any)[key];
-    });
-    Object.assign(cliState, originalState);
-  });
-
   beforeEach(() => {
     jest.resetAllMocks();
     // Reset cliState between tests
     Object.keys(cliState).forEach((key) => {
       delete (cliState as any)[key];
     });
+  });
+
+  afterAll(() => {
+    // Restore cliState
+    Object.keys(cliState).forEach((key) => {
+      delete (cliState as any)[key];
+    });
+    Object.assign(cliState, originalState);
   });
 
   describe('Safety filtering handling', () => {

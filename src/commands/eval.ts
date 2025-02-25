@@ -79,8 +79,7 @@ export async function doEval(
     telemetry.record('command_used', {
       name: 'eval - started',
       watch: Boolean(cmdObj.watch),
-      // Only set when redteam is enabled for sure, because we don't know if config is loaded yet
-      ...(cliState.isRedteam && { isRedteam: true }),
+      isRedteam: Boolean(cliState.isRedteam),
     });
     await telemetry.send();
 
@@ -317,7 +316,7 @@ export async function doEval(
 
     printBorder();
 
-    const isRedteam = cliState.isRedteam;
+    const isRedteam = Boolean(cliState.isRedteam);
 
     logger.info(chalk.green.bold(`Successes: ${successes}`));
     logger.info(chalk.red.bold(`Failures: ${failures}`));
@@ -337,7 +336,7 @@ export async function doEval(
       name: 'eval',
       watch: Boolean(cmdObj.watch),
       duration: Math.round((Date.now() - startTime) / 1000),
-      isRedteam: Boolean(cliState.isRedteam),
+      isRedteam,
     });
     await telemetry.send();
 
@@ -427,7 +426,7 @@ export async function doEval(
         logger.info('Done.');
       }
     }
-    if (testSuite.redteam) {
+    if (isRedteam) {
       showRedteamProviderLabelMissingWarning(testSuite);
     }
     return ret;
