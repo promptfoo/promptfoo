@@ -1,10 +1,15 @@
-import { describe, it, expect } from 'vitest';
 import type { StandaloneEval } from '@promptfoo/util';
+import { describe, it, expect } from 'vitest';
 
 describe('History component utils', () => {
-  const calculatePassRate = (metrics: { testPassCount: number; testFailCount: number } | undefined) => {
+  const calculatePassRate = (
+    metrics: { testPassCount: number; testFailCount: number } | undefined,
+  ) => {
     if (metrics?.testPassCount != null && metrics?.testFailCount != null) {
-      return ((metrics.testPassCount / (metrics.testPassCount + metrics.testFailCount)) * 100).toFixed(2);
+      return (
+        (metrics.testPassCount / (metrics.testPassCount + metrics.testFailCount)) *
+        100
+      ).toFixed(2);
     }
     return '-';
   };
@@ -31,7 +36,7 @@ describe('History component utils', () => {
         'Pass Rate %',
         'Pass Count',
         'Fail Count',
-        'Raw score'
+        'Raw score',
       ];
       const rows = arr.map((col) => [
         col.evalId ?? '',
@@ -41,11 +46,11 @@ describe('History component utils', () => {
         calculatePassRate(col.metrics),
         col.metrics?.testPassCount == null ? '-' : `${col.metrics.testPassCount}`,
         col.metrics?.testFailCount == null ? '-' : `${col.metrics.testFailCount}`,
-        col.metrics?.score == null ? '-' : col.metrics.score?.toFixed(2)
+        col.metrics?.score == null ? '-' : col.metrics.score?.toFixed(2),
       ]);
       return [headers]
         .concat(rows)
-        .map(it => it.map(value => value ?? '').join(','))
+        .map((it) => it.map((value) => value ?? '').join(','))
         .join('\n');
     };
 
@@ -61,13 +66,14 @@ describe('History component utils', () => {
             testPassCount: 8,
             testFailCount: 2,
             testErrorCount: 1,
-            score: 0.8
-          }
-        }
+            score: 0.8,
+          },
+        },
       ];
 
-      const expected = 'Eval,Dataset,Provider,Prompt,Pass Rate %,Pass Count,Fail Count,Raw score\n' +
-                      'eval1,datase,provider1,prompt test prompt,80.00,8,2,0.80';
+      const expected =
+        'Eval,Dataset,Provider,Prompt,Pass Rate %,Pass Count,Fail Count,Raw score\n' +
+        'eval1,datase,provider1,prompt test prompt,80.00,8,2,0.80';
 
       expect(convertToCSV(testData)).toBe(expected);
     });
@@ -85,12 +91,13 @@ describe('History component utils', () => {
           provider: null,
           promptId: null,
           raw: null,
-          metrics: undefined
-        }
+          metrics: undefined,
+        },
       ];
 
-      const expected = 'Eval,Dataset,Provider,Prompt,Pass Rate %,Pass Count,Fail Count,Raw score\n' +
-                      ',,, ,-,-,-,-';
+      const expected =
+        'Eval,Dataset,Provider,Prompt,Pass Rate %,Pass Count,Fail Count,Raw score\n' +
+        ',,, ,-,-,-,-';
 
       expect(convertToCSV(testData)).toBe(expected);
     });
@@ -125,7 +132,7 @@ describe('History component utils', () => {
     it('should get value from metrics object', () => {
       const metrics = {
         testPassCount: 10,
-        testFailCount: 5
+        testFailCount: 5,
       };
 
       expect(getValue(metrics, 'testPassCount')).toBe(10);
@@ -138,7 +145,7 @@ describe('History component utils', () => {
 
     it('should return 0 for non-existent field', () => {
       const metrics = {
-        testPassCount: 10
+        testPassCount: 10,
       };
       expect(getValue(metrics, 'nonExistentField')).toBe(0);
     });
