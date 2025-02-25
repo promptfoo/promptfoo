@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.104.4",
+  "version": "0.105.0",
   "license": "MIT",
   "type": "commonjs",
   "repository": {
@@ -157,7 +157,7 @@
     "zod-to-json-schema": "^3.24.3"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.36.3",
+    "@anthropic-ai/sdk": "^0.37.0",
     "@apidevtools/json-schema-ref-parser": "^11.9.1",
     "@googleapis/sheets": "^9.3.1",
     "ajv": "^8.17.1",

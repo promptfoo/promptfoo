@@ -5,7 +5,12 @@ prompts:
   - file://prompt.yaml
 
 providers:
-  - anthropic:messages:claude-3-7-sonnet-latest
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    config:
+      max_tokens: 2500
+      thinking:
+        type: 'enabled'
+        budget_tokens: 2048 # Must be ≥1024 and less than max_tokens
   - openai:chat:gpt-4o
 
 defaultTest:
