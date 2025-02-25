@@ -86,10 +86,20 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
         logger.debug(`Test has no metadata: ${test.description || 'unnamed test'}`);
         return false;
       }
-      const matches = test.metadata[key] === value;
+      const testValue = test.metadata[key];
+      let matches = false;
+
+      if (Array.isArray(testValue)) {
+        // For array metadata, check if any value includes the search term
+        matches = testValue.some((v) => v.toString().includes(value));
+      } else if (testValue !== undefined) {
+        // For single value metadata, check if it includes the search term
+        matches = testValue.toString().includes(value);
+      }
+
       if (!matches) {
         logger.debug(
-          `Test "${test.description || 'unnamed test'}" metadata doesn't match. Expected ${key}=${value}, got ${JSON.stringify(test.metadata)}`,
+          `Test "${test.description || 'unnamed test'}" metadata doesn't match. Expected ${key} to include ${value}, got ${JSON.stringify(test.metadata)}`,
         );
       }
       return matches;
