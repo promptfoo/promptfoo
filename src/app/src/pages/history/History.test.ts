@@ -1,4 +1,3 @@
-import type { StandaloneEval } from '@promptfoo/util';
 import { describe, it, expect } from 'vitest';
 
 describe('History component utils', () => {
@@ -27,7 +26,7 @@ describe('History component utils', () => {
   });
 
   describe('convertToCSV', () => {
-    const convertToCSV = (arr: StandaloneEval[]) => {
+    const convertToCSV = (arr: any[]) => {
       const headers = [
         'Eval',
         'Dataset',
@@ -55,7 +54,7 @@ describe('History component utils', () => {
     };
 
     it('should convert data to CSV format', () => {
-      const testData: StandaloneEval[] = [
+      const testData = [
         {
           evalId: 'eval1',
           datasetId: 'dataset1',
@@ -97,7 +96,7 @@ describe('History component utils', () => {
     });
 
     it('should handle missing data fields', () => {
-      const testData: StandaloneEval[] = [
+      const testData = [
         {
           evalId: '',
           datasetId: '',
