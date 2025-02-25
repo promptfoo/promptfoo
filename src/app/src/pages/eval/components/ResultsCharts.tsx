@@ -448,7 +448,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
 
       try {
         const res = await callApi(
-          `/progress?description=${encodeURIComponent(config.description)}`,
+          `/history?description=${encodeURIComponent(config.description)}`,
         );
         const data = await res.json();
         setProgressData(data.data);
