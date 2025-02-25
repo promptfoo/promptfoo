@@ -1,3 +1,4 @@
+import type { GaxiosError } from 'gaxios';
 import Clone from 'rfdc';
 import { getCache, isCacheEnabled } from '../cache';
 import cliState from '../cliState';
@@ -108,6 +109,7 @@ interface VertexCompletionOptions {
   region?: string;
   publisher?: string;
   apiVersion?: string;
+  anthropicVersion?: string;
 
   // https://ai.google.dev/api/rest/v1beta/models/streamGenerateContent#request-body
   context?: string;
@@ -145,6 +147,44 @@ interface VertexCompletionOptions {
   functionToolCallbacks?: Record<FunctionDefinition['name'], (arg: string) => Promise<string>>;
 
   systemInstruction?: Content;
+}
+
+// Claude API interfaces
+interface ClaudeMessage {
+  role: string;
+  content: Array<{
+    type: string;
+    text: string;
+  }>;
+}
+
+interface ClaudeRequest {
+  anthropic_version: string;
+  stream: boolean;
+  max_tokens: number;
+  temperature?: number;
+  top_p?: number;
+  top_k?: number;
+  messages: ClaudeMessage[];
+}
+
+interface ClaudeResponse {
+  id: string;
+  type: string;
+  role: string;
+  model: string;
+  content: Array<{
+    type: string;
+    text: string;
+  }>;
+  stop_reason: string;
+  stop_sequence: string | null;
+  usage: {
+    input_tokens: number;
+    cache_creation_input_tokens: number;
+    cache_read_input_tokens: number;
+    output_tokens: number;
+  };
 }
 
 const clone = Clone();
@@ -240,10 +280,131 @@ export class VertexChatProvider extends VertexGenericProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    if (this.modelName.includes('gemini')) {
+    if (this.modelName.includes('claude')) {
+      return this.callClaudeApi(prompt, context);
+    } else if (this.modelName.includes('gemini')) {
       return this.callGeminiApi(prompt, context);
+    } else if (this.modelName.includes('llama')) {
+      throw new Error('Llama on Vertex is not supported yet');
     }
     return this.callPalm2Api(prompt);
+  }
+
+  async callClaudeApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    // Parse the chat prompt into Claude format
+    const messages = parseChatPrompt(prompt, [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: prompt,
+          },
+        ],
+      },
+    ]) as ClaudeMessage[];
+
+    // Prepare the request body
+    const body: ClaudeRequest = {
+      anthropic_version: this.config.anthropicVersion || 'vertex-2023-10-16',
+      stream: false,
+      max_tokens: this.config.maxOutputTokens || 512,
+      temperature: this.config.temperature,
+      top_p: this.config.topP,
+      top_k: this.config.topK,
+      messages,
+    };
+
+    logger.debug(`Preparing to call Claude API with body: ${JSON.stringify(body)}`);
+
+    const cache = await getCache();
+    const cacheKey = `vertex:claude:${this.modelName}:${JSON.stringify(body)}`;
+
+    let cachedResponse;
+    if (isCacheEnabled()) {
+      cachedResponse = await cache.get(cacheKey);
+      if (cachedResponse) {
+        const parsedCachedResponse = JSON.parse(cachedResponse as string);
+        const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
+        if (tokenUsage) {
+          tokenUsage.cached = tokenUsage.total;
+        }
+        logger.debug(`Returning cached response: ${cachedResponse}`);
+        return { ...parsedCachedResponse, cached: true };
+      }
+    }
+
+    let data: ClaudeResponse;
+    try {
+      const { client, projectId } = await getGoogleClient();
+      const url = `https://${this.getApiHost()}/v1/projects/${projectId}/locations/${this.getRegion()}/publishers/anthropic/models/${this.modelName}:rawPredict`;
+
+      const res = await client.request({
+        url,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+        },
+        data: body,
+        timeout: REQUEST_TIMEOUT_MS,
+      });
+
+      data = res.data as ClaudeResponse;
+      logger.debug(`Claude API response: ${JSON.stringify(data)}`);
+    } catch (err) {
+      const error = err as GaxiosError;
+      if (error.response && error.response.data) {
+        logger.debug(`Claude API error:\n${JSON.stringify(error.response.data)}`);
+        return {
+          error: `API call error: ${JSON.stringify(error.response.data)}`,
+        };
+      }
+      logger.debug(`Claude API error:\n${JSON.stringify(err)}`);
+      return {
+        error: `API call error: ${String(err)}`,
+      };
+    }
+
+    try {
+      // Extract the text from the response
+      let output = '';
+      if (data.content && data.content.length > 0) {
+        for (const part of data.content) {
+          if (part.type === 'text') {
+            output += part.text;
+          }
+        }
+      }
+
+      if (!output) {
+        return {
+          error: `No output found in Claude API response: ${JSON.stringify(data)}`,
+        };
+      }
+
+      // Extract token usage information
+      const tokenUsage: TokenUsage = {
+        total: data.usage.input_tokens + data.usage.output_tokens || 0,
+        prompt: data.usage.input_tokens || 0,
+        completion: data.usage.output_tokens || 0,
+      };
+
+      const response = {
+        cached: false,
+        output,
+        tokenUsage,
+      };
+
+      if (isCacheEnabled()) {
+        await cache.set(cacheKey, JSON.stringify(response));
+      }
+
+      return response;
+    } catch (err) {
+      return {
+        error: `Claude API response error: ${String(err)}. Response data: ${JSON.stringify(data)}`,
+      };
+    }
   }
 
   async callGeminiApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
@@ -336,10 +497,7 @@ export class VertexChatProvider extends VertexGenericProvider {
         data = res.data as GeminiApiResponse;
         logger.debug(`Gemini API response: ${JSON.stringify(data)}`);
       } catch (err) {
-        const geminiError = err as any;
-        logger.debug(
-          `Gemini API error:\nString:\n${String(geminiError)}\nJSON:\n${JSON.stringify(geminiError)}]`,
-        );
+        const geminiError = err as GaxiosError;
         if (
           geminiError.response &&
           geminiError.response.data &&
@@ -350,10 +508,12 @@ export class VertexChatProvider extends VertexGenericProvider {
           const code = errorDetails.code;
           const message = errorDetails.message;
           const status = errorDetails.status;
+          logger.debug(`Gemini API error:\n${JSON.stringify(errorDetails)}`);
           return {
             error: `API call error: Status ${status}, Code ${code}, Message:\n\n${message}`,
           };
         }
+        logger.debug(`Gemini API error:\n${JSON.stringify(err)}`);
         return {
           error: `API call error: ${String(err)}`,
         };

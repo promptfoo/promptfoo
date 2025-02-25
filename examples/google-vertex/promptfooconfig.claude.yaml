@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# This configuration runs each prompt through a series of example inputs and checks if they meet requirements.
+
+prompts:
+  - "You are a helpful assistant. Reply with a concise answer to this inquiry: '{{question}}'"
+
+providers:
+  - id: 'vertex:claude-3-5-sonnet-v2'
+    config:
+      region: us-east5
+
+tests:
+  - vars:
+      question: 'Solve 3*x^3-5*x=1'
+  - vars:
+      question: "What's the weather in New York?"

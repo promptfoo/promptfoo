@@ -19,13 +19,13 @@ import TextField from '@mui/material/TextField';
 import type { PromptMetrics } from '@promptfoo/types';
 import type { StandaloneEval } from '@promptfoo/util';
 
-interface ProgressProps {
+interface HistoryProps {
   data: StandaloneEval[];
   isLoading: boolean;
   error: string | null;
 }
 
-export default function Progress({ data, isLoading, error }: ProgressProps) {
+export default function History({ data, isLoading, error }: HistoryProps) {
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);

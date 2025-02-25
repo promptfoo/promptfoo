@@ -8,8 +8,8 @@ export default function HomepageInfo(): JSX.Element {
   const [activeTab, setActiveTab] = useState('security');
 
   const tabs = [
-    { id: 'evaluations', label: 'Quality evaluations' },
-    { id: 'security', label: 'Pre-deployment security scans' },
+    { id: 'evaluations', label: 'Quality evaluations', mobileLabel: 'Evaluations' },
+    { id: 'security', label: 'Pre-deployment security scans', mobileLabel: 'Security' },
   ];
 
   const config = [
@@ -78,7 +78,8 @@ targets:
               className={`${styles.exampleTab} ${activeTab === tab.id ? styles.exampleTabActive : ''}`}
               onClick={() => setActiveTab(tab.id)}
             >
-              {tab.label}
+              <span className={styles.tabLabelDesktop}>{tab.label}</span>
+              <span className={styles.tabLabelMobile}>{tab.mobileLabel}</span>
             </button>
           ))}
         </div>
