@@ -7,7 +7,6 @@ prompts:
 providers:
   - id: 'vertex:claude-3-5-sonnet-v2'
     config:
-      publisher: anthropic
       region: us-east5
 
 tests:
