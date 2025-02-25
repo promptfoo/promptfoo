@@ -11,9 +11,11 @@ interface CliState {
   webUI?: boolean;
 
   // Indicates we're running redteam mode
-  isRedteam?: boolean;
+  isRedteam: boolean;
 }
 
-const state: CliState = {};
+const state: CliState = {
+  isRedteam: false,
+};
 
 export default state;
