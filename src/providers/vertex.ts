@@ -434,31 +434,37 @@ export class VertexChatProvider extends VertexGenericProvider {
         };
       }
     }
-    // Handle function tool callbacks
-    let tool_callback_output;
-    const structured_output = JSON.parse(response.output);
-    if (structured_output.functionCall && this.config.functionToolCallbacks) {
-      const results = [];
-      const functionName = structured_output.functionCall.name
-      if (this.config.functionToolCallbacks[functionName]) {
-        try {
-          const functionResult = await this.config.functionToolCallbacks[functionName](
-            JSON.stringify(structured_output.functionCall.args),
-          );
-          results.push(functionResult);
-        } catch (error) {
-          logger.error(`Error executing function ${functionName}: ${error}`);
+    try {
+      // Handle function tool callbacks
+      let tool_callback_output;
+      const structured_output = JSON.parse(response.output);
+      if (structured_output.functionCall && this.config.functionToolCallbacks) {
+        const results = [];
+        const functionName = structured_output.functionCall.name
+        if (this.config.functionToolCallbacks[functionName]) {
+          try {
+            const functionResult = await this.config.functionToolCallbacks[functionName](
+              JSON.stringify(structured_output.functionCall.args),
+            );
+            results.push(functionResult);
+          } catch (error) {
+            logger.error(`Error executing function ${functionName}: ${error}`);
+          }
+        }
+        if (results.length > 0) {
+          tool_callback_output = results.join('\n');
         }
       }
-      if (results.length > 0) {
-        tool_callback_output = results.join('\n');
-      }
+      response = {
+        cached: response.cached,
+        output: tool_callback_output || response.output,
+        tokenUsage: response.tokenUsage,
+      };
+    } catch (err) {
+      return {
+        error: `Tool callback error: ${String(err)}.}`,
+      };
     }
-    response = {
-      cached: response.cached,
-      output: tool_callback_output || response.output,
-      tokenUsage: response.tokenUsage,
-    };
     return response;
   }
 
