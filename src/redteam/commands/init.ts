@@ -708,3 +708,5 @@ export function initCommand(program: Command) {
       },
     );
 }
+
+export { REDTEAM_CONFIG_TEMPLATE, CUSTOM_PROVIDER_TEMPLATE, recordOnboardingStep, getSystemPrompt };
