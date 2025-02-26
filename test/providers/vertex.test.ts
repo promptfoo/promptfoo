@@ -347,4 +347,198 @@ describe('maybeCoerceToGeminiFormat', () => {
       systemInstruction: undefined,
     });
   });
+
+  it('should handle function tool callbacks correctly', async () => {
+    const mockCachedResponse = {
+      cached: false,
+      output: {
+        functionCall: {
+          name: 'get_weather',
+          args: '{"location":"New York"}',
+        },
+      },
+      tokenUsage: {
+        total: 10,
+        prompt: 5,
+        completion: 5,
+      },
+    };
+
+    const mockGetCache = jest
+      .mocked(getCache().get)
+      .mockResolvedValue(JSON.stringify(mockCachedResponse));
+
+    const mockWeatherFunction = jest.fn().mockResolvedValue('Sunny, 25°C');
+
+    const provider = new VertexChatProvider('gemini', {
+      config: {
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: 'get_weather',
+                description: 'Get the weather for a location',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    location: { type: 'STRING' },
+                  },
+                  required: ['location'],
+                },
+              },
+            ],
+          },
+        ],
+        functionToolCallbacks: {
+          get_weather: mockWeatherFunction,
+        },
+      },
+    });
+    const result = await provider.callApi(
+      JSON.stringify([{ role: 'user', content: "What's the weather in New York?" }]),
+    );
+
+    expect(mockGetCache).toHaveBeenCalledTimes(1);
+    expect(mockWeatherFunction).toHaveBeenCalledWith('{"location":"New York"}');
+    expect(result.output).toBe('Sunny, 25°C');
+    expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5 });
+  });
+
+  // it('should handle multiple function tool calls', async () => {
+  //   const mockResponse = {
+  //     data: {
+  //       choices: [
+  //         {
+  //           message: {
+  //             content: null,
+  //             tool_calls: [
+  //               {
+  //                 function: {
+  //                   name: 'addNumbers',
+  //                   arguments: '{"a":5,"b":6}',
+  //                 },
+  //               },
+  //               {
+  //                 function: {
+  //                   name: 'multiplyNumbers',
+  //                   arguments: '{"x":2,"y":3}',
+  //                 },
+  //               },
+  //             ],
+  //           },
+  //         },
+  //       ],
+  //       usage: { total_tokens: 15, prompt_tokens: 7, completion_tokens: 8 },
+  //     },
+  //     cached: false,
+  //     status: 200,
+  //     statusText: 'OK',
+  //   };
+  //   mockFetchWithCache.mockResolvedValue(mockResponse);
+
+  //   const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+  //     config: {
+  //       tools: [
+  //         {
+  //           type: 'function',
+  //           function: {
+  //             name: 'addNumbers',
+  //             description: 'Add two numbers together',
+  //             parameters: {
+  //               type: 'object',
+  //               properties: {
+  //                 a: { type: 'number' },
+  //                 b: { type: 'number' },
+  //               },
+  //               required: ['a', 'b'],
+  //             },
+  //           },
+  //         },
+  //         {
+  //           type: 'function',
+  //           function: {
+  //             name: 'multiplyNumbers',
+  //             description: 'Multiply two numbers',
+  //             parameters: {
+  //               type: 'object',
+  //               properties: {
+  //                 x: { type: 'number' },
+  //                 y: { type: 'number' },
+  //               },
+  //               required: ['x', 'y'],
+  //             },
+  //           },
+  //         },
+  //       ],
+  //       functionToolCallbacks: {
+  //         addNumbers: (parametersJsonString) => {
+  //           const { a, b } = JSON.parse(parametersJsonString);
+  //           return Promise.resolve(JSON.stringify(a + b));
+  //         },
+  //         multiplyNumbers: (parametersJsonString) => {
+  //           const { x, y } = JSON.parse(parametersJsonString);
+  //           return Promise.resolve(JSON.stringify(x * y));
+  //         },
+  //       },
+  //     },
+  //   });
+
+  //   const result = await provider.callApi('Add 5 and 6, then multiply 2 and 3');
+
+  //   expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+  //   expect(result.output).toBe('11\n6');
+  //   expect(result.tokenUsage).toEqual({ total: 15, prompt: 7, completion: 8 });
+  // });
+
+  // it('should handle errors in function tool callbacks', async () => {
+  //   const mockResponse = {
+  //     data: {
+  //       choices: [
+  //         {
+  //           message: {
+  //             content: null,
+  //             function_call: {
+  //               name: 'errorFunction',
+  //               arguments: '{}',
+  //             },
+  //           },
+  //         },
+  //       ],
+  //       usage: { total_tokens: 5, prompt_tokens: 2, completion_tokens: 3 },
+  //     },
+  //     cached: false,
+  //     status: 200,
+  //     statusText: 'OK',
+  //   };
+  //   mockFetchWithCache.mockResolvedValue(mockResponse);
+
+  //   const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+  //     config: {
+  //       tools: [
+  //         {
+  //           type: 'function',
+  //           function: {
+  //             name: 'errorFunction',
+  //             description: 'A function that always throws an error',
+  //             parameters: {
+  //               type: 'object',
+  //               properties: {},
+  //             },
+  //           },
+  //         },
+  //       ],
+  //       functionToolCallbacks: {
+  //         errorFunction: () => {
+  //           throw new Error('Test error');
+  //         },
+  //       },
+  //     },
+  //   });
+
+  //   const result = await provider.callApi('Call the error function');
+
+  //   expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+  //   expect(result.output).toEqual({ arguments: '{}', name: 'errorFunction' });
+  //   expect(result.tokenUsage).toEqual({ total: 5, prompt: 2, completion: 3 });
+  // });
 });

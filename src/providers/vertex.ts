@@ -480,7 +480,6 @@ export class VertexChatProvider extends VertexGenericProvider {
         response = { ...parsedCachedResponse, cached: true };
       }
     }
-
     if (response === undefined) {
       let data;
       try {
@@ -597,8 +596,11 @@ export class VertexChatProvider extends VertexGenericProvider {
     }
     try {
       // Handle function tool callbacks
+      console.log(`${JSON.stringify(response.output)}`)
+      console.log(`${JSON.stringify(this.config)}`)
       if (this.config.functionToolCallbacks && isValidJson(response.output)) {
         const structured_output = JSON.parse(response.output);
+        console.log(`${JSON.stringify(structured_output)}`)
         if (structured_output.functionCall) {
           const results = [];
           const functionName = structured_output.functionCall.name;

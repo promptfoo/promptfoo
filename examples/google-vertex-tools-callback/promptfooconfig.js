@@ -26,7 +26,6 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
             ],
           },
         ],
-        tool_choice: 'auto',
         functionToolCallbacks: {
           addNumbers: (parametersJsonString) => {
             const { a, b } = JSON.parse(parametersJsonString);
