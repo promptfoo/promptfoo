@@ -401,7 +401,7 @@ describe('maybeCoerceToGeminiFormat', () => {
     expect(mockGetCache).toHaveBeenCalledTimes(1);
     expect(mockWeatherFunction).toHaveBeenCalledWith('{"location":"New York"}');
     expect(result.output).toBe('Sunny, 25°C');
-    expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, cached: 15});
+    expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, cached: 15 });
   });
 
   it('should handle errors in function tool callbacks', async () => {
@@ -420,10 +420,8 @@ describe('maybeCoerceToGeminiFormat', () => {
       },
     };
 
-    jest
-      .mocked(getCache().get)
-      .mockResolvedValue(JSON.stringify(mockCachedResponse));
-    
+    jest.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+
     const provider = new VertexChatProvider('gemini', {
       config: {
         tools: [
@@ -450,7 +448,7 @@ describe('maybeCoerceToGeminiFormat', () => {
 
     const result = await provider.callApi('Call the error function');
 
-    expect(result.output).toBe("{\"functionCall\":{\"name\":\"errorFunction\",\"args\":\"{}\"}}");
+    expect(result.output).toBe('{"functionCall":{"name":"errorFunction","args":"{}"}}');
     expect(result.tokenUsage).toEqual({ total: 5, prompt: 2, completion: 3, cached: 5 });
   });
 });
