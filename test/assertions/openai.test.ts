@@ -27,12 +27,14 @@ beforeEach(() => {
   
   // Mock existsSync to return true for our test files
   mockedFs.existsSync.mockImplementation((path) => {
-    return path.includes('weather_tools.yaml') || path.includes('weather_functions.yaml');
+    const pathStr = path.toString();
+    return pathStr.includes('weather_tools.yaml') || pathStr.includes('weather_functions.yaml');
   });
   
   // Mock readFileSync
   mockedFs.readFileSync.mockImplementation((path, encoding) => {
-    if (path.includes('weather_tools.yaml') || path.includes('weather_functions.yaml')) {
+    const pathStr = path.toString();
+    if (pathStr.includes('weather_tools.yaml') || pathStr.includes('weather_functions.yaml')) {
       return 'mock yaml content';
     }
     return '';
@@ -67,10 +69,36 @@ beforeEach(() => {
   mockedPath.isAbsolute.mockReturnValue(true);
   mockedPath.join.mockImplementation((...args) => './test/fixtures/weather_tools.yaml');
   
-  // Mock fs.statSync to return a proper stats object
-  mockedFs.statSync.mockImplementation((path) => ({
-    isDirectory: () => false,
-  }));
+  // Mock fs.statSync to return a proper stats object that implements Stats interface
+  mockedFs.statSync.mockImplementation((path) => {
+    return {
+      isDirectory: () => false,
+      isFile: () => true,
+      isBlockDevice: () => false,
+      isCharacterDevice: () => false,
+      isSymbolicLink: () => false,
+      isFIFO: () => false,
+      isSocket: () => false,
+      dev: 0,
+      ino: 0,
+      mode: 0,
+      nlink: 0,
+      uid: 0,
+      gid: 0,
+      rdev: 0,
+      size: 0,
+      blksize: 0,
+      blocks: 0,
+      atimeMs: 0,
+      mtimeMs: 0,
+      ctimeMs: 0,
+      birthtimeMs: 0,
+      atime: new Date(),
+      mtime: new Date(),
+      ctime: new Date(),
+      birthtime: new Date()
+    };
+  });
 });
 
 const toolsAssertion: Assertion = {

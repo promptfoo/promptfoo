@@ -490,7 +490,7 @@ export const BEDROCK_MODEL = {
     output: (responseJson: any) => novaOutputFromMessage(responseJson),
   },
   CLAUDE_COMPLETION: {
-    params: (config: BedrockClaudeLegacyCompletionOptions, prompt: string, stop: string[]) => {
+    params: (config: BedrockClaudeLegacyCompletionOptions, prompt: string, stop?: string[]) => {
       const params: any = {
         prompt: `${Anthropic.HUMAN_PROMPT} ${prompt} ${Anthropic.AI_PROMPT}`,
         stop_sequences: stop,
@@ -599,7 +599,7 @@ export const BEDROCK_MODEL = {
     output: (responseJson: any) => outputFromMessage(responseJson),
   },
   TITAN_TEXT: {
-    params: (config: BedrockTextGenerationOptions, prompt: string, stop: string[]) => {
+    params: (config: BedrockTextGenerationOptions, prompt: string, stop?: string[]) => {
       const textGenerationConfig: any = {};
       addConfigParam(
         textGenerationConfig,
@@ -639,7 +639,7 @@ export const BEDROCK_MODEL = {
   LLAMA3_2: getLlamaModelHandler(LlamaVersion.V3_2),
   LLAMA3_3: getLlamaModelHandler(LlamaVersion.V3_3),
   COHERE_COMMAND: {
-    params: (config: BedrockCohereCommandGenerationOptions, prompt: string, stop: string[]) => {
+    params: (config: BedrockCohereCommandGenerationOptions, prompt: string, stop?: string[]) => {
       const params: any = { prompt };
       addConfigParam(
         params,
@@ -668,7 +668,7 @@ export const BEDROCK_MODEL = {
     output: (responseJson: any) => responseJson?.generations[0]?.text,
   },
   COHERE_COMMAND_R: {
-    params: async (config: BedrockCohereCommandRGenerationOptions, prompt: string, stop: string[]) => {
+    params: async (config: BedrockCohereCommandRGenerationOptions, prompt: string, stop?: string[]) => {
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
       const lastMessage = messages[messages.length - 1].content;
       if (!messages.every((m) => typeof m.content === 'string')) {
@@ -702,7 +702,7 @@ export const BEDROCK_MODEL = {
     output: (responseJson: any) => responseJson?.text,
   },
   MISTRAL: {
-    params: (config: BedrockMistralGenerationOptions, prompt: string, stop: string[]) => {
+    params: (config: BedrockMistralGenerationOptions, prompt: string, stop?: string[]) => {
       const params: any = { prompt, stop };
       addConfigParam(
         params,
