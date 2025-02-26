@@ -109,4 +109,82 @@ describe('getUnifiedConfig', () => {
       { id: 'custom', config: { option: true } },
     ]);
   });
+
+  it('should correctly handle metadata and rbacTagIds', () => {
+    const configWithRbacTags: SavedRedteamConfig = {
+      ...baseConfig,
+      target: {
+        ...baseConfig.target,
+        rbacTagIds: ['tag1', 'tag2'],
+      },
+    };
+
+    const result = getUnifiedConfig(configWithRbacTags);
+
+    expect(result.metadata!.rbacTagIds).toEqual(['tag1', 'tag2']);
+    // @ts-ignore
+    expect(result.targets[0].rbacTagIds).toBeUndefined();
+  });
+
+  it('should handle empty or undefined rbacTagIds in metadata', () => {
+    const configWithoutRbacTags: SavedRedteamConfig = {
+      ...baseConfig,
+      target: {
+        ...baseConfig.target,
+        rbacTagIds: undefined,
+      },
+    };
+
+    const result = getUnifiedConfig(configWithoutRbacTags);
+
+    expect(result.metadata!.rbacTagIds).toBeUndefined();
+    // @ts-ignore
+    expect(result.targets[0].rbacTagIds).toBeUndefined();
+  });
+
+  it('should properly transfer rbacTagIds to metadata', () => {
+    const configWithRbacTags: SavedRedteamConfig = {
+      ...baseConfig,
+      target: {
+        ...baseConfig.target,
+        rbacTagIds: ['tag1', 'tag2', 'tag3'],
+      },
+    };
+
+    const result = getUnifiedConfig(configWithRbacTags);
+
+    expect(result.metadata!.rbacTagIds).toEqual(['tag1', 'tag2', 'tag3']);
+    // @ts-ignore
+    expect(result.targets[0].rbacTagIds).toBeUndefined();
+    // @ts-ignore
+    expect(result.targets[0]).not.toHaveProperty('rbacTagIds');
+  });
+
+  it('should handle metadata with various rbacTagIds configurations', () => {
+    const configWithEmptyTags: SavedRedteamConfig = {
+      ...baseConfig,
+      target: {
+        ...baseConfig.target,
+        rbacTagIds: [],
+      },
+    };
+
+    const configWithNullTags: SavedRedteamConfig = {
+      ...baseConfig,
+      target: {
+        ...baseConfig.target,
+        rbacTagIds: null as any,
+      },
+    };
+
+    const emptyResult = getUnifiedConfig(configWithEmptyTags);
+    const nullResult = getUnifiedConfig(configWithNullTags);
+
+    expect(emptyResult.metadata!.rbacTagIds).toEqual([]);
+    expect(nullResult.metadata!.rbacTagIds).toBeNull();
+    // @ts-ignore
+    expect(emptyResult.targets[0].rbacTagIds).toBeUndefined();
+    // @ts-ignore
+    expect(nullResult.targets[0].rbacTagIds).toBeUndefined();
+  });
 });
