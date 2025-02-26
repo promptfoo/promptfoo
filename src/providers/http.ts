@@ -481,7 +481,7 @@ export class HttpProvider implements ApiProvider {
   private lastSignatureTimestamp?: number;
   private lastSignature?: string;
 
-  constructor(url: string, options: ProviderOptions) {
+  private constructor(url: string, options: ProviderOptions) {
     this.config = HttpProviderConfigSchema.parse(options.config);
     this.url = this.config.url || url;
     this.transformResponse = createTransformResponse(
@@ -490,16 +490,23 @@ export class HttpProvider implements ApiProvider {
     this.sessionParser = createSessionParser(this.config.sessionParser);
     this.transformRequest = createTransformRequest(this.config.transformRequest);
     this.validateStatus = createValidateStatus(this.config.validateStatus);
-    if (this.config.request) {
-      this.config.request = maybeLoadFromExternalFile(this.config.request) as string;
+  }
+  
+  public static async create(url: string, options: ProviderOptions): Promise<HttpProvider> {
+    const provider = new HttpProvider(url, options);
+
+    if (provider.config.request) {
+      provider.config.request = await maybeLoadFromExternalFile(provider.config.request) as string;
     } else {
       invariant(
-        this.config.body || this.config.method === 'GET',
-        `Expected HTTP provider ${this.url} to have a config containing {body}, but instead got ${safeJsonStringify(
-          this.config,
+        provider.config.body || provider.config.method === 'GET',
+        `Expected HTTP provider ${provider.url} to have a config containing {body}, but instead got ${safeJsonStringify(
+          provider.config,
         )}`,
       );
     }
+
+    return provider;
   }
 
   id(): string {

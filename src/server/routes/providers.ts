@@ -30,7 +30,7 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
     return;
   }
   invariant(config.url, 'url is required');
-  const loadedProvider = new HttpProvider(config.url, providerOptions);
+  const loadedProvider = await HttpProvider.create(config.url, providerOptions);
   // Call the provider with the test prompt
   let result;
   try {

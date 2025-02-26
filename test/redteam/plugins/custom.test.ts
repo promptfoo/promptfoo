@@ -10,18 +10,19 @@ describe('CustomPlugin', () => {
   let plugin: CustomPlugin;
   let mockProvider: ApiProvider;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     mockProvider = {
       callApi: jest.fn(),
       id: jest.fn().mockReturnValue('test-provider'),
     };
 
-    jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
+    jest.mocked(maybeLoadFromExternalFile).mockResolvedValue({
       generator: 'Generate {{ n }} test prompts for {{ purpose }}',
       grader: 'Grade the response based on {{ purpose }}',
     });
 
-    plugin = new CustomPlugin(
+    // Use static factory method instead of constructor
+    plugin = await CustomPlugin.create(
       mockProvider,
       'test-purpose',
       'testVar',
@@ -72,13 +73,13 @@ describe('loadCustomPluginDefinition', () => {
     jest.clearAllMocks();
   });
 
-  it('should load a valid custom plugin definition', () => {
-    jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
+  it('should load a valid custom plugin definition', async () => {
+    jest.mocked(maybeLoadFromExternalFile).mockResolvedValue({
       generator: 'Valid generator template',
       grader: 'Valid grader template',
     });
 
-    const result = loadCustomPluginDefinition('path/to/valid-plugin.json');
+    const result = await loadCustomPluginDefinition('path/to/valid-plugin.json');
 
     expect(result).toEqual({
       generator: 'Valid generator template',
@@ -86,35 +87,35 @@ describe('loadCustomPluginDefinition', () => {
     });
   });
 
-  it('should throw an error for an invalid custom plugin definition', () => {
-    jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
+  it('should throw an error for an invalid custom plugin definition', async () => {
+    jest.mocked(maybeLoadFromExternalFile).mockResolvedValue({
       generator: '',
       grader: 'Valid grader template',
     });
 
-    expect(() => loadCustomPluginDefinition('path/to/invalid-plugin.json')).toThrow(
+    await expect(loadCustomPluginDefinition('path/to/invalid-plugin.json')).rejects.toThrow(
       'Custom Plugin Schema Validation Error',
     );
   });
 
-  it('should throw an error when the plugin definition is missing a required field', () => {
-    jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
+  it('should throw an error when the plugin definition is missing a required field', async () => {
+    jest.mocked(maybeLoadFromExternalFile).mockResolvedValue({
       generator: 'Valid generator template',
     });
 
-    expect(() => loadCustomPluginDefinition('path/to/invalid-plugin.json')).toThrow(
+    await expect(loadCustomPluginDefinition('path/to/invalid-plugin.json')).rejects.toThrow(
       'Custom Plugin Schema Validation Error',
     );
   });
 
-  it('should throw an error when the plugin definition contains extra fields', () => {
-    jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
+  it('should throw an error when the plugin definition contains extra fields', async () => {
+    jest.mocked(maybeLoadFromExternalFile).mockResolvedValue({
       generator: 'Valid generator template',
       grader: 'Valid grader template',
       extraField: 'This should not be here',
     });
 
-    expect(() => loadCustomPluginDefinition('path/to/invalid-plugin.json')).toThrow(
+    await expect(loadCustomPluginDefinition('path/to/invalid-plugin.json')).rejects.toThrow(
       'Custom Plugin Schema Validation Error',
     );
   });

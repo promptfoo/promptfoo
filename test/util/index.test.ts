@@ -63,48 +63,48 @@ describe('maybeLoadFromExternalFile', () => {
     jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
   });
 
-  it('should return the input if it is not a string', () => {
+  it('should return the input if it is not a string', async () => {
     const input = { key: 'value' };
-    expect(maybeLoadFromExternalFile(input)).toBe(input);
+    expect(await maybeLoadFromExternalFile(input)).toBe(input);
   });
 
-  it('should return the input if it does not start with "file://"', () => {
+  it('should return the input if it does not start with "file://"', async () => {
     const input = 'not a file path';
-    expect(maybeLoadFromExternalFile(input)).toBe(input);
+    expect(await maybeLoadFromExternalFile(input)).toBe(input);
   });
 
-  it('should throw an error if the file does not exist', () => {
+  it('should throw an error if the file does not exist', async () => {
     jest.mocked(fs.existsSync).mockReturnValue(false);
-    expect(() => maybeLoadFromExternalFile('file://nonexistent.txt')).toThrow(
+    await expect(maybeLoadFromExternalFile('file://nonexistent.txt')).rejects.toThrow(
       'File does not exist',
     );
   });
 
-  it('should return the file contents for a non-JSON, non-YAML file', () => {
-    expect(maybeLoadFromExternalFile('file://test.txt')).toBe(mockFileContent);
+  it('should return the file contents for a non-JSON, non-YAML file', async () => {
+    expect(await maybeLoadFromExternalFile('file://test.txt')).toBe(mockFileContent);
   });
 
-  it('should parse and return JSON content for a .json file', () => {
+  it('should parse and return JSON content for a .json file', async () => {
     jest.mocked(fs.readFileSync).mockReturnValue(mockJsonContent);
-    expect(maybeLoadFromExternalFile('file://test.json')).toEqual({ key: 'value' });
+    expect(await maybeLoadFromExternalFile('file://test.json')).toEqual({ key: 'value' });
   });
 
-  it('should parse and return YAML content for a .yaml file', () => {
+  it('should parse and return YAML content for a .yaml file', async () => {
     jest.mocked(fs.readFileSync).mockReturnValue(mockYamlContent);
-    expect(maybeLoadFromExternalFile('file://test.yaml')).toEqual({ key: 'value' });
+    expect(await maybeLoadFromExternalFile('file://test.yaml')).toEqual({ key: 'value' });
   });
 
-  it('should parse and return YAML content for a .yml file', () => {
+  it('should parse and return YAML content for a .yml file', async () => {
     jest.mocked(fs.readFileSync).mockReturnValue(mockYamlContent);
-    expect(maybeLoadFromExternalFile('file://test.yml')).toEqual({ key: 'value' });
+    expect(await maybeLoadFromExternalFile('file://test.yml')).toEqual({ key: 'value' });
   });
 
-  it('should use basePath when resolving file paths', () => {
+  it('should use basePath when resolving file paths', async () => {
     const basePath = '/base/path';
     cliState.basePath = basePath;
     jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
 
-    maybeLoadFromExternalFile('file://test.txt');
+    await maybeLoadFromExternalFile('file://test.txt');
 
     const expectedPath = path.resolve(basePath, 'test.txt');
     expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);

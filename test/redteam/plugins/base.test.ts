@@ -519,9 +519,9 @@ describe('RedteamGraderBase', () => {
         .mocked(maybeLoadFromExternalFile)
         .mockImplementation((input) => {
           if (input === 'file://tools.json') {
-            return [{ name: 'tool1' }, { name: 'tool2' }];
+            return Promise.resolve([{ name: 'tool1' }, { name: 'tool2' }]);
           }
-          return input;
+          return Promise.resolve(input);
         });
 
       ToolGrader = class extends RedteamGraderBase {

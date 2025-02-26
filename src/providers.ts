@@ -520,7 +520,7 @@ export async function loadApiProvider(
     providerPath === 'http' ||
     providerPath === 'https'
   ) {
-    ret = new HttpProvider(providerPath, providerOptions);
+    ret = await HttpProvider.create(providerPath, providerOptions);
   } else if (
     providerPath.startsWith('ws:') ||
     providerPath.startsWith('wss:') ||

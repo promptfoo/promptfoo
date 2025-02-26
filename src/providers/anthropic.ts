@@ -259,7 +259,7 @@ export class AnthropicMessagesProvider implements ApiProvider {
       messages: extractedMessages,
       stream: false,
       temperature: this.config.temperature || getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
-      ...(this.config.tools ? { tools: maybeLoadFromExternalFile(this.config.tools) } : {}),
+      ...(this.config.tools ? { tools: await maybeLoadFromExternalFile(this.config.tools) } : {}),
       ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
       ...(typeof this.config?.extra_body === 'object' && this.config.extra_body
         ? this.config.extra_body

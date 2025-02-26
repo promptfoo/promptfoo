@@ -191,20 +191,22 @@ export interface OpenAiTool {
   function: OpenAiFunction;
 }
 
-export function validateFunctionCall(
+export async function validateFunctionCall(
   functionCall: { arguments: string; name: string },
   functions?: OpenAiFunction[],
   vars?: Record<string, string | object>,
 ) {
   // Parse function call and validate it against schema
-  const interpolatedFunctions = maybeLoadFromExternalFile(
+  const interpolatedFunctions = await maybeLoadFromExternalFile(
     renderVarsInObject(functions, vars),
   ) as OpenAiFunction[];
   const functionArgs = JSON.parse(functionCall.arguments);
   const functionName = functionCall.name;
   const functionSchema = interpolatedFunctions?.find((f) => f.name === functionName)?.parameters;
   if (!functionSchema) {
-    throw new Error(`Called "${functionName}", but there is no function with that name`);
+    // Include available function names in the error message for better debugging
+    const availableFunctions = interpolatedFunctions?.map(f => f.name).join(', ') || 'none';
+    throw new Error(`Called "${functionName}", but there is no function with that name. Available functions: ${availableFunctions}`);
   }
   const validate = ajv.compile(functionSchema);
   if (!validate(functionArgs)) {

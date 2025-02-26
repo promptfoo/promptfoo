@@ -32,7 +32,7 @@ describe('IntentPlugin', () => {
   });
 
   it('should initialize with a single string intent', async () => {
-    const plugin = new IntentPlugin(mockProvider, 'test-purpose', 'prompt', {
+    const plugin = await IntentPlugin.create(mockProvider, 'test-purpose', 'prompt', {
       intent: 'malicious intent',
     });
 
@@ -46,7 +46,7 @@ describe('IntentPlugin', () => {
   });
 
   it('should initialize with an array of string intents', async () => {
-    const plugin = new IntentPlugin(mockProvider, 'test-purpose', 'prompt', {
+    const plugin = await IntentPlugin.create(mockProvider, 'test-purpose', 'prompt', {
       intent: ['intent1', 'intent2', 'intent3'],
     });
 
@@ -58,7 +58,7 @@ describe('IntentPlugin', () => {
   });
 
   it('should initialize with a list of list of strings', async () => {
-    const plugin = new IntentPlugin(mockProvider, 'test-purpose', 'prompt', {
+    const plugin = await IntentPlugin.create(mockProvider, 'test-purpose', 'prompt', {
       intent: [
         ['step1', 'step2'],
         ['other1', 'other2'],
@@ -90,7 +90,7 @@ describe('IntentPlugin', () => {
     jest.mocked(fs.existsSync).mockReturnValue(true);
     jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
 
-    const plugin = new IntentPlugin(mockProvider, 'test-purpose', 'prompt', {
+    const plugin = await IntentPlugin.create(mockProvider, 'test-purpose', 'prompt', {
       intent: 'file://intents.csv',
     });
 
@@ -102,12 +102,10 @@ describe('IntentPlugin', () => {
     expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('intents.csv'), 'utf8');
   });
 
-  it('should throw error when no intent is provided', () => {
-    expect(() => {
-      new IntentPlugin(mockProvider, 'test-purpose', 'prompt', {
-        intent: undefined as any,
-      });
-    }).toThrow(expect.any(Error));
+  it('should throw error when no intent is provided', async () => {
+    await expect(IntentPlugin.create(mockProvider, 'test-purpose', 'prompt', {
+      intent: undefined as any,
+    })).rejects.toThrow(expect.any(Error));
   });
 });
 

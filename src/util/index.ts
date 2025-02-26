@@ -1086,15 +1086,12 @@ export function parsePathOrGlob(
  *
  * @throws {Error} If the specified file does not exist.
  */
-export function maybeLoadFromExternalFile(
+export async function maybeLoadFromExternalFile(
   filePath: string | object | Function | undefined | null,
   defaultFunctionName?: string,
-) {
+): Promise<any> {
   if (Array.isArray(filePath)) {
-    return filePath.map((path) => {
-      const content: any = maybeLoadFromExternalFile(path, defaultFunctionName);
-      return content;
-    });
+    return Promise.all(filePath.map((path) => maybeLoadFromExternalFile(path, defaultFunctionName)));
   }
 
   if (typeof filePath !== 'string') {
@@ -1114,15 +1111,19 @@ export function maybeLoadFromExternalFile(
   }
 
   // For JS and Python files, we need to parse the path to get function names
-  // const { filePath: pathWithoutFunction, functionName, extension } = parsePathOrGlob(cliState.basePath || '', renderedFilePath);
-  // if (isJavascriptFile(pathWithoutFunction)) {
-  //   const mod = await importModule(pathWithoutFunction, functionName ?? defaultFunctionName);
-  //   return typeof mod === 'function' ? await mod() : mod;
-  // }
-  // if (extension === '.py') {
-  //   const result = await runPython(pathWithoutFunction, functionName ?? defaultFunctionName ?? 'get_tools', []);
-  //   return result;
-  // }
+  const { filePath: pathWithoutFunction, functionName, extension } = parsePathOrGlob(cliState.basePath || '', renderedFilePath);
+  if (isJavascriptFile(pathWithoutFunction)) {
+    const mod = await importModule(pathWithoutFunction, functionName ?? defaultFunctionName);
+    return typeof mod === 'function' ? await mod() : mod;
+  }
+  if (extension === '.py') {
+    const fnName = functionName ?? defaultFunctionName;
+    if (!fnName) {
+      throw new Error(`No function name available for Python file: ${pathWithoutFunction}. Either specify a function using syntax file://path/to/file.py:function_name or provide a defaultFunctionName parameter`);
+    }
+    const result = await runPython(pathWithoutFunction, fnName, []);
+    return result;
+  }
 
   const contents = fs.readFileSync(finalPath, 'utf8');
   if (finalPath.endsWith('.json')) {
@@ -1149,9 +1150,9 @@ export function maybeLoadFromExternalFile(
  * @param filePath - The input to process
  * @returns The loaded content
  */
-export function maybeLoadToolsFromExternalFile(
+export async function maybeLoadToolsFromExternalFile(
   filePath: string | object | Function | undefined | null,
-) {
+): Promise<any> {
   return maybeLoadFromExternalFile(filePath, 'get_tools');
 }
 

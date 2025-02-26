@@ -5,12 +5,12 @@ import type { GradingResult } from '../types';
 import { renderVarsInObject, maybeLoadFromExternalFile } from '../util';
 import invariant from '../util/invariant';
 
-export const handleIsValidOpenAiFunctionCall = ({
+export const handleIsValidOpenAiFunctionCall = async ({
   assertion,
   output,
   provider,
   test,
-}: AssertionParams): GradingResult => {
+}: AssertionParams): Promise<GradingResult> => {
   if (typeof output === 'object' && 'function_call' in output) {
     output = (output as { function_call: any }).function_call;
   }
@@ -30,7 +30,7 @@ export const handleIsValidOpenAiFunctionCall = ({
     };
   }
   try {
-    validateFunctionCall(
+    await validateFunctionCall(
       functionOutput,
       (provider as OpenAiChatCompletionProvider).config.functions,
       test.vars,
@@ -51,12 +51,12 @@ export const handleIsValidOpenAiFunctionCall = ({
   }
 };
 
-export const handleIsValidOpenAiToolsCall = ({
+export const handleIsValidOpenAiToolsCall = async ({
   assertion,
   output,
   provider,
   test,
-}: AssertionParams): GradingResult => {
+}: AssertionParams): Promise<GradingResult> => {
   if (typeof output === 'object' && 'tool_calls' in output) {
     output = (output as { tool_calls: any }).tool_calls;
   }
@@ -82,7 +82,7 @@ export const handleIsValidOpenAiToolsCall = ({
 
   let tools = (provider as OpenAiChatCompletionProvider).config.tools;
   if (tools) {
-    tools = maybeLoadFromExternalFile(renderVarsInObject(tools, test.vars));
+    tools = await maybeLoadFromExternalFile(renderVarsInObject(tools, test.vars));
   }
   invariant(
     tools,
@@ -91,13 +91,16 @@ export const handleIsValidOpenAiToolsCall = ({
     )}`,
   );
   try {
-    toolsOutput.forEach((toolOutput) => {
-      validateFunctionCall(
-        toolOutput.function,
-        tools.map((tool) => tool.function),
-        test.vars,
-      );
-    });
+    // Use Promise.all to properly await all async validateFunctionCall operations
+    await Promise.all(
+      toolsOutput.map((toolOutput) => 
+        validateFunctionCall(
+          toolOutput.function,
+          tools.map((tool) => tool.function),
+          test.vars,
+        )
+      )
+    );
     return {
       pass: true,
       score: 1,
