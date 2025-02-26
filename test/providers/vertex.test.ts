@@ -350,7 +350,7 @@ describe('maybeCoerceToGeminiFormat', () => {
 
   it('should handle function tool callbacks correctly', async () => {
     const mockCachedResponse = {
-      cached: false,
+      cached: true,
       output: JSON.stringify({
         functionCall: {
           name: 'get_weather',
@@ -404,141 +404,154 @@ describe('maybeCoerceToGeminiFormat', () => {
     expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, cached: 15});
   });
 
-  // it('should handle multiple function tool calls', async () => {
-  //   const mockResponse = {
-  //     data: {
-  //       choices: [
-  //         {
-  //           message: {
-  //             content: null,
-  //             tool_calls: [
-  //               {
-  //                 function: {
-  //                   name: 'addNumbers',
-  //                   arguments: '{"a":5,"b":6}',
-  //                 },
-  //               },
-  //               {
-  //                 function: {
-  //                   name: 'multiplyNumbers',
-  //                   arguments: '{"x":2,"y":3}',
-  //                 },
-  //               },
-  //             ],
-  //           },
-  //         },
-  //       ],
-  //       usage: { total_tokens: 15, prompt_tokens: 7, completion_tokens: 8 },
-  //     },
-  //     cached: false,
-  //     status: 200,
-  //     statusText: 'OK',
-  //   };
-  //   mockFetchWithCache.mockResolvedValue(mockResponse);
+  it('should handle multiple function tool calls', async () => {
+    const mockCachedResponse = {
+      cached: true,
+      output: JSON.stringify({
+        functionCall: {
+          name: 'get_weather',
+          args: '{"location":"New York"}',
+        },
+      }),
+      tokenUsage: {
+        total: 15,
+        prompt: 10,
+        completion: 5,
+      },
+    };
 
-  //   const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
-  //     config: {
-  //       tools: [
-  //         {
-  //           type: 'function',
-  //           function: {
-  //             name: 'addNumbers',
-  //             description: 'Add two numbers together',
-  //             parameters: {
-  //               type: 'object',
-  //               properties: {
-  //                 a: { type: 'number' },
-  //                 b: { type: 'number' },
-  //               },
-  //               required: ['a', 'b'],
-  //             },
-  //           },
-  //         },
-  //         {
-  //           type: 'function',
-  //           function: {
-  //             name: 'multiplyNumbers',
-  //             description: 'Multiply two numbers',
-  //             parameters: {
-  //               type: 'object',
-  //               properties: {
-  //                 x: { type: 'number' },
-  //                 y: { type: 'number' },
-  //               },
-  //               required: ['x', 'y'],
-  //             },
-  //           },
-  //         },
-  //       ],
-  //       functionToolCallbacks: {
-  //         addNumbers: (parametersJsonString) => {
-  //           const { a, b } = JSON.parse(parametersJsonString);
-  //           return Promise.resolve(JSON.stringify(a + b));
-  //         },
-  //         multiplyNumbers: (parametersJsonString) => {
-  //           const { x, y } = JSON.parse(parametersJsonString);
-  //           return Promise.resolve(JSON.stringify(x * y));
-  //         },
-  //       },
-  //     },
-  //   });
+    const mockGetCache = jest
+      .mocked(getCache().get)
+      .mockResolvedValue(JSON.stringify(mockCachedResponse));
+        
+    const mockResponse = {
+      data: {
+        choices: [
+          {
+            message: {
+              content: null,
+              tool_calls: [
+                {
+                  function: {
+                    name: 'addNumbers',
+                    arguments: '{"a":5,"b":6}',
+                  },
+                },
+                {
+                  function: {
+                    name: 'multiplyNumbers',
+                    arguments: '{"x":2,"y":3}',
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        usage: { total_tokens: 15, prompt_tokens: 7, completion_tokens: 8 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    };
 
-  //   const result = await provider.callApi('Add 5 and 6, then multiply 2 and 3');
+    const provider = new VertexChatProvider('gemini', {
+      config: {
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: 'addNumbers',
+                description: 'Add two numbers together',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    a: { type: 'NUMBER' },
+                    b: { type: 'NUMBER' },
+                  },
+                  required: ['a', 'b'],
+                },
+              },
+              {
+                name: 'multiplyNumbers',
+                description: 'Multiply two numbers',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    a: { type: 'NUMBER' },
+                    b: { type: 'NUMBER' },
+                  },
+                  required: ['a', 'b'],
+                },
+              },
+            ],
+          },
+        ],
+        functionToolCallbacks: {
+          addNumbers: (parametersJsonString) => {
+            const { a, b } = JSON.parse(parametersJsonString);
+            return Promise.resolve(JSON.stringify(a + b));
+          },
+          multiplyNumbers: (parametersJsonString) => {
+            const { x, y } = JSON.parse(parametersJsonString);
+            return Promise.resolve(JSON.stringify(x * y));
+          },
+        },
+      },
+    });
 
-  //   expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
-  //   expect(result.output).toBe('11\n6');
-  //   expect(result.tokenUsage).toEqual({ total: 15, prompt: 7, completion: 8 });
-  // });
+    const result = await provider.callApi('Add 5 and 6, then multiply 2 and 3');
 
-  // it('should handle errors in function tool callbacks', async () => {
-  //   const mockResponse = {
-  //     data: {
-  //       choices: [
-  //         {
-  //           message: {
-  //             content: null,
-  //             function_call: {
-  //               name: 'errorFunction',
-  //               arguments: '{}',
-  //             },
-  //           },
-  //         },
-  //       ],
-  //       usage: { total_tokens: 5, prompt_tokens: 2, completion_tokens: 3 },
-  //     },
-  //     cached: false,
-  //     status: 200,
-  //     statusText: 'OK',
-  //   };
-  //   mockFetchWithCache.mockResolvedValue(mockResponse);
+    expect(result.output).toBe('11\n6');
+    expect(result.tokenUsage).toEqual({ total: 15, prompt: 7, completion: 8 });
+  });
 
-  //   const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
-  //     config: {
-  //       tools: [
-  //         {
-  //           type: 'function',
-  //           function: {
-  //             name: 'errorFunction',
-  //             description: 'A function that always throws an error',
-  //             parameters: {
-  //               type: 'object',
-  //               properties: {},
-  //             },
-  //           },
-  //         },
-  //       ],
-  //       functionToolCallbacks: {
-  //         errorFunction: () => {
-  //           throw new Error('Test error');
-  //         },
-  //       },
-  //     },
-  //   });
+  it('should handle errors in function tool callbacks', async () => {
+    const mockCachedResponse = {
+      cached: true,
+      output: JSON.stringify({
+        functionCall: {
+          name: 'errorFunction',
+          args: '{}',
+        },
+      }),
+      tokenUsage: {
+        total: 5,
+        prompt: 2,
+        completion: 3,
+      },
+    };
 
-  //   const result = await provider.callApi('Call the error function');
+    jest
+      .mocked(getCache().get)
+      .mockResolvedValue(JSON.stringify(mockCachedResponse));
+    
+    const provider = new VertexChatProvider('gemini', {
+      config: {
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: 'errorFunction',
+                description: 'A function that always throws an error',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {},
+                },
+              },
+            ],
+          },
+        ],
+        functionToolCallbacks: {
+          errorFunction: () => {
+            throw new Error('Test error');
+          },
+        },
+      },
+    });
 
-  //   expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
-  //   expect(result.output).toEqual({ arguments: '{}', name: 'errorFunction' });
-  //   expect(result.tokenUsage).toEqual({ total: 5, prompt: 2, completion: 3 });
-  // });
+    const result = await provider.callApi('Call the error function');
+
+    expect(result.output).toBe("{\"functionCall\":{\"name\":\"errorFunction\",\"args\":\"{}\"}}");
+    expect(result.tokenUsage).toEqual({ total: 5, prompt: 2, completion: 3, cached: 5 });
+  });
 });
