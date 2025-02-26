@@ -2,6 +2,7 @@ import type { Command } from 'commander';
 import logger from '../logger';
 import Eval from '../models/eval';
 import telemetry from '../telemetry';
+import type { EvaluateSummaryV3 } from '../types';
 import { writeOutput } from '../util';
 
 export function exportCommand(program: Command) {
@@ -22,7 +23,7 @@ export function exportCommand(program: Command) {
           logger.error(`No eval found with ID ${evalId}`);
           process.exit(1);
         }
-        const summary = await result.toEvaluateSummary();
+        const summary = (await result.toEvaluateSummary()) as EvaluateSummaryV3;
         const jsonData = JSON.stringify(summary, null, 2);
         if (cmdObj.output) {
           await writeOutput(cmdObj.output, result, null);
