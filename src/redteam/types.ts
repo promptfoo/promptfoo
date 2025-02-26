@@ -144,7 +144,7 @@ export interface RedteamRunOptions {
 export interface SavedRedteamConfig {
   description: string;
   prompts: string[];
-  target: ProviderOptions & { rbacTagIds?: string[] };
+  target: ProviderOptions;
   plugins: (RedteamPlugin | { id: string; config?: any })[];
   strategies: RedteamStrategy[];
   purpose?: string;

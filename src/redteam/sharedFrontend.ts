@@ -33,10 +33,9 @@ export function getUnifiedConfig(
 ): UnifiedConfig & { redteam: NonNullable<UnifiedConfig['redteam']> } {
   // Remove UI specific configs from target
   const target = { ...config.target, config: { ...config.target.config } };
-  const metadata = { rbacTagIds: config.target.rbacTagIds };
   delete target.config.sessionSource;
   delete target.config.stateful;
-  delete target.rbacTagIds;
+
   const defaultTest = {
     ...(config.defaultTest ?? {}),
     options: {
@@ -97,6 +96,5 @@ export function getUnifiedConfig(
         };
       }),
     },
-    metadata,
   };
 }
