@@ -351,15 +351,15 @@ describe('maybeCoerceToGeminiFormat', () => {
   it('should handle function tool callbacks correctly', async () => {
     const mockCachedResponse = {
       cached: false,
-      output: {
+      output: JSON.stringify({
         functionCall: {
           name: 'get_weather',
           args: '{"location":"New York"}',
         },
-      },
+      }),
       tokenUsage: {
-        total: 10,
-        prompt: 5,
+        total: 15,
+        prompt: 10,
         completion: 5,
       },
     };
@@ -401,7 +401,7 @@ describe('maybeCoerceToGeminiFormat', () => {
     expect(mockGetCache).toHaveBeenCalledTimes(1);
     expect(mockWeatherFunction).toHaveBeenCalledWith('{"location":"New York"}');
     expect(result.output).toBe('Sunny, 25°C');
-    expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5 });
+    expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, cached: 15});
   });
 
   // it('should handle multiple function tool calls', async () => {

@@ -82,12 +82,6 @@ interface FunctionDeclaration {
 
 export type FunctionParameters = Record<string, unknown>;
 
-interface FunctionDefinition {
-  name: string;
-  description: string;
-  parameters?: FunctionParameters;
-}
-
 interface GoogleSearchRetrieval {
   dynamicRetrievalConfig: {
     mode?: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
@@ -144,7 +138,7 @@ interface VertexCompletionOptions {
    * If set, automatically call these functions when the assistant activates
    * these function tools.
    */
-  functionToolCallbacks?: Record<FunctionDefinition['name'], (arg: string) => Promise<string>>;
+  functionToolCallbacks?: Record<string, (arg: string) => Promise<string>>;
 
   systemInstruction?: Content;
 }
@@ -596,11 +590,8 @@ export class VertexChatProvider extends VertexGenericProvider {
     }
     try {
       // Handle function tool callbacks
-      console.log(`${JSON.stringify(response.output)}`)
-      console.log(`${JSON.stringify(this.config)}`)
       if (this.config.functionToolCallbacks && isValidJson(response.output)) {
         const structured_output = JSON.parse(response.output);
-        console.log(`${JSON.stringify(structured_output)}`)
         if (structured_output.functionCall) {
           const results = [];
           const functionName = structured_output.functionCall.name;
