@@ -554,11 +554,11 @@ export class AzureCompletionProvider extends AzureGenericProvider {
 }
 
 export class AzureChatCompletionProvider extends AzureGenericProvider {
-  getOpenAiBody(
+  async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
-  ): Record<string, any> {
+  ): Promise<Record<string, any>> {
     const config = {
       ...this.config,
       ...context?.prompt?.config,
@@ -567,15 +567,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     // Fix: Match OpenAI's message handling exactly
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
-    // Fix: Match OpenAI's response format handling with variable rendering
-    const responseFormat = config.response_format
-      ? {
-          response_format: maybeLoadFromExternalFile(
-            renderVarsInObject(config.response_format, context?.vars),
-          ),
-        }
-      : {};
-
+    // Build the body with all properties, awaiting the async ones inline
     const body = {
       model: this.deploymentName,
       messages,
@@ -591,27 +583,23 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
             max_tokens: config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024),
             temperature: config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
           }),
-      ...(config.functions
-        ? {
-            functions: maybeLoadFromExternalFile(
-              renderVarsInObject(config.functions, context?.vars),
-            ),
-          }
-        : {}),
       ...(config.function_call ? { function_call: config.function_call } : {}),
       ...(config.seed === undefined ? {} : { seed: config.seed }),
-      ...(config.tools
-        ? {
-            tools: maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)),
-          }
-        : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.deployment_id ? { deployment_id: config.deployment_id } : {}),
       ...(config.dataSources ? { dataSources: config.dataSources } : {}),
-      ...responseFormat,
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(config.stop ? { stop: config.stop } : {}),
       ...(config.passthrough || {}),
+      ...(config.response_format 
+          ? { response_format: await maybeLoadFromExternalFile(renderVarsInObject(config.response_format, context?.vars)) } 
+          : {}),
+      ...(config.functions 
+          ? { functions: await maybeLoadFromExternalFile(renderVarsInObject(config.functions, context?.vars)) } 
+          : {}),
+      ...(config.tools 
+          ? { tools: await maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)) } 
+          : {}),
     };
 
     logger.debug(`Azure API request body: ${JSON.stringify(body)}`);
@@ -630,7 +618,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       throwConfigurationError('Azure API host must be set.');
     }
 
-    const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
 
     let data;
     let cached = false;

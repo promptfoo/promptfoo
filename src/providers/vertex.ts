@@ -265,7 +265,7 @@ export class VertexChatProvider extends VertexGenericProvider {
         }
       }
     }
-    // https://ai.google.dev/api/rest/v1/models/streamGenerateContent
+    // Build the body with all properties, awaiting the async ones inline
     const body = {
       contents: contents as GeminiFormat,
       generationConfig: {
@@ -280,10 +280,10 @@ export class VertexChatProvider extends VertexGenericProvider {
       },
       ...(this.config.safetySettings ? { safetySettings: this.config.safetySettings } : {}),
       ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
-      ...(this.config.tools
-        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(this.config.tools, context?.vars)) }
-        : {}),
       ...(systemInstruction ? { systemInstruction } : {}),
+      ...(this.config.tools 
+          ? { tools: await maybeLoadFromExternalFile(renderVarsInObject(this.config.tools, context?.vars)) }
+          : {}),
     };
     logger.debug(`Preparing to call Google Vertex API (Gemini) with body: ${JSON.stringify(body)}`);
 

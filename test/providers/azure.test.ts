@@ -169,19 +169,20 @@ describe('AzureOpenAiChatCompletionProvider', () => {
       });
     });
 
-    it('should use provider config when no prompt config exists', () => {
+    it('should use provider config when no prompt config exists', async () => {
       const context = {
         prompt: { label: 'test prompt', raw: 'test prompt' },
         vars: {},
       };
-      expect((provider as any).getOpenAiBody('test prompt', context).body).toMatchObject({
-        functions: [{ name: 'provider_func', parameters: {} }],
+      const result = await (provider as any).getOpenAiBody('test prompt', context);
+      expect(result.body).toMatchObject({
         max_tokens: 100,
         temperature: 0.5,
       });
+      expect(result.body.functions).toEqual([{ name: 'provider_func', parameters: {} }]);
     });
 
-    it('should merge prompt config with provider config', () => {
+    it('should merge prompt config with provider config', async () => {
       const context = {
         prompt: {
           config: {
@@ -193,38 +194,41 @@ describe('AzureOpenAiChatCompletionProvider', () => {
         },
         vars: {},
       };
-      expect((provider as any).getOpenAiBody('test prompt', context).body).toMatchObject({
-        functions: [{ name: 'prompt_func', parameters: {} }],
+      const result = await (provider as any).getOpenAiBody('test prompt', context);
+      expect(result.body).toMatchObject({
         max_tokens: 100,
         temperature: 0.7,
       });
+      expect(result.body.functions).toEqual([{ name: 'prompt_func', parameters: {} }]);
     });
 
-    it('should handle undefined prompt config', () => {
+    it('should handle undefined prompt config', async () => {
       const context = {
         prompt: { label: 'test prompt', raw: 'test prompt' },
         vars: {},
       };
-      expect((provider as any).getOpenAiBody('test prompt', context).body).toMatchObject({
-        functions: [{ name: 'provider_func', parameters: {} }],
+      const result = await (provider as any).getOpenAiBody('test prompt', context);
+      expect(result.body).toMatchObject({
         max_tokens: 100,
         temperature: 0.5,
       });
+      expect(result.body.functions).toEqual([{ name: 'provider_func', parameters: {} }]);
     });
 
-    it('should handle empty prompt config', () => {
+    it('should handle empty prompt config', async () => {
       const context = {
         prompt: { config: {}, label: 'test prompt', raw: 'test prompt' },
         vars: {},
       };
-      expect((provider as any).getOpenAiBody('test prompt', context).body).toMatchObject({
-        functions: [{ name: 'provider_func', parameters: {} }],
+      const result = await (provider as any).getOpenAiBody('test prompt', context);
+      expect(result.body).toMatchObject({
         max_tokens: 100,
         temperature: 0.5,
       });
+      expect(result.body.functions).toEqual([{ name: 'provider_func', parameters: {} }]);
     });
 
-    it('should handle complex nested config merging', () => {
+    it('should handle complex nested config merging', async () => {
       const context = {
         prompt: {
           config: {
@@ -236,42 +240,18 @@ describe('AzureOpenAiChatCompletionProvider', () => {
         },
         vars: {},
       };
-      expect((provider as any).getOpenAiBody('test prompt', context).body).toMatchObject({
-        functions: [{ name: 'provider_func', parameters: {} }],
+      const result = await (provider as any).getOpenAiBody('test prompt', context);
+      expect(result.body).toMatchObject({
         max_tokens: 100,
-        response_format: { type: 'json_object' },
         temperature: 0.5,
         tool_choice: { function: { name: 'test' }, type: 'function' },
       });
+      expect(result.body.functions).toEqual([{ name: 'provider_func', parameters: {} }]);
+      expect(result.body.response_format).toEqual({ type: 'json_object' });
     });
 
-    it('should handle json_schema response format', () => {
-      const context = {
-        prompt: {
-          config: {
-            response_format: {
-              type: 'json_schema',
-              json_schema: {
-                name: 'test_schema',
-                strict: true,
-                schema: {
-                  type: 'object',
-                  properties: {
-                    test: { type: 'string' },
-                  },
-                  required: ['test'],
-                  additionalProperties: false,
-                },
-              },
-            },
-          },
-          label: 'test prompt',
-          raw: 'test prompt',
-        },
-        vars: {},
-      };
-      const { body } = (provider as any).getOpenAiBody('test prompt', context);
-      expect(body.response_format).toMatchObject({
+    it('should handle json_schema response format', async () => {
+      const responseFormat = {
         type: 'json_schema',
         json_schema: {
           name: 'test_schema',
@@ -285,10 +265,24 @@ describe('AzureOpenAiChatCompletionProvider', () => {
             additionalProperties: false,
           },
         },
-      });
+      };
+      
+      const context = {
+        prompt: {
+          config: {
+            response_format: responseFormat,
+          },
+          label: 'test prompt',
+          raw: 'test prompt',
+        },
+        vars: {},
+      };
+      
+      const result = await (provider as any).getOpenAiBody('test prompt', context);
+      expect(result.body.response_format).toMatchObject(responseFormat);
     });
 
-    it('should render variables in response format', () => {
+    it('should render variables in response format', async () => {
       const context = {
         prompt: {
           config: {
@@ -313,8 +307,9 @@ describe('AzureOpenAiChatCompletionProvider', () => {
           schemaName: 'dynamic_schema',
         },
       };
-      const { body } = (provider as any).getOpenAiBody('test prompt', context);
-      expect(body.response_format.json_schema.name).toBe('dynamic_schema');
+      
+      const result = await (provider as any).getOpenAiBody('test prompt', context);
+      expect(result.body.response_format.json_schema.name).toBe('dynamic_schema');
     });
   });
 
