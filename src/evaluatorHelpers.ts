@@ -242,20 +242,22 @@ export async function runExtensionHook(
 }
 
 /**
- * Creates a fallback prompt when no prompts are defined in the test suite
+ * Creates a fallback prompt when no prompts are defined
  * Uses available variables to create a simple template prompt
- * @param testSuite The test suite that needs a fallback prompt
+ * @param config Either a TestSuite or a partial config with tests/defaultTest
  * @returns Array of prompts if fallback was created, null otherwise
  */
-export function createFallbackPrompt(testSuite: TestSuite): Prompt[] | null {
-  // Check if there are actual prompts (not just placeholder)
-  const hasRealPrompts =
-    testSuite.prompts &&
-    testSuite.prompts.length > 0 &&
-    (testSuite.prompts.length > 1 || testSuite.prompts[0].raw !== '__placeholder__');
-
-  if (hasRealPrompts) {
-    return null; // No need for fallback
+export function createFallbackPrompt(
+  config: TestSuite | { tests?: any[]; defaultTest?: { vars?: Record<string, any> } },
+): Prompt[] | null {
+  // Skip if we already have real prompts
+  if (
+    'prompts' in config &&
+    config.prompts &&
+    config.prompts.length > 0 &&
+    (config.prompts.length > 1 || config.prompts[0].raw !== '__placeholder__')
+  ) {
+    return null;
   }
 
   logger.warn(
@@ -266,13 +268,13 @@ export function createFallbackPrompt(testSuite: TestSuite): Prompt[] | null {
   const allVarNames = new Set<string>();
 
   // First collect from defaultTest if it exists
-  if (testSuite.defaultTest?.vars) {
-    Object.keys(testSuite.defaultTest.vars).forEach((varName) => allVarNames.add(varName));
+  if (config.defaultTest?.vars) {
+    Object.keys(config.defaultTest.vars).forEach((varName) => allVarNames.add(varName));
   }
 
   // Then from all tests
-  if (testSuite.tests && testSuite.tests.length > 0) {
-    testSuite.tests.forEach((test) => {
+  if (config.tests && config.tests.length > 0) {
+    config.tests.forEach((test) => {
       if (test.vars) {
         Object.keys(test.vars).forEach((varName) => allVarNames.add(varName));
       }

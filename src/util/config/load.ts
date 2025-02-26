@@ -10,6 +10,7 @@ import cliState from '../../cliState';
 import { filterTests } from '../../commands/eval/filterTests';
 import { getEnvBool } from '../../envars';
 import { importModule } from '../../esm';
+import { createFallbackPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { readPrompts, readProviderPromptMap } from '../../prompts';
 import { loadApiProviders } from '../../providers';
@@ -31,6 +32,25 @@ import { isJavascriptFile } from '../../util/file';
 import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
 import { readTest, readTests } from '../testCaseReader';
+
+/**
+ * Check if a variable exists in the tests or default test of a configuration
+ */
+function hasVariable(variableName: string, config: Partial<TestSuite>): boolean {
+  // Check in tests
+  const testsHaveVariable =
+    config.tests?.some(
+      (test) => test.vars && typeof test.vars === 'object' && variableName in test.vars,
+    ) ?? false;
+
+  // Check in default test vars
+  const defaultTestHasVariable =
+    config.defaultTest?.vars &&
+    typeof config.defaultTest.vars === 'object' &&
+    variableName in config.defaultTest.vars;
+
+  return testsHaveVariable || !!defaultTestHasVariable;
+}
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
   if (getEnvBool('PROMPTFOO_DISABLE_REF_PARSER')) {
@@ -195,23 +215,35 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     delete ret.strategies;
   }
   if (!ret.prompts) {
-    logger.debug(`Setting default prompt because there is no \`prompts\` field`);
-    const hasAnyPrompt =
-      // Allow no tests
-      !ret.tests ||
-      // Allow any string
-      typeof ret.tests === 'string' ||
-      // Check the array for `prompt` vars
-      (Array.isArray(ret.tests) &&
-        ret.tests.some(
-          (test) => typeof test === 'object' && Object.keys(test.vars || {}).includes('prompt'),
-        ));
+    logger.debug(`No prompts field found in configuration file`);
 
-    if (!hasAnyPrompt) {
-      logger.warn(
-        `Warning: Expected top-level "prompts" property in config or a test variable named "prompt"`,
+    // Check if there's any 'prompt' variable in the tests that we can use
+    const hasPromptVariable =
+      // If no tests, we don't have a prompt variable
+      !!ret.tests &&
+      // If tests is a string (path), we can't determine
+      typeof ret.tests !== 'string' &&
+      // Look for 'prompt' variable in test array
+      Array.isArray(ret.tests) &&
+      ret.tests.some(
+        (test) => typeof test === 'object' && Object.keys(test.vars || {}).includes('prompt'),
       );
-      ret.prompts = undefined;
+
+    if (hasPromptVariable) {
+      // There's a 'prompt' variable in tests, so we can use it
+      logger.debug(`Found 'prompt' variable in tests, will use it for templating`);
+      ret.prompts = [{ raw: '{{prompt}}', label: 'auto_prompt_variable' }];
+    } else {
+      // Try to create a fallback prompt based on the variables we have
+      const fallbackPrompts = createFallbackPrompt(ret);
+      if (fallbackPrompts) {
+        // The returned fallbackPrompts are already in the correct format with raw and label
+        ret.prompts = fallbackPrompts;
+      } else {
+        // If we couldn't create a fallback prompt, use an empty string
+        logger.warn(`No variables found to create a prompt template. Using empty prompt.`);
+        ret.prompts = [{ raw: '', label: 'empty_prompt' }];
+      }
     }
   }
   return ret;
@@ -507,12 +539,27 @@ export async function resolveConfigs(
     redteam: fileConfig.redteam || defaultConfig.redteam,
   };
 
-  // Validation
-  if (!config.prompts || config.prompts.length === 0) {
-    // Add a placeholder prompt to prevent errors in normalizeInput
-    // This will be replaced with a proper fallback later in the evaluator
-    config.prompts = ['__placeholder__'];
-    logger.debug('Added placeholder prompt that will be replaced by the fallback mechanism');
+  // Handle prompts (if not set)
+  if (!config.prompts?.length) {
+    // Check if we have a 'prompt' variable in tests
+    const hasPromptVariable = hasVariable('prompt', config);
+
+    if (hasPromptVariable) {
+      // There's a 'prompt' variable in tests, so we can use it
+      logger.debug(`Found 'prompt' variable in tests, will use it for templating`);
+      config.prompts = [{ raw: '{{prompt}}', label: 'auto_prompt_variable' }];
+    } else {
+      // Try to create a fallback prompt based on the variables we have
+      const fallbackPrompts = createFallbackPrompt(config);
+      if (fallbackPrompts) {
+        // The returned fallbackPrompts are already in the correct format with raw and label
+        config.prompts = fallbackPrompts;
+      } else {
+        // If we couldn't create a fallback prompt, use an empty string
+        logger.warn(`No variables found to create a prompt template. Using empty prompt.`);
+        config.prompts = [{ raw: '', label: 'empty_prompt' }];
+      }
+    }
   }
 
   if (!config.providers || config.providers.length === 0) {
