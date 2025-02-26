@@ -54,7 +54,7 @@ describe('getUnifiedConfig', () => {
     entities: [],
   };
 
-  it('should transform config correctly', () => {
+  it('should transform config correctly and remove UI specific configs', () => {
     const result = getUnifiedConfig(baseConfig);
 
     expect(result.description).toBe('Test config');
@@ -64,6 +64,11 @@ describe('getUnifiedConfig', () => {
     // @ts-ignore
     expect(result.targets[0].config.stateful).toBeUndefined();
     expect(result.redteam.purpose).toBe('testing');
+  });
+
+  it('should not include metadata in the returned config', () => {
+    const result = getUnifiedConfig(baseConfig);
+    expect(result).not.toHaveProperty('metadata');
   });
 
   it('should handle defaultTest transformation', () => {
@@ -108,5 +113,19 @@ describe('getUnifiedConfig', () => {
       { id: 'goat', config: { stateful: true } },
       { id: 'custom', config: { option: true } },
     ]);
+  });
+
+  it('should handle empty target config', () => {
+    const configWithEmptyTarget: SavedRedteamConfig = {
+      ...baseConfig,
+      target: {
+        id: 'test-target',
+        config: {},
+      },
+    };
+
+    const result = getUnifiedConfig(configWithEmptyTarget);
+    // @ts-ignore
+    expect(result.targets[0].config).toEqual({});
   });
 });
