@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useUserStore } from '@app/stores/userStore';
 import { callApi } from '@app/utils/api';
 import CheckIcon from '@mui/icons-material/Check';
 import FileCopyIcon from '@mui/icons-material/FileCopy';
@@ -15,7 +16,7 @@ interface ShareModalProps {
   open: boolean;
   onClose: () => void;
   evalId: string;
-  onShare: (id: string) => Promise<string>;
+  onShare: (evalId: string) => Promise<string>;
 }
 
 const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, evalId, onShare }) => {
@@ -25,6 +26,15 @@ const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, evalId, onShare 
   const [shareUrl, setShareUrl] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Get authentication state from the store
+  const { email, fetchEmail } = useUserStore();
+
+  // When the modal opens, refresh the auth state to get the latest
+  useEffect(() => {
+    if (open) {
+      fetchEmail();
+    }
+  }, [open, fetchEmail]);
 
   useEffect(() => {
     const handleShare = async () => {
@@ -33,11 +43,26 @@ const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, evalId, onShare 
       }
 
       try {
+        console.log('ShareModal: Checking domain with auth state:', { userLoggedIn: !!email });
         const response = await callApi(`/results/share/check-domain?id=${evalId}`);
         const data = await response.json();
 
         if (response.ok) {
-          const isPublicDomain = data.domain.includes('app.promptfoo.dev');
+          // First check the auth state from our store - if user not logged in, always show confirmation
+          // Then check the server response as a fallback
+          const isPublicDomain =
+            !email ||
+            ('isPublicShare' in data
+              ? data.isPublicShare
+              : data.domain?.includes('app.promptfoo.dev'));
+
+          console.log('ShareModal: Domain check result:', {
+            isPublicDomain,
+            userEmail: email,
+            domain: data.domain,
+            isPublicShare: data.isPublicShare,
+          });
+
           setShowConfirmation(isPublicDomain);
 
           // If it's not a public domain or we already have a URL, no need to generate
@@ -63,7 +88,7 @@ const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, evalId, onShare 
     };
 
     handleShare();
-  }, [open, evalId, shareUrl, error, onShare]);
+  }, [open, evalId, shareUrl, error, onShare, email]);
 
   const handleCopyClick = () => {
     if (inputRef.current) {

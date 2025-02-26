@@ -72,6 +72,7 @@ export class CloudConfig {
 
   delete(): void {
     writeGlobalConfigPartial({ cloud: {} });
+    this.reload();
   }
 
   private saveConfig(): void {

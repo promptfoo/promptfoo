@@ -137,8 +137,8 @@ export function createApp() {
       return;
     }
 
-    const { domain } = determineShareDomain(eval_);
-    res.json({ domain });
+    const { domain, isPublicShare } = determineShareDomain(eval_);
+    res.json({ domain, isPublicShare });
   });
 
   app.post('/api/results/share', async (req: Request, res: Response): Promise<void> => {
