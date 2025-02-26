@@ -354,6 +354,41 @@ Example:
 promptfoo redteam report -p 8080
 ```
 
+## `promptfoo redteam plugins`
+
+List all available red team plugins.
+
+| Option       | Description                               |
+| ------------ | ----------------------------------------- |
+| `--ids-only` | Show only plugin IDs without descriptions |
+| `--default`  | Show only the default plugins             |
+
+## Specifying Command Line Options in Config
+
+Many command line options can be specified directly in your `promptfooconfig.yaml` file using the `commandLineOptions` section. This is convenient for options you frequently use or want to set as defaults for your project.
+
+Example:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - Write a funny tweet about {{topic}}
+providers:
+  - openai:o3-mini
+tests:
+  - file://test_cases.csv
+
+# Command line options as defaults
+commandLineOptions:
+  maxConcurrency: 5
+  verbose: true
+  table: true
+  share: false
+  cache: true
+  tableCellMaxLength: 500
+```
+
+With this configuration, you can simply run `promptfoo eval` without specifying these options on the command line. You can still override any of these settings by providing the corresponding flag when running the command.
+
 ## ASCII-only outputs
 
 To disable terminal colors for printed outputs, set `FORCE_COLOR=0` (this is supported by the [chalk](https://github.com/chalk/chalk) library).
@@ -363,15 +398,6 @@ For the `eval` command, you may also want to disable the progress bar and table 
 ```sh
 FORCE_COLOR=0 promptfoo eval --no-progress-bar --no-table
 ```
-
-## `promptfoo redteam plugins`
-
-List all available red team plugins.
-
-| Option       | Description                               |
-| ------------ | ----------------------------------------- |
-| `--ids-only` | Show only plugin IDs without descriptions |
-| `--default`  | Show only the default plugins             |
 
 # Environment variables
 
