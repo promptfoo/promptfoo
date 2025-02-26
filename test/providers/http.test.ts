@@ -12,6 +12,7 @@ import {
   determineRequestBody,
   HttpProvider,
   processJsonBody,
+  urlEncodeRawRequestPath,
 } from '../../src/providers/http';
 import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared';
 import { maybeLoadFromExternalFile } from '../../src/util';
@@ -378,9 +379,7 @@ describe('HttpProvider', () => {
           request: 'yo mama',
         },
       });
-      await expect(provider.callApi('test prompt')).rejects.toThrow(
-        'Error parsing raw HTTP request',
-      );
+      await expect(provider.callApi('test prompt')).rejects.toThrow(/not valid/);
     });
 
     it('should remove content-length header from raw request', async () => {
@@ -493,6 +492,46 @@ describe('HttpProvider', () => {
 
       expect(fetchWithCache).toHaveBeenCalledWith(
         'http://example.com/api/data',
+        expect.objectContaining({
+          method: 'GET',
+          headers: expect.objectContaining({
+            host: 'example.com',
+            'user-agent': 'TestAgent/1.0',
+          }),
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+      expect(result.output).toEqual({ result: 'success' });
+    });
+
+    it('should handle a basic GET raw request with query params', async () => {
+      const rawRequest = dedent`
+        GET /api/data?{{prompt}} HTTP/1.1
+        Host: example.com
+        User-Agent: TestAgent/1.0
+      `;
+      const provider = new HttpProvider('http', {
+        config: {
+          request: rawRequest,
+          transformResponse: (data: any) => data,
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'http://example.com/api/data?test%20prompt',
         expect.objectContaining({
           method: 'GET',
           headers: expect.objectContaining({
@@ -2691,5 +2730,117 @@ describe('createSessionParser', () => {
       },
     });
     expect(result).toBe('test-session');
+  });
+});
+
+describe('urlEncodeRawRequestPath', () => {
+  it('should not modify request with no query parameters', () => {
+    const rawRequest = 'GET /api/data HTTP/1.1';
+    const result = urlEncodeRawRequestPath(rawRequest);
+    expect(result).toBe(rawRequest);
+  });
+
+  it('should not modify request with simple query parameters', () => {
+    const rawRequest = 'GET /api/data?key=value HTTP/1.1';
+    const result = urlEncodeRawRequestPath(rawRequest);
+    expect(result).toBe(rawRequest);
+  });
+
+  it('should encode URL with spaces in query parameters', () => {
+    const rawRequest = 'GET /api/data?query=hello world HTTP/1.1';
+    const result = urlEncodeRawRequestPath(rawRequest);
+    expect(result).toBe('GET /api/data?query=hello%20world HTTP/1.1');
+  });
+
+  it('should encode URL with already percent-encoded characters', () => {
+    const rawRequest = 'GET /api/data?query=already%20encoded HTTP/1.1';
+    const result = urlEncodeRawRequestPath(rawRequest);
+    expect(result).toBe('GET /api/data?query=already%20encoded HTTP/1.1');
+  });
+
+  it('should throw error when modifying malformed request with no URL', () => {
+    const rawRequest = 'GET HTTP/1.1';
+    expect(() => urlEncodeRawRequestPath(rawRequest)).toThrow(/not valid/);
+  });
+
+  it('should handle complete raw request with headers', () => {
+    const rawRequest = dedent`
+      GET /summarized?topic=hello world&start=01/01/2025&end=01/07/2025&auto_extract_keywords=false HTTP/2
+      Host: foo.bar.com
+      User-Agent: curl/8.7.1
+      Accept: application/json
+    `;
+    const expected = dedent`
+      GET /summarized?topic=hello%20world&start=01/01/2025&end=01/07/2025&auto_extract_keywords=false HTTP/2
+      Host: foo.bar.com
+      User-Agent: curl/8.7.1
+      Accept: application/json
+    `;
+    const result = urlEncodeRawRequestPath(rawRequest);
+    expect(result).toBe(expected);
+  });
+
+  it('should handle POST request with JSON body', () => {
+    const rawRequest = dedent`
+      POST /api/submit?param=hello world HTTP/1.1
+      Host: example.com
+      Content-Type: application/json
+
+      {"key": "value with spaces", "date": "01/01/2025"}
+    `;
+    const expected = dedent`
+      POST /api/submit?param=hello%20world HTTP/1.1
+      Host: example.com
+      Content-Type: application/json
+
+      {"key": "value with spaces", "date": "01/01/2025"}
+    `;
+    const result = urlEncodeRawRequestPath(rawRequest);
+    expect(result).toBe(expected);
+  });
+
+  it('should handle URL with path containing spaces', () => {
+    const rawRequest = 'GET /path with spaces/resource HTTP/1.1';
+    const result = urlEncodeRawRequestPath(rawRequest);
+    expect(result).toBe('GET /path%20with%20spaces/resource HTTP/1.1');
+  });
+
+  it('should handle URL with special characters in path and query', () => {
+    const rawRequest = 'GET /path/with [brackets]?param=value&special=a+b+c HTTP/1.1';
+    const result = urlEncodeRawRequestPath(rawRequest);
+    expect(result).toBe('GET /path/with%20[brackets]?param=value&special=a+b+c HTTP/1.1');
+  });
+
+  it('should handle completely misformed first line', () => {
+    const rawRequest = 'This is not a valid HTTP request line';
+    expect(() => urlEncodeRawRequestPath(rawRequest)).toThrow(/not valid/);
+  });
+
+  it('should handle request with no HTTP protocol version', () => {
+    const rawRequest = 'GET /api/data?query=test';
+    expect(() => urlEncodeRawRequestPath(rawRequest)).toThrow(/not valid/);
+  });
+
+  it('should handle request with different HTTP methods', () => {
+    const methods = ['POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'];
+
+    for (const method of methods) {
+      const rawRequest = dedent`
+        ${method} /api/submit?param=hello world HTTP/1.1
+        Host: example.com
+        Content-Type: application/json
+
+      {"key": "value with spaces", "date": "01/01/2025"}
+      `;
+      const expected = dedent`
+        ${method} /api/submit?param=hello%20world HTTP/1.1
+        Host: example.com
+        Content-Type: application/json
+
+      {"key": "value with spaces", "date": "01/01/2025"}
+    `;
+      const result = urlEncodeRawRequestPath(rawRequest);
+      expect(result).toBe(expected);
+    }
   });
 });
