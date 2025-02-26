@@ -15,6 +15,7 @@ import type {
 import type { EnvOverrides } from '../types/env';
 import { renderVarsInObject } from '../util';
 import { maybeLoadFromExternalFile } from '../util';
+import { isValidJson } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 import type { GeminiErrorResponse, GeminiFormat, Palm2ApiResponse } from './vertexUtil';
@@ -79,6 +80,8 @@ interface FunctionDeclaration {
   response?: Schema;
 }
 
+export type FunctionParameters = Record<string, unknown>;
+
 interface GoogleSearchRetrieval {
   dynamicRetrievalConfig: {
     mode?: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
@@ -130,6 +133,12 @@ interface VertexCompletionOptions {
   };
 
   tools?: Tool[];
+
+  /**
+   * If set, automatically call these functions when the assistant activates
+   * these function tools.
+   */
+  functionToolCallbacks?: Record<string, (arg: string) => Promise<string>>;
 
   systemInstruction?: Content;
 }
@@ -451,6 +460,7 @@ export class VertexChatProvider extends VertexGenericProvider {
     const cache = await getCache();
     const cacheKey = `vertex:${this.modelName}:${JSON.stringify(body)}`;
 
+    let response;
     let cachedResponse;
     if (isCacheEnabled()) {
       cachedResponse = await cache.get(cacheKey);
@@ -461,124 +471,159 @@ export class VertexChatProvider extends VertexGenericProvider {
           tokenUsage.cached = tokenUsage.total;
         }
         logger.debug(`Returning cached response: ${cachedResponse}`);
-        return { ...parsedCachedResponse, cached: true };
+        response = { ...parsedCachedResponse, cached: true };
       }
     }
+    if (response === undefined) {
+      let data;
+      try {
+        const { client, projectId } = await getGoogleClient();
+        const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
+          this.modelName
+        }:streamGenerateContent`;
+        const res = await client.request({
+          url,
+          method: 'POST',
+          data: body,
+          timeout: REQUEST_TIMEOUT_MS,
+        });
+        data = res.data as GeminiApiResponse;
+        logger.debug(`Gemini API response: ${JSON.stringify(data)}`);
+      } catch (err) {
+        const geminiError = err as GaxiosError;
+        if (
+          geminiError.response &&
+          geminiError.response.data &&
+          geminiError.response.data[0] &&
+          geminiError.response.data[0].error
+        ) {
+          const errorDetails = geminiError.response.data[0].error;
+          const code = errorDetails.code;
+          const message = errorDetails.message;
+          const status = errorDetails.status;
+          logger.debug(`Gemini API error:\n${JSON.stringify(errorDetails)}`);
+          return {
+            error: `API call error: Status ${status}, Code ${code}, Message:\n\n${message}`,
+          };
+        }
+        logger.debug(`Gemini API error:\n${JSON.stringify(err)}`);
+        return {
+          error: `API call error: ${String(err)}`,
+        };
+      }
 
-    let data;
-    try {
-      const { client, projectId } = await getGoogleClient();
-      const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
-        this.modelName
-      }:streamGenerateContent`;
-      const res = await client.request({
-        url,
-        method: 'POST',
-        data: body,
-        timeout: REQUEST_TIMEOUT_MS,
-      });
-      data = res.data as GeminiApiResponse;
       logger.debug(`Gemini API response: ${JSON.stringify(data)}`);
-    } catch (err) {
-      const geminiError = err as GaxiosError;
-      if (
-        geminiError.response &&
-        geminiError.response.data &&
-        geminiError.response.data[0] &&
-        geminiError.response.data[0].error
-      ) {
-        const errorDetails = geminiError.response.data[0].error;
-        const code = errorDetails.code;
-        const message = errorDetails.message;
-        const status = errorDetails.status;
-        logger.debug(`Gemini API error:\n${JSON.stringify(errorDetails)}`);
-        return {
-          error: `API call error: Status ${status}, Code ${code}, Message:\n\n${message}`,
-        };
-      }
-      logger.debug(`Gemini API error:\n${JSON.stringify(err)}`);
-      return {
-        error: `API call error: ${String(err)}`,
-      };
-    }
-
-    logger.debug(`Gemini API response: ${JSON.stringify(data)}`);
-    try {
-      const dataWithError = data as GeminiErrorResponse[];
-      const error = dataWithError[0]?.error;
-      if (error) {
-        return {
-          error: `Error ${error.code}: ${error.message}`,
-        };
-      }
-      const dataWithResponse = data as GeminiResponseData[];
-      let output = '';
-      for (const datum of dataWithResponse) {
-        if (datum.candidates && datum.candidates[0]?.content?.parts) {
-          for (const candidate of datum.candidates) {
-            if (candidate.content?.parts) {
-              for (const part of candidate.content.parts) {
-                if ('text' in part) {
-                  output += part.text;
-                } else {
-                  output += JSON.stringify(part);
+      try {
+        const dataWithError = data as GeminiErrorResponse[];
+        const error = dataWithError[0]?.error;
+        if (error) {
+          return {
+            error: `Error ${error.code}: ${error.message}`,
+          };
+        }
+        const dataWithResponse = data as GeminiResponseData[];
+        let output = '';
+        for (const datum of dataWithResponse) {
+          if (datum.candidates && datum.candidates[0]?.content?.parts) {
+            for (const candidate of datum.candidates) {
+              if (candidate.content?.parts) {
+                for (const part of candidate.content.parts) {
+                  if ('text' in part) {
+                    output += part.text;
+                  } else {
+                    output += JSON.stringify(part);
+                  }
                 }
               }
             }
+          } else if (datum.candidates && datum.candidates[0]?.finishReason === 'SAFETY') {
+            if (cliState.config?.redteam) {
+              // Refusals are not errors during redteams, they're actually successes.
+              return {
+                output: 'Content was blocked due to safety settings.',
+              };
+            }
+            return {
+              error: 'Content was blocked due to safety settings.',
+            };
           }
-        } else if (datum.candidates && datum.candidates[0]?.finishReason === 'SAFETY') {
+        }
+
+        if ('promptFeedback' in data[0] && data[0].promptFeedback?.blockReason) {
           if (cliState.config?.redteam) {
             // Refusals are not errors during redteams, they're actually successes.
             return {
-              output: 'Content was blocked due to safety settings.',
+              output: `Content was blocked due to safety settings: ${data[0].promptFeedback.blockReason}`,
             };
           }
           return {
-            error: 'Content was blocked due to safety settings.',
+            error: `Content was blocked due to safety settings: ${data[0].promptFeedback.blockReason}`,
           };
         }
-      }
 
-      if ('promptFeedback' in data[0] && data[0].promptFeedback?.blockReason) {
-        if (cliState.config?.redteam) {
-          // Refusals are not errors during redteams, they're actually successes.
+        if (!output) {
           return {
-            output: `Content was blocked due to safety settings: ${data[0].promptFeedback.blockReason}`,
+            error: `No output found in response: ${JSON.stringify(data)}`,
           };
         }
+
+        const lastData = dataWithResponse[dataWithResponse.length - 1];
+        const tokenUsage = {
+          total: lastData.usageMetadata?.totalTokenCount || 0,
+          prompt: lastData.usageMetadata?.promptTokenCount || 0,
+          completion: lastData.usageMetadata?.candidatesTokenCount || 0,
+        };
+        response = {
+          cached: false,
+          output,
+          tokenUsage,
+        };
+
+        if (isCacheEnabled()) {
+          await cache.set(cacheKey, JSON.stringify(response));
+        }
+      } catch (err) {
         return {
-          error: `Content was blocked due to safety settings: ${data[0].promptFeedback.blockReason}`,
+          error: `Gemini API response error: ${String(err)}. Response data: ${JSON.stringify(data)}`,
         };
       }
-
-      if (!output) {
-        return {
-          error: `No output found in response: ${JSON.stringify(data)}`,
-        };
+    }
+    try {
+      // Handle function tool callbacks
+      if (this.config.functionToolCallbacks && isValidJson(response.output)) {
+        const structured_output = JSON.parse(response.output);
+        if (structured_output.functionCall) {
+          const results = [];
+          const functionName = structured_output.functionCall.name;
+          if (this.config.functionToolCallbacks[functionName]) {
+            try {
+              const functionResult = await this.config.functionToolCallbacks[functionName](
+                JSON.stringify(
+                  typeof structured_output.functionCall.args === 'string'
+                    ? JSON.parse(structured_output.functionCall.args)
+                    : structured_output.functionCall.args,
+                ),
+              );
+              results.push(functionResult);
+            } catch (error) {
+              logger.error(`Error executing function ${functionName}: ${error}`);
+            }
+          }
+          if (results.length > 0) {
+            response = {
+              cached: response.cached,
+              output: results.join('\n'),
+              tokenUsage: response.tokenUsage,
+            };
+          }
+        }
       }
-
-      const lastData = dataWithResponse[dataWithResponse.length - 1];
-      const tokenUsage = {
-        total: lastData.usageMetadata?.totalTokenCount || 0,
-        prompt: lastData.usageMetadata?.promptTokenCount || 0,
-        completion: lastData.usageMetadata?.candidatesTokenCount || 0,
-      };
-      const response = {
-        cached: false,
-        output,
-        tokenUsage,
-      };
-
-      if (isCacheEnabled()) {
-        await cache.set(cacheKey, JSON.stringify(response));
-      }
-
-      return response;
     } catch (err) {
       return {
-        error: `Gemini API response error: ${String(err)}. Response data: ${JSON.stringify(data)}`,
+        error: `Tool callback error: ${String(err)}.`,
       };
     }
+    return response;
   }
 
   async callPalm2Api(prompt: string): Promise<ProviderResponse> {
