@@ -1,9 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { callApi } from '@app/utils/api';
 import type { PromptWithMetadata } from '@promptfoo/types';
+import ErrorBoundary from '../../components/ErrorBoundary';
 import Prompts from './Prompts';
 
 export default function PromptsPage() {
+  return (
+    <ErrorBoundary name="Prompts Page">
+      <PromptsPageContent />
+    </ErrorBoundary>
+  );
+}
+
+function PromptsPageContent() {
   const [prompts, setPrompts] = useState<(PromptWithMetadata & { recentEvalDate: string })[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

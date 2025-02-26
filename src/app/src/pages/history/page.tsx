@@ -1,9 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { callApi } from '@app/utils/api';
 import type { StandaloneEval } from '@promptfoo/util';
+import ErrorBoundary from '../../components/ErrorBoundary';
 import History from './History';
 
 export default function HistoryPage() {
+  return (
+    <ErrorBoundary name="History Page">
+      <HistoryPageContent />
+    </ErrorBoundary>
+  );
+}
+
+function HistoryPageContent() {
   const [cols, setCols] = useState<StandaloneEval[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

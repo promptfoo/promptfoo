@@ -1,9 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { callApi } from '@app/utils/api';
 import type { TestCasesWithMetadata } from '@promptfoo/types';
+import ErrorBoundary from '../../components/ErrorBoundary';
 import Datasets from './Datasets';
 
 export default function DatasetsPage() {
+  return (
+    <ErrorBoundary name="Datasets Page">
+      <DatasetsPageContent />
+    </ErrorBoundary>
+  );
+}
+
+function DatasetsPageContent() {
   const [testCases, setTestCases] = useState<
     (TestCasesWithMetadata & { recentEvalDate: string })[]
   >([]);
