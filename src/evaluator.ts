@@ -11,7 +11,7 @@ import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';
 import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, isCI } from './envars';
-import { renderPrompt, runExtensionHook } from './evaluatorHelpers';
+import { renderPrompt, runExtensionHook, createFallbackPrompt } from './evaluatorHelpers';
 import logger from './logger';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
@@ -439,6 +439,19 @@ class Evaluator {
     checkAbort();
 
     const prompts: CompletedPrompt[] = [];
+
+    // Check if we have only a placeholder prompt
+    const hasOnlyPlaceholder =
+      testSuite.prompts.length === 1 && testSuite.prompts[0].raw === '__placeholder__';
+
+    // Add fallback prompt if needed
+    if (hasOnlyPlaceholder) {
+      const fallbackPrompts = createFallbackPrompt(testSuite);
+      if (fallbackPrompts) {
+        testSuite.prompts = fallbackPrompts;
+      }
+    }
+
     const assertionTypes = new Set<string>();
     const rowsWithSelectBestAssertion = new Set<number>();
 

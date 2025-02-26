@@ -211,8 +211,8 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
       logger.warn(
         `Warning: Expected top-level "prompts" property in config or a test variable named "prompt"`,
       );
+      ret.prompts = undefined;
     }
-    ret.prompts = ['{{prompt}}'];
   }
   return ret;
 }
@@ -509,8 +509,10 @@ export async function resolveConfigs(
 
   // Validation
   if (!config.prompts || config.prompts.length === 0) {
-    logger.error('You must provide at least 1 prompt');
-    process.exit(1);
+    // Add a placeholder prompt to prevent errors in normalizeInput
+    // This will be replaced with a proper fallback later in the evaluator
+    config.prompts = ['__placeholder__'];
+    logger.debug('Added placeholder prompt that will be replaced by the fallback mechanism');
   }
 
   if (!config.providers || config.providers.length === 0) {
@@ -567,8 +569,8 @@ export async function resolveConfigs(
   const parsedProviderPromptMap = readProviderPromptMap(config, parsedPrompts);
 
   if (parsedPrompts.length === 0) {
-    logger.error('No prompts found');
-    process.exit(1);
+    // We'll handle this with createFallbackPrompt later
+    logger.debug('No prompts found after parsing. Will use fallback prompt mechanism.');
   }
 
   const defaultTest: TestCase = {

@@ -11,7 +11,7 @@ import logger from './logger';
 import { isPackagePath, loadFromPackage } from './providers/packageParser';
 import { runPython } from './python/pythonUtils';
 import telemetry from './telemetry';
-import type { ApiProvider, NunjucksFilterMap, Prompt } from './types';
+import type { ApiProvider, NunjucksFilterMap, Prompt, TestSuite } from './types';
 import { renderVarsInObject } from './util';
 import { isJavascriptFile } from './util/file';
 import invariant from './util/invariant';
@@ -238,5 +238,82 @@ export async function runExtensionHook(
     invariant(typeof extension === 'string', 'extension must be a string');
     logger.debug(`Running extension hook ${hookName} with context ${JSON.stringify(context)}`);
     await transform(extension, hookName, context, false);
+  }
+}
+
+/**
+ * Creates a fallback prompt when no prompts are defined in the test suite
+ * Uses available variables to create a simple template prompt
+ * @param testSuite The test suite that needs a fallback prompt
+ * @returns Array of prompts if fallback was created, null otherwise
+ */
+export function createFallbackPrompt(testSuite: TestSuite): Prompt[] | null {
+  // Check if there are actual prompts (not just placeholder)
+  const hasRealPrompts =
+    testSuite.prompts &&
+    testSuite.prompts.length > 0 &&
+    (testSuite.prompts.length > 1 || testSuite.prompts[0].raw !== '__placeholder__');
+
+  if (hasRealPrompts) {
+    return null; // No need for fallback
+  }
+
+  logger.warn(
+    'Warning: No prompts found in configuration. Attempting to create a default prompt from variables.',
+  );
+
+  // Collect all unique variable names from all test cases
+  const allVarNames = new Set<string>();
+
+  // First collect from defaultTest if it exists
+  if (testSuite.defaultTest?.vars) {
+    Object.keys(testSuite.defaultTest.vars).forEach((varName) => allVarNames.add(varName));
+  }
+
+  // Then from all tests
+  if (testSuite.tests && testSuite.tests.length > 0) {
+    testSuite.tests.forEach((test) => {
+      if (test.vars) {
+        Object.keys(test.vars).forEach((varName) => allVarNames.add(varName));
+      }
+    });
+  }
+
+  // Check if there are any vars at all
+  if (allVarNames.size === 0) {
+    logger.warn('No variables found in tests. Creating an empty prompt.');
+    return [{ raw: '', label: 'default_empty_prompt' }];
+  } else {
+    // First try to find preferred variable names
+    const PREFERRED_VAR_NAMES = ['prompt', 'query', 'question', 'input'];
+    let chosenVar = null;
+
+    // Look for preferred variables first
+    for (const preferred of PREFERRED_VAR_NAMES) {
+      if (allVarNames.has(preferred)) {
+        chosenVar = preferred;
+        break;
+      }
+    }
+
+    // If no preferred var found, use the first alphabetically
+    if (!chosenVar) {
+      chosenVar = Array.from(allVarNames).sort()[0];
+    }
+
+    // Create a simple prompt template
+    const defaultPrompt = `{{${chosenVar}}}`;
+
+    // Add warning if there are multiple variables
+    if (allVarNames.size > 1) {
+      logger.warn(
+        `Multiple variables found (${Array.from(allVarNames).join(', ')}). Using '${chosenVar}' for the default prompt. To use a different variable, explicitly define a prompt in your configuration.`,
+      );
+    } else {
+      logger.info(`Created default prompt using variable: ${chosenVar}`);
+    }
+
+    // Return the created prompt
+    return [{ raw: defaultPrompt, label: `default_${chosenVar}_prompt` }];
   }
 }
