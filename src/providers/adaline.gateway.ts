@@ -33,6 +33,7 @@ import type {
   TokenUsage,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
+import { maybeLoadFromExternalFile } from '../util';
 import { safeJsonStringify } from '../util/json';
 import { AnthropicMessagesProvider, calculateAnthropicCost } from './anthropic';
 import { AzureChatCompletionProvider, AzureEmbeddingProvider, calculateAzureCost } from './azure';
@@ -284,15 +285,18 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
     this.config = options.config || {};
   }
 
-  checkRequestFormat(prompt: string): { formatType: 'gateway' | 'openai' } {
-    const checkFormatRequestUsingConfig = (): { formatType: 'gateway' | 'openai' } => {
+  async checkRequestFormat(prompt: string): Promise<{ formatType: 'gateway' | 'openai' }> {
+    const checkFormatRequestUsingConfig = async (): Promise<{ formatType: 'gateway' | 'openai' }> => {
       if (this.config.tools && this.config.tools.length > 0) {
-        if ('definition' in this.config.tools[0]) {
-          // valid tool in config and sufficiently in gateway format
-          return { formatType: 'gateway' };
-        } else if ('function' in this.config.tools[0]) {
-          // valid tool in config and sufficiently in openai format
-          return { formatType: 'openai' };
+        const loadedTools = await maybeLoadFromExternalFile(this.config.tools);
+        if (loadedTools && loadedTools.length > 0) {
+          if ('definition' in loadedTools[0]) {
+            // valid tool in config and sufficiently in gateway format
+            return { formatType: 'gateway' };
+          } else if ('function' in loadedTools[0]) {
+            // valid tool in config and sufficiently in openai format
+            return { formatType: 'openai' };
+          }
         }
       }
 
@@ -340,15 +344,15 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
           }
         } else {
           // JSON prompt does not match openai or gateway format, could just be a valid JSON message to be sent to the model
-          return checkFormatRequestUsingConfig();
+          return await checkFormatRequestUsingConfig();
         }
       }
 
       // JSON prompt does not match openai or gateway format, could just be a valid JSON message to be sent to the model
-      return checkFormatRequestUsingConfig();
+      return await checkFormatRequestUsingConfig();
     } catch {
       // prompt is not a valid JSON string, check if it matches openai or gateway format using config
-      return checkFormatRequestUsingConfig();
+      return await checkFormatRequestUsingConfig();
     }
   }
 
@@ -365,7 +369,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
     // gateway provider can also handle prompts in openai format
     let formatType: 'gateway' | 'openai';
     try {
-      formatType = this.checkRequestFormat(prompt).formatType;
+      formatType = (await this.checkRequestFormat(prompt)).formatType;
       logger.debug(`Calling Adaline Gateway Chat API with prompt format: ${formatType}`);
       if (formatType === 'openai') {
         // create a temp openai provider to get the entire body that would have been sent to openai
@@ -373,7 +377,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
           this.modelName,
           this.providerOptions,
         );
-        const { body } = openAiProvider.getOpenAiBody(prompt, context, callApiOptions);
+        const { body } = await openAiProvider.getOpenAiBody(prompt, context, callApiOptions);
         // create a temp gateway openai model to transform the body to gateway types
         const gatewayOpenAiDummyModel = new GatewayOpenAI().chatModel({
           modelName: 'gpt-4o',

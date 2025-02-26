@@ -144,7 +144,7 @@ describe('AwsBedrockGenericProvider', () => {
   describe('BEDROCK_MODEL CLAUDE_MESSAGES', () => {
     const modelHandler = BEDROCK_MODEL.CLAUDE_MESSAGES;
 
-    it('should include tools and tool_choice in params when provided', () => {
+    it('should include tools and tool_choice in params when provided', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',
         tools: [
@@ -166,7 +166,7 @@ describe('AwsBedrockGenericProvider', () => {
         },
       };
 
-      const params = modelHandler.params(config, 'Test prompt');
+      const params = await modelHandler.params(config, 'Test prompt');
 
       expect(params).toHaveProperty('tools');
       expect(params.tools).toHaveLength(1);
@@ -175,18 +175,18 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params.tool_choice).toEqual({ type: 'auto' });
     });
 
-    it('should not include tools and tool_choice in params when not provided', () => {
+    it('should not include tools and tool_choice in params when not provided', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',
       };
 
-      const params = modelHandler.params(config, 'Test prompt');
+      const params = await modelHandler.params(config, 'Test prompt');
 
       expect(params).not.toHaveProperty('tools');
       expect(params).not.toHaveProperty('tool_choice');
     });
 
-    it('should include specific tool_choice when provided', () => {
+    it('should include specific tool_choice when provided', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',
         tools: [
@@ -209,13 +209,13 @@ describe('AwsBedrockGenericProvider', () => {
         },
       };
 
-      const params = modelHandler.params(config, 'Test prompt');
+      const params = await modelHandler.params(config, 'Test prompt');
 
       expect(params).toHaveProperty('tool_choice');
       expect(params.tool_choice).toEqual({ type: 'tool', name: 'get_current_weather' });
     });
 
-    it('should handle JSON message array with image content', () => {
+    it('should handle JSON message array with image content', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',
       };
@@ -237,7 +237,7 @@ describe('AwsBedrockGenericProvider', () => {
         },
       ]);
 
-      const params = BEDROCK_MODEL.CLAUDE_MESSAGES.params(config, prompt);
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(config, prompt);
 
       expect(params.messages).toEqual([
         {
@@ -257,7 +257,7 @@ describe('AwsBedrockGenericProvider', () => {
       ]);
     });
 
-    it('should handle JSON message array with system message and image content', () => {
+    it('should handle JSON message array with system message and image content', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',
       };
@@ -280,7 +280,7 @@ describe('AwsBedrockGenericProvider', () => {
         },
       ]);
 
-      const params = BEDROCK_MODEL.CLAUDE_MESSAGES.params(config, prompt);
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(config, prompt);
 
       expect(params.messages).toEqual([
         {
@@ -301,7 +301,7 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params.system).toBe('You are a helpful assistant.');
     });
 
-    it('should convert lone system message to user message', () => {
+    it('should convert lone system message to user message', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',
       };
@@ -310,7 +310,7 @@ describe('AwsBedrockGenericProvider', () => {
       const promptWithStringContent = JSON.stringify([
         { role: 'system', content: 'You are a helpful assistant.' },
       ]);
-      const paramsWithString = modelHandler.params(config, promptWithStringContent);
+      const paramsWithString = await modelHandler.params(config, promptWithStringContent);
       expect(paramsWithString.messages).toEqual([
         {
           role: 'user',
@@ -329,7 +329,7 @@ describe('AwsBedrockGenericProvider', () => {
           ],
         },
       ]);
-      const paramsWithArray = modelHandler.params(config, promptWithArrayContent);
+      const paramsWithArray = await modelHandler.params(config, promptWithArrayContent);
       expect(paramsWithArray.messages).toEqual([
         {
           role: 'user',

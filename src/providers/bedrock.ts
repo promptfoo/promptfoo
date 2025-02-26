@@ -231,7 +231,7 @@ export interface BedrockAmazonNovaGenerationOptions extends BedrockOptions {
 }
 
 interface IBedrockModel {
-  params: (config: BedrockOptions, prompt: string, stop: string[]) => any;
+  params: (config: BedrockOptions, prompt: string, stop?: string[]) => any | Promise<any>;
   output: (responseJson: any) => any;
 }
 
@@ -514,7 +514,7 @@ export const BEDROCK_MODEL = {
     output: (responseJson: any) => responseJson?.completion,
   },
   CLAUDE_MESSAGES: {
-    params: (config: BedrockClaudeMessagesCompletionOptions, prompt: string) => {
+    params: async (config: BedrockClaudeMessagesCompletionOptions, prompt: string) => {
       let messages;
       let systemPrompt;
       try {
@@ -585,7 +585,7 @@ export const BEDROCK_MODEL = {
       addConfigParam(
         params,
         'tools',
-        maybeLoadFromExternalFile(config?.tools),
+        await maybeLoadFromExternalFile(config?.tools),
         undefined,
         undefined,
       );
@@ -668,7 +668,7 @@ export const BEDROCK_MODEL = {
     output: (responseJson: any) => responseJson?.generations[0]?.text,
   },
   COHERE_COMMAND_R: {
-    params: (config: BedrockCohereCommandRGenerationOptions, prompt: string, stop: string[]) => {
+    params: async (config: BedrockCohereCommandRGenerationOptions, prompt: string, stop: string[]) => {
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
       const lastMessage = messages[messages.length - 1].content;
       if (!messages.every((m) => typeof m.content === 'string')) {
@@ -693,7 +693,7 @@ export const BEDROCK_MODEL = {
       addConfigParam(params, 'presence_penalty', config?.presence_penalty);
       addConfigParam(params, 'seed', config?.seed);
       addConfigParam(params, 'return_prompt', config?.return_prompt);
-      addConfigParam(params, 'tools', maybeLoadFromExternalFile(config?.tools));
+      addConfigParam(params, 'tools', await maybeLoadFromExternalFile(config?.tools));
       addConfigParam(params, 'tool_results', config?.tool_results);
       addConfigParam(params, 'stop_sequences', stop);
       addConfigParam(params, 'raw_prompting', config?.raw_prompting);
@@ -949,7 +949,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       );
       model = BEDROCK_MODEL.CLAUDE_MESSAGES;
     }
-    const params = model.params(this.config, prompt, stop);
+    const params = await model.params(this.config, prompt, stop);
 
     logger.debug(`Calling Amazon Bedrock API: ${JSON.stringify(params)}`);
 
