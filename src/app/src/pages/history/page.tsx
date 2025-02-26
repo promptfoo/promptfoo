@@ -4,14 +4,6 @@ import type { StandaloneEval } from '@promptfoo/util';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import History from './History';
 
-export default function HistoryPage() {
-  return (
-    <ErrorBoundary name="History Page">
-      <HistoryPageContent />
-    </ErrorBoundary>
-  );
-}
-
 function HistoryPageContent() {
   const [cols, setCols] = useState<StandaloneEval[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -37,4 +29,12 @@ function HistoryPageContent() {
   }, []);
 
   return <History data={cols} isLoading={isLoading} error={error} />;
+}
+
+export default function HistoryPage() {
+  return (
+    <ErrorBoundary name="History Page">
+      <HistoryPageContent />
+    </ErrorBoundary>
+  );
 }

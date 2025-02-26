@@ -4,14 +4,6 @@ import type { TestCasesWithMetadata } from '@promptfoo/types';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import Datasets from './Datasets';
 
-export default function DatasetsPage() {
-  return (
-    <ErrorBoundary name="Datasets Page">
-      <DatasetsPageContent />
-    </ErrorBoundary>
-  );
-}
-
 function DatasetsPageContent() {
   const [testCases, setTestCases] = useState<
     (TestCasesWithMetadata & { recentEvalDate: string })[]
@@ -41,4 +33,12 @@ function DatasetsPageContent() {
   }, []);
 
   return <Datasets data={testCases} isLoading={isLoading} error={error} />;
+}
+
+export default function DatasetsPage() {
+  return (
+    <ErrorBoundary name="Datasets Page">
+      <DatasetsPageContent />
+    </ErrorBoundary>
+  );
 }
