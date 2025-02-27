@@ -137,7 +137,7 @@ async function rollbackEval(url: string, evalId: string, headers: Record<string,
   await fetchWithProxy(`${url}/${evalId}`, { method: 'DELETE', headers });
 }
 
-async function sendChunkedResults(evalRecord: Eval, url: string) {
+async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string | null> {
   await evalRecord.loadResults();
 
   const allResults = evalRecord.results;
@@ -194,7 +194,7 @@ async function sendChunkedResults(evalRecord: Eval, url: string) {
   }
 }
 
-async function sendEvalResults(evalRecord: Eval, url: string) {
+async function sendEvalResults(evalRecord: Eval, url: string): Promise<string | null> {
   await evalRecord.loadResults();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -354,6 +354,7 @@ export async function createShareableUrl(
   }
 
   if (!evalId) {
+    logger.error('Failed to create shareable URL');
     return null;
   }
   logger.debug(`New eval ID on remote instance: ${evalId}`);

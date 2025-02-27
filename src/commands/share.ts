@@ -14,10 +14,17 @@ import invariant from '../util/invariant';
 
 export { determineShareDomain } from '../share';
 
-export async function createPublicUrl(evalRecord: Eval, showAuth: boolean) {
+export async function createAndDisplayShareableUrl(
+  evalRecord: Eval,
+  showAuth: boolean,
+): Promise<string | null> {
   const url = await createShareableUrl(evalRecord, showAuth);
 
-  logger.info(`View results: ${chalk.greenBright.bold(url)}`);
+  if (url) {
+    logger.info(`View results: ${chalk.greenBright.bold(url)}`);
+  } else {
+    logger.error('Failed to create shareable URL');
+  }
   return url;
 }
 
@@ -67,7 +74,7 @@ export function shareCommand(program: Command) {
           process.exit(1);
         }
         if (cmdObj.yes || getEnvString('PROMPTFOO_DISABLE_SHARE_WARNING')) {
-          await createPublicUrl(eval_, cmdObj.showAuth);
+          await createAndDisplayShareableUrl(eval_, cmdObj.showAuth);
           return;
         }
         const reader = readline.createInterface({
@@ -77,7 +84,7 @@ export function shareCommand(program: Command) {
 
         if (cloudConfig.isEnabled()) {
           logger.info(`Sharing eval to ${cloudConfig.getAppUrl()}`);
-          await createPublicUrl(eval_, cmdObj.showAuth);
+          await createAndDisplayShareableUrl(eval_, cmdObj.showAuth);
           process.exit(0);
         }
         const baseUrl = getEnvString('PROMPTFOO_SHARING_APP_BASE_URL');
@@ -91,7 +98,7 @@ export function shareCommand(program: Command) {
             }
             reader.close();
 
-            await createPublicUrl(eval_, cmdObj.showAuth);
+            await createAndDisplayShareableUrl(eval_, cmdObj.showAuth);
           },
         );
       },

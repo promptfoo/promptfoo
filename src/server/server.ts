@@ -6,7 +6,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { Server as SocketIOServer } from 'socket.io';
 import { fromError } from 'zod-validation-error';
-import { createPublicUrl, determineShareDomain } from '../commands/share';
+import { createAndDisplayShareableUrl, determineShareDomain } from '../commands/share';
 import { DEFAULT_PORT, VERSION } from '../constants';
 import { setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
@@ -155,7 +155,7 @@ export function createApp() {
     invariant(eval_, 'Eval not found');
 
     try {
-      const url = await createPublicUrl(eval_, true);
+      const url = await createAndDisplayShareableUrl(eval_, true);
       logger.debug(`Generated share URL: ${url}`);
       res.json({ url });
     } catch (error) {
