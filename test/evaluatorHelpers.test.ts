@@ -226,6 +226,48 @@ describe('renderPrompt', () => {
   });
 });
 
+describe('renderPrompt with prompt functions', () => {
+  it('should handle string returns from prompt functions', async () => {
+    const promptObj = {
+      ...toPrompt('test'),
+      function: async () => 'Hello, world!',
+    };
+    const result = await renderPrompt(promptObj, {});
+    expect(result).toBe('Hello, world!');
+  });
+
+  it('should handle object/array returns from prompt functions', async () => {
+    const messages = [
+      { role: 'system', content: 'You are a helpful assistant.' },
+      { role: 'user', content: 'Hello' },
+    ];
+    const promptObj = {
+      ...toPrompt('test'),
+      function: async () => messages,
+    };
+    const result = await renderPrompt(promptObj, {});
+    expect(JSON.parse(result)).toEqual(messages);
+  });
+
+  it('should handle PromptFunctionResult returns from prompt functions', async () => {
+    const messages = [
+      { role: 'system', content: 'You are a helpful assistant.' },
+      { role: 'user', content: 'Hello' },
+    ];
+    const promptObj = {
+      ...toPrompt('test'),
+      function: async () => ({
+        prompt: messages,
+        config: { max_tokens: 10 },
+      }),
+      config: {},
+    };
+    const result = await renderPrompt(promptObj, {});
+    expect(JSON.parse(result)).toEqual(messages);
+    expect(promptObj.config).toEqual({ max_tokens: 10 });
+  });
+});
+
 describe('resolveVariables', () => {
   it('should replace placeholders with corresponding variable values', () => {
     const variables = { final: '{{ my_greeting }}, {{name}}!', my_greeting: 'Hello', name: 'John' };

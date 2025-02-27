@@ -19,10 +19,23 @@ export type PromptFunctionContext = {
   };
 };
 
+/**
+ * Result type for prompt functions.
+ *
+ * Prompt functions can return:
+ * - A string (used directly as the prompt)
+ * - An object/array (JSON stringified and used as the prompt)
+ * - A PromptFunctionResult object with prompt and optional config
+ */
+export type PromptFunctionResult = {
+  prompt: string | any;
+  config?: Record<string, any>;
+};
+
 export type PromptFunction = (context: {
   vars: Record<string, string | any>;
   provider?: ApiProvider;
-}) => Promise<string | any>;
+}) => Promise<string | any | PromptFunctionResult>;
 
 export type Prompt = {
   id?: string;

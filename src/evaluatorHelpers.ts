@@ -153,7 +153,22 @@ export async function renderPrompt(
     if (typeof result === 'string') {
       basePrompt = result;
     } else if (typeof result === 'object') {
-      basePrompt = JSON.stringify(result);
+      // Check if it's using the structured PromptFunctionResult format
+      if ('prompt' in result) {
+        basePrompt =
+          typeof result.prompt === 'string' ? result.prompt : JSON.stringify(result.prompt);
+
+        // Merge config if provided
+        if (result.config) {
+          prompt.config = {
+            ...prompt.config,
+            ...result.config,
+          };
+        }
+      } else {
+        // Direct object/array format
+        basePrompt = JSON.stringify(result);
+      }
     } else {
       throw new Error(`Prompt function must return a string or object, got ${typeof result}`);
     }
