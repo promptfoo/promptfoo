@@ -354,7 +354,6 @@ export async function createShareableUrl(
   }
 
   if (!evalId) {
-    logger.error('Failed to create shareable URL');
     return null;
   }
   logger.debug(`New eval ID on remote instance: ${evalId}`);
