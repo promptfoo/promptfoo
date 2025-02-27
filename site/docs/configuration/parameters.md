@@ -258,7 +258,7 @@ if __name__ == "__main__":
 
 A Python prompt function `prompt_with_config.py:my_prompt_function` that returns both prompt content and provider configuration:
 
-````python title=prompt_with_config.py
+```python title=prompt_with_config.py
 def my_prompt_function(context: dict) -> dict:
     messages = [
         {"role": "system", "content": "You are a helpful assistant"},
@@ -277,7 +277,7 @@ def my_prompt_function(context: dict) -> dict:
         "prompt": messages,
         "config": config
     }
-    ```
+```
 
 This structured return format allows you to dynamically configure provider settings based on the prompt content or other runtime factors.
 
@@ -317,7 +317,7 @@ prompts:
       response_format:
         type: json_schema
         json_schema: ...
-````
+```
 
 ### Nunjucks filters
 
