@@ -6,7 +6,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { Server as SocketIOServer } from 'socket.io';
 import { fromError } from 'zod-validation-error';
-import { createAndDisplayShareableUrl, determineShareDomain } from '../commands/share';
+import { determineShareDomain } from '../commands/share';
 import { DEFAULT_PORT, VERSION } from '../constants';
 import { setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
@@ -15,6 +15,7 @@ import logger from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
 import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
+import { createShareableUrl } from '../share';
 import telemetry, { TelemetryEventSchema } from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCase/synthesis';
 import { checkRemoteHealth } from '../util/apiHealth';
@@ -155,7 +156,7 @@ export function createApp() {
     invariant(eval_, 'Eval not found');
 
     try {
-      const url = await createAndDisplayShareableUrl(eval_, true);
+      const url = await createShareableUrl(eval_, true);
       logger.debug(`Generated share URL: ${url}`);
       res.json({ url });
     } catch (error) {
