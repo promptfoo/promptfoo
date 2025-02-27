@@ -510,3 +510,6 @@ export default function History({
     </Box>
   );
 }
+
+
+export { calculatePassRate, getSortedValues, getValue, ExportButton, FilterBar, HistoryTable };
