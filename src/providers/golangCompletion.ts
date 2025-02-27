@@ -8,10 +8,10 @@ import logger from '../logger';
 import type {
   ApiProvider,
   CallApiContextParams,
+  ProviderClassificationResponse,
+  ProviderEmbeddingResponse,
   ProviderOptions,
   ProviderResponse,
-  ProviderEmbeddingResponse,
-  ProviderClassificationResponse,
 } from '../types/providers';
 import { parsePathOrGlob } from '../util';
 import { sha256 } from '../util/createHash';
@@ -124,10 +124,14 @@ export class GolangProvider implements ApiProvider {
         const relativeScriptPath = path.relative(moduleRoot, absPath);
         const scriptDir = path.dirname(path.join(tempDir, relativeScriptPath));
 
-        // Copy wrapper.go to the same directory as the script
+        // Check if wrapper.go already exists in the script directory
         const tempWrapperPath = path.join(scriptDir, 'wrapper.go');
         fs.mkdirSync(scriptDir, { recursive: true });
-        fs.copyFileSync(path.join(__dirname, '../golang/wrapper.go'), tempWrapperPath);
+
+        // Only copy wrapper.go if it doesn't exist in the script directory
+        if (!fs.existsSync(tempWrapperPath)) {
+          fs.copyFileSync(path.join(__dirname, '../golang/wrapper.go'), tempWrapperPath);
+        }
 
         const executablePath = path.join(tempDir, 'golang_wrapper');
         const tempScriptPath = path.join(tempDir, relativeScriptPath);
