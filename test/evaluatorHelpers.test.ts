@@ -266,6 +266,61 @@ describe('renderPrompt with prompt functions', () => {
     expect(JSON.parse(result)).toEqual(messages);
     expect(promptObj.config).toEqual({ max_tokens: 10 });
   });
+
+  it('should set config from prompt function when initial config is undefined', async () => {
+    const messages = [
+      { role: 'system', content: 'You are a helpful assistant.' },
+      { role: 'user', content: 'Hello' },
+    ];
+
+    // Create a prompt object with explicitly undefined config
+    const promptObj = {
+      ...toPrompt('test'),
+      config: undefined, // Explicitly set to undefined
+      function: async () => ({
+        prompt: messages,
+        config: { max_tokens: 10 },
+      }),
+    };
+
+    // Verify config is undefined before calling renderPrompt
+    expect(promptObj.config).toBeUndefined();
+
+    const result = await renderPrompt(promptObj, {});
+
+    // After renderPrompt, config should contain the values from result.config
+    expect(promptObj.config).toEqual({ max_tokens: 10 });
+    expect(JSON.parse(result)).toEqual(messages);
+  });
+
+  it('should replace existing config with function config', async () => {
+    const messages = [
+      { role: 'system', content: 'You are a helpful assistant.' },
+      { role: 'user', content: 'Hello' },
+    ];
+    const promptObj = {
+      ...toPrompt('test'),
+      function: async () => ({
+        prompt: messages,
+        config: {
+          temperature: 0.8, // This should override the existing value
+          max_tokens: 20, // This should be added
+        },
+      }),
+      config: {
+        temperature: 0.2, // This should be overridden
+        top_p: 0.9, // This should be preserved
+      },
+    };
+    const result = await renderPrompt(promptObj, {});
+    expect(JSON.parse(result)).toEqual(messages);
+    // Check that function config takes precedence but preserves non-overlapping keys
+    expect(promptObj.config).toEqual({
+      temperature: 0.8, // From function (overridden)
+      max_tokens: 20, // From function (added)
+      top_p: 0.9, // From original config (preserved)
+    });
+  });
 });
 
 describe('resolveVariables', () => {

@@ -194,6 +194,10 @@ The function should return:
 2. An object/array (JSON stringified and used as the prompt)
 3. A structured object with `prompt` (string or object/array) and `config` (provider configuration).
 
+When a prompt function returns configuration alongside the prompt content, the configuration values will be merged with any existing configuration for that prompt. Values returned by the prompt function will take precedence over existing configuration values with the same keys.
+
+This allows you to set default configuration values in your promptfoo config file, while still enabling prompt functions to override specific settings dynamically when needed.
+
 #### Examples
 
 A Javascript prompt function, `prompt.js`:
