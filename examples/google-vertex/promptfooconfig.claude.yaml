@@ -1,5 +1,4 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-
 description: 'Vertex Claude Code Analysis'
 
 prompts:
@@ -9,13 +8,7 @@ providers:
   - id: vertex:claude-3-5-sonnet-v2@20241022
     label: Claude 3.5 Sonnet v2
     config:
-      temperature: 0.7
-      maxOutputTokens: 1024
       region: us-east5
-      publisher: anthropic
-      anthropic_version: 'vertex-2023-10-16'
-      system: 'You are an expert code reviewer. Analyze code for potential issues and provide clear, actionable feedback.'
-
 tests:
   - vars:
       code: |

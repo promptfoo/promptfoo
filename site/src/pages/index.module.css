@@ -49,6 +49,9 @@
   align-items: center;
   justify-content: center;
   gap: 1rem;
+  flex-wrap: wrap;
+  max-width: 100%;
+  padding: 0 1rem;
 }
 
 .walkthroughContainer {
@@ -63,6 +66,9 @@
   justify-content: center;
   border-bottom: 1px solid #e0e0e0;
   margin-bottom: 1rem;
+  flex-wrap: wrap;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .walkthroughTab {
@@ -72,6 +78,8 @@
   font-size: 1.25rem;
   cursor: pointer;
   transition: all 0.3s ease;
+  white-space: normal;
+  text-align: center;
 }
 
 .walkthroughTabActive {
@@ -83,6 +91,8 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .walkthroughHeading {
@@ -148,6 +158,8 @@
 @media screen and (max-width: 768px) {
   .walkthroughContent {
     flex-direction: column;
+    width: 100%;
+    padding: 0 1rem;
   }
 
   .walkthroughDescription,
@@ -160,6 +172,71 @@
   .walkthroughDescription {
     padding-right: 0;
     margin-bottom: 1rem;
+  }
+
+  .heroBanner h1 {
+    font-size: 2.5rem;
+    margin: 2rem 0;
+  }
+
+  .buttons {
+    flex-direction: column;
+    width: 100%;
+    gap: 0.75rem;
+  }
+
+  .buttons a {
+    width: 100%;
+    max-width: 300px;
+  }
+
+  .walkthroughContainer {
+    flex-direction: column;
+  }
+
+  .walkthroughButtons,
+  .walkthroughImageContainer {
+    width: 100%;
+  }
+
+  .walkthroughButtons {
+    margin-bottom: 2rem;
+  }
+
+  .walkthroughButton {
+    align-items: center;
+  }
+
+  .actionOrientedSection {
+    padding: 4rem 0;
+  }
+
+  .actionOrientedSection h2 {
+    font-size: 2rem;
+  }
+
+  .imageSection {
+    padding: 2rem 0;
+  }
+
+  .ctaSection {
+    padding: 4rem 0;
+  }
+
+  .ctaSection h3 {
+    font-size: 1.5rem;
+  }
+
+  .walkthroughTabs {
+    width: 100%;
+    padding: 0 0.5rem;
+    gap: 0.5rem;
+  }
+
+  .walkthroughTab {
+    padding: 0.75rem 0.5rem;
+    font-size: 1rem;
+    flex: 1;
   }
 }
 
@@ -229,50 +306,6 @@
 .ctaSection h2 {
   font-size: 2rem;
   margin-bottom: 2rem;
-}
-
-@media screen and (max-width: 768px) {
-  .heroBanner h1 {
-    font-size: 2.5rem;
-    margin: 2rem 0;
-  }
-
-  .walkthroughContainer {
-    flex-direction: column;
-  }
-
-  .walkthroughButtons,
-  .walkthroughImageContainer {
-    width: 100%;
-  }
-
-  .walkthroughButtons {
-    margin-bottom: 2rem;
-  }
-
-  .walkthroughButton {
-    align-items: center;
-  }
-
-  .actionOrientedSection {
-    padding: 4rem 0;
-  }
-
-  .actionOrientedSection h2 {
-    font-size: 2rem;
-  }
-
-  .imageSection {
-    padding: 2rem 0;
-  }
-
-  .ctaSection {
-    padding: 4rem 0;
-  }
-
-  .ctaSection h3 {
-    font-size: 1.5rem;
-  }
 }
 
 .asSeenOnSection {

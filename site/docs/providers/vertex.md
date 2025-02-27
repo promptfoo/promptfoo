@@ -4,8 +4,6 @@ The `vertex` provider enables integration with Google's [Vertex AI](https://clou
 
 ## Available Models
 
-You can use any of the available [model versions](https://cloud.google.com/vertex-ai/docs/generative-ai/learn/model-versioning) offered by Vertex AI. Note that older Gemini 1.0 models have been deprecated in favor of newer versions ([see documentation](https://ai.google.dev/gemini-api/docs/models/gemini)).
-
 ### Latest Gemini Models
 
 - `vertex:gemini-2.0-flash-001` - Next-gen workhorse model for all daily tasks. Supports text, code, images, audio, video, video with audio, and PDF inputs.

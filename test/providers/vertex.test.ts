@@ -524,4 +524,204 @@ describe('maybeCoerceToGeminiFormat', () => {
     });
     expect(loggerSpy).toHaveBeenCalledWith(`Unknown format for Gemini: ${JSON.stringify(input)}`);
   });
+
+  it('should handle OpenAI chat format with content as an array of objects', () => {
+    const input = [
+      {
+        role: 'system',
+        content: 'You are a helpful AI assistant.',
+      },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: 'What is {{thing}}?',
+          },
+        ],
+      },
+    ];
+
+    const result = vertexUtil.maybeCoerceToGeminiFormat(input);
+
+    expect(result).toEqual({
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              text: 'What is {{thing}}?',
+            },
+          ],
+        },
+      ],
+      coerced: true,
+      systemInstruction: {
+        parts: [{ text: 'You are a helpful AI assistant.' }],
+      },
+    });
+  });
+
+  it('should handle string content', () => {
+    // This simulates the parsed YAML format
+    const input = [
+      {
+        role: 'system',
+        content: 'You are a helpful AI assistant.',
+      },
+      {
+        role: 'user',
+        content: 'What is {{thing}}?',
+      },
+    ];
+
+    const result = vertexUtil.maybeCoerceToGeminiFormat(input);
+
+    expect(result).toEqual({
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: 'What is {{thing}}?' }],
+        },
+      ],
+      coerced: true,
+      systemInstruction: {
+        parts: [{ text: 'You are a helpful AI assistant.' }],
+      },
+    });
+  });
+
+  it('should handle mixed content types', () => {
+    const input = [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'First part' },
+          'Second part as string',
+          { type: 'image', url: 'https://example.com/image.jpg' },
+        ],
+      },
+    ];
+
+    const result = vertexUtil.maybeCoerceToGeminiFormat(input);
+
+    expect(result).toEqual({
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: 'First part' },
+            { text: 'Second part as string' },
+            { type: 'image', url: 'https://example.com/image.jpg' },
+          ],
+        },
+      ],
+      coerced: true,
+      systemInstruction: undefined,
+    });
+  });
+
+  it('should handle function tool callbacks correctly', async () => {
+    const mockCachedResponse = {
+      cached: true,
+      output: JSON.stringify({
+        functionCall: {
+          name: 'get_weather',
+          args: '{"location":"New York"}',
+        },
+      }),
+      tokenUsage: {
+        total: 15,
+        prompt: 10,
+        completion: 5,
+      },
+    };
+
+    const mockGetCache = jest
+      .mocked(getCache().get)
+      .mockResolvedValue(JSON.stringify(mockCachedResponse));
+
+    const mockWeatherFunction = jest.fn().mockResolvedValue('Sunny, 25°C');
+
+    const provider = new VertexChatProvider('gemini', {
+      config: {
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: 'get_weather',
+                description: 'Get the weather for a location',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    location: { type: 'STRING' },
+                  },
+                  required: ['location'],
+                },
+              },
+            ],
+          },
+        ],
+        functionToolCallbacks: {
+          get_weather: mockWeatherFunction,
+        },
+      },
+    });
+    const result = await provider.callApi(
+      JSON.stringify([{ role: 'user', content: "What's the weather in New York?" }]),
+    );
+
+    expect(mockGetCache).toHaveBeenCalledTimes(1);
+    expect(mockWeatherFunction).toHaveBeenCalledWith('{"location":"New York"}');
+    expect(result.output).toBe('Sunny, 25°C');
+    expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, cached: 15 });
+  });
+
+  it('should handle errors in function tool callbacks', async () => {
+    const mockCachedResponse = {
+      cached: true,
+      output: JSON.stringify({
+        functionCall: {
+          name: 'errorFunction',
+          args: '{}',
+        },
+      }),
+      tokenUsage: {
+        total: 5,
+        prompt: 2,
+        completion: 3,
+      },
+    };
+
+    jest.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+
+    const provider = new VertexChatProvider('gemini', {
+      config: {
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: 'errorFunction',
+                description: 'A function that always throws an error',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {},
+                },
+              },
+            ],
+          },
+        ],
+        functionToolCallbacks: {
+          errorFunction: () => {
+            throw new Error('Test error');
+          },
+        },
+      },
+    });
+
+    const result = await provider.callApi('Call the error function');
+
+    expect(result.output).toBe('{"functionCall":{"name":"errorFunction","args":"{}"}}');
+    expect(result.tokenUsage).toEqual({ total: 5, prompt: 2, completion: 3, cached: 5 });
+  });
 });
