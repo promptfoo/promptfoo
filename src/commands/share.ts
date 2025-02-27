@@ -11,7 +11,24 @@ import { createShareableUrl } from '../share';
 import telemetry from '../telemetry';
 import { setupEnv } from '../util';
 
-export { determineShareDomain } from '../share';
+const askForConfirmation = async (hostname: string): Promise<boolean> => {
+  return new Promise((resolve) => {
+    const reader = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+
+    reader.question(
+      `Create a private shareable URL of your eval on ${hostname}?\n\nTo proceed, please confirm [Y/n] `,
+      (answer: string) => {
+        reader.close();
+        const confirmed =
+          answer.toLowerCase() === 'yes' || answer.toLowerCase() === 'y' || answer === '';
+        resolve(confirmed);
+      },
+    );
+  });
+};
 
 export async function createAndDisplayShareableUrl(
   evalRecord: Eval,
@@ -87,26 +104,7 @@ export function shareCommand(program: Command) {
         const baseUrl = getEnvString('PROMPTFOO_SHARING_APP_BASE_URL');
         const hostname = baseUrl ? new URL(baseUrl).hostname : 'app.promptfoo.dev';
 
-        const askForConfirmation = async (): Promise<boolean> => {
-          return new Promise((resolve) => {
-            const reader = readline.createInterface({
-              input: process.stdin,
-              output: process.stdout,
-            });
-
-            reader.question(
-              `Create a private shareable URL of your eval on ${hostname}?\n\nTo proceed, please confirm [Y/n] `,
-              (answer: string) => {
-                reader.close();
-                const confirmed =
-                  answer.toLowerCase() === 'yes' || answer.toLowerCase() === 'y' || answer === '';
-                resolve(confirmed);
-              },
-            );
-          });
-        };
-
-        const confirmed = await askForConfirmation();
+        const confirmed = await askForConfirmation(hostname);
         if (!confirmed) {
           process.exitCode = 1;
           return;
