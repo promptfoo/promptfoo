@@ -30,7 +30,7 @@ you could begin using it immediately with `openai:chat:gpt-5`.
 
 The OpenAI provider supports a handful of [configuration options](https://github.com/promptfoo/promptfoo/blob/main/src/providers/openai.ts#L14-L32), such as `temperature`, `functions`, and `tools`, which can be used to customize the behavior of the model like so:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:gpt-4o-mini
     config:
@@ -46,7 +46,7 @@ For information on setting up chat conversation, see [chat threads](/docs/config
 
 The `providers` list takes a `config` key that allows you to set parameters like `temperature`, `max_tokens`, and [others](https://platform.openai.com/docs/api-reference/chat/create#chat/create-temperature). For example:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:gpt-4o-mini
     config:
@@ -121,24 +121,54 @@ interface OpenAiConfig {
 }
 ```
 
-## o1 Series Models (Beta)
+## Models
 
-The o1 series models handle tokens differently than other OpenAI models. While standard models use `max_tokens` to control output length, o1 models use `max_completion_tokens` to control both reasoning and output tokens:
+### Reasoning Models (o1, o3-mini)
 
-```yaml
+Reasoning models, like `o1` and `o3-mini`, are new large language models trained with reinforcement learning to perform complex reasoning. These models excel in complex problem solving, coding, scientific reasoning, and multi-step planning for agentic workflows.
+
+When using reasoning models, there are important differences in how tokens are handled:
+
+```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:o1-preview
+  - id: openai:o1
     config:
+      reasoning_effort: 'medium' # Can be "low", "medium", or "high"
       max_completion_tokens: 25000 # Can also be set via OPENAI_MAX_COMPLETION_TOKENS env var
 ```
 
-o1 models generate internal "reasoning tokens" that:
+Unlike standard models that use `max_tokens`, reasoning models use:
+
+- `max_completion_tokens` to control the total tokens generated (both reasoning and visible output)
+- `reasoning_effort` to control how thoroughly the model thinks before responding (low, medium, high)
+
+#### How Reasoning Models Work
+
+Reasoning models "think before they answer," generating internal reasoning tokens that:
 
 - Are not visible in the output
 - Count towards token usage and billing
 - Occupy space in the context window
 
-Both `o1-preview` and `o1-mini` models have a 128,000 token context window and work best with straightforward prompts. OpenAI recommends reserving at least 25,000 tokens for reasoning and outputs when starting with these models.
+Both `o1` and `o3-mini` models have a 128,000 token context window. OpenAI recommends reserving at least 25,000 tokens for reasoning and outputs when starting with these models.
+
+### GPT-4.5 Models (Preview)
+
+GPT-4.5 is OpenAI's largest GPT model designed specifically for creative tasks and agentic planning, currently available in a research preview. It features a 128k token context length.
+
+Models in this series include:
+
+- `gpt-4.5-preview`
+- `gpt-4.5-preview-2025-02-27`
+
+You can specify the model name in the `providers` section:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:gpt-4.5-preview
+    config:
+      temperature: 0.7
+```
 
 ## Images
 
@@ -146,9 +176,10 @@ Both `o1-preview` and `o1-mini` models have a 128,000 token context window and w
 
 You can include images in the prompt by using content blocks. For example, here's an example config:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
-  - prompt.json
+  - file://prompt.json
 
 providers:
   - openai:gpt-4o
@@ -162,7 +193,7 @@ tests:
 
 And an example `prompt.json`:
 
-```json
+```json title="prompt.json"
 [
   {
     "role": "user",
@@ -188,7 +219,8 @@ See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main
 
 OpenAI supports Dall-E generations via `openai:image:dall-e-3`. See the [OpenAI Dall-E example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-dalle-images).
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'In the style of Van Gogh: {{subject}}'
   - 'In the style of Dali: {{subject}}'
@@ -224,7 +256,8 @@ To set `tools` on an OpenAI provider, use the provider's `config` key. The model
 
 Tools can be defined inline or loaded from an external file:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://prompt.txt
 providers:
@@ -280,7 +313,7 @@ Sometimes OpenAI function calls don't match `tools` schemas. Use [`is-valid-open
 
 To further test `tools` definitions, you can use the `javascript` assertion and/or `transform` directives. For example:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 tests:
   - vars:
       city: Boston
@@ -345,7 +378,8 @@ They can also include functions that dynamically reference vars:
 
 Use the `functions` config to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`. For example:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://prompt.txt
 providers:
@@ -389,7 +423,7 @@ Sometimes OpenAI function calls don't match `functions` schemas. Use [`is-valid-
 
 To further test function call definitions, you can use the `javascript` assertion and/or `transform` directives. For example:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 tests:
   - vars:
       city: Boston
@@ -416,21 +450,21 @@ Instead of duplicating function definitions across multiple configurations, you 
 
 To load your functions from a file, specify the file path in your provider configuration like so:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - file://./path/to/provider_with_function.yaml
 ```
 
 You can also use a pattern to load multiple files:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - file://./path/to/provider_*.yaml
 ```
 
 Here's an example of how your `provider_with_function.yaml` might look:
 
-```yaml
+```yaml title="provider_with_function.yaml"
 id: openai:chat:gpt-4o-mini
 config:
   functions:
@@ -460,7 +494,7 @@ Promptfoo supports the `response_format` parameter, which allows you to specify 
 
 #### Prompt config example
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   - label: 'Prompt #1'
     raw: 'You are a helpful math tutor. Solve {{problem}}'
@@ -472,7 +506,7 @@ prompts:
 
 #### Provider config example
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:chat:gpt-4o-mini
     config:
@@ -498,7 +532,8 @@ These OpenAI-related environment variables are supported:
 | ------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
 | `OPENAI_TEMPERATURE`           | Temperature model parameter, defaults to 0. Not supported by o1-models.                                          |
 | `OPENAI_MAX_TOKENS`            | Max_tokens model parameter, defaults to 1024. Not supported by o1-models.                                        |
-| `OPENAI_MAX_COMPLETION_TOKENS` | Max_completion_tokens model parameter, defaults to 1024. Used by o1-models.                                      |
+| `OPENAI_MAX_COMPLETION_TOKENS` | Max_completion_tokens model parameter, defaults to 1024. Used by reasoning models.                               |
+| `OPENAI_REASONING_EFFORT`      | Reasoning_effort parameter for reasoning models, defaults to "medium". Options are "low", "medium", or "high".   |
 | `OPENAI_API_HOST`              | The hostname to use (useful if you're using an API proxy). Takes priority over `OPENAI_BASE_URL`.                |
 | `OPENAI_BASE_URL`              | The base URL (protocol + hostname + port) to use, this is a more general option than `OPENAI_API_HOST`.          |
 | `OPENAI_API_KEY`               | OpenAI API key.                                                                                                  |
@@ -540,7 +575,8 @@ The following properties can be overwritten in provider config:
 
 Here's an example of a more detailed config:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Write a tweet about {{topic}}'
 providers:

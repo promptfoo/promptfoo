@@ -17,6 +17,13 @@ export const OPENAI_CHAT_MODELS = [
       output: 15 / 1e6,
     },
   })),
+  ...['gpt-4.5-preview', 'gpt-4.5-preview-2025-02-27'].map((model) => ({
+    id: model,
+    cost: {
+      input: 75 / 1e6,
+      output: 150 / 1e6,
+    },
+  })),
   ...['o1', 'o1-2024-12-17', 'o1-preview', 'o1-preview-2024-09-12'].map((model) => ({
     id: model,
     cost: {
