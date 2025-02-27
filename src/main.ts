@@ -2,6 +2,7 @@
 import { Command } from 'commander';
 import { version } from '../package.json';
 import { checkNodeVersion } from './checkNodeVersion';
+import cliState from './cliState';
 import { authCommand } from './commands/auth';
 import { cacheCommand } from './commands/cache';
 import { configCommand } from './commands/config';
@@ -50,6 +51,9 @@ async function main() {
   initCommand(program);
   viewCommand(program);
   const redteamBaseCommand = program.command('redteam').description('Red team LLM applications');
+  redteamBaseCommand.hook('preAction', () => {
+    cliState.isRedteam = true;
+  });
   shareCommand(program);
 
   // Alphabetical order

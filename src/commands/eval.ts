@@ -79,8 +79,7 @@ export async function doEval(
     telemetry.record('command_used', {
       name: 'eval - started',
       watch: Boolean(cmdObj.watch),
-      // Only set when redteam is enabled for sure, because we don't know if config is loaded yet
-      ...(Boolean(config?.redteam) && { isRedteam: true }),
+      isRedteam: cliState.isRedteam,
     });
     await telemetry.send();
 
@@ -146,8 +145,8 @@ export async function doEval(
     testSuite.tests = await filterTests(testSuite, filterOptions);
 
     if (
-      config.redteam &&
-      config.redteam.plugins &&
+      cliState.isRedteam &&
+      config.redteam?.plugins &&
       config.redteam.plugins.length > 0 &&
       testSuite.tests &&
       testSuite.tests.length > 0
@@ -317,8 +316,6 @@ export async function doEval(
 
     printBorder();
 
-    const isRedteam = Boolean(config.redteam);
-
     logger.info(chalk.green.bold(`Successes: ${successes}`));
     logger.info(chalk.red.bold(`Failures: ${failures}`));
     if (!Number.isNaN(errors)) {
@@ -329,7 +326,7 @@ export async function doEval(
     }
     if (tokenUsage.total > 0) {
       logger.info(
-        `${isRedteam ? `Total probes: ${tokenUsage.numRequests.toLocaleString()} / ` : ''}Total tokens: ${tokenUsage.total.toLocaleString()} / Prompt tokens: ${tokenUsage.prompt.toLocaleString()} / Completion tokens: ${tokenUsage.completion.toLocaleString()} / Cached tokens: ${tokenUsage.cached.toLocaleString()}${tokenUsage.completionDetails?.reasoning ? ` / Reasoning tokens: ${tokenUsage.completionDetails.reasoning.toLocaleString()}` : ''}`,
+        `${cliState.isRedteam ? `Total probes: ${tokenUsage.numRequests.toLocaleString()} / ` : ''}Total tokens: ${tokenUsage.total.toLocaleString()} / Prompt tokens: ${tokenUsage.prompt.toLocaleString()} / Completion tokens: ${tokenUsage.completion.toLocaleString()} / Cached tokens: ${tokenUsage.cached.toLocaleString()}${tokenUsage.completionDetails?.reasoning ? ` / Reasoning tokens: ${tokenUsage.completionDetails.reasoning.toLocaleString()}` : ''}`,
       );
     }
 
@@ -337,7 +334,7 @@ export async function doEval(
       name: 'eval',
       watch: Boolean(cmdObj.watch),
       duration: Math.round((Date.now() - startTime) / 1000),
-      isRedteam,
+      isRedteam: cliState.isRedteam,
     });
     await telemetry.send();
 
@@ -427,7 +424,7 @@ export async function doEval(
         logger.info('Done.');
       }
     }
-    if (testSuite.redteam) {
+    if (cliState.isRedteam) {
       showRedteamProviderLabelMissingWarning(testSuite);
     }
     return ret;

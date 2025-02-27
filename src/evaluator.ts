@@ -438,6 +438,8 @@ class Evaluator {
     // Add abort checks at key points
     checkAbort();
 
+    cliState.isRedteam = Boolean(testSuite.redteam);
+
     const prompts: CompletedPrompt[] = [];
     const assertionTypes = new Set<string>();
     const rowsWithSelectBestAssertion = new Set<number>();
