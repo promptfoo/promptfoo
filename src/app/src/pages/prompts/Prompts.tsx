@@ -31,6 +31,7 @@ interface PromptsProps {
   data: (PromptWithMetadata & { recentEvalDate: string })[];
   isLoading: boolean;
   error: string | null;
+  showDatasetColumn?: boolean;
 }
 
 const LoadingSkeleton = () => (
@@ -54,7 +55,12 @@ const LoadingSkeleton = () => (
   </TableBody>
 );
 
-export default function Prompts({ data, isLoading, error }: PromptsProps) {
+export default function Prompts({
+  data,
+  isLoading,
+  error,
+  showDatasetColumn = true,
+}: PromptsProps) {
   const [searchParams] = useSearchParams();
   const [sort, setSort] = useState<SortState>({ field: 'date', order: 'desc' });
   const [page, setPage] = useState(1);
@@ -385,6 +391,7 @@ export default function Prompts({ data, isLoading, error }: PromptsProps) {
           openDialog={dialogState.open}
           handleClose={handleClose}
           selectedPrompt={paginatedPrompts[dialogState.selectedIndex]}
+          showDatasetColumn={showDatasetColumn}
         />
       )}
     </Box>

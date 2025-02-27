@@ -4,7 +4,11 @@ import type { PromptWithMetadata } from '@promptfoo/types';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import Prompts from './Prompts';
 
-function PromptsPageContent() {
+interface PromptsPageProps {
+  showDatasetColumn?: boolean;
+}
+
+function PromptsPageContent({ showDatasetColumn = true }: PromptsPageProps) {
   const [prompts, setPrompts] = useState<(PromptWithMetadata & { recentEvalDate: string })[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -30,13 +34,20 @@ function PromptsPageContent() {
     fetchPrompts();
   }, []);
 
-  return <Prompts data={prompts} isLoading={isLoading} error={error} />;
+  return (
+    <Prompts
+      data={prompts}
+      isLoading={isLoading}
+      error={error}
+      showDatasetColumn={showDatasetColumn}
+    />
+  );
 }
 
-export default function PromptsPage() {
+export default function PromptsPage({ showDatasetColumn = true }: PromptsPageProps) {
   return (
     <ErrorBoundary name="Prompts Page">
-      <PromptsPageContent />
+      <PromptsPageContent showDatasetColumn={showDatasetColumn} />
     </ErrorBoundary>
   );
 }
