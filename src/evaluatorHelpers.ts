@@ -161,7 +161,7 @@ export async function renderPrompt(
         // Merge config if provided
         if (result.config) {
           prompt.config = {
-            ...prompt.config,
+            ...(prompt.config || {}),
             ...result.config,
           };
         }
