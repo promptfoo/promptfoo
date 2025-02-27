@@ -30,7 +30,7 @@ you could begin using it immediately with `openai:chat:gpt-5`.
 
 The OpenAI provider supports a handful of [configuration options](https://github.com/promptfoo/promptfoo/blob/main/src/providers/openai.ts#L14-L32), such as `temperature`, `functions`, and `tools`, which can be used to customize the behavior of the model like so:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:gpt-4o-mini
     config:
@@ -46,7 +46,7 @@ For information on setting up chat conversation, see [chat threads](/docs/config
 
 The `providers` list takes a `config` key that allows you to set parameters like `temperature`, `max_tokens`, and [others](https://platform.openai.com/docs/api-reference/chat/create#chat/create-temperature). For example:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:gpt-4o-mini
     config:
@@ -125,7 +125,7 @@ interface OpenAiConfig {
 
 The o1 series models handle tokens differently than other OpenAI models. While standard models use `max_tokens` to control output length, o1 models use `max_completion_tokens` to control both reasoning and output tokens:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:o1-preview
     config:
@@ -149,9 +149,9 @@ Models in this series include:
 - `gpt-4.5-preview`
 - `gpt-4.5-preview-2025-02-27`
 
-GPT-4.5 has higher pricing compared to other models:
+You can specify the model name in the `providers` section:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:gpt-4.5-preview
     config:
@@ -164,9 +164,10 @@ providers:
 
 You can include images in the prompt by using content blocks. For example, here's an example config:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
-  - prompt.json
+  - file://prompt.json
 
 providers:
   - openai:gpt-4o
@@ -180,7 +181,7 @@ tests:
 
 And an example `prompt.json`:
 
-```json
+```json title="prompt.json"
 [
   {
     "role": "user",
@@ -206,7 +207,8 @@ See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main
 
 OpenAI supports Dall-E generations via `openai:image:dall-e-3`. See the [OpenAI Dall-E example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-dalle-images).
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'In the style of Van Gogh: {{subject}}'
   - 'In the style of Dali: {{subject}}'
@@ -242,7 +244,8 @@ To set `tools` on an OpenAI provider, use the provider's `config` key. The model
 
 Tools can be defined inline or loaded from an external file:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://prompt.txt
 providers:
@@ -298,7 +301,7 @@ Sometimes OpenAI function calls don't match `tools` schemas. Use [`is-valid-open
 
 To further test `tools` definitions, you can use the `javascript` assertion and/or `transform` directives. For example:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 tests:
   - vars:
       city: Boston
@@ -363,7 +366,8 @@ They can also include functions that dynamically reference vars:
 
 Use the `functions` config to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`. For example:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://prompt.txt
 providers:
@@ -407,7 +411,7 @@ Sometimes OpenAI function calls don't match `functions` schemas. Use [`is-valid-
 
 To further test function call definitions, you can use the `javascript` assertion and/or `transform` directives. For example:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 tests:
   - vars:
       city: Boston
@@ -434,21 +438,21 @@ Instead of duplicating function definitions across multiple configurations, you 
 
 To load your functions from a file, specify the file path in your provider configuration like so:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - file://./path/to/provider_with_function.yaml
 ```
 
 You can also use a pattern to load multiple files:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - file://./path/to/provider_*.yaml
 ```
 
 Here's an example of how your `provider_with_function.yaml` might look:
 
-```yaml
+```yaml title="provider_with_function.yaml"
 id: openai:chat:gpt-4o-mini
 config:
   functions:
@@ -478,7 +482,7 @@ Promptfoo supports the `response_format` parameter, which allows you to specify 
 
 #### Prompt config example
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   - label: 'Prompt #1'
     raw: 'You are a helpful math tutor. Solve {{problem}}'
@@ -490,7 +494,7 @@ prompts:
 
 #### Provider config example
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:chat:gpt-4o-mini
     config:
@@ -558,7 +562,8 @@ The following properties can be overwritten in provider config:
 
 Here's an example of a more detailed config:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Write a tweet about {{topic}}'
 providers:
