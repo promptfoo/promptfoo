@@ -349,6 +349,110 @@ describe('maybeCoerceToGeminiFormat', () => {
       systemInstruction: undefined,
     });
   });
+
+  it('should handle function tool callbacks correctly', async () => {
+    const mockCachedResponse = {
+      cached: true,
+      output: JSON.stringify({
+        functionCall: {
+          name: 'get_weather',
+          args: '{"location":"New York"}',
+        },
+      }),
+      tokenUsage: {
+        total: 15,
+        prompt: 10,
+        completion: 5,
+      },
+    };
+
+    const mockGetCache = jest
+      .mocked(getCache().get)
+      .mockResolvedValue(JSON.stringify(mockCachedResponse));
+
+    const mockWeatherFunction = jest.fn().mockResolvedValue('Sunny, 25°C');
+
+    const provider = new VertexChatProvider('gemini', {
+      config: {
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: 'get_weather',
+                description: 'Get the weather for a location',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    location: { type: 'STRING' },
+                  },
+                  required: ['location'],
+                },
+              },
+            ],
+          },
+        ],
+        functionToolCallbacks: {
+          get_weather: mockWeatherFunction,
+        },
+      },
+    });
+    const result = await provider.callApi(
+      JSON.stringify([{ role: 'user', content: "What's the weather in New York?" }]),
+    );
+
+    expect(mockGetCache).toHaveBeenCalledTimes(1);
+    expect(mockWeatherFunction).toHaveBeenCalledWith('{"location":"New York"}');
+    expect(result.output).toBe('Sunny, 25°C');
+    expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, cached: 15 });
+  });
+
+  it('should handle errors in function tool callbacks', async () => {
+    const mockCachedResponse = {
+      cached: true,
+      output: JSON.stringify({
+        functionCall: {
+          name: 'errorFunction',
+          args: '{}',
+        },
+      }),
+      tokenUsage: {
+        total: 5,
+        prompt: 2,
+        completion: 3,
+      },
+    };
+
+    jest.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+
+    const provider = new VertexChatProvider('gemini', {
+      config: {
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: 'errorFunction',
+                description: 'A function that always throws an error',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {},
+                },
+              },
+            ],
+          },
+        ],
+        functionToolCallbacks: {
+          errorFunction: () => {
+            throw new Error('Test error');
+          },
+        },
+      },
+    });
+
+    const result = await provider.callApi('Call the error function');
+
+    expect(result.output).toBe('{"functionCall":{"name":"errorFunction","args":"{}"}}');
+    expect(result.tokenUsage).toEqual({ total: 5, prompt: 2, completion: 3, cached: 5 });
+  });
 });
 
 describe('Vertex Provider', () => {

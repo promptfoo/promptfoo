@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import fs from 'fs';
+import http from 'http';
 import httpZ from 'http-z';
 import path from 'path';
 import { z } from 'zod';
@@ -19,6 +20,59 @@ import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { REQUEST_TIMEOUT_MS } from './shared';
+
+// This function is used to encode the URL in the first line of a raw request
+export function urlEncodeRawRequestPath(rawRequest: string) {
+  const firstLine = rawRequest.split('\n')[0];
+
+  const firstSpace = firstLine.indexOf(' ');
+  const method = firstLine.slice(0, firstSpace);
+  if (!method || !http.METHODS.includes(method)) {
+    logger.error(`[Http Provider] HTTP request method ${method} is not valid. From: ${firstLine}`);
+    throw new Error(
+      `[Http Provider] HTTP request method ${method} is not valid. From: ${firstLine}`,
+    );
+  }
+  const lastSpace = firstLine.lastIndexOf(' ');
+  if (lastSpace === -1) {
+    logger.error(
+      `[Http Provider] HTTP request URL is not valid. Protocol is missing. From: ${firstLine}`,
+    );
+    throw new Error(
+      `[Http Provider] HTTP request URL is not valid. Protocol is missing. From: ${firstLine}`,
+    );
+  }
+  const url = firstLine.slice(firstSpace + 1, lastSpace);
+
+  if (url.length === 0) {
+    logger.error(`[Http Provider] HTTP request URL is not valid. From: ${firstLine}`);
+    throw new Error(`[Http Provider] HTTP request URL is not valid. From: ${firstLine}`);
+  }
+
+  const protocol = firstLine.slice(lastSpace + 1);
+  if (!protocol.toLowerCase().startsWith('http')) {
+    logger.error(`[Http Provider] HTTP request protocol is not valid. From: ${firstLine}`);
+    throw new Error(`[Http Provider] HTTP request protocol is not valid. From: ${firstLine}`);
+  }
+
+  logger.debug(`[Http Provider] Encoding URL: ${url} from first line of raw request: ${firstLine}`);
+
+  try {
+    // Use the built-in URL class to parse and encode the URL
+    const parsedUrl = new URL(url, 'http://placeholder-base.com');
+
+    // Replace the original URL in the first line
+    rawRequest = rawRequest.replace(
+      firstLine,
+      `${method} ${parsedUrl.pathname}${parsedUrl.search}${protocol ? ' ' + protocol : ''}`,
+    );
+  } catch (err) {
+    logger.error(`[Http Provider] Error parsing URL in HTTP request: ${String(err)}`);
+    throw new Error(`[Http Provider] Error parsing URL in HTTP request: ${String(err)}`);
+  }
+
+  return rawRequest;
+}
 
 const nunjucks = getNunjucksEngine();
 
@@ -302,8 +356,10 @@ export function processTextBody(body: string, vars: Record<string, any>): string
 
 function parseRawRequest(input: string) {
   const adjusted = input.trim().replace(/\n/g, '\r\n') + '\r\n\r\n';
+  // If the injectVar is in a query param, we need to encode the URL in the first line
+  const encoded = urlEncodeRawRequestPath(adjusted);
   try {
-    const messageModel = httpZ.parse(adjusted) as httpZ.HttpZRequestModel;
+    const messageModel = httpZ.parse(encoded) as httpZ.HttpZRequestModel;
     return {
       method: messageModel.method,
       url: messageModel.target,
