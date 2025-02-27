@@ -44,6 +44,23 @@ Meta's Llama models are available through Vertex AI with the following versions:
 
 Note: Llama models support up to 128,000 tokens context length and include built-in safety features through Llama Guard.
 
+#### Llama Configuration Example
+
+```yaml
+providers:
+  - id: vertex:llama-3.3-70b-instruct-maas
+    config:
+      region: us-central1 # Llama models are only available in this region
+      temperature: 0.7
+      maxOutputTokens: 1024
+      llamaConfig:
+        safetySettings:
+          enabled: true # Llama Guard is enabled by default
+          llama_guard_settings: {} # Optional custom settings
+```
+
+By default, Llama models use Llama Guard for content safety. You can disable it by setting `enabled: false`, but this is not recommended for production use.
+
 ### Gemma Models (Open Models)
 
 - `vertex:gemma` - Lightweight text model for generation and summarization
@@ -192,6 +209,17 @@ See [Google's SafetySetting API documentation](https://ai.google.dev/api/generat
 - Built-in safety with Llama Guard (enabled by default)
 - Available in `us-central1` region
 - Quota limits vary by model version (30-60 QPM)
+- Maximum context length of 128,000 tokens
+- Requires specific endpoint format for API calls
+- Only supports unary (non-streaming) responses in promptfoo
+
+#### Llama Model Considerations
+
+- **Regional Availability**: Llama models are available only in `us-central1` region
+- **Guard Integration**: All Llama models use Llama Guard for content safety by default
+- **Specific Endpoint**: Uses a different API endpoint than other Vertex models
+- **Model Status**: Most models are in Preview state, with Llama 3.1 405B being Generally Available (GA)
+- **Vision Support**: Only Llama 3.2 90B supports image input
 
 ### Claude Model Features
 

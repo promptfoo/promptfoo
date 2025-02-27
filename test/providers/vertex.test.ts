@@ -725,3 +725,387 @@ describe('maybeCoerceToGeminiFormat', () => {
     expect(result.tokenUsage).toEqual({ total: 5, prompt: 2, completion: 3, cached: 5 });
   });
 });
+
+describe('VertexChatProvider.callLlamaApi', () => {
+  let provider: VertexChatProvider;
+
+  beforeEach(() => {
+    jest.mocked(getCache).mockReturnValue({
+      get: jest.fn(),
+      set: jest.fn(),
+      wrap: jest.fn(),
+      del: jest.fn(),
+      reset: jest.fn(),
+      store: {} as any,
+    });
+
+    jest.mocked(isCacheEnabled).mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should enforce us-central1 region for Llama models', async () => {
+    // Create provider with non-us-central1 region
+    provider = new VertexChatProvider('llama-3.3-70b-instruct-maas', {
+      config: { region: 'europe-west1' },
+    });
+
+    const response = await provider.callLlamaApi('test prompt');
+
+    // Should return error about region
+    expect(response).toEqual({
+      error:
+        "Llama models are only available in the us-central1 region. Current region: europe-west1. Please set region: 'us-central1' in your configuration.",
+    });
+  });
+
+  it('should validate llama_guard_settings is a valid object', async () => {
+    provider = new VertexChatProvider('llama-3.3-70b-instruct-maas', {
+      config: {
+        region: 'us-central1',
+        llamaConfig: {
+          safetySettings: {
+            // @ts-ignore - intentionally passing invalid type for test
+            llama_guard_settings: 'not-an-object',
+          },
+        },
+      },
+    });
+
+    const response = await provider.callLlamaApi('test prompt');
+
+    // Should return error about invalid llama_guard_settings
+    expect(response).toEqual({
+      error: 'Invalid llama_guard_settings: must be an object, received string',
+    });
+  });
+
+  it('should successfully call Llama API with valid configuration', async () => {
+    provider = new VertexChatProvider('llama-3.3-70b-instruct-maas', {
+      config: {
+        region: 'us-central1',
+        temperature: 0.7,
+        maxOutputTokens: 250,
+        llamaConfig: {
+          safetySettings: {
+            enabled: true,
+            llama_guard_settings: { custom_setting: 'value' },
+          },
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: {
+        choices: [
+          {
+            message: {
+              content: 'Llama response content',
+            },
+          },
+        ],
+        usage: {
+          total_tokens: 35,
+          prompt_tokens: 15,
+          completion_tokens: 20,
+        },
+      },
+    };
+
+    const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+
+    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: {
+        request: mockRequest,
+      } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+
+    const response = await provider.callLlamaApi('test prompt');
+
+    // Should return successful response
+    expect(response).toEqual({
+      cached: false,
+      output: 'Llama response content',
+      tokenUsage: {
+        total: 35,
+        prompt: 15,
+        completion: 20,
+      },
+    });
+
+    // Verify API request
+    expect(mockRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: expect.stringContaining(
+          'us-central1-aiplatform.googleapis.com/v1beta1/projects/test-project-id/locations/us-central1/endpoints/openapi/chat/completions',
+        ),
+        method: 'POST',
+        data: expect.objectContaining({
+          model: 'meta/llama-3.3-70b-instruct-maas',
+          max_tokens: 250,
+          temperature: 0.7,
+          extra_body: {
+            google: {
+              model_safety_settings: {
+                enabled: true,
+                llama_guard_settings: { custom_setting: 'value' },
+              },
+            },
+          },
+        }),
+      }),
+    );
+  });
+
+  it('should default safety settings to enabled when not specified', async () => {
+    provider = new VertexChatProvider('llama-3.3-70b-instruct-maas', {
+      config: {
+        region: 'us-central1',
+      },
+    });
+
+    const mockResponse = {
+      data: {
+        choices: [
+          {
+            message: {
+              content: 'Llama response with default safety',
+            },
+          },
+        ],
+        usage: {
+          total_tokens: 30,
+          prompt_tokens: 10,
+          completion_tokens: 20,
+        },
+      },
+    };
+
+    const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+
+    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: {
+        request: mockRequest,
+      } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+
+    await provider.callLlamaApi('test prompt');
+
+    // Verify safety settings defaulted to enabled
+    expect(mockRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          extra_body: {
+            google: {
+              model_safety_settings: {
+                enabled: true,
+                llama_guard_settings: {},
+              },
+            },
+          },
+        }),
+      }),
+    );
+  });
+
+  it('should handle API errors correctly', async () => {
+    provider = new VertexChatProvider('llama-3.3-70b-instruct-maas', {
+      config: {
+        region: 'us-central1',
+      },
+    });
+
+    const mockError = {
+      response: {
+        data: {
+          error: {
+            code: 400,
+            message: 'Invalid request',
+          },
+        },
+      },
+    };
+
+    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: {
+        request: jest.fn().mockRejectedValue(mockError),
+      } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+
+    const response = await provider.callLlamaApi('test prompt');
+
+    expect(response.error).toContain('API call error:');
+    expect(response.error).toContain('Invalid request');
+  });
+});
+
+describe('VertexChatProvider.callClaudeApi parameter naming', () => {
+  let provider: VertexChatProvider;
+
+  beforeEach(() => {
+    jest.mocked(getCache).mockReturnValue({
+      get: jest.fn(),
+      set: jest.fn(),
+      wrap: jest.fn(),
+      del: jest.fn(),
+      reset: jest.fn(),
+      store: {} as any,
+    });
+
+    jest.mocked(isCacheEnabled).mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should accept anthropicVersion parameter', async () => {
+    provider = new VertexChatProvider('claude-3-sonnet@20240229', {
+      config: {
+        anthropicVersion: 'vertex-2023-10-16',
+        maxOutputTokens: 500,
+      },
+    });
+
+    const mockResponse = {
+      data: {
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-3-sonnet@20240229',
+        content: [{ type: 'text', text: 'Response from Claude' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: {
+          input_tokens: 20,
+          output_tokens: 30,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      },
+    };
+
+    const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+
+    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: {
+        request: mockRequest,
+      } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+
+    await provider.callClaudeApi('test prompt');
+
+    expect(mockRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          anthropic_version: 'vertex-2023-10-16',
+          max_tokens: 500,
+        }),
+      }),
+    );
+  });
+
+  it('should accept anthropic_version parameter (alternative format)', async () => {
+    provider = new VertexChatProvider('claude-3-sonnet@20240229', {
+      config: {
+        anthropic_version: 'vertex-2023-10-16-alt',
+        max_tokens: 600,
+      },
+    });
+
+    const mockResponse = {
+      data: {
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-3-sonnet@20240229',
+        content: [{ type: 'text', text: 'Response from Claude' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: {
+          input_tokens: 20,
+          output_tokens: 30,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      },
+    };
+
+    const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+
+    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: {
+        request: mockRequest,
+      } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+
+    await provider.callClaudeApi('test prompt');
+
+    expect(mockRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          anthropic_version: 'vertex-2023-10-16-alt',
+          max_tokens: 600,
+        }),
+      }),
+    );
+  });
+
+  it('should accept both max_tokens and maxOutputTokens parameters', async () => {
+    provider = new VertexChatProvider('claude-3-sonnet@20240229', {
+      config: {
+        // When both are provided, max_tokens should take precedence
+        max_tokens: 700,
+        maxOutputTokens: 500,
+        top_p: 0.95,
+        top_k: 40,
+      },
+    });
+
+    const mockResponse = {
+      data: {
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-3-sonnet@20240229',
+        content: [{ type: 'text', text: 'Response from Claude' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: {
+          input_tokens: 20,
+          output_tokens: 30,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      },
+    };
+
+    const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+
+    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: {
+        request: mockRequest,
+      } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+
+    await provider.callClaudeApi('test prompt');
+
+    expect(mockRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          max_tokens: 700,
+          top_p: 0.95,
+          top_k: 40,
+        }),
+      }),
+    );
+  });
+});
