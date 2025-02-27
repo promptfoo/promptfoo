@@ -1,16 +1,32 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-# This configuration runs each prompt through a series of example inputs and checks if they meet requirements.
+description: 'Vertex Claude Code Analysis'
 
 prompts:
-  - "You are a helpful assistant. Reply with a concise answer to this inquiry: '{{question}}'"
+  - 'Analyze this code and list any potential issues: ```{{code}}```'
 
 providers:
-  - id: 'vertex:claude-3-5-sonnet-v2'
+  - id: vertex:claude-3-5-sonnet-v2@20241022
+    label: Claude 3.5 Sonnet v2
     config:
       region: us-east5
-
 tests:
   - vars:
-      question: 'Solve 3*x^3-5*x=1'
+      code: |
+        def calculate_average(numbers):
+            total = 0
+            for num in numbers:
+                total += num
+            return total / len(numbers)
   - vars:
-      question: "What's the weather in New York?"
+      code: |
+        def fibonacci(n):
+            if n <= 1:
+                return n
+            return fibonacci(n-1) + fibonacci(n-2)
+  - vars:
+      code: |
+        def search_list(items, target):
+            for i in range(len(items)):
+                if items[i] == target:
+                    return i
+            return -1
