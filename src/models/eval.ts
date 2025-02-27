@@ -32,45 +32,112 @@ import { randomSequence, sha256 } from '../util/createHash';
 import invariant from '../util/invariant';
 import { getCurrentTimestamp } from '../util/time';
 import EvalResult from './evalResult';
+import { BaseModel } from './BaseModel';
 
+/**
+ * Interface for minimal evaluation metadata returned by query functions
+ */
+export interface EvalWithMetadata {
+  id: string;
+  date: Date; // Note: this is the date field, not createdAt
+  config: Partial<UnifiedConfig>;
+  results: any;
+  description?: string;
+  
+  // Helper methods to make this compatible with Eval class in existing code
+  getPrompts(): CompletedPrompt[];
+  toResultsFile(): Promise<ResultsFile>;
+  
+  // Add createdAt to match Eval properties - this is required, not optional
+  createdAt: number;
+}
+
+/**
+ * Create a unique evaluation ID with a timestamp
+ */
 export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
 }
 
-export class EvalQueries {
-  static async getVarsFromEvals(evals: Eval[]) {
-    const db = getDb();
-    const query = sql.raw(
-      `SELECT DISTINCT j.key, eval_id from (SELECT eval_id, json_extract(eval_results.test_case, '$.vars') as vars
-FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')})) t, json_each(t.vars) j;`,
-    );
-    // @ts-ignore
-    const results: { key: string; eval_id: string }[] = await db.all(query);
-    const vars = results.reduce((acc: Record<string, string[]>, r) => {
-      acc[r.eval_id] = acc[r.eval_id] || [];
-      acc[r.eval_id].push(r.key);
-      return acc;
-    }, {});
-    return vars;
-  }
-}
-
-export default class Eval {
+/**
+ * Main evaluation model class using Active Record pattern
+ * Extends BaseModel for common functionality
+ */
+export default class Eval extends BaseModel {
   id: string;
   createdAt: number;
   author?: string;
   description?: string;
   config: Partial<UnifiedConfig>;
-  // If these are empty, you need to call loadResults(). We don't load them by default to save memory.
   results: EvalResult[];
-  resultsCount: number; // Fast way to get the number of results
+  resultsCount: number;
   datasetId?: string;
   prompts: CompletedPrompt[];
   oldResults?: EvaluateSummaryV2;
   persisted: boolean;
 
+  constructor(
+    config: Partial<UnifiedConfig>,
+    opts?: {
+      id?: string;
+      createdAt?: Date;
+      author?: string;
+      description?: string;
+      prompts?: CompletedPrompt[];
+      datasetId?: string;
+      persisted?: boolean;
+    },
+  ) {
+    super(); // Call parent constructor
+    const createdAt = opts?.createdAt || new Date();
+    this.createdAt = createdAt.getTime();
+    this.id = opts?.id || createEvalId(createdAt);
+    this.author = opts?.author;
+    this.description = opts?.description || config.description;
+    this.config = config;
+    this.results = [];
+    this.resultsCount = 0;
+    this.prompts = opts?.prompts || [];
+    this.datasetId = opts?.datasetId;
+    this.persisted = opts?.persisted || false;
+  }
+
+  /**
+   * Convert current instance to EvalWithMetadata interface
+   */
+  toEvalWithMetadata(): EvalWithMetadata {
+    const id = this.id;
+    return {
+      id: this.id,
+      date: new Date(this.createdAt),
+      createdAt: this.createdAt,
+      config: this.config,
+      results: this.oldResults || {},
+      description: this.description,
+      
+      // Add methods to make it compatible with Eval class
+      getPrompts() {
+        if (this.results && 'table' in this.results) {
+          return this.results.table?.head.prompts || [];
+        }
+        return [];
+      },
+      
+      async toResultsFile() {
+        const fullEval = await Eval.findById(id);
+        if (!fullEval) {
+          throw new Error(`Eval with ID ${id} not found when trying to convert to ResultsFile`);
+        }
+        return fullEval.toResultsFile();
+      }
+    };
+  }
+
+  /**
+   * Get most recent evaluation
+   */
   static async latest() {
-    const db = getDb();
+    const db = this.getDb();
     const db_results = await db
       .select({
         id: evalsTable.id,
@@ -86,8 +153,11 @@ export default class Eval {
     return await Eval.findById(db_results[0].id);
   }
 
+  /**
+   * Find an evaluation by ID
+   */
   static async findById(id: string) {
-    const db = getDb();
+    const db = this.getDb();
 
     const { evals, datasetResults } = await db.transaction(async (tx) => {
       const evals = await tx.select().from(evalsTable).where(eq(evalsTable.id, id));
@@ -125,27 +195,279 @@ export default class Eval {
     return evalInstance;
   }
 
-  static async getMany(limit: number = DEFAULT_QUERY_LIMIT): Promise<Eval[]> {
-    const db = getDb();
-    const evals = await db
-      .select()
-      .from(evalsTable)
-      .limit(limit)
-      .orderBy(desc(evalsTable.createdAt))
-      .all();
-    return evals.map(
-      (e) =>
-        new Eval(e.config, {
-          id: e.id,
-          createdAt: new Date(e.createdAt),
-          author: e.author || undefined,
-          description: e.description || undefined,
-          prompts: e.prompts || [],
-          persisted: true,
-        }),
-    );
+  /**
+   * Overloaded getMany method to support both number and object parameter
+   * For backward compatibility
+   */
+  static async getMany(limitOrOptions?: number | {
+    limit?: number;
+    description?: string;
+    datasetId?: string;
+  }): Promise<EvalWithMetadata[]> {
+    // Handle the case where only a number is passed
+    if (typeof limitOrOptions === 'number' || limitOrOptions === undefined) {
+      return this.getManyWithOptions({
+        limit: typeof limitOrOptions === 'number' ? limitOrOptions : DEFAULT_QUERY_LIMIT
+      });
+    }
+    
+    // Otherwise, it's already an options object
+    return this.getManyWithOptions(limitOrOptions);
   }
 
+  /**
+   * Internal implementation of getMany that always takes an options object
+   */
+  private static async getManyWithOptions({
+    limit = DEFAULT_QUERY_LIMIT,
+    description,
+    datasetId,
+  }: {
+    limit?: number;
+    description?: string;
+    datasetId?: string;
+  } = {}): Promise<EvalWithMetadata[]> {
+    const db = this.getDb();
+    
+    // Build query with specific filters
+    const query = db
+      .select({
+        id: evalsTable.id,
+        createdAt: evalsTable.createdAt,
+        author: evalsTable.author,
+        results: evalsTable.results,
+        config: evalsTable.config,
+        description: evalsTable.description,
+      })
+      .from(evalsTable);
+      
+    // Add join and condition if filtering by datasetId
+    if (datasetId) {
+      query
+        .innerJoin(
+          evalsToDatasetsTable,
+          eq(evalsTable.id, evalsToDatasetsTable.evalId)
+        )
+        .where(eq(evalsToDatasetsTable.datasetId, datasetId));
+    }
+    
+    // Add description filter if needed
+    if (description) {
+      query.where(
+        datasetId 
+          ? and(eq(evalsToDatasetsTable.datasetId, datasetId), like(evalsTable.description, `%${description}%`))
+          : like(evalsTable.description, `%${description}%`)
+      );
+    }
+    
+    const results = await query
+      .orderBy(desc(evalsTable.createdAt))
+      .limit(limit)
+      .all();
+    
+    this.logDebug(`Found ${results.length} evals with query filters`);
+    
+    // Process results into EvalWithMetadata objects with method implementations
+    return results.map((eval_) => {
+      // Create an evaluation ID and closure to efficiently implement methods on the metadata object
+      const evalId = eval_.id;
+      const metadata: EvalWithMetadata = {
+        id: evalId,
+        date: new Date(eval_.createdAt),
+        createdAt: eval_.createdAt,
+        config: eval_.config,
+        results: eval_.results as any,
+        description: eval_.description || undefined,
+        
+        // Implement methods that delegate to the Eval class
+        getPrompts() {
+          if (this.results && 'table' in this.results) {
+            return this.results.table?.head.prompts || [];
+          }
+          return [];
+        },
+        
+        async toResultsFile() {
+          const fullEval = await Eval.findById(evalId);
+          if (!fullEval) {
+            throw new Error(`Eval with ID ${evalId} not found when trying to convert to ResultsFile`);
+          }
+          return fullEval.toResultsFile();
+        }
+      };
+      
+      return metadata;
+    });
+  }
+
+  /**
+   * Get standalone evaluations with caching
+   */
+  static async getStandaloneEvals({
+    limit = 100,
+    tag,
+    description,
+  }: {
+    limit?: number;
+    tag?: { key: string; value: string };
+    description?: string;
+  } = {}): Promise<Array<CompletedPrompt & {
+    evalId: string;
+    description: string | null;
+    datasetId: string | null;
+    promptId: string | null;
+    isRedteam: boolean;
+    createdAt: number;
+    pluginFailCount: Record<string, number>;
+    pluginPassCount: Record<string, number>;
+  }>> {
+    const db = this.getDb();
+    
+    const cacheKey = `standalone_evals_${limit}_${tag?.key}_${tag?.value}_${description || ''}`;
+    // Check if we have a cache
+    const cache = this.getModelCache();
+    const cachedResult = cache.get<Array<CompletedPrompt & {
+      evalId: string;
+      description: string | null;
+      datasetId: string | null;
+      promptId: string | null;
+      isRedteam: boolean;
+      createdAt: number;
+      pluginFailCount: Record<string, number>;
+      pluginPassCount: Record<string, number>;
+    }>>(cacheKey);
+    
+    if (cachedResult) {
+      return cachedResult;
+    }
+    
+    const results = db
+      .select({
+        evalId: evalsTable.id,
+        description: evalsTable.description,
+        results: evalsTable.results,
+        createdAt: evalsTable.createdAt,
+        promptId: evalsToPromptsTable.promptId,
+        datasetId: evalsToDatasetsTable.datasetId,
+        tagName: tagsTable.name,
+        tagValue: tagsTable.value,
+        isRedteam: sql`json_extract(evals.config, '$.redteam') IS NOT NULL`.as('isRedteam'),
+      })
+      .from(evalsTable)
+      .leftJoin(evalsToPromptsTable, eq(evalsTable.id, evalsToPromptsTable.evalId))
+      .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
+      .leftJoin(evalsToTagsTable, eq(evalsTable.id, evalsToTagsTable.evalId))
+      .leftJoin(tagsTable, eq(evalsToTagsTable.tagId, tagsTable.id))
+      .where(
+        and(
+          tag ? and(eq(tagsTable.name, tag.key), eq(tagsTable.value, tag.value)) : undefined,
+          description ? eq(evalsTable.description, description) : undefined,
+        ),
+      )
+      .orderBy(desc(evalsTable.createdAt))
+      .limit(limit)
+      .all();
+
+    const standaloneEvals = (
+      await Promise.all(
+        results.map(async (result) => {
+          const {
+            description,
+            createdAt,
+            evalId,
+            promptId,
+            datasetId,
+            isRedteam,
+          } = result;
+          const eval_ = await Eval.findById(evalId);
+          invariant(eval_, `Eval with ID ${evalId} not found`);
+          const table = (await eval_.getTable()) || { body: [] };
+          
+          return eval_.getPrompts().map((col, index) => {
+            // Compute some stats
+            const pluginCounts = table.body.reduce(
+              (acc, row) => {
+                const pluginId = row.test.metadata?.pluginId;
+                if (pluginId) {
+                  const isPass = row.outputs[index].pass;
+                  acc.pluginPassCount[pluginId] =
+                    (acc.pluginPassCount[pluginId] || 0) + (isPass ? 1 : 0);
+                  acc.pluginFailCount[pluginId] =
+                    (acc.pluginFailCount[pluginId] || 0) + (isPass ? 0 : 1);
+                }
+                return acc;
+              },
+              { pluginPassCount: {}, pluginFailCount: {} } as {
+                pluginPassCount: Record<string, number>;
+                pluginFailCount: Record<string, number>;
+              },
+            );
+
+            return {
+              evalId,
+              description,
+              promptId,
+              datasetId,
+              createdAt,
+              isRedteam: isRedteam as boolean,
+              ...pluginCounts,
+              ...col,
+            };
+          });
+        }),
+      )
+    ).flat();
+
+    // Cache the result
+    cache.set(cacheKey, standaloneEvals);
+    
+    return standaloneEvals;
+  }
+
+  /**
+   * Delete all evaluations from the database
+   */
+  static async deleteAll(): Promise<boolean> {
+    try {
+      return await this.transaction(async (tx) => {
+        await tx.delete(evalResultsTable).run();
+        await tx.delete(evalsToPromptsTable).run();
+        await tx.delete(evalsToDatasetsTable).run();
+        await tx.delete(evalsToTagsTable).run();
+        await tx.delete(evalsTable).run();
+        
+        this.logDebug('All evaluations deleted successfully');
+        this.clearModelCache();
+        return true;
+      });
+    } catch (err) {
+      this.handleError('delete all evals', err);
+      return false;
+    }
+  }
+
+  /**
+   * Get vars from evaluations
+   */
+  static async getVarsFromEvals(evals: Eval[]) {
+    const db = this.getDb();
+    const query = sql.raw(
+      `SELECT DISTINCT j.key, eval_id from (SELECT eval_id, json_extract(eval_results.test_case, '$.vars') as vars
+FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')})) t, json_each(t.vars) j;`,
+    );
+    // @ts-ignore
+    const results: { key: string; eval_id: string }[] = await db.all(query);
+    const vars = results.reduce((acc: Record<string, string[]>, r) => {
+      acc[r.eval_id] = acc[r.eval_id] || [];
+      acc[r.eval_id].push(r.key);
+      return acc;
+    }, {});
+    return vars;
+  }
+
+  /**
+   * Create a new evaluation
+   */
   static async create(
     config: Partial<UnifiedConfig>,
     renderedPrompts: Prompt[], // The config doesn't contain the actual prompts, so we need to pass them in separately
@@ -160,7 +482,7 @@ export default class Eval {
     const createdAt = opts?.createdAt || new Date();
     const evalId = opts?.id || createEvalId(createdAt);
     const author = opts?.author || getUserEmail();
-    const db = getDb();
+    const db = this.getDb();
     await db.transaction(async (tx) => {
       await tx
         .insert(evalsTable)
@@ -196,14 +518,14 @@ export default class Eval {
           .onConflictDoNothing()
           .run();
 
-        logger.debug(`Inserting prompt ${promptId}`);
+        this.logDebug(`Inserting prompt ${promptId}`);
       }
       if (opts?.results && opts.results.length > 0) {
         const res = await tx
           .insert(evalResultsTable)
           .values(opts.results?.map((r) => ({ ...r, evalId, id: randomUUID() })))
           .run();
-        logger.debug(`Inserted ${res.changes} eval results`);
+        this.logDebug(`Inserted ${res.changes} eval results`);
       }
 
       // Record dataset relation
@@ -226,7 +548,7 @@ export default class Eval {
         .onConflictDoNothing()
         .run();
 
-      logger.debug(`Inserting dataset ${datasetId}`);
+      this.logDebug(`Inserting dataset ${datasetId}`);
 
       // Record tags
       if (config.tags) {
@@ -257,30 +579,6 @@ export default class Eval {
       }
     });
     return new Eval(config, { id: evalId, author: opts?.author, createdAt, persisted: true });
-  }
-
-  constructor(
-    config: Partial<UnifiedConfig>,
-    opts?: {
-      id?: string;
-      createdAt?: Date;
-      author?: string;
-      description?: string;
-      prompts?: CompletedPrompt[];
-      datasetId?: string;
-      persisted?: boolean;
-    },
-  ) {
-    const createdAt = opts?.createdAt || new Date();
-    this.createdAt = createdAt.getTime();
-    this.id = opts?.id || createEvalId(createdAt);
-    this.author = opts?.author;
-    this.config = config;
-    this.results = [];
-    this.resultsCount = 0;
-    this.prompts = opts?.prompts || [];
-    this.datasetId = opts?.datasetId;
-    this.persisted = opts?.persisted || false;
   }
 
   version() {
@@ -499,6 +797,31 @@ export default class Eval {
       db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
       db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
     });
+  }
+}
+
+/**
+ * Namespace for static evaluation utilities used in other parts of the codebase
+ * Maintains backward compatibility with existing code
+ */
+export namespace EvalQueries {
+  /**
+   * Get vars from evaluations - renamed to work with both EvalWithMetadata and Eval 
+   */
+  export async function getVarsFromEvals(evals: EvalWithMetadata[] | Eval[]) {
+    const db = getDb();
+    const query = sql.raw(
+      `SELECT DISTINCT j.key, eval_id from (SELECT eval_id, json_extract(eval_results.test_case, '$.vars') as vars
+FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')})) t, json_each(t.vars) j;`,
+    );
+    // @ts-ignore
+    const results: { key: string; eval_id: string }[] = await db.all(query);
+    const vars = results.reduce((acc: Record<string, string[]>, r) => {
+      acc[r.eval_id] = acc[r.eval_id] || [];
+      acc[r.eval_id].push(r.key);
+      return acc;
+    }, {});
+    return vars;
   }
 }
 
