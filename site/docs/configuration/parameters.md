@@ -188,7 +188,7 @@ prompts:
 
 In the prompt function, you can access the test case variables and provider information via the context. The function will have access to a `vars` object and `provider` object. Having access to the provider object allows you to dynamically generate prompts for different providers with different formats.
 
-The function should return:
+The function should return one of the following:
 
 1. A string (used directly as the prompt)
 2. An object/array (JSON stringified and used as the prompt)
