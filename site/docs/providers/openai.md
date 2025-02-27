@@ -121,26 +121,38 @@ interface OpenAiConfig {
 }
 ```
 
-## o1 Series Models (Beta)
+## Models
 
-The o1 series models handle tokens differently than other OpenAI models. While standard models use `max_tokens` to control output length, o1 models use `max_completion_tokens` to control both reasoning and output tokens:
+### Reasoning Models (o1, o3-mini)
+
+Reasoning models, like `o1` and `o3-mini`, are new large language models trained with reinforcement learning to perform complex reasoning. These models excel in complex problem solving, coding, scientific reasoning, and multi-step planning for agentic workflows.
+
+When using reasoning models, there are important differences in how tokens are handled:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:o1-preview
+  - id: openai:o1
     config:
+      reasoning_effort: 'medium' # Can be "low", "medium", or "high"
       max_completion_tokens: 25000 # Can also be set via OPENAI_MAX_COMPLETION_TOKENS env var
 ```
 
-o1 models generate internal "reasoning tokens" that:
+Unlike standard models that use `max_tokens`, reasoning models use:
+
+- `max_completion_tokens` to control the total tokens generated (both reasoning and visible output)
+- `reasoning_effort` to control how thoroughly the model thinks before responding (low, medium, high)
+
+#### How Reasoning Models Work
+
+Reasoning models "think before they answer," generating internal reasoning tokens that:
 
 - Are not visible in the output
 - Count towards token usage and billing
 - Occupy space in the context window
 
-Both `o1-preview` and `o1-mini` models have a 128,000 token context window and work best with straightforward prompts. OpenAI recommends reserving at least 25,000 tokens for reasoning and outputs when starting with these models.
+Both `o1` and `o3-mini` models have a 128,000 token context window. OpenAI recommends reserving at least 25,000 tokens for reasoning and outputs when starting with these models.
 
-## GPT-4.5 Models (Preview)
+### GPT-4.5 Models (Preview)
 
 GPT-4.5 is OpenAI's largest GPT model designed specifically for creative tasks and agentic planning, currently available in a research preview. It features a 128k token context length.
 
@@ -520,7 +532,8 @@ These OpenAI-related environment variables are supported:
 | ------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
 | `OPENAI_TEMPERATURE`           | Temperature model parameter, defaults to 0. Not supported by o1-models.                                          |
 | `OPENAI_MAX_TOKENS`            | Max_tokens model parameter, defaults to 1024. Not supported by o1-models.                                        |
-| `OPENAI_MAX_COMPLETION_TOKENS` | Max_completion_tokens model parameter, defaults to 1024. Used by o1-models.                                      |
+| `OPENAI_MAX_COMPLETION_TOKENS` | Max_completion_tokens model parameter, defaults to 1024. Used by reasoning models.                               |
+| `OPENAI_REASONING_EFFORT`      | Reasoning_effort parameter for reasoning models, defaults to "medium". Options are "low", "medium", or "high".   |
 | `OPENAI_API_HOST`              | The hostname to use (useful if you're using an API proxy). Takes priority over `OPENAI_BASE_URL`.                |
 | `OPENAI_BASE_URL`              | The base URL (protocol + hostname + port) to use, this is a more general option than `OPENAI_API_HOST`.          |
 | `OPENAI_API_KEY`               | OpenAI API key.                                                                                                  |
