@@ -188,7 +188,15 @@ prompts:
 
 In the prompt function, you can access the test case variables and provider information via the context. The function will have access to a `vars` object and `provider` object. Having access to the provider object allows you to dynamically generate prompts for different providers with different formats.
 
-The function should return a string or an object that represents the prompt.
+The function should return one of the following:
+
+1. A string (used directly as the prompt)
+2. An object/array (JSON stringified and used as the prompt)
+3. A structured object with `prompt` (string or object/array) and `config` (provider configuration).
+
+When a prompt function returns configuration alongside the prompt content, the configuration values will be merged with any existing configuration for that prompt. Values returned by the prompt function will take precedence over existing configuration values with the same keys.
+
+This allows you to set default configuration values in your promptfoo config file, while still enabling prompt functions to override specific settings dynamically when needed.
 
 #### Examples
 
@@ -251,6 +259,31 @@ if __name__ == "__main__":
     # If you don't specify a `function_name` in the provider string, it will run the main
     print(my_prompt_function(json.loads(sys.argv[1])))
 ```
+
+A Python prompt function `prompt_with_config.py:my_prompt_function` that returns both prompt content and provider configuration:
+
+```python title=prompt_with_config.py
+def my_prompt_function(context: dict) -> dict:
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant"},
+        {"role": "user", "content": f"Tell me about {context['vars']['topic']}"}
+    ]
+
+    # Dynamic configuration based on context
+    config = {
+        "response_format": {
+            "type": "json_schema",
+            "schema": generate_schema_for_topic(context['vars']['topic'])
+        }
+    }
+
+    return {
+        "prompt": messages,
+        "config": config
+    }
+```
+
+This structured return format allows you to dynamically configure provider settings based on the prompt content or other runtime factors.
 
 To verify that your function is producing the correct prompt:
 
