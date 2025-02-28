@@ -88,21 +88,31 @@ function parseOpenAIModerationResponse(data: OpenAIModerationResponse): Provider
     return { flags: [] };
   }
 
-  const flags: ModerationFlag[] = [];
+  // Use a Map to keep track of unique flag codes and their highest confidence score
+  const flagMap = new Map<string, number>();
+
   for (const result of results) {
     if (result.flagged) {
       for (const [category, flagged] of Object.entries(result.categories)) {
         if (flagged) {
-          const appliedTo = result.category_applied_input_types?.[category];
-          flags.push({
-            code: category,
-            description: category + (appliedTo ? ` (applied to: ${appliedTo.join(', ')})` : ''),
-            confidence: result.category_scores[category],
-          });
+          // If this category already exists in our map, keep the higher confidence score
+          const existingConfidence = flagMap.get(category);
+          const currentConfidence = result.category_scores[category];
+
+          if (existingConfidence === undefined || currentConfidence > existingConfidence) {
+            flagMap.set(category, currentConfidence);
+          }
         }
       }
     }
   }
+
+  // Convert the map to an array of ModerationFlag objects
+  const flags: ModerationFlag[] = Array.from(flagMap.entries()).map(([code, confidence]) => ({
+    code,
+    description: code,
+    confidence,
+  }));
 
   return { flags };
 }
