@@ -13,9 +13,24 @@ export type OpenAiImageOperation = 'generation' | 'variation' | 'edit';
 export type DallE2Size = '256x256' | '512x512' | '1024x1024';
 export type DallE3Size = '1024x1024' | '1792x1024' | '1024x1792';
 
-const DALLE2_VALID_SIZES: DallE2Size[] = ['256x256', '512x512', '1024x1024'];
-const DALLE3_VALID_SIZES: DallE3Size[] = ['1024x1024', '1792x1024', '1024x1792'];
-const DEFAULT_SIZE = '1024x1024';
+export const DALLE2_VALID_SIZES: DallE2Size[] = ['256x256', '512x512', '1024x1024'];
+export const DALLE3_VALID_SIZES: DallE3Size[] = ['1024x1024', '1792x1024', '1024x1792'];
+export const DEFAULT_SIZE = '1024x1024';
+
+export const DALLE2_COSTS: Record<DallE2Size, number> = {
+  '256x256': 0.016,
+  '512x512': 0.018,
+  '1024x1024': 0.02,
+};
+
+export const DALLE3_COSTS: Record<string, number> = {
+  'standard_1024x1024': 0.04,
+  'standard_1024x1792': 0.08,
+  'standard_1792x1024': 0.08,
+  'hd_1024x1024': 0.08,
+  'hd_1024x1792': 0.12,
+  'hd_1792x1024': 0.12,
+};
 
 type CommonImageOptions = {
   n?: number;
@@ -39,7 +54,7 @@ type OpenAiImageOptions = OpenAiSharedOptions & {
   model?: OpenAiImageModel;
 } & (DallE2Options | DallE3Options);
 
-function validateSizeForModel(size: string, model: string): { valid: boolean; message?: string } {
+export function validateSizeForModel(size: string, model: string): { valid: boolean; message?: string } {
   if (model === 'dall-e-3' && !DALLE3_VALID_SIZES.includes(size as DallE3Size)) {
     return {
       valid: false,
@@ -57,7 +72,7 @@ function validateSizeForModel(size: string, model: string): { valid: boolean; me
   return { valid: true };
 }
 
-function formatOutput(
+export function formatOutput(
   data: any,
   prompt: string,
   responseFormat?: string,
@@ -85,7 +100,7 @@ function formatOutput(
   }
 }
 
-function prepareRequestBody(
+export function prepareRequestBody(
   model: string,
   prompt: string,
   size: string,
@@ -113,7 +128,27 @@ function prepareRequestBody(
   return body;
 }
 
-async function callOpenAiImageApi(
+export function calculateImageCost(
+  model: string,
+  size: string,
+  quality?: string,
+  n: number = 1
+): number {
+  const imageQuality = quality || 'standard';
+
+  if (model === 'dall-e-3') {
+    const costKey = `${imageQuality}_${size}`;
+    const costPerImage = DALLE3_COSTS[costKey] || DALLE3_COSTS['standard_1024x1024'];
+    return costPerImage * n;
+  } else if (model === 'dall-e-2') {
+    const costPerImage = DALLE2_COSTS[size as DallE2Size] || DALLE2_COSTS['1024x1024'];
+    return costPerImage * n;
+  }
+
+  return 0.04 * n;
+}
+
+export async function callOpenAiImageApi(
   url: string,
   body: Record<string, any>,
   headers: Record<string, string>,
@@ -130,11 +165,15 @@ async function callOpenAiImageApi(
   );
 }
 
-async function processApiResponse(
+export async function processApiResponse(
   data: any,
   prompt: string,
   responseFormat: string,
   cached: boolean,
+  model: string,
+  size: string,
+  quality?: string,
+  n: number = 1
 ): Promise<ProviderResponse> {
   if (data.error) {
     await data?.deleteFromCache?.();
@@ -149,9 +188,12 @@ async function processApiResponse(
       return formattedOutput;
     }
 
+    const cost = cached ? 0 : calculateImageCost(model, size, quality, n);
+
     return {
       output: formattedOutput,
       cached,
+      cost,
       ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
     };
   } catch (err) {
@@ -243,6 +285,15 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
 
     logger.debug(`\tOpenAI image API response: ${JSON.stringify(data)}`);
 
-    return processApiResponse(data, prompt, responseFormat, cached);
+    return processApiResponse(
+      data,
+      prompt,
+      responseFormat,
+      cached,
+      model,
+      size,
+      config.quality,
+      config.n || 1,
+    );
   }
 }
