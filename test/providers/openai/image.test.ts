@@ -52,6 +52,7 @@ describe('OpenAiImageProvider', () => {
       expect(result).toEqual({
         output: '![Generate a cat](https://example.com/image.png)',
         cached: false,
+        cost: 0.04, // Default cost for DALL-E 3 standard 1024x1024
       });
     });
 
@@ -70,6 +71,7 @@ describe('OpenAiImageProvider', () => {
       expect(result).toEqual({
         output: '![test prompt](https://example.com/image.png)',
         cached: true,
+        cost: 0, // Cost is 0 for cached responses
       });
     });
 
@@ -90,6 +92,31 @@ describe('OpenAiImageProvider', () => {
       });
 
       expect(provider.id()).toBe('custom-provider-id');
+    });
+
+    it('should throw an error if API key is not set', async () => {
+      // Save original environment variable
+      const originalEnv = process.env.OPENAI_API_KEY;
+      // Clear the environment variable so we can test the error
+      delete process.env.OPENAI_API_KEY;
+
+      try {
+        // Create provider with no API key in config or environment
+        const provider = new OpenAiImageProvider('dall-e-3');
+
+        // Mock fetchWithCache to prevent it from being called
+        jest.mocked(fetchWithCache).mockImplementation(() => {
+          throw new Error('fetchWithCache should not be called');
+        });
+
+        // Attempt to call the API should throw an error
+        await expect(provider.callApi('Generate a cat')).rejects.toThrow(
+          'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
+        );
+      } finally {
+        // Restore the original environment variable
+        process.env.OPENAI_API_KEY = originalEnv;
+      }
     });
   });
 
@@ -233,6 +260,7 @@ describe('OpenAiImageProvider', () => {
         cached: false,
         isBase64: true,
         format: 'json',
+        cost: 0.04, // Default cost for DALL-E 3 standard 1024x1024
       });
 
       // Verify the request included the response_format parameter

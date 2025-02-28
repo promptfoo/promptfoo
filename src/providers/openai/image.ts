@@ -24,12 +24,12 @@ export const DALLE2_COSTS: Record<DallE2Size, number> = {
 };
 
 export const DALLE3_COSTS: Record<string, number> = {
-  'standard_1024x1024': 0.04,
-  'standard_1024x1792': 0.08,
-  'standard_1792x1024': 0.08,
-  'hd_1024x1024': 0.08,
-  'hd_1024x1792': 0.12,
-  'hd_1792x1024': 0.12,
+  standard_1024x1024: 0.04,
+  standard_1024x1792: 0.08,
+  standard_1792x1024: 0.08,
+  hd_1024x1024: 0.08,
+  hd_1024x1792: 0.12,
+  hd_1792x1024: 0.12,
 };
 
 type CommonImageOptions = {
@@ -54,7 +54,10 @@ type OpenAiImageOptions = OpenAiSharedOptions & {
   model?: OpenAiImageModel;
 } & (DallE2Options | DallE3Options);
 
-export function validateSizeForModel(size: string, model: string): { valid: boolean; message?: string } {
+export function validateSizeForModel(
+  size: string,
+  model: string,
+): { valid: boolean; message?: string } {
   if (model === 'dall-e-3' && !DALLE3_VALID_SIZES.includes(size as DallE3Size)) {
     return {
       valid: false,
@@ -132,7 +135,7 @@ export function calculateImageCost(
   model: string,
   size: string,
   quality?: string,
-  n: number = 1
+  n: number = 1,
 ): number {
   const imageQuality = quality || 'standard';
 
@@ -173,7 +176,7 @@ export async function processApiResponse(
   model: string,
   size: string,
   quality?: string,
-  n: number = 1
+  n: number = 1,
 ): Promise<ProviderResponse> {
   if (data.error) {
     await data?.deleteFromCache?.();
