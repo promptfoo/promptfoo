@@ -65,7 +65,7 @@
     "remark-gfm": "^4.0.0",
     "socket.io-client": "^4.8.1",
     "tinyspy": "^3.0.2",
-    "typescript-eslint": "^8.24.1",
+    "typescript-eslint": "^8.25.0",
     "typescript": "^5.7.3",
     "use-debounce": "^10.0.4",
     "vite-plugin-node-polyfills": "^0.22.0",
