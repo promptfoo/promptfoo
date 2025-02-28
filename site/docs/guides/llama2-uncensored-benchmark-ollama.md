@@ -35,7 +35,7 @@ npx promptfoo@latest init llama-gpt-comparison
 
 Now let's start editing `promptfooconfig.yaml`. First, we'll add the list of models we'd like to compare:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - ollama:llama2
   - ollama:llama2-uncensored
@@ -48,9 +48,9 @@ These [providers](/docs/providers) reference the built-in Ollama models.
 
 Llama and GPT 3.5 use different prompt formats.
 
-First, we'll put the OpenAI prompt template in `prompts/openai_prompt.json`:
+First, we'll put the OpenAI prompt template in a JSON file:
 
-```json title=prompts/openai_prompt.json
+```json title="prompts/openai_prompt.json"
 [
   {
     "role": "user",
@@ -59,9 +59,9 @@ First, we'll put the OpenAI prompt template in `prompts/openai_prompt.json`:
 ]
 ```
 
-The Llama prompt template goes in `prompts/llama_prompt.txt`:
+The Llama prompt template goes in a text file:
 
-```title=prompts/llama_prompt.txt
+```title="prompts/llama_prompt.txt"
 User: {{message}}
 Assistant:
 ```
@@ -70,7 +70,8 @@ Note that these prompt files are [Nunjucks templates](https://mozilla.github.io/
 
 Let's add the prompts to the config and match them with each provider:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   prompts/openai_prompt.json: openai_prompt
   prompts/llama_prompt.txt: llama_prompt
@@ -93,7 +94,7 @@ The `tests` field in the `promptfooconfig.yaml` file is where you add your test 
 
 Here are the test cases we will use:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 // highlight-start
 tests:
   - vars:
@@ -136,7 +137,7 @@ providers:
 
 Let's set up a few assertions to automatically assess the output for correctness. The `defaultTest` block is a shorthand that adds the `assert` to every test:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 // highlight-start
 defaultTest:
   assert:

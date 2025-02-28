@@ -2,7 +2,9 @@
 sidebar_position: 4
 ---
 
-# Prompts, tests, and outputs
+# Prompts and Outputs
+
+This guide covers how to configure prompts and outputs in promptfoo.
 
 ## Prompts
 
@@ -11,6 +13,7 @@ sidebar_position: 4
 By default, the config will accept raw text as prompts:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Translate the following text to French: "{{name}}: {{text}}"'
   - 'Translate the following text to German: "{{name}}: {{text}}"'
@@ -19,6 +22,7 @@ prompts:
 YAML supports multiline strings too:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - |-
     Hi there LLM,
@@ -40,6 +44,7 @@ By default, plaintext prompts are wrapped in a `user`-role message. If you provi
 Here's an example of a chat-formatted prompt:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://path/to/personality1.json
 ```
@@ -66,6 +71,7 @@ Learn more about [chat conversations with OpenAI message format](/docs/providers
 Your prompts may be complicated enough that it's difficult to maintain them inline. In that case, reference a file. Filepaths are relative to the configuration file directory:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://path/to/prompt1.txt
   - file://path/to/prompt2.txt
@@ -182,6 +188,7 @@ Prompt functions allow you to incorporate custom logic in your prompts. These fu
 To specify a prompt function in `promptfooconfig.yaml`, reference the file directly. For example:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://prompt.js
   - file://prompt.py
@@ -201,7 +208,7 @@ This allows you to set default configuration values in your promptfoo config fil
 
 #### Examples
 
-A Javascript prompt function, `prompt.js`:
+A Javascript prompt function:
 
 ```javascript title="prompt.js"
 module.exports = async function ({ vars, provider }) {
@@ -322,6 +329,7 @@ A good use case for this is to set the `response_format` for a specific prompt.
 #### Example
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - label: 'Prompt #1'
     raw: 'You are a helpful math tutor. Solve {{problem}}'
@@ -341,7 +349,7 @@ To define a Nunjucks filter, create a JavaScript file that exports a function. T
 
 Here's an example of a custom Nunjucks filter that transforms a string to uppercase (`allcaps.js`):
 
-```js
+```js title="allcaps.js"
 module.exports = function (str) {
   return str.toUpperCase();
 };
@@ -350,13 +358,14 @@ module.exports = function (str) {
 To use a custom Nunjucks filter in Promptfoo, add it to your configuration file (`promptfooconfig.yaml`). The `nunjucksFilters` field should contain a mapping of filter names to the paths of the JavaScript files that define them:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://prompts.txt
 providers:
   - openai:gpt-4o-mini
 // highlight-start
 nunjucksFilters:
-  allcaps: ./allcaps.js
+  allcaps: file://allcaps.js
 // highlight-end
 tests:
   # ...
@@ -381,6 +390,7 @@ If you have a lot of tests, you can optionally keep them separate from the main 
 The easiest way to do this is by creating a `tests.yaml` file that contains a list of tests. Then, include it in your `promptfooconfig.yaml` like so:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   # ...
 
@@ -393,6 +403,7 @@ tests: file://path/to/tests.yaml
 You can even break it into multiple files or globs:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 tests:
   - file://relative/path/to/normal_test.yaml
   - file://relative/path/to/special_test.yaml
@@ -404,6 +415,7 @@ tests:
 You can also import tests from Javascript or Typescript files.
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 tests:
   - file://path/to/tests.js
   # or
@@ -439,6 +451,7 @@ export async function generate_tests() {
 You can also import tests from Python files. The Python file should contain a function that returns a list of test cases:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 tests: file://path/to/tests.py:generate_tests
 ```
 
@@ -558,11 +571,18 @@ promptfoo eval --output filepath.json
 
 The output file can also be set using the `outputPath` key in the promptfoo configuration.
 
-Several file formats are supported, including JSON, YAML, CSV, and HTML.
+Several file formats are supported, including JSON, YAML, CSV, and HTML:
+
+```bash
+promptfoo eval --output results.json  # JSON format
+promptfoo eval --output results.yaml  # YAML format
+promptfoo eval --output results.csv   # CSV format
+promptfoo eval --output results.html  # HTML format
+```
 
 Each record in the output file corresponds to a test case and includes the original prompt, the output generated by the LLM, and the values of the variables used in the test case.
 
-For example outputs, see the [examples/](https://github.com/promptfoo/promptfoo/tree/main/examples/simple-cli) directory.
+For example outputs, see the [`examples/`](https://github.com/promptfoo/promptfoo/tree/main/examples/simple-cli) directory.
 
 ## Permuting inputs and assertions
 
