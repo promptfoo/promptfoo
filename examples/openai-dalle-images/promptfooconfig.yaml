@@ -4,10 +4,17 @@ prompts:
   - 'In the style of Dali: {{subject}}'
 
 providers:
-  - openai:image:dall-e-3
+  - id: openai:image:dall-e-3
+    config:
+      size: 1024x1024 # Valid sizes for DALL-E 3: 1024x1024, 1792x1024, 1024x1792
+
+  - id: openai:image:dall-e-2
+    config:
+      size: 512x512 # Valid sizes for DALL-E 2: 256x256, 512x512, 1024x1024
+      response_format: b64_json # Returns the raw JSON response with base64-encoded image data
 
 tests:
   - vars:
-      subject: bananas
+      subject: apples
   - vars:
       subject: new york city

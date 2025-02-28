@@ -1,249 +1,471 @@
-import OpenAI from 'openai';
-import { isCacheEnabled, getCache } from '../../../src/cache';
-import { OpenAiImageProvider, OpenAiModerationProvider } from '../../../src/providers/openai/image';
+import { fetchWithCache } from '../../../src/cache';
+import { OpenAiImageProvider } from '../../../src/providers/openai/image';
 
-jest.mock('openai');
 jest.mock('../../../src/cache');
 jest.mock('../../../src/logger');
 
 describe('OpenAiImageProvider', () => {
-  const mockOpenAI = {
-    images: {
-      generate: jest.fn(),
+  const mockFetchResponse = {
+    data: {
+      data: [{ url: 'https://example.com/image.png' }],
     },
+    cached: false,
+    status: 200,
+    statusText: 'OK',
+  };
+
+  const mockBase64Response = {
+    data: {
+      data: [{ b64_json: 'base64EncodedImageData' }],
+    },
+    cached: false,
+    status: 200,
+    statusText: 'OK',
   };
 
   beforeEach(() => {
     jest.resetAllMocks();
-    jest.mocked(OpenAI).mockImplementation(() => mockOpenAI as any);
-    jest.mocked(isCacheEnabled).mockReturnValue(false);
+    jest.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse);
   });
 
-  it('should generate an image successfully', async () => {
-    const provider = new OpenAiImageProvider('dall-e-3', {
-      config: { apiKey: 'test-key' },
+  describe('Basic functionality', () => {
+    it('should generate an image successfully', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const result = await provider.callApi('Generate a cat');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.stringContaining('/images/generations'),
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer test-key',
+          }),
+          body: expect.stringContaining('"prompt":"Generate a cat"'),
+        }),
+        expect.any(Number),
+      );
+
+      expect(result).toEqual({
+        output: '![Generate a cat](https://example.com/image.png)',
+        cached: false,
+      });
     });
 
-    const mockResponse = {
-      data: [{ url: 'https://example.com/image.png' }],
-    };
+    it('should use cached response', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+      });
 
-    mockOpenAI.images.generate.mockResolvedValue(mockResponse);
+      jest.mocked(fetchWithCache).mockResolvedValue({
+        ...mockFetchResponse,
+        cached: true,
+      });
 
-    const result = await provider.callApi('Generate a cat');
+      const result = await provider.callApi('test prompt');
 
-    expect(result).toEqual({
-      output: '![Generate a cat](https://example.com/image.png)',
-      cached: false,
+      expect(result).toEqual({
+        output: '![test prompt](https://example.com/image.png)',
+        cached: true,
+      });
     });
-    expect(mockOpenAI.images.generate).toHaveBeenCalledWith({
-      model: 'dall-e-3',
-      prompt: 'Generate a cat',
-      n: 1,
-      size: '1024x1024',
+
+    it('should sanitize prompt text', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const result = await provider.callApi('Test [prompt] with\nnewlines');
+
+      expect(result.output).toBe('![Test (prompt) with newlines](https://example.com/image.png)');
+    });
+
+    it('should correctly use ID passed during construction', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+        id: 'custom-provider-id',
+      });
+
+      expect(provider.id()).toBe('custom-provider-id');
     });
   });
 
-  it('should handle missing API key', async () => {
-    const provider = new OpenAiImageProvider('dall-e-3');
+  describe('Error handling', () => {
+    it('should handle missing API key', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3');
 
-    mockOpenAI.images.generate.mockRejectedValue(new Error('OpenAI API key is not set'));
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: { error: { message: 'OpenAI API key is not set' } },
+        cached: false,
+        status: 401,
+        statusText: 'Unauthorized',
+      });
 
-    await expect(provider.callApi('test prompt')).rejects.toThrow('OpenAI API key is not set');
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('OpenAI API key is not set');
+    });
+
+    it('should handle API errors', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const errorResponse = {
+        data: { error: { message: 'API error message', type: 'api_error', code: 'error_code' } },
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValue(errorResponse);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('API error message');
+    });
+
+    it('should handle HTTP errors', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+      });
+
+      jest.mocked(fetchWithCache).mockResolvedValue({
+        data: 'Error message',
+        cached: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('API error: 500 Internal Server Error');
+    });
+
+    it('should handle fetch errors', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+      });
+
+      jest.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('API call error: Error: Network error');
+    });
+
+    it('should handle missing image URL in response', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+      });
+
+      jest.mocked(fetchWithCache).mockResolvedValue({
+        data: { data: [{}] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('No image URL found in response');
+    });
+
+    it('should handle error with minimal details', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+      });
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: 'Just a simple error string',
+        cached: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('Internal Server Error');
+    });
+
+    it('should handle deleteFromCache when response parsing fails', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const mockDeleteFn = jest.fn();
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          // Invalid data structure that will cause parsing to fail
+          deleteFromCache: mockDeleteFn,
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await provider.callApi('test prompt');
+      expect(mockDeleteFn).toHaveBeenCalledTimes(1);
+    });
   });
 
-  it('should handle missing image URL in response', async () => {
-    const provider = new OpenAiImageProvider('dall-e-3', {
-      config: { apiKey: 'test-key' },
+  describe('Response format handling', () => {
+    it('should handle base64 response format', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key', response_format: 'b64_json' },
+      });
+
+      jest.mocked(fetchWithCache).mockResolvedValue(mockBase64Response);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        output: JSON.stringify(mockBase64Response.data),
+        cached: false,
+        isBase64: true,
+        format: 'json',
+      });
+
+      // Verify the request included the response_format parameter
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"response_format":"b64_json"'),
+        }),
+        expect.any(Number),
+      );
     });
 
-    const mockResponse = { data: [{}] };
-    mockOpenAI.images.generate.mockResolvedValue(mockResponse);
+    it('should handle missing base64 data in response', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key', response_format: 'b64_json' },
+      });
 
-    const result = await provider.callApi('test prompt');
+      jest.mocked(fetchWithCache).mockResolvedValue({
+        data: { data: [{}] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
-    expect(result).toEqual({
-      error: expect.stringContaining('No image URL found in response'),
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('No base64 image data found in response');
     });
   });
 
-  it('should use cache when enabled', async () => {
-    jest.mocked(isCacheEnabled).mockReturnValue(true);
+  describe('Parameter validation', () => {
+    it('should validate size for DALL-E 3', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key', size: '512x512' },
+      });
 
-    const provider = new OpenAiImageProvider('dall-e-3', {
-      config: { apiKey: 'test-key' },
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('Invalid size "512x512" for DALL-E 3');
     });
 
-    const mockResponse = {
-      data: [{ url: 'https://example.com/image.png' }],
-    };
+    it('should validate size for DALL-E 2', async () => {
+      const provider = new OpenAiImageProvider('dall-e-2', {
+        config: { apiKey: 'test-key', size: '1792x1024' },
+      });
 
-    const mockCache = {
-      get: jest.fn().mockResolvedValue(JSON.stringify(mockResponse)),
-      set: jest.fn(),
-    };
+      const result = await provider.callApi('test prompt');
 
-    jest.mocked(getCache).mockReturnValue(mockCache as any);
-
-    const result = await provider.callApi('test prompt');
-
-    expect(result).toEqual({
-      output: '![test prompt](https://example.com/image.png)',
-      cached: true,
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('Invalid size "1792x1024" for DALL-E 2');
     });
-    expect(mockCache.get).toHaveBeenCalledWith(expect.stringContaining('openai:image:'));
+
+    it('should use correct size defaults based on model', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+      });
+
+      await provider.callApi('test prompt');
+
+      // Check that the default size for DALL-E 3 is correctly set
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"size":"1024x1024"'),
+        }),
+        expect.any(Number),
+      );
+    });
   });
 
-  it('should sanitize prompt text', async () => {
-    const provider = new OpenAiImageProvider('dall-e-3', {
-      config: { apiKey: 'test-key' },
+  describe('Operation handling', () => {
+    it('should handle non-generation operations for DALL-E 2', async () => {
+      const provider = new OpenAiImageProvider('dall-e-2', {
+        config: {
+          apiKey: 'test-key',
+          operation: 'variation',
+          image: 'base64image',
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('Image variation operations');
     });
 
-    const mockResponse = {
-      data: [{ url: 'https://example.com/image.png' }],
-    };
+    it('should reject non-generation operations for DALL-E 3', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: {
+          apiKey: 'test-key',
+          operation: 'variation',
+        },
+      });
 
-    mockOpenAI.images.generate.mockResolvedValue(mockResponse);
+      const result = await provider.callApi('test prompt');
 
-    const result = await provider.callApi('Test [prompt] with\nnewlines');
-
-    expect(result.output).toBe('![Test (prompt) with newlines](https://example.com/image.png)');
-  });
-});
-
-describe('OpenAiModerationProvider', () => {
-  const mockOpenAI = {
-    moderations: {
-      create: jest.fn(),
-    },
-  };
-
-  beforeEach(() => {
-    jest.resetAllMocks();
-    jest.mocked(OpenAI).mockImplementation(() => mockOpenAI as any);
-    jest.mocked(isCacheEnabled).mockReturnValue(false);
-  });
-
-  it('should moderate content successfully', async () => {
-    const provider = new OpenAiModerationProvider('text-moderation-latest', {
-      config: { apiKey: 'test-key' },
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('Operation variation is only supported for dall-e-2 model');
     });
 
-    const mockResponse = {
-      results: [
-        {
-          flagged: true,
-          categories: {
-            hate: true,
-            'hate/threatening': false,
-          },
-          category_scores: {
-            hate: 0.99,
-            'hate/threatening': 0.01,
+    it('should require image data for edit operations', async () => {
+      const provider = new OpenAiImageProvider('dall-e-2', {
+        config: {
+          apiKey: 'test-key',
+          operation: 'edit',
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('Image data is required for variation and edit operations');
+    });
+  });
+
+  describe('Configuration options', () => {
+    it('should handle DALL-E 3 specific options', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: {
+          apiKey: 'test-key',
+          quality: 'hd',
+          style: 'vivid',
+        },
+      });
+
+      await provider.callApi('test prompt');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"quality":"hd"'),
+        }),
+        expect.any(Number),
+      );
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"style":"vivid"'),
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('should include organization ID in headers when provided', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: {
+          apiKey: 'test-key',
+          organization: 'test-org',
+        },
+      });
+
+      await provider.callApi('test prompt');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'OpenAI-Organization': 'test-org',
+          }),
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('should include custom headers when provided', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: {
+          apiKey: 'test-key',
+          headers: {
+            'X-Custom-Header': 'custom-value',
           },
         },
-      ],
-    };
+      });
 
-    mockOpenAI.moderations.create.mockResolvedValue(mockResponse);
+      await provider.callApi('test prompt');
 
-    const result = await provider.callModerationApi('user input', 'assistant response');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'X-Custom-Header': 'custom-value',
+          }),
+        }),
+        expect.any(Number),
+      );
+    });
 
-    expect(result).toEqual({
-      flags: [
-        {
-          code: 'hate',
-          description: 'hate',
-          confidence: 0.99,
+    it('should merge prompt config with provider config', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key', n: 1 },
+      });
+
+      const context = {
+        prompt: {
+          raw: 'test prompt',
+          config: { n: 2 },
+          label: 'test',
         },
-      ],
-    });
-  });
+        vars: {},
+      };
 
-  it('should handle moderation API errors', async () => {
-    const provider = new OpenAiModerationProvider('text-moderation-latest', {
-      config: { apiKey: 'test-key' },
-    });
+      await provider.callApi('test prompt', context);
 
-    mockOpenAI.moderations.create.mockRejectedValue(new Error('API Error'));
-
-    const result = await provider.callModerationApi('user input', 'assistant response');
-
-    expect(result).toEqual({
-      error: expect.stringContaining('API call error'),
-    });
-  });
-
-  it('should return empty flags for non-flagged content', async () => {
-    const provider = new OpenAiModerationProvider('text-moderation-latest', {
-      config: { apiKey: 'test-key' },
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"n":2'),
+        }),
+        expect.any(Number),
+      );
     });
 
-    const mockResponse = {
-      results: [
-        {
-          flagged: false,
-          categories: {
-            hate: false,
-            'hate/threatening': false,
-          },
-          category_scores: {
-            hate: 0.01,
-            'hate/threatening': 0.01,
-          },
+    it('should use custom API URL when provided', async () => {
+      const customApiUrl = 'https://custom-openai.example.com/v1';
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: {
+          apiKey: 'test-key',
         },
-      ],
-    };
-
-    mockOpenAI.moderations.create.mockResolvedValue(mockResponse);
-
-    const result = await provider.callModerationApi('user input', 'assistant response');
-
-    expect(result).toEqual({
-      flags: [],
-    });
-  });
-
-  it('should handle missing API key', async () => {
-    const provider = new OpenAiModerationProvider('text-moderation-latest');
-
-    mockOpenAI.moderations.create.mockRejectedValue(new Error('OpenAI API key is not set'));
-
-    const result = await provider.callModerationApi('user input', 'assistant response');
-    expect(result).toEqual({
-      error: expect.stringContaining('API call error'),
-    });
-  });
-
-  it('should use cache when enabled', async () => {
-    jest.mocked(isCacheEnabled).mockReturnValue(true);
-
-    const provider = new OpenAiModerationProvider('text-moderation-latest', {
-      config: { apiKey: 'test-key' },
-    });
-
-    const mockResponse = {
-      flags: [
-        {
-          code: 'hate',
-          description: 'hate',
-          confidence: 0.9,
+        env: {
+          OPENAI_API_BASE_URL: customApiUrl,
         },
-      ],
-    };
+      });
 
-    const mockCache = {
-      get: jest.fn().mockResolvedValue(JSON.stringify(mockResponse)),
-      set: jest.fn(),
-    };
+      await provider.callApi('test prompt');
 
-    jest.mocked(getCache).mockReturnValue(mockCache as any);
-
-    const result = await provider.callModerationApi('user input', 'assistant response');
-
-    expect(result).toEqual(mockResponse);
-    expect(mockCache.get).toHaveBeenCalledWith(
-      expect.stringContaining('openai:text-moderation-latest:'),
-    );
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        `${customApiUrl}/images/generations`,
+        expect.any(Object),
+        expect.any(Number),
+      );
+    });
   });
 });
