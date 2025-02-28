@@ -26,9 +26,15 @@ interface PromptDialogProps {
   openDialog: boolean;
   handleClose: () => void;
   selectedPrompt: PromptWithMetadata & { recentEvalDate: string };
+  showDatasetColumn?: boolean;
 }
 
-const PromptDialog: React.FC<PromptDialogProps> = ({ openDialog, handleClose, selectedPrompt }) => {
+const PromptDialog: React.FC<PromptDialogProps> = ({
+  openDialog,
+  handleClose,
+  selectedPrompt,
+  showDatasetColumn = true,
+}) => {
   const [copySnackbar, setCopySnackbar] = React.useState(false);
 
   const sortedEvals = useMemo(
@@ -75,6 +81,9 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ openDialog, handleClose, se
     variant: 'body2' as const,
     sx: { display: 'block', textAlign: 'right' },
   };
+
+  // Adjust the widths based on whether dataset column is shown
+  const evalIdWidth = showDatasetColumn ? '25%' : '35%';
 
   return (
     <>
@@ -247,8 +256,8 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ openDialog, handleClose, se
               <Table stickyHeader size="small" sx={{ tableLayout: 'fixed', width: '100%' }}>
                 <TableHead>
                   <TableRow>
-                    <TableCell sx={{ width: '25%' }}>Eval ID</TableCell>
-                    <TableCell sx={{ width: '15%' }}>Dataset ID</TableCell>
+                    <TableCell sx={{ width: evalIdWidth }}>Eval ID</TableCell>
+                    {showDatasetColumn && <TableCell sx={{ width: '15%' }}>Dataset ID</TableCell>}
                     <TableCell align="right" sx={commonCellStyles}>
                       Raw Score
                     </TableCell>
@@ -271,7 +280,7 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ openDialog, handleClose, se
                     <TableRow key={`eval-${evalData.id}`} hover>
                       <TableCell
                         sx={{
-                          width: '25%',
+                          width: evalIdWidth,
                           fontFamily: 'monospace',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
@@ -302,31 +311,33 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ openDialog, handleClose, se
                           </Typography>
                         </Link>
                       </TableCell>
-                      <TableCell
-                        sx={{
-                          width: '15%',
-                          fontFamily: 'monospace',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        <Link
-                          to={`/datasets/?id=${evalData.datasetId}`}
-                          style={{
-                            textDecoration: 'none',
-                            color: 'inherit',
+                      {showDatasetColumn && (
+                        <TableCell
+                          sx={{
+                            width: '15%',
+                            fontFamily: 'monospace',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
                           }}
                         >
-                          <Typography
-                            variant="body2"
-                            color="primary"
-                            sx={{ '&:hover': { textDecoration: 'underline' } }}
+                          <Link
+                            to={`/datasets/?id=${evalData.datasetId}`}
+                            style={{
+                              textDecoration: 'none',
+                              color: 'inherit',
+                            }}
                           >
-                            {evalData.datasetId.slice(0, 6)}
-                          </Typography>
-                        </Link>
-                      </TableCell>
+                            <Typography
+                              variant="body2"
+                              color="primary"
+                              sx={{ '&:hover': { textDecoration: 'underline' } }}
+                            >
+                              {evalData.datasetId.slice(0, 6)}
+                            </Typography>
+                          </Link>
+                        </TableCell>
+                      )}
                       <TableCell align="right" sx={commonCellStyles}>
                         <Typography {...commonTypographyStyles}>
                           {evalData.metrics.score?.toFixed(2) ?? '-'}

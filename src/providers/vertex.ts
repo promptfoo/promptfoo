@@ -15,6 +15,7 @@ import type {
 import type { EnvOverrides } from '../types/env';
 import { renderVarsInObject } from '../util';
 import { maybeLoadFromExternalFile } from '../util';
+import { isValidJson } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 import type { GeminiErrorResponse, GeminiFormat, Palm2ApiResponse } from './vertexUtil';
@@ -79,6 +80,8 @@ interface FunctionDeclaration {
   response?: Schema;
 }
 
+export type FunctionParameters = Record<string, unknown>;
+
 interface GoogleSearchRetrieval {
   dynamicRetrievalConfig: {
     mode?: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
@@ -101,6 +104,7 @@ interface VertexCompletionOptions {
   publisher?: string;
   apiVersion?: string;
   anthropicVersion?: string;
+  anthropic_version?: string; // Alternative format
 
   // https://ai.google.dev/api/rest/v1beta/models/streamGenerateContent#request-body
   context?: string;
@@ -109,8 +113,11 @@ interface VertexCompletionOptions {
   stopSequence?: string[];
   temperature?: number;
   maxOutputTokens?: number;
+  max_tokens?: number; // Alternative format for Claude models
   topP?: number;
+  top_p?: number; // Alternative format for Claude models
   topK?: number;
+  top_k?: number; // Alternative format for Claude models
 
   generationConfig?: {
     context?: string;
@@ -131,7 +138,23 @@ interface VertexCompletionOptions {
 
   tools?: Tool[];
 
+  /**
+   * If set, automatically call these functions when the assistant activates
+   * these function tools.
+   */
+  functionToolCallbacks?: Record<string, (arg: string) => Promise<string>>;
+
   systemInstruction?: Content;
+
+  /**
+   * Model-specific configuration for Llama models
+   */
+  llamaConfig?: {
+    safetySettings?: {
+      enabled?: boolean;
+      llama_guard_settings?: Record<string, unknown>;
+    };
+  };
 }
 
 // Claude API interfaces
@@ -270,13 +293,12 @@ export class VertexChatProvider extends VertexGenericProvider {
     } else if (this.modelName.includes('gemini')) {
       return this.callGeminiApi(prompt, context);
     } else if (this.modelName.includes('llama')) {
-      throw new Error('Llama on Vertex is not supported yet');
+      return this.callLlamaApi(prompt, context);
     }
     return this.callPalm2Api(prompt);
   }
 
   async callClaudeApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    // Parse the chat prompt into Claude format
     const messages = parseChatPrompt(prompt, [
       {
         role: 'user',
@@ -287,16 +309,16 @@ export class VertexChatProvider extends VertexGenericProvider {
           },
         ],
       },
-    ]) as ClaudeMessage[];
+    ]);
 
-    // Prepare the request body
     const body: ClaudeRequest = {
-      anthropic_version: this.config.anthropicVersion || 'vertex-2023-10-16',
+      anthropic_version:
+        this.config.anthropicVersion || this.config.anthropic_version || 'vertex-2023-10-16',
       stream: false,
-      max_tokens: this.config.maxOutputTokens || 512,
+      max_tokens: this.config.max_tokens || this.config.maxOutputTokens || 512,
       temperature: this.config.temperature,
-      top_p: this.config.topP,
-      top_k: this.config.topK,
+      top_p: this.config.top_p || this.config.topP,
+      top_k: this.config.top_k || this.config.topK,
       messages,
     };
 
@@ -451,6 +473,7 @@ export class VertexChatProvider extends VertexGenericProvider {
     const cache = await getCache();
     const cacheKey = `vertex:${this.modelName}:${JSON.stringify(body)}`;
 
+    let response;
     let cachedResponse;
     if (isCacheEnabled()) {
       cachedResponse = await cache.get(cacheKey);
@@ -461,124 +484,159 @@ export class VertexChatProvider extends VertexGenericProvider {
           tokenUsage.cached = tokenUsage.total;
         }
         logger.debug(`Returning cached response: ${cachedResponse}`);
-        return { ...parsedCachedResponse, cached: true };
+        response = { ...parsedCachedResponse, cached: true };
       }
     }
+    if (response === undefined) {
+      let data;
+      try {
+        const { client, projectId } = await getGoogleClient();
+        const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
+          this.modelName
+        }:streamGenerateContent`;
+        const res = await client.request({
+          url,
+          method: 'POST',
+          data: body,
+          timeout: REQUEST_TIMEOUT_MS,
+        });
+        data = res.data as GeminiApiResponse;
+        logger.debug(`Gemini API response: ${JSON.stringify(data)}`);
+      } catch (err) {
+        const geminiError = err as GaxiosError;
+        if (
+          geminiError.response &&
+          geminiError.response.data &&
+          geminiError.response.data[0] &&
+          geminiError.response.data[0].error
+        ) {
+          const errorDetails = geminiError.response.data[0].error;
+          const code = errorDetails.code;
+          const message = errorDetails.message;
+          const status = errorDetails.status;
+          logger.debug(`Gemini API error:\n${JSON.stringify(errorDetails)}`);
+          return {
+            error: `API call error: Status ${status}, Code ${code}, Message:\n\n${message}`,
+          };
+        }
+        logger.debug(`Gemini API error:\n${JSON.stringify(err)}`);
+        return {
+          error: `API call error: ${String(err)}`,
+        };
+      }
 
-    let data;
-    try {
-      const { client, projectId } = await getGoogleClient();
-      const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
-        this.modelName
-      }:streamGenerateContent`;
-      const res = await client.request({
-        url,
-        method: 'POST',
-        data: body,
-        timeout: REQUEST_TIMEOUT_MS,
-      });
-      data = res.data as GeminiApiResponse;
       logger.debug(`Gemini API response: ${JSON.stringify(data)}`);
-    } catch (err) {
-      const geminiError = err as GaxiosError;
-      if (
-        geminiError.response &&
-        geminiError.response.data &&
-        geminiError.response.data[0] &&
-        geminiError.response.data[0].error
-      ) {
-        const errorDetails = geminiError.response.data[0].error;
-        const code = errorDetails.code;
-        const message = errorDetails.message;
-        const status = errorDetails.status;
-        logger.debug(`Gemini API error:\n${JSON.stringify(errorDetails)}`);
-        return {
-          error: `API call error: Status ${status}, Code ${code}, Message:\n\n${message}`,
-        };
-      }
-      logger.debug(`Gemini API error:\n${JSON.stringify(err)}`);
-      return {
-        error: `API call error: ${String(err)}`,
-      };
-    }
-
-    logger.debug(`Gemini API response: ${JSON.stringify(data)}`);
-    try {
-      const dataWithError = data as GeminiErrorResponse[];
-      const error = dataWithError[0]?.error;
-      if (error) {
-        return {
-          error: `Error ${error.code}: ${error.message}`,
-        };
-      }
-      const dataWithResponse = data as GeminiResponseData[];
-      let output = '';
-      for (const datum of dataWithResponse) {
-        if (datum.candidates && datum.candidates[0]?.content?.parts) {
-          for (const candidate of datum.candidates) {
-            if (candidate.content?.parts) {
-              for (const part of candidate.content.parts) {
-                if ('text' in part) {
-                  output += part.text;
-                } else {
-                  output += JSON.stringify(part);
+      try {
+        const dataWithError = data as GeminiErrorResponse[];
+        const error = dataWithError[0]?.error;
+        if (error) {
+          return {
+            error: `Error ${error.code}: ${error.message}`,
+          };
+        }
+        const dataWithResponse = data as GeminiResponseData[];
+        let output = '';
+        for (const datum of dataWithResponse) {
+          if (datum.candidates && datum.candidates[0]?.content?.parts) {
+            for (const candidate of datum.candidates) {
+              if (candidate.content?.parts) {
+                for (const part of candidate.content.parts) {
+                  if ('text' in part) {
+                    output += part.text;
+                  } else {
+                    output += JSON.stringify(part);
+                  }
                 }
               }
             }
+          } else if (datum.candidates && datum.candidates[0]?.finishReason === 'SAFETY') {
+            if (cliState.config?.redteam) {
+              // Refusals are not errors during redteams, they're actually successes.
+              return {
+                output: 'Content was blocked due to safety settings.',
+              };
+            }
+            return {
+              error: 'Content was blocked due to safety settings.',
+            };
           }
-        } else if (datum.candidates && datum.candidates[0]?.finishReason === 'SAFETY') {
+        }
+
+        if ('promptFeedback' in data[0] && data[0].promptFeedback?.blockReason) {
           if (cliState.config?.redteam) {
             // Refusals are not errors during redteams, they're actually successes.
             return {
-              output: 'Content was blocked due to safety settings.',
+              output: `Content was blocked due to safety settings: ${data[0].promptFeedback.blockReason}`,
             };
           }
           return {
-            error: 'Content was blocked due to safety settings.',
+            error: `Content was blocked due to safety settings: ${data[0].promptFeedback.blockReason}`,
           };
         }
-      }
 
-      if ('promptFeedback' in data[0] && data[0].promptFeedback?.blockReason) {
-        if (cliState.config?.redteam) {
-          // Refusals are not errors during redteams, they're actually successes.
+        if (!output) {
           return {
-            output: `Content was blocked due to safety settings: ${data[0].promptFeedback.blockReason}`,
+            error: `No output found in response: ${JSON.stringify(data)}`,
           };
         }
+
+        const lastData = dataWithResponse[dataWithResponse.length - 1];
+        const tokenUsage = {
+          total: lastData.usageMetadata?.totalTokenCount || 0,
+          prompt: lastData.usageMetadata?.promptTokenCount || 0,
+          completion: lastData.usageMetadata?.candidatesTokenCount || 0,
+        };
+        response = {
+          cached: false,
+          output,
+          tokenUsage,
+        };
+
+        if (isCacheEnabled()) {
+          await cache.set(cacheKey, JSON.stringify(response));
+        }
+      } catch (err) {
         return {
-          error: `Content was blocked due to safety settings: ${data[0].promptFeedback.blockReason}`,
+          error: `Gemini API response error: ${String(err)}. Response data: ${JSON.stringify(data)}`,
         };
       }
-
-      if (!output) {
-        return {
-          error: `No output found in response: ${JSON.stringify(data)}`,
-        };
+    }
+    try {
+      // Handle function tool callbacks
+      if (this.config.functionToolCallbacks && isValidJson(response.output)) {
+        const structured_output = JSON.parse(response.output);
+        if (structured_output.functionCall) {
+          const results = [];
+          const functionName = structured_output.functionCall.name;
+          if (this.config.functionToolCallbacks[functionName]) {
+            try {
+              const functionResult = await this.config.functionToolCallbacks[functionName](
+                JSON.stringify(
+                  typeof structured_output.functionCall.args === 'string'
+                    ? JSON.parse(structured_output.functionCall.args)
+                    : structured_output.functionCall.args,
+                ),
+              );
+              results.push(functionResult);
+            } catch (error) {
+              logger.error(`Error executing function ${functionName}: ${error}`);
+            }
+          }
+          if (results.length > 0) {
+            response = {
+              cached: response.cached,
+              output: results.join('\n'),
+              tokenUsage: response.tokenUsage,
+            };
+          }
+        }
       }
-
-      const lastData = dataWithResponse[dataWithResponse.length - 1];
-      const tokenUsage = {
-        total: lastData.usageMetadata?.totalTokenCount || 0,
-        prompt: lastData.usageMetadata?.promptTokenCount || 0,
-        completion: lastData.usageMetadata?.candidatesTokenCount || 0,
-      };
-      const response = {
-        cached: false,
-        output,
-        tokenUsage,
-      };
-
-      if (isCacheEnabled()) {
-        await cache.set(cacheKey, JSON.stringify(response));
-      }
-
-      return response;
     } catch (err) {
       return {
-        error: `Gemini API response error: ${String(err)}. Response data: ${JSON.stringify(data)}`,
+        error: `Tool callback error: ${String(err)}.`,
       };
     }
+    return response;
   }
 
   async callPalm2Api(prompt: string): Promise<ProviderResponse> {
@@ -669,6 +727,165 @@ export class VertexChatProvider extends VertexGenericProvider {
     } catch (err) {
       return {
         error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
+      };
+    }
+  }
+
+  async callLlamaApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    // Validate region for Llama models (only available in us-central1)
+    const region = this.getRegion();
+    if (region !== 'us-central1') {
+      return {
+        error: `Llama models are only available in the us-central1 region. Current region: ${region}. Please set region: 'us-central1' in your configuration.`,
+      };
+    }
+
+    // Parse the chat prompt into Llama format
+    const messages = parseChatPrompt(prompt, [
+      {
+        role: 'user',
+        content: prompt,
+      },
+    ]);
+
+    // Define proper type for Llama model safety settings
+    interface LlamaModelSafetySettings {
+      enabled: boolean;
+      llama_guard_settings: Record<string, unknown>;
+    }
+
+    // Validate llama_guard_settings if provided
+    const llamaGuardSettings = this.config.llamaConfig?.safetySettings?.llama_guard_settings;
+    if (
+      llamaGuardSettings !== undefined &&
+      (typeof llamaGuardSettings !== 'object' || llamaGuardSettings === null)
+    ) {
+      return {
+        error: `Invalid llama_guard_settings: must be an object, received ${typeof llamaGuardSettings}`,
+      };
+    }
+
+    // Extract safety settings from config - default to enabled if not specified
+    const modelSafetySettings: LlamaModelSafetySettings = {
+      enabled: this.config.llamaConfig?.safetySettings?.enabled !== false, // Default to true
+      llama_guard_settings: llamaGuardSettings || {},
+    };
+
+    // Prepare the request body for Llama models
+    const body = {
+      model: `meta/${this.modelName}`,
+      messages,
+      max_tokens: this.config.maxOutputTokens || 1024,
+      stream: false,
+      temperature: this.config.temperature,
+      top_p: this.config.topP,
+      top_k: this.config.topK,
+      extra_body: {
+        google: {
+          model_safety_settings: modelSafetySettings,
+        },
+      },
+    };
+
+    logger.debug(`Preparing to call Llama API with body: ${JSON.stringify(body)}`);
+
+    const cache = await getCache();
+    const cacheKey = `vertex:llama:${this.modelName}:${JSON.stringify(body)}`;
+
+    let cachedResponse;
+    if (isCacheEnabled()) {
+      cachedResponse = await cache.get(cacheKey);
+      if (cachedResponse) {
+        const parsedCachedResponse = JSON.parse(cachedResponse as string);
+        const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
+        if (tokenUsage) {
+          tokenUsage.cached = tokenUsage.total;
+        }
+        logger.debug(`Returning cached response: ${cachedResponse}`);
+        return { ...parsedCachedResponse, cached: true };
+      }
+    }
+
+    // Define the expected response structure
+    interface LlamaResponse {
+      choices?: Array<{
+        message: {
+          content: string;
+        };
+      }>;
+      usage?: {
+        total_tokens: number;
+        prompt_tokens: number;
+        completion_tokens: number;
+      };
+    }
+
+    let data: LlamaResponse;
+    try {
+      const { client, projectId } = await getGoogleClient();
+      // Llama models use a different endpoint format
+      const url = `https://${this.getRegion()}-aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/${this.getRegion()}/endpoints/openapi/chat/completions`;
+
+      const res = await client.request<LlamaResponse>({
+        url,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+        },
+        data: body,
+        timeout: REQUEST_TIMEOUT_MS,
+      });
+
+      data = res.data;
+      logger.debug(`Llama API response: ${JSON.stringify(data)}`);
+    } catch (err) {
+      const error = err as GaxiosError;
+      if (error.response && error.response.data) {
+        logger.debug(`Llama API error:\n${JSON.stringify(error.response.data)}`);
+        return {
+          error: `API call error: ${JSON.stringify(error.response.data)}`,
+        };
+      }
+      logger.debug(`Llama API error:\n${JSON.stringify(err)}`);
+      return {
+        error: `API call error: ${String(err)}`,
+      };
+    }
+
+    try {
+      // Extract the completion text from the response
+      let output = '';
+      if (data.choices && data.choices.length > 0) {
+        output = data.choices[0].message.content;
+      }
+
+      if (!output) {
+        return {
+          error: `No output found in Llama API response: ${JSON.stringify(data)}`,
+        };
+      }
+
+      // Extract token usage information if available
+      const tokenUsage: TokenUsage = {
+        total: data.usage?.total_tokens || 0,
+        prompt: data.usage?.prompt_tokens || 0,
+        completion: data.usage?.completion_tokens || 0,
+      };
+
+      const response = {
+        cached: false,
+        output,
+        tokenUsage,
+      };
+
+      if (isCacheEnabled()) {
+        await cache.set(cacheKey, JSON.stringify(response));
+      }
+
+      return response;
+    } catch (err) {
+      return {
+        error: `Llama API response error: ${String(err)}. Response data: ${JSON.stringify(data)}`,
       };
     }
   }

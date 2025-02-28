@@ -137,7 +137,7 @@ async function rollbackEval(url: string, evalId: string, headers: Record<string,
   await fetchWithProxy(`${url}/${evalId}`, { method: 'DELETE', headers });
 }
 
-async function sendChunkedResults(evalRecord: Eval, url: string) {
+async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string | null> {
   await evalRecord.loadResults();
 
   const allResults = evalRecord.results;
@@ -194,7 +194,7 @@ async function sendChunkedResults(evalRecord: Eval, url: string) {
   }
 }
 
-async function sendEvalResults(evalRecord: Eval, url: string) {
+async function sendEvalResults(evalRecord: Eval, url: string): Promise<string | null> {
   await evalRecord.loadResults();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -284,10 +284,7 @@ async function getApiConfig(evalRecord: Eval): Promise<{
   };
 }
 
-async function handleLegacyResults(
-  evalRecord: Eval,
-  url: string,
-): Promise<string | null | undefined> {
+async function handleLegacyResults(evalRecord: Eval, url: string): Promise<string | null> {
   const summary = await evalRecord.toEvaluateSummary();
   const table = await evalRecord.getTable();
 
@@ -323,7 +320,7 @@ async function handleLegacyResults(
     return null;
   }
 
-  return responseJson.id;
+  return responseJson.id ?? null;
 }
 
 export async function createShareableUrl(
@@ -344,13 +341,13 @@ export async function createShareableUrl(
   );
 
   // 4. Process and send results
-  let evalId: string | undefined | null;
-  if (canUseNewResults && !evalRecord.useOldResults()) {
-    evalId = sendInChunks
-      ? await sendChunkedResults(evalRecord, url)
-      : await sendEvalResults(evalRecord, url);
-  } else {
+  let evalId: string | null;
+  if (!canUseNewResults || evalRecord.useOldResults()) {
     evalId = await handleLegacyResults(evalRecord, url);
+  } else if (sendInChunks) {
+    evalId = await sendChunkedResults(evalRecord, url);
+  } else {
+    evalId = await sendEvalResults(evalRecord, url);
   }
 
   if (!evalId) {

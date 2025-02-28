@@ -1,9 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { callApi } from '@app/utils/api';
 import type { StandaloneEval } from '@promptfoo/util';
+import ErrorBoundary from '../../components/ErrorBoundary';
 import History from './History';
 
-export default function HistoryPage() {
+interface HistoryPageProps {
+  showDatasetColumn?: boolean;
+}
+
+function HistoryPageContent({ showDatasetColumn = true }: HistoryPageProps) {
   const [cols, setCols] = useState<StandaloneEval[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -27,5 +32,20 @@ export default function HistoryPage() {
     })();
   }, []);
 
-  return <History data={cols} isLoading={isLoading} error={error} />;
+  return (
+    <History
+      data={cols}
+      isLoading={isLoading}
+      error={error}
+      showDatasetColumn={showDatasetColumn}
+    />
+  );
+}
+
+export default function HistoryPage({ showDatasetColumn = true }: HistoryPageProps) {
+  return (
+    <ErrorBoundary name="History Page">
+      <HistoryPageContent showDatasetColumn={showDatasetColumn} />
+    </ErrorBoundary>
+  );
 }
