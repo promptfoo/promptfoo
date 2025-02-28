@@ -1,4 +1,5 @@
 import input from '@inquirer/input';
+import chalk from 'chalk';
 import { getEnvString, isCI } from '../../src/envars';
 import { fetchWithTimeout } from '../../src/fetch';
 import {
@@ -11,11 +12,13 @@ import {
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../src/globalConfig/globalConfig';
 import logger from '../../src/logger';
 import telemetry from '../../src/telemetry';
+import { printBorder } from '../../src/util';
 
 jest.mock('@inquirer/input');
 jest.mock('../../src/envars');
 jest.mock('../../src/fetch');
 jest.mock('../../src/telemetry');
+jest.mock('../../src/util');
 
 describe('accounts', () => {
   beforeEach(() => {
@@ -232,6 +235,29 @@ describe('accounts', () => {
       expect(logger.error).toHaveBeenCalledWith(
         'You have exceeded the maximum cloud inference limit. Please contact inquiries@promptfoo.dev to upgrade your account.',
       );
+    });
+
+    it('should display warning message when status is show_usage_warning', async () => {
+      jest.mocked(isCI).mockReturnValue(false);
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        account: { email: 'test@example.com' },
+      });
+
+      const warningMessage = 'You are approaching your usage limit';
+      const mockResponse = new Response(
+        JSON.stringify({ status: 'show_usage_warning', message: warningMessage }),
+        {
+          status: 200,
+          statusText: 'OK',
+        },
+      );
+      jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+
+      await checkEmailStatusOrExit();
+
+      expect(printBorder).toHaveBeenCalledTimes(2);
+      expect(logger.warn).toHaveBeenCalledWith(chalk.yellow(warningMessage));
+      expect(mockExit).not.toHaveBeenCalled();
     });
 
     it('should handle fetch errors', async () => {
