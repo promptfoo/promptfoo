@@ -175,6 +175,10 @@ const config = {
                 label: 'Docs',
               },
               {
+                href: 'https://promptfoo.dev/models/',
+                label: 'Foundational Model Reports',
+              },
+              {
                 href: 'https://github.com/promptfoo/promptfoo',
                 label: 'GitHub',
               },
@@ -233,6 +237,10 @@ const config = {
               {
                 label: 'LLM Red Teaming',
                 to: '/docs/red-team',
+              },
+              {
+                label: 'Foundational Model Reports',
+                to: 'https://promptfoo.dev/models/',
               },
               {
                 label: 'Running Benchmarks',
