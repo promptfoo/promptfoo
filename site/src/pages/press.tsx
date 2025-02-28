@@ -172,7 +172,7 @@ const PressContent = () => {
                   DeepSeek itself, and how users can protect themselves against backdoors,
                   jailbreaks, and censorship.
                 </Typography>
-                <Link href="https://open.spotify.com/episode/6dgcEOdie8Mtl5COJjjHFy">
+                <Link href="https://open.spotify.com/episode/6dgcEOdie8Mtl5COJjjHFy" target="_blank" rel="noopener noreferrer">
                   Listen on Spotify →
                 </Link>
               </Box>
