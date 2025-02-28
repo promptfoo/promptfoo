@@ -1,12 +1,12 @@
 import input from '@inquirer/input';
 import chalk from 'chalk';
+import { TERMINAL_MAX_WIDTH } from 'src/constants';
 import { z } from 'zod';
 import type { GlobalConfig } from '../configTypes';
 import { getEnvString, isCI } from '../envars';
 import { fetchWithTimeout } from '../fetch';
 import logger from '../logger';
 import telemetry from '../telemetry';
-import { printBorder } from '../util';
 import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
 export function getUserEmail(): string | null {
@@ -65,9 +65,10 @@ export async function checkEmailStatusOrExit() {
       process.exit(1);
     }
     if (data?.status === 'show_usage_warning' && data?.message) {
-      printBorder();
+      const border = '='.repeat(TERMINAL_MAX_WIDTH);
+      logger.info(chalk.yellow(border));
       logger.warn(chalk.yellow(data.message));
-      printBorder();
+      logger.info(chalk.yellow(border));
     }
   } catch (e) {
     logger.debug(`Failed to check user status: ${e}`);
