@@ -177,3 +177,6 @@ export default function ExtensionEditor({
     </Accordion>
   );
 }
+
+
+export { FILE_PROTOCOL_PREFIX, validatePath };
