@@ -8,9 +8,11 @@ prompts:
   - What is the weather in {{location}}?
 
 providers:
-  - id: 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${AISTUDIO_API_KEY}'
+  - id: 'google-mm-live:wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key={{env.GOOGLE_API_KEY}}'
     config:
-      tools: file://tools.json
+      messageTemplate: '{"setup": {"model": "models/gemini-2.0-flash-exp", "generation_config": {"response_modalities": ["text"]}}}'
+      transformResponse: 'data.output'
+      timeoutMs: 100000
 
 defaultTest:
   assert:
@@ -28,6 +30,3 @@ defaultTest:
 tests:
   - vars:
       location: San Francisco
-
-  - vars:
-      location: New York
