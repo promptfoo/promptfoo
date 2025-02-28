@@ -306,22 +306,7 @@ describe('OpenAiImageProvider', () => {
   });
 
   describe('Operation handling', () => {
-    it('should handle non-generation operations for DALL-E 2', async () => {
-      const provider = new OpenAiImageProvider('dall-e-2', {
-        config: {
-          apiKey: 'test-key',
-          operation: 'variation',
-          image: 'base64image',
-        },
-      });
-
-      const result = await provider.callApi('test prompt');
-
-      expect(result).toHaveProperty('error');
-      expect(result.error).toContain('Image variation operations');
-    });
-
-    it('should reject non-generation operations for DALL-E 3', async () => {
+    it('should reject non-generation operations', async () => {
       const provider = new OpenAiImageProvider('dall-e-3', {
         config: {
           apiKey: 'test-key',
@@ -332,21 +317,9 @@ describe('OpenAiImageProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result).toHaveProperty('error');
-      expect(result.error).toContain('Operation variation is only supported for dall-e-2 model');
-    });
-
-    it('should require image data for edit operations', async () => {
-      const provider = new OpenAiImageProvider('dall-e-2', {
-        config: {
-          apiKey: 'test-key',
-          operation: 'edit',
-        },
-      });
-
-      const result = await provider.callApi('test prompt');
-
-      expect(result).toHaveProperty('error');
-      expect(result.error).toContain('Image data is required for variation and edit operations');
+      expect(result.error).toContain(
+        "Only 'generation' operations are currently supported. 'variation' operations are not implemented.",
+      );
     });
   });
 
