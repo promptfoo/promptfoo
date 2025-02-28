@@ -234,5 +234,3 @@ export function formatOpenAiError(data: {
   errorMessage += '\n\n' + safeJsonStringify(data, true /* prettyPrint */);
   return errorMessage;
 }
-
-export { ajv };
