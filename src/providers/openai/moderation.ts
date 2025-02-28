@@ -18,7 +18,6 @@ export const OPENAI_MODERATION_MODELS = [
 
 export type OpenAIModerationModelId = string;
 
-// Define category names as a union type
 export type ModerationCategory =
   | 'sexual'
   | 'sexual/minors'
@@ -34,7 +33,6 @@ export type ModerationCategory =
   | 'violence'
   | 'violence/graphic';
 
-// Simplified type definitions using mapped types
 type OpenAIModerationCategories = Record<ModerationCategory | string, boolean>;
 type OpenAIModerationCategoryScores = Record<ModerationCategory | string, number>;
 type OpenAIModerationCategoryAppliedInputTypes = Record<
@@ -69,7 +67,6 @@ export type ImageInput = {
 
 export type ModerationInput = string | (TextInput | ImageInput)[];
 
-// Type guards for better type safety
 export function isTextInput(input: TextInput | ImageInput): input is TextInput {
   return input.type === 'text';
 }
@@ -84,11 +81,6 @@ export interface OpenAIModerationConfig {
   passthrough?: Record<string, any>;
 }
 
-// Standalone utility functions
-
-/**
- * Parse OpenAI moderation API response into standardized format
- */
 function parseOpenAIModerationResponse(data: OpenAIModerationResponse): ProviderModerationResponse {
   const { results } = data;
 
@@ -115,9 +107,6 @@ function parseOpenAIModerationResponse(data: OpenAIModerationResponse): Provider
   return { flags };
 }
 
-/**
- * Format API error response
- */
 function handleApiError(err: any, data?: any): ProviderModerationResponse {
   logger.error(`API error: ${String(err)}`);
   return {
@@ -127,9 +116,6 @@ function handleApiError(err: any, data?: any): ProviderModerationResponse {
   };
 }
 
-/**
- * Generate cache key for a moderation request
- */
 function getModerationCacheKey(
   modelName: string,
   config: any,
@@ -139,27 +125,19 @@ function getModerationCacheKey(
   return `openai:moderation:${modelName}:${JSON.stringify(config)}:${contentKey}`;
 }
 
-/**
- * Check if the moderation model supports image input
- */
 export function supportsImageInput(modelName: string): boolean {
   const model = OPENAI_MODERATION_MODELS.find((model) => model.id === modelName);
   return model?.capabilities.includes('image') ?? false;
 }
 
-/**
- * Format content based on model capabilities
- */
 export function formatModerationInput(
   content: string | (TextInput | ImageInput)[],
   supportsImages: boolean,
 ): ModerationInput {
-  // For string input, wrap in array if model supports images
   if (typeof content === 'string') {
     return supportsImages ? [{ type: 'text', text: content }] : content;
   }
 
-  // For array input, filter out images if model doesn't support them
   if (!supportsImages) {
     logger.warn('Using image inputs with a text-only moderation model. Images will be ignored.');
     const textContent = content
@@ -193,7 +171,6 @@ export class OpenAiModerationProvider
     userPrompt: string,
     assistantResponse: string | (TextInput | ImageInput)[],
   ): Promise<ProviderModerationResponse> {
-    // Validate API key
     const apiKey = this.getApiKey();
     if (!apiKey) {
       return handleApiError(
@@ -201,7 +178,6 @@ export class OpenAiModerationProvider
       );
     }
 
-    // Check if caching is enabled
     const useCache = isCacheEnabled();
     let cacheKey = '';
 
@@ -218,7 +194,6 @@ export class OpenAiModerationProvider
 
     logger.debug(`Calling OpenAI moderation API with model ${this.modelName}`);
 
-    // Prepare request payload
     const supportsImages = supportsImageInput(this.modelName);
     const input = formatModerationInput(assistantResponse, supportsImages);
     const requestBody = JSON.stringify({
@@ -226,7 +201,6 @@ export class OpenAiModerationProvider
       input,
     });
 
-    // Prepare headers with authentication
     const headers = {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
@@ -235,7 +209,6 @@ export class OpenAiModerationProvider
     };
 
     try {
-      // Make API request
       const { data, status, statusText } = await fetchWithCache(
         `${this.getApiUrl()}/moderations`,
         {
@@ -246,7 +219,6 @@ export class OpenAiModerationProvider
         REQUEST_TIMEOUT_MS,
       );
 
-      // Handle error responses
       if (status < 200 || status >= 300) {
         return handleApiError(
           `${status} ${statusText}`,
@@ -256,10 +228,8 @@ export class OpenAiModerationProvider
 
       logger.debug(`\tOpenAI moderation API response: ${JSON.stringify(data)}`);
 
-      // Parse successful response
       const response = parseOpenAIModerationResponse(data);
 
-      // Save to cache for future requests
       if (useCache) {
         const cache = await getCache();
         await cache.set(cacheKey, JSON.stringify(response));
