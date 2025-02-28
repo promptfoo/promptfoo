@@ -123,6 +123,10 @@ function DownloadMenu() {
           output: row.outputs[0].text.includes('---')
             ? row.outputs[0].text.split('---\n')[1]
             : row.outputs[0].text,
+          redteamFinalPrompt: row.outputs[0].metadata?.redteamFinalPrompt,
+          ...(row.outputs[0].gradingResult?.comment
+            ? { comment: row.outputs[0].gradingResult.comment }
+            : {}),
         },
         assert: [
           {

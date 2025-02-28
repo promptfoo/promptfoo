@@ -5,28 +5,31 @@ import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
 import { callApi, fetchUserEmail, updateEvalAuthor } from '@app/utils/api';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
+import ClearIcon from '@mui/icons-material/Clear';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import SearchIcon from '@mui/icons-material/Search';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ShareIcon from '@mui/icons-material/Share';
-import SearchIcon from '@mui/icons-material/Source';
 import EyeIcon from '@mui/icons-material/Visibility';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
+import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import type { SelectChangeEvent } from '@mui/material/Select';
-import Stack from '@mui/material/Stack';
 import type { StackProps } from '@mui/material/Stack';
+import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import { styled } from '@mui/material/styles';
+import { alpha } from '@mui/material/styles';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import invariant from '@promptfoo/util/invariant';
 import type { VisibilityState } from '@tanstack/table-core';
@@ -117,7 +120,6 @@ export default function ResultsView({
   };
 
   const [shareModalOpen, setShareModalOpen] = React.useState(false);
-  const [shareUrl, setShareUrl] = React.useState('');
   const [shareLoading, setShareLoading] = React.useState(false);
 
   // State for anchor element
@@ -138,29 +140,37 @@ export default function ResultsView({
   const handleShareButtonClick = async () => {
     if (IS_RUNNING_LOCALLY) {
       setShareLoading(true);
-      try {
-        const response = await callApi('/results/share', {
-          method: 'POST',
-          body: JSON.stringify({ id: currentEvalId }),
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
-        const { url } = await response.json();
-        if (response.ok) {
-          setShareUrl(url);
-          setShareModalOpen(true);
-        } else {
-          alert('Sorry, something went wrong.');
-        }
-      } catch {
-        alert('Sorry, something went wrong.');
-      } finally {
-        setShareLoading(false);
-      }
-    } else {
-      setShareUrl(`${window.location.host}/eval/?evalId=${currentEvalId}`);
       setShareModalOpen(true);
+    } else {
+      // For non-local instances, just show the modal
+      setShareModalOpen(true);
+    }
+  };
+
+  const handleShare = async (id: string): Promise<string> => {
+    try {
+      if (!IS_RUNNING_LOCALLY) {
+        // For non-local instances, just return the URL directly
+        return `${window.location.host}/eval/?evalId=${id}`;
+      }
+
+      const response = await callApi('/results/share', {
+        method: 'POST',
+        body: JSON.stringify({ id }),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!response.ok) {
+        throw new Error('Failed to generate share URL');
+      }
+      const { url } = await response.json();
+      return url;
+    } catch (error) {
+      console.error('Failed to generate share URL:', error);
+      throw error;
+    } finally {
+      setShareLoading(false);
     }
   };
 
@@ -366,6 +376,17 @@ export default function ResultsView({
     }
   };
 
+  const handleSearchKeyDown = React.useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === 'Escape') {
+        handleSearchTextChange('');
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    },
+    [handleSearchTextChange],
+  );
+
   return (
     <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
       <ResponsiveStack
@@ -428,12 +449,58 @@ export default function ResultsView({
         </Box>
         <Box>
           <TextField
-            sx={{ minWidth: 180 }}
+            sx={(theme) => ({
+              minWidth: 180,
+              '& .MuiInputBase-root': {
+                transition: theme.transitions.create(['background-color']),
+                '&:hover': {
+                  backgroundColor: alpha(theme.palette.primary.main, 0.04),
+                },
+              },
+              '& .MuiInputAdornment-root': {
+                transition: theme.transitions.create(['opacity', 'width', 'transform'], {
+                  duration: theme.transitions.duration.shorter,
+                }),
+              },
+              '& .clear-button': {
+                opacity: searchText ? 1 : 0,
+                width: searchText ? 'auto' : 0,
+                transform: searchText ? 'scale(1)' : 'scale(0.8)',
+                transition: theme.transitions.create(['opacity', 'width', 'transform'], {
+                  duration: theme.transitions.duration.shorter,
+                }),
+              },
+            })}
             size="small"
             label="Search"
             placeholder="Text or regex"
             value={searchText}
             onChange={(e) => handleSearchTextChange(e.target.value)}
+            onKeyDown={handleSearchKeyDown}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon color="action" fontSize="small" />
+                </InputAdornment>
+              ),
+              endAdornment: (
+                <InputAdornment position="end" className="clear-button">
+                  <Tooltip title="Clear search (Esc)">
+                    <IconButton
+                      aria-label="clear search"
+                      onClick={() => handleSearchTextChange('')}
+                      edge="end"
+                      size="small"
+                      sx={{
+                        visibility: searchText ? 'visible' : 'hidden',
+                      }}
+                    >
+                      <ClearIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </InputAdornment>
+              ),
+            }}
           />
         </Box>
         <Box flexGrow={1} />
@@ -453,7 +520,7 @@ export default function ResultsView({
                 Table Settings
               </Button>
             </Tooltip>
-            <Button color="primary" onClick={handleOpenMenu} startIcon={<ArrowDropDownIcon />}>
+            <Button color="primary" onClick={handleOpenMenu} endIcon={<ArrowDropDownIcon />}>
               Eval actions
             </Button>
             {config && (
@@ -558,7 +625,8 @@ export default function ResultsView({
       <ShareModal
         open={shareModalOpen}
         onClose={() => setShareModalOpen(false)}
-        shareUrl={shareUrl}
+        evalId={currentEvalId}
+        onShare={handleShare}
       />
       <SettingsModal open={viewSettingsModalOpen} onClose={() => setViewSettingsModalOpen(false)} />
       <EvalSelectorKeyboardShortcut

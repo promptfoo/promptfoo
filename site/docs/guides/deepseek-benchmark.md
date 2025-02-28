@@ -2,11 +2,11 @@
 sidebar_label: Deepseek benchmark
 ---
 
-# Deepseek vs GPT vs Llama: Run a Custom Benchmark
+# Deepseek vs GPT vs O3 vs Llama: Run a Custom Benchmark
 
 Deepseek is a new Mixture-of-Experts (MoE) model that's all the rage due to its impressive performance, especially in code tasks. Its MoE architecture has 671B total parameters, though only 37B are activated for each token. This allows for efficient inference while maintaining powerful capabilities.
 
-When evaluating LLMs for your application, generic benchmarks often fall short of capturing the specific requirements of your use case. This guide will walk you through creating a tailored benchmark to compare Deepseek-V3, GPT-4o, and Llama-3-70B for your specific needs.
+When evaluating LLMs for your application, generic benchmarks often fall short of capturing the specific requirements of your use case. This guide will walk you through creating a tailored benchmark to compare Deepseek-V3, OpenAI's gpt-4o and o3-mini, and Llama-3-70B for your specific needs.
 
 In this guide, we'll create a practical comparison that results in a detailed side-by-side analysis view.
 
@@ -14,7 +14,7 @@ In this guide, we'll create a practical comparison that results in a detailed si
 
 - Node.js 18 or later
 - OpenRouter API access for Deepseek and Llama (set `OPENROUTER_API_KEY`)
-- OpenAI API access for GPT-4o (set `OPENAI_API_KEY`)
+- OpenAI API access for GPT-4o and o3-mini (set `OPENAI_API_KEY`)
 
 ## Step 1: Project Setup
 
@@ -31,6 +31,7 @@ Edit your `promptfooconfig.yaml` to include the three models:
 ```yaml title="promptfooconfig.yaml"
 providers:
   - 'openai:gpt-4o'
+  - 'openai:o3-mini'
   - 'openrouter:meta-llama/llama-3-70b-instruct'
   - 'openrouter:deepseek/deepseek-chat'
 
@@ -40,13 +41,15 @@ providers:
     config:
       temperature: 0.7
       max_tokens: 1000
+  - id: openai:o3-mini
+    config:
+      max_tokens: 1000
   - id: openrouter:meta-llama/llama-3-70b-instruct
     config:
       temperature: 0.7
       max_tokens: 1000
   - id: openrouter:deepseek/deepseek-chat
     config:
-      temperature: 0.7
       max_tokens: 1000
 ```
 
@@ -133,6 +136,7 @@ Here's how these models compare based on public benchmarks:
 | ----------- | ------------ | ----------------- | ----------------------------------------- |
 | Deepseek-V3 | MoE          | 671B (37B active) | Strong performance in math and code tasks |
 | GPT-4o      | Unknown      | Unknown           | Consistent performance across tasks       |
+| o3-mini     | Unknown      | Unknown           | Reasoning and code tasks                  |
 | Llama-3-70B | Dense        | 70B               | Good balance of efficiency and capability |
 
 However, your custom benchmark results may differ significantly based on your specific use case.
@@ -148,6 +152,6 @@ When choosing between these models, consider:
 
 ## Conclusion
 
-While public benchmarks show Deepseek performing exceptionally well in certain logical tasks, GPT-4o maintaining strong general performance, and Llama-3-70B offering a balanced open-source approach, your specific use case may yield different results.
+While public benchmarks show Deepseek performing exceptionally well in certain logical tasks, GPT-4o maintaining strong general performance, o3 with strong reasoning performance, and Llama-3-70B offering a balanced open-source approach, your specific use case may yield different results.
 
 Remember that the best model for your application depends on your specific requirements, constraints, and use cases. Use this guide as a starting point to create a benchmark that truly matters for your application.

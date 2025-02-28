@@ -5,7 +5,13 @@ sidebar_position: 99
 
 # Guardrails
 
-The Guardrails API helps detect potential security risks in user inputs to language models, identify personally identifiable information (PII), and assess potential harm in content.
+Guardrails are an active mitigation solution to LLM security, implemented to control and monitor user interactions. They help prevent misuse, detect potential security risks, and ensure appropriate model behavior by filtering or blocking problematic inputs and outputs.
+
+Common guardrails include prompt injection/jailbreak detection, content moderation, and PII (personally identifiable information) detection.
+
+## Guardrails API
+
+The Guardrails API helps detect potential security risks in user inputs to LLMs, identify PII, and assess potential harm in content.
 
 The Guardrails API is focused on classification and detection. It returns a result, and your application can decide whether to warn, block, or otherwise respond to the input.
 
@@ -19,7 +25,7 @@ https://api.promptfoo.dev
 
 ## Endpoints
 
-### Prompt injection and Jailbreak detection
+### 1. Prompt injection and Jailbreak detection
 
 Analyzes input text to classify potential security threats from prompt injections and jailbreaks.
 
@@ -68,7 +74,7 @@ Content-Type: application/json
 - `categories.jailbreak`: Indicates if the input may be attempting a jailbreak.
 - `flagged`: True if the input is classified as either prompt injection or jailbreak.
 
-### PII Detection
+### 2. PII Detection
 
 Detects personally identifiable information (PII) in the input text. This system can identify a wide range of PII elements.
 
@@ -145,7 +151,7 @@ Content-Type: application/json
 - `flagged`: True if any PII was detected.
 - `payload.pii`: Array of detected PII entities with their types and positions in the text.
 
-### Harm Detection
+### 3. Harm Detection
 
 Analyzes input text to detect potential harmful content across various categories.
 
@@ -218,7 +224,7 @@ Content-Type: application/json
 - `category_scores` provides a numerical score (between 0 and 1) for each harm category.
 - `flagged`: True if any harm category is detected in the input.
 
-### Supported Categories
+#### Supported Categories
 
 The harm detection API supports the following categories from ML Commons taxonomy:
 
@@ -349,18 +355,62 @@ curl https://api.promptfoo.dev/v1/harm \
 
 This example shows the detection of potentially harmful content related to indiscriminate weapons.
 
-## Guardrails UI
+## UI Features
 
-Promptfoo also provides a UI for guardrail observability for Cloud or Enterprise users.
+### Dashboard Overview
+
+Promptfoo provides a UI for guardrail observability for Cloud or Enterprise users.
 
 The dashboard provides a summary of guardrail events.
 
 ![Guardrails UI](/img/guardrails.png)
 
+### Event Details
+
 The table view provides detailed information about each event.
 
 ![Guardrails event](/img/guardrails-table.png)
 
-# More
+## Node.js Integration
+
+The guardrails functionality is also available directly in the promptfoo Node.js package:
+
+```typescript
+import { guardrails } from 'promptfoo';
+
+// Check for prompt injections/jailbreaks
+const guardResult = await guardrails.guard('Some text');
+
+// Check for PII
+const piiResult = await guardrails.pii('Some text');
+
+// Check for harmful content
+const harmResult = await guardrails.harm('Some text');
+```
+
+All methods return a `GuardResult` object with the following TypeScript interface:
+
+```typescript
+interface GuardResult {
+  model: string;
+  results: Array<{
+    categories: Record<string, boolean>;
+    category_scores: Record<string, number>;
+    flagged: boolean;
+    payload?: {
+      pii?: Array<{
+        entity_type: string;
+        start: number;
+        end: number;
+        pii: string;
+      }>;
+    };
+  }>;
+}
+```
+
+The response format matches exactly what's returned by the REST API endpoints described above.
+
+## Additional Resources
 
 For more information on LLM vulnerabilities and how to mitigate LLM failure modes, refer to our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) and [Introduction to AI red teaming](/docs/red-team/) documentation.

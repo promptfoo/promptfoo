@@ -15,6 +15,7 @@ export type EnvVars = {
   PROMPTFOO_CACHE_TYPE?: 'memory' | 'disk';
   PROMPTFOO_CONFIG_DIR?: string;
   PROMPTFOO_CSV_DELIMITER?: string;
+  PROMPTFOO_CSV_STRICT?: boolean;
   PROMPTFOO_DELAY_MS?: number;
   PROMPTFOO_DISABLE_AJV_STRICT_MODE?: boolean;
   PROMPTFOO_DISABLE_CONVERSATION_VAR?: boolean;
@@ -87,7 +88,9 @@ export type EnvVars = {
   FAL_KEY?: string;
   GROQ_API_KEY?: string;
   HELICONE_API_KEY?: string;
+  /** @deprecated Use HF_TOKEN instead */
   HF_API_TOKEN?: string;
+  HF_TOKEN?: string;
   LANGFUSE_HOST?: string;
   LANGFUSE_PUBLIC_KEY?: string;
   LANGFUSE_SECRET_KEY?: string;
@@ -122,9 +125,9 @@ export type EnvVars = {
   VOYAGE_API_BASE_URL?: string;
   VOYAGE_API_KEY?: string;
   WATSONX_AI_APIKEY?: string;
-  WATSONX_AI_PROJECT_ID?: string;
-  WATSONX_AI_BEARER_TOKEN?: string;
   WATSONX_AI_AUTH_TYPE?: string;
+  WATSONX_AI_BEARER_TOKEN?: string;
+  WATSONX_AI_PROJECT_ID?: string;
 
   // node/npm
   NODE_ENV?: string;

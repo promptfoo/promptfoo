@@ -26,6 +26,7 @@ import { DebugAccessPlugin } from './debugAccess';
 import { DivergentRepetitionPlugin } from './divergentRepetition';
 import { ExcessiveAgencyPlugin } from './excessiveAgency';
 import { HallucinationPlugin } from './hallucination';
+import { HarmbenchPlugin } from './harmbench';
 import { AlignedHarmfulPlugin } from './harmful/aligned';
 import { getHarmfulAssertions } from './harmful/common';
 import { getHarmfulTests } from './harmful/unaligned';
@@ -144,6 +145,7 @@ const pluginFactories: PluginFactory[] = [
     ),
   ),
   createPluginFactory(ExcessiveAgencyPlugin, 'excessive-agency'),
+  createPluginFactory(HarmbenchPlugin, 'harmbench'),
   createPluginFactory(HallucinationPlugin, 'hallucination'),
   createPluginFactory(ImitationPlugin, 'imitation'),
   createPluginFactory<{ intent: string }>(IntentPlugin, 'intent', (config: { intent: string }) =>
@@ -220,6 +222,7 @@ const remotePlugins: PluginFactory[] = [
   'harmful:specialized-advice',
   'hijacking',
   'rag-document-exfiltration',
+  'reasoning-dos',
   'religion',
   'ssrf',
   'system-prompt-override',

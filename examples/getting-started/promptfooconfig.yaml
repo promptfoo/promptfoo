@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Getting started'
+prompts:
+  - 'Convert this English to {{language}}: {{input}}'
+  - 'Translate to {{language}}: {{input}}'
+
+providers:
+  - openai:gpt-4o-mini
+  - openai:gpt-4o
+
+tests:
+  - vars:
+      language: French
+      input: Hello world
+    assert:
+      - type: contains
+        value: 'Bonjour le monde'
+  - vars:
+      language: Spanish
+      input: Where is the library?
+    assert:
+      - type: icontains
+        value: 'Dónde está la biblioteca'

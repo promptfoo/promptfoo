@@ -1,7 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import Editor from 'react-simple-code-editor';
-import { useStore } from '@app/stores/evalConfig';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
@@ -32,49 +31,11 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
   initialYaml,
 }) => {
   const darkMode = useTheme().palette.mode === 'dark';
-  const {
-    defaultTest,
-    setDefaultTest,
-    description,
-    setDescription,
-    env,
-    setEnv,
-    evaluateOptions,
-    setEvaluateOptions,
-    prompts,
-    setPrompts,
-    providers,
-    setProviders,
-    scenarios,
-    setScenarios,
-    testCases,
-    setTestCases,
-  } = useStore();
-
   const [code, setCode] = React.useState('');
   const [isReadOnly, setIsReadOnly] = React.useState(readOnly);
   const [showCopySuccess, setShowCopySuccess] = React.useState(false);
 
-  const handleChange = (yamlObj: any) => {
-    setDefaultTest(yamlObj.defaultTest || {});
-    setDescription(yamlObj.description || '');
-    setEnv(yamlObj.env || {});
-    setEvaluateOptions(yamlObj.evaluateOptions || {});
-    setPrompts(yamlObj.prompts || []);
-    setProviders(yamlObj.providers || []);
-    setScenarios(yamlObj.scenarios || []);
-    setTestCases(yamlObj.tests || []);
-  };
-
   const toggleReadOnly = () => {
-    if (!isReadOnly) {
-      try {
-        const parsed = yaml.load(code, { json: true });
-        handleChange(parsed);
-      } catch {
-        // Invalid YAML, probably mid-edit
-      }
-    }
     setIsReadOnly(!isReadOnly);
   };
 
@@ -85,12 +46,6 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
       reader.onload = (e) => {
         const content = e.target?.result as string;
         setCode(content);
-        try {
-          const parsed = yaml.load(content, { json: true });
-          handleChange(parsed);
-        } catch (error) {
-          console.error('Error parsing uploaded YAML:', error);
-        }
       };
       reader.readAsText(file);
     }
@@ -108,38 +63,13 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
   React.useEffect(() => {
     if (initialYaml) {
       setCode(initialYaml);
-    } else {
-      const testSuite = initialConfig || {
-        defaultTest,
-        description,
-        env,
-        evaluateOptions,
-        prompts,
-        providers,
-        scenarios,
-        tests: testCases,
-      };
-
-      setCode(yaml.dump(testSuite));
+    } else if (initialConfig) {
+      setCode(yaml.dump(initialConfig));
     }
-  }, [
-    initialYaml,
-    initialConfig,
-    defaultTest,
-    description,
-    env,
-    evaluateOptions,
-    prompts,
-    providers,
-    scenarios,
-    testCases,
-  ]);
+  }, [initialYaml, initialConfig]);
 
   return (
-    <Box mt={4}>
-      <Typography variant="h5" gutterBottom>
-        Configuration
-      </Typography>
+    <Box>
       <Typography variant="body1" gutterBottom>
         This is the YAML config that defines the evaluation and is processed by promptfoo. See{' '}
         <Link target="_blank" to="https://promptfoo.dev/docs/configuration/guide">
@@ -164,24 +94,25 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
         </Box>
       )}
       <Box position="relative">
-        <Editor
-          autoCapitalize="off"
-          value={code}
-          onValueChange={(code) => {
-            if (!isReadOnly) {
-              setCode(code);
-            }
-          }}
-          highlight={(code) => highlight(code, languages.yaml)}
-          padding={10}
-          style={{
-            backgroundColor: darkMode ? '#1e1e1e' : '#fff',
-            fontFamily: '"Fira code", "Fira Mono", monospace',
-            fontSize: 14,
-          }}
-          disabled={isReadOnly}
-          className={!readOnly && !isReadOnly ? 'glowing-border' : ''}
-        />
+        <div className={`editor-container ${!readOnly && !isReadOnly ? 'glowing-border' : ''}`}>
+          <Editor
+            autoCapitalize="off"
+            value={code}
+            onValueChange={(code) => {
+              if (!isReadOnly) {
+                setCode(code);
+              }
+            }}
+            highlight={(code) => highlight(code, languages.yaml)}
+            padding={10}
+            style={{
+              fontFamily: '"Fira code", "Fira Mono", monospace',
+              fontSize: 14,
+              backgroundColor: darkMode ? '#1e1e1e' : '#fff',
+            }}
+            disabled={isReadOnly}
+          />
+        </div>
         <Tooltip title="Copy YAML">
           <IconButton
             onClick={handleCopy}

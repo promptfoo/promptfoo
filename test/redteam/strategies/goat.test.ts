@@ -2,8 +2,6 @@ import { describe, it, expect } from '@jest/globals';
 import { addGoatTestCases } from '../../../src/redteam/strategies/goat';
 import type { TestCaseWithPlugin, AssertionType } from '../../../src/types';
 
-jest.mock('../../../src/logger');
-
 describe('GOAT Strategy', () => {
   it('should add GOAT configuration to test cases', async () => {
     const testCases: TestCaseWithPlugin[] = [

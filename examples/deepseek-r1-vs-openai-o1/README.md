@@ -17,41 +17,41 @@ To access the MMLU dataset, you'll need to authenticate with Hugging Face:
 2. Generate an access token at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
 3. Set your token as an environment variable:
 
-   ```sh
-   export HUGGING_FACE_HUB_TOKEN=your_token_here
+   ```bash
+   export HF_TOKEN=your_token_here
    ```
 
    Or add it to your `.env` file:
 
-   ```
-   HUGGING_FACE_HUB_TOKEN=your_token_here
+   ```env
+   HF_TOKEN=your_token_here
    ```
 
 ## Running the Eval
 
 1. Get a local copy of the promptfooconfig.
 
-You can clone this repository and from the root directory run:
+   You can clone this repository and from the root directory run:
 
-```sh
-cd examples/deepseek-r1-vs-openai-o1
-```
+   ```bash
+   cd examples/deepseek-r1-vs-openai-o1
+   ```
 
-or you can get the example with:
+   or you can get the example with:
 
-```sh
-promptfoo init --example deepseek-r1-vs-openai-o1
-```
+   ```bash
+   promptfoo init --example deepseek-r1-vs-openai-o1
+   ```
 
 2. Run the evaluation:
 
-   ```sh
+   ```bash
    promptfoo eval
    ```
 
 3. View the results in a web interface:
 
-   ```sh
+   ```bash
    promptfoo view
    ```
 
@@ -141,5 +141,5 @@ You can modify the test by editing `promptfooconfig.yaml`:
 
 ## Additional Resources
 
-- [DeepSeek provider documentation](/docs/providers/deepseek)
+- [DeepSeek provider documentation](https://promptfoo.dev/docs/providers/deepseek)
 - [MMLU benchmark](https://huggingface.co/datasets/cais/mmlu)

@@ -15,16 +15,21 @@ import {
   ALIASED_PLUGIN_MAPPINGS,
   type Strategy,
   type Plugin,
+  FOUNDATION_PLUGINS,
 } from '../redteam/constants';
 import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
 import { isJavascriptFile } from '../util/file';
 import { ProviderSchema } from '../validators/providers';
 
-const pluginOptions: string[] = [...COLLECTIONS, ...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS].sort();
+export const pluginOptions: string[] = [
+  ...COLLECTIONS,
+  ...REDTEAM_ALL_PLUGINS,
+  ...ALIASED_PLUGINS,
+].sort();
 /**
  * Schema for individual redteam plugins
  */
-const RedteamPluginObjectSchema = z.object({
+export const RedteamPluginObjectSchema = z.object({
   id: z
     .union([
       z.enum(pluginOptions as [string, ...string[]]).superRefine((val, ctx) => {
@@ -75,7 +80,7 @@ export const RedteamPluginSchema = z.union([
   RedteamPluginObjectSchema,
 ]);
 
-const strategyIdSchema = z
+export const strategyIdSchema = z
   .union([
     z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]).superRefine((val, ctx) => {
       if (!ALL_STRATEGIES.includes(val as Strategy)) {
@@ -149,6 +154,7 @@ export const RedteamGenerateOptionsSchema = z.object({
   strategies: z.array(RedteamStrategySchema).optional().describe('Strategies to use'),
   write: z.boolean().describe('Whether to write the output'),
   burpEscapeJson: z.boolean().describe('Whether to escape quotes in Burp payloads').optional(),
+  progressBar: z.boolean().describe('Whether to show a progress bar').optional(),
 });
 
 /**
@@ -232,7 +238,9 @@ export const RedteamConfigSchema = z
     };
 
     const handleCollectionExpansion = (id: string, config: any, numTests: number | undefined) => {
-      if (id === 'harmful') {
+      if (id === 'foundation') {
+        expandCollection([...FOUNDATION_PLUGINS], config, numTests);
+      } else if (id === 'harmful') {
         expandCollection(Object.keys(HARM_PLUGINS), config, numTests);
       } else if (id === 'pii') {
         expandCollection([...PII_PLUGINS], config, numTests);

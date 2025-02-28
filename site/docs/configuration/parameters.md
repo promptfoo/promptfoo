@@ -12,7 +12,8 @@ This guide covers how to configure prompts and outputs in promptfoo.
 
 By default, the config will accept raw text as prompts:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Translate the following text to French: "{{name}}: {{text}}"'
   - 'Translate the following text to German: "{{name}}: {{text}}"'
@@ -20,7 +21,8 @@ prompts:
 
 YAML supports multiline strings too:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - |-
     Hi there LLM,
@@ -42,9 +44,12 @@ By default, plaintext prompts are wrapped in a `user`-role message. If you provi
 Here's an example of a chat-formatted prompt:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://path/to/personality1.json
 ```
+
+And in `personality1.json`:
 
 ```json title="personality1.json"
 [
@@ -65,7 +70,8 @@ Learn more about [chat conversations with OpenAI message format](/docs/providers
 
 Your prompts may be complicated enough that it's difficult to maintain them inline. In that case, reference a file. Filepaths are relative to the configuration file directory:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://path/to/prompt1.txt
   - file://path/to/prompt2.txt
@@ -151,6 +157,7 @@ To set separate prompts for different providers, you can specify the prompt file
 Here's an example of how to set separate prompts for llama3.1 and GPT-4o models:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - id: file://prompts/gpt_chat_prompt.json
     label: gpt_chat_prompt
@@ -180,7 +187,8 @@ Prompt functions allow you to incorporate custom logic in your prompts. These fu
 
 To specify a prompt function in `promptfooconfig.yaml`, reference the file directly. For example:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://prompt.js
   - file://prompt.py
@@ -188,18 +196,26 @@ prompts:
 
 In the prompt function, you can access the test case variables and provider information via the context. The function will have access to a `vars` object and `provider` object. Having access to the provider object allows you to dynamically generate prompts for different providers with different formats.
 
-The function should return a string or an object that represents the prompt.
+The function should return one of the following:
+
+1. A string (used directly as the prompt)
+2. An object/array (JSON stringified and used as the prompt)
+3. A structured object with `prompt` (string or object/array) and `config` (provider configuration).
+
+When a prompt function returns configuration alongside the prompt content, the configuration values will be merged with any existing configuration for that prompt. Values returned by the prompt function will take precedence over existing configuration values with the same keys.
+
+This allows you to set default configuration values in your promptfoo config file, while still enabling prompt functions to override specific settings dynamically when needed.
 
 #### Examples
 
-A Javascript prompt function
+A Javascript prompt function:
 
 ```javascript title="prompt.js"
 module.exports = async function ({ vars, provider }) {
   return [
     {
       role: 'system',
-      content: `You're an angry pirate named ${provider.label || provider.id}. Be concise and stay in character.`,
+      content: `You're an assistant named ${provider.label || provider.id}. Be concise.`,
     },
     {
       role: 'user',
@@ -211,14 +227,14 @@ module.exports = async function ({ vars, provider }) {
 
 To reference a specific function in your prompt file, use the following syntax: `filename.js:functionName`:
 
-```javascript title="prompt.js"
+```javascript title="prompt.js:prompt1"
 // highlight-start
 module.exports.prompt1 = async function ({ vars, provider }) {
   // highlight-end
   return [
     {
       role: 'system',
-      content: `You're an angry pirate named ${provider.label || provider.id}. Be concise and stay in character.`,
+      content: `You're an assistant named ${provider.label || provider.id}. Be concise.`,
     },
     {
       role: 'user',
@@ -246,11 +262,43 @@ def my_prompt_function(context: dict) -> str:
         f"Describe {variables['topic']} concisely, comparing it to the Python"
         " programming language."
     )
-
-if __name__ == "__main__":
-    # If you don't specify a `function_name` in the provider string, it will run the main
-    print(my_prompt_function(json.loads(sys.argv[1])))
 ```
+
+A JavaScript prompt function that returns both prompt content and dynamic configuration:
+
+```javascript title="prompt_with_config.js"
+module.exports = async function ({ vars, provider }) {
+  // Adjust configuration based on topic complexity
+  let temperature = 0.7;
+  let maxTokens = 100;
+
+  if (vars.topic.includes('complex') || vars.topic.length > 50) {
+    // More complex topics get more freedom
+    temperature = 0.9;
+    maxTokens = 150;
+  }
+
+  return {
+    prompt: [
+      {
+        role: 'system',
+        content: `You are a helpful assistant. Be concise.`,
+      },
+      {
+        role: 'user',
+        content: `Tell me about ${vars.topic}`,
+      },
+    ],
+    config: {
+      temperature,
+      max_tokens: maxTokens,
+      response_format: { type: 'text' },
+    },
+  };
+};
+```
+
+This structured return format allows you to dynamically configure provider settings based on the prompt content or other runtime factors.
 
 To verify that your function is producing the correct prompt:
 
@@ -280,7 +328,8 @@ A good use case for this is to set the `response_format` for a specific prompt.
 
 #### Example
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - label: 'Prompt #1'
     raw: 'You are a helpful math tutor. Solve {{problem}}'
@@ -308,7 +357,8 @@ module.exports = function (str) {
 
 To use a custom Nunjucks filter in Promptfoo, add it to your configuration file (`promptfooconfig.yaml`). The `nunjucksFilters` field should contain a mapping of filter names to the paths of the JavaScript files that define them:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://prompts.txt
 providers:
@@ -329,9 +379,199 @@ Translate this to {{language}}: {{body | allcaps}}
 
 In this example, the `body` variable is passed through the `allcaps` filter before it's used in the prompt. This means that the text will be transformed to uppercase.
 
-## Output Configuration
+### Default prompt
 
-Test results can be written to various formats using the `--output` flag or the `outputPath` configuration option:
+If `prompts` is not defined in the config, then by default Promptfoo will use a "passthrough" prompt: `{{prompt}}`. This prompt simply passes through content of the `prompt` variable.
+
+## Tests File
+
+If you have a lot of tests, you can optionally keep them separate from the main config file.
+
+The easiest way to do this is by creating a `tests.yaml` file that contains a list of tests. Then, include it in your `promptfooconfig.yaml` like so:
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+prompts:
+  # ...
+
+providers:
+  # ...
+
+tests: file://path/to/tests.yaml
+```
+
+You can even break it into multiple files or globs:
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+tests:
+  - file://relative/path/to/normal_test.yaml
+  - file://relative/path/to/special_test.yaml
+  - file:///absolute/path/to/more_tests/*.yaml
+```
+
+### Import from Javascript or Typescript
+
+You can also import tests from Javascript or Typescript files.
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+tests:
+  - file://path/to/tests.js
+  # or
+  - file://path/to/tests.ts:generate_tests
+```
+
+The file should export an array of test cases:
+
+```js title="tests.js"
+export default [
+  { vars: { var1: 'value1', var2: 'value2' }, assert: [], description: 'Test #1' },
+  { vars: { var1: 'value3', var2: 'value4' }, assert: [], description: 'Test #2' },
+];
+```
+
+```ts title="tests.ts"
+export async function generate_tests() {
+  // Fetch test cases from database
+  const results = await mockDb.query('SELECT input, context FROM test_cases');
+  return results.map((row, i) => ({
+    vars: {
+      var1: row.input,
+      var2: row.context,
+    },
+    assert: [],
+    description: `Test #${i + 1}`,
+  }));
+}
+```
+
+### Import from Python
+
+You can also import tests from Python files. The Python file should contain a function that returns a list of test cases:
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+tests: file://path/to/tests.py:generate_tests
+```
+
+```python title="tests.py"
+import pandas as pd
+
+def generate_tests():
+    # Load test data from CSV - or from any other data source
+    df = pd.read_csv('test_data.csv')
+
+    test_cases = []
+    for _, row in df.iterrows():
+        test_case = {
+            "vars": {
+                "input": row['input_text'],
+                "context": row['context']
+            },
+            "assert": [{
+                "type": "contains",
+                "value": row['expected_output']
+            }],
+            "description": f"Test case for: {row['input_text'][:30]}..."
+        }
+        test_cases.append(test_case)
+    return test_cases
+```
+
+### Import from JSON/JSONL
+
+JSON files contain an array of test cases:
+
+```json
+[
+  { "vars": { "var1": "value1" }, "assert": [], "description": "Test #1" },
+  { "vars": { "var1": "value2" }, "assert": [], "description": "Test #2" }
+]
+```
+
+JSONL files contain one JSON test case per line:
+
+```jsonl
+{"vars": {"var1": "value1"}, "assert": [], "description": "Test #1"}
+{"vars": {"var1": "value2"}, "assert": [], "description": "Test #2"}
+```
+
+### Import from CSV
+
+promptfoo also supports a test CSV format.
+
+The first row of the CSV file should contain the variable names, and each subsequent row should contain the corresponding values for each test case.
+
+Vars are substituted by [Nunjucks](https://mozilla.github.io/nunjucks/) templating syntax into prompts. The first row is the variable names. All other rows are variable values.
+
+Example of a tests file (`tests.csv`):
+
+```csv title="tests.csv"
+language,input
+German,"Hello, world!"
+Spanish,Where is the library?
+```
+
+The tests file optionally supports several special columns:
+
+- `__expected`: A column that includes [test assertions](/docs/configuration/expected-outputs). This column lets you automatically mark output according to quality expectations.
+  - For multiple assertions, use `__expected1`, `__expected2`, `__expected3`, etc.
+- `__prefix`: This string is prepended to each prompt before it's sent to the API
+- `__suffix`: This string is appended to each prompt before it's sent to the API
+- `__description`: The test description
+- `__metric`: The metric assigned to every assertion in the test case
+- `__threshold`: The threshold assigned to the test case
+
+:::tip
+You can load your tests from [Google Sheets](/docs/configuration/guide#loading-tests-from-csv).
+:::
+
+#### CSV Files with JSON Fields
+
+CSV files can include JSON fields for structured data. Simple JSON can be unquoted (`{"answer":""}`), while JSON with commas should be escaped (`"{""key"":""value""}"`). By default, promptfoo will try to parse JSON fields in both formats. Set `PROMPTFOO_CSV_STRICT=true` to enforce RFC 4180 compliance. Use the `load` filter to parse JSON in prompts: `{{ (json_field | load).property }}`.
+
+#### Passing Configuration to Custom Assertions
+
+Custom assertions (Python, JavaScript, etc.) can receive configuration data through additional CSV columns. These columns become available in the assertion's context under `vars`.
+
+Example CSV with configuration data:
+
+```csv title="tests.csv"
+question,__expected,groundTruthValue,configKey
+What is the difference between supervised and unsupervised learning?,"python: file://custom_assertion.py","reference answer","some value"
+```
+
+The custom assertion can access these values through the context:
+
+```python title="custom_assertion.py"
+def custom_assertion(output, context):
+    # Access configuration from CSV columns
+    vars = context.get('vars', {})
+    ground_truth = vars.get('groundTruthValue')
+    config_value = vars.get('configKey')
+    # ... rest of assertion logic
+```
+
+```javascript title="custom_assertion.js"
+module.exports = (output, { vars }) => {
+  const groundTruth = vars.groundTruthValue;
+  const configValue = vars.configKey;
+  // ... rest of assertion logic
+};
+```
+
+## Output File
+
+The results of the evaluation are written to this file. For example:
+
+```
+promptfoo eval --output filepath.json
+```
+
+The output file can also be set using the `outputPath` key in the promptfoo configuration.
+
+Several file formats are supported, including JSON, YAML, CSV, and HTML:
 
 ```bash
 promptfoo eval --output results.json  # JSON format
@@ -339,8 +579,6 @@ promptfoo eval --output results.yaml  # YAML format
 promptfoo eval --output results.csv   # CSV format
 promptfoo eval --output results.html  # HTML format
 ```
-
-The output file can also be set using the `outputPath` key in the promptfoo configuration.
 
 Each record in the output file corresponds to a test case and includes the original prompt, the output generated by the LLM, and the values of the variables used in the test case.
 

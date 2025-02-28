@@ -4,13 +4,8 @@ import logger from '../logger';
 import Eval from '../models/eval';
 import { generateTable, wrapTable } from '../table';
 import telemetry from '../telemetry';
-import {
-  getEvalFromId,
-  getPromptFromHash,
-  getDatasetFromHash,
-  printBorder,
-  setupEnv,
-} from '../util';
+import { printBorder, setupEnv } from '../util';
+import { getEvalFromId, getPromptFromHash, getDatasetFromHash } from '../util/database';
 import invariant from '../util/invariant';
 
 async function handlePrompt(id: string) {

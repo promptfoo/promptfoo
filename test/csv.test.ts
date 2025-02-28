@@ -2,10 +2,6 @@ import { assertionFromString, testCaseFromCsvRow } from '../src/csv';
 import logger from '../src/logger';
 import type { Assertion, CsvRow, TestCase } from '../src/types';
 
-jest.mock('../src/logger', () => ({
-  warn: jest.fn(),
-}));
-
 describe('testCaseFromCsvRow', () => {
   it('should create a TestCase with assertions and options from a CSV row', () => {
     const row: CsvRow = {

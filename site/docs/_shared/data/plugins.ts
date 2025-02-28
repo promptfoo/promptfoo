@@ -237,6 +237,20 @@ export const PLUGINS = [
     vulnerabilityType: 'security',
   },
   {
+    category: 'Trust and Safety',
+    description: 'Tests prompt injection attacks using the Harmbench dataset',
+    label: 'technical',
+    link: '/docs/red-team/plugins/harmbench/',
+    name: 'Harmbench',
+    pluginId: 'harmbench',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
     category: 'Security and Access Control',
     description: 'Attempts to access or use debugging commands',
     label: 'technical',
@@ -258,6 +272,21 @@ export const PLUGINS = [
     link: '/docs/red-team/plugins/divergent-repetition/',
     name: 'Divergent Repetition',
     pluginId: 'divergent-repetition',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests for vulnerability to computational resource exhaustion through excessive reasoning patterns. Applicable to reasoning models.',
+    label: 'security',
+    link: '/docs/red-team/plugins/reasoning-dos/',
+    name: 'Reasoning DoS',
+    pluginId: 'reasoning-dos',
     applicationTypes: {
       rag: true,
       agent: true,

@@ -3,13 +3,16 @@ import logger from '../logger';
 import type {
   UnifiedConfig,
   Prompt,
+  PromptFunction,
   ProviderOptionsMap,
   TestSuite,
   ProviderOptions,
+  EvaluateTestSuite,
 } from '../types';
 import { parsePathOrGlob } from '../util';
 import { isJavascriptFile } from '../util/file';
 import invariant from '../util/invariant';
+import { PromptSchema } from '../validators/prompts';
 import { processJsFile } from './processors/javascript';
 import { processJsonFile } from './processors/json';
 import { processJsonlFile } from './processors/jsonl';
@@ -186,4 +189,35 @@ export async function readPrompts(
     prompts.push(...promptBatch);
   }
   return prompts;
+}
+
+export async function processPrompts(
+  prompts: EvaluateTestSuite['prompts'],
+): Promise<TestSuite['prompts']> {
+  return (
+    await Promise.all(
+      prompts.map(async (promptInput: EvaluateTestSuite['prompts'][number]) => {
+        if (typeof promptInput === 'function') {
+          return {
+            raw: promptInput.toString(),
+            label: promptInput?.name ?? promptInput.toString(),
+            function: promptInput as PromptFunction,
+          };
+        } else if (typeof promptInput === 'string') {
+          return readPrompts(promptInput);
+        }
+        try {
+          return PromptSchema.parse(promptInput);
+        } catch (error) {
+          logger.warn(
+            `Prompt input is not a valid prompt schema: ${error}\nFalling back to serialized JSON as raw prompt.`,
+          );
+          return {
+            raw: JSON.stringify(promptInput),
+            label: JSON.stringify(promptInput),
+          };
+        }
+      }),
+    )
+  ).flat();
 }

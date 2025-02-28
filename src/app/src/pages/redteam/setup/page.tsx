@@ -28,6 +28,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { styled } from '@mui/material/styles';
 import type { RedteamStrategy } from '@promptfoo/types';
+import { ProviderOptionsSchema } from '@promptfoo/validators/providers';
 import yaml from 'js-yaml';
 import Plugins from './components/Plugins';
 import Purpose from './components/Purpose';
@@ -35,8 +36,10 @@ import Review from './components/Review';
 import Setup from './components/Setup';
 import Strategies from './components/Strategies';
 import Targets from './components/Targets';
+import { predefinedTargets, customTargetOption } from './components/constants';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useSetupState } from './hooks/useSetupState';
+import type { RedteamUITarget } from './types';
 import type { Config } from './types';
 import { generateOrderedYaml } from './utils/yamlHelpers';
 import './page.css';
@@ -437,6 +440,16 @@ export default function RedTeamSetupPage() {
       const strategies = yamlConfig?.redteam?.strategies || [];
       let target = yamlConfig.targets?.[0] || yamlConfig.providers?.[0] || DEFAULT_HTTP_TARGET;
 
+      // Convert string targets to objects
+      if (typeof target === 'string') {
+        const targetType = predefinedTargets.find((t: RedteamUITarget) => t.value === target);
+
+        target = ProviderOptionsSchema.parse({
+          id: targetType ? targetType.value : customTargetOption.value,
+          label: target,
+        });
+      }
+
       const hasAnyStatefulStrategies = strategies.some(
         (strat: RedteamStrategy) => typeof strat !== 'string' && strat?.config?.stateful,
       );
@@ -568,7 +581,7 @@ export default function RedTeamSetupPage() {
                 <StyledTab
                   icon={<AppIcon />}
                   iconPosition="start"
-                  label="Application"
+                  label="Usage Details"
                   {...a11yProps(0)}
                 />
                 <StyledTab

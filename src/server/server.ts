@@ -6,8 +6,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { Server as SocketIOServer } from 'socket.io';
 import { fromError } from 'zod-validation-error';
-import { createPublicUrl } from '../commands/share';
-import { VERSION, DEFAULT_PORT } from '../constants';
+import { DEFAULT_PORT, VERSION } from '../constants';
 import { setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
@@ -15,22 +14,21 @@ import logger from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
 import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
-import telemetry from '../telemetry';
-import { TelemetryEventSchema } from '../telemetry';
-import { synthesizeFromTestSuite } from '../testCases';
+import { createShareableUrl, determineShareDomain } from '../share';
+import telemetry, { TelemetryEventSchema } from '../telemetry';
+import { synthesizeFromTestSuite } from '../testCase/synthesis';
+import { checkRemoteHealth } from '../util/apiHealth';
 import {
+  getLatestEval,
   getPrompts,
   getPromptsForTestCasesHash,
+  getStandaloneEvals,
+  getTestCases,
   listPreviousResults,
   readResult,
-  getTestCases,
-  getLatestEval,
-  getStandaloneEvals,
-} from '../util';
-import { checkRemoteHealth } from '../util/apiHealth';
+} from '../util/database';
 import invariant from '../util/invariant';
-import { BrowserBehavior } from '../util/server';
-import { openBrowser } from '../util/server';
+import { BrowserBehavior, openBrowser } from '../util/server';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
 import { providersRouter } from './routes/providers';
@@ -102,7 +100,7 @@ export function createApp() {
     res.json({ data: allPrompts });
   });
 
-  app.get('/api/progress', async (req: Request, res: Response): Promise<void> => {
+  app.get('/api/history', async (req: Request, res: Response): Promise<void> => {
     const { tagName, tagValue, description } = req.query;
     const tag =
       tagName && tagValue ? { key: tagName as string, value: tagValue as string } : undefined;
@@ -125,19 +123,45 @@ export function createApp() {
     res.json({ data: await getTestCases() });
   });
 
-  // This is used by ResultsView.tsx to share an eval with another promptfoo instance
+  app.get('/api/results/share/check-domain', async (req: Request, res: Response): Promise<void> => {
+    const id = String(req.query.id);
+    if (!id) {
+      res.status(400).json({ error: 'Missing id parameter' });
+      return;
+    }
+
+    const eval_ = await Eval.findById(id);
+    if (!eval_) {
+      logger.warn(`Eval not found for id: ${id}`);
+      res.status(404).json({ error: 'Eval not found' });
+      return;
+    }
+
+    const { domain } = determineShareDomain(eval_);
+    res.json({ domain });
+  });
+
   app.post('/api/results/share', async (req: Request, res: Response): Promise<void> => {
+    logger.debug(`Share request body: ${JSON.stringify(req.body)}`);
     const { id } = req.body;
 
     const result = await readResult(id);
     if (!result) {
+      logger.warn(`Result not found for id: ${id}`);
       res.status(404).json({ error: 'Eval not found' });
       return;
     }
     const eval_ = await Eval.findById(id);
     invariant(eval_, 'Eval not found');
-    const url = await createPublicUrl(eval_, true);
-    res.json({ url });
+
+    try {
+      const url = await createShareableUrl(eval_, true);
+      logger.debug(`Generated share URL: ${url}`);
+      res.json({ url });
+    } catch (error) {
+      logger.error(`Failed to generate share URL: ${error}`);
+      res.status(500).json({ error: 'Failed to generate share URL' });
+    }
   });
 
   app.post('/api/dataset/generate', async (req: Request, res: Response): Promise<void> => {
@@ -170,7 +194,7 @@ export function createApp() {
       await telemetry.recordAndSend(event, properties);
       res.status(200).json({ success: true });
     } catch (error) {
-      console.error('Error processing telemetry request:', error);
+      logger.error(`Error processing telemetry request: ${error}`);
       res.status(500).json({ error: 'Failed to process telemetry request' });
     }
   });

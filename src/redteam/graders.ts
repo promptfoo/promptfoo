@@ -10,6 +10,7 @@ import { DebugAccessGrader } from './plugins/debugAccess';
 import { DivergentRepetitionGrader } from './plugins/divergentRepetition';
 import { ExcessiveAgencyGrader } from './plugins/excessiveAgency';
 import { HallucinationGrader } from './plugins/hallucination';
+import { HarmbenchGrader } from './plugins/harmbench';
 import {
   ChildExploitationGrader,
   CopyrightViolationGrader,
@@ -43,6 +44,7 @@ import { PoliticsGrader } from './plugins/politics';
 import { PromptExtractionGrader } from './plugins/promptExtraction';
 import { RagDocumentExfiltrationGrader } from './plugins/ragDocumentExfiltration';
 import { RbacGrader } from './plugins/rbac';
+import { ReasoningDosGrader } from './plugins/reasoningDos';
 import { ReligionGrader } from './plugins/religion';
 import { ShellInjectionGrader } from './plugins/shellInjection';
 import { SqlInjectionGrader } from './plugins/sqlInjection';
@@ -61,15 +63,18 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:divergent-repetition': new DivergentRepetitionGrader(),
   'promptfoo:redteam:excessive-agency': new ExcessiveAgencyGrader(),
   'promptfoo:redteam:hallucination': new HallucinationGrader(),
+  'promptfoo:redteam:harmbench': new HarmbenchGrader(),
   'promptfoo:redteam:harmful:chemical-biological-weapons': new HarmfulGrader(),
   'promptfoo:redteam:harmful:child-exploitation': new ChildExploitationGrader(),
   'promptfoo:redteam:harmful:copyright-violations': new CopyrightViolationGrader(),
   'promptfoo:redteam:harmful:cybercrime': new CybercrimeGrader(),
+  'promptfoo:redteam:harmful:cybercrime:malicious-code': new CybercrimeGrader(),
   'promptfoo:redteam:harmful:graphic-content': new GraphicContentGrader(),
   'promptfoo:redteam:harmful:harassment-bullying': new HarmfulGrader(),
   'promptfoo:redteam:harmful:hate': new HateGrader(),
   'promptfoo:redteam:harmful:illegal-activities': new IllegalActivitiesGrader(),
   'promptfoo:redteam:harmful:illegal-drugs': new IllegalDrugsGrader(),
+  'promptfoo:redteam:harmful:illegal-drugs:meth': new IllegalDrugsGrader(),
   'promptfoo:redteam:harmful:indiscriminate-weapons': new IndiscriminateWeaponsGrader(),
   'promptfoo:redteam:harmful:insults': new InsultsGrader(),
   'promptfoo:redteam:harmful:intellectual-property': new CopyrightViolationGrader(),
@@ -84,6 +89,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:harmful:specialized-advice': new SpecializedAdviceGrader(),
   'promptfoo:redteam:harmful:unsafe-practices': new UnsafePracticesGrader(),
   'promptfoo:redteam:harmful:violent-crime': new ViolentCrimeGrader(),
+  'promptfoo:redteam:harmful:weapons:ied': new HarmfulGrader(),
   'promptfoo:redteam:harmful': new HarmfulGrader(),
   'promptfoo:redteam:hijacking': new HijackingGrader(),
   'promptfoo:redteam:imitation': new ImitationGrader(),
@@ -100,6 +106,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:politics': new PoliticsGrader(),
   'promptfoo:redteam:prompt-extraction': new PromptExtractionGrader(),
   'promptfoo:redteam:rbac': new RbacGrader(),
+  'promptfoo:redteam:reasoning-dos': new ReasoningDosGrader(),
   'promptfoo:redteam:religion': new ReligionGrader(),
   'promptfoo:redteam:shell-injection': new ShellInjectionGrader(),
   'promptfoo:redteam:sql-injection': new SqlInjectionGrader(),

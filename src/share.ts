@@ -2,16 +2,41 @@ import input from '@inquirer/input';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { URL } from 'url';
-import { SHARE_API_BASE_URL, SHARE_VIEW_BASE_URL, DEFAULT_SHARE_VIEW_BASE_URL } from './constants';
+import { DEFAULT_SHARE_VIEW_BASE_URL, SHARE_API_BASE_URL, SHARE_VIEW_BASE_URL } from './constants';
 import { getEnvBool, getEnvInt, isCI } from './envars';
 import { fetchWithProxy } from './fetch';
-import { getAuthor } from './globalConfig/accounts';
-import { getUserEmail, setUserEmail } from './globalConfig/accounts';
+import { getAuthor, getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger from './logger';
 import type Eval from './models/eval';
 import type { SharedResults } from './types';
 import { cloudCanAcceptChunkedResults } from './util/cloud';
+
+export interface ShareDomainResult {
+  domain: string;
+  isPublicShare: boolean;
+}
+
+export function determineShareDomain(eval_: Eval): ShareDomainResult {
+  const sharing = eval_.config.sharing;
+  logger.debug(
+    `Share config: isCloudEnabled=${cloudConfig.isEnabled()}, sharing=${JSON.stringify(sharing)}, evalId=${eval_.id}`,
+  );
+
+  const isPublicShare =
+    !cloudConfig.isEnabled() && (!sharing || sharing === true || !('appBaseUrl' in sharing));
+
+  const domain = isPublicShare
+    ? DEFAULT_SHARE_VIEW_BASE_URL
+    : cloudConfig.isEnabled()
+      ? cloudConfig.getAppUrl()
+      : typeof sharing === 'object' && sharing.appBaseUrl
+        ? sharing.appBaseUrl
+        : DEFAULT_SHARE_VIEW_BASE_URL;
+
+  logger.debug(`Share domain determined: domain=${domain}, isPublic=${isPublicShare}`);
+  return { domain, isPublicShare };
+}
 
 const VERSION_SUPPORTS_CHUNKS = '0.103.8';
 
@@ -112,7 +137,7 @@ async function rollbackEval(url: string, evalId: string, headers: Record<string,
   await fetchWithProxy(`${url}/${evalId}`, { method: 'DELETE', headers });
 }
 
-async function sendChunkedResults(evalRecord: Eval, url: string) {
+async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string | null> {
   await evalRecord.loadResults();
 
   const allResults = evalRecord.results;
@@ -169,7 +194,7 @@ async function sendChunkedResults(evalRecord: Eval, url: string) {
   }
 }
 
-async function sendEvalResults(evalRecord: Eval, url: string) {
+async function sendEvalResults(evalRecord: Eval, url: string): Promise<string | null> {
   await evalRecord.loadResults();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -259,10 +284,7 @@ async function getApiConfig(evalRecord: Eval): Promise<{
   };
 }
 
-async function handleLegacyResults(
-  evalRecord: Eval,
-  url: string,
-): Promise<string | null | undefined> {
+async function handleLegacyResults(evalRecord: Eval, url: string): Promise<string | null> {
   const summary = await evalRecord.toEvaluateSummary();
   const table = await evalRecord.getTable();
 
@@ -298,7 +320,7 @@ async function handleLegacyResults(
     return null;
   }
 
-  return responseJson.id;
+  return responseJson.id ?? null;
 }
 
 export async function createShareableUrl(
@@ -319,13 +341,13 @@ export async function createShareableUrl(
   );
 
   // 4. Process and send results
-  let evalId: string | undefined | null;
-  if (canUseNewResults && !evalRecord.useOldResults()) {
-    evalId = sendInChunks
-      ? await sendChunkedResults(evalRecord, url)
-      : await sendEvalResults(evalRecord, url);
-  } else {
+  let evalId: string | null;
+  if (!canUseNewResults || evalRecord.useOldResults()) {
     evalId = await handleLegacyResults(evalRecord, url);
+  } else if (sendInChunks) {
+    evalId = await sendChunkedResults(evalRecord, url);
+  } else {
+    evalId = await sendEvalResults(evalRecord, url);
   }
 
   if (!evalId) {
@@ -333,16 +355,13 @@ export async function createShareableUrl(
   }
   logger.debug(`New eval ID on remote instance: ${evalId}`);
 
-  // 5. Generate final URL
-  const appBaseUrl = cloudConfig.isEnabled()
-    ? cloudConfig.getAppUrl()
-    : (evalRecord.config.sharing as any)?.appBaseUrl || SHARE_VIEW_BASE_URL;
+  const { domain } = determineShareDomain(evalRecord);
 
   const fullUrl = cloudConfig.isEnabled()
-    ? `${appBaseUrl}/eval/${evalId}`
+    ? `${domain}/eval/${evalId}`
     : SHARE_VIEW_BASE_URL === DEFAULT_SHARE_VIEW_BASE_URL
-      ? `${appBaseUrl}/eval/${evalId}`
-      : `${appBaseUrl}/eval/?evalId=${evalId}`;
+      ? `${domain}/eval/${evalId}`
+      : `${domain}/eval/?evalId=${evalId}`;
 
   return showAuth ? fullUrl : stripAuthFromUrl(fullUrl);
 }

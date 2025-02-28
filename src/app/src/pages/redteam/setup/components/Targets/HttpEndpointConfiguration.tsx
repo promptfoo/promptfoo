@@ -29,7 +29,8 @@ import 'prismjs/components/prism-http';
 import 'prismjs/components/prism-json';
 import 'prismjs/components/prism-yaml';
 import type { ProviderOptions } from '../../types';
-import 'prismjs/themes/prism.css';
+import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
+import './syntax-highlighting.css';
 
 interface HttpEndpointConfigurationProps {
   selectedTarget: ProviderOptions;
@@ -88,7 +89,7 @@ Content-Type: application/json
 {
   "messages": [
     {
-      "role": "user", 
+      "role": "user",
       "content": "{{prompt}}"
     }
   ]
@@ -135,6 +136,7 @@ Content-Type: application/json
         updateCustomTarget('method', 'POST');
         updateCustomTarget('headers', {});
         updateCustomTarget('body', '');
+        updateCustomTarget('useHttps', false);
       }
     },
     [updateCustomTarget, setBodyError, setUrlError],
@@ -320,23 +322,14 @@ ${exampleRequest}`;
   };
 
   return (
-    <Box mt={2}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h6">HTTP Endpoint Configuration</Typography>
-        <Box>
-          <Button variant="outlined" onClick={() => setConfigDialogOpen(true)}>
-            Generate Config
-          </Button>
-        </Box>
-      </Box>
+    <Box>
       <FormControlLabel
         control={
           <Switch
-            checked={!!selectedTarget.config.request}
+            checked={Boolean(selectedTarget.config.request)}
             onChange={(e) => {
-              const enabled = e.target.checked;
-              resetState(enabled);
-              if (enabled) {
+              resetState(e.target.checked);
+              if (e.target.checked) {
                 updateCustomTarget('request', exampleRequest);
               }
             }}
@@ -346,20 +339,45 @@ ${exampleRequest}`;
         sx={{ mb: 2, display: 'block' }}
       />
       {selectedTarget.config.request ? (
-        <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
+        <Box
+          mt={2}
+          p={2}
+          sx={{
+            border: 1,
+            borderColor: theme.palette.divider,
+            borderRadius: 1,
+            backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#ffffff',
+            '& .token': {
+              background: 'transparent !important',
+            },
+          }}
+        >
+          <FormControlLabel
+            control={
+              <Switch
+                checked={selectedTarget.config.useHttps}
+                onChange={(e) => {
+                  const enabled = e.target.checked;
+                  updateCustomTarget('useHttps', enabled);
+                }}
+              />
+            }
+            label="Use HTTPS"
+            sx={{ mb: 2, display: 'block' }}
+          />
           <Editor
-            value={selectedTarget.config.request}
+            value={selectedTarget.config.request || ''}
             onValueChange={handleRawRequestChange}
             highlight={(code) => highlight(code, languages.http)}
             padding={10}
             style={{
               fontFamily: '"Fira code", "Fira Mono", monospace',
               fontSize: 14,
-              backgroundColor: darkMode ? '#1e1e1e' : '#f5f5f5',
-              borderRadius: 4,
-              minHeight: '10rem',
+              backgroundColor: 'transparent',
+              color: theme.palette.text.primary,
             }}
             placeholder={placeholderText}
+            className={theme.palette.mode === 'dark' ? 'dark-syntax' : ''}
           />
           {bodyError && (
             <Typography color="error" variant="body2" sx={{ mt: 1 }}>
@@ -559,6 +577,11 @@ ${exampleRequest}`;
           )}
         </DialogActions>
       </Dialog>
+      <HttpAdvancedConfiguration
+        selectedTarget={selectedTarget}
+        updateCustomTarget={updateCustomTarget}
+        defaultRequestTransform={selectedTarget.config.transformRequest}
+      />
     </Box>
   );
 };

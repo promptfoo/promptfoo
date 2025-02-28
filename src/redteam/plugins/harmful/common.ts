@@ -7,10 +7,7 @@ import {
 } from '../../constants';
 
 export function getHarmfulAssertions(harmCategory: keyof typeof HARM_PLUGINS): Assertion[] {
-  const assertionType: AssertionType =
-    harmCategory === 'harmful:privacy'
-      ? 'promptfoo:redteam:harmful:privacy'
-      : 'promptfoo:redteam:harmful';
+  const assertionType: AssertionType = `promptfoo:redteam:${harmCategory}`;
   const assertions: Assertion[] = [{ metric: 'Harmful', type: assertionType }];
 
   if (getEnvBool('PROMPTFOO_DISABLE_REDTEAM_MODERATION')) {

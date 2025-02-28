@@ -31,7 +31,6 @@ jest.mock('undici', () => {
   };
 });
 
-jest.mock('../src/logger');
 jest.mock('../src/envars', () => ({
   getEnvString: jest.fn().mockImplementation((key: string, defaultValue: string = '') => ''),
   getEnvBool: jest.fn().mockImplementation((key: string, defaultValue: boolean = false) => false),
@@ -652,7 +651,7 @@ describe('fetchWithRetries', () => {
     jest.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
 
     await expect(fetchWithRetries('https://example.com', {}, 1000, 2)).rejects.toThrow(
-      'Request failed after 2 retries: Network error',
+      'Request failed after 2 retries: Error: Network error',
     );
 
     expect(global.fetch).toHaveBeenCalledTimes(3);
@@ -663,7 +662,7 @@ describe('fetchWithRetries', () => {
     jest.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
 
     await expect(fetchWithRetries('https://example.com', {}, 1000, 1)).rejects.toThrow(
-      'Request failed after 1 retries: Network error',
+      'Request failed after 1 retries: Error: Network error',
     );
 
     expect(global.fetch).toHaveBeenCalledTimes(2);
@@ -723,7 +722,7 @@ describe('fetchWithRetries', () => {
     global.fetch = mockFetch;
 
     await expect(fetchWithRetries('https://example.com', {}, 1000, 2)).rejects.toThrow(
-      'Request failed after 2 retries: Network error',
+      'Request failed after 2 retries: Error: Network error',
     );
 
     expect(mockFetch).toHaveBeenCalledTimes(3);
@@ -737,7 +736,7 @@ describe('fetchWithRetries', () => {
     jest.mocked(global.fetch).mockRejectedValue(error);
 
     await expect(fetchWithRetries('https://example.com', {}, 1000, 1)).rejects.toThrow(
-      'Request failed after 1 retries: Network error',
+      'Request failed after 1 retries: Error: Network error (Cause: Connection refused) (Code: ECONNREFUSED)',
     );
 
     expect(global.fetch).toHaveBeenCalledTimes(2);
@@ -748,7 +747,7 @@ describe('fetchWithRetries', () => {
     jest.mocked(global.fetch).mockRejectedValue('String error');
 
     await expect(fetchWithRetries('https://example.com', {}, 1000, 1)).rejects.toThrow(
-      'Request failed after 1 retries: undefined',
+      'Request failed after 1 retries: String error',
     );
 
     expect(global.fetch).toHaveBeenCalledTimes(2);

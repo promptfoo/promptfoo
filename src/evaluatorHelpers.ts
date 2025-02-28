@@ -153,7 +153,22 @@ export async function renderPrompt(
     if (typeof result === 'string') {
       basePrompt = result;
     } else if (typeof result === 'object') {
-      basePrompt = JSON.stringify(result);
+      // Check if it's using the structured PromptFunctionResult format
+      if ('prompt' in result) {
+        basePrompt =
+          typeof result.prompt === 'string' ? result.prompt : JSON.stringify(result.prompt);
+
+        // Merge config if provided
+        if (result.config) {
+          prompt.config = {
+            ...(prompt.config || {}),
+            ...result.config,
+          };
+        }
+      } else {
+        // Direct object/array format
+        basePrompt = JSON.stringify(result);
+      }
     } else {
       throw new Error(`Prompt function must return a string or object, got ${typeof result}`);
     }
@@ -165,10 +180,8 @@ export async function renderPrompt(
       vars[key] = (vars[key] as string).replace(/\n$/, '');
     }
   }
-
   // Resolve variable mappings
   resolveVariables(vars);
-
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
     const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
@@ -201,7 +214,6 @@ export async function renderPrompt(
     );
     return heliconeResult;
   }
-
   // Render prompt
   try {
     if (getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {
@@ -209,12 +221,11 @@ export async function renderPrompt(
     }
 
     const parsed = JSON.parse(basePrompt);
-
     // The _raw_ prompt is valid JSON. That means that the user likely wants to substitute vars _within_ the JSON itself.
     // Recursively walk the JSON structure. If we find a string, render it with nunjucks.
     return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
   } catch {
-    return nunjucks.renderString(basePrompt, vars);
+    return renderVarsInObject(nunjucks.renderString(basePrompt, vars), vars);
   }
 }
 

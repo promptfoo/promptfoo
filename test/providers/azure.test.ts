@@ -6,10 +6,9 @@ import {
 } from '../../src/providers/azure';
 import { maybeEmitAzureOpenAiWarning } from '../../src/providers/azureUtil';
 import { HuggingfaceTextGenerationProvider } from '../../src/providers/huggingface';
-import { OpenAiCompletionProvider } from '../../src/providers/openai';
+import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 import type { TestCase, TestSuite } from '../../src/types';
 
-jest.mock('../../src/logger');
 jest.mock('../../src/cache', () => ({
   fetchWithCache: jest.fn(),
 }));

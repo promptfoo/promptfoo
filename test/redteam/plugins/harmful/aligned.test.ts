@@ -4,8 +4,6 @@ import type { HarmfulCategory } from '../../../../src/redteam/plugins/harmful/co
 import { REDTEAM_MODEL_CATEGORIES } from '../../../../src/redteam/plugins/harmful/constants';
 import type { ApiProvider } from '../../../../src/types';
 
-jest.mock('../../../../src/logger');
-
 describe('AlignedHarmfulPlugin', () => {
   let mockProvider: ApiProvider;
   let plugin: AlignedHarmfulPlugin;

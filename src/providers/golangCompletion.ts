@@ -49,12 +49,25 @@ export class GolangProvider implements ApiProvider {
     return `golang:${this.scriptPath}:${this.functionName || 'default'}`;
   }
 
+  private findModuleRoot(startPath: string): string {
+    let currentPath = startPath;
+    while (currentPath !== path.dirname(currentPath)) {
+      if (fs.existsSync(path.join(currentPath, 'go.mod'))) {
+        return currentPath;
+      }
+      currentPath = path.dirname(currentPath);
+    }
+    throw new Error('Could not find go.mod file in any parent directory');
+  }
+
   private async executeGolangScript(
     prompt: string,
     context: CallApiContextParams | undefined,
     apiType: 'call_api' | 'call_embedding_api' | 'call_classification_api',
   ): Promise<any> {
     const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
+    const moduleRoot = this.findModuleRoot(path.dirname(absPath));
+    logger.debug(`Found module root at ${moduleRoot}`);
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(fs.readFileSync(absPath, 'utf-8'));
     const cacheKey = `golang:${this.scriptPath}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
@@ -87,22 +100,46 @@ export class GolangProvider implements ApiProvider {
 
       let tempDir: string | undefined;
       try {
+        // Create temp directory
         tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'golang-provider-'));
-        const tempWrapperPath = path.join(tempDir, 'wrapper.go');
-        const tempScriptPath = path.join(tempDir, 'provider.go');
-        const executablePath = path.join(tempDir, 'golang_wrapper');
 
+        // Helper function to copy directory recursively
+        const copyDir = (src: string, dest: string) => {
+          fs.mkdirSync(dest, { recursive: true });
+          const entries = fs.readdirSync(src, { withFileTypes: true });
+          for (const entry of entries) {
+            const srcPath = path.join(src, entry.name);
+            const destPath = path.join(dest, entry.name);
+            if (entry.isDirectory()) {
+              copyDir(srcPath, destPath);
+            } else {
+              fs.copyFileSync(srcPath, destPath);
+            }
+          }
+        };
+
+        // Copy the entire module structure
+        copyDir(moduleRoot, tempDir);
+
+        const relativeScriptPath = path.relative(moduleRoot, absPath);
+        const scriptDir = path.dirname(path.join(tempDir, relativeScriptPath));
+
+        // Copy wrapper.go to the same directory as the script
+        const tempWrapperPath = path.join(scriptDir, 'wrapper.go');
+        fs.mkdirSync(scriptDir, { recursive: true });
         fs.copyFileSync(path.join(__dirname, '../golang/wrapper.go'), tempWrapperPath);
-        fs.copyFileSync(absPath, tempScriptPath);
 
-        if (!fs.existsSync(executablePath)) {
-          // Compile the Go code only if the executable doesn't exist
-          const compileCommand = `${this.config.goExecutable || 'go'} build -o ${executablePath} ${tempWrapperPath} ${tempScriptPath}`;
-          await execAsync(compileCommand);
-        }
+        const executablePath = path.join(tempDir, 'golang_wrapper');
+        const tempScriptPath = path.join(tempDir, relativeScriptPath);
 
-        // Run the compiled binary
-        const command = `${executablePath} ${tempScriptPath} ${functionName} '${safeJsonStringify(args)}'`;
+        // Build from the script directory
+        const compileCommand = `cd ${scriptDir} && ${this.config.goExecutable || 'go'} build -o ${executablePath} wrapper.go ${path.basename(relativeScriptPath)}`;
+        await execAsync(compileCommand);
+
+        const jsonArgs = safeJsonStringify(args) || '[]';
+        // Escape single quotes in the JSON string
+        const escapedJsonArgs = jsonArgs.replace(/'/g, "'\\''");
+        const command = `${executablePath} ${tempScriptPath} ${functionName} '${escapedJsonArgs}'`;
         logger.debug(`Running command: ${command}`);
 
         const { stdout, stderr } = await execAsync(command);

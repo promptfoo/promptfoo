@@ -1,10 +1,11 @@
 import cliState from '../../cliState';
 import logger from '../../logger';
-import { OpenAiChatCompletionProvider } from '../../providers/openai';
+import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import {
   type ApiProvider,
   type CallApiContextParams,
   type CallApiOptionsParams,
+  type EvaluateResult,
   type GuardrailResponse,
   isApiProvider,
   isProviderOptions,
@@ -215,4 +216,5 @@ export interface BaseRedteamResponse {
   metadata: BaseRedteamMetadata;
   tokenUsage: TokenUsage;
   guardrails?: GuardrailResponse;
+  additionalResults?: EvaluateResult[];
 }

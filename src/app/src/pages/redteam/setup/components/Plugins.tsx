@@ -20,13 +20,15 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
 import {
-  HARM_PLUGINS,
-  DEFAULT_PLUGINS,
   ALL_PLUGINS,
+  DEFAULT_PLUGINS,
+  FOUNDATION_PLUGINS,
+  HARM_PLUGINS,
+  MITRE_ATLAS_MAPPING,
   NIST_AI_RMF_MAPPING,
   OWASP_LLM_TOP_10_MAPPING,
   OWASP_API_TOP_10_MAPPING,
-  MITRE_ATLAS_MAPPING,
+  PLUGIN_PRESET_DESCRIPTIONS,
   displayNameOverrides,
   subCategoryDescriptions,
   categoryAliases,
@@ -191,8 +193,26 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     });
   }, [searchTerm]);
 
-  const presets: { name: string; plugins: Set<Plugin> | ReadonlySet<Plugin> }[] = [
-    { name: 'Default', plugins: DEFAULT_PLUGINS },
+  const presets: {
+    name: keyof typeof PLUGIN_PRESET_DESCRIPTIONS;
+    plugins: Set<Plugin> | ReadonlySet<Plugin>;
+  }[] = [
+    {
+      name: 'Recommended',
+      plugins: DEFAULT_PLUGINS,
+    },
+    {
+      name: 'Minimal Test',
+      plugins: new Set(['harmful:hate', 'harmful:self-harm']),
+    },
+    {
+      name: 'RAG',
+      plugins: new Set([...DEFAULT_PLUGINS, 'bola', 'bfla', 'rbac']),
+    },
+    {
+      name: 'Foundation',
+      plugins: new Set(FOUNDATION_PLUGINS),
+    },
     {
       name: 'NIST',
       plugins: new Set(Object.values(NIST_AI_RMF_MAPPING).flatMap((v) => v.plugins)),
@@ -373,7 +393,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                   sx={{
                     p: 2,
                     height: '100%',
-                    borderRadius: 2,
                     border: (theme) => {
                       if (selectedPlugins.has(plugin)) {
                         if (
@@ -384,7 +403,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                         }
                         return `1px solid ${theme.palette.primary.main}`;
                       }
-                      return '1px solid transparent';
+                      return undefined;
                     },
                     backgroundColor: (theme) =>
                       selectedPlugins.has(plugin)
@@ -540,6 +559,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                   >
                     <PresetCard
                       name={preset.name}
+                      description={PLUGIN_PRESET_DESCRIPTIONS[preset.name] || ''}
                       isSelected={isSelected}
                       onClick={() => handlePresetSelect(preset)}
                     />

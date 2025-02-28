@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import fs from 'fs';
+import http from 'http';
 import httpZ from 'http-z';
 import path from 'path';
 import { z } from 'zod';
@@ -19,6 +20,59 @@ import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { REQUEST_TIMEOUT_MS } from './shared';
+
+// This function is used to encode the URL in the first line of a raw request
+export function urlEncodeRawRequestPath(rawRequest: string) {
+  const firstLine = rawRequest.split('\n')[0];
+
+  const firstSpace = firstLine.indexOf(' ');
+  const method = firstLine.slice(0, firstSpace);
+  if (!method || !http.METHODS.includes(method)) {
+    logger.error(`[Http Provider] HTTP request method ${method} is not valid. From: ${firstLine}`);
+    throw new Error(
+      `[Http Provider] HTTP request method ${method} is not valid. From: ${firstLine}`,
+    );
+  }
+  const lastSpace = firstLine.lastIndexOf(' ');
+  if (lastSpace === -1) {
+    logger.error(
+      `[Http Provider] HTTP request URL is not valid. Protocol is missing. From: ${firstLine}`,
+    );
+    throw new Error(
+      `[Http Provider] HTTP request URL is not valid. Protocol is missing. From: ${firstLine}`,
+    );
+  }
+  const url = firstLine.slice(firstSpace + 1, lastSpace);
+
+  if (url.length === 0) {
+    logger.error(`[Http Provider] HTTP request URL is not valid. From: ${firstLine}`);
+    throw new Error(`[Http Provider] HTTP request URL is not valid. From: ${firstLine}`);
+  }
+
+  const protocol = firstLine.slice(lastSpace + 1);
+  if (!protocol.toLowerCase().startsWith('http')) {
+    logger.error(`[Http Provider] HTTP request protocol is not valid. From: ${firstLine}`);
+    throw new Error(`[Http Provider] HTTP request protocol is not valid. From: ${firstLine}`);
+  }
+
+  logger.debug(`[Http Provider] Encoding URL: ${url} from first line of raw request: ${firstLine}`);
+
+  try {
+    // Use the built-in URL class to parse and encode the URL
+    const parsedUrl = new URL(url, 'http://placeholder-base.com');
+
+    // Replace the original URL in the first line
+    rawRequest = rawRequest.replace(
+      firstLine,
+      `${method} ${parsedUrl.pathname}${parsedUrl.search}${protocol ? ' ' + protocol : ''}`,
+    );
+  } catch (err) {
+    logger.error(`[Http Provider] Error parsing URL in HTTP request: ${String(err)}`);
+    throw new Error(`[Http Provider] Error parsing URL in HTTP request: ${String(err)}`);
+  }
+
+  return rawRequest;
+}
 
 const nunjucks = getNunjucksEngine();
 
@@ -65,6 +119,10 @@ export const HttpProviderConfigSchema = z.object({
   method: z.string().optional(),
   queryParams: z.record(z.string()).optional(),
   request: z.string().optional(),
+  useHttps: z
+    .boolean()
+    .optional()
+    .describe('Use HTTPS for the request. This only works with the raw request option'),
   sessionParser: z.union([z.string(), z.function()]).optional(),
   transformRequest: z.union([z.string(), z.function()]).optional(),
   transformResponse: z.union([z.string(), z.function()]).optional(),
@@ -202,11 +260,15 @@ export async function createTransformResponse(
     return (data, text, context) => {
       try {
         const trimmedParser = parser.trim();
+        // Check if it's a function expression (either arrow or regular)
+        const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedParser);
         const transformFn = new Function(
           'json',
           'text',
           'context',
-          `try { return (${trimmedParser}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
+          isFunctionExpression
+            ? `try { return (${trimmedParser})(json, text, context); } catch(e) { throw new Error('Transform failed: ' + e.message); }`
+            : `try { return (${trimmedParser}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
         );
         let resp: ProviderResponse | string;
         if (context) {
@@ -294,8 +356,10 @@ export function processTextBody(body: string, vars: Record<string, any>): string
 
 function parseRawRequest(input: string) {
   const adjusted = input.trim().replace(/\n/g, '\r\n') + '\r\n\r\n';
+  // If the injectVar is in a query param, we need to encode the URL in the first line
+  const encoded = urlEncodeRawRequestPath(adjusted);
   try {
-    const messageModel = httpZ.parse(adjusted) as httpZ.HttpZRequestModel;
+    const messageModel = httpZ.parse(encoded) as httpZ.HttpZRequestModel;
     return {
       method: messageModel.method,
       url: messageModel.target,
@@ -621,7 +685,7 @@ export class HttpProvider implements ApiProvider {
     }
 
     if (this.config.request) {
-      return this.callApiWithRawRequest(vars);
+      return this.callApiWithRawRequest(vars, context);
     }
 
     const defaultHeaders = this.getDefaultHeaders(this.config.body);
@@ -631,7 +695,7 @@ export class HttpProvider implements ApiProvider {
     // Transform prompt using request transform
     const transformedPrompt = await (await this.transformRequest)(prompt);
     logger.debug(
-      `[HTTP Provider]: Transformed prompt: ${transformedPrompt}. Original prompt: ${prompt}`,
+      `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
     );
 
     const renderedConfig: Partial<HttpProviderConfig> = {
@@ -688,13 +752,15 @@ export class HttpProvider implements ApiProvider {
       this.config.maxRetries,
     );
 
-    logger.debug(`[HTTP Provider]: Response: ${response.data}`);
+    logger.debug(`[HTTP Provider]: Response: ${safeJsonStringify(response.data)}`);
     if (!(await this.validateStatus)(response.status)) {
       throw new Error(
         `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
       );
     }
-    logger.debug(`[HTTP Provider]: Response (HTTP ${response.status}): ${response.data}`);
+    logger.debug(
+      `[HTTP Provider]: Response (HTTP ${response.status}): ${safeJsonStringify(response.data)}`,
+    );
 
     const ret: ProviderResponse = {};
     if (context?.debug) {
@@ -739,18 +805,26 @@ export class HttpProvider implements ApiProvider {
     };
   }
 
-  private async callApiWithRawRequest(vars: Record<string, any>): Promise<ProviderResponse> {
+  private async callApiWithRawRequest(
+    vars: Record<string, any>,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     invariant(this.config.request, 'Expected request to be set in http provider config');
     const renderedRequest = nunjucks.renderString(this.config.request, vars);
     const parsedRequest = parseRawRequest(renderedRequest.trim());
 
-    const protocol = this.url.startsWith('https') ? 'https' : 'http';
+    const protocol = this.url.startsWith('https') || this.config.useHttps ? 'https' : 'http';
     const url = new URL(
       parsedRequest.url,
       `${protocol}://${parsedRequest.headers['host']}`,
     ).toString();
 
-    logger.debug(`[HTTP Provider]: Calling ${url} with raw request: ${parsedRequest}`);
+    // Remove content-length header from raw request if the user added it, it will be added by fetch with the correct value
+    delete parsedRequest.headers['content-length'];
+
+    logger.debug(
+      `[HTTP Provider]: Calling ${url} with raw request: ${parsedRequest.method}  ${safeJsonStringify(parsedRequest.body)} \n headers: ${safeJsonStringify(parsedRequest.headers)}`,
+    );
     const response = await fetchWithCache(
       url,
       {
@@ -760,11 +834,11 @@ export class HttpProvider implements ApiProvider {
       },
       REQUEST_TIMEOUT_MS,
       'text',
-      undefined,
+      context?.debug,
       this.config.maxRetries,
     );
 
-    logger.debug(`[HTTP Provider]: Response: ${response.data}`);
+    logger.debug(`[HTTP Provider]: Response: ${safeJsonStringify(response.data)}`);
 
     if (!(await this.validateStatus)(response.status)) {
       throw new Error(
@@ -779,12 +853,24 @@ export class HttpProvider implements ApiProvider {
     } catch {
       parsedData = null;
     }
+    const ret: ProviderResponse = {};
+    if (context?.debug) {
+      ret.raw = response.data;
+      ret.metadata = {
+        headers: response.headers,
+      };
+    }
 
     const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
     if (parsedOutput?.output) {
-      return parsedOutput;
+      return {
+        ...ret,
+        ...parsedOutput,
+      };
     }
+
     return {
+      ...ret,
       output: parsedOutput,
     };
   }

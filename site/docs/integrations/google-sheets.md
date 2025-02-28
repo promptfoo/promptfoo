@@ -18,16 +18,26 @@ promptfoo allows you to import eval test cases directly from Google Sheets. This
 
 For sheets that are accessible via "anyone with the link", simply specify the share URL in your configuration:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Public Google Sheet Example'
 prompts:
-  - prompt1.txt
-  - prompt2.txt
+  - 'Please translate the following text to {{language}}: {{input}}'
 providers:
   - anthropic:messages:claude-3-5-sonnet-20241022
   - openai:chat:gpt-4o
 // highlight-start
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
 // highlight-end
+```
+
+The Google Sheet above is structured with columns that define the test cases. Here's a copy of the sheet:
+
+```csv title="Google Sheet"
+language,input,__expected
+French,Hello world,icontains: bonjour
+German,I'm hungry,llm-rubric: is german
+Swahili,Hello world,similar(0.8):hello world
 ```
 
 > 💡 See our [example sheet](https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit#gid=0) for the expected format. For details on sheet structure, refer to [loading assertions from CSV](/docs/configuration/expected-outputs/#load-assertions-from-csv).
