@@ -68,7 +68,7 @@ export async function fetchCsvFromGoogleSheetAuthenticated(url: string): Promise
   return dataRows.map((row) => {
     const csvRow: CsvRow = {};
     headers.forEach((header, index) => {
-      csvRow[header] = row[index];
+      csvRow[header] = row[index] ?? '';
     });
     return csvRow;
   });
