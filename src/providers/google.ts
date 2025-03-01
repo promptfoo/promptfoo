@@ -1,3 +1,4 @@
+import { getNunjucksEngine } from '../util/templates';
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
@@ -54,7 +55,7 @@ class GoogleGenericProvider implements ApiProvider {
   }
 
   getApiHost(): string | undefined {
-    return (
+    const apiHost = (
       this.config.apiHost ||
       this.env?.GOOGLE_API_HOST ||
       this.env?.PALM_API_HOST ||
@@ -62,16 +63,24 @@ class GoogleGenericProvider implements ApiProvider {
       getEnvString('PALM_API_HOST') ||
       DEFAULT_API_HOST
     );
+    if (apiHost) {
+      return getNunjucksEngine().renderString(apiHost, {});
+    }
+    return undefined;
   }
 
   getApiKey(): string | undefined {
-    return (
+    const apiKey = (
       this.config.apiKey ||
       this.env?.GOOGLE_API_KEY ||
       this.env?.PALM_API_KEY ||
       getEnvString('GOOGLE_API_KEY') ||
       getEnvString('PALM_API_KEY')
     );
+    if (apiKey) {
+      return getNunjucksEngine().renderString(apiKey, {});
+    }
+    return undefined;
   }
 
   // @ts-ignore: Prompt is not used in this implementation
