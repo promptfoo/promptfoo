@@ -281,3 +281,6 @@ export default function CustomIntentSection() {
     </Box>
   );
 }
+
+
+export { EXAMPLE_INTENTS, ITEMS_PER_PAGE, DEBOUNCE_MS, UPDATE_DRAFT_MS };
