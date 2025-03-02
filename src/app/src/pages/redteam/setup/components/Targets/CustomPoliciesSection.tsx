@@ -205,3 +205,6 @@ export const CustomPoliciesSection = () => {
 };
 
 export default memo(CustomPoliciesSection);
+
+
+export { PolicyInput };
