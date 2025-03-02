@@ -261,7 +261,7 @@ export default function CustomIntentSection() {
               variant="contained"
               disabled={hasEmptyArrayItems(localConfig.intent as string[])}
             >
-              Add another
+              Add prompt
             </Button>
             <Button component="label" variant="outlined" startIcon={<FileUploadIcon />}>
               Upload CSV
