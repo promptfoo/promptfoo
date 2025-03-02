@@ -739,3 +739,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     </ErrorBoundary>
   );
 }
+
+
+export { ErrorFallback, went, wrong, PLUGINS_REQUIRING_CONFIG, PLUGINS_SUPPORTING_CONFIG, currentlySelectedPreset };
