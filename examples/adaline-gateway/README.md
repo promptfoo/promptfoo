@@ -12,11 +12,15 @@ npx promptfoo@latest init --example adaline-gateway
 
 This example contains multiple sub-examples:
 
-- `adaline-chat/`: Basic chat completion example
-- `adaline-vision/`: Vision model testing with direct image URLs
-- `adaline-vision-base64/`: Vision model testing with base64-encoded images
-
-Each subdirectory contains its own:
+- `adaline-chat-history/`: Example demonstrating chat history handling
+- `adaline-embedding-similarity/`: Example showing embedding and similarity features
+- `adaline-eval-factuality/`: Example for evaluating factuality
+- `adaline-multi-provider/`: Example using multiple providers
+- `adaline-openai-format/`: Example with OpenAI format compatibility
+- `adaline-structured-output/`: Example for structured output generation
+- `adaline-tool-call/`: Example demonstrating tool calling capabilities
+- `adaline-vision/`: Example for vision-related tasks
+- `adaline-vision-base64/`: Example using base64-encoded images
 
 - Configuration file (`promptfooconfig.yaml`)
 - Test prompts and cases
