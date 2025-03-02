@@ -679,9 +679,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         >
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
-              Custom Policies ({config.plugins.filter(
-                (p) => typeof p === 'object' && 'id' in p && p.id === 'policy'
-              ).length || 0})
+              Custom Policies (
+              {config.plugins.filter((p) => typeof p === 'object' && 'id' in p && p.id === 'policy')
+                .length || 0}
+              )
             </Typography>
           </AccordionSummary>
           <AccordionDetails>
