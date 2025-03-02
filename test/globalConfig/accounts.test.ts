@@ -12,7 +12,6 @@ import {
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../src/globalConfig/globalConfig';
 import logger from '../../src/logger';
 import telemetry from '../../src/telemetry';
-import { printBorder } from '../../src/util';
 
 jest.mock('@inquirer/input');
 jest.mock('../../src/envars');
@@ -255,7 +254,7 @@ describe('accounts', () => {
 
       await checkEmailStatusOrExit();
 
-      expect(printBorder).toHaveBeenCalledTimes(2);
+      expect(logger.info).toHaveBeenCalledTimes(2);
       expect(logger.warn).toHaveBeenCalledWith(chalk.yellow(warningMessage));
       expect(mockExit).not.toHaveBeenCalled();
     });
