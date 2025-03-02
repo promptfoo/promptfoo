@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Bedrock Nova Eval'
+description: 'Bedrock Nova Eval with Images'
 
 prompts:
   - file://nova_multimodal_prompt.json
