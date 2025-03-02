@@ -1,45 +1,84 @@
-# TypeScript Configuration Example for promptfoo
+# TypeScript Configuration Example
 
-This guide demonstrates how to set up a TypeScript configuration for promptfoo using `promptfooconfig.ts`.
+This example demonstrates how to use TypeScript for promptfoo configuration, enabling type safety, better IDE support, and more maintainable configuration files.
 
-## Prerequisites
-
-- Node.js 20 or later
-- A TypeScript loader for Node.js such as `@swc-node/register` or `tsx`
-
-Install your chosen loader:
+## Quick Start
 
 ```bash
 npx promptfoo@latest init --example ts-config
-# or simply
+```
+
+## Configuration
+
+1. Install a TypeScript loader (choose one):
+
+```bash
+# Option 1: Using @swc-node/register (Recommended)
 npm install @swc-node/register
-# or
+
+# Option 2: Using tsx
 npm install tsx
 ```
 
-## Running the Evaluation
+2. Review the example files:
+   - `promptfooconfig.ts`: Main TypeScript configuration
+   - `types.ts`: Custom type definitions
+   - Test cases with type-safe variables
 
-Execute the evaluation using one of the following commands:
+## Usage
+
+Run the evaluation using your chosen loader:
+
+### Using @swc-node/register
 
 ```bash
-npx promptfoo@latest init --example ts-config
-# or simply
-# Using @swc-node/register
-NODE_OPTIONS='--import @swc-node/register/esm-register' promptfoo eval -c examples/ts-config/promptfooconfig.ts
-
-# Using tsx
-NODE_OPTIONS="--import tsx" promptfoo eval -c examples/ts-config/promptfooconfig.ts
+NODE_OPTIONS='--import @swc-node/register/esm-register' promptfoo eval -c promptfooconfig.ts
 ```
 
-View the results:
+### Using tsx
+
+```bash
+NODE_OPTIONS='--loader tsx' promptfoo eval -c promptfooconfig.ts
+```
+
+View results:
 
 ```bash
 promptfoo view
 ```
 
-## TypeScript Support in Node.js
+## What's Being Tested
 
-- Currently, Node.js requires external loaders to run TypeScript files directly. However, future versions of Node.js are expected to include native TypeScript support:
-- Node.js 20 introduced the `--experimental-loader` flag for ES module.
-- The Node.js team is actively working on enhancing TypeScript integration.
-- Future versions may reduce or eliminate the need for external loaders.
+This example demonstrates:
+
+- Type-safe configuration setup
+- TypeScript integration patterns
+- Custom type definitions
+- Module imports and exports
+- Configuration validation at compile time
+
+## Example Structure
+
+The example includes:
+
+- `promptfooconfig.ts`: Main TypeScript configuration file
+- `types.ts`: Type definitions and interfaces
+- Test cases with typed variables
+- TypeScript-specific configuration options
+
+## Implementation Details
+
+The configuration demonstrates:
+
+- How to define typed configurations
+- Using TypeScript features in config files
+- Importing external modules and types
+- Type-safe variable references
+- Error handling with TypeScript
+
+## Additional Resources
+
+- [TypeScript Configuration Guide](https://promptfoo.dev/docs/configuration/typescript)
+- [Configuration Types Reference](https://promptfoo.dev/docs/configuration/types)
+- [TypeScript Documentation](https://www.typescriptlang.org/docs/)
+- [SWC Node Documentation](https://swc.rs/docs/usage/swc-node)
