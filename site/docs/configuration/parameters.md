@@ -374,7 +374,7 @@ In this example, the `body` variable is passed through the `allcaps` filter befo
 
 If `prompts` is not defined in the config, then by default Promptfoo will use a "passthrough" prompt: `{{prompt}}`. This prompt simply passes through content of the `prompt` variable.
 
-## Tests File
+## Tests and Vars
 
 If you have a lot of tests, you can optionally keep them separate from the main config file.
 
@@ -547,6 +547,86 @@ module.exports = (output, { vars }) => {
   // ... rest of assertion logic
 };
 ```
+
+### Loading images and other file types
+
+Promptfoo supports loading various file types as variables in your prompts:
+
+```yaml title="promptfooconfig.yaml"
+tests:
+  - vars:
+      text_file: file://path/to/text.txt
+      yaml_file: file://path/to/data.yaml
+      pdf_document: file://path/to/document.pdf
+      image: file://path/to/image.png
+      video: file://path/to/video.mp4
+```
+
+When loading files as variables:
+
+- **Text files** are loaded as plain text
+- **YAML/YML files** are loaded as JSON strings
+- **PDF files** are parsed to extract text (requires `pdf-parse` package)
+- **Image files** (jpg, jpeg, png, gif, bmp, webp, svg) are loaded as base64 strings
+- **Video files** (mp4, webm, ogg, mov, avi, wmv, mkv, m4v) are loaded as base64 strings
+
+This is particularly useful for multimodal models that can process text, images, and videos. For example, to include an image in a prompt for a vision model:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - |-
+    [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Describe what you see in this image:"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "data:image/jpeg;base64,{{image}}"
+            }
+          }
+        ]
+      }
+    ]
+
+tests:
+  - vars:
+      image: file://path/to/image.jpg
+```
+
+Similarly, for video content:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - |-
+    [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Describe what happens in this video:"
+          },
+          {
+            "type": "video_url",
+            "video_url": {
+              "url": "data:video/mp4;base64,{{video}}"
+            }
+          }
+        ]
+      }
+    ]
+
+tests:
+  - vars:
+      video: file://path/to/video.mp4
+```
+
+The media files will be automatically loaded and converted to base64 strings that can be used directly in your prompts for multimodal models.
 
 ## Output File
 

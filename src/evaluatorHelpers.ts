@@ -18,6 +18,18 @@ import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
 
+function isImageFile(filePath: string): boolean {
+  const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'];
+  const fileExtension = filePath.split('.').pop()?.toLowerCase() || '';
+  return imageExtensions.includes(fileExtension);
+}
+
+function isVideoFile(filePath: string): boolean {
+  const videoExtensions = ['mp4', 'webm', 'ogg', 'mov', 'avi', 'wmv', 'mkv', 'm4v'];
+  const fileExtension = filePath.split('.').pop()?.toLowerCase() || '';
+  return videoExtensions.includes(fileExtension);
+}
+
 export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   logger.debug(`Extracting text from PDF: ${pdfPath}`);
   try {
@@ -122,8 +134,27 @@ export async function renderPrompt(
         vars[varName] = JSON.stringify(
           yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object,
         );
-      } else if (fileExtension === 'pdf') {
+      } else if (fileExtension === 'pdf' && !getEnvBool('PROMPTFOO_DISABLE_PDF_AS_TEXT')) {
+        telemetry.recordOnce('feature_used', {
+          feature: 'extract_text_from_pdf',
+        });
         vars[varName] = await extractTextFromPDF(filePath);
+      } else if (
+        (isImageFile(filePath) || isVideoFile(filePath)) &&
+        !getEnvBool('PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64')
+      ) {
+        telemetry.recordOnce('feature_used', {
+          feature: 'load_image_as_base64',
+        });
+        logger.debug(`Loading image as base64: ${filePath}`);
+        try {
+          const imageBuffer = fs.readFileSync(filePath);
+          vars[varName] = imageBuffer.toString('base64');
+        } catch (error) {
+          throw new Error(
+            `Failed to load image ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
       } else {
         vars[varName] = fs.readFileSync(filePath, 'utf8').trim();
       }
