@@ -178,7 +178,9 @@ export const CustomPoliciesSection = () => {
               <IconButton
                 onClick={() => {
                   setPolicies((prev) =>
-                    prev.map((p) => (p.id === policy.id ? { ...p, isExpanded: !p.isExpanded } : p)),
+                    prev.map((p) =>
+                      p.id === policy.id ? { ...p, isExpanded: !p.isExpanded } : p,
+                    ),
                   );
                 }}
               >
@@ -205,3 +207,6 @@ export const CustomPoliciesSection = () => {
 };
 
 export default memo(CustomPoliciesSection);
+
+
+export { PolicyInput };
