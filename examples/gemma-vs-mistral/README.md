@@ -4,7 +4,9 @@ Next, edit promptfooconfig.yaml.
 
 Then run:
 
-```
+```bash
+npx promptfoo@latest init --example gemma-vs-mistral
+# or simply
 promptfoo eval
 ```
 

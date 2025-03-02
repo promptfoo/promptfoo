@@ -2,6 +2,8 @@ To get started, set up any API key environment variables required by your provid
 
 Then run:
 
-```
+```bash
+npx promptfoo@latest init --example redteam-beavertails
+# or simply
 promptfoo eval
 ```

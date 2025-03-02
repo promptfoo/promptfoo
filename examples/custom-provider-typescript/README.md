@@ -2,7 +2,9 @@ This example uses a custom API provider in `customProvider.ts`. It also uses CSV
 
 Run:
 
-```
+```bash
+npx promptfoo@latest init --example custom-provider-typescript
+# or simply
 promptfoo eval
 ```
 

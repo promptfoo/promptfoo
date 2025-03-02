@@ -41,3 +41,11 @@ This example demonstrates how to use Promptfoo for image classification tasks us
    - Try different models such as llama3.2 or Claude 3.5 by changing the provider in the config
    - Adjust the system prompt to improve classification accuracy
    - Add additional assertions to validate model outputs
+
+## Quick Start
+
+You can initialize this example with:
+
+```bash
+npx promptfoo@latest init --example image-classification
+```

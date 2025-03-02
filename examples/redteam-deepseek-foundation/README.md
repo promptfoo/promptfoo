@@ -23,3 +23,11 @@ Follow these steps to get started:
 **Note:** If you prefer not to use the OpenRouter DeepSeek configuration, you can switch to the official DeepSeek provider. Simply update your configuration to follow the guidelines in [DeepSeek Documentation](https://promptfoo.dev/docs/providers/deepseek) (also referenced as @deepseek.md).
 
 For more details on our DeepSeek red team process and security analysis, refer to the [DeepSeek Red Team Blog Post](https://www.promptfoo.dev/blog/deepseek-redteam/).
+
+## Quick Start
+
+You can initialize this example with:
+
+```bash
+npx promptfoo@latest init --example redteam-deepseek-foundation
+```

@@ -4,7 +4,9 @@ If you use a model-graded eval, you must set your OPENAI_API_KEY environment var
 
 Then run:
 
-```
+```bash
+npx promptfoo@latest init --example standalone-assertions
+# or simply
 promptfoo eval --assertions asserts.yaml --model-outputs outputs.json
 ```
 

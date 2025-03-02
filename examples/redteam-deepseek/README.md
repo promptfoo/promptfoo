@@ -2,7 +2,9 @@ To get started, set your OPENROUTER_API_KEY environment variable.
 
 This command will run the eval specified in `promptfooconfig.yaml`:
 
-```
+```bash
+npx promptfoo@latest init --example redteam-deepseek
+# or simply
 promptfoo eval
 ```
 

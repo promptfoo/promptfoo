@@ -6,7 +6,9 @@ Next, edit promptfooconfig.yaml.
 
 Then run:
 
-```
+```bash
+npx promptfoo@latest init --example prompts-per-model
+# or simply
 promptfoo eval
 ```
 

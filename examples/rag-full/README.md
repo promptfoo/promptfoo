@@ -25,7 +25,9 @@ Now we're ready to go.
 - Edit `promptfooconfig.yaml` to your liking to configure the questions you'd like to ask in your tests. Then run:
 - Edit `retrieve.py` to control how context is loaded and questions are answered.
 
-```
+```bash
+npx promptfoo@latest init --example rag-full
+# or simply
 promptfoo eval
 ```
 

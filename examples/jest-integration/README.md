@@ -31,3 +31,11 @@ To get started, follow these steps:
 For more details on integrating prompt testing with Jest and Vitest, see the [documentation](https://promptfoo.dev/docs/integrations/jest).
 
 ![Testing prompts with Jest](https://github.com/promptfoo/promptfoo/assets/310310/a9c5b96c-d4ea-42fd-8ce9-704098195e33)
+
+## Quick Start
+
+You can initialize this example with:
+
+```bash
+npx promptfoo@latest init --example jest-integration
+```

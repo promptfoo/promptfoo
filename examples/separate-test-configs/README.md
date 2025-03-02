@@ -2,6 +2,8 @@ This example shows how you can use paths and wildcards to simplify for `promptfo
 
 Run:
 
-```
+```bash
+npx promptfoo@latest init --example separate-test-configs
+# or simply
 promptfoo eval
 ```

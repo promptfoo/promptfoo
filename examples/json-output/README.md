@@ -4,7 +4,9 @@ Next, edit promptfooconfig.yaml.
 
 Then run:
 
-```
+```bash
+npx promptfoo@latest init --example json-output
+# or simply
 promptfoo eval
 ```
 

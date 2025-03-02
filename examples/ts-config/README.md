@@ -10,6 +10,8 @@ This guide demonstrates how to set up a TypeScript configuration for promptfoo u
 Install your chosen loader:
 
 ```bash
+npx promptfoo@latest init --example ts-config
+# or simply
 npm install @swc-node/register
 # or
 npm install tsx
@@ -20,6 +22,8 @@ npm install tsx
 Execute the evaluation using one of the following commands:
 
 ```bash
+npx promptfoo@latest init --example ts-config
+# or simply
 # Using @swc-node/register
 NODE_OPTIONS='--import @swc-node/register/esm-register' promptfoo eval -c examples/ts-config/promptfooconfig.ts
 

@@ -16,6 +16,8 @@ This example demonstrates how to use Perplexity's search-augmented chat models t
 2. Set up your environment:
 
 ```bash
+npx promptfoo@latest init --example perplexity.ai-example
+# or simply
 export PERPLEXITY_API_KEY=your_api_key_here
 export OPENAI_API_KEY=your_api_key_here  # For comparison model
 ```
@@ -25,6 +27,8 @@ export OPENAI_API_KEY=your_api_key_here  # For comparison model
 Initialize and run the example:
 
 ```bash
+npx promptfoo@latest init --example perplexity.ai-example
+# or simply
 promptfoo init --example perplexity.ai-example
 promptfoo eval
 promptfoo view

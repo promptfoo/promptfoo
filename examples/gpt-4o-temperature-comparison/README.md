@@ -4,7 +4,9 @@ Next, edit promptfooconfig.yaml.
 
 Then run:
 
-```
+```bash
+npx promptfoo@latest init --example gpt-4o-temperature-comparison
+# or simply
 promptfoo eval
 ```
 

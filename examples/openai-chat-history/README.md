@@ -4,7 +4,9 @@ Next, have a look at prompt.json and edit promptfooconfig.yaml.
 
 Then run:
 
-```
+```bash
+npx promptfoo@latest init --example openai-chat-history
+# or simply
 promptfoo eval
 ```
 

@@ -19,7 +19,9 @@ For comprehensive information on implementing and using these hooks, refer to th
 
 Specify your extensions in the `promptfooconfig.yaml` file:
 
-```yaml
+```bash
+npx promptfoo@latest init --example extension-api
+# or simply
 extensions:
   - file://path/to/your/extension.py:extension_hook
   - file://path/to/your/extension.js:extensionHook
@@ -51,7 +53,9 @@ These extensions function similarly to "before" and "after" hooks in popular uni
 
 To execute this example, use the following command in your terminal:
 
-```sh
+```bash
+npx promptfoo@latest init --example extension-api
+# or simply
 LOG_LEVEL=debug promptfoo eval
 ```
 

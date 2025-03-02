@@ -11,18 +11,24 @@ This example demonstrates how to setup authentication with an http provider usin
 1. Install dependencies:
 
 ```bash
+npx promptfoo@latest init --example http-provider-auth-signature
+# or simply
 npm install
 ```
 
 2. Start the server:
 
 ```bash
+npx promptfoo@latest init --example http-provider-auth-signature
+# or simply
 npm start
 ```
 
 ## Running Tests
 
 ```bash
+npx promptfoo@latest init --example http-provider-auth-signature
+# or simply
 # Run test cases
 promptfoo eval --no-cache
 

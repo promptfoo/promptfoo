@@ -40,3 +40,11 @@ We do not format the prompts for compatibility with `llama.cpp`. Prompts are pas
 ## Note on Caching
 
 Since promptfoo is unaware of the underlying model being run in `llama.cpp`, it will not invalidate the cache when the model is updated. This means you may see stale results from the cache if you change the model. Run `npx promptfoo@latest eval --no-cache` to perform the evaluation without using the cache.
+
+## Quick Start
+
+You can initialize this example with:
+
+```bash
+npx promptfoo@latest init --example llama-cpp
+```

@@ -7,6 +7,8 @@ This example demonstrates how to use CSV files for test cases in promptfoo, incl
 You can initialize this example in your project by running:
 
 ```bash
+npx promptfoo@latest init --example simple-csv
+# or simply
 promptfoo init --example simple-csv
 ```
 
@@ -30,6 +32,8 @@ promptfoo init --example simple-csv
 From the root of this example, you can run the eval as:
 
 ```bash
+npx promptfoo@latest init --example simple-csv
+# or simply
 promptfoo eval
 ```
 

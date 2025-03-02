@@ -24,3 +24,11 @@ To get started:
    ```sh
    npx promptfoo@latest view
    ```
+
+## Quick Start
+
+You can initialize this example with:
+
+```bash
+npx promptfoo@latest init --example python-provider
+```

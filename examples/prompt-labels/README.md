@@ -8,7 +8,9 @@ Next, edit promptfooconfig.yaml.
 
 Then run:
 
-```
+```bash
+npx promptfoo@latest init --example prompt-labels
+# or simply
 promptfoo eval
 ```
 

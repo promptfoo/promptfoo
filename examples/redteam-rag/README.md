@@ -18,3 +18,11 @@ To re-generate tests and run the red team eval:
 ```
 promptfoo redteam run
 ```
+
+## Quick Start
+
+You can initialize this example with:
+
+```bash
+npx promptfoo@latest init --example redteam-rag
+```

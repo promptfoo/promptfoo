@@ -4,7 +4,9 @@ Identical configurations are provided in `promptfooconfig.js` and `promptfooconf
 
 Run:
 
-```
+```bash
+npx promptfoo@latest init --example self-grading
+# or simply
 promptfoo eval
 ```
 

@@ -2,7 +2,9 @@ To get started, set your OPENAI_API_KEY environment variable.
 
 Next, have a look at prompt.json and edit promptfooconfig.yaml. The prompt uses a special built-in variable `_conversation` that has the following signature:
 
-```ts
+```bash
+npx promptfoo@latest init --example multiple-turn-conversation
+# or simply
 type Completion = {
   prompt: string | object;
   input: string;
@@ -20,7 +22,9 @@ Use `completion.output` to get the assistant's response to that message.
 
 Then run:
 
-```
+```bash
+npx promptfoo@latest init --example multiple-turn-conversation
+# or simply
 promptfoo eval
 ```
 

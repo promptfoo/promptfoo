@@ -2,7 +2,9 @@ This example shows a YAML configuration with inline tests.
 
 Run the test suite with:
 
-```
+```bash
+npx promptfoo@latest init --example simple-test
+# or simply
 promptfoo eval
 ```
 

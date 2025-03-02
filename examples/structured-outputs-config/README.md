@@ -13,6 +13,14 @@ The example includes two prompt configurations for solving a math problem.
    - For OpenAI: Set `OPENAI_API_KEY` environment variable.
    - For Azure OpenAI: Set required Azure credentials. See [Azure OpenAI provider docs](https://promptfoo.com/docs/providers/azure) for more details.
 
+## Quick Start
+
+```bash
+npx promptfoo@latest init --example structured-outputs-config
+# or simply
+promptfoo eval
+```
+
 ## Getting Started
 
 1. Review and customize `promptfooconfig.yaml` as needed

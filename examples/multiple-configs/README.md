@@ -4,7 +4,9 @@ Next, edit promptfooconfig.yaml.
 
 Then run:
 
-```
+```bash
+npx promptfoo@latest init --example multiple-configs
+# or simply
 promptfoo eval -c configs/*
 ```
 

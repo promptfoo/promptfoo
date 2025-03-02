@@ -6,7 +6,9 @@ This example demonstrates how to use [Vertex AI models](https://www.promptfoo.de
 
 Initialize this example in a new directory:
 
-```sh
+```bash
+npx promptfoo@latest init --example google-vertex-tools
+# or simply
 promptfoo init --example google-vertex-tools
 ```
 

@@ -2,7 +2,9 @@ This example uses a custom API provider in `customProvider.mjs`. It also uses CS
 
 Run:
 
-```
+```bash
+npx promptfoo@latest init --example custom-provider-mjs
+# or simply
 promptfoo eval
 ```
 

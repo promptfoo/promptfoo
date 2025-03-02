@@ -27,3 +27,11 @@ This example demonstrates different ways to generate test cases using JavaScript
    ```bash
    npx promptfoo eval
    ```
+
+## Quick Start
+
+```bash
+npx promptfoo@latest init --example javascript-test-cases
+# or simply
+promptfoo eval
+```

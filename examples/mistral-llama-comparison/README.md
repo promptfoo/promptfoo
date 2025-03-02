@@ -4,7 +4,9 @@ Next, change a few of the text files in prompts/ and edit promptfooconfig.yaml.
 
 Then run:
 
-```
+```bash
+npx promptfoo@latest init --example mistral-llama-comparison
+# or simply
 promptfoo eval
 ```
 

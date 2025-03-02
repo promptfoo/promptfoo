@@ -27,6 +27,14 @@ To access the MMLU dataset, you'll need to authenticate with Hugging Face:
    HF_TOKEN=your_token_here
    ```
 
+## Getting started
+
+```bash
+npx promptfoo@latest init --example deepseek-r1-vs-openai-o1
+# or simply
+promptfoo eval
+```
+
 ## Running the Eval
 
 1. Get a local copy of the promptfooconfig.

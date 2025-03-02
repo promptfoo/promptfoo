@@ -4,7 +4,9 @@ Next, edit promptfooconfig.yaml.
 
 Then run:
 
-```
+```bash
+npx promptfoo@latest init --example ibm-granite-vs-llama
+# or simply
 promptfoo eval
 ```
 

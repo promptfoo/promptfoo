@@ -1,11 +1,31 @@
-This example shows how you can use promptfoo to generate a side-by-side eval of multiple prompts to compare GPT 3 and GPT 4 outputs.
+# Azure OpenAI Example
 
-Set the `AZURE_OPENAI_API_KEY` environment variable before running.
+This example demonstrates how to use Azure OpenAI with promptfoo. See https://promptfoo.dev/docs/providers/azure/ for more Azure setup information.
 
-See https://promptfoo.dev/docs/providers/azure/ for more Azure setup information.
+## Quick Start
 
-Edit configuration in `promptfooconfig.yaml`. Run with:
-
+```bash
+npx promptfoo@latest init --example azure-openai
 ```
+
+## Configuration
+
+Edit configuration in `promptfooconfig.yaml`. The following environment variables are required:
+
+```bash
+export AZURE_OPENAI_API_KEY=your-key-here
+export AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
+```
+
+## Usage
+
+Run the evaluation:
+
+```bash
 promptfoo eval
 ```
+
+## Additional Resources
+
+- [Azure OpenAI Setup Guide](https://promptfoo.dev/docs/providers/azure/)
+- [Configuration Documentation](https://promptfoo.dev/docs/configuration/)

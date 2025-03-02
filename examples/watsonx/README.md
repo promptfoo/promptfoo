@@ -2,21 +2,27 @@ To get started, you need to set up authentication and project ID. You can choose
 
 **Option 1: IAM Authentication**
 
-```sh
+```bash
+npx promptfoo@latest init --example watsonx
+# or simply
 export WATSONX_AI_AUTH_TYPE=iam
 export WATSONX_AI_APIKEY=your-ibm-cloud-api-key
 ```
 
 **Option 2: Bearer Token Authentication**
 
-```sh
+```bash
+npx promptfoo@latest init --example watsonx
+# or simply
 export WATSONX_AI_AUTH_TYPE=bearertoken
 export WATSONX_AI_BEARER_TOKEN=your-ibm-cloud-bearer-token
 ```
 
 Then set your project ID:
 
-```sh
+```bash
+npx promptfoo@latest init --example watsonx
+# or simply
 export WATSONX_AI_PROJECT_ID=your-ibm-project-id
 ```
 
@@ -28,13 +34,17 @@ Next, edit promptfooconfig.yaml.
 
 Then run:
 
-```sh
+```bash
+npx promptfoo@latest init --example watsonx
+# or simply
 npm run local -- eval --config examples/watsonx/promptfooconfig.yaml
 ```
 
 or
 
-```sh
+```bash
+npx promptfoo@latest init --example watsonx
+# or simply
 promptfoo eval
 ```
 

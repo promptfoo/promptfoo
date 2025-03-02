@@ -4,7 +4,9 @@ Next, edit assert.js and promptfooconfig.yaml.
 
 Then run:
 
-```
+```bash
+npx promptfoo@latest init --example javascript-assert-external
+# or simply
 promptfoo eval
 ```
 

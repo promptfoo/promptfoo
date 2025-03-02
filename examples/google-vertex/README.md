@@ -56,7 +56,13 @@ This directory contains example configurations for testing different Google Vert
    gcloud config set project YOUR_PROJECT_ID
    ```
 
-2. Run specific model tests:
+2. Initialize this example:
+
+   ```bash
+   npx promptfoo@latest init --example google-vertex
+   ```
+
+3. Run specific model tests:
 
    ```sh
    # Test Gemini models
@@ -69,7 +75,7 @@ This directory contains example configurations for testing different Google Vert
    promptfoo eval -c promptfooconfig.llama.yaml
    ```
 
-3. View results:
+4. View results:
    ```sh
    promptfoo view
    ```

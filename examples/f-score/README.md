@@ -11,6 +11,8 @@ This project evaluates GPT-4o-mini's zero-shot performance on IMDB movie review 
 Set your OpenAI API key and run the evaluation:
 
 ```bash
+npx promptfoo@latest init --example f-score
+# or simply
 promptfoo eval
 ```
 

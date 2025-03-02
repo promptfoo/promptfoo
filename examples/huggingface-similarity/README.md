@@ -4,7 +4,9 @@ Next, change a few of the prompts in prompts.txt and edit promptfooconfig.yaml.
 
 Then run:
 
-```
+```bash
+npx promptfoo@latest init --example huggingface-similarity
+# or simply
 promptfoo eval
 ```
 

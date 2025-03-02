@@ -70,3 +70,11 @@ curl -X POST http://localhost:2345/chat \
         ]
     }'
 ```
+
+## Quick Start
+
+You can initialize this example with:
+
+```bash
+npx promptfoo@latest init --example redteam-chatbot
+```

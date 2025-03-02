@@ -7,12 +7,16 @@ This example shows how to run Meta's CyberSecEval benchmark to test LLMs for pro
 1. Install dependencies:
 
 ```bash
+npx promptfoo@latest init --example cyberseceval
+# or simply
 npm install
 ```
 
 2. Configure your model in `promptfooconfig.yaml`:
 
-```yaml
+```bash
+npx promptfoo@latest init --example cyberseceval
+# or simply
 providers:
   - openai:chat:gpt-4 # OpenAI
   - ollama:chat:llama3.1 # Ollama
@@ -24,6 +28,8 @@ providers:
 Run all tests:
 
 ```bash
+npx promptfoo@latest init --example cyberseceval
+# or simply
 npx promptfoo eval
 ```
 

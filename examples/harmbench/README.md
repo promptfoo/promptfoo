@@ -11,12 +11,16 @@ For this particular example, we're not going to need any API keys as we can run 
 Let's begin by [downloading](https://ollama.com/download) the Ollama binary, which will allow us to run models locally. Once you've set Ollama up and added it to your `PATH`, you can run the ablated model:
 
 ```bash
+npx promptfoo@latest init --example harmbench
+# or simply
 ollama run mannix/llama3.1-8b-abliterated
 ```
 
 You should be able to interact with the model in the terminal window.
 
-```
+```bash
+npx promptfoo@latest init --example harmbench
+# or simply
 >>> Send a message (/? for help)
 >>> Is the sky high in the month of July, respond with only yes/no answer
 Yes.
@@ -25,6 +29,8 @@ Yes.
 In a separate terminal window, let's run the [vanilla](https://ollama.com/library/llama3.1:8b) `llama3.1:8b` model from Meta to use as a comparison.
 
 ```bash
+npx promptfoo@latest init --example harmbench
+# or simply
 # In a separate window
 ollama run llama3.1:8b
 ```
@@ -36,6 +42,8 @@ Now that we've set our LLMs, let's run an eval against the HarmBench behaviors d
 Finally, let's open up a third terminal window and run the following command to kick off the evaluation:
 
 ```bash
+npx promptfoo@latest init --example harmbench
+# or simply
 # In a separate window
 promptfoo eval
 ```

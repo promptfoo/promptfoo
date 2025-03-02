@@ -2,7 +2,9 @@ To get started, edit promptfooconfig.yaml.
 
 Then run:
 
-```
+```bash
+npx promptfoo@latest init --example test-markdown
+# or simply
 promptfoo eval
 ```
 

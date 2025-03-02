@@ -18,6 +18,22 @@ You'll need an API key from Mistral AI. If you don't have one, sign up at [mistr
    - `promptfooconfig.yaml`: Defines the Mistral models to compare, test cases, and evaluation criteria.
    - `prompt.yaml`: Contains the prompt template for the scientific explanations.
 
+## Getting Started
+
+Set your Mistral API key in your environment variables:
+
+```bash
+export MISTRAL_API_KEY=your-key-here
+```
+
+Initialize this example:
+
+```bash
+npx promptfoo@latest init --example mistral
+# or simply
+promptfoo eval
+```
+
 ## Usage
 
 1. Run the evaluation:

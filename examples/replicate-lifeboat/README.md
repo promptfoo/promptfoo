@@ -4,7 +4,9 @@ Then, add your test cases.
 
 Then run:
 
-```
+```bash
+npx promptfoo@latest init --example replicate-lifeboat
+# or simply
 promptfoo eval
 ```
 

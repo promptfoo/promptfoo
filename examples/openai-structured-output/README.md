@@ -18,6 +18,8 @@ This example demonstrates how to use OpenAI's new Structured Outputs feature wit
 To run:
 
 ```bash
+npx promptfoo@latest init --example openai-structured-output
+# or simply
 promptfoo eval
 ```
 

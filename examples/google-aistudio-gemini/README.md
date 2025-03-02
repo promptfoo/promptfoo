@@ -20,13 +20,17 @@ The example tests across multiple Gemini models:
 
 1. Get a local copy of the configuration:
 
-```sh
+```bash
+npx promptfoo@latest init --example google-aistudio-gemini
+# or simply
 promptfoo init --example google-aistudio-gemini
 ```
 
 2. Run the example:
 
-```sh
+```bash
+npx promptfoo@latest init --example google-aistudio-gemini
+# or simply
 promptfoo eval
 ```
 

@@ -28,3 +28,11 @@ Afterwards, you can view the results by running:
 ```sh
 npx promptfoo@latest view
 ```
+
+## Quick Start
+
+You can initialize this example with:
+
+```bash
+npx promptfoo@latest init --example claude-vs-gpt-image
+```

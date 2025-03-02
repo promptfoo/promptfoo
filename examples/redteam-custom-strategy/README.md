@@ -13,6 +13,8 @@ The example is configured in `promptfooconfig.yaml` and uses:
 Run the evaluation:
 
 ```bash
+npx promptfoo@latest init --example redteam-custom-strategy
+# or simply
 promptfoo eval
 ```
 

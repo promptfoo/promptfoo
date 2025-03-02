@@ -77,3 +77,11 @@ For more details, see:
 - [Blog Post](https://promptfoo.dev/blog/red-team-ollama-model/)
 - [Red Team Documentation](https://promptfoo.dev/docs/red-team/quickstart/)
 - [Ollama Provider Guide](https://promptfoo.dev/docs/providers/ollama/)
+
+## Quick Start
+
+You can initialize this example with:
+
+```bash
+npx promptfoo@latest init --example redteam-ollama
+```

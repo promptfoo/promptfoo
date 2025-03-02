@@ -8,7 +8,9 @@ See `promptfooconfig.js` for the full configuration, including prompts, provider
 
 ## Running the Example
 
-```
+```bash
+npx promptfoo@latest init --example function-tools-callback
+# or simply
 promptfoo eval -c [path to examples/function-tools-callback/]promptfooconfig.js
 ```
 

@@ -5,7 +5,9 @@ Next, duplicate the Google Sheet in promptfooconfig.yaml and replace the URL.
 
 Then run:
 
-```
+```bash
+npx promptfoo@latest init --example google-sheets
+# or simply
 promptfoo eval
 ```
 

@@ -5,7 +5,9 @@ There are two examples:
 
 Then run:
 
-```
+```bash
+npx promptfoo@latest init --example portkey-test
+# or simply
 promptfoo eval
 ```
 

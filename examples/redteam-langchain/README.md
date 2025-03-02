@@ -20,3 +20,11 @@ npx promptfoo@latest redteam run
 ```
 
 See the [LangChain Red Team Guide](https://promptfoo.dev/blog/red-team-langchain) for details.
+
+## Quick Start
+
+You can initialize this example with:
+
+```bash
+npx promptfoo@latest init --example redteam-langchain
+```

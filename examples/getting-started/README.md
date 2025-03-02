@@ -2,6 +2,12 @@
 
 This is a simple example that demonstrates the basic functionality of promptfoo. It tests two different translation prompts across multiple language models.
 
+## Quick Start
+
+```bash
+npx promptfoo@latest init --example getting-started
+```
+
 ## Setup
 
 1. Set your OpenAI API key:
@@ -30,4 +36,7 @@ The configuration in `promptfooconfig.yaml` shows:
 - How to specify multiple providers (models)
 - How to set up test cases with different variable values
 
-This is the same example shown in the Getting Started guide at https://promptfoo.dev/docs/getting-started
+## Related Resources
+
+- [Getting Started Guide](https://promptfoo.dev/docs/getting-started)
+- [Configuration Documentation](https://promptfoo.dev/docs/configuration/)

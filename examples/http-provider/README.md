@@ -12,7 +12,9 @@ This example demonstrates how to configure and use HTTP providers with promptfoo
 
 Here's a basic example configuration for an HTTP provider that sends prompts to an API endpoint:
 
-```yaml
+```bash
+npx promptfoo@latest init --example http-provider
+# or simply
 providers:
   - id: https://api.example.com/chat
     config:
@@ -61,4 +63,4 @@ To test your configuration:
 
 For development and testing, you can use services like [webhook.site](https://webhook.site) to create test endpoints.
 
-For more detailed information, see the [HTTP Provider documentation](/docs/providers/http).
+For more detailed information, see the [HTTP Provider documentation](https://promptfoo.dev/docs/providers/http).

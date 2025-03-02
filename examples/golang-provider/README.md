@@ -4,7 +4,9 @@ This example demonstrates how to structure a Go-based provider for promptfoo. Fo
 
 To get started with this example:
 
-```sh
+```bash
+npx promptfoo@latest init --example golang-provider
+# or simply
 promptfoo init --example golang-provider
 ```
 
@@ -12,7 +14,9 @@ promptfoo init --example golang-provider
 
 This example shows two implementations of the same provider interface:
 
-```
+```bash
+npx promptfoo@latest init --example golang-provider
+# or simply
 golang-provider/
 ├── go.mod            # Root module definition
 ├── main.go           # Root provider implementation
@@ -50,7 +54,9 @@ The structure demonstrates how to:
 
 Run the comparison:
 
-```sh
+```bash
+npx promptfoo@latest init --example golang-provider
+# or simply
 npx promptfoo eval
 ```
 

@@ -1,27 +1,42 @@
-# Adaline Gateway Examples
+# Adaline Gateway Example
 
-This directory contains examples demonstrating how to use the Adaline Gateway with promptfoo. The Adaline Gateway provides a unified interface for interacting with various AI providers.
+This example demonstrates how to use promptfoo with Adaline's API Gateway for testing multiple vision and language models. It includes several sub-examples showcasing different features and capabilities.
 
-## Installation
-
-To run these examples, you'll need to install the Adaline Gateway and its peer dependencies:
+## Quick Start
 
 ```bash
-npm install @adaline/anthropic@latest @adaline/azure@latest @adaline/gateway@latest @adaline/google@latest @adaline/groq@latest @adaline/open-router@latest @adaline/openai@latest @adaline/provider@latest @adaline/together-ai@latest @adaline/types@latest @adaline/vertex@latest
+npx promptfoo@latest init --example adaline-gateway
 ```
 
-## Examples
+## Structure
 
-Each subdirectory contains a specific example showcasing different features of the Adaline Gateway:
+This example contains multiple sub-examples:
 
-- `adaline-chat-history/`: Example demonstrating chat history handling
-- `adaline-embedding-similarity/`: Example showing embedding and similarity features
-- `adaline-eval-factuality/`: Example for evaluating factuality
-- `adaline-multi-provider/`: Example using multiple providers
-- `adaline-openai-format/`: Example with OpenAI format compatibility
-- `adaline-structured-output/`: Example for structured output generation
-- `adaline-tool-call/`: Example demonstrating tool calling capabilities
-- `adaline-vision/`: Example for vision-related tasks
-- `adaline-vision-base64/`: Example using base64-encoded images
+- `adaline-chat/`: Basic chat completion example
+- `adaline-vision/`: Vision model testing with direct image URLs
+- `adaline-vision-base64/`: Vision model testing with base64-encoded images
 
-Each example directory contains its own configuration file (`promptfooconfig.yaml`) and relevant prompts.
+Each subdirectory contains its own:
+
+- Configuration file (`promptfooconfig.yaml`)
+- Test prompts and cases
+- Model-specific settings
+
+## Configuration
+
+1. Set up your Adaline API credentials:
+
+```bash
+export ADALINE_API_KEY=your_api_key_here
+```
+
+2. Review the configuration in each subdirectory's `promptfooconfig.yaml` to understand:
+   - Model selection and parameters
+   - Test case setup
+   - Input/output formats
+
+## Additional Resources
+
+- [Adaline API Documentation](https://docs.adaline.ai)
+- [Vision Testing Guide](https://promptfoo.dev/docs/configuration/image-testing)
+- [Configuration Reference](https://promptfoo.dev/docs/configuration/)

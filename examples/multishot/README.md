@@ -1,6 +1,8 @@
 This example is pre-configured in `promptfooconfig.yaml` (both identical examples). That means you can just run:
 
-```
+```bash
+npx promptfoo@latest init --example multishot
+# or simply
 promptfoo eval
 ```
 
