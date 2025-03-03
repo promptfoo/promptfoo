@@ -277,6 +277,63 @@ tests:
         value: Do not mention that you are an AI or chat assistant
 ```
 
+## Multimodal Capabilities
+
+Some Bedrock models, like Amazon Nova, support multimodal inputs including images and text. To use these capabilities, you'll need to structure your prompts to include both the image data and text content.
+
+Here's an example configuration for running multimodal evaluations:
+
+```yaml
+description: 'Bedrock Nova Eval with Images'
+
+prompts:
+  - file://nova_multimodal_prompt.json
+
+providers:
+  - id: bedrock:amazon.nova-pro-v1:0
+    config:
+      region: 'us-east-1'
+      inferenceConfig:
+        temperature: 0.7
+        max_new_tokens: 256
+
+tests:
+  - vars:
+      image: file://path/to/image.jpg
+```
+
+The prompt file (`nova_multimodal_prompt.json`) should be structured to include both image and text content. This format will depend on the specific model you're using:
+
+```json
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "image": {
+          "format": "jpg",
+          "source": { "bytes": "{{image}}" }
+        }
+      },
+      {
+        "text": "What is this a picture of?"
+      }
+    ]
+  }
+]
+```
+
+See [Github](https://github.com/promptfoo/promptfoo/blob/main/examples/amazon-bedrock/promptfooconfig.nova.multimodal.yaml) for a runnable example.
+
+When loading image files as variables, Promptfoo automatically converts them to the appropriate format for the model. The supported image formats include:
+
+- jpg/jpeg
+- png
+- gif
+- bmp
+- webp
+- svg
+
 ## Embeddings
 
 To override the embeddings provider for all assertions that require embeddings (such as similarity), use `defaultTest`:
