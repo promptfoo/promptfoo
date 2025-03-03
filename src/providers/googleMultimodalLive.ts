@@ -154,13 +154,24 @@ export class GoogleMMLiveProvider implements ApiProvider {
       let response_text_total = '';
 
       ws.onmessage = async (event) => {
-        // clearTimeout(timeout);
         logger.debug(`Received WebSocket response: ${event.data}`);
         try {
-          // Handle Blob data
-          const responseText = await new Response(event.data.toString('utf-8')).text();
+          let responseData: string;
+          if (typeof event.data === 'string') {
+            responseData = event.data;
+          } else if (Buffer.isBuffer(event.data)) {
+            responseData = event.data.toString('utf-8');
+          } else {
+            // Handle cases where event.data is of an unexpected type
+            console.error('Unexpected event.data type:', typeof event.data, event.data);
+            ws.close();
+            resolve({ error: 'Unexpected response data format' });
+            return;
+          }
+
+          const responseText = await new Response(responseData).text();
           const response = JSON.parse(responseText);
-          console.log('Endpoint respopnse:', JSON.stringify(response));
+          console.log('Endpoint response:', JSON.stringify(response));
 
           // Handle setup complete response
           if (response.setupComplete) {
@@ -191,6 +202,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
           }
         } catch (err) {
           console.error('Failed to process response:', err);
+          ws.close();
           resolve({ error: `Failed to process response: ${JSON.stringify(err)}` });
         }
       };
@@ -198,6 +210,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
       ws.onerror = (err) => {
         clearTimeout(timeout);
         console.error('WebSocket Error:', err);
+        ws.close();
         resolve({ error: `WebSocket error: ${JSON.stringify(err)}` });
       };
 
@@ -230,7 +243,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
                 }
               : {}),
             ...(this.config.systemInstruction
-              ? { tools: maybeLoadFromExternalFile(this.config.systemInstruction) }
+              ? { systemInstruction: maybeLoadFromExternalFile(this.config.systemInstruction) }
               : {}),
           },
         };
