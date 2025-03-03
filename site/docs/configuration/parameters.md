@@ -628,6 +628,8 @@ tests:
 
 The media files will be automatically loaded and converted to base64 strings that can be used directly in your prompts for multimodal models.
 
+If you want to disable this automatic loading behavior, you can set the environment variable `PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64=true`. This is useful when you want to handle the media files differently or when working with very large files that might cause memory issues.
+
 ## Output File
 
 The results of the evaluation are written to this file. For example:
