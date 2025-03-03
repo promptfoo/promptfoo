@@ -13,7 +13,7 @@ import { runPython } from './python/pythonUtils';
 import telemetry from './telemetry';
 import type { ApiProvider, NunjucksFilterMap, Prompt } from './types';
 import { renderVarsInObject } from './util';
-import { isJavascriptFile } from './util/file';
+import { isJavascriptFile, isImageFile, isVideoFile } from './util/file';
 import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
@@ -122,8 +122,27 @@ export async function renderPrompt(
         vars[varName] = JSON.stringify(
           yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object,
         );
-      } else if (fileExtension === 'pdf') {
+      } else if (fileExtension === 'pdf' && !getEnvBool('PROMPTFOO_DISABLE_PDF_AS_TEXT')) {
+        telemetry.recordOnce('feature_used', {
+          feature: 'extract_text_from_pdf',
+        });
         vars[varName] = await extractTextFromPDF(filePath);
+      } else if (
+        (isImageFile(filePath) || isVideoFile(filePath)) &&
+        !getEnvBool('PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64')
+      ) {
+        telemetry.recordOnce('feature_used', {
+          feature: 'load_image_as_base64',
+        });
+        logger.debug(`Loading image as base64: ${filePath}`);
+        try {
+          const imageBuffer = fs.readFileSync(filePath);
+          vars[varName] = imageBuffer.toString('base64');
+        } catch (error) {
+          throw new Error(
+            `Failed to load image ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
       } else {
         vars[varName] = fs.readFileSync(filePath, 'utf8').trim();
       }
