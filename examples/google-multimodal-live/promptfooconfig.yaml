@@ -2,31 +2,26 @@
 
 # Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
 
-description: 'Function calling demonstration'
+description: 'Basic query demonstration'
 
 prompts:
-  - What is the weather in {{location}}?
+  - Why is {{concept}}?
 
 providers:
-  - id: 'google-mm-live:wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key={{env.GOOGLE_API_KEY}}'
+  - id: 'gemini-2.0-flash-exp:'
     config:
-      messageTemplate: '{"setup": {"model": "models/gemini-2.0-flash-exp", "generation_config": {"response_modalities": ["text"]}}}'
-      transformResponse: 'data.output'
-      timeoutMs: 100000
+      model: 'gemini-2.0-flash-exp'
+      generationConfig:
+        response_modalities: ['text']
+      timeoutMs: 10000
 
 defaultTest:
   assert:
-    - type: equals
-      value: get_current_weather
-      # Transform is a cleaner way to pick out specific properties.
-      # This transform returns only the 'name' property
-      transform: JSON.parse(output).functionCall.name
-    - type: similar
-      value: '{{location}}'
-      threshold: 0.9
-      # This transform returns only the parsed location argument.
-      transform: JSON.parse(output).functionCall.args.location
+    - type: icontains
+      value: salt
+    - type: icontains
+      value: weathering
 
 tests:
   - vars:
-      location: San Francisco
+      concept: the sea salty

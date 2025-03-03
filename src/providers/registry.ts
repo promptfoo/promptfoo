@@ -966,9 +966,8 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      // const modelName = providerPath.split(':')[1];
-      const url = providerPath.split(':').slice(1).join(':');
-      return new GoogleMMLiveProvider(url, providerOptions);
+      const splits = providerPath.split(':');
+      return new GoogleMMLiveProvider(splits.slice(1).join(':'), providerOptions);
     },
   },
   {
