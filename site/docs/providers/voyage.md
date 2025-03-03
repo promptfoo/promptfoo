@@ -1,39 +1,61 @@
 # Voyage AI
 
-[Voyage AI](https://www.voyageai.com/) is Anthropic's [recommended](https://docs.anthropic.com/en/docs/embeddings) embeddings provider. It supports [all models](https://docs.voyageai.com/docs/embeddings). As of time of writing:
+[Voyage AI](https://www.voyageai.com/) is Anthropic's [recommended](https://docs.anthropic.com/en/docs/embeddings) embeddings provider. It offers state-of-the-art embedding models optimized for different use cases.
 
-- voyage-large-2-instruct
-- voyage-finance-2
-- voyage-multilingual-2
-- voyage-law-2
-- voyage-code-2
-- voyage-large-2
-- voyage-2
+## Available Models
 
-To use it, set the `VOYAGE_API_KEY` environment variable.
+- `voyage-3-large` (1024d) - Best general-purpose model, recommended default
+- `voyage-3` (1024d) - Standard model
+- `voyage-3-lite` (512d) - Lightweight model
+- `voyage-code-3` - Specialized for code embeddings
+- `voyage-finance-2` - Specialized for financial text
+- `voyage-law-2` - Specialized for legal text
+- `voyage-multimodal-3` - Supports text + image embeddings
 
-Use it like so:
+## Basic Usage
 
-```yaml
-provider: voyage:voyage-2
+Set your API key:
+
+```bash
+export VOYAGE_API_KEY="your-api-key"
 ```
 
-You can enable it for every similarity comparison using the `defaultTest` property:
+Use in your configuration:
+
+```yaml
+provider: voyage:voyage-3-large
+```
+
+## Default Configuration
+
+Enable Voyage embeddings for all similarity comparisons:
 
 ```yaml
 defaultTest:
   options:
     provider:
-      embedding: voyage:voyage-2
+      embedding: voyage:voyage-3-large
 ```
 
-You can also override the API key or API base URL:
+## Advanced Configuration
+
+Full configuration options:
 
 ```yaml
 provider:
-  id: voyage:voyage-2
+  id: voyage:voyage-3-large
   config:
-    apiKey: XXX
-    apiKeyEnvar: VOYAGE_API_KEY # if set, will fetch API key from this environment variable
-    apiBaseUrl: https://api.voyageai.com/v1
+    apiKey: xxx # Direct API key
+    apiKeyEnvar: VOYAGE_API_KEY # Environment variable for API key
+    apiBaseUrl: https://api.voyageai.com/v1 # Custom API endpoint
+    input_type: document # or 'query' for search queries
 ```
+
+### Configuration Options
+
+- `apiKey`: Direct API key (not recommended, prefer environment variables)
+- `apiKeyEnvar`: Environment variable name for API key (default: VOYAGE_API_KEY)
+- `apiBaseUrl`: Custom API endpoint (default: https://api.voyageai.com/v1)
+- `input_type`: Type of embedding to generate
+  - `document`: For document/content embeddings (default)
+  - `query`: For search query embeddings

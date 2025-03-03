@@ -1,21 +1,41 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Similarity assertions with Voyage AI'
+description: 'Text and Multimodal Embeddings with Voyage AI'
 
 prompts:
-  - 'Output the color of {{item}}'
+  - 'Describe {{item}}'
+  - file://prompt.json
 
 providers:
-  - 'anthropic:messages:claude-3-5-haiku-20241022'
+  - 'anthropic:messages:claude-3-7-sonnet-20250219'
 
 defaultTest:
   options:
     provider:
-      embedding: 'voyage:voyage-2'
+      embedding: 'voyage:voyage-3-large'
 
 tests:
   - vars:
       item: bananas
+      image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/Bananas_white_background_DS.jpg/320px-Bananas_white_background_DS.jpg'
     assert:
       - type: similar
-        value: 'yellowish'
-        threshold: 0.5
+        value: 'yellow curved fruit'
+        threshold: 0.8
+      - type: similar
+        value: 'bunch of ripe yellow bananas'
+        threshold: 0.8
+        provider:
+          embedding: 'voyage:voyage-multimodal-3'
+
+  - vars:
+      item: apple
+      image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/15/Red_Apple.jpg/320px-Red_Apple.jpg'
+    assert:
+      - type: similar
+        value: 'round red fruit'
+        threshold: 0.8
+      - type: similar
+        value: 'fresh red apple'
+        threshold: 0.8
+        provider:
+          embedding: 'voyage:voyage-multimodal-3'

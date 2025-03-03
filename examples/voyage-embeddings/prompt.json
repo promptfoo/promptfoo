@@ -1,0 +1,12 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "Describe {{item}}"
+    },
+    {
+      "type": "image_url",
+      "image_url": "{{image_url}}"
+    }
+  ]
+}
