@@ -157,7 +157,7 @@
     "zod-to-json-schema": "^3.24.3"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.38.0",
+    "@anthropic-ai/sdk": "^0.39.0",
     "@apidevtools/json-schema-ref-parser": "^11.9.1",
     "@googleapis/sheets": "^9.3.1",
     "ajv": "^8.17.1",
