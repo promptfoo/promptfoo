@@ -959,8 +959,7 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) =>
-      providerPath.startsWith('google-mm-live:'),
+    test: (providerPath: string) => providerPath.startsWith('google-mm-live:'),
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,

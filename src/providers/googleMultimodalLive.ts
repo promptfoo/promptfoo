@@ -1,6 +1,6 @@
 import WebSocket from 'ws';
-import logger from '../logger';
 import { getEnvString } from '../envars';
+import logger from '../logger';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -9,7 +9,6 @@ import type {
 } from '../types';
 import '../util';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
-
 
 interface Blob {
   mimeType: string;
@@ -122,7 +121,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
 
   constructor(modelName: string, options: ProviderOptions) {
     this.config = options.config as CompletionOptions;
-    this.modelName = modelName
+    this.modelName = modelName;
   }
 
   id(): string {
@@ -145,14 +144,14 @@ export class GoogleMMLiveProvider implements ApiProvider {
     // logger.debug(`Sending WebSocket message to ${this.url}: ${message}`);
 
     return new Promise<ProviderResponse>((resolve) => {
-      const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${this.getApiKey()}`
+      const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${this.getApiKey()}`;
       const ws = new WebSocket(url);
       const timeout = setTimeout(() => {
         ws.close();
         resolve({ error: 'WebSocket request timed out' });
       }, this.config.timeoutMs || 10000);
 
-      let response_text_total = "";
+      let response_text_total = '';
 
       ws.onmessage = async (event) => {
         // clearTimeout(timeout);
@@ -180,7 +179,8 @@ export class GoogleMMLiveProvider implements ApiProvider {
           }
           // Handle model response
           else if (response.serverContent?.modelTurn?.parts?.[0]?.text) {
-            response_text_total = response_text_total + response.serverContent.modelTurn.parts[0].text;
+            response_text_total =
+              response_text_total + response.serverContent.modelTurn.parts[0].text;
           } else if (response.toolCall?.functionCalls) {
             resolve({ output: JSON.stringify(response) });
           } else if (response.serverContent?.turnComplete) {
