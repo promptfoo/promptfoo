@@ -13,22 +13,10 @@ import { runPython } from './python/pythonUtils';
 import telemetry from './telemetry';
 import type { ApiProvider, NunjucksFilterMap, Prompt } from './types';
 import { renderVarsInObject } from './util';
-import { isJavascriptFile } from './util/file';
+import { isJavascriptFile, isImageFile, isVideoFile } from './util/file';
 import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
-
-function isImageFile(filePath: string): boolean {
-  const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'];
-  const fileExtension = filePath.split('.').pop()?.toLowerCase() || '';
-  return imageExtensions.includes(fileExtension);
-}
-
-function isVideoFile(filePath: string): boolean {
-  const videoExtensions = ['mp4', 'webm', 'ogg', 'mov', 'avi', 'wmv', 'mkv', 'm4v'];
-  const fileExtension = filePath.split('.').pop()?.toLowerCase() || '';
-  return videoExtensions.includes(fileExtension);
-}
 
 export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   logger.debug(`Extracting text from PDF: ${pdfPath}`);
