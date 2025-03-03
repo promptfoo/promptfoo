@@ -176,7 +176,7 @@ const config = {
               },
               {
                 href: 'https://promptfoo.dev/models/',
-                label: 'Foundational Model Reports',
+                label: 'Foundation Model Reports',
               },
               {
                 href: 'https://github.com/promptfoo/promptfoo',
@@ -239,7 +239,7 @@ const config = {
                 to: '/docs/red-team',
               },
               {
-                label: 'Foundational Model Reports',
+                label: 'Foundation Model Reports',
                 to: 'https://promptfoo.dev/models/',
               },
               {
