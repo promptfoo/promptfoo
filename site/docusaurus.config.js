@@ -175,7 +175,7 @@ const config = {
                 label: 'Docs',
               },
               {
-                href: '/models/',
+                href: 'https://www.promptfoo.dev/models/',
                 label: 'Foundation Model Reports',
               },
               {
@@ -240,7 +240,7 @@ const config = {
               },
               {
                 label: 'Foundation Model Reports',
-                to: '/models/',
+                to: 'https://www.promptfoo.dev/models/',
               },
               {
                 label: 'Running Benchmarks',
