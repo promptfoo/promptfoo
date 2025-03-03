@@ -158,7 +158,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
         logger.debug(`Received WebSocket response: ${event.data}`);
         try {
           // Handle Blob data
-          const responseText = await new Response(event.data).text();
+          const responseText = await new Response(event.data.toString('utf-8')).text();
           const response = JSON.parse(responseText);
           console.log('Endpoint respopnse:', JSON.stringify(response));
 
