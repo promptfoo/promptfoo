@@ -969,6 +969,21 @@ export const PLUGINS = [
     },
     vulnerabilityType: 'security',
   },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests for exposure of debug information, embeddings, and internal system state in API responses',
+    label: 'technical',
+    link: '/docs/red-team/plugins/extra-information/',
+    name: 'Extra Information',
+    pluginId: 'extra-information',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+  },
 ] as const as readonly Plugin[];
 
 // Compile-time check
