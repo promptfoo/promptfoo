@@ -8,9 +8,8 @@ prompts:
   - Why is {{concept}}?
 
 providers:
-  - id: 'gemini-2.0-flash-exp:'
+  - id: 'google-mm-live:gemini-2.0-flash-exp'
     config:
-      model: 'gemini-2.0-flash-exp'
       generationConfig:
         response_modalities: ['text']
       timeoutMs: 10000

@@ -210,7 +210,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
 
         const setupMessage = {
           setup: {
-            model: `models/${this.config.model}`,
+            model: `models/${this.modelName}`,
             generation_config: {
               context: this.config.context,
               examples: this.config.examples,

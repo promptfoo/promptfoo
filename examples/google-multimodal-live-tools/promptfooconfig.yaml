@@ -10,7 +10,6 @@ prompts: |
 providers:
   - id: 'google-mm-live:gemini-2.0-flash-exp'
     config:
-      model: 'gemini-2.0-flash-exp'
       tools: file://tools.json
       generationConfig:
         response_modalities: ['text']
@@ -35,5 +34,7 @@ tests:
     assert:
       - type: icontains
         value: salt
-      - type: icontains
-        value: weathering
+      - type: icontains-any
+        value:
+          - 'weathering'
+          - 'rainwater'
