@@ -509,8 +509,8 @@ export async function resolveConfigs(
     redteam: fileConfig.redteam || defaultConfig.redteam,
   };
 
-  const hasPrompts = [config.prompts].flat().length > 0;
-  const hasProviders = [config.providers].flat().length > 0;
+  const hasPrompts = [config.prompts].flat().filter(Boolean).length > 0;
+  const hasProviders = [config.providers].flat().filter(Boolean).length > 0;
   const hasConfigFile = Boolean(configPaths);
 
   if (!hasConfigFile && !hasPrompts && !hasProviders && !isCI()) {
