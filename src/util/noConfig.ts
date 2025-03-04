@@ -1,8 +1,28 @@
 import confirm from '@inquirer/confirm';
 import dedent from 'dedent';
 import logger from '../logger';
-import { initializeProject } from '../onboarding';
 import { isRunningUnderNpx } from '../util';
+
+// Initialize a project callback type - will be provided by the code that uses this module
+type InitializeProjectCallback = (directory: string | null, interactive: boolean) => Promise<void>;
+
+// Default no-op implementation
+const defaultInitializer: InitializeProjectCallback = async () => {
+  logger.info('No project initializer provided');
+  process.exit(0);
+};
+
+// Store the initializer function - can be set later by the application
+let projectInitializer: InitializeProjectCallback = defaultInitializer;
+
+/**
+ * Set the project initializer function to be used when the user chooses to initialize a project
+ * This function is called by the application to inject the initialization functionality
+ * @param initializer The function to call for project initialization
+ */
+export function setProjectInitializer(initializer: InitializeProjectCallback): void {
+  projectInitializer = initializer;
+}
 
 /**
  * Handles the case when no configuration is found.
@@ -27,7 +47,8 @@ export async function handleNoConfiguration(): Promise<never> {
   });
 
   if (shouldInit) {
-    await initializeProject(null, true);
+    // Use the injected initializer instead of direct import
+    await projectInitializer(null, true);
     process.exit(0);
   }
   process.exit(1);

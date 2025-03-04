@@ -72,6 +72,7 @@ jest.mock('../../../src/util/noConfig', () => ({
   handleNoConfiguration: jest.fn().mockImplementation(() => {
     throw new Error('Mock handleNoConfiguration called');
   }),
+  setProjectInitializer: jest.fn(),
 }));
 
 jest.mock('../../../src/util/config/load', () => {
