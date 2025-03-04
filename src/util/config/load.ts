@@ -527,7 +527,6 @@ export async function resolveConfigs(
     process.exit(1);
   }
 
-  // Continue with normal validation
   if (!hasPrompts) {
     logger.error('You must provide at least 1 prompt');
     process.exit(1);
