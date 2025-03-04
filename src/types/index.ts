@@ -826,7 +826,7 @@ export const TestSuiteConfigSchema = z.object({
 
   // Envvar overrides
   env: z
-    .union([ProviderEnvOverridesSchema, z.record(z.string(), z.any().transform(value => value == null ? '' : String(value)))])
+    .union([ProviderEnvOverridesSchema, z.record(z.string(), z.any().transform(String))])
     .optional(),
 
   // Metrics to calculate after the eval has been completed
@@ -945,3 +945,12 @@ export interface LoadApiProviderContext {
   basePath?: string;
   env?: EnvOverrides;
 }
+
+export {
+  GradingConfigSchema,
+  EvaluateOptionsSchema,
+  PromptMetricsSchema,
+  AssertionSetSchema,
+  ProviderPromptMapSchema,
+  MetadataSchema,
+};
