@@ -130,7 +130,9 @@ const PluginTable = ({
                     {shouldRenderDescription && (
                       <td style={{ ...styles.td, ...styles.columns.description }}>
                         {plugin.description}
-                        {showRemoteStatus && plugin.isRemote && <span title="Uses remote inference"> 🌐</span>}
+                        {showRemoteStatus && plugin.isRemote && (
+                          <span title="Uses remote inference"> 🌐</span>
+                        )}
                       </td>
                     )}
                     {shouldRenderPluginId && (
@@ -163,7 +165,9 @@ const PluginTable = ({
                 {shouldRenderDescription && (
                   <td style={styles.td}>
                     {plugin.description}
-                    {showRemoteStatus && plugin.isRemote && <span title="Uses remote inference"> 🌐</span>}
+                    {showRemoteStatus && plugin.isRemote && (
+                      <span title="Uses remote inference"> 🌐</span>
+                    )}
                   </td>
                 )}
                 {shouldRenderPluginId && (
