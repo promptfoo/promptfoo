@@ -625,5 +625,3 @@ export async function resolveConfigs(
   cliState.config = config;
   return { config, testSuite, basePath };
 }
-
-export { handleNoConfiguration };
