@@ -1,6 +1,4 @@
 import $RefParser from '@apidevtools/json-schema-ref-parser';
-import confirm from '@inquirer/confirm';
-import dedent from 'dedent';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
@@ -13,7 +11,6 @@ import { filterTests } from '../../commands/eval/filterTests';
 import { getEnvBool, isCI } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import { initializeProject } from '../../onboarding';
 import { readPrompts, readProviderPromptMap } from '../../prompts';
 import { loadApiProviders } from '../../providers';
 import telemetry from '../../telemetry';
@@ -29,10 +26,11 @@ import {
   type TestSuite,
   type UnifiedConfig,
 } from '../../types';
-import { isRunningUnderNpx, maybeLoadFromExternalFile, readFilters } from '../../util';
+import { maybeLoadFromExternalFile, readFilters } from '../../util';
 import { isJavascriptFile } from '../../util/file';
 import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
+import { handleNoConfiguration } from '../noConfig';
 import { readTest, readTests } from '../testCaseReader';
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
@@ -439,35 +437,6 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   return combinedConfig;
 }
 
-/**
- * Handles the case when no configuration is found.
- * Offers to initialize a new project if not in CI mode.
- * @returns {Promise<never>} This function always exits the process.
- */
-export async function handleNoConfiguration(): Promise<never> {
-  const runCommand = isRunningUnderNpx() ? 'npx promptfoo eval' : 'promptfoo eval';
-
-  logger.warn(dedent`
-    No promptfooconfig found. Try running with:
-
-    ${runCommand} -c path/to/promptfooconfig.yaml
-
-    Or create a config with:
-
-    ${runCommand} init`);
-
-  const shouldInit = await confirm({
-    message: 'Would you like to initialize a new project?',
-    default: true,
-  });
-
-  if (shouldInit) {
-    await initializeProject(null, true);
-    process.exit(0);
-  }
-  process.exit(1);
-}
-
 export async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
   _defaultConfig: Partial<UnifiedConfig>,
@@ -656,3 +625,5 @@ export async function resolveConfigs(
   cliState.config = config;
   return { config, testSuite, basePath };
 }
+
+export { handleNoConfiguration };
