@@ -509,18 +509,10 @@ export async function resolveConfigs(
     redteam: fileConfig.redteam || defaultConfig.redteam,
   };
 
-  // Check if we're missing both configuration and CLI arguments
-  const hasPrompts = Boolean(
-    config.prompts && typeof config.prompts === 'string'
-      ? config.prompts.length > 0
-      : Array.isArray(config.prompts)
-        ? config.prompts.length > 0
-        : false,
-  );
-  const hasProviders = Boolean(config.providers && config.providers.length > 0);
+  const hasPrompts = [config.prompts].flat().length > 0;
+  const hasProviders = [config.providers].flat().length > 0;
   const hasConfigFile = Boolean(configPaths);
 
-  // If there's no config and no CLI args, and we're not in CI, offer to initialize
   if (!hasConfigFile && !hasPrompts && !hasProviders && !isCI()) {
     const runCommand = isRunningUnderNpx() ? 'npx promptfoo eval' : 'promptfoo eval';
 

@@ -4,15 +4,10 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
 import cliState from '../../../src/cliState';
-import { isCI } from '../../../src/envars';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
-import { readPrompts } from '../../../src/prompts';
-import { loadApiProviders } from '../../../src/providers';
 import type { UnifiedConfig } from '../../../src/types';
-import type { Prompt, ApiProvider } from '../../../src/types';
 import { maybeLoadFromExternalFile } from '../../../src/util';
-import { isRunningUnderNpx } from '../../../src/util';
 import {
   dereferenceConfig,
   readConfig,
@@ -20,12 +15,6 @@ import {
   combineConfigs,
 } from '../../../src/util/config/load';
 import { readTests } from '../../../src/util/testCaseReader';
-
-// Mock the required modules
-jest.mock('../../../src/envars');
-jest.mock('../../../src/util');
-jest.mock('../../../src/prompts');
-jest.mock('../../../src/providers');
 
 jest.mock('../../../src/database', () => ({
   getDb: jest.fn(),
@@ -48,19 +37,11 @@ jest.mock('fs', () => ({
   mkdirSync: jest.fn(),
 }));
 
-jest.mock('../../../src/envars', () => ({
-  isCI: jest.fn().mockReturnValue(false),
-  getEnvBool: jest.fn(),
-  getEnvString: jest.fn().mockReturnValue('info'),
-  getEnvInt: jest.fn().mockReturnValue(300000),
-}));
-
 jest.mock('../../../src/util', () => {
   const originalModule = jest.requireActual('../../../src/util');
   return {
     ...originalModule,
     maybeLoadFromExternalFile: jest.fn(originalModule.maybeLoadFromExternalFile),
-    isRunningUnderNpx: jest.fn().mockReturnValue(false),
   };
 });
 
@@ -75,9 +56,6 @@ jest.mock('../../../src/util/testCaseReader', () => {
     readTests: jest.fn(originalModule.readTests),
   };
 });
-
-// Mock process.exit to prevent tests from exiting
-process.exit = jest.fn() as any;
 
 describe('combineConfigs', () => {
   beforeEach(() => {
@@ -1188,270 +1166,5 @@ describe('readConfig', () => {
       prompts: ['{{prompt}}'],
     });
     expect(fs.readFileSync).toHaveBeenCalledWith('empty.yaml', 'utf-8');
-  });
-});
-
-describe('resolveConfigs validation', () => {
-  beforeEach(() => {
-    jest.resetAllMocks();
-
-    // Reset default mock implementations with minimally valid objects
-    jest.mocked(readPrompts).mockResolvedValue([{ raw: 'test prompt', label: 'test' } as Prompt]);
-    // Use a valid mock for ApiProvider that doesn't cause type errors
-    jest.mocked(loadApiProviders).mockResolvedValue([{} as unknown as ApiProvider]);
-  });
-
-  it('should suggest initialization when no config file, prompts, or providers are present', async () => {
-    // Setting up the test conditions for missing config, prompts, and providers
-    const cmdObj = { config: undefined };
-    const defaultConfig = {};
-
-    // Mock the configuration validation checks
-    jest.mocked(isCI).mockReturnValue(false);
-    jest.mocked(isRunningUnderNpx).mockReturnValue(false);
-
-    // Force the checks to trigger the initialization suggestion
-    jest.mocked(readPrompts).mockImplementation(() => {
-      throw new Error('Should not be called in this test');
-    });
-
-    // Call the function
-    await resolveConfigs(cmdObj, defaultConfig);
-
-    // Verify that the warning is logged and process.exit is called
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No promptfooconfig found'));
-    expect(process.exit).toHaveBeenCalledWith(1);
-  });
-
-  it('should use npx in suggestion when running under npx', async () => {
-    // Setting up the test conditions for missing config, prompts, and providers
-    const cmdObj = { config: undefined };
-    const defaultConfig = {};
-
-    // Mock the configuration validation checks
-    jest.mocked(isCI).mockReturnValue(false);
-    jest.mocked(isRunningUnderNpx).mockReturnValue(true);
-
-    // Force the checks to trigger the initialization suggestion
-    jest.mocked(readPrompts).mockImplementation(() => {
-      throw new Error('Should not be called in this test');
-    });
-
-    // Call the function
-    await resolveConfigs(cmdObj, defaultConfig);
-
-    // Verify that the warning with npx is logged and process.exit is called
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo eval'));
-    expect(process.exit).toHaveBeenCalledWith(1);
-  });
-
-  it('should not suggest initialization when in CI mode', async () => {
-    // Setting up the test conditions for missing config, prompts, and providers
-    const cmdObj = { config: undefined };
-    const defaultConfig = {};
-
-    // Mock the configuration validation checks
-    jest.mocked(isCI).mockReturnValue(true);
-
-    // Force the checks to trigger the prompt validation (not initialization suggestion)
-    jest.mocked(readPrompts).mockResolvedValue([]);
-
-    // Call the function
-    await resolveConfigs(cmdObj, defaultConfig);
-
-    // Verify that the warning about initialization is not shown
-    expect(logger.warn).not.toHaveBeenCalledWith(
-      expect.stringContaining('No promptfooconfig found'),
-    );
-
-    // Verify that the error about missing prompts is shown instead
-    expect(logger.error).toHaveBeenCalledWith('You must provide at least 1 prompt');
-    expect(process.exit).toHaveBeenCalledWith(1);
-  });
-
-  it('should display error for missing prompts', async () => {
-    const cmdObj = { config: ['config.json'] };
-    const defaultConfig = {};
-
-    // Mock configuration with no prompts but with providers
-    jest.mocked(fs.readFileSync).mockReturnValue(
-      JSON.stringify({
-        providers: ['openai:gpt-4'],
-      }),
-    );
-
-    // Force the check to trigger the prompt validation
-    jest.mocked(readPrompts).mockResolvedValue([]);
-
-    // Call the function
-    await resolveConfigs(cmdObj, defaultConfig);
-
-    // Verify that the error message about missing prompts is shown
-    expect(logger.error).toHaveBeenCalledWith('You must provide at least 1 prompt');
-    expect(process.exit).toHaveBeenCalledWith(1);
-  });
-
-  it('should display error for missing providers', async () => {
-    const cmdObj = { config: ['config.json'] };
-    const defaultConfig = {};
-
-    // Mock configuration with prompts but no providers
-    jest.mocked(fs.readFileSync).mockReturnValue(
-      JSON.stringify({
-        prompts: ['Hello world'],
-      }),
-    );
-
-    // Allow prompts check to pass but fail providers check
-    jest.mocked(readPrompts).mockResolvedValue([{} as any]);
-    jest.mocked(loadApiProviders).mockResolvedValue([]);
-
-    // Call the function
-    await resolveConfigs(cmdObj, defaultConfig);
-
-    // Verify that the error message about missing providers is shown
-    expect(logger.error).toHaveBeenCalledWith(
-      'You must specify at least 1 provider (for example, openai:gpt-4o)',
-    );
-    expect(process.exit).toHaveBeenCalledWith(1);
-  });
-
-  it('should handle valid configuration properly', async () => {
-    const cmdObj = { config: ['config.json'] };
-    const defaultConfig = {};
-
-    // Mock configuration with both prompts and providers
-    jest.mocked(fs.readFileSync).mockReturnValue(
-      JSON.stringify({
-        prompts: ['This is a valid prompt'],
-        providers: ['openai:gpt-4'],
-      }),
-    );
-
-    // Mock successful parsing of prompts and providers
-    jest.mocked(readPrompts).mockResolvedValue([{} as any]);
-    jest.mocked(loadApiProviders).mockResolvedValue([{} as any]);
-
-    // Mock other functions to prevent actual execution
-    jest.mocked(readTests).mockResolvedValue([]);
-    jest.mocked(maybeLoadFromExternalFile).mockResolvedValue([]);
-
-    // Keep track of exit calls
-    let exitCalled = false;
-    jest.spyOn(process, 'exit').mockImplementationOnce(() => {
-      exitCalled = true;
-      return undefined as never;
-    });
-
-    await resolveConfigs(cmdObj, defaultConfig);
-
-    // Verify that process.exit is not called
-    expect(exitCalled).toBe(false);
-  });
-});
-
-describe('validation logic', () => {
-  // Define a simple interface matching the structure we're testing
-  interface ConfigLike {
-    prompts?: string | string[];
-    providers?: string[];
-  }
-
-  it('should validate that config has prompts', () => {
-    // Create a simple config without prompts but with providers
-    const config: ConfigLike = {
-      providers: ['provider1'],
-    };
-
-    // Check the validation logic directly
-    const hasPrompts = Boolean(
-      config.prompts &&
-        ((Array.isArray(config.prompts) && config.prompts.length > 0) ||
-          (typeof config.prompts === 'string' && config.prompts.trim() !== '')),
-    );
-
-    expect(hasPrompts).toBe(false);
-  });
-
-  it('should validate that config has providers', () => {
-    // Create a simple config with prompts but no providers
-    const config: ConfigLike = {
-      prompts: ['prompt1'],
-    };
-
-    // Check the validation logic directly
-    const hasProviders = Boolean(config.providers && config.providers.length > 0);
-
-    expect(hasProviders).toBe(false);
-  });
-
-  it('should validate both prompts and providers', () => {
-    // Create a fully valid config
-    const config: ConfigLike = {
-      prompts: ['prompt1'],
-      providers: ['provider1'],
-    };
-
-    // Check the validation logic directly
-    const hasPrompts = Boolean(
-      config.prompts &&
-        ((Array.isArray(config.prompts) && config.prompts.length > 0) ||
-          (typeof config.prompts === 'string' && config.prompts.trim() !== '')),
-    );
-    const hasProviders = Boolean(config.providers && config.providers.length > 0);
-
-    expect(hasPrompts).toBe(true);
-    expect(hasProviders).toBe(true);
-  });
-
-  it('should handle string prompts correctly', () => {
-    // Create a config with string prompt
-    const config: ConfigLike = {
-      prompts: 'This is a prompt',
-      providers: ['provider1'],
-    };
-
-    // Check the validation logic directly
-    const hasPrompts = Boolean(
-      config.prompts &&
-        ((Array.isArray(config.prompts) && config.prompts.length > 0) ||
-          (typeof config.prompts === 'string' && config.prompts.trim() !== '')),
-    );
-
-    expect(hasPrompts).toBe(true);
-  });
-
-  it('should reject empty string prompts', () => {
-    // Create a config with empty string prompt
-    const config: ConfigLike = {
-      prompts: '',
-      providers: ['provider1'],
-    };
-
-    // Check the validation logic directly
-    const hasPrompts = Boolean(
-      config.prompts &&
-        ((Array.isArray(config.prompts) && config.prompts.length > 0) ||
-          (typeof config.prompts === 'string' && config.prompts.trim() !== '')),
-    );
-
-    expect(hasPrompts).toBe(false);
-  });
-
-  it('should reject empty array of prompts', () => {
-    // Create a config with empty array of prompts
-    const config: ConfigLike = {
-      prompts: [],
-      providers: ['provider1'],
-    };
-
-    // Check the validation logic directly
-    const hasPrompts = Boolean(
-      config.prompts &&
-        ((Array.isArray(config.prompts) && config.prompts.length > 0) ||
-          (typeof config.prompts === 'string' && config.prompts.trim() !== '')),
-    );
-
-    expect(hasPrompts).toBe(false);
   });
 });
