@@ -141,8 +141,6 @@ export class GoogleMMLiveProvider implements ApiProvider {
 
     const userMessage = prompt;
 
-    // logger.debug(`Sending WebSocket message to ${this.url}: ${message}`);
-
     return new Promise<ProviderResponse>((resolve) => {
       const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${this.getApiKey()}`;
       const ws = new WebSocket(url);
@@ -163,7 +161,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
             responseData = event.data.toString('utf-8');
           } else {
             // Handle cases where event.data is of an unexpected type
-            console.error('Unexpected event.data type:', typeof event.data, event.data);
+            logger.debug(`Unexpected event.data type: ${typeof event.data} ${event.data}`);
             ws.close();
             resolve({ error: 'Unexpected response data format' });
             return;
@@ -171,7 +169,6 @@ export class GoogleMMLiveProvider implements ApiProvider {
 
           const responseText = await new Response(responseData).text();
           const response = JSON.parse(responseText);
-          console.log('Endpoint response:', JSON.stringify(response));
 
           // Handle setup complete response
           if (response.setupComplete) {
@@ -194,14 +191,17 @@ export class GoogleMMLiveProvider implements ApiProvider {
               response_text_total + response.serverContent.modelTurn.parts[0].text;
           } else if (response.toolCall?.functionCalls) {
             resolve({ output: JSON.stringify(response) });
-          } else if (response.serverContent?.turnComplete) {
+          } else if (
+            response.serverContent?.turnComplete ||
+            response.serverContent?.groundingMetadata
+          ) {
             if (response_text_total) {
               resolve({ output: response_text_total });
             }
             ws.close();
           }
         } catch (err) {
-          console.error('Failed to process response:', err);
+          logger.debug(`Failed to process response: ${err}`);
           ws.close();
           resolve({ error: `Failed to process response: ${JSON.stringify(err)}` });
         }
@@ -209,7 +209,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
 
       ws.onerror = (err) => {
         clearTimeout(timeout);
-        console.error('WebSocket Error:', err);
+        logger.debug(`WebSocket Error: ${err}`);
         ws.close();
         resolve({ error: `WebSocket error: ${JSON.stringify(err)}` });
       };
@@ -219,7 +219,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
       };
 
       ws.onopen = () => {
-        console.log('WebSocket connection is opening...');
+        logger.debug('WebSocket connection is opening...');
 
         const setupMessage = {
           setup: {
