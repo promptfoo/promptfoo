@@ -559,6 +559,11 @@ export class VertexChatProvider extends VertexGenericProvider {
             return {
               error: 'Content was blocked due to safety settings.',
             };
+          } else if (datum.candidates && datum.candidates[0]?.finishReason !== 'STOP') {
+            // e.g. MALFORMED_FUNCTION_CALL
+            return {
+              error: `Finish reason ${datum.candidates[0]?.finishReason}: ${JSON.stringify(data)}`,
+            };
           }
         }
 
