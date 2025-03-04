@@ -1,8 +1,10 @@
 import $RefParser from '@apidevtools/json-schema-ref-parser';
+import dedent from 'dedent';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
+import process from 'process';
 import { fromError } from 'zod-validation-error';
 import { readAssertions } from '../../assertions';
 import { validateAssertions } from '../../assertions/validateAssertions';
@@ -26,11 +28,10 @@ import {
   type TestSuite,
   type UnifiedConfig,
 } from '../../types';
-import { maybeLoadFromExternalFile, readFilters } from '../../util';
+import { isRunningUnderNpx, maybeLoadFromExternalFile, readFilters } from '../../util';
 import { isJavascriptFile } from '../../util/file';
 import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
-import { handleNoConfiguration } from '../noConfig';
 import { readTest, readTests } from '../testCaseReader';
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
@@ -521,7 +522,17 @@ export async function resolveConfigs(
 
   // If there's no config and no CLI args, and we're not in CI, offer to initialize
   if (!hasConfigFile && !hasPrompts && !hasProviders && !isCI()) {
-    await handleNoConfiguration();
+    const runCommand = isRunningUnderNpx() ? 'npx promptfoo eval' : 'promptfoo eval';
+
+    logger.warn(dedent`
+      No promptfooconfig found. Try running with:
+  
+      ${runCommand} -c path/to/promptfooconfig.yaml
+  
+      Or create a config with:
+  
+      ${runCommand} init`);
+    process.exit(1);
   }
 
   // Continue with normal validation
