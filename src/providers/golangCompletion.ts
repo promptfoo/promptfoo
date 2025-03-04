@@ -117,7 +117,7 @@ export class GolangProvider implements ApiProvider {
               if (entry.name === 'main.go') {
                 let content = fs.readFileSync(srcPath, 'utf-8');
                 // Remove the var CallApi declaration while preserving the file
-                content = content.replace(/\/\/ CallApi.*?var CallApi.*?\n/s, '');
+                content = content.replace(/\/\/\s*CallApi[\s\S]*?var\s+CallApi[\s\S]*?\n/s, '');
                 fs.writeFileSync(destPath, content);
               } else {
                 fs.copyFileSync(srcPath, destPath);
