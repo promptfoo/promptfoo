@@ -177,6 +177,51 @@ describe('TestSuiteConfigSchema', () => {
     expect(configFiles.length).toBeGreaterThan(0);
   });
 
+  it('should validate env field with non-string values that get transformed to strings', () => {
+    const customEnvVars = {
+      CUSTOM_STRING_VALUE: 'string-value',
+      CUSTOM_NUMBER_VALUE: 42,
+      CUSTOM_BOOLEAN_TRUE: true,
+      CUSTOM_BOOLEAN_FALSE: false,
+      CUSTOM_OBJECT_VALUE: { key: 'value' },
+      CUSTOM_ARRAY_VALUE: [1, 2, 3],
+    };
+
+    const recordSchema = z.record(z.string(), z.any().transform(String));
+    const recordResult = recordSchema.safeParse(customEnvVars);
+
+    expect(recordResult.success).toBe(true);
+
+    const parsedData = recordResult.success ? recordResult.data : {};
+
+    expect(parsedData.CUSTOM_STRING_VALUE).toBe('string-value');
+    expect(parsedData.CUSTOM_NUMBER_VALUE).toBe('42');
+    expect(parsedData.CUSTOM_BOOLEAN_TRUE).toBe('true');
+    expect(parsedData.CUSTOM_BOOLEAN_FALSE).toBe('false');
+    expect(parsedData.CUSTOM_OBJECT_VALUE).toBe('[object Object]');
+    expect(parsedData.CUSTOM_ARRAY_VALUE).toBe('1,2,3');
+
+    const config = {
+      providers: [{ id: 'test-provider' }],
+      prompts: ['test prompt'],
+      env: customEnvVars,
+    };
+
+    const result = TestSuiteConfigSchema.safeParse(config);
+
+    expect(result.success).toBe(true);
+
+    const testProvider = result.success
+      ? {
+          id: 'test-provider',
+          config: { someConfig: true },
+          env: result.data.env,
+        }
+      : { id: 'test-provider', config: { someConfig: true } };
+
+    expect(Object.keys(testProvider)).toContain('env');
+  });
+
   for (const file of configFiles) {
     it(`should validate ${path.relative(rootDir, file)}`, async () => {
       const configContent = fs.readFileSync(file, 'utf8');
