@@ -30,6 +30,7 @@ import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
 import { FalImageGenerationProvider } from './fal';
 import { GolangProvider } from './golangCompletion';
 import { GoogleChatProvider } from './google';
+import { GoogleMMLiveProvider } from './googleMultimodalLive';
 import { GroqProvider } from './groq';
 import { HttpProvider } from './http';
 import {
@@ -955,6 +956,17 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return new SequenceProvider(providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('google-mm-live:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      return new GoogleMMLiveProvider(splits.slice(1).join(':'), providerOptions);
     },
   },
   {

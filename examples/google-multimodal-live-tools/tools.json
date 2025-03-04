@@ -1,0 +1,40 @@
+[
+  {
+    "functionDeclarations": [
+      {
+        "name": "get_weather",
+        "description": "Get current weather information for a city",
+        "parameters": {
+          "type": "OBJECT",
+          "properties": {
+            "city": {
+              "type": "STRING",
+              "description": "The name of the city to get weather for"
+            }
+          },
+          "required": ["city"]
+        }
+      },
+      {
+        "name": "get_stock_price",
+        "description": "Get current stock price and related information for a given stock symbol",
+        "parameters": {
+          "type": "OBJECT",
+          "properties": {
+            "symbol": {
+              "type": "STRING",
+              "description": "The stock symbol to get price information for (e.g., AAPL, GOOGL)"
+            }
+          },
+          "required": ["symbol"]
+        }
+      }
+    ]
+  },
+  {
+    "codeExecution": {}
+  },
+  {
+    "googleSearch": {}
+  }
+]
