@@ -144,6 +144,81 @@ describe('vertexUtil', () => {
         systemInstruction: undefined,
       });
     });
+
+    it('should handle content with MAX_TOKENS finish reason', () => {
+      const input = [
+        {
+          role: 'model',
+          content: { text: 'Truncated response' },
+          finishReason: 'MAX_TOKENS',
+        },
+      ];
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result.contents[0]).toEqual({
+        role: 'model',
+        parts: [{ text: 'Truncated response' }],
+      });
+    });
+
+    it('should handle content with RECITATION finish reason', () => {
+      const input = [
+        {
+          role: 'model',
+          content: { text: 'Recited content' },
+          finishReason: 'RECITATION',
+        },
+      ];
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result.contents[0]).toEqual({
+        role: 'model',
+        parts: [{ text: 'Recited content' }],
+      });
+    });
+
+    it('should handle content with BLOCKLIST finish reason', () => {
+      const input = [
+        {
+          role: 'model',
+          content: { text: 'Blocked content' },
+          finishReason: 'BLOCKLIST',
+        },
+      ];
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result.contents[0]).toEqual({
+        role: 'model',
+        parts: [{ text: 'Blocked content' }],
+      });
+    });
+
+    it('should handle content with PROHIBITED_CONTENT finish reason', () => {
+      const input = [
+        {
+          role: 'model',
+          content: { text: 'Prohibited content' },
+          finishReason: 'PROHIBITED_CONTENT',
+        },
+      ];
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result.contents[0]).toEqual({
+        role: 'model',
+        parts: [{ text: 'Prohibited content' }],
+      });
+    });
+
+    it('should handle content with SPII finish reason', () => {
+      const input = [
+        {
+          role: 'model',
+          content: { text: 'Sensitive information' },
+          finishReason: 'SPII',
+        },
+      ];
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result.contents[0]).toEqual({
+        role: 'model',
+        parts: [{ text: 'Sensitive information' }],
+      });
+    });
   });
 
   describe('getGoogleClient', () => {
@@ -174,11 +249,9 @@ describe('vertexUtil', () => {
 
       jest.mocked(GoogleAuth).mockImplementation(() => mockAuth as any);
 
-      // First call
       await getGoogleClient();
       const googleAuthCalls = jest.mocked(GoogleAuth).mock.calls.length;
 
-      // Second call should reuse cached version
       await getGoogleClient();
       expect(jest.mocked(GoogleAuth).mock.calls).toHaveLength(googleAuthCalls);
     });

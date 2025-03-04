@@ -34,7 +34,17 @@ interface Content {
 
 interface Candidate {
   content: Content;
-  finishReason?: 'FINISH_REASON_STOP' | 'STOP' | 'SAFETY';
+  finishReason?:
+    | 'FINISH_REASON_UNSPECIFIED'
+    | 'STOP'
+    | 'MAX_TOKENS'
+    | 'SAFETY'
+    | 'RECITATION'
+    | 'OTHER'
+    | 'BLOCKLIST'
+    | 'PROHIBITED_CONTENT'
+    | 'SPII'
+    | 'MALFORMED_FUNCTION_CALL';
   safetyRatings: SafetyRating[];
 }
 
