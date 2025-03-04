@@ -448,11 +448,11 @@ export async function handleNoConfiguration(): Promise<never> {
   const runCommand = isRunningUnderNpx() ? 'npx promptfoo eval' : 'promptfoo eval';
 
   logger.warn(dedent`
-    No configuration found. Try running with:
+    No promptfooconfig found. Try running with:
 
     ${runCommand} -c path/to/promptfooconfig.yaml
 
-    Or create a configuration with:
+    Or create a config with:
 
     ${runCommand} init`);
 

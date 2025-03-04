@@ -1228,7 +1228,7 @@ describe('No configuration handling', () => {
       // Execute and verify
       await expect(realHandleNoConfiguration()).rejects.toThrow('Test exited with code 1');
 
-      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No configuration found'));
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No promptfooconfig found'));
       expect(confirm).toHaveBeenCalledWith({
         message: 'Would you like to initialize a new promptfooconfig?',
         default: true,
@@ -1245,7 +1245,7 @@ describe('No configuration handling', () => {
       // Execute and verify
       await expect(realHandleNoConfiguration()).rejects.toThrow('Test exited with code 0');
 
-      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No configuration found'));
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No promptfooconfig found'));
       expect(confirm).toHaveBeenCalledWith({
         message: 'Would you like to initialize a new promptfooconfig?',
         default: true,
