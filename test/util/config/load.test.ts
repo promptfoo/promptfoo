@@ -70,23 +70,17 @@ jest.mock('../../../src/onboarding');
 jest.mock('../../../src/util');
 jest.mock('fs');
 
-// Create a separate mock for the load module
 jest.mock('../../../src/util/config/load', () => {
-  // Get the actual module implementation
   const originalModule = jest.requireActual('../../../src/util/config/load');
-
-  // Return a module with a mocked handleNoConfiguration
   return {
     ...originalModule,
     handleNoConfiguration: jest.fn().mockImplementation(() => {
       throw new Error('Mock handleNoConfiguration called');
     }),
-    // Preserve resolveConfigs but keep access to mocks in our tests
     resolveConfigs: jest.fn().mockImplementation(originalModule.resolveConfigs),
   };
 });
 
-// Get the real function for testing implementation
 const realHandleNoConfiguration = jest.requireActual(
   '../../../src/util/config/load',
 ).handleNoConfiguration;
@@ -158,16 +152,15 @@ describe('combineConfigs', () => {
           } else if (typeof path === 'string' && path === 'config2.json') {
             return JSON.stringify(config2);
           }
-          return Buffer.from(''); // Return an empty Buffer instead of null
+          return Buffer.from('');
         },
       )
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2))
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2))
-      .mockReturnValue(Buffer.from('')); // Return an empty Buffer instead of null
+      .mockReturnValue(Buffer.from(''));
 
-    // Mocks for prompt loading
     jest.mocked(fs.readdirSync).mockReturnValue([]);
     jest.mocked(fs.statSync).mockImplementation(() => {
       throw new Error('File does not exist');
@@ -349,7 +342,7 @@ describe('combineConfigs', () => {
               prompts: ['file://prompt3.txt', 'prompt4'],
             });
           }
-          return Buffer.from(''); // Return an empty Buffer instead of null
+          return Buffer.from('');
         },
       );
 
@@ -384,7 +377,7 @@ describe('combineConfigs', () => {
               prompts: ['prompt3', 'file://prompt2.txt', 'prompt4'],
             });
           }
-          return Buffer.from(''); // Return an empty Buffer instead of null
+          return Buffer.from('');
         },
       );
 
@@ -1208,8 +1201,6 @@ describe('No configuration handling', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-
-    // Mock process.exit with proper type
     exitSpy = jest.spyOn(process, 'exit').mockImplementation((code) => {
       throw new Error(`Test exited with code ${code}`);
     }) as jest.SpyInstance;
@@ -1221,16 +1212,14 @@ describe('No configuration handling', () => {
 
   describe('handleNoConfiguration implementation', () => {
     it('should suggest commands and exit when user declines initialization', async () => {
-      // Setup
       jest.mocked(confirm).mockResolvedValue(false);
       jest.mocked(isRunningUnderNpx).mockReturnValue(false);
 
-      // Execute and verify
       await expect(realHandleNoConfiguration()).rejects.toThrow('Test exited with code 1');
 
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No promptfooconfig found'));
       expect(confirm).toHaveBeenCalledWith({
-        message: 'Would you like to initialize a new promptfooconfig?',
+        message: 'Would you like to initialize a new project?',
         default: true,
       });
       expect(initializeProject).not.toHaveBeenCalled();
@@ -1238,16 +1227,14 @@ describe('No configuration handling', () => {
     });
 
     it('should initialize project and exit with 0 when user confirms', async () => {
-      // Setup
       jest.mocked(confirm).mockResolvedValue(true);
       jest.mocked(isRunningUnderNpx).mockReturnValue(false);
 
-      // Execute and verify
       await expect(realHandleNoConfiguration()).rejects.toThrow('Test exited with code 0');
 
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No promptfooconfig found'));
       expect(confirm).toHaveBeenCalledWith({
-        message: 'Would you like to initialize a new promptfooconfig?',
+        message: 'Would you like to initialize a new project?',
         default: true,
       });
       expect(initializeProject).toHaveBeenCalledWith(null, true);
@@ -1255,11 +1242,9 @@ describe('No configuration handling', () => {
     });
 
     it('should show npx command when running under npx', async () => {
-      // Setup
       jest.mocked(confirm).mockResolvedValue(false);
       jest.mocked(isRunningUnderNpx).mockReturnValue(true);
 
-      // Execute and verify
       await expect(realHandleNoConfiguration()).rejects.toThrow('Test exited with code 1');
 
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo eval'));
@@ -1273,62 +1258,48 @@ describe('No configuration handling', () => {
     });
 
     it('should call handleNoConfiguration when no config, prompts, or providers in non-CI mode', async () => {
-      // Setup
       jest.mocked(isCI).mockReturnValue(false);
 
-      // Make resolveConfigs call our mocked handleNoConfiguration
       jest
         .mocked(loadModule.resolveConfigs)
         .mockImplementationOnce(async (cmdObj, defaultConfig) => {
-          // Simulate the condition that triggers handleNoConfiguration
           await loadModule.handleNoConfiguration();
-          // This shouldn't be reached due to the error
           return {} as any;
         });
 
-      // Execute
       await expect(loadModule.resolveConfigs({}, {})).rejects.toThrow(
         'Mock handleNoConfiguration called',
       );
 
-      // Verify
       expect(loadModule.handleNoConfiguration).toHaveBeenCalledTimes(1);
     });
 
     it('should not call handleNoConfiguration in CI mode', async () => {
-      // Setup
       jest.mocked(isCI).mockReturnValue(true);
 
-      // Make resolveConfigs throw an expected error without calling handleNoConfiguration
       jest.mocked(loadModule.resolveConfigs).mockImplementationOnce(async () => {
         throw new Error('You must provide at least 1 prompt');
       });
 
-      // Execute
       await expect(loadModule.resolveConfigs({}, {})).rejects.toThrow(
         'You must provide at least 1 prompt',
       );
 
-      // Verify
       expect(loadModule.handleNoConfiguration).not.toHaveBeenCalled();
     });
 
     it('should not call handleNoConfiguration when config file is specified', async () => {
-      // Setup
       jest.mocked(isCI).mockReturnValue(false);
       jest.mocked(fs.existsSync).mockReturnValue(false);
 
-      // Make resolveConfigs throw an expected error without calling handleNoConfiguration
       jest.mocked(loadModule.resolveConfigs).mockImplementationOnce(async () => {
         throw new Error('No configuration file found');
       });
 
-      // Execute
       await expect(loadModule.resolveConfigs({ config: ['config.yaml'] }, {})).rejects.toThrow(
         'No configuration file found',
       );
 
-      // Verify
       expect(loadModule.handleNoConfiguration).not.toHaveBeenCalled();
     });
   });

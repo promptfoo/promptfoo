@@ -457,7 +457,7 @@ export async function handleNoConfiguration(): Promise<never> {
     ${runCommand} init`);
 
   const shouldInit = await confirm({
-    message: 'Would you like to initialize a new promptfooconfig?',
+    message: 'Would you like to initialize a new project?',
     default: true,
   });
 
