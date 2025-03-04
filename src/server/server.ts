@@ -201,6 +201,12 @@ export function createApp() {
 
   // Must come after the above routes (particularly /api/config) so it doesn't
   // overwrite dynamic routes.
+
+  express.static.mime.define({
+    'application/javascript': ['js', 'mjs', 'jsx', 'ts', 'tsx'],
+    'text/javascript': ['js', 'mjs', 'jsx', 'ts', 'tsx'],
+  });
+
   app.use(express.static(staticDir));
 
   // Handle client routing, return all requests to the app
