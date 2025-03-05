@@ -35,6 +35,11 @@ export async function loadApiProvider(
     const cloudDatabaseId = renderedProviderPath.slice(CLOUD_PREFIX_IDENTIFIER.length);
 
     const provider = await getProviderFromCloud(cloudDatabaseId);
+    if (provider.id.startsWith(CLOUD_PREFIX_IDENTIFIER)) {
+      throw new Error(
+        `This cloud provider ${cloudDatabaseId} points to another cloud provider: ${provider.id}. This is not allowed. A cloud provider should point to a specific provider, not another cloud provider.`,
+      );
+    }
     return loadApiProvider(provider.id, { ...context, options: provider });
   }
 
