@@ -8,7 +8,7 @@ prompts: |
   {{query}}
 
 providers:
-  - id: 'google-mm-live:gemini-2.0-flash-exp'
+  - id: 'google:live:gemini-2.0-flash-exp'
     config:
       tools: file://tools.json
       generationConfig:

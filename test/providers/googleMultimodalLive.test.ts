@@ -38,6 +38,10 @@ describe('GoogleMMLiveProvider', () => {
     expect(provider.config.generationConfig?.response_modalities?.[0]).toBe('text');
   });
 
+  it('should return the correct id', () => {
+    expect(provider.id()).toBe('google:live:gemini-2.0-flash-exp');
+  });
+
   it('should send message and handle basic response', async () => {
     jest.mocked(WebSocket).mockImplementation(() => {
       setTimeout(() => {

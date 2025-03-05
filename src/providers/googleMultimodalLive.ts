@@ -125,7 +125,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
   }
 
   id(): string {
-    return `google-mm-live:${this.modelName}`;
+    return `google:live:${this.modelName}`;
   }
 
   toString(): string {

@@ -797,7 +797,20 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      const modelName = providerPath.split(':')[1];
+      const splits = providerPath.split(':');
+
+      if (splits.length >= 3) {
+        const serviceType = splits[1];
+        const modelName = splits.slice(2).join(':');
+
+        if (serviceType === 'live') {
+          // This is a Multimodal Live API request
+          return new GoogleMMLiveProvider(modelName, providerOptions);
+        }
+      }
+
+      // Default to regular Google API
+      const modelName = splits[1];
       return new GoogleChatProvider(modelName, providerOptions);
     },
   },
@@ -956,17 +969,6 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return new SequenceProvider(providerOptions);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath.startsWith('google-mm-live:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      const splits = providerPath.split(':');
-      return new GoogleMMLiveProvider(splits.slice(1).join(':'), providerOptions);
     },
   },
   {
