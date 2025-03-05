@@ -868,7 +868,19 @@
             },
             {
               "type": "object",
-              "additionalProperties": {}
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  }
+                ]
+              }
             }
           ]
         },

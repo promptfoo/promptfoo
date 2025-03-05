@@ -286,20 +286,6 @@ describe('TestSuiteConfigSchema env property', () => {
     expect(() => TestSuiteConfigSchema.parse(config)).not.toThrow();
   });
 
-  it('should validate config with mixed type env values', () => {
-    const config = {
-      providers: ['provider1'],
-      prompts: ['prompt1'],
-      env: {
-        API_KEY: 'abc123',
-        PORT: 3000,
-        DEBUG: true,
-        CONFIG: { key: 'value' },
-      },
-    };
-    expect(() => TestSuiteConfigSchema.parse(config)).not.toThrow();
-  });
-
   it('should validate config with undefined env property', () => {
     const config = {
       providers: ['provider1'],

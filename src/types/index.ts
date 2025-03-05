@@ -830,7 +830,11 @@ export const TestSuiteConfigSchema = z.object({
       ProviderEnvOverridesSchema,
       z.record(
         z.string(),
-        z.any().transform((value) => (value == null ? '' : String(value))),
+        z.union([
+          z.string(),
+          z.number().transform((n) => String(n)),
+          z.boolean().transform((b) => String(b)),
+        ]),
       ),
     ])
     .optional(),
