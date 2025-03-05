@@ -9,7 +9,7 @@ import type {
 } from '../redteam/types';
 import type { EnvOverrides } from '../types/env';
 import { ProviderEnvOverridesSchema } from '../types/env';
-import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/file';
+import { JAVASCRIPT_EXTENSIONS } from '../util/fileUtils';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
 import { RedteamConfigSchema } from '../validators/redteam';
@@ -76,6 +76,10 @@ export interface CsvRow {
 }
 
 export type VarMapping = Record<string, string>;
+
+const isFilePathJavascriptFile = (filePath: string): boolean => {
+  return new RegExp(`\\.(${JAVASCRIPT_EXTENSIONS.join('|')})$`).test(filePath);
+};
 
 const GradingConfigSchema = z.object({
   rubricPrompt: z
@@ -752,7 +756,7 @@ export const TestSuiteSchema = z.object({
           (value) => {
             const parts = value.split(':');
             return (
-              (parts[1].endsWith('.py') || isJavascriptFile(parts[1])) &&
+              (parts[1].endsWith('.py') || isFilePathJavascriptFile(parts[1])) &&
               (parts.length === 3 || parts.length === 2)
             );
           },

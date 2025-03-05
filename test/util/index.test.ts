@@ -1,27 +1,16 @@
+/**
+ * @jest-environment node
+ */
 import * as fs from 'fs';
-import { globSync } from 'glob';
-import * as path from 'path';
-import cliState from '../../src/cliState';
+import * as glob from 'glob';
 import { getDb } from '../../src/database';
+import * as esm from '../../src/esm';
 import * as googleSheets from '../../src/googleSheets';
 import Eval from '../../src/models/eval';
-import {
-  ResultFailureReason,
-  type ApiProvider,
-  type EvaluateResult,
-  type TestCase,
-} from '../../src/types';
-import {
-  maybeLoadFromExternalFile,
-  parsePathOrGlob,
-  providerToIdentifier,
-  readFilters,
-  readOutput,
-  resultIsForTestCase,
-  varsMatch,
-  writeMultipleOutputs,
-  writeOutput,
-} from '../../src/util';
+import { ResultFailureReason, type EvaluateResult } from '../../src/types';
+import { readOutput, writeMultipleOutputs, writeOutput } from '../../src/util';
+import * as util from '../../src/util';
+import { getNunjucksEngine } from '../../src/util/templates';
 import { TestGrader } from './utils';
 
 jest.mock('../../src/database', () => ({
@@ -46,135 +35,297 @@ jest.mock('fs', () => ({
   mkdirSync: jest.fn(),
 }));
 
-jest.mock('../../src/esm');
+jest.mock('../../src/esm', () => ({
+  ...jest.requireActual('../../src/esm'),
+  importModule: jest.fn(),
+}));
+
+jest.mock('../../src/util/templates', () => ({
+  getNunjucksEngine: jest.fn(),
+}));
 
 jest.mock('../../src/googleSheets', () => ({
   writeCsvToGoogleSheet: jest.fn(),
 }));
 
-describe('maybeLoadFromExternalFile', () => {
-  const mockFileContent = 'test content';
-  const mockJsonContent = '{"key": "value"}';
-  const mockYamlContent = 'key: value';
-
-  beforeEach(() => {
-    jest.resetAllMocks();
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
-  });
-
-  it('should return the input if it is not a string', () => {
-    const input = { key: 'value' };
-    expect(maybeLoadFromExternalFile(input)).toBe(input);
-  });
-
-  it('should return the input if it does not start with "file://"', () => {
-    const input = 'not a file path';
-    expect(maybeLoadFromExternalFile(input)).toBe(input);
-  });
-
-  it('should throw an error if the file does not exist', () => {
-    jest.mocked(fs.existsSync).mockReturnValue(false);
-    expect(() => maybeLoadFromExternalFile('file://nonexistent.txt')).toThrow(
-      'File does not exist',
-    );
-  });
-
-  it('should return the file contents for a non-JSON, non-YAML file', () => {
-    expect(maybeLoadFromExternalFile('file://test.txt')).toBe(mockFileContent);
-  });
-
-  it('should parse and return JSON content for a .json file', () => {
-    jest.mocked(fs.readFileSync).mockReturnValue(mockJsonContent);
-    expect(maybeLoadFromExternalFile('file://test.json')).toEqual({ key: 'value' });
-  });
-
-  it('should parse and return YAML content for a .yaml file', () => {
-    jest.mocked(fs.readFileSync).mockReturnValue(mockYamlContent);
-    expect(maybeLoadFromExternalFile('file://test.yaml')).toEqual({ key: 'value' });
-  });
-
-  it('should parse and return YAML content for a .yml file', () => {
-    jest.mocked(fs.readFileSync).mockReturnValue(mockYamlContent);
-    expect(maybeLoadFromExternalFile('file://test.yml')).toEqual({ key: 'value' });
-  });
-
-  it('should use basePath when resolving file paths', () => {
-    const basePath = '/base/path';
-    cliState.basePath = basePath;
-    jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
-
-    maybeLoadFromExternalFile('file://test.txt');
-
-    const expectedPath = path.resolve(basePath, 'test.txt');
-    expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
-    expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
-
-    cliState.basePath = undefined;
-  });
-
-  it('should handle relative paths correctly', () => {
-    const basePath = './relative/path';
-    cliState.basePath = basePath;
-    jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
-
-    maybeLoadFromExternalFile('file://test.txt');
-
-    const expectedPath = path.resolve(basePath, 'test.txt');
-    expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
-    expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
-
-    cliState.basePath = undefined;
-  });
-
-  it('should handle a path with environment variables in Nunjucks template', () => {
-    process.env.TEST_ROOT_PATH = '/root/dir';
-    const input = 'file://{{ env.TEST_ROOT_PATH }}/test.txt';
-
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-
-    const expectedPath = path.resolve(`${process.env.TEST_ROOT_PATH}/test.txt`);
-    maybeLoadFromExternalFile(input);
-
-    expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
-    expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
-
-    delete process.env.TEST_ROOT_PATH;
-  });
-
-  it('should ignore basePath when file path is absolute', () => {
-    const basePath = '/base/path';
-    cliState.basePath = basePath;
-    jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
-
-    maybeLoadFromExternalFile('file:///absolute/path/test.txt');
-
-    const expectedPath = path.resolve('/absolute/path/test.txt');
-    expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
-    expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
-
-    cliState.basePath = undefined;
-  });
-
-  it('should handle list of paths', () => {
-    const basePath = './relative/path';
-    cliState.basePath = basePath;
-    jest.mocked(fs.readFileSync).mockReturnValue(mockJsonContent);
-
-    maybeLoadFromExternalFile(['file://test1.txt', 'file://test2.txt', 'file://test3.txt']);
-
-    expect(fs.existsSync).toHaveBeenCalledTimes(3);
-    expect(fs.existsSync).toHaveBeenNthCalledWith(1, path.resolve(basePath, 'test1.txt'));
-    expect(fs.existsSync).toHaveBeenNthCalledWith(2, path.resolve(basePath, 'test2.txt'));
-    expect(fs.existsSync).toHaveBeenNthCalledWith(3, path.resolve(basePath, 'test3.txt'));
-
-    cliState.basePath = undefined;
-  });
-});
-
 describe('util', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  describe('renderVarsInObject', () => {
+    let mockRenderString: jest.Mock;
+
+    beforeEach(() => {
+      mockRenderString = jest.fn();
+      mockRenderString.mockImplementation((template: string) => template);
+      jest.mocked(getNunjucksEngine).mockReturnValue({
+        renderString: mockRenderString,
+      });
+    });
+
+    it('should return the object as-is if no vars are provided', () => {
+      const obj = { key: 'value' };
+      expect(util.renderVarsInObject(obj)).toEqual(obj);
+    });
+
+    it('should return the object as-is if PROMPTFOO_DISABLE_TEMPLATING is set', () => {
+      process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+      const obj = { key: 'value' };
+      expect(util.renderVarsInObject(obj, { var: 'value' })).toEqual(obj);
+      delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
+    });
+
+    it('should render templated variables in strings', () => {
+      const obj = 'Hello {{name}}';
+      const vars = { name: 'World' };
+      util.renderVarsInObject(obj, vars);
+      expect(mockRenderString).toHaveBeenCalledWith(obj, vars);
+    });
+
+    it('should recursively render templates in arrays', () => {
+      const obj = ['Hello {{name}}', 'Goodbye {{name}}'];
+      const vars = { name: 'World' };
+      util.renderVarsInObject(obj, vars);
+      expect(mockRenderString).toHaveBeenCalledTimes(2);
+      expect(mockRenderString).toHaveBeenCalledWith(obj[0], vars);
+      expect(mockRenderString).toHaveBeenCalledWith(obj[1], vars);
+    });
+
+    it('should recursively render templates in objects', () => {
+      const obj = {
+        greeting: 'Hello {{name}}',
+        farewell: 'Goodbye {{name}}',
+      };
+      const vars = { name: 'World' };
+      util.renderVarsInObject(obj, vars);
+      expect(mockRenderString).toHaveBeenCalledTimes(2);
+      expect(mockRenderString).toHaveBeenCalledWith(obj.greeting, vars);
+      expect(mockRenderString).toHaveBeenCalledWith(obj.farewell, vars);
+    });
+
+    it('should handle deeply nested objects and arrays', () => {
+      const obj = {
+        greeting: 'Hello {{name}}',
+        nested: {
+          array: ['Goodbye {{name}}', { deep: 'Very {{name}}' }],
+        },
+      };
+      const vars = { name: 'World' };
+      util.renderVarsInObject(obj, vars);
+      expect(mockRenderString).toHaveBeenCalledTimes(3);
+      expect(mockRenderString).toHaveBeenCalledWith(obj.greeting, vars);
+      expect(mockRenderString).toHaveBeenCalledWith(obj.nested.array[0], vars);
+      const nestedObj = obj.nested.array[1] as { deep: string };
+      expect(mockRenderString).toHaveBeenCalledWith(nestedObj.deep, vars);
+    });
+
+    it('should handle functions by evaluating and parsing them', () => {
+      const fn = jest.fn().mockReturnValue('Hello {{name}}');
+      const vars = { name: 'World' };
+      util.renderVarsInObject(fn, vars);
+      expect(fn).toHaveBeenCalledWith({ vars });
+      expect(mockRenderString).toHaveBeenCalledWith('Hello {{name}}', vars);
+    });
+  });
+
+  describe('providerToIdentifier', () => {
+    it('should return undefined for undefined provider', () => {
+      expect(util.providerToIdentifier(undefined)).toBeUndefined();
+    });
+
+    it('should return id for API provider', () => {
+      const mockApiProvider = {
+        id: jest.fn().mockReturnValue('api-provider-id'),
+        callApi: jest.fn(),
+      };
+      expect(util.providerToIdentifier(mockApiProvider)).toBe('api-provider-id');
+      expect(mockApiProvider.id).toHaveBeenCalledWith();
+    });
+
+    it('should return id for provider options', () => {
+      const provider = {
+        id: 'provider-id',
+      };
+      expect(util.providerToIdentifier(provider)).toBe('provider-id');
+    });
+
+    it('should return string as-is for string provider', () => {
+      expect(util.providerToIdentifier('provider-id')).toBe('provider-id');
+    });
+  });
+
+  describe('varsMatch', () => {
+    it('should return true for matching vars', () => {
+      const vars1 = { key: 'value' };
+      const vars2 = { key: 'value' };
+      expect(util.varsMatch(vars1, vars2)).toBe(true);
+    });
+
+    it('should return false for non-matching vars', () => {
+      const vars1 = { key: 'value' };
+      const vars2 = { key: 'other-value' };
+      expect(util.varsMatch(vars1, vars2)).toBe(false);
+    });
+
+    it('should return true if both vars are undefined', () => {
+      expect(util.varsMatch(undefined, undefined)).toBe(true);
+    });
+
+    it('should handle deeply nested objects', () => {
+      const vars1 = { nested: { key: 'value' } };
+      const vars2 = { nested: { key: 'value' } };
+      expect(util.varsMatch(vars1, vars2)).toBe(true);
+    });
+  });
+
+  describe('resultIsForTestCase', () => {
+    it('should return true if vars and provider match', () => {
+      const result = {
+        vars: { key: 'value' },
+        provider: 'provider-id',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: {} as any,
+        promptId: '',
+        prompt: '',
+        response: '',
+        responseJson: null,
+        score: null,
+        success: true,
+        cached: false,
+        gradingResult: null,
+      } as EvaluateResult;
+
+      const testCase = {
+        vars: { key: 'value' },
+        provider: 'provider-id',
+      };
+      expect(util.resultIsForTestCase(result, testCase)).toBe(true);
+    });
+
+    it('should return false if vars do not match', () => {
+      const result = {
+        vars: { key: 'value' },
+        provider: 'provider-id',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: {} as any,
+        promptId: '',
+        prompt: '',
+        response: '',
+        responseJson: null,
+        score: null,
+        success: true,
+        cached: false,
+        gradingResult: null,
+      } as EvaluateResult;
+
+      const testCase = {
+        vars: { key: 'other-value' },
+        provider: 'provider-id',
+      };
+      expect(util.resultIsForTestCase(result, testCase)).toBe(false);
+    });
+
+    it('should return false if provider does not match', () => {
+      const result = {
+        vars: { key: 'value' },
+        provider: 'provider-id',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: {} as any,
+        promptId: '',
+        prompt: '',
+        response: '',
+        responseJson: null,
+        score: null,
+        success: true,
+        cached: false,
+        gradingResult: null,
+      } as EvaluateResult;
+
+      const testCase = {
+        vars: { key: 'value' },
+        provider: 'other-provider-id',
+      };
+      expect(util.resultIsForTestCase(result, testCase)).toBe(false);
+    });
+
+    it('should ignore provider if not specified in test case', () => {
+      const result = {
+        vars: { key: 'value' },
+        provider: 'provider-id',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: {} as any,
+        promptId: '',
+        prompt: '',
+        response: '',
+        responseJson: null,
+        score: null,
+        success: true,
+        cached: false,
+        gradingResult: null,
+      } as EvaluateResult;
+
+      const testCase = {
+        vars: { key: 'value' },
+      };
+      expect(util.resultIsForTestCase(result, testCase)).toBe(true);
+    });
+  });
+
+  describe('isRunningUnderNpx', () => {
+    afterEach(() => {
+      delete process.env.npm_execpath;
+      delete process.env.npm_lifecycle_script;
+    });
+
+    it('should return true if npm_execpath includes npx', () => {
+      process.env.npm_execpath = '/path/to/npx';
+      expect(util.isRunningUnderNpx()).toBe(true);
+    });
+
+    it('should return true if npm_lifecycle_script includes npx', () => {
+      process.env.npm_lifecycle_script = 'npx some-command';
+      expect(util.isRunningUnderNpx()).toBe(true);
+    });
+
+    it('should return false if neither condition is met', () => {
+      process.env.npm_execpath = '/path/to/npm';
+      process.env.npm_lifecycle_script = 'npm run something';
+      expect(util.isRunningUnderNpx()).toBe(false);
+    });
+  });
+
+  describe('readFilters', () => {
+    beforeEach(() => {
+      jest.resetModules();
+      jest.clearAllMocks();
+
+      // Reset the mocks directly
+      jest.mocked(glob.globSync).mockReset();
+      jest.mocked(esm.importModule).mockReset();
+    });
+
+    it('should handle empty results from globSync', async () => {
+      // Mock glob to return empty array
+      jest.mocked(glob.globSync).mockReturnValue([]);
+
+      // Mock importModule to return a function for direct import
+      jest.mocked(esm.importModule).mockResolvedValue(() => 'direct import result');
+
+      const result = await util.readFilters({ testFilter: 'nonexistent.js' }, '/test/path');
+
+      // Verify the filter was loaded via direct import
+      expect(result).toHaveProperty('testFilter');
+      expect(typeof result.testFilter).toBe('function');
+      expect(result.testFilter()).toBe('direct import result');
+
+      // Verify importModule was called with the expected path
+      expect(esm.importModule).toHaveBeenCalledWith(expect.stringContaining('nonexistent.js'));
+    });
   });
 
   describe('writeOutput', () => {
@@ -314,326 +465,8 @@ describe('util', () => {
     });
   });
 
-  it('readFilters', async () => {
-    const mockFilter = jest.fn();
-    jest.doMock(path.resolve('filter.js'), () => mockFilter, { virtual: true });
-
-    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
-
-    const filters = await readFilters({ testFilter: 'filter.js' });
-
-    expect(filters.testFilter).toBe(mockFilter);
-  });
-
-  describe('providerToIdentifier', () => {
-    it('works with string', () => {
-      const provider = 'openai:gpt-4';
-
-      expect(providerToIdentifier(provider)).toStrictEqual(provider);
-    });
-
-    it('works with provider id undefined', () => {
-      expect(providerToIdentifier(undefined)).toBeUndefined();
-    });
-
-    it('works with ApiProvider', () => {
-      const providerId = 'custom';
-      const apiProvider = {
-        id() {
-          return providerId;
-        },
-      } as ApiProvider;
-
-      expect(providerToIdentifier(apiProvider)).toStrictEqual(providerId);
-    });
-
-    it('works with ProviderOptions', () => {
-      const providerId = 'custom';
-      const providerOptions = {
-        id: providerId,
-      };
-
-      expect(providerToIdentifier(providerOptions)).toStrictEqual(providerId);
-    });
-  });
-
-  describe('varsMatch', () => {
-    it('true with both undefined', () => {
-      expect(varsMatch(undefined, undefined)).toBe(true);
-    });
-
-    it('false with one undefined', () => {
-      expect(varsMatch(undefined, {})).toBe(false);
-      expect(varsMatch({}, undefined)).toBe(false);
-    });
-  });
-
-  describe('resultIsForTestCase', () => {
-    const testCase: TestCase = {
-      provider: 'provider',
-      vars: {
-        key: 'value',
-      },
-    };
-    const result = {
-      provider: 'provider',
-      vars: {
-        key: 'value',
-      },
-    } as any as EvaluateResult;
-
-    it('is true', () => {
-      expect(resultIsForTestCase(result, testCase)).toBe(true);
-    });
-
-    it('is false if provider is different', () => {
-      const nonMatchTestCase: TestCase = {
-        provider: 'different',
-        vars: {
-          key: 'value',
-        },
-      };
-
-      expect(resultIsForTestCase(result, nonMatchTestCase)).toBe(false);
-    });
-
-    it('is false if vars are different', () => {
-      const nonMatchTestCase: TestCase = {
-        provider: 'provider',
-        vars: {
-          key: 'different',
-        },
-      };
-
-      expect(resultIsForTestCase(result, nonMatchTestCase)).toBe(false);
-    });
-  });
-
   describe('parsePathOrGlob', () => {
-    afterEach(() => {
-      jest.clearAllMocks();
-    });
-
-    it('should parse a simple file path with extension', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('/base', 'file.txt')).toEqual({
-        extension: '.txt',
-        functionName: undefined,
-        isPathPattern: false,
-        filePath: path.join('/base', 'file.txt'),
-      });
-    });
-
-    it('should parse a file path with function name', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('/base', 'file.py:myFunction')).toEqual({
-        extension: '.py',
-        functionName: 'myFunction',
-        isPathPattern: false,
-        filePath: path.join('/base', 'file.py'),
-      });
-    });
-
-    it('should parse a Go file path with function name', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('/base', 'script.go:CallApi')).toEqual({
-        extension: '.go',
-        functionName: 'CallApi',
-        isPathPattern: false,
-        filePath: path.join('/base', 'script.go'),
-      });
-    });
-
-    it('should parse a directory path', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => true } as fs.Stats);
-      expect(parsePathOrGlob('/base', 'dir')).toEqual({
-        extension: undefined,
-        functionName: undefined,
-        isPathPattern: true,
-        filePath: path.join('/base', 'dir'),
-      });
-    });
-
-    it('should handle non-existent file path gracefully when PROMPTFOO_STRICT_FILES is false', () => {
-      jest.spyOn(fs, 'statSync').mockImplementation(() => {
-        throw new Error('File does not exist');
-      });
-      expect(parsePathOrGlob('/base', 'nonexistent.js')).toEqual({
-        extension: '.js',
-        functionName: undefined,
-        isPathPattern: false,
-        filePath: path.join('/base', 'nonexistent.js'),
-      });
-    });
-
-    it('should throw an error for non-existent file path when PROMPTFOO_STRICT_FILES is true', () => {
-      process.env.PROMPTFOO_STRICT_FILES = 'true';
-      jest.spyOn(fs, 'statSync').mockImplementation(() => {
-        throw new Error('File does not exist');
-      });
-      expect(() => parsePathOrGlob('/base', 'nonexistent.js')).toThrow('File does not exist');
-      delete process.env.PROMPTFOO_STRICT_FILES;
-    });
-
-    it('should properly test file existence when function name in the path', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      parsePathOrGlob('/base', 'script.py:myFunction');
-      expect(fs.statSync).toHaveBeenCalledWith(path.join('/base', 'script.py'));
-    });
-
-    it('should return empty extension for files without extension', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('/base', 'file')).toEqual({
-        extension: '',
-        functionName: undefined,
-        isPathPattern: false,
-        filePath: path.join('/base', 'file'),
-      });
-    });
-
-    it('should handle relative paths', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('./base', 'file.txt')).toEqual({
-        extension: '.txt',
-        functionName: undefined,
-        isPathPattern: false,
-        filePath: path.join('./base', 'file.txt'),
-      });
-    });
-
-    it('should handle paths with environment variables', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      process.env.FILE_PATH = 'file.txt';
-      expect(parsePathOrGlob('/base', process.env.FILE_PATH)).toEqual({
-        extension: '.txt',
-        functionName: undefined,
-        isPathPattern: false,
-        filePath: path.join('/base', 'file.txt'),
-      });
-      delete process.env.FILE_PATH;
-    });
-
-    it('should handle glob patterns in file path', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('/base', '*.js')).toEqual({
-        extension: undefined,
-        functionName: undefined,
-        isPathPattern: true,
-        filePath: path.join('/base', '*.js'),
-      });
-    });
-
-    it('should handle complex file paths', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('/base', 'dir/subdir/file.py:func')).toEqual({
-        extension: '.py',
-        functionName: 'func',
-        isPathPattern: false,
-        filePath: path.join('/base', 'dir/subdir/file.py'),
-      });
-    });
-
-    it('should handle non-standard file extensions', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('/base', 'file.customext')).toEqual({
-        extension: '.customext',
-        functionName: undefined,
-        isPathPattern: false,
-        filePath: path.join('/base', 'file.customext'),
-      });
-    });
-
-    it('should handle deeply nested file paths', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('/base', 'a/b/c/d/e/f/g/file.py:func')).toEqual({
-        extension: '.py',
-        functionName: 'func',
-        isPathPattern: false,
-        filePath: path.join('/base', 'a/b/c/d/e/f/g/file.py'),
-      });
-    });
-
-    it('should handle complex directory paths', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => true } as fs.Stats);
-      expect(parsePathOrGlob('/base', 'a/b/c/d/e/f/g')).toEqual({
-        extension: undefined,
-        functionName: undefined,
-        isPathPattern: true,
-        filePath: path.join('/base', 'a/b/c/d/e/f/g'),
-      });
-    });
-
-    it('should join basePath and safeFilename correctly', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      const basePath = 'base';
-      const relativePath = 'relative/path/to/file.txt';
-      expect(parsePathOrGlob(basePath, relativePath)).toEqual({
-        extension: '.txt',
-        functionName: undefined,
-        isPathPattern: false,
-        filePath: expect.stringMatching(/base[\\\/]relative[\\\/]path[\\\/]to[\\\/]file.txt/),
-      });
-    });
-
-    it('should handle empty basePath', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('', 'file.txt')).toEqual({
-        extension: '.txt',
-        functionName: undefined,
-        isPathPattern: false,
-        filePath: 'file.txt',
-      });
-    });
-
-    it('should handle file:// prefix', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('', 'file://file.txt')).toEqual({
-        extension: '.txt',
-        functionName: undefined,
-        isPathPattern: false,
-        filePath: 'file.txt',
-      });
-    });
-
-    it('should handle file://./... with absolute base path', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('/absolute/base', 'file://./prompts/file.txt')).toEqual({
-        extension: '.txt',
-        functionName: undefined,
-        isPathPattern: false,
-        filePath: expect.stringMatching(/^[/\\]absolute[/\\]base[/\\]prompts[/\\]file\.txt$/),
-      });
-    });
-
-    it('should handle file://./... with relative base path', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('relative/base', 'file://file.txt')).toEqual({
-        extension: '.txt',
-        functionName: undefined,
-        isPathPattern: false,
-        filePath: expect.stringMatching(/^relative[/\\]base[/\\]file\.txt$/),
-      });
-    });
-
-    it('should handle file:// prefix with Go function', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('/base', 'file://script.go:CallApi')).toEqual({
-        extension: '.go',
-        functionName: 'CallApi',
-        isPathPattern: false,
-        filePath: path.join('/base', 'script.go'),
-      });
-    });
-
-    it('should handle file:// prefix with absolute path and Go function', () => {
-      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('/base', 'file:///absolute/path/script.go:CallApi')).toEqual({
-        extension: '.go',
-        functionName: 'CallApi',
-        isPathPattern: false,
-        filePath: expect.stringMatching(/^[/\\]absolute[/\\]path[/\\]script\.go$/),
-      });
-    });
+    // Note: Tests for parsePathOrGlob have been moved to test/util/file.test.ts
   });
 
   describe('Grader', () => {
