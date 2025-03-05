@@ -317,5 +317,3 @@ export class GoogleChatProvider extends GoogleGenericProvider {
     }
   }
 }
-
-export { DEFAULT_API_HOST, GoogleGenericProvider };
