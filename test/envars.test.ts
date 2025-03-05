@@ -25,6 +25,21 @@ describe('envars', () => {
     it('should return the default value for a non-existing environment variable', () => {
       expect(getEnvString('PROMPTFOO_AUTHOR', 'default')).toBe('default');
     });
+
+    it('should handle Azure Content Safety endpoint', () => {
+      process.env.AZURE_CONTENT_SAFETY_ENDPOINT = 'https://test.azure.com';
+      expect(getEnvString('AZURE_CONTENT_SAFETY_ENDPOINT')).toBe('https://test.azure.com');
+    });
+
+    it('should handle Azure Content Safety API version', () => {
+      process.env.AZURE_CONTENT_SAFETY_API_VERSION = '2023-10-01';
+      expect(getEnvString('AZURE_CONTENT_SAFETY_API_VERSION')).toBe('2023-10-01');
+    });
+
+    it('should handle Azure Content Safety API key', () => {
+      process.env.AZURE_CONTENT_SAFETY_API_KEY = 'test-key-123';
+      expect(getEnvString('AZURE_CONTENT_SAFETY_API_KEY')).toBe('test-key-123');
+    });
   });
 
   describe('getEnvBool', () => {
@@ -177,7 +192,6 @@ describe('envars', () => {
     ];
 
     beforeEach(() => {
-      // Clear all CI-related environment variables before each test
       ciEnvironments.forEach((env) => delete process.env[env]);
     });
 
