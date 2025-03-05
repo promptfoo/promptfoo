@@ -1,4 +1,9 @@
-import { isGradingResult, TestCaseSchema, CommandLineOptionsSchema } from '../../src/types';
+import {
+  isGradingResult,
+  TestCaseSchema,
+  CommandLineOptionsSchema,
+  TestSuiteConfigSchema,
+} from '../../src/types';
 
 describe('isGradingResult', () => {
   it('should return true for valid grading result object', () => {
@@ -241,5 +246,51 @@ describe('CommandLineOptionsSchema', () => {
     expect(() => CommandLineOptionsSchema.parse(options)).not.toThrow(
       'Invalid command line options',
     );
+  });
+});
+
+describe('TestSuiteConfigSchema env property', () => {
+  it('should validate config with string env values', () => {
+    const config = {
+      providers: ['provider1'],
+      prompts: ['prompt1'],
+      env: {
+        API_KEY: 'abc123',
+        DEBUG: 'true',
+      },
+    };
+    expect(() => TestSuiteConfigSchema.parse(config)).not.toThrow();
+  });
+
+  it('should validate config with number env values converted to strings', () => {
+    const config = {
+      providers: ['provider1'],
+      prompts: ['prompt1'],
+      env: {
+        PORT: 3000,
+        TIMEOUT: 5000,
+      },
+    };
+    expect(() => TestSuiteConfigSchema.parse(config)).not.toThrow();
+  });
+
+  it('should validate config with boolean env values converted to strings', () => {
+    const config = {
+      providers: ['provider1'],
+      prompts: ['prompt1'],
+      env: {
+        DEBUG: true,
+        VERBOSE: false,
+      },
+    };
+    expect(() => TestSuiteConfigSchema.parse(config)).not.toThrow();
+  });
+
+  it('should validate config with undefined env property', () => {
+    const config = {
+      providers: ['provider1'],
+      prompts: ['prompt1'],
+    };
+    expect(() => TestSuiteConfigSchema.parse(config)).not.toThrow();
   });
 });
