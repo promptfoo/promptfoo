@@ -3,11 +3,13 @@ import dedent from 'dedent';
 import fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
+import { CLOUD_PREFIX_IDENTIFIER } from 'src/constants';
 import cliState from '../cliState';
 import logger from '../logger';
 import type { LoadApiProviderContext, TestSuiteConfig } from '../types';
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions, ProviderOptionsMap } from '../types/providers';
+import { getProviderFromCloud } from '../util/cloud';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { providerMap } from './registry';
@@ -28,6 +30,13 @@ export async function loadApiProvider(
   };
 
   const renderedProviderPath = getNunjucksEngine().renderString(providerPath, {});
+
+  if (renderedProviderPath.startsWith(CLOUD_PREFIX_IDENTIFIER)) {
+    const cloudDatabaseId = renderedProviderPath.slice(CLOUD_PREFIX_IDENTIFIER.length);
+
+    const provider = await getProviderFromCloud(cloudDatabaseId);
+    return loadApiProvider(provider.id, { ...context, options: provider });
+  }
 
   if (
     renderedProviderPath.startsWith('file://') &&
