@@ -45,13 +45,9 @@ services:
       # Add any API keys you need here
       # OPENAI_API_KEY: your_api_key
     restart: unless-stopped
-    # Optional: Set resource limits
-    # mem_limit: 1g
-    # cpus: 1.0
 
 volumes:
   promptfoo_data:
-    # This creates a named volume with appropriate permissions
 ```
 
 2. Run the container:
@@ -79,7 +75,7 @@ mkdir -p ~/promptfoo_data
 chmod 755 ~/promptfoo_data && chown -R $(id -u):$(id -g) ~/promptfoo_data
 ```
 
-> **Note on permissions**: The above approach uses more restrictive 755 permissions, which is generally more secure than 777. If you encounter permission errors, you may need to use `chmod 777` instead, but be aware this grants all users full access to the directory.
+> **Note**: If you encounter permission errors, you may need to use `chmod 777` instead, but be aware this grants all users full access to the directory.
 
 3. Run the container:
 
@@ -112,42 +108,28 @@ helm install my-promptfoo ./helm/chart/promptfoo \
   --set domainName=promptfoo.example.com
 ```
 
-3. For production deployments, consider these additional settings:
-
-```bash
-helm install my-promptfoo ./helm/chart/promptfoo \
-  --namespace promptfoo \
-  --create-namespace \
-  --set service.type=ClusterIP \
-  --set domainName=promptfoo.example.com \
-  --set resources.requests.memory=512Mi \
-  --set resources.limits.memory=1Gi \
-  --set persistentVolumesClaims[0].size=10Gi \
-  --set autoscaling.enabled=true
-```
-
 For more advanced configuration, see the `values.yaml` file in the Helm chart directory.
 
 ## Building from Source
 
-If you need to customize the application or want to build from source:
+If you need to customize the application:
 
 1. Clone the repository:
 
-```sh
+```bash
 git clone https://github.com/promptfoo/promptfoo.git
 cd promptfoo
 ```
 
 2. Build the Docker image:
 
-```sh
+```bash
 docker build -t promptfoo:local .
 ```
 
 3. Run the container:
 
-```sh
+```bash
 # Create data directory with proper permissions
 mkdir -p ~/promptfoo_data
 chmod 755 ~/promptfoo_data && chown -R $(id -u):$(id -g) ~/promptfoo_data
@@ -160,17 +142,17 @@ docker run -d --name promptfoo_container \
   promptfoo:local
 ```
 
-## Production Configuration
+## Configuration
 
-### Data Persistence
+### Data Storage
 
-promptfoo uses a SQLite database (`promptfoo.db`) located in `/home/promptfoo/.promptfoo` in the container. For production deployments, consider these best practices:
+promptfoo uses a SQLite database (`promptfoo.db`) located in `/home/promptfoo/.promptfoo` in the container. For production deployments:
 
-1. **Always use volume mounts** to persist data
-2. **Implement regular backups** of your data directory
-3. **Monitor disk space** to prevent database corruption
+- Always use volume mounts to persist data
+- Implement regular backups of your data directory
+- Monitor disk space to prevent database corruption
 
-### Backup Strategy
+### Backup and Restore
 
 To back up your promptfoo data:
 
@@ -193,18 +175,18 @@ kubectl exec -n promptfoo $(kubectl get pods -n promptfoo -l app.kubernetes.io/n
 | `ANTHROPIC_API_KEY`     | Anthropic API key                | -       |
 | `PROMPTFOO_SELF_HOSTED` | Indicates server is self-hosted  | 1       |
 
-### Security Considerations
+### Security Best Practices
 
-1. **API Keys**: Store API keys securely using environment variables or secrets management
-2. **Authentication**: Consider using a reverse proxy (like Nginx) with basic authentication for public deployments
-3. **HTTPS**: Use a reverse proxy to terminate HTTPS for production deployments
-4. **Resource Limits**: Always set memory and CPU limits to prevent resource exhaustion
+- Store API keys securely using environment variables or secrets management
+- Use a reverse proxy (like Nginx) with basic authentication for public deployments
+- Configure HTTPS for production deployments
+- Set memory and CPU limits to prevent resource exhaustion
 
 ## Client Configuration
 
 To point the promptfoo CLI to your hosted instance:
 
-```sh
+```bash
 # Configure CLI to use your hosted instance
 export PROMPTFOO_REMOTE_API_BASE_URL=https://promptfoo.example.com
 export PROMPTFOO_REMOTE_APP_BASE_URL=https://promptfoo.example.com
@@ -221,11 +203,36 @@ sharing:
   appBaseUrl: https://promptfoo.example.com
 ```
 
+## Upgrading
+
+To upgrade to a newer version:
+
+```bash
+# Using Docker Compose
+docker-compose pull
+docker-compose up -d
+
+# Using Docker directly
+docker pull ghcr.io/promptfoo/promptfoo:latest
+docker stop promptfoo_container
+docker rm promptfoo_container
+docker run -d --name promptfoo_container \
+  --restart unless-stopped \
+  -p 3000:3000 \
+  -v ~/promptfoo_data:/home/promptfoo/.promptfoo \
+  ghcr.io/promptfoo/promptfoo:latest
+
+# Using Helm
+helm upgrade my-promptfoo ./helm/chart/promptfoo --namespace promptfoo
+```
+
+Always back up your data before upgrading.
+
 ## Troubleshooting
 
 ### Permission Denied Errors
 
-If you see a permission error like:
+If you see an error like:
 
 ```
 Error: EACCES: permission denied, open '/home/promptfoo/.promptfoo/evalLastWritten'
@@ -282,39 +289,6 @@ If you experience database errors:
 3. Remove the `promptfoo.db` file
 4. Restart the container
 
-## Monitoring
-
-For production deployments, consider monitoring:
-
-1. **Container health**: Set up health checks or use the built-in Docker health checks
-2. **Resource usage**: Monitor CPU, memory, and disk usage
-3. **Application logs**: Check container logs for errors or warnings
-
-## Upgrading
-
-To upgrade to a newer version:
-
-```bash
-# Using Docker Compose
-docker-compose pull
-docker-compose up -d
-
-# Using Docker directly
-docker pull ghcr.io/promptfoo/promptfoo:latest
-docker stop promptfoo_container
-docker rm promptfoo_container
-docker run -d --name promptfoo_container \
-  --restart unless-stopped \
-  -p 3000:3000 \
-  -v ~/promptfoo_data:/home/promptfoo/.promptfoo \
-  ghcr.io/promptfoo/promptfoo:latest
-
-# Using Helm
-helm upgrade my-promptfoo ./helm/chart/promptfoo --namespace promptfoo
-```
-
-Always back up your data before upgrading.
-
 ## System Requirements
 
 ### Client Requirements
@@ -331,18 +305,12 @@ Always back up your data before upgrading.
 
 - **Docker**: 20.10+ or Docker Desktop
 - **Docker Compose**: 2.x+ (if using Docker Compose)
-- **Resources**:
-  - 1 CPU core minimum
-  - 512MB RAM minimum (1GB+ recommended)
-  - 5GB storage minimum for database and container
+- **Resources**: 1 CPU core, 512MB RAM minimum (1GB+ recommended), 5GB storage minimum
 
 #### Kubernetes Environment
 
 - **Kubernetes**: 1.19+
 - **Helm**: 3.x
-- **Resources**:
-  - 1 CPU core request, 2 core limit recommended
-  - 512MB RAM request, 1GB limit recommended
-  - 10GB+ persistent volume
+- **Resources**: 1 CPU core, 512MB RAM minimum (1GB+ recommended), 10GB+ persistent volume
 
 For larger teams or heavier usage patterns, consider increasing the resources accordingly.
