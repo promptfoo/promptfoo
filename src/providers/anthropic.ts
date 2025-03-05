@@ -77,10 +77,7 @@ interface AnthropicMessageOptions {
   model?: string;
   temperature?: number;
   thinking?: Anthropic.Messages.ThinkingConfigParam;
-  tool_choice?:
-    | Anthropic.MessageCreateParams.ToolChoiceAny
-    | Anthropic.MessageCreateParams.ToolChoiceAuto
-    | Anthropic.MessageCreateParams.ToolChoiceTool;
+  tool_choice?: Anthropic.Messages.ToolChoice;
   tools?: Anthropic.Tool[];
   top_k?: number;
   top_p?: number;
