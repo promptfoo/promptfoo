@@ -1,10 +1,42 @@
 .editor-container {
-  border: 1px solid #ccc;
+  border: 1px solid var(--editor-border-color, #e0e0e0);
   border-radius: 4px;
   position: relative;
+  transition: all 0.2s ease;
+  overflow: hidden;
+  min-height: 200px;
+  max-height: 600px;
 }
 
 .glowing-border {
-  border-color: #1976d2;
-  box-shadow: 0 0 0 1px #1976d2;
+  border-color: var(--primary-color, #1976d2);
+  box-shadow: 0 0 0 1px var(--primary-color, #1976d2);
+}
+
+/* Style for editor in dark mode */
+:root[data-mui-color-scheme='dark'] .editor-container {
+  --editor-border-color: #424242;
+}
+
+:root[data-mui-color-scheme='dark'] .glowing-border {
+  --primary-color: #90caf9;
+}
+
+/* Style the editor to take full width */
+.editor-container > div {
+  width: 100%;
+  min-height: 200px;
+}
+
+/* Add scrollbars for overflow */
+.editor-container pre {
+  max-height: 580px;
+  overflow: auto;
+}
+
+/* Focus styles */
+.editor-container:focus-within {
+  outline: none;
+  border-color: var(--primary-color, #1976d2);
+  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.2);
 }

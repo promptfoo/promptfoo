@@ -1,29 +1,41 @@
 import React from 'react';
 import { useStore } from '@app/stores/evalConfig';
+import Add from '@mui/icons-material/Add';
 import Copy from '@mui/icons-material/ContentCopy';
 import Delete from '@mui/icons-material/Delete';
 import Edit from '@mui/icons-material/Edit';
 import Publish from '@mui/icons-material/Publish';
-import Button from '@mui/material/Button';
-import IconButton from '@mui/material/IconButton';
+import Box from '@mui/material/Box';
+import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
-import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { alpha, useTheme } from '@mui/material/styles';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import { testCaseFromCsvRow } from '@promptfoo/csv';
 import type { CsvRow, TestCase } from '@promptfoo/types';
 import TestCaseDialog from './TestCaseDialog';
+import {
+  ContentSection,
+  SectionTitle,
+  TransitionButton,
+  TransitionIconButton,
+  ActionButtonsStack,
+  StyledTableContainer,
+  EmptyState,
+} from './shared/TransitionComponents';
 
 interface TestCasesSectionProps {
   varsList: string[];
 }
 
 const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { testCases, setTestCases } = useStore();
   const [editingTestCaseIndex, setEditingTestCaseIndex] = React.useState<number | null>(null);
   const [testCaseDialogOpen, setTestCaseDialogOpen] = React.useState(false);
@@ -79,46 +91,58 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
   };
 
   return (
-    <>
-      <Stack direction="row" spacing={2} mb={2} justifyContent="space-between">
-        <Typography variant="h5">Test Cases</Typography>
-        <div>
-          <label htmlFor={`file-input-add-test-case`}>
-            <Tooltip title="Upload test cases from csv">
-              <span>
-                <IconButton component="span">
-                  <Publish />
-                </IconButton>
-                <input
-                  id={`file-input-add-test-case`}
-                  type="file"
-                  accept=".csv"
-                  onChange={handleAddTestCaseFromFile}
-                  style={{ display: 'none' }}
-                />
-              </span>
-            </Tooltip>
-          </label>
-          <Button color="primary" onClick={() => setTestCaseDialogOpen(true)} variant="contained">
+    <ContentSection>
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        mb={3}
+        justifyContent="space-between"
+        alignItems={{ xs: 'flex-start', sm: 'center' }}
+      >
+        <SectionTitle>Test Cases</SectionTitle>
+
+        <ActionButtonsStack>
+          <TransitionButton
+            variant="outlined"
+            startIcon={<Publish />}
+            component="label"
+            size={isMobile ? 'small' : 'medium'}
+          >
+            Import CSV
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleAddTestCaseFromFile}
+              style={{ display: 'none' }}
+              aria-label="Upload test cases from CSV file"
+            />
+          </TransitionButton>
+
+          <TransitionButton
+            color="primary"
+            onClick={() => setTestCaseDialogOpen(true)}
+            startIcon={<Add />}
+            size={isMobile ? 'small' : 'medium'}
+          >
             Add Test Case
-          </Button>
-        </div>
+          </TransitionButton>
+        </ActionButtonsStack>
       </Stack>
-      <TableContainer>
-        <Table>
+
+      <StyledTableContainer>
+        <Table aria-label="Test cases table">
           <TableHead>
             <TableRow>
               <TableCell>Description</TableCell>
               <TableCell>Assertions</TableCell>
-              <TableCell>Variables</TableCell>
+              {!isMobile && <TableCell>Variables</TableCell>}
               <TableCell align="right"></TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {testCases.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} align="center">
-                  No test cases added yet.
+                <TableCell colSpan={isMobile ? 3 : 4} align="center">
+                  <EmptyState message="No test cases added yet." />
                 </TableCell>
               </TableRow>
             ) : (
@@ -127,9 +151,16 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
                   key={index}
                   sx={{
                     '&:hover': {
-                      backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                      backgroundColor: (theme) =>
+                        alpha(
+                          theme.palette.action.hover,
+                          theme.palette.mode === 'dark' ? 0.1 : 0.04,
+                        ),
                       cursor: 'pointer',
                     },
+                    transition: theme.transitions.create('background-color', {
+                      duration: theme.transitions.duration.shortest,
+                    }),
                   }}
                   onClick={() => {
                     setEditingTestCaseIndex(index);
@@ -137,45 +168,103 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
                   }}
                 >
                   <TableCell>
-                    <Typography variant="body2">
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontWeight: 500,
+                        transition: theme.transitions.create('color', {
+                          duration: theme.transitions.duration.standard,
+                        }),
+                      }}
+                    >
                       {testCase.description || `Test Case #${index + 1}`}
                     </Typography>
                   </TableCell>
-                  <TableCell>{testCase.assert?.length || 0} assertions</TableCell>
                   <TableCell>
-                    {Object.entries(testCase.vars || {})
-                      .map(([k, v]) => k + '=' + v)
-                      .join(', ')}
+                    <Chip
+                      label={`${testCase.assert?.length || 0} assertion${testCase.assert?.length === 1 ? '' : 's'}`}
+                      size="small"
+                      color="primary"
+                      variant="outlined"
+                      sx={{
+                        transition: theme.transitions.create(
+                          ['background-color', 'color', 'border-color'],
+                          { duration: theme.transitions.duration.standard },
+                        ),
+                      }}
+                    />
                   </TableCell>
-                  <TableCell align="right" sx={{ minWidth: 150 }}>
-                    <IconButton
-                      onClick={() => {
+                  {!isMobile && (
+                    <TableCell>
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          flexWrap: 'wrap',
+                          gap: 0.5,
+                          maxWidth: '400px',
+                        }}
+                      >
+                        {Object.entries(testCase.vars || {}).length > 0 ? (
+                          Object.entries(testCase.vars || {}).map(([key, value], i) => (
+                            <Chip
+                              key={i}
+                              label={`${key}=${String(value).substring(0, 20)}${String(value).length > 20 ? '...' : ''}`}
+                              size="small"
+                              sx={{
+                                fontSize: '0.7rem',
+                                height: '24px',
+                                transition: theme.transitions.create(
+                                  ['background-color', 'color', 'border-color'],
+                                  { duration: theme.transitions.duration.standard },
+                                ),
+                              }}
+                            />
+                          ))
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            No variables
+                          </Typography>
+                        )}
+                      </Box>
+                    </TableCell>
+                  )}
+                  <TableCell align="right" sx={{ minWidth: 120 }}>
+                    <TransitionIconButton
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setEditingTestCaseIndex(index);
                         setTestCaseDialogOpen(true);
                       }}
-                      size="small"
+                      tooltip="Edit test case"
+                      aria-label={`Edit test case ${index + 1}`}
                     >
-                      <Edit />
-                    </IconButton>
-                    <IconButton
+                      <Edit fontSize="small" />
+                    </TransitionIconButton>
+
+                    <TransitionIconButton
                       onClick={(event) => handleDuplicateTestCase(event, index)}
-                      size="small"
+                      tooltip="Duplicate test case"
+                      aria-label={`Duplicate test case ${index + 1}`}
                     >
-                      <Copy />
-                    </IconButton>
-                    <IconButton
+                      <Copy fontSize="small" />
+                    </TransitionIconButton>
+
+                    <TransitionIconButton
                       onClick={(event) => handleRemoveTestCase(event, index)}
-                      size="small"
+                      color="error"
+                      tooltip="Delete test case"
+                      aria-label={`Delete test case ${index + 1}`}
                     >
-                      <Delete />
-                    </IconButton>
+                      <Delete fontSize="small" />
+                    </TransitionIconButton>
                   </TableCell>
                 </TableRow>
               ))
             )}
           </TableBody>
         </Table>
-      </TableContainer>
+      </StyledTableContainer>
+
       <TestCaseDialog
         open={testCaseDialogOpen}
         onAdd={handleAddTestCase}
@@ -186,7 +275,7 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
           setTestCaseDialogOpen(false);
         }}
       />
-    </>
+    </ContentSection>
   );
 };
 
