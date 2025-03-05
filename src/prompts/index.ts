@@ -1,4 +1,5 @@
 import { globSync } from 'glob';
+import { isJavascriptFile } from 'src/util/fileUtils';
 import logger from '../logger';
 import type {
   UnifiedConfig,
@@ -9,7 +10,7 @@ import type {
   ProviderOptions,
   EvaluateTestSuite,
 } from '../types';
-import { isJavascriptFile, parsePathOrGlob } from '../util/file';
+import { parsePathOrGlob } from '../util/file';
 import invariant from '../util/invariant';
 import { PromptSchema } from '../validators/prompts';
 import { processJsFile } from './processors/javascript';

@@ -1,14 +1,9 @@
 import * as fs from 'fs';
 import path from 'path';
 import cliState from '../../src/cliState';
-import {
-  isJavascriptFile,
-  isImageFile,
-  isVideoFile,
-  maybeLoadFromExternalFile,
-  parsePathOrGlob,
-} from '../../src/util/file';
+import { maybeLoadFromExternalFile, parsePathOrGlob } from '../../src/util/file';
 import { safeResolve, safeJoin } from '../../src/util/file.node';
+import { isJavascriptFile, isImageFile, isVideoFile } from '../../src/util/fileUtils';
 
 jest.mock('fs', () => ({
   ...jest.requireActual('fs'),

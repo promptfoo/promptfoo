@@ -22,7 +22,7 @@ import type {
   TestCaseWithVarsFile,
   TestSuiteConfig,
 } from '../types';
-import { isJavascriptFile } from './file';
+import { isJavascriptFile } from './fileUtils';
 
 export async function readTestFiles(
   pathOrGlobs: string | string[],

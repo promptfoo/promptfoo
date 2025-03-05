@@ -30,7 +30,7 @@ import {
 } from '../../types';
 import { isRunningUnderNpx, readFilters } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
-import { isJavascriptFile } from '../../util/file';
+import { isJavascriptFile } from '../../util/fileUtils';
 import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
 import { readTest, readTests } from '../testCaseReader';

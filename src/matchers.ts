@@ -37,7 +37,7 @@ import type {
   TokenUsage,
 } from './types';
 import { maybeLoadFromExternalFile } from './util/file';
-import { isJavascriptFile } from './util/file';
+import { isJavascriptFile } from './util/fileUtils';
 import invariant from './util/invariant';
 import { extractJsonObjects } from './util/json';
 import { getNunjucksEngine } from './util/templates';

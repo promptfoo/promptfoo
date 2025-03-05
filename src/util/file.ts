@@ -24,10 +24,8 @@ import { getConfigDirectoryPath } from './config/manage';
 import { sha256 } from './createHash';
 import { convertTestResultsToTableRow, getHeaderForTable } from './exportToFile';
 // Import and re-export file utility functions from fileUtils.ts
-import { JAVASCRIPT_EXTENSIONS, isJavascriptFile, isImageFile, isVideoFile } from './fileUtils';
+import { isJavascriptFile } from './fileUtils';
 import { getNunjucksEngine } from './templates';
-
-export { JAVASCRIPT_EXTENSIONS, isJavascriptFile, isImageFile, isVideoFile };
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
   const passFailText = output.pass
