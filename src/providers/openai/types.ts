@@ -25,6 +25,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   function_call?: 'none' | 'auto' | { name: string };
   tools?: OpenAiTool[];
   tool_choice?: 'none' | 'auto' | 'required' | { type: 'function'; function?: { name: string } };
+  tool_resources?: Record<string, any>;
   response_format?:
     | {
         type: 'json_object';

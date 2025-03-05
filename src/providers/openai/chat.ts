@@ -1,3 +1,4 @@
+import dedent from 'dedent';
 import { OpenAiGenericProvider } from '.';
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt } from '../../envars';
@@ -244,6 +245,22 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             ),
           };
         }
+      }
+
+      // Handle DeepSeek reasoning model's reasoning_content by prepending it to the output
+      if (
+        message.reasoning_content &&
+        typeof message.reasoning_content === 'string' &&
+        typeof output === 'string'
+      ) {
+        output = dedent`
+          Chain of Thought:
+
+          ${message.reasoning_content}
+
+          Final Answer:
+
+          ${output}`;
       }
 
       return {
