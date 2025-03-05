@@ -1,4 +1,3 @@
-import { getNunjucksEngine } from '../util/templates';
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
@@ -10,6 +9,7 @@ import type {
 } from '../types';
 import type { EnvOverrides } from '../types/env';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
+import { getNunjucksEngine } from '../util/templates';
 import { CHAT_MODELS } from './googleShared';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 import { maybeCoerceToGeminiFormat } from './vertexUtil';
@@ -55,14 +55,13 @@ class GoogleGenericProvider implements ApiProvider {
   }
 
   getApiHost(): string | undefined {
-    const apiHost = (
+    const apiHost =
       this.config.apiHost ||
       this.env?.GOOGLE_API_HOST ||
       this.env?.PALM_API_HOST ||
       getEnvString('GOOGLE_API_HOST') ||
       getEnvString('PALM_API_HOST') ||
-      DEFAULT_API_HOST
-    );
+      DEFAULT_API_HOST;
     if (apiHost) {
       return getNunjucksEngine().renderString(apiHost, {});
     }
@@ -70,13 +69,12 @@ class GoogleGenericProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    const apiKey = (
+    const apiKey =
       this.config.apiKey ||
       this.env?.GOOGLE_API_KEY ||
       this.env?.PALM_API_KEY ||
       getEnvString('GOOGLE_API_KEY') ||
-      getEnvString('PALM_API_KEY')
-    );
+      getEnvString('PALM_API_KEY');
     if (apiKey) {
       return getNunjucksEngine().renderString(apiKey, {});
     }
@@ -319,3 +317,5 @@ export class GoogleChatProvider extends GoogleGenericProvider {
     }
   }
 }
+
+export { DEFAULT_API_HOST, GoogleGenericProvider };
