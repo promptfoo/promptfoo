@@ -4,7 +4,7 @@ sidebar_label: Custom Javascript
 
 # Custom Javascript Providers
 
-Custom Javascript providers allow you to define your provider in javascript or typescript. You can integrate with any API or service beyond the built-in providers through a simple interface. This approach allows you to implement providers that are not available by default in promptfoo.
+Custom Javascript providers let you create providers in JavaScript or TypeScript to integrate with any API or service not built into promptfoo.
 
 ## Supported File Formats and Examples
 
@@ -95,7 +95,7 @@ module.exports = class OpenAIProvider {
 
 The `context` parameter contains:
 
-```javascript title="callApiContext.js"
+```javascript
 {
   vars: {}, // Test case variables
   prompt: {}, // Original prompt template
