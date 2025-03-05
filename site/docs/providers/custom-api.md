@@ -2,9 +2,9 @@
 sidebar_label: Custom Javascript
 ---
 
-# Custom JavaScript Providers
+# Javascript Provider
 
-Custom Javascript providers let you create providers in JavaScript or TypeScript to integrate with any API or service not built into promptfoo.
+Custom Javascript providers let you create providers in JavaScript or TypeScript to integrate with any API or service not already built into promptfoo.
 
 ## Supported File Formats and Examples
 
@@ -302,7 +302,6 @@ providers:
 - [Browser Provider](/docs/providers/browser/)
 - [Custom Provider Examples](https://github.com/promptfoo/promptfoo/tree/main/examples)
 - [Custom Script Provider](/docs/providers/custom-script/)
-- [Evaluator Configuration](/docs/configuration/evaluators)
 - [Go Provider](/docs/providers/go/)
 - [HTTP Provider](/docs/providers/http/)
 - [Python Provider](/docs/providers/python/)
