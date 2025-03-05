@@ -124,6 +124,14 @@ export async function doEval(
 
     ({ config, testSuite, basePath: _basePath } = await resolveConfigs(cmdObj, defaultConfig));
 
+    // Ensure evaluateOptions from the config file are applied
+    if (config.evaluateOptions) {
+      evaluateOptions = {
+        ...evaluateOptions,
+        ...config.evaluateOptions,
+      };
+    }
+
     let maxConcurrency = cmdObj.maxConcurrency;
     const delay = cmdObj.delay ?? 0;
 
