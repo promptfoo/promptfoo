@@ -1,0 +1,21 @@
+{
+  "model": "gpt-4o-2024-05-14",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a helpful voice assistant. When responding to the user, speak naturally and provide concise, useful information. If the user provides audio input, respond in a conversational manner."
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "audio",
+          "audio_url": "{{audioInputPath}}"
+        }
+      ]
+    }
+  ],
+  "response_format": {
+    "type": "{{responseFormat}}"
+  }
+}

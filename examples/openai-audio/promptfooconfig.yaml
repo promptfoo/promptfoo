@@ -1,0 +1,62 @@
+description: |
+  OpenAI audio example configuration for testing audio-based LLM features.
+  This demonstrates how to use audio input and output capabilities with OpenAI models.
+
+prompts:
+  - id: audio-query
+    path: ./prompt.json
+    vars:
+      audioInputPath: ./assets/audio-sample.wav
+      responseFormat: text
+
+providers:
+  - id: openai-audio-to-text
+    label: OpenAI GPT-4o (Audio to Text)
+    config:
+      provider: openai-chat
+      model: gpt-4o-2024-05-14
+      apiBaseUrl: https://api.openai.com/v1
+      apiKey: $OPENAI_API_KEY
+
+  - id: openai-audio-to-audio
+    label: OpenAI GPT-4o (Audio to Audio)
+    config:
+      provider: openai-chat
+      model: gpt-4o-2024-05-14
+      apiBaseUrl: https://api.openai.com/v1
+      apiKey: $OPENAI_API_KEY
+      extraParams:
+        response_format:
+          type: audio_url
+
+tests:
+  - description: Test Audio Input to Text Output
+    prompt: audio-query
+    provider: openai-audio-to-text
+    vars:
+      audioInputPath: ./assets/audio-sample.wav
+      responseFormat: text
+    assert:
+      - type: javascript
+        path: ./audio-assertions.js
+        function: containsKeywords
+        vars:
+          expectedKeywords: ['hello', 'weather', 'today']
+
+  - description: Test Audio Input to Audio Output
+    prompt: audio-query
+    provider: openai-audio-to-audio
+    vars:
+      audioInputPath: ./assets/audio-sample.wav
+      responseFormat: audio_url
+    assert:
+      - type: javascript
+        path: ./audio-assertions.js
+        function: hasAudioOutput
+
+      - type: javascript
+        path: ./audio-assertions.js
+        function: checkAudioDuration
+        vars:
+          minDuration: 3
+          maxDuration: 30

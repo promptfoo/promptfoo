@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Advanced OpenAI Audio Capabilities Demo
+prompts:
+  - id: audio-input-output
+    label: Audio Input/Output
+    file: ./prompt.json
+
+providers:
+  - id: openai:gpt-4o-audio-preview
+    label: GPT-4o Audio Premium
+    config:
+      modalities: ['text', 'audio']
+      audio:
+        voice: alloy # Options: alloy, echo, fable, onyx, nova, shimmer
+        format: wav
+        speed: 1.0
+
+  - id: openai:gpt-4o-mini-audio-preview
+    label: GPT-4o Mini Audio
+    config:
+      modalities: ['text', 'audio']
+      audio:
+        voice: nova
+        format: mp3
+        bitrate: 256k
+        speed: 1.2
+
+tests:
+  - vars:
+      audio_input: file://assets/input.wav
+      question: Please transcribe this audio recording and identify the main topic being discussed.
+    description: Audio transcription and analysis
+    threshold: 0.7
+
+  - vars:
+      text_prompt: Explain the concept of neural networks in simple terms in about 20 seconds of spoken audio
+    description: Educational audio generation
+    threshold: 0.7
+
+  - vars:
+      audio_input: file://assets/input.wav
+      reply_prompt: Listen to this audio and respond with a spoken summary of the key points
+    description: Audio summary with voice response
+    threshold: 0.7
+
+  - vars:
+      text_prompt: Tell me a short bedtime story for children about a friendly robot
+      audio_options:
+        voice: fable
+        speed: 0.9
+    description: Custom voice parameters test
+    threshold: 0.7
+# You can add assertion functions to evaluate the quality of audio outputs
+# These would need custom JavaScript or Python evaluation functions
+#assertionFile: ./audio-assertions.js
