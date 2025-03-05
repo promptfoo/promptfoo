@@ -1,9 +1,6 @@
 import { fetchWithProxy } from '../fetch';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
-import type { ProviderOptions } from '../types/providers';
-import { ProviderOptionsSchema } from '../validators/providers';
-import invariant from './invariant';
 
 const CHUNKED_RESULTS_BUILD_DATE = new Date('2025-01-10');
 
@@ -18,7 +15,7 @@ function makeRequest(path: string, method: string, body?: any) {
   });
 }
 
-export async function getProviderFromCloud(id: string): Promise<ProviderOptions & { id: string }> {
+export async function getProviderFromCloud(id: string) {
   if (!cloudConfig.isEnabled()) {
     throw new Error(
       `Could not fetch Provider ${id} from cloud. Cloud config is not enabled. Please run \`promptfoo auth login\` to login.`,
@@ -34,10 +31,7 @@ export async function getProviderFromCloud(id: string): Promise<ProviderOptions 
     } else {
       throw new Error(`Failed to fetch provider from cloud: ${response.statusText}`);
     }
-    const provider = ProviderOptionsSchema.parse(body.config);
-    // The provider options schema has ID field as optional but we know it's required for cloud providers
-    invariant(provider.id, `Provider ${id} has no id in ${body.config}`);
-    return { ...provider, id: provider.id };
+    return body.config;
   } catch (e) {
     logger.error(`Failed to fetch provider from cloud: ${id}.`);
     logger.error(String(e));
@@ -89,3 +83,5 @@ export async function cloudCanAcceptChunkedResults() {
   const buildDate = await targetApiBuildDate();
   return buildDate != null && buildDate > CHUNKED_RESULTS_BUILD_DATE;
 }
+
+export { CHUNKED_RESULTS_BUILD_DATE, makeRequest };
