@@ -264,3 +264,5 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
     }
   }
 }
+
+export { parseAzureModerationResponse, handleApiError, getModerationCacheKey };
