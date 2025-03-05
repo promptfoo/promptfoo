@@ -17,19 +17,54 @@ keywords:
 
 promptfoo provides a Docker image that allows you to host a central server that stores your team's evals. With this, you can:
 
-- Share your evals with your team.
-- Run evals in your CI/CD pipeline and aggregate the results.
-- Keep sensitive data off of your local machine.
+- Share your evals with your team
+- Run evals in your CI/CD pipeline and aggregate the results
+- Keep sensitive data off of your local machine
 
-The self-hosted app consists of:
+The self-hosted app consists of an Express server that serves the web UI and API.
 
-- The self-hosted app is an Express server that serves the web UI and API.
+## Deployment Options
 
-## Using Pre-built Docker Images
+### Option 1: Docker Compose (Recommended)
 
-A quick way to get started is to use a pre-built image.
+Using Docker Compose is the simplest and most reliable way to run promptfoo:
 
-To use a pre-built image:
+1. Create a `docker-compose.yml` file:
+
+```yaml
+version: '3'
+
+services:
+  promptfoo:
+    image: ghcr.io/promptfoo/promptfoo:latest
+    ports:
+      - '3000:3000'
+    volumes:
+      - promptfoo_data:/home/promptfoo/.promptfoo
+    environment:
+      # Add any API keys you need here
+      # OPENAI_API_KEY: your_api_key
+    restart: unless-stopped
+    # Optional: Set resource limits
+    # mem_limit: 1g
+    # cpus: 1.0
+
+volumes:
+  promptfoo_data:
+    # This creates a named volume with appropriate permissions
+```
+
+2. Run the container:
+
+```bash
+docker-compose up -d
+```
+
+This method uses Docker's named volumes which automatically handle permissions correctly.
+
+### Option 2: Docker Run
+
+If you prefer using Docker directly:
 
 1. Pull the image:
 
@@ -37,116 +72,277 @@ To use a pre-built image:
 docker pull ghcr.io/promptfoo/promptfoo:latest
 ```
 
-You can use specific version tags instead of `latest` to pin to a specific version.
-
-2. Run the container:
+2. Prepare a directory with proper permissions:
 
 ```bash
-docker run -d --name promptfoo_container -p 3000:3000 -v /path/to/local_promptfoo:/home/promptfoo/.promptfoo ghcr.io/promptfoo/promptfoo:latest
+mkdir -p ~/promptfoo_data
+chmod 755 ~/promptfoo_data && chown -R $(id -u):$(id -g) ~/promptfoo_data
 ```
 
-Key points:
+> **Note on permissions**: The above approach uses more restrictive 755 permissions, which is generally more secure than 777. If you encounter permission errors, you may need to use `chmod 777` instead, but be aware this grants all users full access to the directory.
 
-- `-v /path/to/local_promptfoo:/home/promptfoo/.promptfoo` maps the container's working directory to your local filesystem. Replace `/path/to/local_promptfoo` with your preferred path.
-- Omitting the `-v` argument will result in non-persistent evals.
-- Add any api keys as environment variables on the docker container. For example, `-e OPENAI_API_KEY=sk-abc123` sets the OpenAI API key so users can run evals directly from the web UI. Replace `sk-abc123` with your actual API key.
+3. Run the container:
+
+```bash
+docker run -d --name promptfoo_container \
+  --restart unless-stopped \
+  -p 3000:3000 \
+  -v ~/promptfoo_data:/home/promptfoo/.promptfoo \
+  ghcr.io/promptfoo/promptfoo:latest
+```
+
+### Option 3: Kubernetes with Helm
+
+For production deployments on Kubernetes, promptfoo provides a Helm chart:
+
+1. Clone the repository to get the Helm chart:
+
+```bash
+git clone https://github.com/promptfoo/promptfoo.git
+cd promptfoo
+```
+
+2. Install the chart:
+
+```bash
+helm install my-promptfoo ./helm/chart/promptfoo \
+  --namespace promptfoo \
+  --create-namespace \
+  --set service.type=ClusterIP \
+  --set domainName=promptfoo.example.com
+```
+
+3. For production deployments, consider these additional settings:
+
+```bash
+helm install my-promptfoo ./helm/chart/promptfoo \
+  --namespace promptfoo \
+  --create-namespace \
+  --set service.type=ClusterIP \
+  --set domainName=promptfoo.example.com \
+  --set resources.requests.memory=512Mi \
+  --set resources.limits.memory=1Gi \
+  --set persistentVolumesClaims[0].size=10Gi \
+  --set autoscaling.enabled=true
+```
+
+For more advanced configuration, see the `values.yaml` file in the Helm chart directory.
 
 ## Building from Source
 
-### 1. Clone the Repository
+If you need to customize the application or want to build from source:
 
-First, clone the promptfoo repository from GitHub:
+1. Clone the repository:
 
 ```sh
 git clone https://github.com/promptfoo/promptfoo.git
 cd promptfoo
 ```
 
-### 2. Build the Docker Image
-
-Build the Docker image with the following command:
+2. Build the Docker image:
 
 ```sh
-docker build -t promptfoo .
+docker build -t promptfoo:local .
 ```
 
-### 3. Run the Docker Container
-
-Launch the Docker container using this command:
+3. Run the container:
 
 ```sh
-docker run -d --name promptfoo_container -p 3000:3000 -v /path/to/local_promptfoo:/home/promptfoo/.promptfoo promptfoo
+# Create data directory with proper permissions
+mkdir -p ~/promptfoo_data
+chmod 755 ~/promptfoo_data && chown -R $(id -u):$(id -g) ~/promptfoo_data
+
+# Run the container
+docker run -d --name promptfoo_container \
+  --restart unless-stopped \
+  -p 3000:3000 \
+  -v ~/promptfoo_data:/home/promptfoo/.promptfoo \
+  promptfoo:local
 ```
 
-## Advanced Configuration
+## Production Configuration
 
-### Eval Storage
+### Data Persistence
 
-promptfoo uses a SQLite database (`promptfoo.db`) located in `/home/promptfoo/.promptfoo` on the image. Ensure this directory is persisted to save your evals. Pass `-v /path/to/local_promptfoo:/home/promptfoo/.promptfoo` to the `docker run` command to persist the evals.
+promptfoo uses a SQLite database (`promptfoo.db`) located in `/home/promptfoo/.promptfoo` in the container. For production deployments, consider these best practices:
 
-## Pointing promptfoo to your hosted instance
+1. **Always use volume mounts** to persist data
+2. **Implement regular backups** of your data directory
+3. **Monitor disk space** to prevent database corruption
 
-When self-hosting, you need to set the environment variables so that the `promptfoo share` command knows how to reach your hosted application. Here's an example:
+### Backup Strategy
+
+To back up your promptfoo data:
+
+```bash
+# For Docker/Docker Compose installations
+tar -czf promptfoo-backup-$(date +%Y%m%d).tar.gz -C ~/promptfoo_data .
+
+# For Kubernetes installations
+kubectl exec -n promptfoo $(kubectl get pods -n promptfoo -l app.kubernetes.io/name=promptfoo -o name | head -n 1) -- \
+  tar -czf - -C /home/promptfoo/.promptfoo . > promptfoo-backup-$(date +%Y%m%d).tar.gz
+```
+
+### Environment Variables
+
+| Variable                | Description                      | Default |
+| ----------------------- | -------------------------------- | ------- |
+| `API_PORT`              | Port to run the server on        | 3000    |
+| `HOST`                  | Host to bind to                  | 0.0.0.0 |
+| `OPENAI_API_KEY`        | OpenAI API key for running evals | -       |
+| `ANTHROPIC_API_KEY`     | Anthropic API key                | -       |
+| `PROMPTFOO_SELF_HOSTED` | Indicates server is self-hosted  | 1       |
+
+### Security Considerations
+
+1. **API Keys**: Store API keys securely using environment variables or secrets management
+2. **Authentication**: Consider using a reverse proxy (like Nginx) with basic authentication for public deployments
+3. **HTTPS**: Use a reverse proxy to terminate HTTPS for production deployments
+4. **Resource Limits**: Always set memory and CPU limits to prevent resource exhaustion
+
+## Client Configuration
+
+To point the promptfoo CLI to your hosted instance:
 
 ```sh
-PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:3000 PROMPTFOO_REMOTE_APP_BASE_URL=http://localhost:3000 promptfoo share -y
+# Configure CLI to use your hosted instance
+export PROMPTFOO_REMOTE_API_BASE_URL=https://promptfoo.example.com
+export PROMPTFOO_REMOTE_APP_BASE_URL=https://promptfoo.example.com
+
+# Test sharing an eval
+promptfoo share -y
 ```
 
-This will create a shareable URL using your self-hosted service.
-
-The `PROMPTFOO_REMOTE_API_BASE_URL` environment variable specifies the base URL for the API endpoints of your self-hosted service. This is where the `promptfoo share` command sends data to create a shareable URL.
-
-Similarly, the `PROMPTFOO_REMOTE_APP_BASE_URL` environment variable sets the base URL for the UI of your self-hosted service. This will be a visible part of the shareable URL.
-
-These configuration options can also be set under the `sharing` property of your promptfoo config:
+These configuration options can also be set in your promptfoo config:
 
 ```yaml
 sharing:
-  apiBaseUrl: http://localhost:3000
-  appBaseUrl: http://localhost:3000
+  apiBaseUrl: https://promptfoo.example.com
+  appBaseUrl: https://promptfoo.example.com
 ```
 
-## Specifications
+## Troubleshooting
 
-Promptfoo comes in two parts:
+### Permission Denied Errors
 
-- A client tool for running evals and interacting with the Promptfoo API.
-- A web server that stores and analyzes results, serves dashboards, enables sharing, and provides a UI for viewing reports from other users.
+If you see a permission error like:
 
-### Client
+```
+Error: EACCES: permission denied, open '/home/promptfoo/.promptfoo/evalLastWritten'
+```
 
-The Promptfoo client is a Node.js application that runs on all modern operating systems. It can be run on a laptop or personal computer, in a CI/CD pipeline, or on a server.
+This means the container's `promptfoo` user doesn't have permission to write to the mounted volume. Fix this with one of these methods:
 
-#### Requirements
+1. **Use Docker Compose with named volumes** (recommended)
+2. **Fix permissions on your host directory**:
+   ```bash
+   mkdir -p ~/promptfoo_data
+   chmod 777 ~/promptfoo_data
+   ```
+3. **Use a temporary container to set permissions**:
+   ```bash
+   mkdir -p ~/promptfoo_data
+   docker run --rm -v ~/promptfoo_data:/data alpine chmod -R 777 /data
+   ```
 
-- **Operating System**: Linux, MacOS, Windows (Linux recommended for server installations)
-- **CPU**: 2+ CPU cores, 2.0GHz or faster recommended
-- **GPU**: Not required
-- **RAM**: 4 GB
-- **Storage**: 10 GB
-- **Dependencies**:
-  - **Node.js**: Version 18 or newer
-  - **Package Manager**: npm (comes with Node.js)
+### Node.js Version Issues
 
-### Server
+promptfoo requires Node.js v20+ for certain components. If you see errors like:
 
-The Promptfoo server is a Node.js application that runs on a server. It can be run in a Docker container or as a standalone Node.js application.
+```
+npm WARN EBADENGINE Unsupported engine {
+  required: { node: '>=20.18.1' },
+  current: { node: 'v18.19.1' }
+}
+```
 
-Note that the server is _optional_ for running evals or red teams with Promptfoo. You can run evals locally or in a CI/CD pipeline without running the server.
+Update your Node.js installation to version 20 or later.
 
-#### Requirements
+### Container Fails to Start
 
-Docker Environment
+If the container exits immediately, check the logs:
 
-- **Docker Engine**: 20.10 or newer
-- **Docker Compose**: 2.x or newer
+```bash
+docker logs promptfoo_container
+```
 
-Results Server Host
+Common issues include:
 
-- **OS**: Anything capable of running Docker (Kubernetes, Azure Container Instances, etc.)
-- **CPU**: 4+ cores
-- **RAM**: 8GB minimum (16GB recommended)
-- **Storage**:
-  - 100GB+ for container volumes and database
-  - Device mapper or overlay2 storage driver recommended
-  - SSD storage recommended for database volumes
+- Port 3000 already in use
+- Insufficient permissions on mounted volumes
+- Memory constraints
+- SQLite database corruption
+
+### Database Issues
+
+If you experience database errors:
+
+1. Stop the container
+2. Backup your data directory
+3. Remove the `promptfoo.db` file
+4. Restart the container
+
+## Monitoring
+
+For production deployments, consider monitoring:
+
+1. **Container health**: Set up health checks or use the built-in Docker health checks
+2. **Resource usage**: Monitor CPU, memory, and disk usage
+3. **Application logs**: Check container logs for errors or warnings
+
+## Upgrading
+
+To upgrade to a newer version:
+
+```bash
+# Using Docker Compose
+docker-compose pull
+docker-compose up -d
+
+# Using Docker directly
+docker pull ghcr.io/promptfoo/promptfoo:latest
+docker stop promptfoo_container
+docker rm promptfoo_container
+docker run -d --name promptfoo_container \
+  --restart unless-stopped \
+  -p 3000:3000 \
+  -v ~/promptfoo_data:/home/promptfoo/.promptfoo \
+  ghcr.io/promptfoo/promptfoo:latest
+
+# Using Helm
+helm upgrade my-promptfoo ./helm/chart/promptfoo --namespace promptfoo
+```
+
+Always back up your data before upgrading.
+
+## System Requirements
+
+### Client Requirements
+
+- **Operating System**: Linux, macOS, Windows
+- **CPU**: 2+ cores
+- **RAM**: 4 GB minimum
+- **Storage**: 10 GB minimum
+- **Dependencies**: Node.js v20+
+
+### Server Requirements
+
+#### Docker Environment
+
+- **Docker**: 20.10+ or Docker Desktop
+- **Docker Compose**: 2.x+ (if using Docker Compose)
+- **Resources**:
+  - 1 CPU core minimum
+  - 512MB RAM minimum (1GB+ recommended)
+  - 5GB storage minimum for database and container
+
+#### Kubernetes Environment
+
+- **Kubernetes**: 1.19+
+- **Helm**: 3.x
+- **Resources**:
+  - 1 CPU core request, 2 core limit recommended
+  - 512MB RAM request, 1GB limit recommended
+  - 10GB+ persistent volume
+
+For larger teams or heavier usage patterns, consider increasing the resources accordingly.
