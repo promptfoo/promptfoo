@@ -54,4 +54,22 @@ describe('xAI Provider', () => {
       }),
     );
   });
+
+  it('allows overriding the default API base URL', () => {
+    const options: ProviderOptions = {
+      config: {
+        apiBaseUrl: 'https://custom-api.x.ai/v2',
+      },
+    };
+    createXAIProvider('xai:grok-2', options);
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
+      'grok-2',
+      expect.objectContaining({
+        config: expect.objectContaining({
+          apiBaseUrl: 'https://custom-api.x.ai/v2',
+          apiKeyEnvar: 'XAI_API_KEY',
+        }),
+      }),
+    );
+  });
 });

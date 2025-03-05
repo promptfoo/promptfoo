@@ -15,9 +15,10 @@ export function createXAIProvider(
   const xaiConfig = {
     ...options,
     config: {
-      ...options.config,
-      apiBaseUrl: 'https://api.x.ai/v1',
+      // Only set default URL if not already provided in config
+      apiBaseUrl: options.config?.config?.apiBaseUrl || 'https://api.x.ai/v1',
       apiKeyEnvar: 'XAI_API_KEY',
+      ...options.config,
     },
   };
 
