@@ -7,7 +7,6 @@ jest.mock('../../src/util/time', () => ({
 }));
 
 jest.mock('../../src/fetch');
-jest.mock('../../src/logger');
 
 describe('SimulatedUser', () => {
   let simulatedUser: SimulatedUser;

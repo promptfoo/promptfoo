@@ -11,12 +11,6 @@ import {
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import type { ApiProvider } from '../../../src/types';
 
-jest.mock('../../../src/logger', () => ({
-  error: jest.fn(),
-  warn: jest.fn(),
-  debug: jest.fn(),
-}));
-
 jest.mock('../../../src/cache', () => ({
   fetchWithCache: jest.fn(),
 }));

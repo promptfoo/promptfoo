@@ -9,16 +9,24 @@ export function getStrategyIdFromMetric(metric: string): string | null {
   if (metricSuffix) {
     if (metricSuffix === 'Base64') {
       return 'base64';
+    } else if (metricSuffix === 'BestOfN') {
+      return 'best-of-n';
     } else if (metricSuffix === 'Citation') {
       return 'citation';
     } else if (metricSuffix === 'Crescendo') {
       return 'crescendo';
+    } else if (metricSuffix === 'GCG') {
+      return 'gcg';
     } else if (metricSuffix === 'GOAT') {
       return 'goat';
     } else if (metricSuffix === 'Injection') {
       return 'prompt-injection';
     } else if (metricSuffix === 'Iterative') {
       return 'jailbreak';
+    } else if (metricSuffix === 'Composite') {
+      return 'jailbreak:composite';
+    } else if (metricSuffix === 'Likert') {
+      return 'jailbreak:likert';
     } else if (metricSuffix === 'IterativeTree') {
       return 'jailbreak:tree';
     } else if (metricSuffix === 'Leetspeak') {
@@ -29,6 +37,8 @@ export function getStrategyIdFromMetric(metric: string): string | null {
       return 'multilingual';
     } else if (metricSuffix === 'Rot13') {
       return 'rot13';
+    } else if (metricSuffix === 'Pandamonium') {
+      return 'pandamonium';
     }
   }
   return null;

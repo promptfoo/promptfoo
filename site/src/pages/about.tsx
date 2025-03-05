@@ -96,12 +96,6 @@ const AboutPageContent = () => {
                 bio: 'Vanessa led hundreds of security and privacy reviews for customers at Gong. She has also pentested dozens of enterprises and launched hundreds of bug bounty programs for a leading crowdsourced security company and is published in Forbes, Lawfare, and Dark Reading.',
               },
               {
-                name: 'Vedant Radhakrishnan',
-                title: 'Staff Engineer',
-                image: '/img/team/vedant.jpeg',
-                bio: 'Vedant is a seasoned engineer with a strong background in software engineering, infrastrucure and security. He has broad experience leading teams and building products at companies like Pinterest, Microsoft, and Amazon.',
-              },
-              {
                 name: 'Guangshuo Zang',
                 title: 'Staff Engineer',
                 image: '/img/team/shuo.jpeg',
@@ -203,7 +197,7 @@ const AboutPageContent = () => {
             An Incredible Open Source Community
           </Typography>
           <Typography variant="body1" paragraph align="center">
-            Promptfoo is proud to be supported by a vibrant community of over 100 open source
+            Promptfoo is proud to be supported by a vibrant community of over 150 open source
             contributors.
           </Typography>
           <Box display="flex" justifyContent="center" mt={4}>

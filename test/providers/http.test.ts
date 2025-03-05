@@ -1,15 +1,18 @@
+import crypto from 'crypto';
 import dedent from 'dedent';
+import fs from 'fs';
 import path from 'path';
 import { fetchWithCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
 import {
+  createSessionParser,
   createTransformRequest,
   createTransformResponse,
+  createValidateStatus,
   determineRequestBody,
   HttpProvider,
   processJsonBody,
-  createSessionParser,
-  createValidateStatus,
+  urlEncodeRawRequestPath,
 } from '../../src/providers/http';
 import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared';
 import { maybeLoadFromExternalFile } from '../../src/util';
@@ -46,8 +49,6 @@ jest.mock('../../src/esm', () => ({
 jest.mock('../../src/cliState', () => ({
   basePath: '/mock/base/path',
 }));
-
-jest.mock('../../src/logger');
 
 describe('HttpProvider', () => {
   const mockUrl = 'http://example.com/api';
@@ -378,9 +379,172 @@ describe('HttpProvider', () => {
           request: 'yo mama',
         },
       });
-      await expect(provider.callApi('test prompt')).rejects.toThrow(
-        'Error parsing raw HTTP request',
+      await expect(provider.callApi('test prompt')).rejects.toThrow(/not valid/);
+    });
+
+    it('should remove content-length header from raw request', async () => {
+      const rawRequest = dedent`
+        POST /api/submit HTTP/1.1
+        Host: example.com
+        Content-Type: application/json
+        Content-Length: 1234
+
+        {"data": "test"}
+      `;
+      const provider = new HttpProvider('https', {
+        config: {
+          request: rawRequest,
+          transformResponse: (data: any) => data,
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'received' }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      await provider.callApi('test prompt');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://example.com/api/submit',
+        expect.objectContaining({
+          method: 'POST',
+          headers: {
+            host: 'example.com',
+            'content-type': 'application/json',
+            // content-length should not be present
+          },
+          body: '{"data": "test"}',
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
       );
+    });
+    it('should use HTTPS when useHttps option is enabled', async () => {
+      const rawRequest = dedent`
+        GET /api/data HTTP/1.1
+        Host: example.com
+        User-Agent: TestAgent/1.0
+      `;
+      const provider = new HttpProvider('http', {
+        config: {
+          request: rawRequest,
+          useHttps: true,
+          transformResponse: (data: any) => data,
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://example.com/api/data',
+        expect.objectContaining({
+          method: 'GET',
+          headers: expect.objectContaining({
+            host: 'example.com',
+            'user-agent': 'TestAgent/1.0',
+          }),
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+      expect(result.output).toEqual({ result: 'success' });
+    });
+
+    it('should use HTTP when useHttps option is disabled', async () => {
+      const rawRequest = dedent`
+        GET /api/data HTTP/1.1
+        Host: example.com
+        User-Agent: TestAgent/1.0
+      `;
+      const provider = new HttpProvider('http', {
+        config: {
+          request: rawRequest,
+          useHttps: false,
+          transformResponse: (data: any) => data,
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'http://example.com/api/data',
+        expect.objectContaining({
+          method: 'GET',
+          headers: expect.objectContaining({
+            host: 'example.com',
+            'user-agent': 'TestAgent/1.0',
+          }),
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+      expect(result.output).toEqual({ result: 'success' });
+    });
+
+    it('should handle a basic GET raw request with query params', async () => {
+      const rawRequest = dedent`
+        GET /api/data?{{prompt}} HTTP/1.1
+        Host: example.com
+        User-Agent: TestAgent/1.0
+      `;
+      const provider = new HttpProvider('http', {
+        config: {
+          request: rawRequest,
+          transformResponse: (data: any) => data,
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'http://example.com/api/data?test%20prompt',
+        expect.objectContaining({
+          method: 'GET',
+          headers: expect.objectContaining({
+            host: 'example.com',
+            'user-agent': 'TestAgent/1.0',
+          }),
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+      expect(result.output).toEqual({ result: 'success' });
     });
   });
 
@@ -633,14 +797,14 @@ describe('HttpProvider', () => {
   });
 
   describe('getHeaders', () => {
-    it('should combine default headers with config headers', () => {
+    it('should combine default headers with config headers', async () => {
       const provider = new HttpProvider(mockUrl, {
         config: {
           headers: { 'X-Custom': '{{ prompt }}' },
           body: 'test',
         },
       });
-      const result = provider['getHeaders'](
+      const result = await provider.getHeaders(
         { 'content-type': 'application/json' },
         { prompt: 'test' },
       );
@@ -650,14 +814,14 @@ describe('HttpProvider', () => {
       });
     });
 
-    it('should render template strings in headers', () => {
+    it('should render template strings in headers', async () => {
       const provider = new HttpProvider(mockUrl, {
         config: {
           headers: { 'X-Custom': '{{ prompt | upper }}' },
           body: 'test',
         },
       });
-      const result = provider['getHeaders']({}, { prompt: 'test' });
+      const result = await provider.getHeaders({}, { prompt: 'test' });
       expect(result).toEqual({
         'x-custom': 'TEST',
       });
@@ -1547,7 +1711,10 @@ describe('session handling', () => {
 
     const result = await provider.callApi('test');
     expect(result.sessionId).toBe('test-session');
-    expect(sessionParser).toHaveBeenCalledWith({ headers: mockResponse.headers });
+    expect(sessionParser).toHaveBeenCalledWith({
+      headers: mockResponse.headers,
+      body: { result: 'success' },
+    });
   });
 });
 
@@ -1896,7 +2063,7 @@ describe('session parser', () => {
     const provider = new HttpProvider('http://test.com', {
       config: {
         method: 'GET',
-        sessionParser: 'x-session-id',
+        sessionParser: 'data.headers["x-session-id"]',
       },
     });
 
@@ -1959,6 +2126,131 @@ describe('transform response error handling', () => {
     jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await expect(provider.callApi('test')).rejects.toThrow('Failed to transform response');
+  });
+});
+
+describe('arrow function parsing in transformResponse', () => {
+  it('should handle arrow function with explicit body', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'GET',
+        transformResponse: '(json, text) => { return json.data }',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ data: 'test value' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.output).toBe('test value');
+  });
+
+  it('should handle regular function with explicit body', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'GET',
+        transformResponse: 'function(json, text) { return json.data }',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ data: 'test value' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.output).toBe('test value');
+  });
+
+  it('should handle arrow function with implicit return', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'GET',
+        transformResponse: '(json) => json.data',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ data: 'test value' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.output).toBe('test value');
+  });
+
+  it('should handle arrow function with context parameter', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'GET',
+        transformResponse: '(json, text, context) => context.response.status',
+      },
+    });
+
+    const mockResponse = {
+      data: 'response',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.output).toBe(200);
+  });
+
+  it('should handle simple expression without function', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'GET',
+        transformResponse: 'json.data',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ data: 'test value' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.output).toBe('test value');
+  });
+
+  it('should handle multiline arrow function', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'GET',
+        transformResponse: `(json, text) => {
+          const value = json.data;
+          return value.toUpperCase();
+        }`,
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ data: 'test value' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.output).toBe('TEST VALUE');
   });
 });
 
@@ -2173,5 +2465,382 @@ describe('string-based validators', () => {
     jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await expect(provider.callApi('test')).rejects.toThrow('Invalid status validator expression');
+  });
+});
+
+describe('RSA signature authentication', () => {
+  let mockPrivateKey: string;
+  let mockSign: jest.SpyInstance;
+  let mockUpdate: jest.SpyInstance;
+  let mockEnd: jest.SpyInstance;
+
+  beforeEach(() => {
+    mockPrivateKey = '-----BEGIN PRIVATE KEY-----\nMOCK_KEY\n-----END PRIVATE KEY-----';
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(mockPrivateKey);
+
+    mockUpdate = jest.fn();
+    mockEnd = jest.fn();
+    mockSign = jest.fn().mockReturnValue(Buffer.from('mocksignature'));
+
+    const mockSignObject = {
+      update: mockUpdate,
+      end: mockEnd,
+      sign: mockSign,
+    };
+
+    jest.spyOn(crypto, 'createSign').mockReturnValue(mockSignObject as any);
+    jest.spyOn(Date, 'now').mockReturnValue(1000); // Mock timestamp
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('should generate and include signature in vars', async () => {
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        signatureAuth: {
+          privateKeyPath: '/path/to/key.pem',
+          signatureValidityMs: 300000, // 5 minutes
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test');
+
+    // Verify signature generation with specific data
+    expect(fs.readFileSync).toHaveBeenCalledWith('/path/to/key.pem', 'utf8');
+    expect(crypto.createSign).toHaveBeenCalledWith('SHA256');
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+    expect(mockEnd).toHaveBeenCalledTimes(1);
+    expect(mockSign).toHaveBeenCalledWith(mockPrivateKey);
+  });
+
+  it('should reuse cached signature when within validity period', async () => {
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        signatureAuth: {
+          privateKeyPath: '/path/to/key.pem',
+          signatureValidityMs: 300000,
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    // First call should generate signature
+    await provider.callApi('test');
+    expect(crypto.createSign).toHaveBeenCalledTimes(1);
+
+    // Second call within validity period should reuse signature
+    jest.spyOn(Date, 'now').mockReturnValue(2000); // Still within validity period
+    await provider.callApi('test');
+    expect(crypto.createSign).toHaveBeenCalledTimes(1); // Should not be called again
+  });
+
+  it('should regenerate signature when expired', async () => {
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        signatureAuth: {
+          privateKeyPath: '/path/to/key.pem',
+          signatureValidityMs: 300000,
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    // First call should generate signature
+    await provider.callApi('test');
+    expect(crypto.createSign).toHaveBeenCalledTimes(1);
+
+    // Second call after validity period should regenerate signature
+    jest.spyOn(Date, 'now').mockReturnValue(301000); // After validity period
+    await provider.callApi('test');
+    expect(crypto.createSign).toHaveBeenCalledTimes(2); // Should be called again
+  });
+
+  it('should use custom signature data template', async () => {
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        signatureAuth: {
+          privateKeyPath: '/path/to/key.pem',
+          signatureValidityMs: 300000,
+          signatureDataTemplate: 'custom-{{signatureTimestamp}}',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test');
+
+    // Verify signature generation with custom template
+    expect(crypto.createSign).toHaveBeenCalledWith('SHA256');
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+    expect(mockUpdate).toHaveBeenCalledWith('custom-1000'); // Custom template
+    expect(mockEnd).toHaveBeenCalledTimes(1);
+    expect(mockSign).toHaveBeenCalledWith(mockPrivateKey);
+  });
+
+  it('should support using privateKey directly instead of privateKeyPath', async () => {
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        signatureAuth: {
+          privateKey: mockPrivateKey,
+          signatureValidityMs: 300000,
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test');
+
+    // Verify signature generation using privateKey directly
+    expect(fs.readFileSync).not.toHaveBeenCalled(); // Should not read from file
+    expect(crypto.createSign).toHaveBeenCalledWith('SHA256');
+    expect(mockSign).toHaveBeenCalledWith(mockPrivateKey);
+  });
+});
+
+describe('createSessionParser', () => {
+  it('should return empty string when no parser is provided', async () => {
+    const parser = await createSessionParser(undefined);
+    const result = parser({ headers: {}, body: {} });
+    expect(result).toBe('');
+  });
+
+  it('should handle function parser', async () => {
+    const functionParser = ({ headers }: { headers: Record<string, string> }) =>
+      headers['session-id'];
+    const parser = await createSessionParser(functionParser);
+    const result = parser({ headers: { 'session-id': 'test-session' } });
+    expect(result).toBe('test-session');
+  });
+
+  it('should handle header path expression', async () => {
+    const parser = await createSessionParser('data.headers["x-session-id"]');
+    const result = parser({
+      headers: { 'x-session-id': 'test-session' },
+      body: {},
+    });
+    expect(result).toBe('test-session');
+  });
+
+  it('should handle body path expression', async () => {
+    const parser = await createSessionParser('data.body.session.id');
+    const result = parser({
+      headers: {},
+      body: { session: { id: 'test-session' } },
+    });
+    expect(result).toBe('test-session');
+  });
+
+  it('should handle file:// parser', async () => {
+    const mockParser = jest.fn(({ headers }) => headers['session-id']);
+    jest.mocked(importModule).mockResolvedValueOnce(mockParser);
+
+    const parser = await createSessionParser('file://session-parser.js');
+    const result = parser({ headers: { 'session-id': 'test-session' } });
+
+    expect(result).toBe('test-session');
+    expect(importModule).toHaveBeenCalledWith(
+      path.resolve('/mock/base/path', 'session-parser.js'),
+      undefined,
+    );
+  });
+
+  it('should handle file:// parser with specific function', async () => {
+    const mockParser = jest.fn(({ body }) => body.sessionId);
+    jest.mocked(importModule).mockResolvedValueOnce(mockParser);
+
+    const parser = await createSessionParser('file://session-parser.js:parseSession');
+    const result = parser({ headers: {}, body: { sessionId: 'test-session' } });
+
+    expect(result).toBe('test-session');
+    expect(importModule).toHaveBeenCalledWith(
+      path.resolve('/mock/base/path', 'session-parser.js'),
+      'parseSession',
+    );
+  });
+
+  it('should throw error for malformed file:// parser', async () => {
+    jest.mocked(importModule).mockResolvedValueOnce({});
+
+    await expect(createSessionParser('file://invalid-parser.js')).rejects.toThrow(
+      /Response transform malformed/,
+    );
+  });
+
+  it('should handle complex body path expression', async () => {
+    const parser = await createSessionParser('data.body.data.attributes.session.id');
+    const result = parser({
+      headers: {},
+      body: {
+        data: {
+          attributes: {
+            session: {
+              id: 'test-session',
+            },
+          },
+        },
+      },
+    });
+    expect(result).toBe('test-session');
+  });
+});
+
+describe('urlEncodeRawRequestPath', () => {
+  it('should not modify request with no query parameters', () => {
+    const rawRequest = 'GET /api/data HTTP/1.1';
+    const result = urlEncodeRawRequestPath(rawRequest);
+    expect(result).toBe(rawRequest);
+  });
+
+  it('should not modify request with simple query parameters', () => {
+    const rawRequest = 'GET /api/data?key=value HTTP/1.1';
+    const result = urlEncodeRawRequestPath(rawRequest);
+    expect(result).toBe(rawRequest);
+  });
+
+  it('should encode URL with spaces in query parameters', () => {
+    const rawRequest = 'GET /api/data?query=hello world HTTP/1.1';
+    const result = urlEncodeRawRequestPath(rawRequest);
+    expect(result).toBe('GET /api/data?query=hello%20world HTTP/1.1');
+  });
+
+  it('should encode URL with already percent-encoded characters', () => {
+    const rawRequest = 'GET /api/data?query=already%20encoded HTTP/1.1';
+    const result = urlEncodeRawRequestPath(rawRequest);
+    expect(result).toBe('GET /api/data?query=already%20encoded HTTP/1.1');
+  });
+
+  it('should throw error when modifying malformed request with no URL', () => {
+    const rawRequest = 'GET HTTP/1.1';
+    expect(() => urlEncodeRawRequestPath(rawRequest)).toThrow(/not valid/);
+  });
+
+  it('should handle complete raw request with headers', () => {
+    const rawRequest = dedent`
+      GET /summarized?topic=hello world&start=01/01/2025&end=01/07/2025&auto_extract_keywords=false HTTP/2
+      Host: foo.bar.com
+      User-Agent: curl/8.7.1
+      Accept: application/json
+    `;
+    const expected = dedent`
+      GET /summarized?topic=hello%20world&start=01/01/2025&end=01/07/2025&auto_extract_keywords=false HTTP/2
+      Host: foo.bar.com
+      User-Agent: curl/8.7.1
+      Accept: application/json
+    `;
+    const result = urlEncodeRawRequestPath(rawRequest);
+    expect(result).toBe(expected);
+  });
+
+  it('should handle POST request with JSON body', () => {
+    const rawRequest = dedent`
+      POST /api/submit?param=hello world HTTP/1.1
+      Host: example.com
+      Content-Type: application/json
+
+      {"key": "value with spaces", "date": "01/01/2025"}
+    `;
+    const expected = dedent`
+      POST /api/submit?param=hello%20world HTTP/1.1
+      Host: example.com
+      Content-Type: application/json
+
+      {"key": "value with spaces", "date": "01/01/2025"}
+    `;
+    const result = urlEncodeRawRequestPath(rawRequest);
+    expect(result).toBe(expected);
+  });
+
+  it('should handle URL with path containing spaces', () => {
+    const rawRequest = 'GET /path with spaces/resource HTTP/1.1';
+    const result = urlEncodeRawRequestPath(rawRequest);
+    expect(result).toBe('GET /path%20with%20spaces/resource HTTP/1.1');
+  });
+
+  it('should handle URL with special characters in path and query', () => {
+    const rawRequest = 'GET /path/with [brackets]?param=value&special=a+b+c HTTP/1.1';
+    const result = urlEncodeRawRequestPath(rawRequest);
+    expect(result).toBe('GET /path/with%20[brackets]?param=value&special=a+b+c HTTP/1.1');
+  });
+
+  it('should handle completely misformed first line', () => {
+    const rawRequest = 'This is not a valid HTTP request line';
+    expect(() => urlEncodeRawRequestPath(rawRequest)).toThrow(/not valid/);
+  });
+
+  it('should handle request with no HTTP protocol version', () => {
+    const rawRequest = 'GET /api/data?query=test';
+    expect(() => urlEncodeRawRequestPath(rawRequest)).toThrow(/not valid/);
+  });
+
+  it('should handle request with different HTTP methods', () => {
+    const methods = ['POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'];
+
+    for (const method of methods) {
+      const rawRequest = dedent`
+        ${method} /api/submit?param=hello world HTTP/1.1
+        Host: example.com
+        Content-Type: application/json
+
+      {"key": "value with spaces", "date": "01/01/2025"}
+      `;
+      const expected = dedent`
+        ${method} /api/submit?param=hello%20world HTTP/1.1
+        Host: example.com
+        Content-Type: application/json
+
+      {"key": "value with spaces", "date": "01/01/2025"}
+    `;
+      const result = urlEncodeRawRequestPath(rawRequest);
+      expect(result).toBe(expected);
+    }
   });
 });

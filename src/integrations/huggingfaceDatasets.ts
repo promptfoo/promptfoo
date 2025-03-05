@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+import { getEnvString } from '../envars';
 import { fetchWithProxy } from '../fetch';
 import logger from '../logger';
 import type { TestCase } from '../types';
@@ -18,7 +19,7 @@ interface HuggingFaceResponse {
   }>;
 }
 
-function parseDatasetPath(path: string): {
+export function parseDatasetPath(path: string): {
   owner: string;
   repo: string;
   queryParams: URLSearchParams;
@@ -74,7 +75,14 @@ export async function fetchHuggingFaceDataset(
     const url = `${baseUrl}?dataset=${encodeURIComponent(`${owner}/${repo}`)}&${requestParams.toString()}`;
     logger.debug(`[Huggingface Dataset] Fetching page from ${url}`);
 
-    const response = await fetchWithProxy(url);
+    const hfToken = getEnvString('HF_TOKEN') || getEnvString('HF_API_TOKEN');
+    const headers: Record<string, string> = {};
+    if (hfToken) {
+      logger.debug('[Huggingface Dataset] Using token for authentication');
+      headers.Authorization = `Bearer ${hfToken}`;
+    }
+
+    const response = await fetchWithProxy(url, { headers });
     if (!response.ok) {
       const error = `[Huggingface Dataset] Failed to fetch dataset: ${response.statusText}.\nFetched ${url}`;
       logger.error(error);

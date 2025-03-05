@@ -19,7 +19,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - vertex:gemini-pro
+  - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
       language: French
@@ -47,7 +47,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - vertex:gemini-pro
+  - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
       language: French
@@ -71,7 +71,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - vertex:gemini-pro
+  - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
       language: French
@@ -141,20 +141,20 @@ tests:
 A single string is also valid:
 
 ```yaml
-tests: tests/*
+tests: file://tests/*
 ```
 
 Or a list of paths:
 
 ```yaml
 tests:
-  - 'tests/accuracy'
-  - 'tests/creativity'
-  - 'tests/hallucination'
+  - file://tests/accuracy
+  - file://tests/creativity
+  - file://tests/hallucination
 ```
 
 :::tip
-We also support CSV datasets from [local file](/docs/configuration/parameters/#import-from-csv) and [Google Sheets](/docs/integrations/google-sheets).
+Test files can be defined in YAML/JSON, JSONL, [CSV](/docs/configuration/parameters/#import-from-csv), and TypeScript/JavaScript. We also support [Google Sheets](/docs/integrations/google-sheets) CSV datasets.
 :::
 
 ## Import vars from separate files
@@ -271,7 +271,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - vertex:gemini-pro
+  - vertex:gemini-2.0-flash-exp
 // highlight-start
 defaultTest:
   assert:
@@ -333,7 +333,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - vertex:gemini-pro
+  - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
       language: French
@@ -672,7 +672,7 @@ The `transformVars` function should return an object with the transformed variab
 
 ```yaml
 prompts:
-  - 'Summarize the following text in {{topic_length}} words: {{file_content}}'
+  - 'Summarize the following text in {{topic_length}} words: {{processed_content}}'
 
 defaultTest:
   options:
@@ -680,13 +680,13 @@ defaultTest:
       return {
         uppercase_topic: vars.topic.toUpperCase(),
         topic_length: vars.topic.length,
-        file_content: fs.readFileSync(vars.file_path, 'utf-8')
+        processed_content: vars.content.trim()
       };
 
 tests:
   - vars:
       topic: 'climate change'
-      file_path: './data/climate_article.txt'
+      content: '  This is some text about climate change that needs processing.  '
     assert:
       - type: contains
         value: '{{uppercase_topic}}'
@@ -787,7 +787,7 @@ promptfoo eval -c config1.yaml -c config2.yaml -c config3.yaml
 
 ## Loading tests from CSV
 
-YAML is nice, but some organizations maintain their LLM tests in spreadsheets for ease of collaboration. promptfoo supports a special [CSV file format](/docs/configuration/parameters#tests-file).
+YAML is nice, but some organizations maintain their LLM tests in spreadsheets for ease of collaboration. promptfoo supports a special [CSV file format](/docs/configuration/parameters#tests-and-vars).
 
 ```yaml
 prompts:
@@ -795,7 +795,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - vertex:gemini-pro
+  - vertex:gemini-2.0-flash-exp
 // highlight-next-line
 tests: file://tests.csv
 ```
@@ -808,7 +808,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - vertex:gemini-pro
+  - vertex:gemini-2.0-flash-exp
 // highlight-next-line
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
 ```

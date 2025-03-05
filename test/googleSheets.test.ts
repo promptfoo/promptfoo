@@ -18,11 +18,6 @@ interface MockSpreadsheets {
   batchUpdate: jest.Mock;
 }
 
-jest.mock('../src/logger', () => ({
-  debug: jest.fn(),
-  error: jest.fn(),
-}));
-
 jest.mock('../src/fetch', () => ({
   fetchWithProxy: jest.fn(),
 }));
@@ -163,7 +158,7 @@ describe('Google Sheets Integration', () => {
       const mockResponse = {
         data: {
           values: [
-            ['header1', 'header2'],
+            ['header1', 'header2', 'header3'],
             ['value1', 'value2'],
           ],
         },
@@ -171,7 +166,7 @@ describe('Google Sheets Integration', () => {
       spreadsheets.values.get.mockResolvedValue(mockResponse);
 
       const result = await fetchCsvFromGoogleSheetAuthenticated(TEST_SHEET_URL);
-      expect(result).toEqual([{ header1: 'value1', header2: 'value2' }]);
+      expect(result).toEqual([{ header1: 'value1', header2: 'value2', header3: '' }]);
       expect(spreadsheets.values.get).toHaveBeenCalledWith({
         spreadsheetId: '1234567890',
         range: 'A1:ZZZ',

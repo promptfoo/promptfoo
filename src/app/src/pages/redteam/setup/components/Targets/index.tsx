@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
@@ -10,8 +10,8 @@ import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import Link from '@mui/material/Link';
 import MenuItem from '@mui/material/MenuItem';
-import Select from '@mui/material/Select';
 import type { SelectChangeEvent } from '@mui/material/Select';
+import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
@@ -20,7 +20,9 @@ import type { ProviderResponse, ProviderTestResponse } from '@promptfoo/types';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import type { ProviderOptions } from '../../types';
 import Prompts from '../Prompts';
+import { predefinedTargets, customTargetOption } from '../constants';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
+import CommonConfigurationOptions from './CommonConfigurationOptions';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
 import TestTargetConfiguration from './TestTargetConfiguration';
@@ -31,19 +33,6 @@ interface TargetsProps {
   onBack: () => void;
   setupModalOpen: boolean;
 }
-
-const predefinedTargets = [
-  { value: '', label: 'Select a target' },
-  { value: 'http', label: 'HTTP/HTTPS Endpoint' },
-  { value: 'websocket', label: 'WebSocket Endpoint' },
-  { value: 'browser', label: 'Web Browser Automation' },
-  { value: 'openai:gpt-4o-mini', label: 'OpenAI GPT-4o Mini' },
-  { value: 'openai:gpt-4o', label: 'OpenAI GPT-4o' },
-  { value: 'claude-3-5-sonnet-latest', label: 'Anthropic Claude 3.5 Sonnet' },
-  { value: 'vertex:gemini-pro', label: 'Google Vertex AI Gemini Pro' },
-];
-
-const customTargetOption = { value: 'custom', label: 'Custom Target' };
 
 const selectOptions = [...predefinedTargets, customTargetOption];
 
@@ -65,10 +54,6 @@ const validateUrl = (url: string, type: 'http' | 'websocket' = 'http'): boolean 
   }
 };
 
-const requiresTransformResponse = (target: ProviderOptions) => {
-  return target.id === 'http' || target.id === 'websocket';
-};
-
 const requiresPrompt = (target: ProviderOptions) => {
   return target.id !== 'http' && target.id !== 'websocket' && target.id !== 'browser';
 };
@@ -79,6 +64,9 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   const [selectedTarget, setSelectedTarget] = useState<ProviderOptions>(
     config.target || DEFAULT_HTTP_TARGET,
   );
+  const [useGuardrail, setUseGuardrail] = useState(
+    config.defaultTest?.assert?.some((a) => a.type === 'guardrails') ?? false,
+  );
   const [testingTarget, setTestingTarget] = useState(false);
   const [testResult, setTestResult] = useState<{
     success?: boolean;
@@ -86,7 +74,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
     suggestions?: string[];
     providerResponse?: ProviderResponse;
   } | null>(null);
-  const [hasTestedTarget, setHasTestedTarget] = useState(false);
+
   const [bodyError, setBodyError] = useState<string | null>(null);
   const [urlError, setUrlError] = useState<string | null>(null);
   const [missingFields, setMissingFields] = useState<string[]>([]);
@@ -103,7 +91,25 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   }, []);
 
   useEffect(() => {
-    updateConfig('target', selectedTarget);
+    const updatedTarget = { ...selectedTarget };
+
+    if (useGuardrail) {
+      const defaultTestConfig = {
+        assert: [
+          {
+            type: 'guardrails',
+            config: {
+              purpose: 'redteam',
+            },
+          },
+        ],
+      };
+      updateConfig('defaultTest', defaultTestConfig);
+    } else {
+      updateConfig('defaultTest', undefined);
+    }
+
+    updateConfig('target', updatedTarget);
     const missingFields: string[] = [];
 
     if (selectedTarget.label) {
@@ -122,7 +128,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
 
     setMissingFields(missingFields);
     setPromptRequired(requiresPrompt(selectedTarget));
-  }, [selectedTarget, updateConfig]);
+  }, [selectedTarget, useGuardrail, updateConfig]);
 
   const handleTargetChange = (event: SelectChangeEvent<string>) => {
     const value = event.target.value as string;
@@ -219,8 +225,33 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         } else {
           setBodyError(null);
         }
+      } else if (field === 'transformResponse') {
+        updatedTarget.config.transformResponse = value;
+        // Check if the transform response includes guardrails
+        const hasGuardrails =
+          value.includes('guardrails:') ||
+          value.includes('"guardrails"') ||
+          value.includes("'guardrails'");
+        setUseGuardrail(hasGuardrails);
+        if (hasGuardrails) {
+          const defaultTestConfig = {
+            assert: [
+              {
+                type: 'guardrails',
+                config: {
+                  purpose: 'redteam',
+                },
+              },
+            ],
+          };
+          updateConfig('defaultTest', defaultTestConfig);
+        } else {
+          updateConfig('defaultTest', undefined);
+        }
       } else if (field === 'label') {
         updatedTarget.label = value;
+      } else if (field === 'delay') {
+        updatedTarget.delay = value;
       } else {
         updatedTarget.config[field] = value;
       }
@@ -284,7 +315,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
           message: 'Target configuration is valid!',
           providerResponse: data.providerResponse,
         });
-        setHasTestedTarget(true);
       }
     } catch (error) {
       console.error('Error testing target:', error);
@@ -308,6 +338,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         In Promptfoo targets are also known as providers. You can configure additional targets
         later.
       </Typography>
+
       <Typography variant="body1">
         For more information on available providers and how to configure them, please visit our{' '}
         <Link href="https://www.promptfoo.dev/docs/providers/" target="_blank" rel="noopener">
@@ -320,6 +351,29 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium', mb: 3 }}>
           Select a Target
         </Typography>
+        <Box sx={{ mt: 2, mb: 2 }}>
+          <FormControl fullWidth>
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+              <Box sx={{ flex: 1 }}>
+                <InputLabel id="predefined-target-label">Target Type</InputLabel>
+                <Select
+                  labelId="predefined-target-label"
+                  value={selectedTarget.id}
+                  onChange={handleTargetChange}
+                  label="Target Type"
+                  fullWidth
+                >
+                  {selectOptions.map((target) => (
+                    <MenuItem key={target.value} value={target.value}>
+                      {target.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </Box>
+            </Box>
+          </FormControl>
+        </Box>
+
         <TextField
           fullWidth
           sx={{ mb: 2 }}
@@ -341,26 +395,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
           'customer-service-agent', 'compliance-bot'
         </Typography>
 
-        <FormControl fullWidth>
-          <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
-            <Box sx={{ flex: 1 }}>
-              <InputLabel id="predefined-target-label">Target Type</InputLabel>
-              <Select
-                labelId="predefined-target-label"
-                value={selectedTarget.id}
-                onChange={handleTargetChange}
-                label="Target Type"
-                fullWidth
-              >
-                {selectOptions.map((target) => (
-                  <MenuItem key={target.value} value={target.value}>
-                    {target.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </Box>
-          </Box>
-        </FormControl>
         {(selectedTarget.id.startsWith('javascript') || selectedTarget.id.startsWith('python')) && (
           <TextField
             fullWidth
@@ -438,15 +472,29 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         )}
       </Box>
 
+      <Typography variant="h6" gutterBottom>
+        Additional Configuration
+      </Typography>
+      <CommonConfigurationOptions
+        selectedTarget={selectedTarget}
+        updateCustomTarget={updateCustomTarget}
+        extensions={config.extensions}
+        onExtensionsChange={(extensions) => updateConfig('extensions', extensions)}
+        onValidationChange={(hasErrors) => {
+          setMissingFields((prev) =>
+            hasErrors
+              ? [...prev.filter((f) => f !== 'Extensions'), 'Extensions']
+              : prev.filter((f) => f !== 'Extensions'),
+          );
+        }}
+      />
+
       {testingEnabled && (
         <TestTargetConfiguration
           testingTarget={testingTarget}
           handleTestTarget={handleTestTarget}
           selectedTarget={selectedTarget}
           testResult={testResult}
-          requiresTransformResponse={requiresTransformResponse}
-          updateCustomTarget={updateCustomTarget}
-          hasTestedTarget={hasTestedTarget}
         />
       )}
 
@@ -456,7 +504,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         sx={{
           display: 'flex',
           justifyContent: 'space-between',
-          alignItems: 'center',
+          gap: 2,
           mt: 4,
           width: '100%',
           position: 'relative',
@@ -483,10 +531,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
           variant="outlined"
           startIcon={<KeyboardArrowLeftIcon />}
           onClick={onBack}
-          sx={{
-            px: 4,
-            py: 1,
-          }}
+          sx={{ px: 4, py: 1 }}
         >
           Back
         </Button>
@@ -494,7 +539,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
           variant="contained"
           onClick={onNext}
           endIcon={<KeyboardArrowRightIcon />}
-          disabled={missingFields.length > 0 /*|| (testingEnabled && !hasTestedTarget)*/}
+          disabled={missingFields.length > 0}
           sx={{
             backgroundColor: theme.palette.primary.main,
             '&:hover': { backgroundColor: theme.palette.primary.dark },

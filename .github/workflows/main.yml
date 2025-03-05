@@ -36,10 +36,10 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: 'npm'
 
-      - name: Use Python 3.12
+      - name: Use Python 3.13
         uses: actions/setup-python@v5
         with:
-          python-version: 3.12
+          python-version: 3.13
 
       - name: Install Dependencies
         run: |
@@ -83,7 +83,7 @@ jobs:
 
       - name: Check Dependency Versions
         run: |
-          npm exec check-dependency-version-consistency
+          npx check-dependency-version-consistency
 
       - name: Check for circular dependencies
         run: |
@@ -138,7 +138,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.9, 3.12]
+        python-version: [3.9, 3.13]
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -222,10 +222,10 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      - name: Use Python 3.12
+      - name: Use Python 3.13
         uses: actions/setup-python@v5
         with:
-          python-version: 3.12
+          python-version: 3.13
 
       - name: Install Dependencies
         run: |
@@ -334,3 +334,22 @@ jobs:
       - name: Run actionlint
         id: actionlint
         uses: raven-actions/actionlint@v2
+
+  golang:
+    name: Go Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.6'
+          check-latest: true
+
+      - name: Run wrapper tests
+        working-directory: src/golang
+        run: |
+          go test -v wrapper.go wrapper_test.go

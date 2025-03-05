@@ -89,7 +89,7 @@ If you're not sure where to start, check out our [good first issues](https://git
    git checkout -b feature/your-feature-name
    ```
 
-2. Make your changes and commit them. We try to follow the [Conventional Commits](https://www.conventionalcommits.org/) specification, but this is not required for feature branches. We merge all PRs into `main` with a squash merge and a conventional commit message.
+2. Make your changes and commit them. We follow the [Conventional Commits](https://www.conventionalcommits.org/) specification for PR titles when merging into `main`. Individual commits can use any format, since we squash merge all PRs with a conventional commit message.
 
 3. Push your branch to your fork:
 
@@ -97,7 +97,7 @@ If you're not sure where to start, check out our [good first issues](https://git
    git push origin your-branch-name
    ```
 
-4. Open a pull request (PR) against the `main` branch of the promptfoo repository.
+4. [Open a pull request](https://github.com/promptfoo/promptfoo/compare) (PR) against the `main` branch of the promptfoo repository.
 
 When opening a pull request:
 
@@ -105,7 +105,7 @@ When opening a pull request:
 - Ensure test coverage for new code or bug fixes.
 - Provide clear instructions on how to reproduce the problem or test the new feature.
 - Be responsive to feedback and be prepared to make changes if requested.
-- Ensure your tests are passing and your code is properly linted.
+- Ensure your tests are passing and your code is properly linted and formatted. You can do this by running `npm run lint -- --fix` and `npm run format` respectively.
 
 Don't hesitate to ask for help. We're here to support you. If you're worried about whether your PR will be accepted, please talk to us first (see [Getting Help](#getting-help)).
 
@@ -125,10 +125,14 @@ To run tests in watch mode:
 npm run test:watch
 ```
 
-You can also run specific tests with:
+You can also run specific tests with (see [jest documentation](https://jestjs.io/docs/cli#jest-regexfortestfiles)):
 
 ```sh
 npx jest [pattern]
+
+# Example:
+# Runs all provider tests
+npx jest providers
 ```
 
 ### Writing Tests
@@ -294,28 +298,38 @@ Note: releases are only issued by maintainers. If you need to to release a new v
 
 As a maintainer, when you are ready to release a new version:
 
-1. Update the version in `package.json`.
-2. Run `npm install`.
-3. Add the updated files to Git:
+1. From main, run `npm version <minor|patch>`. We do not increment the major version per our adoption of [0ver](https://0ver.org/). This will automatically:
 
-   ```sh
-   git add package.json package-lock.json
+   - Pull latest changes from main branch
+   - Update `package.json`, `package-lock.json` and `CITATION.cff` with the new version
+   - Create a new branch named `chore/bump-version-<new-version>`
+   - Create a pull request titled `"chore: bump version <new-version>"`
+
+   When creating a new release version, please follow these guidelines:
+
+   - Patch will bump the version by `0.0.1` and is used for bug fixes and minor features
+   - Minor will bump the version by `0.1.0` and is used for major features and breaking changes
+
+   To determine the appropriate release type, review the changes between the latest release and main branch by visiting ([example](https://github.com/promptfoo/promptfoo/compare/0.103.13...main)):
+
+   ```
+   https://github.com/promptfoo/promptfoo/compare/[latest-version]...main
    ```
 
-4. Commit the changes:
+2. Once your PR is approved and landed, a version tag will be created automatically by a GitHub Action. After the version tag has been created, generate a [new release](https://github.com/promptfoo/promptfoo/releases/new) based on the tagged version.
 
-   ```sh
-   git commit -m "chore: Bump version to 0.X.Y"
-   ```
+3. Cleanup the release notes. You can look at [this](https://github.com/promptfoo/promptfoo/releases/tag/0.103.13) release as an example
 
-5. Push the changes to the main branch:
+   - Break up each PR in the release into one of the following 5 sections (as applicable)
+     - New Features
+     - Bug Fixes
+     - Chores
+     - Docs
+     - Dependencies
+   - Sort the lines in each section alphabetically
+   - Ensure that the author of the PR is correctly cited
 
-   ```sh
-   git push origin main
-   ```
-
-6. A version tag will be created automatically by a GitHub Action. After the version tag has been created, generate a new release based on the tagged version.
-7. A GitHub Action should automatically publish the package to npm. If it does not, please publish manually.
+4. A GitHub Action should automatically publish the package to npm. If it does not, please publish manually.
 
 ## Getting Help
 

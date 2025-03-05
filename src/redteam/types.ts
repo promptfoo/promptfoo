@@ -1,5 +1,5 @@
 import type { ApiProvider, ProviderOptions } from '../types/providers';
-import type { Severity, Plugin } from './constants';
+import type { Plugin, Severity } from './constants';
 
 // Base types
 export type RedteamObjectConfig = Record<string, unknown>;
@@ -22,6 +22,15 @@ type ConfigurableObject = {
 
 type WithNumTests = {
   numTests?: number;
+};
+
+type TestCase = {
+  description?: string;
+  vars?: Record<string, unknown>;
+  provider?: string | ProviderOptions | ApiProvider;
+  providerOutput?: string | Record<string, unknown>;
+  assert?: any;
+  options?: any;
 };
 
 // Derived types
@@ -64,6 +73,7 @@ type CommonOptions = {
   sharing?: boolean;
 };
 
+// NOTE: Remember to edit validators/redteam.ts:RedteamGenerateOptionsSchema if you edit this schema
 export interface RedteamCliGenerateOptions extends CommonOptions {
   cache: boolean;
   config?: string;
@@ -77,6 +87,8 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   inRedteamRun?: boolean;
   verbose?: boolean;
   abortSignal?: AbortSignal;
+  burpEscapeJson?: boolean;
+  progressBar?: boolean;
 }
 
 export interface RedteamFileConfig extends CommonOptions {
@@ -85,6 +97,7 @@ export interface RedteamFileConfig extends CommonOptions {
 }
 
 export interface SynthesizeOptions extends CommonOptions {
+  abortSignal?: AbortSignal;
   entities?: string[];
   language: string;
   maxConcurrency?: number;
@@ -92,7 +105,8 @@ export interface SynthesizeOptions extends CommonOptions {
   plugins: (RedteamPluginObject & { id: string; numTests: number })[];
   prompts: [string, ...string[]];
   strategies: RedteamStrategyObject[];
-  abortSignal?: AbortSignal;
+  targetLabels: string[];
+  showProgressBar?: boolean;
 }
 
 export type RedteamAssertionTypes = `promptfoo:redteam:${string}`;
@@ -110,10 +124,18 @@ export interface RedteamRunOptions {
   filterProviders?: string;
   filterTargets?: string;
   verbose?: boolean;
+  progressBar?: boolean;
 
   // Used by webui
   liveRedteamConfig?: any;
   logCallback?: (message: string) => void;
+  progressCallback?: (
+    completed: number,
+    total: number,
+    index: number | string,
+    evalStep: any, // RunEvalOptions, but introduces circular dependency
+    metrics: any, // PromptMetrics, but introduces circular dependency
+  ) => void;
   abortSignal?: AbortSignal;
 
   loadedFromCloud?: boolean;
@@ -126,6 +148,7 @@ export interface SavedRedteamConfig {
   plugins: (RedteamPlugin | { id: string; config?: any })[];
   strategies: RedteamStrategy[];
   purpose?: string;
+  extensions?: string[];
   numTests?: number;
   applicationDefinition: {
     purpose?: string;
@@ -138,4 +161,15 @@ export interface SavedRedteamConfig {
     connectedSystems?: string;
   };
   entities: string[];
+  defaultTest?: TestCase;
+}
+
+/**
+ * Base metadata interface shared by all redteam providers
+ */
+export interface BaseRedteamMetadata {
+  redteamFinalPrompt?: string;
+  messages: Record<string, any>[];
+  stopReason: string;
+  redteamHistory?: { prompt: string; output: string }[];
 }

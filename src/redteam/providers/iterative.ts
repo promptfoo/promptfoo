@@ -23,7 +23,29 @@ import { checkPenalizedPhrases, getTargetResponse, redteamProviderManager } from
 
 // Based on: https://arxiv.org/abs/2312.02119
 
-async function runRedteamConversation({
+interface IterativeMetadata {
+  finalIteration: number;
+  highestScore: number;
+  redteamFinalPrompt?: string;
+  redteamHistory: {
+    prompt: string;
+    output: string;
+    score: number;
+    isOnTopic: boolean;
+    graderPassed: boolean | undefined;
+    guardrails: GuardrailResponse | undefined;
+  }[];
+}
+
+interface TokenUsage {
+  total: number;
+  prompt: number;
+  completion: number;
+  numRequests: number;
+  cached: number;
+}
+
+export async function runRedteamConversation({
   context,
   filters,
   injectVar,
@@ -45,7 +67,11 @@ async function runRedteamConversation({
   targetProvider: ApiProvider;
   test?: AtomicTestCase;
   vars: Record<string, string | object>;
-}) {
+}): Promise<{
+  output: string;
+  metadata: IterativeMetadata;
+  tokenUsage: TokenUsage;
+}> {
   const nunjucks = getNunjucksEngine();
   const goal = vars[injectVar];
 
@@ -438,14 +464,15 @@ class RedteamIterativeProvider implements ApiProvider {
     return 'promptfoo:redteam:iterative';
   }
 
-  /**
-   *
-   * @param prompt - Rendered prompt. This is unused because we need the raw prompt in order to generate attacks
-   * @param context
-   * @param options
-   * @returns
-   */
-  async callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<{
+    output: string;
+    metadata: IterativeMetadata;
+    tokenUsage: TokenUsage;
+  }> {
     logger.debug(`[Iterative] callApi context: ${safeJsonStringify(context)}`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context.vars, 'Expected vars to be set');

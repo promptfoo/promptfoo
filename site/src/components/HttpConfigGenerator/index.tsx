@@ -48,7 +48,7 @@ Content-Type: application/json
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('https://api.promptfoo.app/http-provider-generator', {
+      const res = await fetch('https://api.promptfoo.app/api/http-provider-generator', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

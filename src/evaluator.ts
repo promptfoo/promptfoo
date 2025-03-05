@@ -16,8 +16,10 @@ import logger from './logger';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureUtil';
+import type RedteamPandamoniumProvider from './redteam/providers/pandamonium';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
+import type { EvalConversations, EvalRegisters, ScoringFunction, TokenUsage, Vars } from './types';
 import {
   type ApiProvider,
   type Assertion,
@@ -32,6 +34,7 @@ import {
   type TestSuite,
 } from './types';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
+import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify } from './util/json';
 import { sleep } from './util/time';
@@ -62,6 +65,294 @@ export function isAllowedPrompt(prompt: Prompt, allowedPrompts: string[] | undef
     allowedPrompts.includes(prompt.label) ||
     allowedPrompts.some((allowedPrompt) => prompt.label.startsWith(`${allowedPrompt}:`))
   );
+}
+
+export function newTokenUsage(): Required<TokenUsage> {
+  return {
+    total: 0,
+    prompt: 0,
+    completion: 0,
+    cached: 0,
+    numRequests: 0,
+    completionDetails: {
+      reasoning: 0,
+      acceptedPrediction: 0,
+      rejectedPrediction: 0,
+    },
+  };
+}
+
+/**
+ * Runs a single test case.
+ * @param options - The options for running the test case.
+ * {
+ *   provider - The provider to use for the test case.
+ *   prompt - The raw prompt to use for the test case.
+ *   test - The test case to run with assertions, etc.
+ *   delay - A delay in ms to wait before any provider calls
+ *   nunjucksFilters - The nunjucks filters to use for the test case.
+ *   evaluateOptions - Currently unused
+ *   testIdx - The index of the test case among all tests (row in the results table).
+ *   promptIdx - The index of the prompt among all prompts (column in the results table).
+ *   conversations - Evals can be run serially across multiple turns of a conversation. This gives access to the conversation history.
+ *   registers - The registers to use for the test case to store values for later tests.
+ *   isRedteam - Whether the test case is a redteam test case.
+ * }
+ * @returns The result of the test case.
+ */
+export async function runEval({
+  provider,
+  prompt, // raw prompt
+  test,
+  delay,
+  nunjucksFilters: filters,
+  evaluateOptions,
+  testIdx,
+  promptIdx,
+  conversations, //
+  registers,
+  isRedteam,
+  allTests,
+  concurrency,
+}: RunEvalOptions): Promise<EvaluateResult[]> {
+  // Use the original prompt to set the label, not renderedPrompt
+  const promptLabel = prompt.label;
+
+  provider.delay ??= delay ?? getEnvInt('PROMPTFOO_DELAY_MS', 0);
+  invariant(
+    typeof provider.delay === 'number',
+    `Provider delay should be set for ${provider.label}`,
+  );
+
+  // Set up the special _conversation variable
+  const vars = test.vars || {};
+  const conversationKey = `${provider.label || provider.id()}:${prompt.id}${test.metadata?.conversationId ? `:${test.metadata.conversationId}` : ''}`;
+  const usesConversation = prompt.raw.includes('_conversation');
+  if (
+    !getEnvBool('PROMPTFOO_DISABLE_CONVERSATION_VAR') &&
+    !test.options?.disableConversationVar &&
+    usesConversation
+  ) {
+    vars._conversation = conversations?.[conversationKey] || [];
+  }
+
+  // Overwrite vars with any saved register values
+  Object.assign(vars, registers);
+  // Render the prompt
+  const renderedPrompt = await renderPrompt(prompt, vars, filters, provider);
+  let renderedJson = undefined;
+  try {
+    renderedJson = JSON.parse(renderedPrompt);
+  } catch {}
+
+  const setup = {
+    provider: {
+      id: provider.id(),
+      label: provider.label,
+      config: provider.config,
+    },
+    prompt: {
+      raw: renderedPrompt,
+      label: promptLabel,
+      config: prompt.config,
+    },
+    vars,
+  };
+  // Call the API
+  let latencyMs = 0;
+  try {
+    const startTime = Date.now();
+    let response: ProviderResponse = {
+      output: '',
+      tokenUsage: {},
+      cost: 0,
+      cached: false,
+    };
+
+    if (test.providerOutput) {
+      response.output = test.providerOutput;
+    } else if (
+      typeof test.provider === 'object' &&
+      typeof test.provider.id === 'function' &&
+      test.provider.id() === 'promptfoo:redteam:pandamonium'
+    ) {
+      return await (test.provider as RedteamPandamoniumProvider).runPandamonium(
+        provider,
+        test,
+        allTests || [],
+        concurrency,
+      );
+    } else {
+      response = await ((test.provider as ApiProvider) || provider).callApi(
+        renderedPrompt,
+        {
+          // Always included
+          vars,
+
+          // Part of these may be removed in python and script providers, but every Javascript provider gets them
+          prompt,
+          filters,
+          originalProvider: provider,
+          test,
+
+          // All of these are removed in python and script providers, but every Javascript provider gets them
+          logger: logger as winston.Logger,
+          fetchWithCache,
+          getCache,
+        },
+        {
+          includeLogProbs: test.assert?.some((a) => a.type === 'perplexity'),
+        },
+      );
+    }
+    const endTime = Date.now();
+    latencyMs = endTime - startTime;
+
+    let conversationLastInput = undefined;
+    if (renderedJson && Array.isArray(renderedJson)) {
+      const lastElt = renderedJson[renderedJson.length - 1];
+      // Use the `content` field if present (OpenAI chat format)
+      conversationLastInput = lastElt?.content || lastElt;
+    }
+    if (conversations) {
+      conversations[conversationKey] = conversations[conversationKey] || [];
+      conversations[conversationKey].push({
+        prompt: renderedJson || renderedPrompt,
+        input: conversationLastInput || renderedJson || renderedPrompt,
+        output: response.output || '',
+      });
+    }
+
+    if (!response.cached && provider.delay > 0) {
+      logger.debug(`Sleeping for ${provider.delay}ms`);
+      await sleep(provider.delay);
+    }
+
+    const ret: EvaluateResult = {
+      ...setup,
+      response,
+      success: false,
+      failureReason: ResultFailureReason.NONE,
+      score: 0,
+      namedScores: {},
+      latencyMs,
+      cost: response.cost,
+      metadata: response.metadata,
+      promptIdx,
+      testIdx,
+      testCase: test,
+      promptId: prompt.id || '',
+      tokenUsage: newTokenUsage(),
+    };
+
+    invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
+
+    if (response.error) {
+      ret.error = response.error;
+      ret.failureReason = ResultFailureReason.ERROR;
+      ret.success = false;
+    } else if (response.output === null || response.output === undefined) {
+      // NOTE: empty output often indicative of guardrails, so behavior differs for red teams.
+      if (isRedteam) {
+        ret.success = true;
+      } else {
+        ret.success = false;
+        ret.score = 0;
+        ret.error = 'No output';
+      }
+    } else {
+      // Create a copy of response so we can potentially mutate it.
+      const processedResponse = { ...response };
+      const transforms: string[] = [
+        provider.transform, // Apply provider transform first
+        // NOTE: postprocess is deprecated. Use the first defined transform.
+        [test.options?.transform, test.options?.postprocess].find((s) => s),
+      ]
+        .flat()
+        .filter((s): s is string => typeof s === 'string');
+      for (const t of transforms) {
+        processedResponse.output = await transform(t, processedResponse.output, {
+          vars,
+          prompt,
+        });
+      }
+
+      invariant(processedResponse.output != null, 'Response output should not be null');
+      const checkResult = await runAssertions({
+        prompt: renderedPrompt,
+        provider,
+        providerResponse: processedResponse,
+        test,
+        latencyMs: response.cached ? undefined : latencyMs,
+        assertScoringFunction: test.assertScoringFunction as ScoringFunction,
+      });
+
+      if (!checkResult.pass) {
+        ret.error = checkResult.reason;
+        ret.failureReason = ResultFailureReason.ASSERT;
+      }
+      ret.success = checkResult.pass;
+      ret.score = checkResult.score;
+      ret.namedScores = checkResult.namedScores || {};
+      if (checkResult.tokensUsed) {
+        ret.tokenUsage.total += checkResult.tokensUsed.total || 0;
+        ret.tokenUsage.prompt += checkResult.tokensUsed.prompt || 0;
+        ret.tokenUsage.completion += checkResult.tokensUsed.completion || 0;
+        ret.tokenUsage.cached += checkResult.tokensUsed.cached || 0;
+        ret.tokenUsage.numRequests += checkResult.tokensUsed.numRequests || 1;
+        if (checkResult.tokensUsed.completionDetails) {
+          ret.tokenUsage.completionDetails.reasoning! +=
+            checkResult.tokensUsed.completionDetails.reasoning || 0;
+          ret.tokenUsage.completionDetails.acceptedPrediction! +=
+            checkResult.tokensUsed.completionDetails.acceptedPrediction || 0;
+          ret.tokenUsage.completionDetails.rejectedPrediction! +=
+            checkResult.tokensUsed.completionDetails.rejectedPrediction || 0;
+        }
+      }
+      ret.response = processedResponse;
+      ret.gradingResult = checkResult;
+    }
+
+    // Update token usage stats
+    if (response.tokenUsage) {
+      ret.tokenUsage.total += response.tokenUsage.total || 0;
+      ret.tokenUsage.prompt += response.tokenUsage.prompt || 0;
+      ret.tokenUsage.completion += response.tokenUsage.completion || 0;
+      ret.tokenUsage.cached += response.tokenUsage.cached || 0;
+      ret.tokenUsage.numRequests += response.tokenUsage.numRequests || 1;
+      if (response.tokenUsage.completionDetails) {
+        ret.tokenUsage.completionDetails.reasoning! +=
+          response.tokenUsage.completionDetails.reasoning || 0;
+        ret.tokenUsage.completionDetails.acceptedPrediction! +=
+          response.tokenUsage.completionDetails.acceptedPrediction || 0;
+        ret.tokenUsage.completionDetails.rejectedPrediction! +=
+          response.tokenUsage.completionDetails.rejectedPrediction || 0;
+      }
+    }
+
+    if (test.options?.storeOutputAs && ret.response?.output && registers) {
+      // Save the output in a register for later use
+      registers[test.options.storeOutputAs] = ret.response.output;
+    }
+
+    return [ret];
+  } catch (err) {
+    return [
+      {
+        ...setup,
+        error: String(err) + '\n\n' + (err as Error).stack,
+        success: false,
+        failureReason: ResultFailureReason.ERROR,
+        score: 0,
+        namedScores: {},
+        latencyMs,
+        promptIdx,
+        testIdx,
+        testCase: test,
+        promptId: prompt.id || '',
+      },
+    ];
+  }
 }
 
 export function generateVarCombinations(
@@ -110,11 +401,8 @@ class Evaluator {
   testSuite: TestSuite;
   options: EvaluateOptions;
   stats: EvaluateStats;
-  conversations: Record<
-    string,
-    { prompt: string | object; input: string; output: string | object }[]
-  >;
-  registers: Record<string, string | object>;
+  conversations: EvalConversations;
+  registers: EvalRegisters;
   fileWriters: JsonlFileWriter[];
   constructor(testSuite: TestSuite, evalRecord: Eval, options: EvaluateOptions) {
     this.testSuite = testSuite;
@@ -124,13 +412,7 @@ class Evaluator {
       successes: 0,
       failures: 0,
       errors: 0,
-      tokenUsage: {
-        total: 0,
-        prompt: 0,
-        completion: 0,
-        cached: 0,
-        numRequests: 0,
-      },
+      tokenUsage: newTokenUsage(),
     };
     this.conversations = {};
     this.registers = {};
@@ -144,224 +426,9 @@ class Evaluator {
     this.fileWriters = jsonlFiles.map((p) => new JsonlFileWriter(p));
   }
 
-  async runEval({
-    provider,
-    prompt, // raw prompt
-    test,
-    delay,
-    nunjucksFilters: filters,
-    evaluateOptions,
-    testIdx,
-    promptIdx,
-  }: RunEvalOptions): Promise<EvaluateResult> {
-    // Use the original prompt to set the label, not renderedPrompt
-    const promptLabel = prompt.label;
-
-    provider.delay ??= delay ?? getEnvInt('PROMPTFOO_DELAY_MS', 0);
-    invariant(
-      typeof provider.delay === 'number',
-      `Provider delay should be set for ${provider.label}`,
-    );
-
-    // Set up the special _conversation variable
-    const vars = test.vars || {};
-    const conversationKey = `${provider.label || provider.id()}:${prompt.id}${test.metadata?.conversationId ? `:${test.metadata.conversationId}` : ''}`;
-    const usesConversation = prompt.raw.includes('_conversation');
-    if (
-      !getEnvBool('PROMPTFOO_DISABLE_CONVERSATION_VAR') &&
-      !test.options?.disableConversationVar &&
-      usesConversation
-    ) {
-      vars._conversation = this.conversations[conversationKey] || [];
-    }
-
-    // Overwrite vars with any saved register values
-    Object.assign(vars, this.registers);
-    // Render the prompt
-    const renderedPrompt = await renderPrompt(prompt, vars, filters, provider);
-    let renderedJson = undefined;
-    try {
-      renderedJson = JSON.parse(renderedPrompt);
-    } catch {}
-
-    const setup = {
-      provider: {
-        id: provider.id(),
-        label: provider.label,
-        config: provider.config,
-      },
-      prompt: {
-        raw: renderedPrompt,
-        label: promptLabel,
-        config: prompt.config,
-      },
-      vars,
-    };
-
-    // Call the API
-    let latencyMs = 0;
-    try {
-      const startTime = Date.now();
-      let response: ProviderResponse = {
-        output: '',
-        tokenUsage: {},
-        cost: 0,
-        cached: false,
-      };
-
-      if (test.providerOutput) {
-        response.output = test.providerOutput;
-      } else {
-        response = await ((test.provider as ApiProvider) || provider).callApi(
-          renderedPrompt,
-          {
-            // Always included
-            vars,
-
-            // Part of these may be removed in python and script providers, but every Javascript provider gets them
-            prompt,
-            filters,
-            originalProvider: provider,
-            test,
-
-            // All of these are removed in python and script providers, but every Javascript provider gets them
-            logger: logger as winston.Logger,
-            fetchWithCache,
-            getCache,
-          },
-          {
-            includeLogProbs: test.assert?.some((a) => a.type === 'perplexity'),
-          },
-        );
-      }
-      const endTime = Date.now();
-      latencyMs = endTime - startTime;
-
-      let conversationLastInput = undefined;
-      if (renderedJson && Array.isArray(renderedJson)) {
-        const lastElt = renderedJson[renderedJson.length - 1];
-        // Use the `content` field if present (OpenAI chat format)
-        conversationLastInput = lastElt?.content || lastElt;
-      }
-      this.conversations[conversationKey] = this.conversations[conversationKey] || [];
-      this.conversations[conversationKey].push({
-        prompt: renderedJson || renderedPrompt,
-        input: conversationLastInput || renderedJson || renderedPrompt,
-        output: response.output || '',
-      });
-
-      if (!response.cached && provider.delay > 0) {
-        logger.debug(`Sleeping for ${provider.delay}ms`);
-        await sleep(provider.delay);
-      }
-
-      const ret: EvaluateResult = {
-        ...setup,
-        response,
-        success: false,
-        failureReason: ResultFailureReason.NONE,
-        score: 0,
-        namedScores: {},
-        latencyMs,
-        cost: response.cost,
-        metadata: response.metadata,
-        promptIdx,
-        testIdx,
-        testCase: test,
-        promptId: prompt.id || '',
-      };
-      if (response.error) {
-        ret.error = response.error;
-      } else if (response.output === null || response.output === undefined) {
-        ret.success = false;
-        ret.score = 0;
-        ret.error = 'No output';
-      } else {
-        // Create a copy of response so we can potentially mutate it.
-        const processedResponse = { ...response };
-        const transforms: string[] = [
-          provider.transform, // Apply provider transform first
-          // NOTE: postprocess is deprecated. Use the first defined transform.
-          [test.options?.transform, test.options?.postprocess].find((s) => s),
-        ]
-          .flat()
-          .filter((s): s is string => typeof s === 'string');
-        for (const t of transforms) {
-          processedResponse.output = await transform(t, processedResponse.output, {
-            vars,
-            prompt,
-          });
-        }
-
-        invariant(processedResponse.output != null, 'Response output should not be null');
-        const checkResult = await runAssertions({
-          prompt: renderedPrompt,
-          provider,
-          providerResponse: processedResponse,
-          test,
-          latencyMs: response.cached ? undefined : latencyMs,
-        });
-        if (!checkResult.pass) {
-          ret.error = checkResult.reason;
-          ret.failureReason = ResultFailureReason.ASSERT;
-        }
-        ret.success = checkResult.pass;
-        ret.score = checkResult.score;
-        ret.namedScores = checkResult.namedScores || {};
-        if (checkResult.tokensUsed) {
-          this.stats.tokenUsage.total += checkResult.tokensUsed.total || 0;
-          this.stats.tokenUsage.prompt += checkResult.tokensUsed.prompt || 0;
-          this.stats.tokenUsage.completion += checkResult.tokensUsed.completion || 0;
-          this.stats.tokenUsage.cached += checkResult.tokensUsed.cached || 0;
-          this.stats.tokenUsage.numRequests += checkResult.tokensUsed.numRequests || 1;
-        }
-        ret.response = processedResponse;
-        ret.gradingResult = checkResult;
-      }
-
-      // Update token usage stats
-      if (response.tokenUsage) {
-        this.stats.tokenUsage.total += response.tokenUsage.total || 0;
-        this.stats.tokenUsage.prompt += response.tokenUsage.prompt || 0;
-        this.stats.tokenUsage.completion += response.tokenUsage.completion || 0;
-        this.stats.tokenUsage.cached += response.tokenUsage.cached || 0;
-        this.stats.tokenUsage.numRequests += response.tokenUsage.numRequests || 1;
-      }
-
-      if (ret.success) {
-        this.stats.successes++;
-      } else if (ret.failureReason === ResultFailureReason.ERROR) {
-        this.stats.errors++;
-      } else {
-        this.stats.failures++;
-      }
-
-      if (test.options?.storeOutputAs && ret.response?.output) {
-        // Save the output in a register for later use
-        this.registers[test.options.storeOutputAs] = ret.response.output;
-      }
-
-      return ret;
-    } catch (err) {
-      this.stats.errors++;
-      return {
-        ...setup,
-        error: String(err) + '\n\n' + (err as Error).stack,
-        success: false,
-        failureReason: ResultFailureReason.ERROR,
-        score: 0,
-        namedScores: {},
-        latencyMs,
-        promptIdx,
-        testIdx,
-        testCase: test,
-        promptId: prompt.id || '',
-      };
-    }
-  }
-
   async evaluate(): Promise<Eval> {
     const { testSuite, options } = this;
+
     const checkAbort = () => {
       if (options.abortSignal?.aborted) {
         throw new Error('Operation cancelled');
@@ -521,12 +588,13 @@ class Evaluator {
 
     // Prepare vars
     const varNames: Set<string> = new Set();
-    const varsWithSpecialColsRemoved: Record<string, string | string[] | object>[] = [];
+    const varsWithSpecialColsRemoved: Vars[] = [];
     const inputTransformDefault = testSuite?.defaultTest?.options?.transformVars;
     for (const testCase of tests) {
       testCase.vars = { ...testSuite.defaultTest?.vars, ...testCase?.vars };
+
       if (testCase.vars) {
-        const varWithSpecialColsRemoved: Record<string, string | string[] | object> = {};
+        const varWithSpecialColsRemoved: Vars = {};
         const inputTransformForIndividualTest = testCase.options?.transformVars;
         const inputTransform = inputTransformForIndividualTest || inputTransformDefault;
         if (inputTransform) {
@@ -534,7 +602,7 @@ class Evaluator {
             prompt: {},
             uuid: randomUUID(),
           };
-          const transformedVars = await transform(
+          const transformedVars: Vars = await transform(
             inputTransform,
             testCase.vars,
             transformContext,
@@ -558,6 +626,7 @@ class Evaluator {
     // Set up eval cases
     const runEvalOptions: RunEvalOptions[] = [];
     let testIdx = 0;
+    let concurrency = options.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
     for (let index = 0; index < tests.length; index++) {
       const testCase = tests[index];
       invariant(
@@ -574,7 +643,18 @@ class Evaluator {
       testCase.options = { ...testSuite.defaultTest?.options, ...testCase.options };
       testCase.metadata = { ...testSuite.defaultTest?.metadata, ...testCase.metadata };
       testCase.provider = testCase.provider || testSuite.defaultTest?.provider;
+      testCase.assertScoringFunction =
+        testCase.assertScoringFunction || testSuite.defaultTest?.assertScoringFunction;
 
+      if (typeof testCase.assertScoringFunction === 'string') {
+        const { filePath: resolvedPath, functionName } = parseFileUrl(
+          testCase.assertScoringFunction,
+        );
+        testCase.assertScoringFunction = await loadFunction<ScoringFunction>({
+          filePath: resolvedPath,
+          functionName,
+        });
+      }
       const prependToPrompt =
         testCase.options?.prefix || testSuite.defaultTest?.options?.prefix || '';
       const appendToPrompt =
@@ -610,6 +690,11 @@ class Evaluator {
                 promptIdx,
                 repeatIndex,
                 evaluateOptions: options,
+                conversations: this.conversations,
+                registers: this.registers,
+                isRedteam: this.testSuite.redteam != null,
+                allTests: runEvalOptions,
+                concurrency,
               });
               promptIdx++;
             }
@@ -619,7 +704,7 @@ class Evaluator {
       }
     }
     // Determine run parameters
-    let concurrency = options.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
+
     if (concurrency > 1) {
       const usesConversation = prompts.some((p) => p.raw.includes('_conversation'));
       const usesStoreOutputAs = tests.some((t) => t.options?.storeOutputAs);
@@ -646,95 +731,134 @@ class Evaluator {
         test: evalStep.test,
       });
 
-      const row = await this.runEval(evalStep);
-
-      if (evalStep.test.assert?.some((a) => a.type === 'select-best')) {
-        rowsWithSelectBestAssertion.add(row.testIdx);
-      }
-      for (const assert of evalStep.test.assert || []) {
-        if (assert.type) {
-          assertionTypes.add(assert.type);
-        }
-      }
-
-      numComplete++;
-      if (options.progressCallback) {
-        options.progressCallback(
-          this.evalRecord.results.length,
-          runEvalOptions.length,
-          index,
-          evalStep,
-        );
-      }
-
-      try {
-        await this.evalRecord.addResult(row, evalStep.test);
-      } catch (error) {
-        logger.error(`Error saving result: ${error} ${safeJsonStringify(row)}`);
-      }
-
-      for (const writer of this.fileWriters) {
-        await writer.write(row);
-      }
-
-      const { promptIdx } = row;
-      const metrics = prompts[promptIdx].metrics;
-      invariant(metrics, 'Expected prompt.metrics to be set');
-      metrics.score += row.score;
-      for (const [key, value] of Object.entries(row.namedScores)) {
-        metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
-        metrics.namedScoresCount[key] = (metrics.namedScoresCount[key] || 0) + 1;
-      }
-
-      if (testSuite.derivedMetrics) {
-        const math = await import('mathjs'); // TODO: move this
-        for (const metric of testSuite.derivedMetrics) {
-          if (metrics.namedScores[metric.name] === undefined) {
-            metrics.namedScores[metric.name] = 0;
-          }
-          try {
-            if (typeof metric.value === 'function') {
-              metrics.namedScores[metric.name] = metric.value(metrics.namedScores, evalStep);
-            } else {
-              const evaluatedValue = math.evaluate(metric.value, metrics.namedScores);
-              metrics.namedScores[metric.name] = evaluatedValue;
-            }
-          } catch (error) {
-            logger.debug(
-              `Could not evaluate derived metric '${metric.name}': ${(error as Error).message}`,
-            );
-          }
-        }
-      }
-      metrics.testPassCount += row.success ? 1 : 0;
-      if (!row.success) {
-        if (row.failureReason === ResultFailureReason.ERROR) {
-          metrics.testErrorCount += 1;
+      const rows = await runEval(evalStep);
+      for (const row of rows) {
+        // capture metrics
+        if (row.success) {
+          this.stats.successes++;
+        } else if (row.failureReason === ResultFailureReason.ERROR) {
+          this.stats.errors++;
         } else {
-          metrics.testFailCount += 1;
+          this.stats.failures++;
+        }
+
+        if (row.tokenUsage) {
+          this.stats.tokenUsage.total += row.tokenUsage.total || 0;
+          this.stats.tokenUsage.prompt += row.tokenUsage.prompt || 0;
+          this.stats.tokenUsage.completion += row.tokenUsage.completion || 0;
+          this.stats.tokenUsage.cached += row.tokenUsage.cached || 0;
+          this.stats.tokenUsage.numRequests += row.tokenUsage.numRequests || 1;
+          if (row.tokenUsage.completionDetails) {
+            this.stats.tokenUsage.completionDetails.reasoning! +=
+              row.tokenUsage.completionDetails.reasoning || 0;
+            this.stats.tokenUsage.completionDetails.acceptedPrediction! +=
+              row.tokenUsage.completionDetails.acceptedPrediction || 0;
+            this.stats.tokenUsage.completionDetails.rejectedPrediction! +=
+              row.tokenUsage.completionDetails.rejectedPrediction || 0;
+          }
+        }
+
+        if (evalStep.test.assert?.some((a) => a.type === 'select-best')) {
+          rowsWithSelectBestAssertion.add(row.testIdx);
+        }
+        for (const assert of evalStep.test.assert || []) {
+          if (assert.type) {
+            assertionTypes.add(assert.type);
+          }
+        }
+
+        numComplete++;
+
+        try {
+          await this.evalRecord.addResult(row);
+        } catch (error) {
+          logger.error(`Error saving result: ${error} ${safeJsonStringify(row)}`);
+        }
+
+        for (const writer of this.fileWriters) {
+          await writer.write(row);
+        }
+
+        const { promptIdx } = row;
+        const metrics = prompts[promptIdx].metrics;
+        invariant(metrics, 'Expected prompt.metrics to be set');
+        metrics.score += row.score;
+        for (const [key, value] of Object.entries(row.namedScores)) {
+          metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
+          metrics.namedScoresCount[key] = (metrics.namedScoresCount[key] || 0) + 1;
+        }
+
+        if (testSuite.derivedMetrics) {
+          const math = await import('mathjs');
+          for (const metric of testSuite.derivedMetrics) {
+            if (metrics.namedScores[metric.name] === undefined) {
+              metrics.namedScores[metric.name] = 0;
+            }
+            try {
+              if (typeof metric.value === 'function') {
+                metrics.namedScores[metric.name] = metric.value(metrics.namedScores, evalStep);
+              } else {
+                const evaluatedValue = math.evaluate(metric.value, metrics.namedScores);
+                metrics.namedScores[metric.name] = evaluatedValue;
+              }
+            } catch (error) {
+              logger.debug(
+                `Could not evaluate derived metric '${metric.name}': ${(error as Error).message}`,
+              );
+            }
+          }
+        }
+        metrics.testPassCount += row.success ? 1 : 0;
+        if (!row.success) {
+          if (row.failureReason === ResultFailureReason.ERROR) {
+            metrics.testErrorCount += 1;
+          } else {
+            metrics.testFailCount += 1;
+          }
+        }
+        metrics.assertPassCount +=
+          row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
+        metrics.assertFailCount +=
+          row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
+        metrics.totalLatencyMs += row.latencyMs || 0;
+        metrics.tokenUsage.cached =
+          (metrics.tokenUsage.cached || 0) + (row.response?.tokenUsage?.cached || 0);
+        metrics.tokenUsage.completion =
+          (metrics.tokenUsage.completion || 0) + (row.response?.tokenUsage?.completion || 0);
+        metrics.tokenUsage.prompt =
+          (metrics.tokenUsage.prompt || 0) + (row.response?.tokenUsage?.prompt || 0);
+        metrics.tokenUsage.total =
+          (metrics.tokenUsage.total || 0) + (row.response?.tokenUsage?.total || 0);
+        metrics.tokenUsage.numRequests =
+          (metrics.tokenUsage.numRequests || 0) + (row.response?.tokenUsage?.numRequests || 1);
+        metrics.tokenUsage.completionDetails = {
+          reasoning:
+            (metrics.tokenUsage.completionDetails?.reasoning || 0) +
+            (row.response?.tokenUsage?.completionDetails?.reasoning || 0),
+          acceptedPrediction:
+            (metrics.tokenUsage.completionDetails?.acceptedPrediction || 0) +
+            (row.response?.tokenUsage?.completionDetails?.acceptedPrediction || 0),
+          rejectedPrediction:
+            (metrics.tokenUsage.completionDetails?.rejectedPrediction || 0) +
+            (row.response?.tokenUsage?.completionDetails?.rejectedPrediction || 0),
+        };
+        metrics.cost += row.cost || 0;
+
+        await runExtensionHook(testSuite.extensions, 'afterEach', {
+          test: evalStep.test,
+          result: row,
+        });
+
+        if (options.progressCallback) {
+          options.progressCallback(
+            this.evalRecord.resultsCount,
+            runEvalOptions.length,
+            index,
+            evalStep,
+            metrics,
+          );
         }
       }
-      metrics.assertPassCount +=
-        row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
-      metrics.assertFailCount +=
-        row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
-      metrics.totalLatencyMs += row.latencyMs || 0;
-      metrics.tokenUsage.cached =
-        (metrics.tokenUsage.cached || 0) + (row.response?.tokenUsage?.cached || 0);
-      metrics.tokenUsage.completion =
-        (metrics.tokenUsage.completion || 0) + (row.response?.tokenUsage?.completion || 0);
-      metrics.tokenUsage.prompt =
-        (metrics.tokenUsage.prompt || 0) + (row.response?.tokenUsage?.prompt || 0);
-      metrics.tokenUsage.total =
-        (metrics.tokenUsage.total || 0) + (row.response?.tokenUsage?.total || 0);
-      metrics.tokenUsage.numRequests =
-        (metrics.tokenUsage.numRequests || 0) + (row.response?.tokenUsage?.numRequests || 1);
-      metrics.cost += row.cost || 0;
-
-      await runExtensionHook(testSuite.extensions, 'afterEach', {
-        test: evalStep.test,
-        result: row,
-      });
     };
 
     // Set up main progress bars
@@ -743,9 +867,9 @@ class Evaluator {
     const originalProgressCallback = this.options.progressCallback;
     const isWebUI = Boolean(cliState.webUI);
 
-    this.options.progressCallback = (completed, total, index, evalStep) => {
+    this.options.progressCallback = (completed, total, index, evalStep, metrics) => {
       if (originalProgressCallback) {
-        originalProgressCallback(completed, total, index, evalStep);
+        originalProgressCallback(completed, total, index, evalStep, metrics);
       }
 
       if (isWebUI) {

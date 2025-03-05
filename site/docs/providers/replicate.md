@@ -1,7 +1,3 @@
----
-sidebar_position: 99
----
-
 # Replicate
 
 Replicate is an API for machine learning models. It currently hosts models like [Llama v2](https://replicate.com/replicate/llama70b-v2-chat), [Gemma](https://replicate.com/google-deepmind/gemma-7b-it), and [Mistral/Mixtral](https://replicate.com/mistralai/mixtral-8x7b-instruct-v0.1).

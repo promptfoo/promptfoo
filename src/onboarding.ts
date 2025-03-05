@@ -133,6 +133,10 @@ def call_api(prompt, options, context):
         # If you want to report token usage, you can set the 'tokenUsage' field.
         result['tokenUsage'] = {"total": token_count, "prompt": prompt_token_count, "completion": completion_token_count}
 
+    if failed_guardrails:
+        # If guardrails triggered, you can set the 'guardrails' field.
+        result['guardrails'] = {"flagged": True}
+
     return result
 `;
 
@@ -384,7 +388,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     const choices: { name: string; value: (string | object)[] }[] = [
       { name: `I'll choose later`, value: ['openai:gpt-4o-mini', 'openai:gpt-4o'] },
       {
-        name: '[OpenAI] GPT 4o, GPT 4o-mini, GPT-3.5, ...',
+        name: '[OpenAI] o1, o3, GPT 4o, GPT 4o-mini, GPT-3.5, ...',
         value:
           action === 'agent'
             ? [
@@ -418,7 +422,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       {
         name: '[Anthropic] Claude Opus, Sonnet, Haiku, ...',
         value: [
-          'anthropic:messages:claude-3-5-sonnet-20241022',
+          'anthropic:messages:claude-3-7-sonnet-20250219',
           'anthropic:messages:claude-3-5-haiku-20241022',
         ],
       },
@@ -457,7 +461,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         name: '[Cohere] Command R, Command R+, ...',
         value: ['cohere:command-r', 'cohere:command-r-plus'],
       },
-      { name: '[Google] Gemini Pro, Gemini Ultra, ...', value: ['vertex:gemini-pro'] },
+      { name: '[Google] Gemini 1.5 Pro, ...', value: ['vertex:gemini-1.5-pro'] },
       {
         name: '[Ollama] Llama 3, Mixtral, ...',
         value: ['ollama:chat:llama3', 'ollama:chat:mixtral:8x22b'],

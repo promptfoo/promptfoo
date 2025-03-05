@@ -1,8 +1,6 @@
-import {
-  OpenAiChatCompletionProvider,
-  OpenAiCompletionProvider,
-  OpenAiEmbeddingProvider,
-} from '../../src/providers/openai';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
+import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import { createTogetherAiProvider } from '../../src/providers/togetherai';
 import type { ProviderOptions } from '../../src/types';
 import type { EnvOverrides } from '../../src/types/env';

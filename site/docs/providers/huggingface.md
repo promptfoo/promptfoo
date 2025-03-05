@@ -1,7 +1,3 @@
----
-sidebar_position: 99
----
-
 # HuggingFace
 
 promptfoo includes support for the [HuggingFace Inference API](https://huggingface.co/inference-api), for text generation, classification, and embeddings related tasks, as well as [HuggingFace Datasets](https://huggingface.co/docs/datasets).
@@ -121,6 +117,14 @@ providers:
   - id: huggingface:text-generation:my-local-model
     config:
       apiEndpoint: http://127.0.0.1:8080/generate
+```
+
+## Authentication
+
+If you need to access private datasets or want to increase your rate limits, you can authenticate using your HuggingFace token. Set the `HF_TOKEN` environment variable with your token:
+
+```bash
+export HF_TOKEN=your_token_here
 ```
 
 ## Datasets

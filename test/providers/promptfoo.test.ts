@@ -8,10 +8,10 @@ import {
   PromptfooSimulatedUserProvider,
 } from '../../src/providers/promptfoo';
 
-jest.mock('../../src/fetch');
 jest.mock('../../src/cache');
-jest.mock('../../src/globalConfig/accounts');
 jest.mock('../../src/envars');
+jest.mock('../../src/fetch');
+jest.mock('../../src/globalConfig/accounts');
 jest.mock('../../src/globalConfig/cloud', () => ({
   CloudConfig: class {
     isEnabled() {

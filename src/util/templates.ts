@@ -1,4 +1,5 @@
 import nunjucks from 'nunjucks';
+import cliState from '../cliState';
 import { getEnvBool } from '../envars';
 import type { NunjucksFilterMap } from '../types';
 
@@ -30,8 +31,15 @@ export function getNunjucksEngine(
   if (
     !getEnvBool('PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS', getEnvBool('PROMPTFOO_SELF_HOSTED', false))
   ) {
-    env.addGlobal('env', process.env);
+    env.addGlobal('env', {
+      ...process.env,
+      ...cliState.config?.env,
+    });
   }
+
+  env.addFilter('load', function (str) {
+    return JSON.parse(str);
+  });
 
   if (filters) {
     for (const [name, filter] of Object.entries(filters)) {

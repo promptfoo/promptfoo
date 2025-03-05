@@ -1,7 +1,10 @@
+import crypto from 'crypto';
+import fs from 'fs';
+import http from 'http';
 import httpZ from 'http-z';
 import path from 'path';
 import { z } from 'zod';
-import { fetchWithCache } from '../cache';
+import { fetchWithCache, type FetchWithCacheResult } from '../cache';
 import cliState from '../cliState';
 import { importModule } from '../esm';
 import logger from '../logger';
@@ -18,7 +21,96 @@ import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
+// This function is used to encode the URL in the first line of a raw request
+export function urlEncodeRawRequestPath(rawRequest: string) {
+  const firstLine = rawRequest.split('\n')[0];
+
+  const firstSpace = firstLine.indexOf(' ');
+  const method = firstLine.slice(0, firstSpace);
+  if (!method || !http.METHODS.includes(method)) {
+    logger.error(`[Http Provider] HTTP request method ${method} is not valid. From: ${firstLine}`);
+    throw new Error(
+      `[Http Provider] HTTP request method ${method} is not valid. From: ${firstLine}`,
+    );
+  }
+  const lastSpace = firstLine.lastIndexOf(' ');
+  if (lastSpace === -1) {
+    logger.error(
+      `[Http Provider] HTTP request URL is not valid. Protocol is missing. From: ${firstLine}`,
+    );
+    throw new Error(
+      `[Http Provider] HTTP request URL is not valid. Protocol is missing. From: ${firstLine}`,
+    );
+  }
+  const url = firstLine.slice(firstSpace + 1, lastSpace);
+
+  if (url.length === 0) {
+    logger.error(`[Http Provider] HTTP request URL is not valid. From: ${firstLine}`);
+    throw new Error(`[Http Provider] HTTP request URL is not valid. From: ${firstLine}`);
+  }
+
+  const protocol = firstLine.slice(lastSpace + 1);
+  if (!protocol.toLowerCase().startsWith('http')) {
+    logger.error(`[Http Provider] HTTP request protocol is not valid. From: ${firstLine}`);
+    throw new Error(`[Http Provider] HTTP request protocol is not valid. From: ${firstLine}`);
+  }
+
+  logger.debug(`[Http Provider] Encoding URL: ${url} from first line of raw request: ${firstLine}`);
+
+  try {
+    // Use the built-in URL class to parse and encode the URL
+    const parsedUrl = new URL(url, 'http://placeholder-base.com');
+
+    // Replace the original URL in the first line
+    rawRequest = rawRequest.replace(
+      firstLine,
+      `${method} ${parsedUrl.pathname}${parsedUrl.search}${protocol ? ' ' + protocol : ''}`,
+    );
+  } catch (err) {
+    logger.error(`[Http Provider] Error parsing URL in HTTP request: ${String(err)}`);
+    throw new Error(`[Http Provider] Error parsing URL in HTTP request: ${String(err)}`);
+  }
+
+  return rawRequest;
+}
+
 const nunjucks = getNunjucksEngine();
+
+export async function generateSignature(
+  privateKeyPathOrKey: string,
+  signatureTimestamp: number,
+  signatureDataTemplate: string,
+  signatureAlgorithm: string = 'SHA256',
+  isPath: boolean = true,
+): Promise<string> {
+  try {
+    const privateKey = isPath ? fs.readFileSync(privateKeyPathOrKey, 'utf8') : privateKeyPathOrKey;
+    const data = nunjucks
+      .renderString(signatureDataTemplate, {
+        signatureTimestamp,
+      })
+      .replace(/\\n/g, '\n');
+    const sign = crypto.createSign(signatureAlgorithm);
+    sign.update(data);
+    sign.end();
+    const signature = sign.sign(privateKey);
+    return signature.toString('base64');
+  } catch (err) {
+    logger.error(`Error generating signature: ${String(err)}`);
+    throw new Error(`Failed to generate signature: ${String(err)}`);
+  }
+}
+
+export function needsSignatureRefresh(
+  timestamp: number,
+  validityMs: number,
+  bufferMs?: number,
+): boolean {
+  const now = Date.now();
+  const timeElapsed = now - timestamp;
+  const effectiveBufferMs = bufferMs ?? Math.floor(validityMs * 0.1); // Default to 10% of validity time
+  return timeElapsed + effectiveBufferMs >= validityMs;
+}
 
 export const HttpProviderConfigSchema = z.object({
   body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
@@ -27,6 +119,10 @@ export const HttpProviderConfigSchema = z.object({
   method: z.string().optional(),
   queryParams: z.record(z.string()).optional(),
   request: z.string().optional(),
+  useHttps: z
+    .boolean()
+    .optional()
+    .describe('Use HTTPS for the request. This only works with the raw request option'),
   sessionParser: z.union([z.string(), z.function()]).optional(),
   transformRequest: z.union([z.string(), z.function()]).optional(),
   transformResponse: z.union([z.string(), z.function()]).optional(),
@@ -38,6 +134,23 @@ export const HttpProviderConfigSchema = z.object({
    * @deprecated use transformResponse instead
    */
   responseParser: z.union([z.string(), z.function()]).optional(),
+  // Digital Signature Authentication
+  signatureAuth: z
+    .object({
+      privateKeyPath: z.string().optional(),
+      privateKey: z.string().optional(),
+      signatureValidityMs: z.number().default(300000), // 5 minutes
+      // Template for generating the data to sign
+      signatureDataTemplate: z.string().default('{{timestamp}}'),
+      // Signature algorithm to use (defaults to SHA256)
+      signatureAlgorithm: z.string().default('SHA256'),
+      // Buffer time in ms before expiry to refresh (defaults to 10% of validity time)
+      signatureRefreshBufferMs: z.number().optional(),
+    })
+    .refine((data) => data.privateKeyPath !== undefined || data.privateKey !== undefined, {
+      message: 'Either privateKeyPath or privateKey must be provided',
+    })
+    .optional(),
 });
 
 export type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
@@ -54,13 +167,17 @@ function contentTypeIsJson(headers: Record<string, string> | undefined) {
   });
 }
 
+interface SessionParserData {
+  headers?: Record<string, string> | null;
+  body?: Record<string, any> | string | null;
+}
+
 export async function createSessionParser(
   parser: string | Function | undefined,
-): Promise<({ headers }: { headers: Record<string, string> }) => string> {
+): Promise<(data: SessionParserData) => string> {
   if (!parser) {
     return () => '';
   }
-
   if (typeof parser === 'function') {
     return (response) => parser(response);
   }
@@ -84,8 +201,10 @@ export async function createSessionParser(
       `Response transform malformed: ${filename} must export a function or have a default export as a function`,
     );
   } else if (typeof parser === 'string') {
-    return ({ headers }) => {
-      return new Function('headers', `return headers[${JSON.stringify(parser)}]`)(headers);
+    return (data: SessionParserData) => {
+      const trimmedParser = parser.trim();
+
+      return new Function('data', `return (${trimmedParser});`)(data);
     };
   }
   throw new Error(
@@ -93,16 +212,24 @@ export async function createSessionParser(
   );
 }
 
+interface TransformResponseContext {
+  response: FetchWithCacheResult<any>;
+}
+
 export async function createTransformResponse(
   parser: string | Function | undefined,
-): Promise<(data: any, text: string) => ProviderResponse> {
+): Promise<(data: any, text: string, context?: TransformResponseContext) => ProviderResponse> {
   if (!parser) {
     return (data, text) => ({ output: data || text });
   }
+
   if (typeof parser === 'function') {
-    return (data, text) => {
+    return (data, text, context) => {
       try {
-        const result = parser(data, text);
+        const result = parser(data, text, context);
+        if (typeof result === 'string') {
+          return { output: result };
+        }
         return { output: result };
       } catch (err) {
         logger.error(`Error in response transform function: ${String(err)}`);
@@ -130,17 +257,30 @@ export async function createTransformResponse(
       `Response transform malformed: ${filename} must export a function or have a default export as a function`,
     );
   } else if (typeof parser === 'string') {
-    return (data, text) => {
+    return (data, text, context) => {
       try {
         const trimmedParser = parser.trim();
+        // Check if it's a function expression (either arrow or regular)
+        const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedParser);
         const transformFn = new Function(
           'json',
           'text',
-          `try { return (${trimmedParser}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
+          'context',
+          isFunctionExpression
+            ? `try { return (${trimmedParser})(json, text, context); } catch(e) { throw new Error('Transform failed: ' + e.message); }`
+            : `try { return (${trimmedParser}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
         );
-        return {
-          output: transformFn(data || null, text),
-        };
+        let resp: ProviderResponse | string;
+        if (context) {
+          resp = transformFn(data || null, text, context);
+        } else {
+          resp = transformFn(data || null, text);
+        }
+
+        if (typeof resp === 'string') {
+          return { output: resp };
+        }
+        return resp;
       } catch (err) {
         logger.error(`Error in response transform: ${String(err)}`);
         throw new Error(`Failed to transform response: ${String(err)}`);
@@ -216,8 +356,10 @@ export function processTextBody(body: string, vars: Record<string, any>): string
 
 function parseRawRequest(input: string) {
   const adjusted = input.trim().replace(/\n/g, '\r\n') + '\r\n\r\n';
+  // If the injectVar is in a query param, we need to encode the URL in the first line
+  const encoded = urlEncodeRawRequestPath(adjusted);
   try {
-    const messageModel = httpZ.parse(adjusted) as httpZ.HttpZRequestModel;
+    const messageModel = httpZ.parse(encoded) as httpZ.HttpZRequestModel;
     return {
       method: messageModel.method,
       url: messageModel.target,
@@ -390,10 +532,15 @@ export async function createValidateStatus(
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
-  private transformResponse: Promise<(data: any, text: string) => ProviderResponse>;
-  private sessionParser: Promise<({ headers }: { headers: Record<string, string> }) => string>;
+  private transformResponse: Promise<
+    (data: any, text: string, context?: TransformResponseContext) => ProviderResponse
+  >;
+  private sessionParser: Promise<(data: SessionParserData) => string>;
   private transformRequest: Promise<(prompt: string) => any>;
   private validateStatus: Promise<(status: number) => boolean>;
+  private lastSignatureTimestamp?: number;
+  private lastSignature?: string;
+
   constructor(url: string, options: ProviderOptions) {
     this.config = HttpProviderConfigSchema.parse(options.config);
     this.url = this.config.url || url;
@@ -423,6 +570,48 @@ export class HttpProvider implements ApiProvider {
     return `[HTTP Provider ${this.url}]`;
   }
 
+  private async refreshSignatureIfNeeded(): Promise<void> {
+    if (!this.config.signatureAuth) {
+      logger.debug('[HTTP Provider Auth]: No signature auth configured');
+      return;
+    }
+
+    const {
+      privateKeyPath,
+      privateKey,
+      signatureValidityMs,
+      signatureDataTemplate,
+      signatureAlgorithm,
+      signatureRefreshBufferMs,
+    } = this.config.signatureAuth;
+
+    if (
+      !this.lastSignatureTimestamp ||
+      !this.lastSignature ||
+      needsSignatureRefresh(
+        this.lastSignatureTimestamp,
+        signatureValidityMs,
+        signatureRefreshBufferMs,
+      )
+    ) {
+      logger.debug('[HTTP Provider Auth]: Generating new signature');
+      this.lastSignatureTimestamp = Date.now();
+      this.lastSignature = await generateSignature(
+        privateKeyPath || privateKey!,
+        this.lastSignatureTimestamp,
+        signatureDataTemplate,
+        signatureAlgorithm,
+        privateKeyPath !== undefined,
+      );
+      logger.debug('[HTTP Provider Auth]: Generated new signature successfully');
+    } else {
+      logger.debug('[HTTP Provider Auth]: Using cached signature');
+    }
+
+    invariant(this.lastSignature, 'Signature should be defined at this point');
+    invariant(this.lastSignatureTimestamp, 'Timestamp should be defined at this point');
+  }
+
   private getDefaultHeaders(body: any): Record<string, string> {
     if (this.config.method === 'GET') {
       return {};
@@ -450,15 +639,16 @@ export class HttpProvider implements ApiProvider {
     }
   }
 
-  private getHeaders(
+  async getHeaders(
     defaultHeaders: Record<string, string>,
     vars: Record<string, any>,
-  ): Record<string, string> {
+  ): Promise<Record<string, string>> {
     const configHeaders = this.config.headers || {};
     // Convert all keys in configHeaders to lowercase
     const headers = Object.fromEntries(
       Object.entries(configHeaders).map(([key, value]) => [key.toLowerCase(), value]),
     );
+
     return Object.fromEntries(
       Object.entries({ ...defaultHeaders, ...headers }).map(([key, value]) => [
         key,
@@ -471,20 +661,41 @@ export class HttpProvider implements ApiProvider {
     const vars = {
       ...(context?.vars || {}),
       prompt,
-    };
+    } as Record<string, any>;
+
+    // Add signature values to vars if signature auth is enabled
+    if (this.config.signatureAuth) {
+      await this.refreshSignatureIfNeeded();
+      invariant(this.lastSignature, 'Signature should be defined at this point');
+      invariant(this.lastSignatureTimestamp, 'Timestamp should be defined at this point');
+
+      if (vars.signature) {
+        logger.warn(
+          '[HTTP Provider Auth]: `signature` is already defined in vars and will be overwritten',
+        );
+      }
+      if (vars.signatureTimestamp) {
+        logger.warn(
+          '[HTTP Provider Auth]: `signatureTimestamp` is already defined in vars and will be overwritten',
+        );
+      }
+
+      vars.signature = this.lastSignature;
+      vars.signatureTimestamp = this.lastSignatureTimestamp;
+    }
 
     if (this.config.request) {
-      return this.callApiWithRawRequest(vars);
+      return this.callApiWithRawRequest(vars, context);
     }
 
     const defaultHeaders = this.getDefaultHeaders(this.config.body);
-    const headers = this.getHeaders(defaultHeaders, vars);
+    const headers = await this.getHeaders(defaultHeaders, vars);
     this.validateContentTypeAndBody(headers, this.config.body);
 
     // Transform prompt using request transform
     const transformedPrompt = await (await this.transformRequest)(prompt);
     logger.debug(
-      `[HTTP Provider]: Transformed prompt: ${transformedPrompt}. Original prompt: ${prompt}`,
+      `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
     );
 
     const renderedConfig: Partial<HttpProviderConfig> = {
@@ -541,13 +752,15 @@ export class HttpProvider implements ApiProvider {
       this.config.maxRetries,
     );
 
-    logger.debug(`[HTTP Provider]: Response: ${response.data}`);
+    logger.debug(`[HTTP Provider]: Response: ${safeJsonStringify(response.data)}`);
     if (!(await this.validateStatus)(response.status)) {
       throw new Error(
         `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
       );
     }
-    logger.debug(`[HTTP Provider]: Response (HTTP ${response.status}): ${response.data}`);
+    logger.debug(
+      `[HTTP Provider]: Response (HTTP ${response.status}): ${safeJsonStringify(response.data)}`,
+    );
 
     const ret: ProviderResponse = {};
     if (context?.debug) {
@@ -565,37 +778,53 @@ export class HttpProvider implements ApiProvider {
       parsedData = null;
     }
 
-    const parsedOutput = (await this.transformResponse)(parsedData, rawText);
-    ret.output = parsedOutput.output || parsedOutput;
     try {
       const sessionId =
-        response.headers && this.sessionParser !== null
-          ? (await this.sessionParser)({ headers: response.headers })
-          : undefined;
+        this.sessionParser == null
+          ? undefined
+          : (await this.sessionParser)({ headers: response.headers, body: parsedData ?? rawText });
       if (sessionId) {
         ret.sessionId = sessionId;
       }
     } catch (err) {
       logger.error(
-        `Error parsing session ID: ${String(err)}. Got headers: ${safeJsonStringify(response.headers)}`,
+        `Error parsing session ID: ${String(err)}. Got headers: ${safeJsonStringify(response.headers)} and parsed body: ${safeJsonStringify(parsedData)}`,
       );
       throw err;
     }
-    return ret;
+    const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
+    if (parsedOutput?.output) {
+      return {
+        ...ret,
+        ...parsedOutput,
+      };
+    }
+    return {
+      ...ret,
+      output: parsedOutput,
+    };
   }
 
-  private async callApiWithRawRequest(vars: Record<string, any>): Promise<ProviderResponse> {
+  private async callApiWithRawRequest(
+    vars: Record<string, any>,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     invariant(this.config.request, 'Expected request to be set in http provider config');
     const renderedRequest = nunjucks.renderString(this.config.request, vars);
     const parsedRequest = parseRawRequest(renderedRequest.trim());
 
-    const protocol = this.url.startsWith('https') ? 'https' : 'http';
+    const protocol = this.url.startsWith('https') || this.config.useHttps ? 'https' : 'http';
     const url = new URL(
       parsedRequest.url,
       `${protocol}://${parsedRequest.headers['host']}`,
     ).toString();
 
-    logger.debug(`[HTTP Provider]: Calling ${url} with raw request: ${parsedRequest}`);
+    // Remove content-length header from raw request if the user added it, it will be added by fetch with the correct value
+    delete parsedRequest.headers['content-length'];
+
+    logger.debug(
+      `[HTTP Provider]: Calling ${url} with raw request: ${parsedRequest.method}  ${safeJsonStringify(parsedRequest.body)} \n headers: ${safeJsonStringify(parsedRequest.headers)}`,
+    );
     const response = await fetchWithCache(
       url,
       {
@@ -605,11 +834,11 @@ export class HttpProvider implements ApiProvider {
       },
       REQUEST_TIMEOUT_MS,
       'text',
-      undefined,
+      context?.debug,
       this.config.maxRetries,
     );
 
-    logger.debug(`[HTTP Provider]: Response: ${response.data}`);
+    logger.debug(`[HTTP Provider]: Response: ${safeJsonStringify(response.data)}`);
 
     if (!(await this.validateStatus)(response.status)) {
       throw new Error(
@@ -624,10 +853,25 @@ export class HttpProvider implements ApiProvider {
     } catch {
       parsedData = null;
     }
+    const ret: ProviderResponse = {};
+    if (context?.debug) {
+      ret.raw = response.data;
+      ret.metadata = {
+        headers: response.headers,
+      };
+    }
 
-    const parsedOutput = (await this.transformResponse)(parsedData, rawText);
+    const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
+    if (parsedOutput?.output) {
+      return {
+        ...ret,
+        ...parsedOutput,
+      };
+    }
+
     return {
-      output: parsedOutput.output || parsedOutput,
+      ...ret,
+      output: parsedOutput,
     };
   }
 }

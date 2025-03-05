@@ -33,6 +33,7 @@ import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import invariant from '../util/invariant';
 import { filterProviders } from './eval/filterProviders';
+import type { FilterOptions } from './eval/filterTests';
 import { filterTests } from './eval/filterTests';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
@@ -133,13 +134,16 @@ export async function doEval(
       );
     }
 
-    testSuite.tests = await filterTests(testSuite, {
+    const filterOptions: FilterOptions = {
       failing: cmdObj.filterFailing,
+      errorsOnly: cmdObj.filterErrorsOnly,
       firstN: cmdObj.filterFirstN,
       metadata: cmdObj.filterMetadata,
       pattern: cmdObj.filterPattern,
       sample: cmdObj.filterSample,
-    });
+    };
+
+    testSuite.tests = await filterTests(testSuite, filterOptions);
 
     if (
       config.redteam &&
@@ -223,6 +227,11 @@ export async function doEval(
       completion: 0,
       cached: 0,
       numRequests: 0,
+      completionDetails: {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
     };
 
     // Calculate our total successes and failures
@@ -241,6 +250,14 @@ export async function doEval(
       tokenUsage.completion += prompt.metrics?.tokenUsage?.completion || 0;
       tokenUsage.cached += prompt.metrics?.tokenUsage?.cached || 0;
       tokenUsage.numRequests += prompt.metrics?.tokenUsage?.numRequests || 0;
+      if (prompt.metrics?.tokenUsage?.completionDetails) {
+        tokenUsage.completionDetails.reasoning +=
+          prompt.metrics.tokenUsage.completionDetails.reasoning || 0;
+        tokenUsage.completionDetails.acceptedPrediction +=
+          prompt.metrics.tokenUsage.completionDetails.acceptedPrediction || 0;
+        tokenUsage.completionDetails.rejectedPrediction +=
+          prompt.metrics.tokenUsage.completionDetails.rejectedPrediction || 0;
+      }
     }
     const totalTests = successes + failures + errors;
     const passRate = (successes / totalTests) * 100;
@@ -264,7 +281,7 @@ export async function doEval(
     }
 
     if (totalTests >= 500) {
-      logger.info('No table output will be shown because there are more than 500 tests.');
+      logger.info('Skipping table output because there are more than 500 tests.');
     }
 
     const { outputPath } = config;
@@ -283,7 +300,7 @@ export async function doEval(
       if (shareableUrl) {
         logger.info(`${chalk.green('✔')} Evaluation complete: ${shareableUrl}`);
       } else {
-        logger.info(`${chalk.green('✔')} Evaluation complete.\n`);
+        logger.info(`${chalk.green('✔')} Evaluation complete. ID: ${chalk.cyan(evalRecord.id)}\n`);
         logger.info(
           `» Run ${chalk.greenBright.bold('promptfoo view')} to use the local web viewer`,
         );
@@ -312,7 +329,7 @@ export async function doEval(
     }
     if (tokenUsage.total > 0) {
       logger.info(
-        `${isRedteam ? `Total probes: ${tokenUsage.numRequests.toLocaleString()} / ` : ''}Total tokens: ${tokenUsage.total.toLocaleString()} / Prompt tokens: ${tokenUsage.prompt.toLocaleString()} / Completion tokens: ${tokenUsage.completion.toLocaleString()} / Cached tokens: ${tokenUsage.cached.toLocaleString()}`,
+        `${isRedteam ? `Total probes: ${tokenUsage.numRequests.toLocaleString()} / ` : ''}Total tokens: ${tokenUsage.total.toLocaleString()} / Prompt tokens: ${tokenUsage.prompt.toLocaleString()} / Completion tokens: ${tokenUsage.completion.toLocaleString()} / Cached tokens: ${tokenUsage.cached.toLocaleString()}${tokenUsage.completionDetails?.reasoning ? ` / Reasoning tokens: ${tokenUsage.completionDetails.reasoning.toLocaleString()}` : ''}`,
       );
     }
 
@@ -517,8 +534,14 @@ export function evalCommand(
       'Only run tests with these providers (regex match)',
     )
     .option('--filter-sample <number>', 'Only run a random sample of N tests')
-    .option('--filter-failing <path>', 'Path to json output file')
-    .option('--filter-errors-only <path>', 'Path to json output file with error tests')
+    .option(
+      '--filter-failing <path or id>',
+      'Path to json output file or eval ID to filter failing tests from',
+    )
+    .option(
+      '--filter-errors-only <path or id>',
+      'Path to json output file or eval ID to filter error tests from',
+    )
     .option(
       '--filter-metadata <key=value>',
       'Only run tests whose metadata matches the key=value pair (e.g. --filter-metadata pluginId=debug-access)',

@@ -263,6 +263,7 @@ export enum LlamaVersion {
   V3 = 3,
   V3_1 = 3.1,
   V3_2 = 3.2,
+  V3_3 = 3.3,
 }
 
 export interface LlamaMessage {
@@ -329,7 +330,15 @@ export const formatPromptLlama3Instruct = (messages: LlamaMessage[]): string => 
 };
 
 export const getLlamaModelHandler = (version: LlamaVersion) => {
-  if (![LlamaVersion.V2, LlamaVersion.V3, LlamaVersion.V3_1, LlamaVersion.V3_2].includes(version)) {
+  if (
+    ![
+      LlamaVersion.V2,
+      LlamaVersion.V3,
+      LlamaVersion.V3_1,
+      LlamaVersion.V3_2,
+      LlamaVersion.V3_3,
+    ].includes(version)
+  ) {
     throw new Error(`Unsupported LLAMA version: ${version}`);
   }
 
@@ -345,6 +354,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
         case LlamaVersion.V3:
         case LlamaVersion.V3_1:
         case LlamaVersion.V3_2:
+        case LlamaVersion.V3_3:
           finalPrompt = formatPromptLlama3Instruct(messages as LlamaMessage[]);
           break;
         default:
@@ -362,23 +372,13 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
         0,
       );
       addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('AWS_BEDROCK_TOP_P'), 1);
-      if ([LlamaVersion.V2, LlamaVersion.V3, LlamaVersion.V3_1].includes(version)) {
-        addConfigParam(
-          params,
-          'max_gen_len',
-          config?.max_gen_len,
-          getEnvInt('AWS_BEDROCK_MAX_GEN_LEN'),
-          1024,
-        );
-      }
-      if (LlamaVersion.V3_2 === version) {
-        addConfigParam(
-          params,
-          'max_new_tokens',
-          config?.max_new_tokens,
-          getEnvInt('AWS_BEDROCK_MAX_NEW_TOKENS'),
-        );
-      }
+      addConfigParam(
+        params,
+        'max_gen_len',
+        config?.max_gen_len,
+        getEnvInt('AWS_BEDROCK_MAX_GEN_LEN'),
+        1024,
+      );
       return params;
     },
     output: (responseJson: any) => responseJson?.generation,
@@ -637,6 +637,7 @@ export const BEDROCK_MODEL = {
   LLAMA3: getLlamaModelHandler(LlamaVersion.V3),
   LLAMA3_1: getLlamaModelHandler(LlamaVersion.V3_1),
   LLAMA3_2: getLlamaModelHandler(LlamaVersion.V3_2),
+  LLAMA3_3: getLlamaModelHandler(LlamaVersion.V3_3),
   COHERE_COMMAND: {
     params: (config: BedrockCohereCommandGenerationOptions, prompt: string, stop: string[]) => {
       const params: any = { prompt };
@@ -737,6 +738,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-3-5-haiku-20241022-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-5-sonnet-20241022-v2:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -767,6 +769,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.anthropic.claude-3-5-haiku-20241022-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-5-sonnet-20241022-v2:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -777,6 +780,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.meta.llama3-2-1b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'us.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'us.meta.llama3-2-90b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
+  'us.meta.llama3-3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_3,
 
   // EU Models
   'eu.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -814,6 +818,9 @@ function getHandlerForModel(modelName: string) {
   }
   if (modelName.includes('meta.llama3-2')) {
     return BEDROCK_MODEL.LLAMA3_2;
+  }
+  if (modelName.includes('meta.llama3-3')) {
+    return BEDROCK_MODEL.LLAMA3_3;
   }
   if (modelName.includes('meta.llama3')) {
     return BEDROCK_MODEL.LLAMA3;
@@ -967,9 +974,11 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
     const response = await bedrockInstance.invokeModel({
       modelId: this.modelName,
       ...(this.config.guardrailIdentifier
-        ? { guardrailIdentifier: this.config.guardrailIdentifier }
+        ? { guardrailIdentifier: String(this.config.guardrailIdentifier) }
         : {}),
-      ...(this.config.guardrailVersion ? { guardrailVersion: this.config.guardrailVersion } : {}),
+      ...(this.config.guardrailVersion
+        ? { guardrailVersion: String(this.config.guardrailVersion) }
+        : {}),
       ...(this.config.trace ? { trace: this.config.trace } : {}),
       accept: 'application/json',
       contentType: 'application/json',

@@ -11,6 +11,7 @@ vi.mock('./store', () => ({
     setTable: vi.fn(),
     table: null,
     version: 4,
+    renderMarkdown: true,
   })),
 }));
 
@@ -85,6 +86,7 @@ describe('ResultsTable Metrics Display', () => {
       setTable: vi.fn(),
       table: mockTable,
       version: 4,
+      renderMarkdown: true,
     }));
   });
 
@@ -144,6 +146,7 @@ describe('ResultsTable Metrics Display', () => {
       setTable: vi.fn(),
       table: mockTableNoMetrics,
       version: 4,
+      renderMarkdown: true,
     }));
 
     renderWithProviders(<ResultsTable {...defaultProps} />);
@@ -156,5 +159,106 @@ describe('ResultsTable Metrics Display', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
     expect(screen.getByText('Tokens/Sec:')).toBeInTheDocument();
     expect(screen.getByText('250')).toBeInTheDocument();
+  });
+
+  describe('Variable rendering', () => {
+    const complexObject = { foo: 'bar', nested: { value: 123 } };
+    const longObject = {
+      key1: 'very long value '.repeat(10),
+      key2: 'another long value '.repeat(10),
+    };
+
+    const createMockTableWithVar = (varValue: any) => ({
+      body: [
+        {
+          outputs: [{ pass: true, score: 1, text: 'test output' }],
+          test: {},
+          vars: [varValue],
+        },
+      ],
+      head: {
+        prompts: [{ provider: 'test-provider' }],
+        vars: ['objectVar'],
+      },
+    });
+
+    it('renders object variables as formatted JSON with markdown enabled', () => {
+      const mockTableWithObjectVar = createMockTableWithVar(complexObject);
+
+      vi.mocked(useStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        inComparisonMode: false,
+        setTable: vi.fn(),
+        table: mockTableWithObjectVar,
+        version: 4,
+        renderMarkdown: true,
+      }));
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      const codeElement = screen.getByText(/foo/);
+      expect(codeElement).toBeInTheDocument();
+      expect(codeElement.closest('code')).toHaveClass('language-json');
+    });
+
+    it('renders object variables as plain JSON with markdown disabled', () => {
+      const mockTableWithObjectVar = createMockTableWithVar(complexObject);
+
+      vi.mocked(useStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        inComparisonMode: false,
+        setTable: vi.fn(),
+        table: mockTableWithObjectVar,
+        version: 4,
+        renderMarkdown: false,
+      }));
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      const cellElement = screen.getByText(/foo/);
+      expect(cellElement).toBeInTheDocument();
+      expect(cellElement.closest('code')).toBeNull();
+    });
+
+    it('truncates long object representations', () => {
+      const mockTableWithLongVar = createMockTableWithVar(longObject);
+
+      vi.mocked(useStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        inComparisonMode: false,
+        setTable: vi.fn(),
+        table: mockTableWithLongVar,
+        version: 4,
+        renderMarkdown: true,
+      }));
+
+      renderWithProviders(<ResultsTable {...defaultProps} maxTextLength={50} />);
+
+      const element = screen.getByText((content) => content.includes('...'));
+      expect(element).toBeInTheDocument();
+      expect(element.textContent!.length).toBeLessThanOrEqual(50 + 6); // +6 for ```json
+    });
+
+    it('handles null values correctly', () => {
+      const mockTableWithNullVar = createMockTableWithVar(null);
+
+      vi.mocked(useStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        inComparisonMode: false,
+        setTable: vi.fn(),
+        table: mockTableWithNullVar,
+        version: 4,
+        renderMarkdown: true,
+      }));
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      const element = screen.getByText('null');
+      expect(element).toBeInTheDocument();
+    });
   });
 });

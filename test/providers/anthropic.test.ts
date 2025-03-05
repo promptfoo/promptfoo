@@ -1,4 +1,5 @@
 import type Anthropic from '@anthropic-ai/sdk';
+import { APIError } from '@anthropic-ai/sdk';
 import dedent from 'dedent';
 import { clearCache, disableCache, enableCache, getCache } from '../../src/cache';
 import {
@@ -13,7 +14,6 @@ import {
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
-jest.mock('../../src/logger');
 
 describe('Anthropic', () => {
   afterEach(async () => {
@@ -43,7 +43,7 @@ describe('Anthropic', () => {
       },
     ];
 
-    const provider = new AnthropicMessagesProvider('claude-3-opus-20240229', {
+    const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
       config: { tools },
     });
 
@@ -71,7 +71,7 @@ describe('Anthropic', () => {
       expect(provider.anthropic.messages.create).toHaveBeenNthCalledWith(
         1,
         {
-          model: 'claude-3-opus-20240229',
+          model: 'claude-3-5-sonnet-20241022',
           max_tokens: 1024,
           messages: [
             {
@@ -133,7 +133,7 @@ describe('Anthropic', () => {
       expect(provider.anthropic.messages.create).toHaveBeenNthCalledWith(
         1,
         {
-          model: 'claude-3-opus-20240229',
+          model: 'claude-3-5-sonnet-20241022',
           max_tokens: 1024,
           messages: [
             {
@@ -155,6 +155,79 @@ describe('Anthropic', () => {
       );
 
       provider.config.tool_choice = undefined;
+    });
+
+    it('should include extra_body parameters in API call', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
+        config: {
+          extra_body: {
+            top_p: 0.9,
+            custom_param: 'test_value',
+          },
+        },
+      });
+
+      jest
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockImplementation()
+        .mockResolvedValue({
+          content: [{ type: 'text', text: 'Test response' }],
+        } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+
+      expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
+      expect(provider.anthropic.messages.create).toHaveBeenCalledWith(
+        {
+          model: 'claude-3-5-sonnet-20241022',
+          max_tokens: 1024,
+          messages: [
+            {
+              role: 'user',
+              content: [{ type: 'text', text: 'Test prompt' }],
+            },
+          ],
+          temperature: 0,
+          stream: false,
+          top_p: 0.9,
+          custom_param: 'test_value',
+        },
+        {},
+      );
+    });
+
+    it('should not include extra_body when it is not an object', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
+        config: {
+          extra_body: undefined,
+        },
+      });
+
+      jest
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockImplementation()
+        .mockResolvedValue({
+          content: [{ type: 'text', text: 'Test response' }],
+        } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+
+      expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
+      expect(provider.anthropic.messages.create).toHaveBeenCalledWith(
+        {
+          model: 'claude-3-5-sonnet-20241022',
+          max_tokens: 1024,
+          messages: [
+            {
+              role: 'user',
+              content: [{ type: 'text', text: 'Test prompt' }],
+            },
+          ],
+          temperature: 0,
+          stream: false,
+        },
+        {},
+      );
     });
 
     it('should not use cache if caching is disabled for ToolUse requests', async () => {
@@ -200,10 +273,12 @@ describe('Anthropic', () => {
         .mockResolvedValue({
           content: [],
         } as unknown as Anthropic.Messages.Message);
-      getCache().set(
-        'anthropic:{"model":"claude-3-opus-20240229","max_tokens":1024,"messages":[{"role":"user","content":[{"type":"text","text":"What is the forecast in San Francisco?"}]}],"stream":false,"temperature":0,"tools":[{"name":"get_weather","description":"Get the current weather in a given location","input_schema":{"type":"object","properties":{"location":{"type":"string","description":"The city and state, e.g. San Francisco, CA"},"unit":{"type":"string","enum":["celsius","fahrenheit"]}},"required":["location"]}}]}',
-        'Test output',
-      );
+
+      const cacheKey =
+        'anthropic:{"model":"claude-3-5-sonnet-20241022","max_tokens":1024,"messages":[{"role":"user","content":[{"type":"text","text":"What is the forecast in San Francisco?"}]}],"stream":false,"temperature":0,"tools":[{"name":"get_weather","description":"Get the current weather in a given location","input_schema":{"type":"object","properties":{"location":{"type":"string","description":"The city and state, e.g. San Francisco, CA"},"unit":{"type":"string","enum":["celsius","fahrenheit"]}},"required":["location"]}}]}';
+
+      await getCache().set(cacheKey, 'Test output');
+
       const result = await provider.callApi('What is the forecast in San Francisco?');
       expect(result).toMatchObject({
         output: 'Test output',
@@ -213,7 +288,7 @@ describe('Anthropic', () => {
     });
 
     it('should handle API call error', async () => {
-      const provider = new AnthropicMessagesProvider('claude-3-opus-20240229');
+      const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022');
       jest
         .spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
@@ -221,12 +296,52 @@ describe('Anthropic', () => {
 
       const result = await provider.callApi('What is the forecast in San Francisco?');
       expect(result).toMatchObject({
-        error: 'API call error: Error: API call failed',
+        error: 'API call error: API call failed',
+      });
+    });
+
+    it('should handle non-Error API call errors', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022');
+      jest
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockImplementation()
+        .mockRejectedValue('Non-error object');
+
+      const result = await provider.callApi('What is the forecast in San Francisco?');
+      expect(result).toMatchObject({
+        error: 'API call error: Non-error object',
+      });
+    });
+
+    it('should handle APIError with error details', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022');
+
+      const mockApiError = Object.create(APIError.prototype);
+      Object.assign(mockApiError, {
+        name: 'APIError',
+        message: 'API Error',
+        status: 400,
+        error: {
+          error: {
+            message: 'Invalid request parameters',
+            type: 'invalid_params',
+          },
+        },
+      });
+
+      jest
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockImplementation()
+        .mockRejectedValue(mockApiError);
+
+      const result = await provider.callApi('What is the forecast in San Francisco?');
+      expect(result).toMatchObject({
+        error: 'API call error: Invalid request parameters, status 400, type invalid_params',
       });
     });
 
     it('should return token usage and cost', async () => {
-      const provider = new AnthropicMessagesProvider('claude-3-opus-20240229', {
+      const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
         config: { max_tokens: 100, temperature: 0.5, cost: 0.015 },
       });
       jest
@@ -244,17 +359,253 @@ describe('Anthropic', () => {
         cost: 1.5,
       });
     });
+
+    it('should handle thinking configuration', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219', {
+        config: {
+          thinking: {
+            type: 'enabled',
+            budget_tokens: 2048,
+          },
+        },
+      });
+
+      jest
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockImplementation()
+        .mockResolvedValue({
+          content: [
+            {
+              type: 'thinking',
+              thinking: 'Let me analyze this step by step...',
+              signature: 'test-signature',
+            },
+            {
+              type: 'text',
+              text: 'Final answer',
+            },
+          ],
+        } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('What is 2+2?');
+      expect(provider.anthropic.messages.create).toHaveBeenCalledWith(
+        {
+          model: 'claude-3-7-sonnet-20250219',
+          max_tokens: 2048,
+          messages: [
+            {
+              role: 'user',
+              content: [{ type: 'text', text: 'What is 2+2?' }],
+            },
+          ],
+          stream: false,
+          temperature: undefined,
+          thinking: {
+            type: 'enabled',
+            budget_tokens: 2048,
+          },
+        },
+        {},
+      );
+      expect(result.output).toBe(
+        'Thinking: Let me analyze this step by step...\nSignature: test-signature\n\nFinal answer',
+      );
+    });
+
+    it('should handle redacted thinking blocks', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219');
+      jest
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockImplementation()
+        .mockResolvedValue({
+          content: [
+            {
+              type: 'redacted_thinking',
+              data: 'encrypted-data',
+            },
+            {
+              type: 'text',
+              text: 'Final answer',
+            },
+          ],
+        } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('What is 2+2?');
+      expect(result.output).toBe('Redacted Thinking: encrypted-data\n\nFinal answer');
+    });
+
+    it('should handle API errors for thinking configuration', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219');
+
+      // Mock API error for invalid budget
+      const mockApiError = Object.create(APIError.prototype);
+      Object.assign(mockApiError, {
+        name: 'APIError',
+        message: 'API Error',
+        status: 400,
+        error: {
+          error: {
+            message: 'Thinking budget must be at least 1024 tokens when enabled',
+            type: 'invalid_request_error',
+          },
+        },
+      });
+
+      jest.spyOn(provider.anthropic.messages, 'create').mockRejectedValue(mockApiError);
+
+      const result = await provider.callApi(
+        JSON.stringify([
+          {
+            role: 'user',
+            content: 'test',
+            thinking: {
+              type: 'enabled',
+              budget_tokens: 512,
+            },
+          },
+        ]),
+      );
+
+      expect(result.error).toBe(
+        'API call error: Thinking budget must be at least 1024 tokens when enabled, status 400, type invalid_request_error',
+      );
+
+      // Test budget exceeding max_tokens
+      const providerWithMaxTokens = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219', {
+        config: {
+          max_tokens: 2048,
+        },
+      });
+
+      const mockMaxTokensError = Object.create(APIError.prototype);
+      Object.assign(mockMaxTokensError, {
+        name: 'APIError',
+        message: 'API Error',
+        status: 400,
+        error: {
+          error: {
+            message: 'Thinking budget must be less than max_tokens',
+            type: 'invalid_request_error',
+          },
+        },
+      });
+
+      jest
+        .spyOn(providerWithMaxTokens.anthropic.messages, 'create')
+        .mockRejectedValue(mockMaxTokensError);
+
+      const result2 = await providerWithMaxTokens.callApi(
+        JSON.stringify([
+          {
+            role: 'user',
+            content: 'test',
+            thinking: {
+              type: 'enabled',
+              budget_tokens: 3000,
+            },
+          },
+        ]),
+      );
+
+      expect(result2.error).toBe(
+        'API call error: Thinking budget must be less than max_tokens, status 400, type invalid_request_error',
+      );
+    });
+
+    it('should respect explicit temperature when thinking is enabled', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219', {
+        config: {
+          thinking: {
+            type: 'enabled',
+            budget_tokens: 2048,
+          },
+          temperature: 0.7,
+        },
+      });
+
+      jest
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockImplementation()
+        .mockResolvedValue({
+          content: [{ type: 'text', text: 'Test response' }],
+        } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+      expect(provider.anthropic.messages.create).toHaveBeenCalledWith(
+        {
+          model: 'claude-3-7-sonnet-20250219',
+          max_tokens: 2048,
+          messages: [
+            {
+              role: 'user',
+              content: [{ type: 'text', text: 'Test prompt' }],
+            },
+          ],
+          stream: false,
+          temperature: 0.7,
+          thinking: {
+            type: 'enabled',
+            budget_tokens: 2048,
+          },
+        },
+        {},
+      );
+    });
+
+    it('should include beta features header when specified', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219', {
+        config: {
+          beta: ['output-128k-2025-02-19'],
+        },
+      });
+
+      jest
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockImplementation()
+        .mockResolvedValue({
+          content: [{ type: 'text', text: 'Test response' }],
+        } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+      expect(provider.anthropic.messages.create).toHaveBeenCalledWith(expect.anything(), {
+        headers: {
+          'anthropic-beta': 'output-128k-2025-02-19',
+        },
+      });
+    });
+
+    it('should include multiple beta features in header', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219', {
+        config: {
+          beta: ['output-128k-2025-02-19', 'another-beta-feature'],
+        },
+      });
+
+      jest
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockImplementation()
+        .mockResolvedValue({
+          content: [{ type: 'text', text: 'Test response' }],
+        } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+      expect(provider.anthropic.messages.create).toHaveBeenCalledWith(expect.anything(), {
+        headers: {
+          'anthropic-beta': 'output-128k-2025-02-19,another-beta-feature',
+        },
+      });
+    });
   });
 
   describe('AnthropicLlmRubricProvider', () => {
     let provider: AnthropicLlmRubricProvider;
 
     beforeEach(() => {
-      provider = new AnthropicLlmRubricProvider('claude-3-5-sonnet-20240620');
+      provider = new AnthropicLlmRubricProvider('claude-3-5-sonnet-20241022');
     });
 
     it('should initialize with forced tool configuration', () => {
-      expect(provider.modelName).toBe('claude-3-5-sonnet-20240620');
+      expect(provider.modelName).toBe('claude-3-5-sonnet-20241022');
       expect(provider.config.tool_choice).toEqual({ type: 'tool', name: 'grade_output' });
     });
 
@@ -409,9 +760,18 @@ describe('Anthropic', () => {
 
   describe('calculateAnthropicCost', () => {
     it('should calculate cost for valid input and output tokens', () => {
-      const cost = calculateAnthropicCost('claude-3-opus-20240229', { cost: 0.015 }, 100, 200);
+      const cost = calculateAnthropicCost('claude-3-5-sonnet-20241022', { cost: 0.015 }, 100, 200);
+      expect(cost).toBe(4.5); // (0.003 * 100) + (0.015 * 200)
+    });
 
-      expect(cost).toBe(4.5); // (0.015 * 100) + (0.075 * 200)
+    it('should calculate cost for Claude 3.7 model', () => {
+      const cost = calculateAnthropicCost('claude-3-7-sonnet-20250219', { cost: 0.02 }, 100, 200);
+      expect(cost).toBe(6); // (0.004 * 100) + (0.02 * 200)
+    });
+
+    it('should calculate cost for Claude 3.7 latest model', () => {
+      const cost = calculateAnthropicCost('claude-3-7-sonnet-latest', { cost: 0.02 }, 100, 200);
+      expect(cost).toBe(6); // (0.004 * 100) + (0.02 * 200)
     });
 
     it('should return undefined for missing model', () => {
@@ -421,7 +781,7 @@ describe('Anthropic', () => {
     });
 
     it('should return undefined for missing tokens', () => {
-      const cost = calculateAnthropicCost('claude-3-opus-20240229', { cost: 0.015 });
+      const cost = calculateAnthropicCost('claude-3-5-sonnet-20241022', { cost: 0.015 });
 
       expect(cost).toBeUndefined();
     });
@@ -451,7 +811,7 @@ describe('Anthropic', () => {
 
     it('should return text from a single text block', () => {
       const message: Anthropic.Messages.Message = {
-        content: [{ type: 'text', text: 'Hello' }],
+        content: [{ type: 'text', text: 'Hello', citations: [] }],
         id: '',
         model: '',
         role: 'assistant',
@@ -473,8 +833,8 @@ describe('Anthropic', () => {
     it('should concatenate text blocks without tool_use blocks', () => {
       const message: Anthropic.Messages.Message = {
         content: [
-          { type: 'text', text: 'Hello' },
-          { type: 'text', text: 'World' },
+          { type: 'text', text: 'Hello', citations: [] },
+          { type: 'text', text: 'World', citations: [] },
         ],
         id: '',
         model: '',
@@ -533,14 +893,14 @@ describe('Anthropic', () => {
     it('should concatenate text and tool_use blocks as JSON strings', () => {
       const message: Anthropic.Messages.Message = {
         content: [
-          { type: 'text', text: 'Hello' },
+          { type: 'text', text: 'Hello', citations: [] },
           {
             type: 'tool_use',
             id: 'tool1',
             name: 'get_weather',
             input: { location: 'San Francisco, CA' },
           },
-          { type: 'text', text: 'World' },
+          { type: 'text', text: 'World', citations: [] },
         ],
         id: '',
         model: '',
@@ -560,6 +920,42 @@ describe('Anthropic', () => {
       expect(result).toBe(
         'Hello\n\n{"type":"tool_use","id":"tool1","name":"get_weather","input":{"location":"San Francisco, CA"}}\n\nWorld',
       );
+    });
+
+    it('should handle text blocks with citations', () => {
+      const message: Anthropic.Messages.Message = {
+        content: [
+          {
+            type: 'text',
+            text: 'The sky is blue',
+            citations: [
+              {
+                type: 'char_location',
+                cited_text: 'The sky is blue.',
+                document_index: 0,
+                document_title: 'Nature Facts',
+                start_char_index: 0,
+                end_char_index: 15,
+              },
+            ],
+          },
+        ],
+        id: '',
+        model: '',
+        role: 'assistant',
+        stop_reason: null,
+        stop_sequence: null,
+        type: 'message',
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      };
+
+      const result = outputFromMessage(message);
+      expect(result).toBe('The sky is blue');
     });
   });
 

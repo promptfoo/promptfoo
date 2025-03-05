@@ -8,8 +8,6 @@ import { runPython } from '../../src/python/pythonUtils';
 
 const execPromise = util.promisify(exec);
 
-jest.mock('../../src/logger');
-
 describe('pythonUtils Integration Tests', () => {
   const scriptsDir = path.join(__dirname, 'scripts');
 

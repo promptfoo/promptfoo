@@ -5,9 +5,9 @@ import type {
   LlamaMessage,
   TextGenerationOptions,
 } from '../../src/providers/bedrock';
-import { AwsBedrockGenericProvider } from '../../src/providers/bedrock';
 import {
   addConfigParam,
+  AwsBedrockGenericProvider,
   BEDROCK_MODEL,
   formatPromptLlama2Chat,
   formatPromptLlama3Instruct,
@@ -35,12 +35,6 @@ jest.mock('proxy-agent', () => jest.fn());
 jest.mock('../../src/cache', () => ({
   getCache: jest.fn(),
   isCacheEnabled: jest.fn(),
-}));
-
-jest.mock('../../src/logger', () => ({
-  debug: jest.fn(),
-  warn: jest.fn(),
-  error: jest.fn(),
 }));
 
 class TestBedrockProvider extends AwsBedrockGenericProvider {
@@ -730,7 +724,7 @@ describe('llama', () => {
       const handler = getLlamaModelHandler(LlamaVersion.V3_2);
 
       it('should generate correct prompt for a single user message', () => {
-        const config = { temperature: 0.5, top_p: 0.9, max_new_tokens: 512 };
+        const config = { temperature: 0.5, top_p: 0.9, max_gen_len: 512 };
         const prompt = 'Describe the purpose of a "hello world" program in one sentence.';
         expect(handler.params(config, prompt)).toEqual({
           prompt: dedent`<|begin_of_text|><|start_header_id|>user<|end_header_id|>
@@ -738,16 +732,39 @@ describe('llama', () => {
           Describe the purpose of a "hello world" program in one sentence.<|eot_id|><|start_header_id|>assistant<|end_header_id|>`,
           temperature: 0.5,
           top_p: 0.9,
-          max_new_tokens: 512,
+          max_gen_len: 512,
         });
       });
 
-      it('should use max_new_tokens instead of max_gen_len', () => {
-        const config = { max_new_tokens: 1000 };
+      it('should use max_gen_len parameter', () => {
+        const config = { max_gen_len: 1000 };
         const prompt = 'Test prompt';
         const params = handler.params(config, prompt);
-        expect(params).toHaveProperty('max_new_tokens', 1000);
-        expect(params).not.toHaveProperty('max_gen_len');
+        expect(params).toHaveProperty('max_gen_len', 1000);
+      });
+    });
+
+    describe('LLAMA3_3', () => {
+      const handler = getLlamaModelHandler(LlamaVersion.V3_3);
+
+      it('should generate correct prompt for a single user message', () => {
+        const config = { temperature: 0.5, top_p: 0.9, max_gen_len: 512 };
+        const prompt = 'Describe the purpose of a "hello world" program in one sentence.';
+        expect(handler.params(config, prompt)).toEqual({
+          prompt: dedent`<|begin_of_text|><|start_header_id|>user<|end_header_id|>
+
+          Describe the purpose of a "hello world" program in one sentence.<|eot_id|><|start_header_id|>assistant<|end_header_id|>`,
+          temperature: 0.5,
+          top_p: 0.9,
+          max_gen_len: 512,
+        });
+      });
+
+      it('should use max_gen_len parameter', () => {
+        const config = { max_gen_len: 1000 };
+        const prompt = 'Test prompt';
+        const params = handler.params(config, prompt);
+        expect(params).toHaveProperty('max_gen_len', 1000);
       });
     });
 

@@ -15,11 +15,14 @@ export type EnvVars = {
   PROMPTFOO_CACHE_TYPE?: 'memory' | 'disk';
   PROMPTFOO_CONFIG_DIR?: string;
   PROMPTFOO_CSV_DELIMITER?: string;
+  PROMPTFOO_CSV_STRICT?: boolean;
   PROMPTFOO_DELAY_MS?: number;
   PROMPTFOO_DISABLE_AJV_STRICT_MODE?: boolean;
   PROMPTFOO_DISABLE_CONVERSATION_VAR?: boolean;
   PROMPTFOO_DISABLE_ERROR_LOG?: boolean;
   PROMPTFOO_DISABLE_JSON_AUTOESCAPE?: boolean;
+  PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64?: boolean;
+  PROMPTFOO_DISABLE_PDF_AS_TEXT?: boolean;
   PROMPTFOO_DISABLE_REDTEAM_MODERATION?: boolean;
   PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION?: boolean;
   PROMPTFOO_DISABLE_REF_PARSER?: boolean;
@@ -48,6 +51,7 @@ export type EnvVars = {
   PROMPTFOO_RETRY_5XX?: boolean;
   PROMPTFOO_SELF_HOSTED?: boolean;
   PROMPTFOO_SHARING_APP_BASE_URL?: string;
+  PROMPTFOO_SHARE_CHUNK_SIZE?: number;
   PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES?: boolean;
   PROMPTFOO_STRICT_FILES?: boolean;
   PROMPTFOO_STRIP_PROMPT_TEXT?: boolean;
@@ -86,7 +90,9 @@ export type EnvVars = {
   FAL_KEY?: string;
   GROQ_API_KEY?: string;
   HELICONE_API_KEY?: string;
+  /** @deprecated Use HF_TOKEN instead */
   HF_API_TOKEN?: string;
+  HF_TOKEN?: string;
   LANGFUSE_HOST?: string;
   LANGFUSE_PUBLIC_KEY?: string;
   LANGFUSE_SECRET_KEY?: string;
@@ -121,9 +127,9 @@ export type EnvVars = {
   VOYAGE_API_BASE_URL?: string;
   VOYAGE_API_KEY?: string;
   WATSONX_AI_APIKEY?: string;
-  WATSONX_AI_PROJECT_ID?: string;
-  WATSONX_AI_BEARER_TOKEN?: string;
   WATSONX_AI_AUTH_TYPE?: string;
+  WATSONX_AI_BEARER_TOKEN?: string;
+  WATSONX_AI_PROJECT_ID?: string;
 
   // node/npm
   NODE_ENV?: string;

@@ -69,6 +69,10 @@ export default function Review() {
     updateConfig('description', event.target.value);
   };
 
+  useEffect(() => {
+    recordEvent('webui_page_view', { page: 'redteam_config_review' });
+  }, []);
+
   const handleSaveYaml = () => {
     const blob = new Blob([yamlContent], { type: 'text/yaml' });
     const url = URL.createObjectURL(blob);
@@ -133,6 +137,8 @@ export default function Review() {
       .filter((intent): intent is string => typeof intent === 'string' && intent.trim() !== '');
   }, [config.plugins]);
 
+  const [expanded, setExpanded] = React.useState(false);
+
   const getStrategyId = (strategy: string | { id: string }): string => {
     return typeof strategy === 'string' ? strategy : strategy.id;
   };
@@ -173,6 +179,13 @@ export default function Review() {
       clearInterval(pollInterval);
       setPollInterval(null);
     }
+
+    recordEvent('feature_used', {
+      feature: 'redteam_config_run',
+      numPlugins: config.plugins.length,
+      numStrategies: config.strategies.length,
+      targetType: config.target.id,
+    });
 
     setIsRunning(true);
     setLogs([]);
@@ -371,7 +384,7 @@ export default function Review() {
                 Intents ({intents.length})
               </Typography>
               <Stack spacing={1}>
-                {intents.map((intent, index) => (
+                {intents.slice(0, expanded ? undefined : 5).map((intent, index) => (
                   <Box
                     key={index}
                     sx={{
@@ -394,6 +407,11 @@ export default function Review() {
                     </Typography>
                   </Box>
                 ))}
+                {intents.length > 5 && (
+                  <Button onClick={() => setExpanded(!expanded)} size="small" sx={{ mt: 1 }}>
+                    {expanded ? 'Show Less' : `Show ${intents.length - 5} More`}
+                  </Button>
+                )}
               </Stack>
             </Paper>
           </Grid>

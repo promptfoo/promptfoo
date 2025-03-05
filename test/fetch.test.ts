@@ -1,15 +1,16 @@
 import fs from 'fs';
 import path from 'path';
-import { ProxyAgent } from 'proxy-agent';
+import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import cliState from '../src/cliState';
 import { VERSION } from '../src/constants';
-import { getEnvString, getEnvBool } from '../src/envars';
+import { getEnvBool, getEnvString } from '../src/envars';
 import {
   fetchWithProxy,
   fetchWithRetries,
   fetchWithTimeout,
   handleRateLimit,
   isRateLimited,
+  sanitizeUrl,
 } from '../src/fetch';
 import logger from '../src/logger';
 import { sleep } from '../src/util/time';
@@ -19,21 +20,21 @@ jest.mock('../src/util/time', () => ({
   sleep: jest.fn().mockResolvedValue(undefined),
 }));
 
-jest.mock('proxy-agent', () => {
+jest.mock('undici', () => {
   return {
     ProxyAgent: jest.fn().mockImplementation((options) => ({
       options,
       addRequest: jest.fn(),
       destroy: jest.fn(),
     })),
+    setGlobalDispatcher: jest.fn(),
   };
 });
 
-jest.mock('../src/logger');
 jest.mock('../src/envars', () => ({
   getEnvString: jest.fn().mockImplementation((key: string, defaultValue: string = '') => ''),
   getEnvBool: jest.fn().mockImplementation((key: string, defaultValue: boolean = false) => false),
-  getEnvInt: jest.fn().mockReturnValue(100),
+  getEnvInt: jest.fn().mockImplementation((key: string, defaultValue: number = 0) => defaultValue),
 }));
 
 jest.mock('fs', () => ({
@@ -51,6 +52,11 @@ describe('fetchWithProxy', () => {
     jest.clearAllMocks();
     jest.spyOn(global, 'fetch').mockImplementation();
     jest.mocked(ProxyAgent).mockClear();
+    jest.mocked(setGlobalDispatcher).mockClear();
+    delete process.env.HTTPS_PROXY;
+    delete process.env.https_proxy;
+    delete process.env.HTTP_PROXY;
+    delete process.env.http_proxy;
   });
 
   afterEach(() => {
@@ -220,6 +226,9 @@ describe('fetchWithProxy', () => {
   it('should use custom CA certificate when PROMPTFOO_CA_CERT_PATH is set', async () => {
     const mockCertPath = path.normalize('/path/to/cert.pem');
     const mockCertContent = 'mock-cert-content';
+    const mockProxyUrl = 'http://proxy.example.com';
+
+    process.env.HTTPS_PROXY = mockProxyUrl;
 
     jest.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
       if (key === 'PROMPTFOO_CA_CERT_PATH') {
@@ -241,19 +250,30 @@ describe('fetchWithProxy', () => {
     await fetchWithProxy('https://example.com');
 
     const actualPath = jest.mocked(fs.readFileSync).mock.calls[0][0] as string;
+    const actualEncoding = jest.mocked(fs.readFileSync).mock.calls[0][1];
     const normalizedActual = path.normalize(actualPath).replace(/^\w:/, '');
     const normalizedExpected = path.normalize(mockCertPath).replace(/^\w:/, '');
     expect(normalizedActual).toBe(normalizedExpected);
-    expect(ProxyAgent).toHaveBeenCalledWith(
-      expect.objectContaining({
+    expect(actualEncoding).toBe('utf8');
+    expect(ProxyAgent).toHaveBeenCalledWith({
+      uri: mockProxyUrl,
+      proxyTls: {
         ca: mockCertContent,
         rejectUnauthorized: true,
-      }),
-    );
+      },
+      requestTls: {
+        ca: mockCertContent,
+        rejectUnauthorized: true,
+      },
+    });
+    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(ProxyAgent));
   });
 
   it('should handle missing CA certificate file gracefully', async () => {
     const mockCertPath = path.normalize('/path/to/nonexistent.pem');
+    const mockProxyUrl = 'http://proxy.example.com';
+
+    process.env.HTTPS_PROXY = mockProxyUrl;
 
     jest.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
       if (key === 'PROMPTFOO_CA_CERT_PATH') {
@@ -274,14 +294,22 @@ describe('fetchWithProxy', () => {
     const normalizedActual = path.normalize(actualPath).replace(/^\w:/, '');
     const normalizedExpected = path.normalize(mockCertPath).replace(/^\w:/, '');
     expect(normalizedActual).toBe(normalizedExpected);
-    expect(ProxyAgent).toHaveBeenCalledWith(
-      expect.objectContaining({
+    expect(ProxyAgent).toHaveBeenCalledWith({
+      uri: mockProxyUrl,
+      proxyTls: {
         rejectUnauthorized: true,
-      }),
-    );
+      },
+      requestTls: {
+        rejectUnauthorized: true,
+      },
+    });
+    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(ProxyAgent));
   });
 
   it('should disable SSL verification when PROMPTFOO_INSECURE_SSL is true', async () => {
+    const mockProxyUrl = 'http://proxy.example.com';
+    process.env.HTTPS_PROXY = mockProxyUrl;
+
     jest
       .mocked(getEnvString)
       .mockImplementation((key: string, defaultValue: string = '') => defaultValue);
@@ -297,19 +325,26 @@ describe('fetchWithProxy', () => {
 
     await fetchWithProxy('https://example.com');
 
-    expect(ProxyAgent).toHaveBeenCalledWith(
-      expect.objectContaining({
+    expect(ProxyAgent).toHaveBeenCalledWith({
+      uri: mockProxyUrl,
+      proxyTls: {
         rejectUnauthorized: false,
-      }),
-    );
+      },
+      requestTls: {
+        rejectUnauthorized: false,
+      },
+    });
+    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(ProxyAgent));
   });
 
   it('should resolve CA certificate path relative to basePath when available', async () => {
     const mockBasePath = path.normalize('/base/path');
     const mockCertPath = 'certs/cert.pem';
     const mockCertContent = 'mock-cert-content';
+    const mockProxyUrl = 'http://proxy.example.com';
 
-    // Update basePath in cliState
+    process.env.HTTPS_PROXY = mockProxyUrl;
+
     cliState.basePath = mockBasePath;
 
     jest.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
@@ -333,6 +368,7 @@ describe('fetchWithProxy', () => {
 
     const expectedPath = path.normalize(path.join(mockBasePath, mockCertPath));
     const actualPath = jest.mocked(fs.readFileSync).mock.calls[0][0] as string;
+    const actualEncoding = jest.mocked(fs.readFileSync).mock.calls[0][1];
 
     const normalizedActual = path.normalize(actualPath).replace(/^\w:/, '');
     const normalizedExpected = path.normalize(expectedPath).replace(/^\w:/, '');
@@ -340,17 +376,107 @@ describe('fetchWithProxy', () => {
     const normalizedCertPath = path.normalize(mockCertPath);
 
     expect(normalizedActual).toBe(normalizedExpected);
+    expect(actualEncoding).toBe('utf8');
     expect(normalizedActual).toContain(normalizedBasePath);
     expect(normalizedActual).toContain(normalizedCertPath);
-    expect(ProxyAgent).toHaveBeenCalledWith(
-      expect.objectContaining({
+    expect(ProxyAgent).toHaveBeenCalledWith({
+      uri: mockProxyUrl,
+      proxyTls: {
         ca: mockCertContent,
         rejectUnauthorized: true,
-      }),
-    );
+      },
+      requestTls: {
+        ca: mockCertContent,
+        rejectUnauthorized: true,
+      },
+    });
+    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(ProxyAgent));
 
-    // Reset basePath
     cliState.basePath = undefined;
+  });
+
+  it('should not create ProxyAgent when no proxy URL is found', async () => {
+    await fetchWithProxy('https://example.com');
+
+    expect(ProxyAgent).not.toHaveBeenCalled();
+    expect(setGlobalDispatcher).not.toHaveBeenCalled();
+  });
+
+  it('should use proxy URL from environment variables in order of precedence', async () => {
+    const mockProxyUrls = {
+      HTTPS_PROXY: 'http://https-proxy.example.com',
+      https_proxy: 'http://https-proxy-lower.example.com',
+      HTTP_PROXY: 'http://http-proxy.example.com',
+      http_proxy: 'http://http-proxy-lower.example.com',
+    } as const;
+
+    const allProxyVars = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy'];
+
+    const testCases = [
+      {
+        env: { HTTPS_PROXY: mockProxyUrls.HTTPS_PROXY },
+        expected: { url: mockProxyUrls.HTTPS_PROXY },
+      },
+      {
+        env: { https_proxy: mockProxyUrls.https_proxy },
+        expected: { url: mockProxyUrls.https_proxy },
+      },
+      {
+        env: { HTTP_PROXY: mockProxyUrls.HTTP_PROXY },
+        expected: { url: mockProxyUrls.HTTP_PROXY },
+      },
+      {
+        env: { http_proxy: mockProxyUrls.http_proxy },
+        expected: { url: mockProxyUrls.http_proxy },
+      },
+    ];
+
+    for (const testCase of testCases) {
+      jest.clearAllMocks();
+
+      allProxyVars.forEach((key) => {
+        delete process.env[key];
+      });
+
+      Object.entries(testCase.env).forEach(([key, value]) => {
+        process.env[key] = value;
+      });
+
+      await fetchWithProxy('https://example.com');
+
+      expect(ProxyAgent).toHaveBeenCalledWith({
+        uri: testCase.expected.url,
+        proxyTls: {
+          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', false),
+        },
+        requestTls: {
+          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', false),
+        },
+      });
+      expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(ProxyAgent));
+
+      const debugCalls = jest.mocked(logger.debug).mock.calls;
+      const normalizedCalls = debugCalls.map((call) => call[0].replace(/\/$/, ''));
+
+      // On Windows, environment variables are case-insensitive
+      const isWindows = process.platform === 'win32';
+      const expectedEnvVar = Object.keys(testCase.env)[0];
+      const expectedUrl = testCase.expected.url;
+
+      expect(normalizedCalls).toEqual([
+        expect.stringMatching(
+          new RegExp(
+            `Found proxy configuration in ${isWindows ? '.*' : expectedEnvVar}: ${expectedUrl}`,
+            isWindows ? 'i' : '',
+          ),
+        ),
+        `Using proxy: ${expectedUrl}`,
+      ]);
+
+      allProxyVars.forEach((key) => {
+        delete process.env[key];
+      });
+    }
   });
 });
 
@@ -525,22 +651,22 @@ describe('fetchWithRetries', () => {
     jest.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
 
     await expect(fetchWithRetries('https://example.com', {}, 1000, 2)).rejects.toThrow(
-      'Request failed after 2 retries: Network error',
+      'Request failed after 2 retries: Error: Network error',
     );
 
-    expect(global.fetch).toHaveBeenCalledTimes(3); // Initial attempt + 2 retries
-    expect(sleep).toHaveBeenCalledTimes(2); // Should sleep between attempts, but not after last attempt
+    expect(global.fetch).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenCalledTimes(2);
   });
 
   it('should not sleep after the final attempt', async () => {
     jest.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
 
     await expect(fetchWithRetries('https://example.com', {}, 1000, 1)).rejects.toThrow(
-      'Request failed after 1 retries: Network error',
+      'Request failed after 1 retries: Error: Network error',
     );
 
-    expect(global.fetch).toHaveBeenCalledTimes(2); // Initial attempt + 1 retry
-    expect(sleep).toHaveBeenCalledTimes(1); // Should only sleep once between attempts
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(1);
   });
 
   it('should handle 5XX errors when PROMPTFOO_RETRY_5XX is true', async () => {
@@ -596,10 +722,74 @@ describe('fetchWithRetries', () => {
     global.fetch = mockFetch;
 
     await expect(fetchWithRetries('https://example.com', {}, 1000, 2)).rejects.toThrow(
-      'Request failed after 2 retries: Network error',
+      'Request failed after 2 retries: Error: Network error',
     );
 
-    expect(mockFetch).toHaveBeenCalledTimes(3); // Initial attempt + 2 retries
+    expect(mockFetch).toHaveBeenCalledTimes(3);
     expect(sleep).toHaveBeenCalledTimes(2);
+  });
+
+  it('should handle detailed error information', async () => {
+    const error = new Error('Network error');
+    (error as any).code = 'ECONNREFUSED';
+    (error as any).cause = 'Connection refused';
+    jest.mocked(global.fetch).mockRejectedValue(error);
+
+    await expect(fetchWithRetries('https://example.com', {}, 1000, 1)).rejects.toThrow(
+      'Request failed after 1 retries: Error: Network error (Cause: Connection refused) (Code: ECONNREFUSED)',
+    );
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it('should handle non-Error objects in rejection', async () => {
+    jest.mocked(global.fetch).mockRejectedValue('String error');
+
+    await expect(fetchWithRetries('https://example.com', {}, 1000, 1)).rejects.toThrow(
+      'Request failed after 1 retries: String error',
+    );
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it('should handle rate limits with OpenAI specific headers', async () => {
+    const rateLimitedResponse = createMockResponse({
+      status: 429,
+      headers: new Headers({
+        'x-ratelimit-reset-tokens': '5',
+      }),
+    });
+    const successResponse = createMockResponse();
+
+    const mockFetch = jest
+      .fn()
+      .mockResolvedValueOnce(rateLimitedResponse)
+      .mockResolvedValueOnce(successResponse);
+    global.fetch = mockFetch;
+
+    await fetchWithRetries('https://example.com', {}, 1000, 2);
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Rate limited on URL'));
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('sanitizeUrl', () => {
+  it('should mask credentials in URLs', () => {
+    const url = 'https://username:password@example.com/api';
+    expect(sanitizeUrl(url)).toBe('https://***:***@example.com/api');
+  });
+
+  it('should handle URLs without credentials', () => {
+    const url = 'https://example.com/api';
+    expect(sanitizeUrl(url)).toBe(url);
+  });
+
+  it('should return original string for invalid URLs', () => {
+    const invalidUrl = 'not-a-url';
+    expect(sanitizeUrl(invalidUrl)).toBe(invalidUrl);
   });
 });

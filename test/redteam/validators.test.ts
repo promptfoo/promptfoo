@@ -2,17 +2,54 @@ import type { RedteamPluginObject, RedteamStrategy } from 'src/redteam/types';
 import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   ALL_STRATEGIES as REDTEAM_ALL_STRATEGIES,
-  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   COLLECTIONS,
+  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
+  FOUNDATION_PLUGINS,
+  type BasePlugin,
+  type PIIPlugin,
 } from '../../src/redteam/constants';
 import {
-  RedteamGenerateOptionsSchema,
   RedteamConfigSchema,
+  RedteamGenerateOptionsSchema,
   RedteamPluginSchema,
   RedteamStrategySchema,
+  RedteamPluginObjectSchema,
 } from '../../src/validators/redteam';
+
+describe('RedteamPluginObjectSchema', () => {
+  it('should validate valid plugin object', () => {
+    const validPlugin = {
+      id: 'pii:direct',
+      numTests: 5,
+      config: { key: 'value' },
+    };
+
+    const result = RedteamPluginObjectSchema.safeParse(validPlugin);
+    expect(result.success).toBe(true);
+  });
+
+  it('should reject invalid plugin id', () => {
+    const invalidPlugin = {
+      id: 'invalid-plugin',
+      numTests: 5,
+    };
+
+    const result = RedteamPluginObjectSchema.safeParse(invalidPlugin);
+    expect(result.success).toBe(false);
+  });
+
+  it('should allow custom plugin paths starting with file://', () => {
+    const customPlugin = {
+      id: 'file:///path/to/plugin.js',
+      numTests: 5,
+    };
+
+    const result = RedteamPluginObjectSchema.safeParse(customPlugin);
+    expect(result.success).toBe(true);
+  });
+});
 
 describe('redteamGenerateOptionsSchema', () => {
   it('should accept valid options for a redteam test', () => {
@@ -44,6 +81,35 @@ describe('redteamGenerateOptionsSchema', () => {
         write: true,
       },
     });
+  });
+
+  it('should validate basic generate options', () => {
+    const options = {
+      cache: true,
+      defaultConfig: {},
+      force: false,
+      write: true,
+      burpEscapeJson: true,
+      progressBar: true,
+    };
+
+    const result = RedteamGenerateOptionsSchema.safeParse(options);
+    expect(result.success).toBe(true);
+  });
+
+  it('should validate optional fields', () => {
+    const options = {
+      cache: true,
+      defaultConfig: {},
+      write: true,
+      plugins: [{ id: 'pii:direct', numTests: 5 }],
+      strategies: ['basic'],
+      maxConcurrency: 5,
+      delay: 1000,
+    };
+
+    const result = RedteamGenerateOptionsSchema.safeParse(options);
+    expect(result.success).toBe(true);
   });
 
   it('should reject invalid plugin names', () => {
@@ -1127,6 +1193,55 @@ describe('RedteamConfigSchema transform', () => {
       'provider',
       'purpose',
     ]);
+  });
+  it('should expand harmful plugin to all harm categories', () => {
+    const result = RedteamConfigSchema.parse({
+      numTests: 5,
+      plugins: ['harmful'],
+    });
+
+    expect(result.plugins?.every((p: RedteamPluginObject) => p.id.startsWith('harmful:'))).toBe(
+      true,
+    );
+    expect(result.plugins?.every((p: RedteamPluginObject) => p.numTests === 5)).toBe(true);
+  });
+
+  it('should expand foundation plugin to all foundation plugins', () => {
+    const result = RedteamConfigSchema.parse({
+      numTests: 5,
+      plugins: ['foundation'],
+    });
+
+    expect(
+      result.plugins?.every((p: RedteamPluginObject) =>
+        Array.from(FOUNDATION_PLUGINS).includes(p.id as BasePlugin),
+      ),
+    ).toBe(true);
+    expect(result.plugins?.every((p: RedteamPluginObject) => p.numTests === 5)).toBe(true);
+  });
+
+  it('should handle multiple collection plugins including foundation', () => {
+    const result = RedteamConfigSchema.parse({
+      numTests: 3,
+      plugins: ['foundation', 'harmful', 'pii'],
+    });
+
+    expect(
+      result.plugins?.some((p: RedteamPluginObject) =>
+        Array.from(FOUNDATION_PLUGINS).includes(p.id as BasePlugin),
+      ),
+    ).toBe(true);
+    expect(result.plugins?.some((p: RedteamPluginObject) => p.id.startsWith('harmful:'))).toBe(
+      true,
+    );
+    expect(
+      result.plugins?.some((p: RedteamPluginObject) => PII_PLUGINS.includes(p.id as PIIPlugin)),
+    ).toBe(true);
+    expect(
+      result.plugins?.every(
+        (p: RedteamPluginObject) => !['foundation', 'harmful', 'pii'].includes(p.id),
+      ),
+    ).toBe(true);
   });
 });
 

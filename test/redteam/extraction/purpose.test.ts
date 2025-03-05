@@ -4,16 +4,9 @@ import { extractSystemPurpose } from '../../../src/redteam/extraction/purpose';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import type { ApiProvider } from '../../../src/types';
 
-jest.mock('../../../src/logger', () => ({
-  error: jest.fn(),
-  debug: jest.fn(),
-  warn: jest.fn(),
-}));
-
 jest.mock('../../../src/cache', () => ({
   fetchWithCache: jest.fn(),
 }));
-
 jest.mock('../../../src/redteam/remoteGeneration', () => ({
   ...jest.requireActual('../../../src/redteam/remoteGeneration'),
   getRemoteGenerationUrl: jest.fn().mockReturnValue('https://api.promptfoo.app/task'),

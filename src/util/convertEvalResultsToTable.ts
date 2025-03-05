@@ -142,6 +142,8 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
         metrics: new PromptMetrics(),
       };
     }
+
+    row.testIdx = result.testIdx;
     const prompt = completedPrompts[result.promptIdx];
     invariant(prompt.metrics, 'Prompt metrics are required');
     prompt.metrics.score += result.score;
@@ -164,8 +166,8 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   }
   const rows = Object.values(rowMap);
   const sortedVars = [...varsForHeader].sort();
-  for (const [rowIdx, row] of rows.entries()) {
-    row.vars = sortedVars.map((varName) => varValuesForRow.get(rowIdx)?.[varName] || '');
+  for (const row of rows) {
+    row.vars = sortedVars.map((varName) => varValuesForRow.get(row.testIdx)?.[varName] || '');
   }
 
   return {

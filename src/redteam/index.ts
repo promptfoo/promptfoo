@@ -16,6 +16,7 @@ import {
   PII_PLUGINS,
   ALIASED_PLUGIN_MAPPINGS,
   STRATEGY_EXEMPT_PLUGINS,
+  FOUNDATION_PLUGINS,
 } from './constants';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
@@ -114,6 +115,7 @@ export function resolvePluginConfig(config: Record<string, any> | undefined): Re
 }
 
 const categories = {
+  foundation: FOUNDATION_PLUGINS,
   harmful: Object.keys(HARM_PLUGINS),
   pii: PII_PLUGINS,
 } as const;
@@ -121,10 +123,13 @@ const categories = {
 /**
  * Formats the test count for display.
  * @param numTests - The number of tests.
+ * @param strategy - Whether the test count is for a strategy.
  * @returns A formatted string representing the test count.
  */
-const formatTestCount = (numTests: number): string =>
-  numTests === 1 ? '1 test' : `${numTests} tests`;
+const formatTestCount = (numTests: number, strategy: boolean): string =>
+  numTests === 1
+    ? `1 ${strategy ? 'additional' : ''} test`
+    : `${numTests} ${strategy ? 'additional' : ''} tests`;
 
 /**
  * Checks if a plugin matches any of the strategy's target plugins
@@ -139,11 +144,7 @@ function pluginMatchesStrategyTargets(
   if (STRATEGY_EXEMPT_PLUGINS.includes(pluginId as StrategyExemptPlugin)) {
     return false;
   }
-  if (
-    pluginId === 'intent' &&
-    isProviderOptions(testCase.provider) &&
-    testCase.provider?.id === 'sequence'
-  ) {
+  if (isProviderOptions(testCase.provider) && testCase.provider?.id === 'sequence') {
     // Sequence providers are verbatim and strategies don't apply
     return false;
   }
@@ -250,17 +251,99 @@ export function getTestCount(
   totalPluginTests: number,
   strategies: RedteamStrategyObject[],
 ): number {
-  if (strategy.id === 'basic' && !strategy.config?.enabled) {
-    return 0; // Return 0 tests if basic strategy is disabled
+  // Basic strategy either keeps original count or removes all tests
+  if (strategy.id === 'basic') {
+    return strategy.config?.enabled === false ? 0 : totalPluginTests;
   }
+
+  // Multilingual strategy doubles the total count
   if (strategy.id === 'multilingual') {
-    return (
-      totalPluginTests *
-      (Math.max(strategies.length, 1) *
-        (Object.keys(strategy.config?.languages ?? {}).length || DEFAULT_LANGUAGES.length))
-    );
+    const numLanguages =
+      Object.keys(strategy.config?.languages ?? {}).length || DEFAULT_LANGUAGES.length;
+    return totalPluginTests * numLanguages;
   }
-  return totalPluginTests; // Default case
+
+  // Retry strategy doubles the plugin tests
+  if (strategy.id === 'retry') {
+    const configuredNumTests = strategy.config?.numTests as number | undefined;
+    const additionalTests = configuredNumTests ?? totalPluginTests;
+    return totalPluginTests + additionalTests;
+  }
+
+  // All other strategies add the same number as plugin tests
+  return totalPluginTests * 2;
+}
+
+/**
+ * Calculates the total number of tests to be generated based on plugins and strategies.
+ * @param plugins - The array of plugins to generate tests for
+ * @param strategies - The array of strategies to apply
+ * @returns Object containing total tests and intermediate calculations
+ */
+export function calculateTotalTests(
+  plugins: SynthesizeOptions['plugins'],
+  strategies: RedteamStrategyObject[],
+): {
+  effectiveStrategyCount: number;
+  includeBasicTests: boolean;
+  multilingualStrategy: RedteamStrategyObject | undefined;
+  totalPluginTests: number;
+  totalTests: number;
+} {
+  const multilingualStrategy = strategies.find((s) => s.id === 'multilingual');
+  const retryStrategy = strategies.find((s) => s.id === 'retry');
+  const basicStrategy = strategies.find((s) => s.id === 'basic');
+
+  const basicStrategyExists = basicStrategy !== undefined;
+  const includeBasicTests = basicStrategy?.config?.enabled ?? true;
+
+  const effectiveStrategyCount =
+    basicStrategyExists && !includeBasicTests ? strategies.length - 1 : strategies.length;
+
+  const totalPluginTests = plugins.reduce((sum, p) => sum + (p.numTests || 0), 0);
+
+  // When there are no strategies, or only a disabled basic strategy
+  if (
+    strategies.length === 0 ||
+    (strategies.length === 1 && basicStrategyExists && !includeBasicTests)
+  ) {
+    return {
+      effectiveStrategyCount: 0,
+      includeBasicTests: strategies.length === 0 ? true : includeBasicTests,
+      multilingualStrategy: undefined,
+      totalPluginTests,
+      totalTests: includeBasicTests ? totalPluginTests : 0,
+    };
+  }
+
+  // Start with base test count from basic strategy
+  let totalTests = includeBasicTests ? totalPluginTests : 0;
+
+  // Apply retry strategy first if present
+  if (retryStrategy) {
+    totalTests = getTestCount(retryStrategy, totalTests, strategies);
+  }
+
+  // Apply other non-basic, non-multilingual, non-retry strategies
+  for (const strategy of strategies) {
+    if (['basic', 'multilingual', 'retry'].includes(strategy.id)) {
+      continue;
+    }
+    totalTests = getTestCount(strategy, totalPluginTests, strategies);
+  }
+
+  // Apply multilingual strategy last if present
+  if (multilingualStrategy) {
+    totalTests = getTestCount(multilingualStrategy, totalTests, strategies);
+  }
+
+  return {
+    effectiveStrategyCount,
+    includeBasicTests,
+    multilingualStrategy,
+    totalPluginTests,
+    totalTests,
+  };
 }
 
 /**
@@ -269,6 +352,8 @@ export function getTestCount(
  * @returns A promise that resolves to an object containing the purpose, entities, and test cases.
  */
 export async function synthesize({
+  abortSignal,
+  delay,
   entities: entitiesOverride,
   injectVar,
   language,
@@ -278,12 +363,13 @@ export async function synthesize({
   provider,
   purpose: purposeOverride,
   strategies,
-  delay,
-  abortSignal,
+  targetLabels,
+  showProgressBar: showProgressBarOverride,
 }: SynthesizeOptions): Promise<{
   purpose: string;
   entities: string[];
   testCases: TestCaseWithPlugin[];
+  injectVar: string;
 }> {
   // Add abort check helper
   const checkAbort = () => {
@@ -306,12 +392,13 @@ export async function synthesize({
 
   const redteamProvider = await redteamProviderManager.getProvider({ provider });
 
-  // We need to know how many languages we're generating for
-  // We generate multilingual attacks for all of our test cases so it's plugins * strategies * languages
-  const multilingualStrategy = strategies.find((s) => s.id === 'multilingual');
-  const numLanguages = multilingualStrategy
-    ? Object.keys(multilingualStrategy?.config?.languages ?? {}).length || DEFAULT_LANGUAGES.length
-    : 1;
+  const {
+    effectiveStrategyCount,
+    includeBasicTests,
+    multilingualStrategy,
+    totalPluginTests,
+    totalTests,
+  } = calculateTotalTests(plugins, strategies);
 
   logger.info(
     `Synthesizing test cases for ${prompts.length} ${
@@ -320,21 +407,20 @@ export async function synthesize({
       plugins
         .map(
           (p) =>
-            `${p.id} (${formatTestCount(p.numTests)})${p.config ? ` (${JSON.stringify(p.config)})` : ''}`,
+            `${p.id} (${formatTestCount(p.numTests, false)})${p.config ? ` (${JSON.stringify(p.config)})` : ''}`,
         )
         .sort()
         .join('\n'),
     )}\n`,
   );
   if (strategies.length > 0) {
-    const totalPluginTests = plugins.reduce((sum, p) => sum + (p.numTests || 0), 0);
-
     logger.info(
       `Using strategies:\n\n${chalk.yellow(
         strategies
+          .filter((s) => s.id !== 'basic')
           .map((s) => {
             const testCount = getTestCount(s, totalPluginTests, strategies);
-            return `${s.id} (${formatTestCount(testCount)})`;
+            return `${s.id} (${formatTestCount(testCount, true)})`;
           })
           .sort()
           .join('\n'),
@@ -342,21 +428,12 @@ export async function synthesize({
     );
   }
 
-  // Find if basic strategy is disabled
-  const basicStrategy = strategies.find((s) => s.id === 'basic');
-  const includeBasicTests = basicStrategy?.config?.enabled ?? true;
-
-  const totalPluginTests = plugins.reduce((sum, p) => sum + (p.numTests || 0), 0);
-
-  const totalTests =
-    totalPluginTests * (strategies.length + (includeBasicTests ? 1 : -1)) * numLanguages;
-
   logger.info(
     chalk.bold(`Test Generation Summary:`) +
       `\n• Total tests: ${chalk.cyan(totalTests)}` +
       `\n• Plugin tests: ${chalk.cyan(totalPluginTests)}` +
       `\n• Plugins: ${chalk.cyan(plugins.length)}` +
-      `\n• Strategies: ${chalk.cyan(includeBasicTests ? strategies.length : strategies.length - 1)}` +
+      `\n• Strategies: ${chalk.cyan(effectiveStrategyCount)}` +
       `\n• Max concurrency: ${chalk.cyan(maxConcurrency)}\n` +
       (delay ? `• Delay: ${chalk.cyan(delay)}\n` : ''),
   );
@@ -459,7 +536,10 @@ export async function synthesize({
   const isWebUI = Boolean(cliState.webUI);
 
   const showProgressBar =
-    !isWebUI && process.env.LOG_LEVEL !== 'debug' && getLogLevel() !== 'debug';
+    !isWebUI &&
+    process.env.LOG_LEVEL !== 'debug' &&
+    getLogLevel() !== 'debug' &&
+    showProgressBarOverride !== false;
   if (showProgressBar) {
     progressBar = new cliProgress.SingleBar(
       {
@@ -573,13 +653,36 @@ export async function synthesize({
   // After generating plugin test cases but before applying strategies:
   const pluginTestCases = testCases;
 
+  // Initialize strategy results
+  const strategyResults: Record<string, { requested: number; generated: number }> = {};
+
+  // Apply retry strategy first if it exists
+  const retryStrategy = strategies.find((s) => s.id === 'retry');
+  if (retryStrategy) {
+    logger.debug('Applying retry strategy first');
+    retryStrategy.config = {
+      targetLabels,
+      ...retryStrategy.config,
+    };
+    const { testCases: retryTestCases, strategyResults: retryResults } = await applyStrategies(
+      pluginTestCases,
+      [retryStrategy],
+      injectVar,
+    );
+    pluginTestCases.push(...retryTestCases);
+    Object.assign(strategyResults, retryResults);
+  }
+
   // Check for abort signal or apply non-basic, non-multilingual strategies
   checkAbort();
-  const { testCases: strategyTestCases, strategyResults } = await applyStrategies(
-    pluginTestCases,
-    strategies.filter((s) => s.id !== 'basic' && s.id !== 'multilingual'),
-    injectVar,
-  );
+  const { testCases: strategyTestCases, strategyResults: otherStrategyResults } =
+    await applyStrategies(
+      pluginTestCases,
+      strategies.filter((s) => !['basic', 'multilingual', 'retry'].includes(s.id)),
+      injectVar,
+    );
+
+  Object.assign(strategyResults, otherStrategyResults);
 
   // Combine test cases based on basic strategy setting
   const finalTestCases = [...(includeBasicTests ? pluginTestCases : []), ...strategyTestCases];
@@ -602,5 +705,5 @@ export async function synthesize({
 
   logger.info(generateReport(pluginResults, strategyResults));
 
-  return { purpose, entities, testCases: finalTestCases };
+  return { purpose, entities, testCases: finalTestCases, injectVar };
 }

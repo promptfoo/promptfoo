@@ -67,6 +67,7 @@ export interface Plugin {
   name: string;
   pluginId: string;
   vulnerabilityType: VulnerabilityType;
+  isRemote?: boolean;
 }
 
 // Type utility at the top
@@ -95,6 +96,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Trust and Safety',
@@ -165,6 +167,7 @@ export const PLUGINS = [
       chat: false,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Security and Access Control',
@@ -179,6 +182,7 @@ export const PLUGINS = [
       chat: false,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Brand',
@@ -193,6 +197,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'misinformation and misuse',
+    isRemote: true,
   },
   {
     category: 'Compliance and Legal',
@@ -237,6 +242,20 @@ export const PLUGINS = [
     vulnerabilityType: 'security',
   },
   {
+    category: 'Trust and Safety',
+    description: 'Tests prompt injection attacks using the Harmbench dataset',
+    label: 'technical',
+    link: '/docs/red-team/plugins/harmbench/',
+    name: 'Harmbench',
+    pluginId: 'harmbench',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
     category: 'Security and Access Control',
     description: 'Attempts to access or use debugging commands',
     label: 'technical',
@@ -264,6 +283,22 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'security',
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests for vulnerability to computational resource exhaustion through excessive reasoning patterns. Applicable to reasoning models.',
+    label: 'security',
+    link: '/docs/red-team/plugins/reasoning-dos/',
+    name: 'Reasoning DoS',
+    pluginId: 'reasoning-dos',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Brand',
@@ -502,6 +537,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'misinformation and misuse',
+    isRemote: true,
   },
   {
     category: 'Compliance and Legal',
@@ -614,6 +650,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'misinformation and misuse',
+    isRemote: true,
   },
   {
     category: 'Compliance and Legal',
@@ -670,6 +707,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Brand',
@@ -699,6 +737,7 @@ export const PLUGINS = [
       chat: false,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Custom',
@@ -727,6 +766,21 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'misinformation and misuse',
+  },
+  {
+    category: 'Compliance and Legal',
+    description: 'Content related to RAG Document Exfiltration',
+    label: 'technical',
+    link: '/docs/red-team/plugins/rag-document-exfiltration',
+    name: 'RAG Document Exfiltration',
+    pluginId: 'rag-document-exfiltration',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Security and Access Control',
@@ -868,6 +922,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'misinformation and misuse',
+    isRemote: true,
   },
   {
     category: 'Security and Access Control',
@@ -910,6 +965,7 @@ export const PLUGINS = [
       chat: false,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Security and Access Control',
@@ -925,6 +981,7 @@ export const PLUGINS = [
       chat: false,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
 ] as const as readonly Plugin[];
 

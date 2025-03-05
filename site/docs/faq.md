@@ -60,10 +60,11 @@ No, we do not collect any personally identifiable information (PII).
 
 ### How do I use a proxy with Promptfoo?
 
-Promptfoo uses [proxy-agent](https://www.npmjs.com/package/proxy-agent) to handle proxy configuration across all supported providers. The proxy settings are configured through environment variables:
+Promptfoo proxy settings are configured through environment variables:
 
 1. `HTTP_PROXY`: For HTTP requests
 2. `HTTPS_PROXY`: For HTTPS requests
+3. `NO_PROXY`: Comma-separated list of hosts to exclude from proxying
 
 The proxy URL format is: `[protocol://][user:password@]host[:port]`
 
@@ -75,6 +76,9 @@ export HTTPS_PROXY=http://proxy.company.com:8080
 
 # Proxy with authentication
 export HTTPS_PROXY=http://username:password@proxy.company.com:8080
+
+# Exclude specific hosts from proxying
+export NO_PROXY=localhost,127.0.0.1,internal.domain.com
 ```
 
 Note: Environment variables are specific to your terminal/shell instance. If you need them permanently, add them to your shell's startup file (e.g., `~/.bashrc`, `~/.zshrc`).

@@ -2,11 +2,9 @@ import request from 'supertest';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { createApp } from '../../src/server/server';
-import { deleteAllEvals } from '../../src/util';
+import { deleteAllEvals } from '../../src/util/database';
 import results_v3 from './v3evalToShare.json';
 import results_v4 from './v4evalToShare.json';
-
-jest.mock('../../src/logger');
 
 describe('share', () => {
   let app: ReturnType<typeof createApp>;

@@ -46,6 +46,34 @@ interface RiskCategoryDrawerProps {
   strategyStats: Record<string, { pass: number; total: number }>;
 }
 
+const PRIORITY_STRATEGIES = ['jailbreak:composite', 'pliny', 'prompt-injections'];
+
+// Sort function for prioritizing specific strategies
+function sortByPriorityStrategies(
+  a: { gradingResult?: GradingResult },
+  b: { gradingResult?: GradingResult },
+): number {
+  const strategyA = a.gradingResult ? getStrategyIdFromGradingResult(a.gradingResult) : '';
+  const strategyB = b.gradingResult ? getStrategyIdFromGradingResult(b.gradingResult) : '';
+
+  const priorityA = PRIORITY_STRATEGIES.indexOf(strategyA || '');
+  const priorityB = PRIORITY_STRATEGIES.indexOf(strategyB || '');
+
+  // If both have priority, sort by priority index
+  if (priorityA !== -1 && priorityB !== -1) {
+    return priorityA - priorityB;
+  }
+  // If only one has priority, it should come first
+  if (priorityA !== -1) {
+    return -1;
+  }
+  if (priorityB !== -1) {
+    return 1;
+  }
+  // If neither has priority, maintain original order
+  return 0;
+}
+
 function getPromptDisplayString(prompt: string): string {
   try {
     const parsedPrompt = JSON.parse(prompt);
@@ -134,6 +162,10 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
     result?: EvaluateResult;
   } | null>(null);
 
+  const sortedFailures = React.useMemo(() => {
+    return [...failures].sort(sortByPriorityStrategies);
+  }, [failures]);
+
   return (
     <Drawer anchor="right" open={open} onClose={onClose}>
       <Box sx={{ width: 750, p: 2 }} className="risk-category-drawer">
@@ -187,7 +219,7 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
         {activeTab === 0 ? (
           failures.length > 0 ? (
             <List>
-              {failures.map((failure, index) => (
+              {sortedFailures.map((failure, index) => (
                 <ListItem
                   key={index}
                   className="failure-item"

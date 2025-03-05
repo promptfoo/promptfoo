@@ -49,12 +49,6 @@ jest.mock('../src/fetch', () => ({
   fetch: jest.fn(),
 }));
 
-jest.mock('../src/logger', () => ({
-  info: jest.fn(),
-  warn: jest.fn(),
-  error: jest.fn(),
-}));
-
 jest.mock('../src/redteam/commands/init', () => ({
   redteamInit: jest.fn(),
 }));

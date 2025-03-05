@@ -35,6 +35,7 @@ export function redteamRunCommand(program: Command) {
     .option('--remote', 'Force remote inference wherever possible', false)
     .option('--force', 'Force generation even if no changes are detected', false)
     .option('--verbose', 'Show debug output', false)
+    .option('--no-progress-bar', 'Do not show progress bar')
     .option(
       '--filter-providers, --filter-targets <providers>',
       'Only run tests with these providers (regex match)',
@@ -70,7 +71,11 @@ export function redteamRunCommand(program: Command) {
             logger.error(`  ${err.path.join('.')}: ${err.message}`);
           });
         } else {
-          logger.error(`An unexpected error occurred: ${error}`);
+          logger.error(
+            `An unexpected error occurred during red team run: ${error instanceof Error ? error.message : String(error)}\n${
+              error instanceof Error ? error.stack : ''
+            }`,
+          );
         }
         process.exitCode = 1;
       }

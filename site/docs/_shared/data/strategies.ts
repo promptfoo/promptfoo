@@ -148,6 +148,17 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Static (Single-Turn)',
+    strategy: 'hex',
+    displayName: 'Hex',
+    description: 'Hex encoding bypass',
+    longDescription:
+      'Tests detection and handling of hex-encoded malicious payloads to bypass content filters',
+    cost: 'Low',
+    asrIncrease: '20-30%',
+    link: '/docs/red-team/strategies/hex/',
+  },
+  {
+    category: 'Static (Single-Turn)',
     strategy: 'basic',
     displayName: 'Basic',
     description: 'Plugin-generated test cases',
@@ -200,5 +211,17 @@ export const strategies: Strategy[] = [
     cost: 'Low',
     asrIncrease: '20-30%',
     link: '/docs/red-team/strategies/rot13/',
+  },
+  {
+    category: 'Regression',
+    strategy: 'retry',
+    displayName: 'Retry',
+    description: 'Historical failure testing',
+    longDescription:
+      'Automatically incorporates previously failed test cases into your test suite, creating a regression testing system that learns from past failures',
+    cost: 'Low',
+    asrIncrease: '50-70%',
+    link: '/docs/red-team/strategies/retry/',
+    recommended: false,
   },
 ];
