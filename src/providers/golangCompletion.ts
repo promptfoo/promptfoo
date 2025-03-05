@@ -13,8 +13,8 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/providers';
-import { parsePathOrGlob } from '../util';
 import { sha256 } from '../util/createHash';
+import { parsePathOrGlob } from '../util/file';
 import { safeJsonStringify } from '../util/json';
 
 const execAsync = util.promisify(exec);

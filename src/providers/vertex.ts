@@ -14,7 +14,7 @@ import type {
 } from '../types';
 import type { EnvOverrides } from '../types/env';
 import { renderVarsInObject } from '../util';
-import { maybeLoadFromExternalFile } from '../util';
+import { maybeLoadFromExternalFile } from '../util/file';
 import { isValidJson } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';

@@ -7,9 +7,14 @@ import { getDb } from '../../src/database';
 import * as esm from '../../src/esm';
 import * as googleSheets from '../../src/googleSheets';
 import Eval from '../../src/models/eval';
-import { ResultFailureReason, type EvaluateResult } from '../../src/types';
-import { readOutput, writeMultipleOutputs, writeOutput } from '../../src/util';
+import {
+  ResultFailureReason,
+  type EvaluateResult,
+  type ProviderOptions,
+  type Prompt,
+} from '../../src/types';
 import * as util from '../../src/util';
+import { readOutput, writeMultipleOutputs, writeOutput } from '../../src/util/file';
 import { getNunjucksEngine } from '../../src/util/templates';
 import { TestGrader } from './utils';
 
@@ -61,7 +66,7 @@ describe('util', () => {
       mockRenderString.mockImplementation((template: string) => template);
       jest.mocked(getNunjucksEngine).mockReturnValue({
         renderString: mockRenderString,
-      });
+      } as any);
     });
 
     it('should return the object as-is if no vars are provided', () => {
@@ -183,18 +188,21 @@ describe('util', () => {
     it('should return true if vars and provider match', () => {
       const result = {
         vars: { key: 'value' },
-        provider: 'provider-id',
+        provider: { id: 'provider-id' } as Pick<ProviderOptions, 'id' | 'label'>,
         promptIdx: 0,
         testIdx: 0,
         testCase: {} as any,
         promptId: '',
-        prompt: '',
-        response: '',
+        prompt: { raw: '', label: '' } as Prompt,
+        response: undefined,
         responseJson: null,
-        score: null,
+        score: 0,
         success: true,
         cached: false,
         gradingResult: null,
+        failureReason: ResultFailureReason.NONE,
+        latencyMs: 0,
+        namedScores: {},
       } as EvaluateResult;
 
       const testCase = {
@@ -207,18 +215,21 @@ describe('util', () => {
     it('should return false if vars do not match', () => {
       const result = {
         vars: { key: 'value' },
-        provider: 'provider-id',
+        provider: { id: 'provider-id' } as Pick<ProviderOptions, 'id' | 'label'>,
         promptIdx: 0,
         testIdx: 0,
         testCase: {} as any,
         promptId: '',
-        prompt: '',
-        response: '',
+        prompt: { raw: '', label: '' } as Prompt,
+        response: undefined,
         responseJson: null,
-        score: null,
+        score: 0,
         success: true,
         cached: false,
         gradingResult: null,
+        failureReason: ResultFailureReason.NONE,
+        latencyMs: 0,
+        namedScores: {},
       } as EvaluateResult;
 
       const testCase = {
@@ -231,18 +242,21 @@ describe('util', () => {
     it('should return false if provider does not match', () => {
       const result = {
         vars: { key: 'value' },
-        provider: 'provider-id',
+        provider: { id: 'provider-id' } as Pick<ProviderOptions, 'id' | 'label'>,
         promptIdx: 0,
         testIdx: 0,
         testCase: {} as any,
         promptId: '',
-        prompt: '',
-        response: '',
+        prompt: { raw: '', label: '' } as Prompt,
+        response: undefined,
         responseJson: null,
-        score: null,
+        score: 0,
         success: true,
         cached: false,
         gradingResult: null,
+        failureReason: ResultFailureReason.NONE,
+        latencyMs: 0,
+        namedScores: {},
       } as EvaluateResult;
 
       const testCase = {
@@ -255,18 +269,21 @@ describe('util', () => {
     it('should ignore provider if not specified in test case', () => {
       const result = {
         vars: { key: 'value' },
-        provider: 'provider-id',
+        provider: { id: 'provider-id' } as Pick<ProviderOptions, 'id' | 'label'>,
         promptIdx: 0,
         testIdx: 0,
         testCase: {} as any,
         promptId: '',
-        prompt: '',
-        response: '',
+        prompt: { raw: '', label: '' } as Prompt,
+        response: undefined,
         responseJson: null,
-        score: null,
+        score: 0,
         success: true,
         cached: false,
         gradingResult: null,
+        failureReason: ResultFailureReason.NONE,
+        latencyMs: 0,
+        namedScores: {},
       } as EvaluateResult;
 
       const testCase = {

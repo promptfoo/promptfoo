@@ -14,7 +14,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types';
-import { maybeLoadFromExternalFile } from '../util';
+import { maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/file';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';

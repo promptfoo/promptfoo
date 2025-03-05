@@ -8,8 +8,8 @@ jest.mock('../../src/python/pythonUtils');
 jest.mock('../../src/cache');
 jest.mock('fs');
 jest.mock('path');
-jest.mock('../../src/util', () => {
-  const actual = jest.requireActual('../../src/util');
+jest.mock('../../src/util/file', () => {
+  const actual = jest.requireActual('../../src/util/file');
   return {
     ...actual,
     parsePathOrGlob: jest.fn(() => ({

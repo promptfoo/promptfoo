@@ -9,8 +9,8 @@ jest.mock('../../src/cache');
 jest.mock('fs');
 jest.mock('path');
 
-jest.mock('../../src/util', () => {
-  const actual = jest.requireActual('../../src/util');
+jest.mock('../../src/util/file', () => {
+  const actual = jest.requireActual('../../src/util/file');
   return {
     ...actual,
     parsePathOrGlob: jest.fn(() => ({
@@ -42,7 +42,7 @@ describe('GolangProvider', () => {
     mockIsCacheEnabled.mockReturnValue(false);
     mockReadFileSync.mockReturnValue('mock file content');
 
-    const mockParsePathOrGlob = jest.requireMock('../../src/util').parsePathOrGlob;
+    const mockParsePathOrGlob = jest.requireMock('../../src/util/file').parsePathOrGlob;
     mockParsePathOrGlob.mockImplementation((basePath: string, runPath: string) => {
       if (!basePath && runPath === 'script.go') {
         return {
@@ -437,7 +437,7 @@ describe('GolangProvider', () => {
     });
 
     it('should use custom function name when specified', async () => {
-      const mockParsePathOrGlob = jest.requireMock('../../src/util').parsePathOrGlob;
+      const mockParsePathOrGlob = jest.requireMock('../../src/util/file').parsePathOrGlob;
       mockParsePathOrGlob.mockReturnValueOnce({
         filePath: '/absolute/path/to/script.go',
         functionName: 'custom_function',

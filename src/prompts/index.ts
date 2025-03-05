@@ -9,8 +9,7 @@ import type {
   ProviderOptions,
   EvaluateTestSuite,
 } from '../types';
-import { parsePathOrGlob } from '../util';
-import { isJavascriptFile } from '../util/file';
+import { isJavascriptFile, parsePathOrGlob } from '../util/file';
 import invariant from '../util/invariant';
 import { PromptSchema } from '../validators/prompts';
 import { processJsFile } from './processors/javascript';

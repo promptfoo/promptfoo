@@ -3,6 +3,7 @@ import Eval from '../../../src/models/eval';
 import type { TestSuite, EvaluateResult, Prompt, ProviderResponse } from '../../../src/types';
 import { ResultFailureReason } from '../../../src/types';
 import * as util from '../../../src/util';
+import { readOutput } from '../../../src/util/file';
 
 jest.mock('../../../src/models/eval', () => ({
   findById: jest.fn(),
@@ -10,11 +11,18 @@ jest.mock('../../../src/models/eval', () => ({
 
 jest.mock('../../../src/util', () => ({
   ...jest.requireActual('../../../src/util'),
-  readOutput: jest.fn(),
   resultIsForTestCase: jest.fn().mockImplementation((result, test) => {
     return result.testCase === test;
   }),
 }));
+
+jest.mock('../../../src/util/file', () => {
+  const originalModule = jest.requireActual('../../../src/util/file');
+  return {
+    ...originalModule,
+    readOutput: jest.fn(),
+  };
+});
 
 describe('filterTestsUtil', () => {
   describe('filterTestsByResults', () => {
@@ -105,7 +113,7 @@ describe('filterTestsUtil', () => {
 
     describe('with file path', () => {
       beforeEach(() => {
-        jest.mocked(util.readOutput).mockResolvedValue({
+        jest.mocked(readOutput).mockResolvedValue({
           evalId: null,
           results: {
             version: 2,
@@ -196,11 +204,11 @@ describe('filterTestsUtil', () => {
         );
         expect(result).toHaveLength(1);
         expect(result[0]?.vars?.var1).toBe('test1');
-        expect(util.readOutput).not.toHaveBeenCalled();
+        expect(readOutput).not.toHaveBeenCalled();
       });
 
       it('should handle readOutput returning summary without results', async () => {
-        jest.mocked(util.readOutput).mockResolvedValue({
+        jest.mocked(readOutput).mockResolvedValue({
           evalId: null,
           results: {
             version: 2,
@@ -234,7 +242,7 @@ describe('filterTestsUtil', () => {
       });
 
       it('should handle readOutput throwing an error', async () => {
-        jest.mocked(util.readOutput).mockRejectedValue(new Error('Failed to read file'));
+        jest.mocked(readOutput).mockRejectedValue(new Error('Failed to read file'));
         const result = await filterTestsByResults(mockTestSuite, 'results.json', () => true);
         expect(result).toHaveLength(0);
       });
@@ -304,7 +312,7 @@ describe('filterTestsUtil', () => {
           },
         ];
 
-        jest.mocked(util.readOutput).mockResolvedValue({
+        jest.mocked(readOutput).mockResolvedValue({
           evalId: null,
           results: {
             version: 2,

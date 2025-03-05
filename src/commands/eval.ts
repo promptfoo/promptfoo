@@ -27,10 +27,10 @@ import type {
 } from '../types';
 import { OutputFileExtension, TestSuiteSchema } from '../types';
 import { CommandLineOptionsSchema } from '../types';
-import { isRunningUnderNpx, maybeLoadFromExternalFile } from '../util';
-import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
+import { isRunningUnderNpx, printBorder, setupEnv } from '../util';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
+import { maybeLoadFromExternalFile, writeMultipleOutputs } from '../util/file';
 import invariant from '../util/invariant';
 import { filterProviders } from './eval/filterProviders';
 import type { FilterOptions } from './eval/filterTests';

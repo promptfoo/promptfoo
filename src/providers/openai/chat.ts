@@ -5,7 +5,7 @@ import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import { renderVarsInObject } from '../../util';
-import { maybeLoadFromExternalFile } from '../../util';
+import { maybeLoadFromExternalFile } from '../../util/file';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from '../shared';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 import { calculateOpenAICost } from './util';

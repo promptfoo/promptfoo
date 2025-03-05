@@ -15,35 +15,7 @@ import {
   isProviderOptions,
 } from '../types';
 import type { Vars } from '../types';
-import {
-  writeOutput,
-  writeMultipleOutputs,
-  readOutput,
-  getLatestResultsPath,
-  listPreviousResultFilenames_fileSystem,
-  listPreviousResults_fileSystem,
-  filenameToDate,
-  dateToFilename,
-  readResult_fileSystem,
-  parsePathOrGlob,
-  maybeLoadFromExternalFile,
-} from './file';
 import { getNunjucksEngine } from './templates';
-
-// Re-export file-related functions from file.ts
-export {
-  writeOutput,
-  writeMultipleOutputs,
-  readOutput,
-  getLatestResultsPath,
-  listPreviousResultFilenames_fileSystem,
-  listPreviousResults_fileSystem,
-  filenameToDate,
-  dateToFilename,
-  readResult_fileSystem,
-  parsePathOrGlob,
-  maybeLoadFromExternalFile,
-};
 
 export async function readFilters(
   filters: Record<string, string>,

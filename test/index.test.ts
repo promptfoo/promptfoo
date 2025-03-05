@@ -4,7 +4,7 @@ import * as index from '../src/index';
 import { evaluate } from '../src/index';
 import Eval from '../src/models/eval';
 import { readProviderPromptMap } from '../src/prompts';
-import { writeOutput, writeMultipleOutputs } from '../src/util';
+import { writeOutput, writeMultipleOutputs } from '../src/util/file';
 
 jest.mock('../src/cache');
 jest.mock('../src/database', () => ({
@@ -29,6 +29,7 @@ jest.mock('../src/prompts', () => {
 });
 jest.mock('../src/telemetry');
 jest.mock('../src/util');
+jest.mock('../src/util/file');
 
 describe('index.ts exports', () => {
   const expectedNamedExports = [

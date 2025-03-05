@@ -20,7 +20,8 @@ import type {
   ProviderOptions,
   Scenario,
 } from './types';
-import { readFilters, writeMultipleOutputs, writeOutput } from './util';
+import { readFilters } from './util';
+import { writeMultipleOutputs, writeOutput } from './util/file';
 import invariant from './util/invariant';
 import { readTests } from './util/testCaseReader';
 
