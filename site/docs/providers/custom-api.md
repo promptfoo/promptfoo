@@ -2,7 +2,7 @@
 sidebar_label: Custom Javascript
 ---
 
-# Custom Javascript Providers
+# Custom JavaScript Providers
 
 Custom Javascript providers let you create providers in JavaScript or TypeScript to integrate with any API or service not built into promptfoo.
 
