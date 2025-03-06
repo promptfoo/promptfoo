@@ -660,6 +660,74 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
 });
 ```
 
+## Audio capabilities
+
+OpenAI models with audio support (like `gpt-4o-audio-preview` and `gpt-4o-mini-audio-preview`) can process audio inputs and generate audio outputs. This enables testing speech-to-text, text-to-speech, and speech-to-speech capabilities.
+
+### Using audio inputs
+
+You can include audio files in your prompts using the following format:
+
+```json title="audio-input.json"
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "You are a helpful customer support agent. Listen to the customer's request and respond with a helpful answer."
+      },
+      {
+        "type": "input_audio",
+        "input_audio": {
+          "data": "{{audio_file}}",
+          "format": "mp3"
+        }
+      }
+    ]
+  }
+]
+```
+
+With a corresponding configuration:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - id: file://audio-input.json
+    label: Audio Input
+
+providers:
+  - id: openai:chat:gpt-4o-audio-preview
+    config:
+      modalities: ['text'] # also supports 'audio'
+
+tests:
+  - vars:
+      audio_file: file://assets/transcript1.mp3
+    assert:
+      - type: llm-rubric
+        value: Resolved the customer's issue
+```
+
+Supported audio file formats include WAV, MP3, OGG, AAC, M4A, and FLAC.
+
+### Audio configuration options
+
+The audio configuration supports these parameters:
+
+| Parameter | Description                    | Default | Options                                 |
+| --------- | ------------------------------ | ------- | --------------------------------------- |
+| `voice`   | Voice for audio generation     | alloy   | alloy, echo, fable, onyx, nova, shimmer |
+| `format`  | Audio format to generate       | wav     | wav, mp3, opus, aac                     |
+| `speed`   | Speaking speed multiplier      | 1.0     | Any number between 0.25 and 4.0         |
+| `bitrate` | Bitrate for compressed formats | -       | e.g., "128k", "256k"                    |
+
+In the web UI, audio outputs display with an embedded player and transcript. For a complete working example, see the [OpenAI audio example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-audio) or initialize it with:
+
+```bash
+npx promptfoo@latest init --example openai-audio
+```
+
 ## Troubleshooting
 
 ### OpenAI rate limits

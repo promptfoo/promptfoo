@@ -36,3 +36,15 @@ export function isVideoFile(filePath: string): boolean {
   const fileExtension = filePath.split('.').pop()?.toLowerCase() || '';
   return videoExtensions.includes(fileExtension);
 }
+
+/**
+ * Checks if a file is an audio file based on its extension. Non-exhaustive list.
+ *
+ * @param filePath - The path of the file to check.
+ * @returns True if the file has an audio extension, false otherwise.
+ */
+export function isAudioFile(filePath: string): boolean {
+  const audioExtensions = ['wav', 'mp3', 'ogg', 'aac', 'm4a', 'flac', 'wma', 'aiff', 'opus'];
+  const fileExtension = filePath.split('.').pop()?.toLowerCase() || '';
+  return audioExtensions.includes(fileExtension);
+}

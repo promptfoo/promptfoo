@@ -31,6 +31,7 @@ import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
 import { FalImageGenerationProvider } from './fal';
 import { GolangProvider } from './golangCompletion';
 import { GoogleChatProvider } from './google';
+import { GoogleMMLiveProvider } from './googleMultimodalLive';
 import { GroqProvider } from './groq';
 import { HttpProvider } from './http';
 import {
@@ -809,7 +810,20 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      const modelName = providerPath.split(':')[1];
+      const splits = providerPath.split(':');
+
+      if (splits.length >= 3) {
+        const serviceType = splits[1];
+        const modelName = splits.slice(2).join(':');
+
+        if (serviceType === 'live') {
+          // This is a Multimodal Live API request
+          return new GoogleMMLiveProvider(modelName, providerOptions);
+        }
+      }
+
+      // Default to regular Google API
+      const modelName = splits[1];
       return new GoogleChatProvider(modelName, providerOptions);
     },
   },

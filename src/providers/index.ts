@@ -4,10 +4,12 @@ import fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
 import cliState from '../cliState';
+import { CLOUD_PREFIX_IDENTIFIER } from '../constants';
 import logger from '../logger';
 import type { LoadApiProviderContext, TestSuiteConfig } from '../types';
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions, ProviderOptionsMap } from '../types/providers';
+import { getProviderFromCloud } from '../util/cloud';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { providerMap } from './registry';
@@ -28,6 +30,18 @@ export async function loadApiProvider(
   };
 
   const renderedProviderPath = getNunjucksEngine().renderString(providerPath, {});
+
+  if (renderedProviderPath.startsWith(CLOUD_PREFIX_IDENTIFIER)) {
+    const cloudDatabaseId = renderedProviderPath.slice(CLOUD_PREFIX_IDENTIFIER.length);
+
+    const provider = await getProviderFromCloud(cloudDatabaseId);
+    if (provider.id.startsWith(CLOUD_PREFIX_IDENTIFIER)) {
+      throw new Error(
+        `This cloud provider ${cloudDatabaseId} points to another cloud provider: ${provider.id}. This is not allowed. A cloud provider should point to a specific provider, not another cloud provider.`,
+      );
+    }
+    return loadApiProvider(provider.id, { ...context, options: provider });
+  }
 
   if (
     renderedProviderPath.startsWith('file://') &&
