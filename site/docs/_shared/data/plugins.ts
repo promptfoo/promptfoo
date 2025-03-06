@@ -67,6 +67,7 @@ export interface Plugin {
   name: string;
   pluginId: string;
   vulnerabilityType: VulnerabilityType;
+  isRemote?: boolean;
 }
 
 // Type utility at the top
@@ -95,6 +96,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Trust and Safety',
@@ -165,6 +167,7 @@ export const PLUGINS = [
       chat: false,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Security and Access Control',
@@ -179,6 +182,7 @@ export const PLUGINS = [
       chat: false,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Brand',
@@ -193,6 +197,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'misinformation and misuse',
+    isRemote: true,
   },
   {
     category: 'Compliance and Legal',
@@ -293,6 +298,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Brand',
@@ -531,6 +537,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'misinformation and misuse',
+    isRemote: true,
   },
   {
     category: 'Compliance and Legal',
@@ -643,6 +650,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'misinformation and misuse',
+    isRemote: true,
   },
   {
     category: 'Compliance and Legal',
@@ -699,6 +707,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Brand',
@@ -728,6 +737,7 @@ export const PLUGINS = [
       chat: false,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Custom',
@@ -770,6 +780,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Security and Access Control',
@@ -911,6 +922,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'misinformation and misuse',
+    isRemote: true,
   },
   {
     category: 'Security and Access Control',
@@ -953,6 +965,7 @@ export const PLUGINS = [
       chat: false,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Security and Access Control',
@@ -968,6 +981,7 @@ export const PLUGINS = [
       chat: false,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
 ] as const as readonly Plugin[];
 
