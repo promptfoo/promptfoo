@@ -603,3 +603,18 @@ thead.collapsed .header-dismiss {
   height: 24px;
   line-height: 1;
 }
+
+.audio-output {
+  margin: 1rem 0;
+}
+
+.audio-output audio {
+  margin-bottom: 0.5rem;
+}
+
+.audio-output .transcript {
+  font-size: 0.9rem;
+  color: var(--ifm-color-emphasis-700);
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
