@@ -668,7 +668,7 @@ OpenAI models with audio support (like `gpt-4o-audio-preview` and `gpt-4o-mini-a
 
 You can include audio files in your prompts using the following format:
 
-```json
+```json title="audio-input.json"
 [
   {
     "role": "user",
@@ -691,7 +691,7 @@ You can include audio files in your prompts using the following format:
 
 With a corresponding configuration:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   - id: file://audio-input.json
     label: Audio Input
@@ -699,11 +699,11 @@ prompts:
 providers:
   - id: openai:chat:gpt-4o-audio-preview
     config:
-      modalities: ['text', 'audio']
+      modalities: ['text'] # also supports 'audio'
 
 tests:
   - vars:
-      audio_file: file://assets/speech.mp3
+      audio_file: file://assets/transcript1.mp3
     assert:
       - type: llm-rubric
         value: Resolved the customer's issue
