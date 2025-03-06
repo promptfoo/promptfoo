@@ -5,6 +5,7 @@ import {
   setDefaultCompletionProviders,
   setDefaultEmbeddingProviders,
 } from '../../src/providers/defaults';
+import { DefaultModerationProvider } from '../../src/providers/openai/defaults';
 import type { ApiProvider } from '../../src/types';
 import type { EnvOverrides } from '../../src/types/env';
 
@@ -85,7 +86,7 @@ describe('Provider override tests', () => {
     expect(providers.embeddingProvider.id()).toBe('test-embedding-provider');
   });
 
-  it('should use Azure moderation provider when AZURE_CONTENT_SAFETY_ENDPOINT is set', async () => {
+  it('should use AzureModerationProvider when AZURE_CONTENT_SAFETY_ENDPOINT is set', async () => {
     process.env.AZURE_CONTENT_SAFETY_ENDPOINT = 'https://test-endpoint.com';
 
     const providers = await getDefaultProviders();
@@ -96,7 +97,14 @@ describe('Provider override tests', () => {
     );
   });
 
-  it('should use Azure moderation provider when AZURE_CONTENT_SAFETY_ENDPOINT is provided in env overrides', async () => {
+  it('should use DefaultModerationProvider when AZURE_CONTENT_SAFETY_ENDPOINT is not set', async () => {
+    delete process.env.AZURE_CONTENT_SAFETY_ENDPOINT;
+
+    const providers = await getDefaultProviders();
+    expect(providers.moderationProvider).toBe(DefaultModerationProvider);
+  });
+
+  it('should use AzureModerationProvider when AZURE_CONTENT_SAFETY_ENDPOINT is provided via env overrides', async () => {
     const envOverrides: EnvOverrides = {
       AZURE_CONTENT_SAFETY_ENDPOINT: 'https://test-endpoint.com',
     } as EnvOverrides;
