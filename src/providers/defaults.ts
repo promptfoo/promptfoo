@@ -153,8 +153,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
   }
 
   // If Azure Content Safety endpoint is available, use it for moderation
-  const extendedEnv = env as EnvOverrides & { AZURE_CONTENT_SAFETY_ENDPOINT?: string };
-  if (getEnvString('AZURE_CONTENT_SAFETY_ENDPOINT') || extendedEnv?.AZURE_CONTENT_SAFETY_ENDPOINT) {
+  if (getEnvString('AZURE_CONTENT_SAFETY_ENDPOINT') || env?.AZURE_CONTENT_SAFETY_ENDPOINT) {
     providers.moderationProvider = new AzureModerationProvider('text-content-safety', { env });
   }
 

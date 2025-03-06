@@ -153,6 +153,3 @@ export async function loadApiProviders(
   }
   throw new Error('Invalid providers list');
 }
-
-export * from './azure';
-export * from './azure/moderation';

@@ -39,6 +39,8 @@ export interface AzureModerationConfig {
   endpoint?: string;
   apiVersion?: string;
   headers?: Record<string, string>;
+  blocklistNames?: string[];
+  haltOnBlocklistHit?: boolean;
   passthrough?: Record<string, any>;
 }
 
@@ -51,11 +53,7 @@ function parseAzureModerationResponse(data: AzureAnalyzeTextResult): ProviderMod
       return { flags: [] };
     }
 
-    const categories =
-      data.categoriesAnalysis ||
-      (data as any).categoriesAnalysis ||
-      (data as any).categories_analysis ||
-      [];
+    const categories = data.categoriesAnalysis || [];
     const blocklistMatches =
       data.blocklistsMatch || (data as any).blocklistsMatch || (data as any).blocklists_match || [];
 
@@ -210,8 +208,8 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
       const body = {
         text: assistantResponse,
         categories: ['Hate', 'Sexual', 'SelfHarm', 'Violence'],
-        blocklistNames: [],
-        haltOnBlocklistHit: false,
+        blocklistNames: this.configWithHeaders.blocklistNames || [],
+        haltOnBlocklistHit: this.configWithHeaders.haltOnBlocklistHit ?? false,
         outputType: 'FourSeverityLevels',
         ...(this.configWithHeaders.passthrough || {}),
       };

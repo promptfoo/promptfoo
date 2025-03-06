@@ -171,14 +171,14 @@ export const providerMap: ProviderFactory[] = [
     test: (providerPath: string) =>
       providerPath.startsWith('azure:') ||
       providerPath.startsWith('azureopenai:') ||
-      providerPath === 'azure-moderation',
+      providerPath === 'azure:moderation',
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      // Handle azure-moderation directly
-      if (providerPath === 'azure-moderation') {
+      // Handle azure:moderation directly
+      if (providerPath === 'azure:moderation') {
         const { deploymentName, modelName } = providerOptions.config || {};
         return new AzureModerationProvider(
           deploymentName || modelName || 'text-content-safety',
