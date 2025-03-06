@@ -173,6 +173,6 @@ tests:
         provider:
           id: azure:moderation
           config:
-            blocklistNames: []
+            blocklistNames: ['my-custom-blocklist', 'industry-terms']
             haltOnBlocklistHit: true
 ```
