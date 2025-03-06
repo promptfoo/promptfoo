@@ -660,6 +660,154 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
 });
 ```
 
+## Audio capabilities
+
+OpenAI models with audio support (like `gpt-4o-audio-preview` and `gpt-4o-mini-audio-preview`) can process audio inputs and generate audio outputs. This enables testing speech-to-text, text-to-speech, and speech-to-speech capabilities.
+
+### Audio-capable models
+
+The following models support audio processing:
+
+- `gpt-4o-audio-preview`
+- `gpt-4o-audio-preview-2024-12-17`
+- `gpt-4o-audio-preview-2024-10-01`
+- `gpt-4o-mini-audio-preview`
+- `gpt-4o-mini-audio-preview-2024-12-17`
+
+### Using audio inputs
+
+You can include audio files in your prompts by using the file reference syntax:
+
+```yaml
+prompts:
+  - id: audio-query
+    path: ./prompt.json
+    vars:
+      audioInputPath: file://./assets/audio-sample.wav
+```
+
+With a corresponding prompt template in JSON format:
+
+```json
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "audio",
+          "audio_url": "{{audioInputPath}}"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Supported audio file formats include:
+
+- WAV (recommended)
+- MP3
+- OGG
+- AAC
+- M4A
+- FLAC
+
+### Generating audio outputs
+
+To generate audio outputs, specify the response format in your provider configuration:
+
+```yaml
+providers:
+  - id: openai:gpt-4o-audio-preview
+    config:
+      modalities: ['text', 'audio']
+      audio:
+        voice: alloy
+        format: wav
+        speed: 1.0
+```
+
+Or set the `response_format` directly:
+
+```yaml
+providers:
+  - id: openai-audio-to-audio
+    config:
+      provider: openai-chat
+      model: gpt-4o-2024-05-14
+      extraParams:
+        response_format:
+          type: audio_url
+```
+
+### Audio configuration options
+
+The audio configuration supports these parameters:
+
+| Parameter | Description                                | Default | Options                                 |
+| --------- | ------------------------------------------ | ------- | --------------------------------------- |
+| `voice`   | The voice to use for audio generation      | alloy   | alloy, echo, fable, onyx, nova, shimmer |
+| `format`  | The audio file format to generate          | wav     | wav, mp3, opus, aac                     |
+| `speed`   | Speaking speed (multiplier)                | 1.0     | Any number between 0.25 and 4.0         |
+| `bitrate` | Bitrate for compressed audio formats (mp3) | -       | e.g., "128k", "256k"                    |
+
+Example configuration with custom audio parameters:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:gpt-4o-audio-preview
+    config:
+      modalities: ['text', 'audio']
+      audio:
+        voice: nova
+        format: mp3
+        bitrate: 256k
+        speed: 1.2
+
+tests:
+  - description: Test Audio Input to Text Output
+    prompt: audio-query
+    provider: openai-audio-to-text
+    vars:
+      audioInputPath: ./assets/audio-sample.wav
+      responseFormat: text
+    assert:
+      - type: javascript
+        path: file://./audio-assertions.js
+        function: containsKeywords
+        vars:
+          expectedKeywords: ['hello', 'weather', 'today']
+```
+
+And an example for audio input to audio output:
+
+```yaml
+tests:
+  - description: Test Audio Input to Audio Output
+    prompt: audio-query
+    provider: openai-audio-to-audio
+    vars:
+      audioInputPath: ./assets/audio-sample.wav
+      responseFormat: audio_url
+    assert:
+      - type: javascript
+        path: ./audio-assertions.js
+        function: hasAudioOutput
+```
+
+### Audio token usage and cost
+
+Audio-capable models have different pricing for audio inputs and outputs compared to text. The costs are calculated as:
+
+- Regular text tokens: Input and output text costs as normal
+- Audio input tokens: Higher cost per token for processing audio
+- Audio output tokens: Higher cost per token for generating audio
+
+In the web UI, audio outputs will be displayed with an embedded audio player and transcript (if available).
+
+For a complete working example, see the [OpenAI audio example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-audio).
+
 ## Troubleshooting
 
 ### OpenAI rate limits
