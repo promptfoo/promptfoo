@@ -9,6 +9,7 @@
     "type": "git",
     "url": "git+https://github.com/promptfoo/promptfoo.git"
   },
+  "packageManager": "npm@10.7.0",
   "main": "dist/src/index.js",
   "exports": {
     ".": {
