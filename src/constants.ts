@@ -34,4 +34,4 @@ export const TERMINAL_MAX_WIDTH =
     ? process?.stdout?.columns - 10
     : 120;
 
-export const CLOUD_PREFIX_IDENTIFIER = 'promptfoo_cloud:';
+export const CLOUD_PREFIX_IDENTIFIER = 'promptfoo://target/';
