@@ -791,5 +791,214 @@ describe('OpenAI Provider', () => {
       const regularBody = JSON.parse(regularCall[1].body);
       expect(regularBody.reasoning_effort).toBeUndefined();
     });
+
+    it('should handle audio responses correctly', async () => {
+      const mockAudioResponse = {
+        data: {
+          choices: [
+            {
+              message: {
+                audio: {
+                  id: 'audio-id-123',
+                  expires_at: '2023-12-31T23:59:59Z',
+                  data: 'base64audiodata',
+                  transcript: 'This is the audio transcript',
+                  format: 'mp3',
+                },
+              },
+            },
+          ],
+          usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockAudioResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const result = await provider.callApi('Generate audio response');
+
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe('This is the audio transcript');
+      expect(result.audio).toEqual({
+        id: 'audio-id-123',
+        expiresAt: '2023-12-31T23:59:59Z',
+        data: 'base64audiodata',
+        transcript: 'This is the audio transcript',
+        format: 'mp3',
+      });
+      expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5 });
+    });
+
+    it('should handle audio responses without transcript', async () => {
+      const mockAudioResponse = {
+        data: {
+          choices: [
+            {
+              message: {
+                audio: {
+                  id: 'audio-id-456',
+                  expires_at: '2023-12-31T23:59:59Z',
+                  data: 'base64audiodata',
+                  format: 'wav',
+                },
+              },
+            },
+          ],
+          usage: { total_tokens: 12, prompt_tokens: 8, completion_tokens: 4 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockAudioResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const result = await provider.callApi('Generate audio without transcript');
+
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe(''); // Empty string when no transcript
+      expect(result.audio).toEqual({
+        id: 'audio-id-456',
+        expiresAt: '2023-12-31T23:59:59Z',
+        data: 'base64audiodata',
+        transcript: undefined,
+        format: 'wav',
+      });
+      expect(result.tokenUsage).toEqual({ total: 12, prompt: 8, completion: 4 });
+    });
+
+    it('should use default wav format when not specified', async () => {
+      const mockAudioResponse = {
+        data: {
+          choices: [
+            {
+              message: {
+                audio: {
+                  id: 'audio-id-789',
+                  expires_at: '2023-12-31T23:59:59Z',
+                  data: 'base64audiodata',
+                  transcript: 'Audio without format specified',
+                },
+              },
+            },
+          ],
+          usage: { total_tokens: 18, prompt_tokens: 12, completion_tokens: 6 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockAudioResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const result = await provider.callApi('Generate audio without format');
+
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe('Audio without format specified');
+      expect(result.audio).toEqual({
+        id: 'audio-id-789',
+        expiresAt: '2023-12-31T23:59:59Z',
+        data: 'base64audiodata',
+        transcript: 'Audio without format specified',
+        format: 'wav', // Default format
+      });
+      expect(result.tokenUsage).toEqual({ total: 18, prompt: 12, completion: 6 });
+    });
+
+    it('should handle cached audio responses correctly', async () => {
+      const mockAudioResponse = {
+        data: {
+          choices: [
+            {
+              message: {
+                audio: {
+                  id: 'audio-id-cached',
+                  expires_at: '2023-12-31T23:59:59Z',
+                  data: 'base64audiodatacached',
+                  transcript: 'This is a cached audio response',
+                  format: 'mp3',
+                },
+              },
+            },
+          ],
+          usage: { total_tokens: 20, prompt_tokens: 15, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockAudioResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const result = await provider.callApi('Generate cached audio');
+
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe('This is a cached audio response');
+      expect(result.audio).toEqual({
+        id: 'audio-id-cached',
+        expiresAt: '2023-12-31T23:59:59Z',
+        data: 'base64audiodatacached',
+        transcript: 'This is a cached audio response',
+        format: 'mp3',
+      });
+      expect(result.cached).toBe(false);
+
+      // Now test with cached response
+      const cachedResponse = {
+        ...mockAudioResponse,
+        cached: true,
+      };
+      mockFetchWithCache.mockResolvedValue(cachedResponse);
+
+      const cachedResult = await provider.callApi('Generate cached audio');
+
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(2);
+      expect(cachedResult.output).toBe('This is a cached audio response');
+      expect(cachedResult.audio).toEqual({
+        id: 'audio-id-cached',
+        expiresAt: '2023-12-31T23:59:59Z',
+        data: 'base64audiodatacached',
+        transcript: 'This is a cached audio response',
+        format: 'mp3',
+      });
+      expect(cachedResult.cached).toBe(true);
+      expect(cachedResult.tokenUsage).toEqual({ total: 20, cached: 20 });
+    });
+
+    it('should properly handle audio requested with response_format option', async () => {
+      // Setup provider with response_format that specifies audio
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: {
+          response_format: { type: 'audio' } as any,
+        },
+      });
+
+      // Mock a non-audio response (model doesn't support audio format)
+      const mockTextResponse = {
+        data: {
+          choices: [{ message: { content: 'Model responded with text instead of audio' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockTextResponse);
+
+      // Call the API with audio format requested
+      const result = await provider.callApi('Generate audio please');
+
+      // Verify request sent with audio format
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const requestBody = JSON.parse(call[1].body);
+      expect(requestBody.response_format).toEqual({ type: 'audio' });
+
+      // Verify result handled gracefully
+      expect(result.output).toBe('Model responded with text instead of audio');
+      expect(result.audio).toBeUndefined(); // No audio returned
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+    });
   });
 });
