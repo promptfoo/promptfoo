@@ -18,7 +18,7 @@ function makeRequest(path: string, method: string, body?: any) {
   });
 }
 
-export async function getProviderFromCloud(id: string): Promise<ProviderOptions & { id: string }> {
+export async function getProviderModelFromCloud(id: string) {
   if (!cloudConfig.isEnabled()) {
     throw new Error(
       `Could not fetch Provider ${id} from cloud. Cloud config is not enabled. Please run \`promptfoo auth login\` to login.`,
@@ -26,7 +26,6 @@ export async function getProviderFromCloud(id: string): Promise<ProviderOptions 
   }
   try {
     const response = await makeRequest(`api/providers/${id}`, 'GET');
-
     const body = await response.json();
     if (response.ok) {
       logger.info(`Provider fetched from cloud: ${id}`);
@@ -34,9 +33,25 @@ export async function getProviderFromCloud(id: string): Promise<ProviderOptions 
     } else {
       throw new Error(`Failed to fetch provider from cloud: ${response.statusText}`);
     }
-    const provider = ProviderOptionsSchema.parse(body.config);
+    return body;
+  } catch (e) {
+    logger.error(`Failed to fetch provider from cloud: ${id}.`);
+    logger.error(String(e));
+    throw new Error(`Failed to fetch provider from cloud: ${id}.`);
+  }
+}
+
+export async function getProviderFromCloud(id: string): Promise<ProviderOptions & { id: string }> {
+  if (!cloudConfig.isEnabled()) {
+    throw new Error(
+      `Could not fetch Provider ${id} from cloud. Cloud config is not enabled. Please run \`promptfoo auth login\` to login.`,
+    );
+  }
+  try {
+    const model = await getProviderModelFromCloud(id);
+    const provider = ProviderOptionsSchema.parse(model.config);
     // The provider options schema has ID field as optional but we know it's required for cloud providers
-    invariant(provider.id, `Provider ${id} has no id in ${body.config}`);
+    invariant(provider.id, `Provider ${id} has no id in ${model.config}`);
     return { ...provider, id: provider.id };
   } catch (e) {
     logger.error(`Failed to fetch provider from cloud: ${id}.`);
