@@ -53,21 +53,8 @@ export function redteamRunCommand(program: Command) {
 
       if (opts.config && UUID_REGEX.test(opts.config)) {
         const configObj = await getConfigFromCloud(opts.config);
-        const provider = await getProviderModelFromCloud(configObj.provider);
 
-        opts.liveRedteamConfig = getUnifiedConfig(configObj.config);
-
-        // If the session source is client, we need to generate a session id for the test
-        if (provider.sessionSource === 'client') {
-          opts.liveRedteamConfig.defaultTest = {
-            options: {
-              transformVars: '{ ...vars, sessionId: context.uuid }',
-            },
-          };
-        }
-        if (provider.extensions) {
-          opts.liveRedteamConfig.extensions = provider.extensions;
-        }
+        opts.liveRedteamConfig = configObj;
 
         opts.config = undefined;
 
