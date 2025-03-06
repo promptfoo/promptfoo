@@ -170,8 +170,9 @@ tests:
       foo: bar
     assert:
       - type: moderation
-        provider: 'azure:moderation'
-        config:
-          blocklistNames: ['my-custom-blocklist', 'industry-terms']
-          haltOnBlocklistHit: true
+        provider:
+          id: azure:moderation
+          config:
+            blocklistNames: []
+            haltOnBlocklistHit: true
 ```
