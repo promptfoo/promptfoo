@@ -396,6 +396,9 @@
                             },
                             {
                               "type": "array"
+                            },
+                            {
+                              "type": "string"
                             }
                           ]
                         }
