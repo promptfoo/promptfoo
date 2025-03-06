@@ -44,7 +44,9 @@ export interface AzureModerationConfig {
   passthrough?: Record<string, any>;
 }
 
-function parseAzureModerationResponse(data: AzureAnalyzeTextResult): ProviderModerationResponse {
+export function parseAzureModerationResponse(
+  data: AzureAnalyzeTextResult,
+): ProviderModerationResponse {
   try {
     logger.debug(`Azure Content Safety API response: ${JSON.stringify(data)}`);
 
@@ -90,12 +92,12 @@ function parseAzureModerationResponse(data: AzureAnalyzeTextResult): ProviderMod
   }
 }
 
-function handleApiError(err: any, data?: any): ProviderModerationResponse {
+export function handleApiError(err: any, data?: any): ProviderModerationResponse {
   logger.error(`Azure moderation API error: ${err}${data ? `, ${data}` : ''}`);
   return { error: err.message || 'Unknown error', flags: [] };
 }
 
-function getModerationCacheKey(modelName: string, config: any, content: string): string {
+export function getModerationCacheKey(modelName: string, config: any, content: string): string {
   return `azure-moderation:${modelName}:${JSON.stringify(content)}`;
 }
 
