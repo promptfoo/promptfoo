@@ -23,7 +23,6 @@
   margin-right: 0.5rem;
 }
 
-/* Dark mode adjustments */
 [data-theme='dark'] .audioContainer {
   background: var(--ifm-background-color);
   border: 1px solid var(--ifm-color-emphasis-300);

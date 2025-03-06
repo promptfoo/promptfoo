@@ -254,7 +254,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         }
       }
 
-      // Handle audio output
       if (message.audio) {
         return {
           output: message.audio.transcript || '',

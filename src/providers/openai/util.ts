@@ -164,7 +164,6 @@ export function calculateOpenAICost(
   audioCompletionTokens?: number,
 ): number | undefined {
   if (!audioPromptTokens && !audioCompletionTokens) {
-    // Regular text token calculation
     return calculateCost(modelName, config, promptTokens, completionTokens, [
       ...OPENAI_CHAT_MODELS,
       ...OPENAI_COMPLETION_MODELS,
@@ -194,12 +193,10 @@ export function calculateOpenAICost(
 
   let totalCost = 0;
 
-  // Calculate text token costs
   const inputCost = config.cost ?? model.cost.input;
   const outputCost = config.cost ?? model.cost.output;
   totalCost += inputCost * promptTokens + outputCost * completionTokens;
 
-  // Calculate audio token costs if the model supports it
   if ('audioInput' in model.cost && 'audioOutput' in model.cost) {
     const audioInputCost = config.audioCost ?? (model.cost.audioInput as number);
     const audioOutputCost = config.audioCost ?? (model.cost.audioOutput as number);
