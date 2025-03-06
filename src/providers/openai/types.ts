@@ -47,19 +47,11 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   passthrough?: object;
   reasoning_effort?: ReasoningEffort;
   modalities?: string[];
-  /**
-   * Audio configuration for audio-capable models like gpt-4o-audio-preview and gpt-4o-mini-audio-preview.
-   * Used for generating audio outputs and processing audio inputs.
-   *
-   * For audio inputs:
-   * - Load an audio file in evaluatorHelpers.ts which will convert it to base64
-   * - Use with {{ your_audio.wav }} in the prompt or __AUDIO_FILE:your_audio.wav
-   */
   audio?: {
-    voice?: string;
-    format?: string;
     bitrate?: string;
+    format?: string;
     speed?: number;
+    voice?: string;
   };
 
   /**

@@ -559,13 +559,6 @@ export const VarsSchema = z.record(
     z.array(z.union([z.string(), z.number(), z.boolean()])),
     z.record(z.string(), z.any()),
     z.array(z.any()),
-    // Support file:// URLs that point to audio files
-    z
-      .string()
-      .refine((value) => value.startsWith('file://') && /\.(wav|mp3|ogg|m4a)$/i.test(value), {
-        message:
-          'Audio file must start with file:// and have a valid audio extension (.wav, .mp3, .ogg, .m4a)',
-      }),
   ]),
 );
 
