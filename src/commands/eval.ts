@@ -127,8 +127,8 @@ export async function doEval(
     // Ensure evaluateOptions from the config file are applied
     if (config.evaluateOptions) {
       evaluateOptions = {
-        ...config.evaluateOptions,
         ...evaluateOptions,
+        ...config.evaluateOptions,
       };
     }
 
@@ -170,11 +170,11 @@ export async function doEval(
     );
 
     const options: EvaluateOptions = {
-      ...evaluateOptions,
       showProgressBar: getLogLevel() === 'debug' ? false : cmdObj.progressBar,
+      maxConcurrency,
       repeat,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
-      maxConcurrency,
+      ...evaluateOptions,
     };
 
     if (cmdObj.grader) {
@@ -650,3 +650,5 @@ export function evalCommand(
 
   return evalCmd;
 }
+
+export { EvalCommandSchema, showRedteamProviderLabelMissingWarning };
