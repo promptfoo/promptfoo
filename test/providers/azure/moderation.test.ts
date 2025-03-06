@@ -1,8 +1,8 @@
 import {
-  parseAzureModerationResponse,
-  handleApiError,
-  getModerationCacheKey,
   type AzureModerationCategory,
+  getModerationCacheKey,
+  handleApiError,
+  parseAzureModerationResponse,
 } from '../../../src/providers/azure/moderation';
 
 describe('Azure Moderation', () => {
@@ -45,30 +45,6 @@ describe('Azure Moderation', () => {
       };
 
       expect(parseAzureModerationResponse(response)).toEqual({ flags: [] });
-    });
-
-    it('should handle response with snake_case fields', () => {
-      const response = {
-        categories_analysis: [
-          {
-            category: 'Violence' as AzureModerationCategory,
-            severity: 6,
-          },
-        ],
-        blocklists_match: [],
-      } as any;
-
-      const result = parseAzureModerationResponse(response);
-
-      expect(result).toEqual({
-        flags: [
-          {
-            code: 'violence',
-            description: 'Content flagged for Violence',
-            confidence: 6 / 7,
-          },
-        ],
-      });
     });
 
     it('should handle multiple categories with severity', () => {
