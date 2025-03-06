@@ -4,7 +4,7 @@
     "content": [
       {
         "type": "text",
-        "text": "What is in this recording?"
+        "text": "{{question}}"
       },
       {
         "type": "input_audio",
