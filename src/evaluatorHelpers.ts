@@ -13,7 +13,7 @@ import { runPython } from './python/pythonUtils';
 import telemetry from './telemetry';
 import type { ApiProvider, NunjucksFilterMap, Prompt } from './types';
 import { renderVarsInObject } from './util';
-import { isJavascriptFile, isImageFile, isVideoFile } from './util/file';
+import { isJavascriptFile, isImageFile, isVideoFile, isAudioFile } from './util/file';
 import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
@@ -128,19 +128,26 @@ export async function renderPrompt(
         });
         vars[varName] = await extractTextFromPDF(filePath);
       } else if (
-        (isImageFile(filePath) || isVideoFile(filePath)) &&
+        (isImageFile(filePath) || isVideoFile(filePath) || isAudioFile(filePath)) &&
         !getEnvBool('PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64')
       ) {
+        const fileType = isImageFile(filePath)
+          ? 'image'
+          : isVideoFile(filePath)
+            ? 'video'
+            : 'audio';
+
         telemetry.recordOnce('feature_used', {
-          feature: 'load_image_as_base64',
+          feature: `load_${fileType}_as_base64`,
         });
-        logger.debug(`Loading image as base64: ${filePath}`);
+
+        logger.debug(`Loading ${fileType} as base64: ${filePath}`);
         try {
-          const imageBuffer = fs.readFileSync(filePath);
-          vars[varName] = imageBuffer.toString('base64');
+          const fileBuffer = fs.readFileSync(filePath);
+          vars[varName] = fileBuffer.toString('base64');
         } catch (error) {
           throw new Error(
-            `Failed to load image ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
+            `Failed to load ${fileType} ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
           );
         }
       } else {
