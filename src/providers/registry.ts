@@ -20,6 +20,7 @@ import {
   AzureCompletionProvider,
   AzureEmbeddingProvider,
 } from './azure';
+import { AzureModerationProvider } from './azure/moderation';
 import { BAMProvider } from './bam';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock';
 import { BrowserProvider } from './browser';
@@ -43,13 +44,13 @@ import {
 import { JfrogMlChatCompletionProvider } from './jfrog';
 import { LlamaProvider } from './llama';
 import {
-  LocalAiCompletionProvider,
   LocalAiChatProvider,
+  LocalAiCompletionProvider,
   LocalAiEmbeddingProvider,
 } from './localai';
 import { ManualInputProvider } from './manualInput';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
-import { OllamaEmbeddingProvider, OllamaCompletionProvider, OllamaChatProvider } from './ollama';
+import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
 import { OpenAiAssistantProvider } from './openai/assistant';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
@@ -169,12 +170,24 @@ export const providerMap: ProviderFactory[] = [
   },
   {
     test: (providerPath: string) =>
-      providerPath.startsWith('azure:') || providerPath.startsWith('azureopenai:'),
+      providerPath.startsWith('azure:') ||
+      providerPath.startsWith('azureopenai:') ||
+      providerPath === 'azure:moderation',
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
+      // Handle azure:moderation directly
+      if (providerPath === 'azure:moderation') {
+        const { deploymentName, modelName } = providerOptions.config || {};
+        return new AzureModerationProvider(
+          deploymentName || modelName || 'text-content-safety',
+          providerOptions,
+        );
+      }
+
+      // Handle other Azure providers
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const deploymentName = splits[2];
@@ -195,7 +208,7 @@ export const providerMap: ProviderFactory[] = [
         return new AzureCompletionProvider(deploymentName, providerOptions);
       }
       throw new Error(
-        `Unknown Azure model type: ${modelType}. Use one of the following providers: azure:chat:<model name>, azure:assistant:<assistant id>, azure:completion:<model name>`,
+        `Unknown Azure model type: ${modelType}. Use one of the following providers: azure:chat:<model name>, azure:assistant:<assistant id>, azure:completion:<model name>, azure:moderation:<model name>`,
       );
     },
   },
