@@ -216,5 +216,16 @@
         "skipAsyncImports": true
       }
     }
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@playwright/browser-chromium",
+      "@swc/core",
+      "better-sqlite3",
+      "core-js",
+      "core-js-pure",
+      "esbuild"
+    ],
+    "ignoredBuiltDependencies": []
   }
 }

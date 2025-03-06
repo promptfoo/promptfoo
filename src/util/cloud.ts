@@ -1,13 +1,14 @@
 import { fetchWithProxy } from '../fetch';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
+import type { SavedRedteamConfig } from '../redteam/types';
 import type { ProviderOptions } from '../types/providers';
 import { ProviderOptionsSchema } from '../validators/providers';
 import invariant from './invariant';
 
 const CHUNKED_RESULTS_BUILD_DATE = new Date('2025-01-10');
 
-function makeRequest(path: string, method: string, body?: any) {
+export function makeRequest(path: string, method: string, body?: any): Promise<Response> {
   const apiHost = cloudConfig.getApiHost();
   const apiKey = cloudConfig.getApiKey();
   const url = `${apiHost}/${path}`;
@@ -45,7 +46,14 @@ export async function getProviderFromCloud(id: string): Promise<ProviderOptions 
   }
 }
 
-export async function getConfigFromCloud(id: string) {
+interface CloudConfig {
+  id: string;
+  config: SavedRedteamConfig;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function getConfigFromCloud(id: string): Promise<CloudConfig> {
   if (!cloudConfig.isEnabled()) {
     throw new Error(
       `Could not fetch Config ${id} from cloud. Cloud config is not enabled. Please run \`promptfoo auth login\` to login.`,
@@ -85,7 +93,7 @@ export async function targetApiBuildDate(): Promise<Date | null> {
   }
 }
 
-export async function cloudCanAcceptChunkedResults() {
+export async function cloudCanAcceptChunkedResults(): Promise<boolean> {
   const buildDate = await targetApiBuildDate();
   return buildDate != null && buildDate > CHUNKED_RESULTS_BUILD_DATE;
 }
