@@ -3,13 +3,24 @@ description: Audio Input Example
 
 prompts:
   - id: file://audio-input.json
+    label: Audio Input
 
 providers:
   - id: openai:chat:gpt-4o-audio-preview
+    config:
+      modalities: ['text', 'audio']
   - id: openai:chat:gpt-4o-mini-audio-preview
+    config:
+      modalities: ['text']
 
 tests:
   - vars:
       audio_file: file://assets/Armstrong_Small_Step.mp3
+    assert:
+      - type: llm-rubric
+        value: Is a speech by Neil Armstrong about the moon landing
   - vars:
       audio_file: file://assets/Kennedy_berliner.mp3
+    assert:
+      - type: llm-rubric
+        value: Is a speech by John F. Kennedy in Berlin about being a jelly donut
