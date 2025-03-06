@@ -6,7 +6,6 @@ import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
 import { getConfigFromCloud } from '../../util/cloud';
 import { doRedteamRun } from '../shared';
-import { getUnifiedConfig } from '../sharedFrontend';
 import type { RedteamRunOptions } from '../types';
 import { poisonCommand } from './poison';
 
