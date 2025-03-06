@@ -218,7 +218,12 @@ describe('GoogleMMLiveProvider', () => {
             }),
           } as WebSocket.MessageEvent);
         }, 10);
-      }, 60);
+        setTimeout(() => {
+          mockWs.onmessage?.({
+            data: JSON.stringify({ serverContent: { turnComplete: true } }),
+          } as WebSocket.MessageEvent);
+        }, 10);
+      }, 70);
       return mockWs;
     });
 

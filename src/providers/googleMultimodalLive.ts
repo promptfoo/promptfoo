@@ -192,8 +192,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
           } else if (response.toolCall?.functionCalls) {
             resolve({ output: JSON.stringify(response) });
           } else if (
-            response.serverContent?.turnComplete ||
-            response.serverContent?.groundingMetadata
+            response.serverContent?.turnComplete
           ) {
             if (response_text_total) {
               resolve({ output: response_text_total });
