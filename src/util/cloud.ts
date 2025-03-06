@@ -1,8 +1,8 @@
-import { getUnifiedConfig } from 'src/redteam/sharedFrontend';
-import type { UnifiedConfig } from 'src/types';
 import { fetchWithProxy } from '../fetch';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
+import { getUnifiedConfig } from '../redteam/sharedFrontend';
+import type { UnifiedConfig } from '../types';
 import type { ProviderOptions } from '../types/providers';
 import { ProviderOptionsSchema } from '../validators/providers';
 import invariant from './invariant';
@@ -38,7 +38,7 @@ export async function targetApiBuildDate(): Promise<Date | null> {
   }
 }
 
-async function cloudCanBuildFormattedConfig() {
+export async function cloudCanBuildFormattedConfig() {
   const buildDate = await targetApiBuildDate();
   return buildDate != null && buildDate > FORMATTED_CONFIG_ENDPOINT_BUILD_DATE;
 }
@@ -71,12 +71,15 @@ export async function getConfigFromCloud(id: string): Promise<UnifiedConfig> {
   }
   try {
     const canBuildFormattedConfig = await cloudCanBuildFormattedConfig();
+
     if (canBuildFormattedConfig) {
       const response = await makeRequest(`api/redteam/configs/${id}/unified`, 'GET');
+
       const body = await response.json();
       return body;
     } else {
       const response = await makeRequest(`api/redteam/configs/${id}`, 'GET');
+
       const body = await response.json();
       if (response.ok) {
         logger.info(`Config fetched from cloud: ${id}`);

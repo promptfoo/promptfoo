@@ -4,11 +4,10 @@ import cliState from '../../cliState';
 import logger, { setLogLevel } from '../../logger';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
-import { getConfigFromCloud, getProviderModelFromCloud } from '../../util/cloud';
-import { MULTI_TURN_STRATEGIES } from '../constants';
+import { getConfigFromCloud } from '../../util/cloud';
 import { doRedteamRun } from '../shared';
 import { getUnifiedConfig } from '../sharedFrontend';
-import type { RedteamRunOptions, StrategyConfig } from '../types';
+import type { RedteamRunOptions } from '../types';
 import { poisonCommand } from './poison';
 
 const UUID_REGEX = /^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$/;
@@ -55,13 +54,6 @@ export function redteamRunCommand(program: Command) {
       if (opts.config && UUID_REGEX.test(opts.config)) {
         const configObj = await getConfigFromCloud(opts.config);
         const provider = await getProviderModelFromCloud(configObj.provider);
-
-        // if the provider is stateful, mark all the multi-turn strategies as stateful
-        configObj.config.strategies.forEach((strategy: StrategyConfig) => {
-          if (MULTI_TURN_STRATEGIES.includes(strategy.id as any)) {
-            strategy.config = { ...(strategy.config || {}), stateful: provider.stateful };
-          }
-        });
 
         opts.liveRedteamConfig = getUnifiedConfig(configObj.config);
 
