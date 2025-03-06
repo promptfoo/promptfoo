@@ -114,7 +114,7 @@ export interface ProviderResponse {
   guardrails?: GuardrailResponse;
   audio?: {
     id?: string;
-    expires_at?: number;
+    expiresAt?: number;
     data?: string; // base64 encoded audio data
     transcript?: string;
     format?: string;

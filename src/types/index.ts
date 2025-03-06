@@ -273,7 +273,7 @@ export interface EvaluateTableOutput {
   tokenUsage?: Partial<TokenUsage>;
   audio?: {
     id?: string;
-    expires_at?: number;
+    expiresAt?: number;
     data?: string; // base64 encoded audio data
     transcript?: string;
     format?: string;

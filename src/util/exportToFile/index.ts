@@ -78,7 +78,7 @@ export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableO
     audio: result.response?.audio
       ? {
           id: result.response.audio.id,
-          expires_at: result.response.audio.expires_at,
+          expiresAt: result.response.audio.expiresAt,
           data: result.response.audio.data,
           transcript: result.response.audio.transcript,
           format: result.response.audio.format,

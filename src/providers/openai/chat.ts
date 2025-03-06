@@ -259,7 +259,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           output: message.audio.transcript || '',
           audio: {
             id: message.audio.id,
-            expires_at: message.audio.expires_at,
+            expiresAt: message.audio.expires_at,
             data: message.audio.data,
             transcript: message.audio.transcript,
             format: message.audio.format || 'wav',

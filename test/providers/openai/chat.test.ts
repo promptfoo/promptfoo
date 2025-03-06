@@ -823,7 +823,7 @@ describe('OpenAI Provider', () => {
       expect(result.output).toBe('This is the audio transcript');
       expect(result.audio).toEqual({
         id: 'audio-id-123',
-        expires_at: '2023-12-31T23:59:59Z',
+        expiresAt: '2023-12-31T23:59:59Z',
         data: 'base64audiodata',
         transcript: 'This is the audio transcript',
         format: 'mp3',
@@ -861,7 +861,7 @@ describe('OpenAI Provider', () => {
       expect(result.output).toBe(''); // Empty string when no transcript
       expect(result.audio).toEqual({
         id: 'audio-id-456',
-        expires_at: '2023-12-31T23:59:59Z',
+        expiresAt: '2023-12-31T23:59:59Z',
         data: 'base64audiodata',
         transcript: undefined,
         format: 'wav',
@@ -899,7 +899,7 @@ describe('OpenAI Provider', () => {
       expect(result.output).toBe('Audio without format specified');
       expect(result.audio).toEqual({
         id: 'audio-id-789',
-        expires_at: '2023-12-31T23:59:59Z',
+        expiresAt: '2023-12-31T23:59:59Z',
         data: 'base64audiodata',
         transcript: 'Audio without format specified',
         format: 'wav', // Default format
@@ -938,7 +938,7 @@ describe('OpenAI Provider', () => {
       expect(result.output).toBe('This is a cached audio response');
       expect(result.audio).toEqual({
         id: 'audio-id-cached',
-        expires_at: '2023-12-31T23:59:59Z',
+        expiresAt: '2023-12-31T23:59:59Z',
         data: 'base64audiodatacached',
         transcript: 'This is a cached audio response',
         format: 'mp3',
@@ -958,7 +958,7 @@ describe('OpenAI Provider', () => {
       expect(cachedResult.output).toBe('This is a cached audio response');
       expect(cachedResult.audio).toEqual({
         id: 'audio-id-cached',
-        expires_at: '2023-12-31T23:59:59Z',
+        expiresAt: '2023-12-31T23:59:59Z',
         data: 'base64audiodatacached',
         transcript: 'This is a cached audio response',
         format: 'mp3',
