@@ -7,6 +7,7 @@ import {
 } from '../../src/providers/defaults';
 import { DefaultModerationProvider } from '../../src/providers/openai/defaults';
 import type { ApiProvider } from '../../src/types';
+import type { EnvOverrides } from '../../src/types/env';
 
 class MockProvider implements ApiProvider {
   private providerId: string;
@@ -86,10 +87,14 @@ describe('Provider override tests', () => {
   });
 
   it('should use AzureModerationProvider when AZURE_CONTENT_SAFETY_ENDPOINT is set', async () => {
-    process.env.AZURE_CONTENT_SAFETY_ENDPOINT = 'https://test-endpoint.azure.com';
+    process.env.AZURE_CONTENT_SAFETY_ENDPOINT = 'https://test-endpoint.com';
 
     const providers = await getDefaultProviders();
+
     expect(providers.moderationProvider).toBeInstanceOf(AzureModerationProvider);
+    expect((providers.moderationProvider as AzureModerationProvider).modelName).toBe(
+      'text-content-safety',
+    );
   });
 
   it('should use DefaultModerationProvider when AZURE_CONTENT_SAFETY_ENDPOINT is not set', async () => {
@@ -100,10 +105,31 @@ describe('Provider override tests', () => {
   });
 
   it('should use AzureModerationProvider when AZURE_CONTENT_SAFETY_ENDPOINT is provided via env overrides', async () => {
-    const providers = await getDefaultProviders({
-      AZURE_CONTENT_SAFETY_ENDPOINT: 'https://test-endpoint.azure.com',
-    } as any);
+    const envOverrides: EnvOverrides = {
+      AZURE_CONTENT_SAFETY_ENDPOINT: 'https://test-endpoint.com',
+    } as EnvOverrides;
+
+    const providers = await getDefaultProviders(envOverrides);
 
     expect(providers.moderationProvider).toBeInstanceOf(AzureModerationProvider);
+    expect((providers.moderationProvider as AzureModerationProvider).modelName).toBe(
+      'text-content-safety',
+    );
+  });
+
+  it('should use Azure moderation provider with custom configuration', async () => {
+    const envOverrides: EnvOverrides = {
+      AZURE_CONTENT_SAFETY_ENDPOINT: 'https://test-endpoint.com',
+      AZURE_CONTENT_SAFETY_API_KEY: 'test-api-key',
+      AZURE_CONTENT_SAFETY_API_VERSION: '2024-01-01',
+    } as EnvOverrides;
+
+    const providers = await getDefaultProviders(envOverrides);
+
+    expect(providers.moderationProvider).toBeInstanceOf(AzureModerationProvider);
+    const moderationProvider = providers.moderationProvider as AzureModerationProvider;
+    expect(moderationProvider.modelName).toBe('text-content-safety');
+    expect(moderationProvider.endpoint).toBe('https://test-endpoint.com');
+    expect(moderationProvider.apiVersion).toBe('2024-01-01');
   });
 });
