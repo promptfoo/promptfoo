@@ -13,6 +13,10 @@ dist
 .vite
 *.tsbuildinfo
 
+# pnpm-specific
+.pnpm-store/
+pnpm-debug.log
+
 # Python-related
 __pycache__
 
