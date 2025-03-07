@@ -805,7 +805,7 @@ describe('Anthropic', () => {
         },
       };
 
-      const result = outputFromMessage(message);
+      const result = outputFromMessage(message, false);
       expect(result).toBe('');
     });
 
@@ -826,7 +826,7 @@ describe('Anthropic', () => {
         },
       };
 
-      const result = outputFromMessage(message);
+      const result = outputFromMessage(message, false);
       expect(result).toBe('Hello');
     });
 
@@ -850,7 +850,7 @@ describe('Anthropic', () => {
         },
       };
 
-      const result = outputFromMessage(message);
+      const result = outputFromMessage(message, false);
       expect(result).toBe('Hello\n\nWorld');
     });
 
@@ -884,7 +884,7 @@ describe('Anthropic', () => {
         },
       };
 
-      const result = outputFromMessage(message);
+      const result = outputFromMessage(message, false);
       expect(result).toBe(
         '{"type":"tool_use","id":"tool1","name":"get_weather","input":{"location":"San Francisco, CA"}}\n\n{"type":"tool_use","id":"tool2","name":"get_time","input":{"location":"New York, NY"}}',
       );
@@ -916,7 +916,7 @@ describe('Anthropic', () => {
         },
       };
 
-      const result = outputFromMessage(message);
+      const result = outputFromMessage(message, false);
       expect(result).toBe(
         'Hello\n\n{"type":"tool_use","id":"tool1","name":"get_weather","input":{"location":"San Francisco, CA"}}\n\nWorld',
       );
@@ -954,8 +954,124 @@ describe('Anthropic', () => {
         },
       };
 
-      const result = outputFromMessage(message);
+      const result = outputFromMessage(message, false);
       expect(result).toBe('The sky is blue');
+    });
+
+    it('should include thinking blocks when showThinking is true', () => {
+      const message: Anthropic.Messages.Message = {
+        content: [
+          { type: 'text', text: 'Hello', citations: [] },
+          {
+            type: 'thinking',
+            thinking: 'I need to consider the weather',
+            signature: 'abc123',
+          },
+          { type: 'text', text: 'World', citations: [] },
+        ],
+        id: '',
+        model: '',
+        role: 'assistant',
+        stop_reason: null,
+        stop_sequence: null,
+        type: 'message',
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      };
+
+      const result = outputFromMessage(message, true);
+      expect(result).toBe(
+        'Hello\n\nThinking: I need to consider the weather\nSignature: abc123\n\nWorld',
+      );
+    });
+
+    it('should exclude thinking blocks when showThinking is false', () => {
+      const message: Anthropic.Messages.Message = {
+        content: [
+          { type: 'text', text: 'Hello', citations: [] },
+          {
+            type: 'thinking',
+            thinking: 'I need to consider the weather',
+            signature: 'abc123',
+          },
+          { type: 'text', text: 'World', citations: [] },
+        ],
+        id: '',
+        model: '',
+        role: 'assistant',
+        stop_reason: null,
+        stop_sequence: null,
+        type: 'message',
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      };
+
+      const result = outputFromMessage(message, false);
+      expect(result).toBe('Hello\n\nWorld');
+    });
+
+    it('should include redacted_thinking blocks when showThinking is true', () => {
+      const message: Anthropic.Messages.Message = {
+        content: [
+          { type: 'text', text: 'Hello', citations: [] },
+          {
+            type: 'redacted_thinking',
+            data: 'Some redacted thinking data',
+          },
+          { type: 'text', text: 'World', citations: [] },
+        ],
+        id: '',
+        model: '',
+        role: 'assistant',
+        stop_reason: null,
+        stop_sequence: null,
+        type: 'message',
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      };
+
+      const result = outputFromMessage(message, true);
+      expect(result).toBe('Hello\n\nRedacted Thinking: Some redacted thinking data\n\nWorld');
+    });
+
+    it('should exclude redacted_thinking blocks when showThinking is false', () => {
+      const message: Anthropic.Messages.Message = {
+        content: [
+          { type: 'text', text: 'Hello', citations: [] },
+          {
+            type: 'redacted_thinking',
+            data: 'Some redacted thinking data',
+          },
+          { type: 'text', text: 'World', citations: [] },
+        ],
+        id: '',
+        model: '',
+        role: 'assistant',
+        stop_reason: null,
+        stop_sequence: null,
+        type: 'message',
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      };
+
+      const result = outputFromMessage(message, false);
+      expect(result).toBe('Hello\n\nWorld');
     });
   });
 
