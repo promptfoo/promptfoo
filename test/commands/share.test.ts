@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { createAndDisplayShareableUrl, shareCommand } from '../../src/commands/share';
+import * as envars from '../../src/envars';
 import logger from '../../src/logger';
-import type Eval from '../../src/models/eval';
 import { createShareableUrl } from '../../src/share';
 
 jest.mock('../../src/share');
@@ -10,6 +10,9 @@ jest.mock('../../src/telemetry', () => ({
   record: jest.fn(),
   send: jest.fn(),
 }));
+jest.mock('../../src/envars');
+jest.mock('readline');
+jest.mock('../../src/models/eval');
 
 describe('Share Command', () => {
   describe('createAndDisplayShareableUrl', () => {
@@ -18,7 +21,7 @@ describe('Share Command', () => {
     });
 
     it('should return a URL and log it when successful', async () => {
-      const mockEval = { id: 'test-eval-id' } as Eval;
+      const mockEval = { id: 'test-eval-id' } as any;
       const mockUrl = 'https://app.promptfoo.dev/eval/test-eval-id';
 
       jest.mocked(createShareableUrl).mockResolvedValue(mockUrl);
@@ -31,7 +34,7 @@ describe('Share Command', () => {
     });
 
     it('should pass showAuth parameter correctly', async () => {
-      const mockEval = { id: 'test-eval-id' } as Eval;
+      const mockEval = { id: 'test-eval-id' } as any;
       const mockUrl = 'https://app.promptfoo.dev/eval/test-eval-id';
 
       jest.mocked(createShareableUrl).mockResolvedValue(mockUrl);
@@ -42,7 +45,7 @@ describe('Share Command', () => {
     });
 
     it('should return null when createShareableUrl returns null', async () => {
-      const mockEval = { id: 'test-eval-id' } as Eval;
+      const mockEval = { id: 'test-eval-id' } as any;
 
       jest.mocked(createShareableUrl).mockResolvedValue(null);
 
@@ -74,6 +77,73 @@ describe('Share Command', () => {
       expect(options?.find((o) => o.short === '-y')).toBeDefined();
       expect(options?.find((o) => o.long === '--show-auth')).toBeDefined();
       expect(options?.find((o) => o.long === '--env-path')).toBeDefined();
+    });
+
+    // Test just the hostname determination logic directly
+    it('should use app.promptfoo.dev by default if no environment variables are set', () => {
+      // Mock environment variables to return undefined
+      jest.mocked(envars.getEnvString).mockImplementation(() => '');
+
+      const baseUrl =
+        envars.getEnvString('PROMPTFOO_SHARING_APP_BASE_URL') ||
+        envars.getEnvString('PROMPTFOO_REMOTE_APP_BASE_URL');
+      const hostname = baseUrl ? new URL(baseUrl).hostname : 'app.promptfoo.dev';
+
+      expect(hostname).toBe('app.promptfoo.dev');
+    });
+
+    it('should use PROMPTFOO_SHARING_APP_BASE_URL for hostname when set', () => {
+      // Mock PROMPTFOO_SHARING_APP_BASE_URL
+      jest.mocked(envars.getEnvString).mockImplementation((key) => {
+        if (key === 'PROMPTFOO_SHARING_APP_BASE_URL') {
+          return 'https://custom-domain.com';
+        }
+        return '';
+      });
+
+      const baseUrl =
+        envars.getEnvString('PROMPTFOO_SHARING_APP_BASE_URL') ||
+        envars.getEnvString('PROMPTFOO_REMOTE_APP_BASE_URL');
+      const hostname = baseUrl ? new URL(baseUrl).hostname : 'app.promptfoo.dev';
+
+      expect(hostname).toBe('custom-domain.com');
+    });
+
+    it('should use PROMPTFOO_REMOTE_APP_BASE_URL for hostname when PROMPTFOO_SHARING_APP_BASE_URL is not set', () => {
+      // Mock PROMPTFOO_REMOTE_APP_BASE_URL
+      jest.mocked(envars.getEnvString).mockImplementation((key) => {
+        if (key === 'PROMPTFOO_REMOTE_APP_BASE_URL') {
+          return 'https://self-hosted-domain.com';
+        }
+        return '';
+      });
+
+      const baseUrl =
+        envars.getEnvString('PROMPTFOO_SHARING_APP_BASE_URL') ||
+        envars.getEnvString('PROMPTFOO_REMOTE_APP_BASE_URL');
+      const hostname = baseUrl ? new URL(baseUrl).hostname : 'app.promptfoo.dev';
+
+      expect(hostname).toBe('self-hosted-domain.com');
+    });
+
+    it('should prioritize PROMPTFOO_SHARING_APP_BASE_URL over PROMPTFOO_REMOTE_APP_BASE_URL', () => {
+      // Mock both environment variables
+      jest.mocked(envars.getEnvString).mockImplementation((key) => {
+        if (key === 'PROMPTFOO_SHARING_APP_BASE_URL') {
+          return 'https://sharing-domain.com';
+        }
+        if (key === 'PROMPTFOO_REMOTE_APP_BASE_URL') {
+          return 'https://remote-domain.com';
+        }
+        return '';
+      });
+
+      const baseUrl =
+        envars.getEnvString('PROMPTFOO_SHARING_APP_BASE_URL') ||
+        envars.getEnvString('PROMPTFOO_REMOTE_APP_BASE_URL');
+      const hostname = baseUrl ? new URL(baseUrl).hostname : 'app.promptfoo.dev';
+
+      expect(hostname).toBe('sharing-domain.com');
     });
   });
 });

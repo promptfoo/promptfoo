@@ -3,7 +3,7 @@ import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { URL } from 'url';
 import { DEFAULT_SHARE_VIEW_BASE_URL, SHARE_API_BASE_URL, SHARE_VIEW_BASE_URL } from './constants';
-import { getEnvBool, getEnvInt, isCI } from './envars';
+import { getEnvBool, getEnvInt, isCI, getEnvString } from './envars';
 import { fetchWithProxy } from './fetch';
 import { getAuthor, getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
@@ -26,13 +26,15 @@ export function determineShareDomain(eval_: Eval): ShareDomainResult {
   const isPublicShare =
     !cloudConfig.isEnabled() && (!sharing || sharing === true || !('appBaseUrl' in sharing));
 
+  const envAppBaseUrl = getEnvString('PROMPTFOO_REMOTE_APP_BASE_URL');
+
   const domain = isPublicShare
-    ? DEFAULT_SHARE_VIEW_BASE_URL
+    ? envAppBaseUrl || DEFAULT_SHARE_VIEW_BASE_URL
     : cloudConfig.isEnabled()
       ? cloudConfig.getAppUrl()
       : typeof sharing === 'object' && sharing.appBaseUrl
         ? sharing.appBaseUrl
-        : DEFAULT_SHARE_VIEW_BASE_URL;
+        : envAppBaseUrl || DEFAULT_SHARE_VIEW_BASE_URL;
 
   logger.debug(`Share domain determined: domain=${domain}, isPublic=${isPublicShare}`);
   return { domain, isPublicShare };
@@ -357,11 +359,15 @@ export async function createShareableUrl(
 
   const { domain } = determineShareDomain(evalRecord);
 
+  // For custom self-hosted setups, ensure we're using the same domain as the API
+  const customDomain = getEnvString('PROMPTFOO_REMOTE_APP_BASE_URL');
+  const finalDomain = customDomain || domain;
+
   const fullUrl = cloudConfig.isEnabled()
-    ? `${domain}/eval/${evalId}`
-    : SHARE_VIEW_BASE_URL === DEFAULT_SHARE_VIEW_BASE_URL
-      ? `${domain}/eval/${evalId}`
-      : `${domain}/eval/?evalId=${evalId}`;
+    ? `${finalDomain}/eval/${evalId}`
+    : SHARE_VIEW_BASE_URL === DEFAULT_SHARE_VIEW_BASE_URL && !customDomain
+      ? `${finalDomain}/eval/${evalId}`
+      : `${finalDomain}/eval/?evalId=${evalId}`;
 
   return showAuth ? fullUrl : stripAuthFromUrl(fullUrl);
 }
