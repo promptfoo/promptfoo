@@ -189,6 +189,7 @@ describe('cloud utils', () => {
 
       mockFetchWithProxy.mockResolvedValueOnce({
         json: () => Promise.resolve(mockProvider),
+        ok: true,
       } as Response);
 
       const result = await getProviderFromCloud('test-provider');
@@ -257,9 +258,11 @@ describe('cloud utils', () => {
 
       mockFetchWithProxy.mockResolvedValueOnce({
         json: () => Promise.resolve({ buildDate: '2025-03-011' }),
+        ok: true,
       } as Response);
       mockFetchWithProxy.mockResolvedValueOnce({
         json: () => Promise.resolve(mockUnifiedConfig),
+        ok: true,
       } as Response);
 
       const result = await getConfigFromCloud('test-config');
