@@ -4,7 +4,7 @@ import fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
 import cliState from '../cliState';
-import { CLOUD_PREFIX_IDENTIFIER } from '../constants';
+import { CLOUD_PROVIDER_PREFIX } from '../constants';
 import logger from '../logger';
 import type { LoadApiProviderContext, TestSuiteConfig } from '../types';
 import type { EnvOverrides } from '../types/env';
@@ -31,11 +31,11 @@ export async function loadApiProvider(
 
   const renderedProviderPath = getNunjucksEngine().renderString(providerPath, {});
 
-  if (renderedProviderPath.startsWith(CLOUD_PREFIX_IDENTIFIER)) {
-    const cloudDatabaseId = renderedProviderPath.slice(CLOUD_PREFIX_IDENTIFIER.length);
+  if (renderedProviderPath.startsWith(CLOUD_PROVIDER_PREFIX)) {
+    const cloudDatabaseId = renderedProviderPath.slice(CLOUD_PROVIDER_PREFIX.length);
 
     const provider = await getProviderFromCloud(cloudDatabaseId);
-    if (provider.id.startsWith(CLOUD_PREFIX_IDENTIFIER)) {
+    if (provider.id.startsWith(CLOUD_PROVIDER_PREFIX)) {
       throw new Error(
         `This cloud provider ${cloudDatabaseId} points to another cloud provider: ${provider.id}. This is not allowed. A cloud provider should point to a specific provider, not another cloud provider.`,
       );
