@@ -791,6 +791,9 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.meta.llama3-3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_3,
 
   // EU Models
+  'eu.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'eu.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'eu.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'eu.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
