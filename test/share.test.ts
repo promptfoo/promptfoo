@@ -25,7 +25,7 @@ jest.mock('../src/util/cloud', () => ({
 jest.mock('../src/envars', () => ({
   getEnvBool: jest.fn(),
   getEnvInt: jest.fn(),
-  getEnvString: jest.fn().mockReturnValue(undefined),
+  getEnvString: jest.fn().mockReturnValue(''),
   isCI: jest.fn(),
 }));
 
@@ -74,8 +74,8 @@ describe('stripAuthFromUrl', () => {
 describe('determineShareDomain', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    // Reset the mock to return undefined for all environment variables
-    jest.requireMock('../src/envars').getEnvString.mockImplementation((_key: string) => undefined);
+    // Reset the mock to return empty string for all environment variables
+    jest.requireMock('../src/envars').getEnvString.mockImplementation((_key: string) => '');
   });
 
   it('should use DEFAULT_SHARE_VIEW_BASE_URL when no custom domain is specified', () => {
@@ -97,7 +97,7 @@ describe('determineShareDomain', () => {
       if (key === 'PROMPTFOO_REMOTE_APP_BASE_URL') {
         return customDomain;
       }
-      return undefined;
+      return '';
     });
 
     jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
@@ -139,7 +139,7 @@ describe('determineShareDomain', () => {
       if (key === 'PROMPTFOO_REMOTE_APP_BASE_URL') {
         return envAppBaseUrl;
       }
-      return undefined;
+      return '';
     });
 
     jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
@@ -162,8 +162,8 @@ describe('determineShareDomain', () => {
 describe('createShareableUrl', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    // Reset the mock to return undefined for all environment variables
-    jest.requireMock('../src/envars').getEnvString.mockImplementation((_key: string) => undefined);
+    // Reset the mock to return empty string for all environment variables
+    jest.requireMock('../src/envars').getEnvString.mockImplementation((_key: string) => '');
     // Setup default successful response
     mockFetch.mockResolvedValue({
       ok: true,
@@ -211,9 +211,7 @@ describe('createShareableUrl', () => {
       jest.mocked(getUserEmail).mockReturnValue('test@example.com');
       jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
       // Reset the environment variable mock
-      jest
-        .requireMock('../src/envars')
-        .getEnvString.mockImplementation((_key: string) => undefined);
+      jest.requireMock('../src/envars').getEnvString.mockImplementation((_key: string) => '');
 
       // Reset fetch mock between tests
       mockFetch.mockReset();
@@ -368,7 +366,7 @@ describe('createShareableUrl', () => {
       if (key === 'PROMPTFOO_REMOTE_APP_BASE_URL') {
         return customDomain;
       }
-      return undefined;
+      return '';
     });
 
     const mockEval: Partial<Eval> = {

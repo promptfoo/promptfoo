@@ -82,7 +82,7 @@ describe('Share Command', () => {
     // Test just the hostname determination logic directly
     it('should use app.promptfoo.dev by default if no environment variables are set', () => {
       // Mock environment variables to return undefined
-      jest.mocked(envars.getEnvString).mockImplementation(() => undefined);
+      jest.mocked(envars.getEnvString).mockImplementation(() => '');
 
       const baseUrl =
         envars.getEnvString('PROMPTFOO_SHARING_APP_BASE_URL') ||
@@ -98,7 +98,7 @@ describe('Share Command', () => {
         if (key === 'PROMPTFOO_SHARING_APP_BASE_URL') {
           return 'https://custom-domain.com';
         }
-        return undefined;
+        return '';
       });
 
       const baseUrl =
@@ -115,7 +115,7 @@ describe('Share Command', () => {
         if (key === 'PROMPTFOO_REMOTE_APP_BASE_URL') {
           return 'https://self-hosted-domain.com';
         }
-        return undefined;
+        return '';
       });
 
       const baseUrl =
@@ -135,7 +135,7 @@ describe('Share Command', () => {
         if (key === 'PROMPTFOO_REMOTE_APP_BASE_URL') {
           return 'https://remote-domain.com';
         }
-        return undefined;
+        return '';
       });
 
       const baseUrl =
