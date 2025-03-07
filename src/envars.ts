@@ -160,6 +160,11 @@ export type EnvVars = {
   AZURE_EMBEDDING_DEPLOYMENT_NAME?: string;
   AZURE_OPENAI_DEPLOYMENT_NAME?: string;
   AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME?: string;
+
+  // Azure Content Safety params
+  AZURE_CONTENT_SAFETY_ENDPOINT?: string;
+  AZURE_CONTENT_SAFETY_API_VERSION?: string;
+  AZURE_CONTENT_SAFETY_API_KEY?: string;
 } & EnvOverrides;
 
 type EnvVarKey = keyof EnvVars;

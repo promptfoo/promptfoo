@@ -116,6 +116,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(config.stop ? { stop: config.stop } : {}),
       ...(config.passthrough || {}),
+      ...(this.modelName.includes('audio')
+        ? {
+            modalities: config.modalities || ['text', 'audio'],
+            audio: config.audio || { voice: 'alloy', format: 'wav' },
+          }
+        : {}),
     };
 
     return { body, config };
@@ -242,6 +248,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               config,
               data.usage?.prompt_tokens,
               data.usage?.completion_tokens,
+              data.usage?.audio_prompt_tokens,
+              data.usage?.audio_completion_tokens,
             ),
           };
         }
@@ -262,6 +270,29 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
           ${output}`;
       }
+      if (message.audio) {
+        return {
+          output: message.audio.transcript || '',
+          audio: {
+            id: message.audio.id,
+            expiresAt: message.audio.expires_at,
+            data: message.audio.data,
+            transcript: message.audio.transcript,
+            format: message.audio.format || 'wav',
+          },
+          tokenUsage: getTokenUsage(data, cached),
+          cached,
+          logProbs,
+          cost: calculateOpenAICost(
+            this.modelName,
+            config,
+            data.usage?.prompt_tokens,
+            data.usage?.completion_tokens,
+            data.usage?.audio_prompt_tokens,
+            data.usage?.audio_completion_tokens,
+          ),
+        };
+      }
 
       return {
         output,
@@ -273,6 +304,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           config,
           data.usage?.prompt_tokens,
           data.usage?.completion_tokens,
+          data.usage?.audio_prompt_tokens,
+          data.usage?.audio_completion_tokens,
         ),
       };
     } catch (err) {

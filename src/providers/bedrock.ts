@@ -61,6 +61,10 @@ export interface BedrockClaudeMessagesCompletionOptions extends BedrockOptions {
     type: 'any' | 'auto' | 'tool';
     name?: string;
   };
+  thinking?: {
+    type: 'enabled';
+    budget_tokens: number;
+  };
 }
 
 interface BedrockLlamaGenerationOptions extends BedrockOptions {
@@ -397,7 +401,7 @@ export const BEDROCK_MODEL = {
         'max_tokens',
         config?.max_tokens,
         getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
-        1024,
+        undefined,
       );
       addConfigParam(
         params,
@@ -472,7 +476,7 @@ export const BEDROCK_MODEL = {
         'max_new_tokens',
         config?.interfaceConfig?.max_new_tokens,
         getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
-        1024,
+        undefined,
       );
       addConfigParam(
         inferenceConfig,
@@ -590,13 +594,38 @@ export const BEDROCK_MODEL = {
         undefined,
       );
       addConfigParam(params, 'tool_choice', config?.tool_choice, undefined, undefined);
+      addConfigParam(params, 'thinking', config?.thinking, undefined, undefined);
       if (systemPrompt) {
         addConfigParam(params, 'system', systemPrompt, undefined, undefined);
       }
 
       return params;
     },
-    output: (responseJson: any) => outputFromMessage(responseJson),
+    output: (responseJson: any) => {
+      // Handle thinking content if present
+      if (responseJson.content && Array.isArray(responseJson.content)) {
+        interface ThinkingContentItem {
+          type: string;
+          thinking?: string;
+          text?: string;
+        }
+
+        const thinkingContent = responseJson.content.find(
+          (item: ThinkingContentItem) => item.type === 'thinking',
+        );
+        const textContent = responseJson.content.find(
+          (item: ThinkingContentItem) => item.type === 'text',
+        );
+
+        if (thinkingContent && textContent) {
+          // Prepend thinking to the main output
+          return `[Thinking] ${thinkingContent.thinking}\n\n[Response] ${textContent.text}`;
+        }
+      }
+
+      // Fall back to standard output handling if no thinking content
+      return outputFromMessage(responseJson);
+    },
   },
   TITAN_TEXT: {
     params: (config: BedrockTextGenerationOptions, prompt: string, stop: string[]) => {

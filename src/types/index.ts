@@ -271,6 +271,13 @@ export interface EvaluateTableOutput {
   testCase: AtomicTestCase;
   text: string;
   tokenUsage?: Partial<TokenUsage>;
+  audio?: {
+    id?: string;
+    expiresAt?: number;
+    data?: string; // base64 encoded audio data
+    transcript?: string;
+    format?: string;
+  };
 }
 
 export interface EvaluateTableRow {
@@ -825,7 +832,19 @@ export const TestSuiteConfigSchema = z.object({
   nunjucksFilters: z.record(z.string(), z.string()).optional(),
 
   // Envvar overrides
-  env: z.union([ProviderEnvOverridesSchema, z.record(z.string(), z.string())]).optional(),
+  env: z
+    .union([
+      ProviderEnvOverridesSchema,
+      z.record(
+        z.string(),
+        z.union([
+          z.string(),
+          z.number().transform((n) => String(n)),
+          z.boolean().transform((b) => String(b)),
+        ]),
+      ),
+    ])
+    .optional(),
 
   // Metrics to calculate after the eval has been completed
   derivedMetrics: z.array(DerivedMetricSchema).optional(),

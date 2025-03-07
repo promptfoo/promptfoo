@@ -201,6 +201,15 @@ export function createApp() {
 
   // Must come after the above routes (particularly /api/config) so it doesn't
   // overwrite dynamic routes.
+
+  // Configure proper MIME types for JavaScript files
+  // This is necessary because some browsers (especially Arc) enforce strict MIME type checking
+  // and will refuse to execute scripts with incorrect MIME types for security reasons
+  express.static.mime.define({
+    'application/javascript': ['js', 'mjs', 'cjs'],
+    'text/javascript': ['js', 'mjs', 'cjs'],
+  });
+
   app.use(express.static(staticDir));
 
   // Handle client routing, return all requests to the app

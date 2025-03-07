@@ -2,6 +2,7 @@ import fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
 import cliState from '../src/cliState';
+import { CLOUD_PROVIDER_PREFIX } from '../src/constants';
 import { loadApiProvider, loadApiProviders } from '../src/providers';
 import { HttpProvider } from '../src/providers/http';
 import { OpenAiChatCompletionProvider } from '../src/providers/openai/chat';
@@ -10,6 +11,7 @@ import { PythonProvider } from '../src/providers/pythonCompletion';
 import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
 import { WebSocketProvider } from '../src/providers/websocket';
 import type { ProviderOptions } from '../src/types';
+import { getProviderFromCloud } from '../src/util/cloud';
 
 jest.mock('fs');
 jest.mock('js-yaml');
@@ -20,6 +22,7 @@ jest.mock('../src/providers/openai/embedding');
 jest.mock('../src/providers/pythonCompletion');
 jest.mock('../src/providers/scriptCompletion');
 jest.mock('../src/providers/websocket');
+jest.mock('../src/util/cloud');
 
 describe('loadApiProvider', () => {
   beforeEach(() => {
@@ -72,6 +75,26 @@ describe('loadApiProvider', () => {
     expect(yaml.load).toHaveBeenCalledWith(JSON.stringify(jsonContent));
     expect(provider).toBeDefined();
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', expect.any(Object));
+  });
+
+  it('should load Provider from cloud', async () => {
+    jest.mocked(getProviderFromCloud).mockResolvedValue({
+      id: 'openai:chat:gpt-4',
+      config: {
+        apiKey: 'test-key',
+        temperature: 0.7,
+      },
+    });
+    const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`);
+
+    expect(provider).toBeDefined();
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', {
+      config: expect.objectContaining({
+        apiKey: 'test-key',
+        temperature: 0.7,
+      }),
+      id: 'openai:chat:gpt-4',
+    });
   });
 
   it('should load OpenAI chat provider', async () => {
