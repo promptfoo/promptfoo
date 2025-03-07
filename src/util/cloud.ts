@@ -85,6 +85,8 @@ export async function getConfigFromCloud(id: string): Promise<UnifiedConfig> {
         throw new Error(`Failed to fetch config from cloud: ${response.statusText}`);
       }
       const body = await response.json();
+      logger.info(`Config fetched from cloud: ${id}`);
+      logger.debug(`Config from cloud: ${JSON.stringify(body, null, 2)}`);
       return body;
     } else {
       const response = await makeRequest(`api/redteam/configs/${id}`, 'GET');
