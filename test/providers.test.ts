@@ -2,6 +2,7 @@ import fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
 import cliState from '../src/cliState';
+import { CLOUD_PROVIDER_PREFIX } from '../src/constants';
 import { loadApiProvider, loadApiProviders } from '../src/providers';
 import { HttpProvider } from '../src/providers/http';
 import { OpenAiChatCompletionProvider } from '../src/providers/openai/chat';
@@ -84,7 +85,7 @@ describe('loadApiProvider', () => {
         temperature: 0.7,
       },
     });
-    const provider = await loadApiProvider('promptfoo_cloud:123');
+    const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`);
 
     expect(provider).toBeDefined();
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', {
