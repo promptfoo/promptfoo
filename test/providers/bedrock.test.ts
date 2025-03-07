@@ -946,7 +946,6 @@ describe('BEDROCK_MODEL AMAZON_NOVA', () => {
         },
       ],
       inferenceConfig: {
-        max_new_tokens: 1024,
         temperature: 0,
       },
     });
@@ -994,7 +993,6 @@ describe('BEDROCK_MODEL AMAZON_NOVA', () => {
       ],
       system: [{ text: 'You are a helpful assistant.' }],
       inferenceConfig: {
-        max_new_tokens: 1024,
         temperature: 0,
       },
     });
@@ -1014,7 +1012,6 @@ describe('BEDROCK_MODEL AMAZON_NOVA', () => {
         },
       ],
       inferenceConfig: {
-        max_new_tokens: 1024,
         temperature: 0,
       },
     });
