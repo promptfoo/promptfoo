@@ -51,7 +51,14 @@ export async function getProviderFromCloud(id: string): Promise<ProviderOptions 
   }
   try {
     const response = await makeRequest(`api/providers/${id}`, 'GET');
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch provider from cloud: ${response.statusText}`);
+    }
     const body = await response.json();
+    logger.info(`Provider fetched from cloud: ${id}`);
+    logger.debug(`Provider from cloud: ${JSON.stringify(body, null, 2)}`);
+
     const provider = ProviderOptionsSchema.parse(body.config);
     // The provider options schema has ID field as optional but we know it's required for cloud providers
     invariant(provider.id, `Provider ${id} has no id in ${body.config}`);
@@ -74,19 +81,22 @@ export async function getConfigFromCloud(id: string): Promise<UnifiedConfig> {
 
     if (canBuildFormattedConfig) {
       const response = await makeRequest(`api/redteam/configs/${id}/unified`, 'GET');
-
+      if (!response.ok) {
+        throw new Error(`Failed to fetch config from cloud: ${response.statusText}`);
+      }
       const body = await response.json();
       return body;
     } else {
       const response = await makeRequest(`api/redteam/configs/${id}`, 'GET');
 
-      const body = await response.json();
-      if (response.ok) {
-        logger.info(`Config fetched from cloud: ${id}`);
-        logger.debug(`Config from cloud: ${JSON.stringify(body, null, 2)}`);
-      } else {
+      if (!response.ok) {
         throw new Error(`Failed to fetch config from cloud: ${response.statusText}`);
       }
+
+      const body = await response.json();
+      logger.info(`Config fetched from cloud: ${id}`);
+      logger.debug(`Config from cloud: ${JSON.stringify(body, null, 2)}`);
+
       return getUnifiedConfig(body.config);
     }
   } catch (e) {
