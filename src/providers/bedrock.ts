@@ -492,7 +492,7 @@ export const BEDROCK_MODEL = {
 
       return params;
     },
-    output: (responseJson: any) => novaOutputFromMessage(responseJson),
+    output: (config: BedrockOptions, responseJson: any) => novaOutputFromMessage(responseJson),
   },
   CLAUDE_COMPLETION: {
     params: (config: BedrockClaudeLegacyCompletionOptions, prompt: string, stop: string[]) => {
