@@ -281,15 +281,15 @@ const sidebars = {
           items: [
             {
               type: 'doc',
-              id: 'model-scanner/index',
+              id: 'model-audit/index',
             },
             {
               type: 'doc',
-              id: 'model-scanner/usage',
+              id: 'model-audit/usage',
             },
             {
               type: 'doc',
-              id: 'model-scanner/scanners',
+              id: 'model-audit/scanners',
             },
           ],
         },
