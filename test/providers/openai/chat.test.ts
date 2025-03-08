@@ -1,3 +1,4 @@
+import dedent from 'dedent';
 import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 
@@ -223,6 +224,130 @@ describe('OpenAI Provider', () => {
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('Test output');
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+    });
+
+    it('should handle DeepSeek reasoning model content correctly', async () => {
+      const mockResponse = {
+        data: {
+          choices: [
+            {
+              message: {
+                content: 'The final answer is 9.11 is greater than 9.8.',
+                reasoning_content:
+                  'Let me compare 9.11 and 9.8:\n9.11 > 9.8 because 11 > 8 in the decimal places.\nTherefore, 9.11 is greater than 9.8.',
+              },
+            },
+          ],
+          usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('deepseek-reasoner');
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: '9.11 and 9.8, which is greater?' }]),
+      );
+
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      const expectedOutput = dedent`
+        Chain of Thought:
+
+        Let me compare 9.11 and 9.8:
+        9.11 > 9.8 because 11 > 8 in the decimal places.
+        Therefore, 9.11 is greater than 9.8.
+
+        Final Answer:
+
+        The final answer is 9.11 is greater than 9.8.`;
+      expect(result.output).toBe(expectedOutput);
+      expect(result.tokenUsage).toEqual({ total: 20, prompt: 10, completion: 10 });
+    });
+
+    it('should handle multi-round conversations with DeepSeek reasoning model', async () => {
+      // Round 1 response
+      const mockResponse1 = {
+        data: {
+          choices: [
+            {
+              message: {
+                content: 'The final answer is 9.11 is greater than 9.8.',
+                reasoning_content:
+                  'Let me compare 9.11 and 9.8:\n9.11 > 9.8 because 11 > 8 in the decimal places.\nTherefore, 9.11 is greater than 9.8.',
+              },
+            },
+          ],
+          usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+
+      // Round 2 response
+      const mockResponse2 = {
+        data: {
+          choices: [
+            {
+              message: {
+                content: 'There are 2 "r"s in the word "strawberry".',
+                reasoning_content:
+                  'Let me count the occurrences of the letter "r" in "strawberry":\nThe word is spelled s-t-r-a-w-b-e-r-r-y.\nI can see that the letter "r" appears twice: once in "str" and once in "rry".\nTherefore, there are 2 occurrences of the letter "r" in "strawberry".',
+              },
+            },
+          ],
+          usage: { total_tokens: 25, prompt_tokens: 15, completion_tokens: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+
+      mockFetchWithCache.mockResolvedValueOnce(mockResponse1).mockResolvedValueOnce(mockResponse2);
+
+      const provider = new OpenAiChatCompletionProvider('deepseek-reasoner');
+
+      // First round
+      const result1 = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: '9.11 and 9.8, which is greater?' }]),
+      );
+
+      const expectedOutput1 = dedent`
+        Chain of Thought:
+
+        Let me compare 9.11 and 9.8:
+        9.11 > 9.8 because 11 > 8 in the decimal places.
+        Therefore, 9.11 is greater than 9.8.
+
+        Final Answer:
+
+        The final answer is 9.11 is greater than 9.8.`;
+      expect(result1.output).toBe(expectedOutput1);
+
+      // Second round (with conversation history excluding reasoning_content)
+      const result2 = await provider.callApi(
+        JSON.stringify([
+          { role: 'user', content: '9.11 and 9.8, which is greater?' },
+          { role: 'assistant', content: 'The final answer is 9.11 is greater than 9.8.' },
+          { role: 'user', content: 'How many Rs are there in the word "strawberry"?' },
+        ]),
+      );
+
+      const expectedOutput2 = dedent`
+        Chain of Thought:
+
+        Let me count the occurrences of the letter "r" in "strawberry":
+        The word is spelled s-t-r-a-w-b-e-r-r-y.
+        I can see that the letter "r" appears twice: once in "str" and once in "rry".
+        Therefore, there are 2 occurrences of the letter "r" in "strawberry".
+
+        Final Answer:
+
+        There are 2 "r"s in the word "strawberry".`;
+      expect(result2.output).toBe(expectedOutput2);
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(2);
     });
 
     it('should handle function tool callbacks correctly', async () => {
