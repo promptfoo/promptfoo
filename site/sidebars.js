@@ -285,11 +285,11 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'model-scanner/scanners',
+              id: 'model-scanner/usage',
             },
             {
               type: 'doc',
-              id: 'model-scanner/installation',
+              id: 'model-scanner/scanners',
             },
           ],
         },
