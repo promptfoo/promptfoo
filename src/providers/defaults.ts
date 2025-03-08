@@ -38,8 +38,9 @@ export async function setDefaultEmbeddingProviders(provider: ApiProvider) {
 
 /**
  * Helper to check if a key is set in environment or env overrides
+ * Exported for testing
  */
-function isKeySet(key: keyof EnvOverrides, env?: EnvOverrides): boolean {
+export function isKeySet(key: keyof EnvOverrides, env?: EnvOverrides): boolean {
   return !!getEnvString(key) || !!env?.[key];
 }
 
@@ -57,8 +58,8 @@ interface ProviderEntry {
   hasCredentials(env?: EnvOverrides): boolean | Promise<boolean>;
 }
 
-// Define all providers with their credential checking logic
-const PROVIDERS: ProviderEntry[] = [
+// Exported for testing
+export const PROVIDERS: ProviderEntry[] = [
   // OpenAI Provider
   {
     name: 'openai',
