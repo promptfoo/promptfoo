@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import Editor from 'react-simple-code-editor';
+import { useStore } from '@app/stores/evalConfig';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
@@ -34,9 +35,37 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
   const [code, setCode] = React.useState('');
   const [isReadOnly, setIsReadOnly] = React.useState(readOnly);
   const [showCopySuccess, setShowCopySuccess] = React.useState(false);
+  const [showSaveSuccess, setShowSaveSuccess] = React.useState(false);
+  const [parseError, setParseError] = React.useState<string | null>(null);
+
+  const { setStateFromConfig, getTestSuite } = useStore();
+
+  // Parse YAML and update the store
+  const parseAndUpdateStore = (yamlContent: string) => {
+    try {
+      const parsedConfig = yaml.load(yamlContent);
+      if (parsedConfig && typeof parsedConfig === 'object') {
+        setStateFromConfig(parsedConfig);
+        setParseError(null);
+        setShowSaveSuccess(true);
+      } else {
+        setParseError('Invalid YAML configuration');
+      }
+    } catch (err) {
+      console.error('Failed to parse YAML:', err);
+      setParseError(`Failed to parse YAML: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
 
   const toggleReadOnly = () => {
-    setIsReadOnly(!isReadOnly);
+    if (isReadOnly) {
+      // Going from read-only to editable - no action needed
+      setIsReadOnly(false);
+    } else {
+      // Going from editable to read-only - save changes
+      parseAndUpdateStore(code);
+      setIsReadOnly(true);
+    }
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -46,6 +75,8 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
       reader.onload = (e) => {
         const content = e.target?.result as string;
         setCode(content);
+        // Automatically parse and update store with uploaded file
+        parseAndUpdateStore(content);
       };
       reader.readAsText(file);
     }
@@ -65,8 +96,12 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
       setCode(initialYaml);
     } else if (initialConfig) {
       setCode(yaml.dump(initialConfig));
+    } else {
+      // If no initial config is provided, generate from current store state
+      const currentConfig = getTestSuite();
+      setCode(yaml.dump(currentConfig));
     }
-  }, [initialYaml, initialConfig]);
+  }, [initialYaml, initialConfig, getTestSuite]);
 
   return (
     <Box>
@@ -87,11 +122,21 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
           >
             {isReadOnly ? 'Edit YAML' : 'Save'}
           </Button>
+          {!isReadOnly && (
+            <Button variant="contained" color="primary" onClick={() => parseAndUpdateStore(code)}>
+              Apply YAML
+            </Button>
+          )}
           <Button variant="text" color="primary" startIcon={<UploadIcon />} component="label">
             Upload YAML
             <input type="file" hidden accept=".yaml,.yml" onChange={handleFileUpload} />
           </Button>
         </Box>
+      )}
+      {parseError && (
+        <Typography color="error" variant="body2" sx={{ mb: 2 }}>
+          {parseError}
+        </Typography>
       )}
       <Box position="relative">
         <div className={`editor-container ${!readOnly && !isReadOnly ? 'glowing-border' : ''}`}>
@@ -135,6 +180,13 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
         autoHideDuration={2000}
         onClose={() => setShowCopySuccess(false)}
         message="YAML copied to clipboard"
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
+      <Snackbar
+        open={showSaveSuccess}
+        autoHideDuration={2000}
+        onClose={() => setShowSaveSuccess(false)}
+        message="Configuration saved successfully"
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       />
     </Box>
