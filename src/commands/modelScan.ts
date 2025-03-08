@@ -101,3 +101,5 @@ export function modelScanCommand(program: Command): void {
       });
     });
 }
+
+export { execAsync, checkModelAuditInstalled };
