@@ -36,6 +36,8 @@ import { providersRouter } from './routes/providers';
 import { redteamRouter } from './routes/redteam';
 import { userRouter } from './routes/user';
 
+dotenv.config();
+
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
 
@@ -224,15 +226,7 @@ export async function startServer(
   port = DEFAULT_PORT,
   browserBehavior = BrowserBehavior.ASK,
   filterDescription?: string,
-  envPath?: string,
 ) {
-  if (envPath) {
-    logger.info(`Loading environment variables from ${envPath}`);
-    dotenv.config({ path: envPath });
-  } else {
-    dotenv.config();
-  }
-
   const app = createApp();
 
   const httpServer = http.createServer(app);
