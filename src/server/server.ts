@@ -1,5 +1,6 @@
 import compression from 'compression';
 import cors from 'cors';
+import dotenv from 'dotenv';
 import type { Request, Response } from 'express';
 import express from 'express';
 import http from 'node:http';
@@ -223,7 +224,15 @@ export async function startServer(
   port = DEFAULT_PORT,
   browserBehavior = BrowserBehavior.ASK,
   filterDescription?: string,
+  envPath?: string,
 ) {
+  if (envPath) {
+    logger.info(`Loading environment variables from ${envPath}`);
+    dotenv.config({ path: envPath });
+  } else {
+    dotenv.config();
+  }
+
   const app = createApp();
 
   const httpServer = http.createServer(app);
