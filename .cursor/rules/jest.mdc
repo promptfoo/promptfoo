@@ -6,7 +6,7 @@ alwaysApply: false
 
 # Jest Testing Guidelines
 
-Files: "test/**/\*.test.ts,test/**/\*.spec.ts"
+Files: "test/**/*.test.ts,test/**/*.spec.ts"
 
 This rule provides guidance for writing and running Jest tests in the promptfoo project, which are different from the Vitest tests in the `src/app` directory.
 
