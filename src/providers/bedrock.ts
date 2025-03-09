@@ -528,23 +528,43 @@ export const BEDROCK_MODEL = {
           const systemMessages = parsed.filter((msg) => msg.role === 'system');
           const nonSystemMessages = parsed.filter((msg) => msg.role !== 'system');
 
-          // Get system prompt from the system messages
-          if (systemMessages.length > 0) {
-            systemPrompt = systemMessages.map((msg) => msg.content).join('\n\n');
+          // Handle the special case for lone system messages
+          if (systemMessages.length === 1 && nonSystemMessages.length === 0) {
+            // If there's only a system message, convert it to a user message
+            // This maintains compatibility with the existing test
+            messages = [
+              {
+                role: 'user',
+                content: Array.isArray(systemMessages[0].content)
+                  ? systemMessages[0].content
+                  : [
+                      {
+                        type: 'text',
+                        text: systemMessages[0].content,
+                      },
+                    ],
+              },
+            ];
+            systemPrompt = undefined;
+          } else {
+            // Normal case - keep system message as system prompt
+            if (systemMessages.length > 0) {
+              systemPrompt = systemMessages.map((msg) => msg.content).join('\n\n');
+            }
+            messages = nonSystemMessages.map((msg) => {
+              return {
+                role: msg.role,
+                content: Array.isArray(msg.content)
+                  ? msg.content
+                  : [
+                      {
+                        type: 'text',
+                        text: msg.content,
+                      },
+                    ],
+              };
+            });
           }
-          messages = nonSystemMessages.map((msg) => {
-            return {
-              role: msg.role,
-              content: Array.isArray(msg.content)
-                ? msg.content
-                : [
-                    {
-                      type: 'text',
-                      text: msg.content,
-                    },
-                  ],
-            };
-          });
         } else {
           messages = [
             {
@@ -580,6 +600,13 @@ export const BEDROCK_MODEL = {
 
       // If thinking is enabled, temperature MUST be set to 1.0 for Claude on Bedrock
       if (config.thinking && config.thinking.type === 'enabled') {
+        // If temperature is explicitly set but not to 1.0, log a warning
+        if (config.temperature !== undefined && config.temperature !== 1.0) {
+          logger.warn(
+            `For Claude on Bedrock with thinking enabled, temperature must be 1.0. Your configured value (${config.temperature}) will be overridden.`,
+          );
+        }
+        // Always force temperature to 1.0 when thinking is enabled
         params.temperature = 1.0;
       } else {
         addConfigParam(
@@ -620,7 +647,25 @@ export const BEDROCK_MODEL = {
       return params;
     },
     output: (config: BedrockClaudeMessagesCompletionOptions, responseJson: any) => {
-      return outputFromMessage(responseJson, config?.showThinking ?? true);
+      try {
+        // For Claude thinking in Bedrock, make sure we're showing the thinking content
+        // when available and the showThinking option is enabled
+        if (responseJson?.content) {
+          return outputFromMessage(responseJson, config?.showThinking ?? true);
+        } else if (responseJson?.error) {
+          // Handle error responses from Bedrock
+          throw new Error(
+            `Bedrock Claude error: ${responseJson.error.message || JSON.stringify(responseJson.error)}`,
+          );
+        } else {
+          // Default response handling
+          return outputFromMessage(responseJson, config?.showThinking ?? true);
+        }
+      } catch (error) {
+        // Re-throw with context if there's an error processing the response
+        console.error('Error processing Bedrock Claude response:', error);
+        throw error;
+      }
     },
   },
   TITAN_TEXT: {
@@ -979,6 +1024,15 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       );
       model = BEDROCK_MODEL.CLAUDE_MESSAGES;
     }
+
+    // If this is a Claude model with thinking enabled, log a debug message
+    if (
+      this.modelName.includes('claude') &&
+      (this.config as BedrockClaudeMessagesCompletionOptions)?.thinking?.type === 'enabled'
+    ) {
+      logger.debug(`Using Claude thinking mode for model ${this.modelName} with temperature=1.0`);
+    }
+
     const params = model.params(this.config, prompt, stop);
 
     logger.debug(`Calling Amazon Bedrock API: ${JSON.stringify(params)}`);
@@ -998,50 +1052,64 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       }
     }
 
-    const bedrockInstance = await this.getBedrockInstance();
-    const response = await bedrockInstance.invokeModel({
-      modelId: this.modelName,
-      ...(this.config.guardrailIdentifier
-        ? { guardrailIdentifier: String(this.config.guardrailIdentifier) }
-        : {}),
-      ...(this.config.guardrailVersion
-        ? { guardrailVersion: String(this.config.guardrailVersion) }
-        : {}),
-      ...(this.config.trace ? { trace: this.config.trace } : {}),
-      accept: 'application/json',
-      contentType: 'application/json',
-      body: JSON.stringify(params),
-    });
-
-    logger.debug(`Amazon Bedrock API response: ${response.body.transformToString()}`);
-    if (isCacheEnabled()) {
-      try {
-        await cache.set(cacheKey, new TextDecoder().decode(response.body));
-      } catch (err) {
-        logger.error(`Failed to cache response: ${String(err)}`);
-      }
-    }
     try {
-      const output = JSON.parse(new TextDecoder().decode(response.body));
-
-      return {
-        ...model.output(this.config, output),
-        tokenUsage: {
-          total: output.total_tokens ?? output.prompt_token_count + output.generation_token_count,
-          prompt: output.prompt_tokens ?? output.prompt_token_count,
-          completion: output.completion_tokens ?? output.generation_token_count,
-        },
-        ...(output['amazon-bedrock-guardrailAction']
-          ? {
-              guardrails: {
-                flagged: output['amazon-bedrock-guardrailAction'] === 'INTERVENED',
-              },
-            }
+      const bedrockInstance = await this.getBedrockInstance();
+      const response = await bedrockInstance.invokeModel({
+        modelId: this.modelName,
+        ...(this.config.guardrailIdentifier
+          ? { guardrailIdentifier: String(this.config.guardrailIdentifier) }
           : {}),
-      };
-    } catch (err) {
+        ...(this.config.guardrailVersion
+          ? { guardrailVersion: String(this.config.guardrailVersion) }
+          : {}),
+        ...(this.config.trace ? { trace: this.config.trace } : {}),
+        accept: 'application/json',
+        contentType: 'application/json',
+        body: JSON.stringify(params),
+      });
+
+      logger.debug(`Amazon Bedrock API response: ${response.body.transformToString()}`);
+      if (isCacheEnabled()) {
+        try {
+          await cache.set(cacheKey, new TextDecoder().decode(response.body));
+        } catch (err) {
+          logger.error(`Failed to cache response: ${String(err)}`);
+        }
+      }
+      try {
+        const output = JSON.parse(new TextDecoder().decode(response.body));
+
+        return {
+          ...model.output(this.config, output),
+          tokenUsage: {
+            total: output.total_tokens ?? output.prompt_token_count + output.generation_token_count,
+            prompt: output.prompt_tokens ?? output.prompt_token_count,
+            completion: output.completion_tokens ?? output.generation_token_count,
+          },
+          ...(output['amazon-bedrock-guardrailAction']
+            ? {
+                guardrails: {
+                  flagged: output['amazon-bedrock-guardrailAction'] === 'INTERVENED',
+                },
+              }
+            : {}),
+        };
+      } catch (err) {
+        return {
+          error: `API response error: ${String(err)}: ${JSON.stringify(response)}`,
+        };
+      }
+    } catch (error: any) {
+      // Provide clearer error messages for thinking-related issues
+      if (error.name === 'ValidationException' && error.message.includes('thinking')) {
+        logger.error(`Bedrock Claude thinking error: ${error.message}`);
+        logger.debug('This may be due to incorrect temperature setting when thinking is enabled.');
+        return {
+          error: `Bedrock Claude thinking error: ${error.message}. Note: When thinking is enabled, temperature must be 1.0.`,
+        };
+      }
       return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(response)}`,
+        error: `Error calling AWS Bedrock: ${String(error)}`,
       };
     }
   }

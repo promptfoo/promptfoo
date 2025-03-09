@@ -15,6 +15,9 @@ providers:
   - id: bedrock:us.anthropic.claude-3-7-sonnet-20250219-v1:0
     config:
       max_tokens: 8192 # Must be greater than budget_tokens
+      anthropic_version: 'bedrock-2023-05-31' # Explicitly set the Anthropic version
+      temperature: 1.0 # Must be 1.0 when thinking is enabled
+      # Note: temperature will automatically be set to 1.0 when thinking is enabled
       thinking:
         type: 'enabled'
         budget_tokens: 4096
