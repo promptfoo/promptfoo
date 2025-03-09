@@ -12,10 +12,10 @@ import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { ResultFailureReason } from '@promptfoo/types';
+import { removeEmpty } from '@promptfoo/util/objectUtils';
 import { stringify as csvStringify } from 'csv-stringify/browser/esm/sync';
 import yaml from 'js-yaml';
 import { useStore as useResultsViewStore } from './store';
-import { removeEmpty } from './utils';
 
 function DownloadMenu() {
   const { table, config, evalId } = useResultsViewStore();
