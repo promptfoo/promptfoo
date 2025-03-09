@@ -29,7 +29,12 @@ export function modelScanCommand(program: Command): void {
     )
     .option('-f, --format <format>', 'Output format (text or json)', 'text')
     .option('-o, --output <path>', 'Output file path (prints to stdout if not specified)')
-    .option('-t, --timeout <seconds>', 'Scan timeout in seconds', (val) => Number.parseInt(val, 10), 300)
+    .option(
+      '-t, --timeout <seconds>',
+      'Scan timeout in seconds',
+      (val) => Number.parseInt(val, 10),
+      300,
+    )
     .option('-v, --verbose', 'Enable verbose output')
     .option('--max-file-size <bytes>', 'Maximum file size to scan in bytes')
     .action(async (paths: string[], options) => {
