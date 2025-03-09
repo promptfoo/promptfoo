@@ -60,13 +60,13 @@ async function main() {
   debugCommand(program, defaultConfig, defaultConfigPath);
   deleteCommand(program);
   exportCommand(program);
+  const generateCommand = program.command('generate').description('Generate synthetic data');
   feedbackCommand(program);
   importCommand(program);
   listCommand(program);
   modelScanCommand(program);
   showCommand(program);
 
-  const generateCommand = program.command('generate').description('Generate synthetic data');
   generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
   redteamGenerateCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
 
