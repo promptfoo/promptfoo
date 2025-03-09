@@ -41,7 +41,7 @@ alwaysApply: false
   ```
 - Follow this specific field order in all configuration files:
   1. `description` - A SHORT clear description of what the example demonstrates. Between 3 and 10 words
-  2. `env` (optional) - Environment variable settings. Only define if absolutely necessary'
+  2. `env` (optional) - Environment variable settings. Only define if absolutely necessary
   3. `prompts` - The prompts to evaluate
   4. `providers` - The models/providers to test
   5. `defaultTest` (optional) - Default assertions for all tests
