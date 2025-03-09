@@ -1,11 +1,12 @@
 ---
 description: Guidelines for Python development
-globs: "**/*.py"
+globs: '**/*.py'
 alwaysApply: false
 ---
+
 # Python Development Guidelines
 
-Files: "**/*.py"
+Files: "\*_/_.py"
 
 This rule provides guidance for Python development in the promptfoo project.
 
@@ -30,4 +31,4 @@ This rule provides guidance for Python development in the promptfoo project.
 ## Integration with TypeScript
 
 - Understand the interaction between Python components and the TypeScript core
-- Follow the patterns established in existing Python files for interfacing with the main codebase 
+- Follow the patterns established in existing Python files for interfacing with the main codebase

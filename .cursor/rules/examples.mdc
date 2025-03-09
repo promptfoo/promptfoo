@@ -1,29 +1,32 @@
 ---
-description: 
-globs: 
+description: This rule provides guidance for creating and maintaining examples in the promptfoo project, which has an extensive collection of example configurations.gitgi
+globs: examples/**/*
 alwaysApply: false
 ---
+
 # Examples Development Guidelines
-
-Files: "examples/**/*"
-
-This rule provides guidance for creating and maintaining examples in the promptfoo project, which has an extensive collection of example configurations.
 
 ## Example Structure
 
 - Each example should have its own directory with a clear, descriptive name
 - The README.md must begin with the folder name as an H1 heading:
   ```markdown
-  # example-name
+  # example-name (human readable name)
   ```
 - Every example README must include how to run it with:
-  ```markdown
+
+  ````markdown
   You can run this example with:
-  
+
   ```bash
   npx promptfoo@latest init --example example-name
   ```
+  ````
+
   ```
+
+  ```
+
 - Include a comprehensive README.md that explains:
   - The purpose of the example
   - Required prerequisites or setup
@@ -39,8 +42,8 @@ This rule provides guidance for creating and maintaining examples in the promptf
   # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
   ```
 - Follow this specific field order in all configuration files:
-  1. `description` - A clear description of what the example demonstrates
-  2. `env` (optional) - Environment variable settings
+  1. `description` - A SHORT clear description of what the example demonstrates. Between 3 and 10 words
+  2. `env` (optional) - Environment variable settings. Only define if absolutely necessary'
   3. `prompts` - The prompts to evaluate
   4. `providers` - The models/providers to test
   5. `defaultTest` (optional) - Default assertions for all tests
@@ -76,14 +79,15 @@ This rule provides guidance for creating and maintaining examples in the promptf
   - How to obtain it (for API keys)
   - Any default values or constraints
 - Include a sample `.env` file or instructions when multiple variables are needed:
+
   ```markdown
   ## Environment Variables
-  
+
   This example requires the following environment variables:
-  
+
   - `OPENAI_API_KEY` - Your OpenAI API key
   - `ANTHROPIC_API_KEY` - Your Anthropic API key
-  
+
   You can set these in a `.env` file or directly in your environment.
   ```
 
@@ -99,14 +103,15 @@ This rule provides guidance for creating and maintaining examples in the promptf
 ## Configuration Examples
 
 ### Basic Example
+
 ```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: A simple evaluation of translation quality
 prompts:
   - Translate "{{input}}" to {{language}}
 providers:
-  - openai:gpt-4-turbo-2025
-  - anthropic:claude-3-opus-2025
+  - openai:o3-mini
+  - anthropic:claude-3-7-sonnet-latest
 tests:
   - vars:
       input: Hello, world!
@@ -123,6 +128,7 @@ tests:
 ```
 
 ### Example with Optional Fields
+
 ```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Evaluating joke quality across different models
@@ -134,7 +140,7 @@ providers:
   - id: gpt-5-creative
     provider: openai:gpt-5-preview
     temperature: $TEMPERATURE
-  - anthropic:claude-3-sonnet-2025
+  - anthropic:claude-3-7-sonnet-latest
 defaultTest:
   assert:
     - type: javascript
@@ -186,4 +192,4 @@ tests:
 - Make it clear which features each example demonstrates
 - Group related examples together
 - Include links to more comprehensive documentation where appropriate
-- Consider creating guides that walk through multiple examples 
+- Consider creating guides that walk through multiple examples

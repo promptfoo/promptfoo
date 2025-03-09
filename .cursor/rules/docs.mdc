@@ -1,8 +1,9 @@
 ---
 description: This rule provides guidance for working with documentation in the promptfoo project.
-globs: "**/*.md,**/*.mdc,site/docs/**/*"
+globs: '**/*.md,**/*.mdc,site/docs/**/*'
 alwaysApply: false
 ---
+
 # Documentation Guidelines
 
 ## Documentation Standards
@@ -16,6 +17,7 @@ alwaysApply: false
 ## Provider Documentation
 
 When documenting a provider:
+
 - Include a description of the provider
 - List setup instructions including required environment variables
 - Document configuration options with examples
@@ -36,4 +38,4 @@ When documenting a provider:
 - Include code examples with proper syntax highlighting
 - Keep lines at a reasonable length for readability
 - Use tables for presenting structured information
-- Link to related documentation as appropriate 
+- Link to related documentation as appropriate

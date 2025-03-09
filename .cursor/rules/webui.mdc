@@ -1,11 +1,12 @@
 ---
 description: Guidelines for working on the web UI and frontend components
-globs: "src/app/**/*.tsx,src/app/**/*.jsx,src/app/**/*.ts,src/app/**/*.js,src/app/**/*.css"
+globs: 'src/app/**/*.tsx,src/app/**/*.jsx,src/app/**/*.ts,src/app/**/*.js,src/app/**/*.css'
 alwaysApply: false
 ---
+
 # Web UI Development Guidelines
 
-Files: "src/app/**/*.tsx,src/app/**/*.jsx,src/app/**/*.ts,src/app/**/*.js,src/app/**/*.css"
+Files: "src/app/**/\*.tsx,src/app/**/_.jsx,src/app/\*\*/_.ts,src/app/**/\*.js,src/app/**/\*.css"
 
 This rule provides guidance for working on the promptfoo web UI and frontend components.
 
@@ -91,4 +92,4 @@ The promptfoo web UI is a React app that gets exported as a static site and host
   - In production, the front end is built and served as a static site via the Express server
 - After making changes to the code, you need to run `npm run build` again to see the changes in the production build
 
-@file .cursor/rules/vitest.mdc 
+@file .cursor/rules/vitest.mdc

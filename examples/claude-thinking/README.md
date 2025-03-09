@@ -1,3 +1,7 @@
+---
+description: "Demonstrates Claude's thinking capability for complex problem solving"
+---
+
 # Claude's Step-by-Step Thinking Demonstration
 
 This example demonstrates Claude's "thinking" capability, which allows you to see the model's step-by-step reasoning process before it provides a final answer. The example compares thinking outputs from both the Anthropic API directly and Claude on AWS Bedrock.
@@ -86,4 +90,5 @@ Final answer: We need exactly 2 weighings to find the heavier ball.
 
 - [Claude Thinking Documentation](https://docs.anthropic.com/claude/docs/extended-thinking)
 - [AWS Bedrock Claude Guide](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-claude.html)
+- [AWS Bedrock Model Access Setup](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html)
 - [Promptfoo Documentation on Claude Providers](https://promptfoo.dev/docs/providers/anthropic)

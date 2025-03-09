@@ -1,11 +1,12 @@
 ---
 description: Guidelines for writing Vitest tests in the src/app directory
-globs: "src/app/**/*.test.ts,src/app/**/*.spec.ts,src/app/**/*.test.tsx,src/app/**/*.spec.tsx"
+globs: 'src/app/**/*.test.ts,src/app/**/*.spec.ts,src/app/**/*.test.tsx,src/app/**/*.spec.tsx'
 alwaysApply: false
 ---
+
 # Vitest Testing Guidelines
 
-Files: "src/app/**/*.test.ts,src/app/**/*.spec.ts,src/app/**/*.test.tsx,src/app/**/*.spec.tsx"
+Files: "src/app/**/\*.test.ts,src/app/**/_.spec.ts,src/app/\*\*/_.test.tsx,src/app/\*_/_.spec.tsx"
 
 This rule provides guidance for writing and running Vitest tests in the promptfoo project, specifically for the `src/app` directory.
 
@@ -28,34 +29,40 @@ This rule provides guidance for writing and running Vitest tests in the promptfo
 - Mock as few functions as possible to keep tests realistic
 - Never increase the function timeout - fix the test instead
 - Prefer using the Vitest mocking utilities rather than manual mocks:
+
   ```typescript
   import { vi } from 'vitest';
-  
+
   const mockFn = vi.fn().mockReturnValue('mocked value');
   ```
+
 - Organize tests in descriptive `describe` and `it` blocks:
+
   ```typescript
   describe('Component', () => {
     describe('someFunction', () => {
       it('should handle normal input correctly', () => {
         // test code
       });
-      
+
       it('should handle edge cases', () => {
         // test code
       });
     });
   });
   ```
+
 - When writing expectations, prefer assertions on entire objects rather than individual keys:
+
   ```typescript
   // Preferred:
   expect(result).toEqual({ id: 1, name: 'test' });
-  
+
   // Avoid:
   expect(result.id).toEqual(1);
   expect(result.name).toEqual('test');
   ```
+
 - Use Vitest's snapshot testing for UI components when appropriate:
   ```typescript
   expect(wrapper).toMatchSnapshot();
@@ -101,4 +108,4 @@ This rule provides guidance for writing and running Vitest tests in the promptfo
 - Run tests in a single pass (no watch mode)
 - Ensure all tests are independent and can run in any order
 - Clean up any test data or mocks after each test
-- Run the full test suite before committing changes 
+- Run the full test suite before committing changes
