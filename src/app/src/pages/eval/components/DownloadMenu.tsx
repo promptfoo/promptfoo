@@ -15,11 +15,13 @@ import { ResultFailureReason } from '@promptfoo/types';
 import { removeEmpty } from '@promptfoo/util/objectUtils';
 import { stringify as csvStringify } from 'csv-stringify/browser/esm/sync';
 import yaml from 'js-yaml';
+import { useToast } from '../../../hooks/useToast';
 import { useStore as useResultsViewStore } from './store';
 
 function DownloadMenu() {
   const { table, config, evalId } = useResultsViewStore();
   const [open, setOpen] = React.useState(false);
+  const { showToast } = useToast();
 
   const openDownloadDialog = (blob: Blob, downloadName: string) => {
     const url = URL.createObjectURL(blob);
@@ -46,12 +48,50 @@ function DownloadMenu() {
     const mimeType = 'text/yaml;charset=utf-8';
     const blob = new Blob([schemaLine + configData], { type: mimeType });
     openDownloadDialog(blob, 'promptfooconfig.yaml');
+    showToast('Configuration downloaded successfully', 'success');
+    handleClose();
+  };
+
+  const downloadFailedTestsConfig = () => {
+    if (!config || !table) {
+      showToast('No configuration or results available', 'error');
+      return;
+    }
+
+    // Create a copy of the config to modify
+    const configCopy = { ...config };
+
+    // Find the failed tests
+    const failedTests = table.body
+      .filter((row) => row.outputs.some((output) => !output.pass))
+      .map((row) => row.test);
+
+    if (failedTests.length === 0) {
+      showToast('No failed tests found', 'info');
+      return;
+    }
+
+    // Replace the tests array with only the failed tests
+    configCopy.tests = failedTests;
+
+    // Clean top-level empty properties
+    const cleanConfig = removeEmpty(configCopy);
+
+    // Convert to YAML and download
+    const schemaLine = '# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json\n';
+    const configData = yaml.dump(cleanConfig, { skipInvalid: true });
+    const mimeType = 'text/yaml;charset=utf-8';
+    const blob = new Blob([schemaLine + configData], { type: mimeType });
+
+    const fileName = evalId ? `${evalId}-failed-tests.yaml` : 'promptfoo-failed-tests.yaml';
+    openDownloadDialog(blob, fileName);
+    showToast(`Downloaded config with ${failedTests.length} failed tests`, 'success');
     handleClose();
   };
 
   const downloadDpoJson = () => {
     if (!table) {
-      alert('No table data');
+      showToast('No table data', 'error');
       return;
     }
     const formattedData = table.body.map((row, index) => ({
@@ -68,7 +108,7 @@ function DownloadMenu() {
 
   const downloadTable = () => {
     if (!table) {
-      alert('No table data');
+      showToast('No table data', 'error');
       return;
     }
     const blob = new Blob([JSON.stringify(table, null, 2)], { type: 'application/json' });
@@ -78,7 +118,7 @@ function DownloadMenu() {
 
   const downloadCsv = () => {
     if (!table) {
-      alert('No table data');
+      showToast('No table data', 'error');
       return;
     }
 
@@ -115,7 +155,7 @@ function DownloadMenu() {
 
   const downloadHumanEvalTestCases = () => {
     if (!table) {
-      alert('No table data');
+      showToast('No table data', 'error');
       return;
     }
 
@@ -151,12 +191,12 @@ function DownloadMenu() {
 
   const downloadBurpPayloads = () => {
     if (!table) {
-      alert('No table data');
+      showToast('No table data', 'error');
       return;
     }
 
     if (!config?.redteam) {
-      alert('No redteam config');
+      showToast('No redteam config', 'error');
       return;
     }
 
@@ -251,6 +291,21 @@ function DownloadMenu() {
                 fullWidth
               >
                 Download YAML Config
+              </Button>
+            </Tooltip>
+
+            <Tooltip title="Download failed tests configuration">
+              <Button
+                onClick={downloadFailedTestsConfig}
+                startIcon={<DownloadIcon />}
+                variant="outlined"
+                color="secondary"
+                fullWidth
+                disabled={
+                  !table || table.body.every((row) => row.outputs.every((output) => output.pass))
+                }
+              >
+                Download Failed Tests Config
               </Button>
             </Tooltip>
 
