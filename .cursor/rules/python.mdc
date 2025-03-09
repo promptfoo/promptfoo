@@ -6,7 +6,7 @@ alwaysApply: false
 
 # Python Development Guidelines
 
-Files: "**/*.py"
+Files: "\*_/_.py"
 
 This rule provides guidance for Python development in the promptfoo project.
 

@@ -23,7 +23,6 @@ alwaysApply: false
   ```
   ````
 
-
 - Include a comprehensive README.md that explains:
   - The purpose of the example
   - Required prerequisites or setup
@@ -190,4 +189,7 @@ tests:
 - Group related examples together
 - Include links to more comprehensive documentation where appropriate
 - Consider creating guides that walk through multiple examples
-````
+
+```
+
+```
