@@ -975,7 +975,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
         return {
-          output: model.output(this.config, JSON.parse(cachedResponse as string)),
+          ...model.output(this.config, JSON.parse(cachedResponse as string)),
           tokenUsage: {},
         };
       }
@@ -1008,7 +1008,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       const output = JSON.parse(new TextDecoder().decode(response.body));
 
       return {
-        output: model.output(this.config, output),
+        ...model.output(this.config, output),
         tokenUsage: {
           total: output.total_tokens ?? output.prompt_token_count + output.generation_token_count,
           prompt: output.prompt_tokens ?? output.prompt_token_count,

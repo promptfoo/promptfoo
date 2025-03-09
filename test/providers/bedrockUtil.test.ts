@@ -17,7 +17,7 @@ describe('novaOutputFromMessage', () => {
     };
 
     const result = novaOutputFromMessage(response);
-    expect(result).toBe(
+    expect(result.output).toBe(
       '{"name":"tool1","toolUseId":"123","input":{"foo":"bar"}}\n\n{"name":"tool2","toolUseId":"456","input":{"baz":"qux"}}',
     );
   });
@@ -33,13 +33,13 @@ describe('novaOutputFromMessage', () => {
     };
 
     const result = novaOutputFromMessage(response);
-    expect(result).toBe('First message\n\nSecond message');
+    expect(result.output).toBe('First message');
   });
 
   it('should handle empty response', () => {
     const response = {};
     const result = novaOutputFromMessage(response);
-    expect(result).toBeUndefined();
+    expect(result.output).toBe('');
   });
 });
 

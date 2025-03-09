@@ -25,7 +25,7 @@ interface AmazonResponse {
 export function novaOutputFromMessage(response: AmazonResponse) {
   const hasToolUse = response.output?.message?.content.some((block) => block.toolUse?.toolUseId);
   if (hasToolUse) {
-    return response.output?.message?.content
+    const toolUseBlocks = response.output?.message?.content
       .map((block) => {
         if (block.text) {
           // Filter out text for tool use blocks.
@@ -34,14 +34,16 @@ export function novaOutputFromMessage(response: AmazonResponse) {
         }
         return JSON.stringify(block.toolUse);
       })
-      .filter((block) => block)
+      .filter(Boolean)
       .join('\n\n');
+
+    return {
+      output: toolUseBlocks || '',
+    };
   }
-  return response.output?.message?.content
-    .map((block) => {
-      return block.text;
-    })
-    .join('\n\n');
+  return {
+    output: response.output?.message?.content?.[0]?.text || '',
+  };
 }
 
 export interface TextBlockParam {

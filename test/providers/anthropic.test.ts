@@ -407,8 +407,9 @@ describe('Anthropic', () => {
         },
         {},
       );
-      expect(result.output).toBe(
-        'Thinking: Let me analyze this step by step...\nSignature: test-signature\n\nFinal answer',
+      expect(result.output).toBe('Final answer');
+      expect(result.reasoning).toBe(
+        'Thinking: Let me analyze this step by step...\nSignature: test-signature',
       );
     });
 
@@ -431,7 +432,9 @@ describe('Anthropic', () => {
         } as Anthropic.Messages.Message);
 
       const result = await provider.callApi('What is 2+2?');
-      expect(result.output).toBe('Redacted Thinking: encrypted-data\n\nFinal answer');
+      expect(result.output).toBe('Final answer');
+      expect(result.reasoning).toBe('Redacted Thinking: encrypted-data');
+      expect(result.reasoning).toBe('Redacted Thinking: encrypted-data');
     });
 
     it('should handle API errors for thinking configuration', async () => {
@@ -806,7 +809,7 @@ describe('Anthropic', () => {
       };
 
       const result = outputFromMessage(message, false);
-      expect(result).toBe('');
+      expect(result.output).toBe('');
     });
 
     it('should return text from a single text block', () => {
@@ -827,7 +830,7 @@ describe('Anthropic', () => {
       };
 
       const result = outputFromMessage(message, false);
-      expect(result).toBe('Hello');
+      expect(result.output).toBe('Hello');
     });
 
     it('should concatenate text blocks without tool_use blocks', () => {
@@ -851,7 +854,7 @@ describe('Anthropic', () => {
       };
 
       const result = outputFromMessage(message, false);
-      expect(result).toBe('Hello\n\nWorld');
+      expect(result.output).toBe('Hello\n\nWorld');
     });
 
     it('should handle content with tool_use blocks', () => {
@@ -885,7 +888,7 @@ describe('Anthropic', () => {
       };
 
       const result = outputFromMessage(message, false);
-      expect(result).toBe(
+      expect(result.output).toBe(
         '{"type":"tool_use","id":"tool1","name":"get_weather","input":{"location":"San Francisco, CA"}}\n\n{"type":"tool_use","id":"tool2","name":"get_time","input":{"location":"New York, NY"}}',
       );
     });
@@ -917,7 +920,7 @@ describe('Anthropic', () => {
       };
 
       const result = outputFromMessage(message, false);
-      expect(result).toBe(
+      expect(result.output).toBe(
         'Hello\n\n{"type":"tool_use","id":"tool1","name":"get_weather","input":{"location":"San Francisco, CA"}}\n\nWorld',
       );
     });
@@ -955,7 +958,7 @@ describe('Anthropic', () => {
       };
 
       const result = outputFromMessage(message, false);
-      expect(result).toBe('The sky is blue');
+      expect(result.output).toBe('The sky is blue');
     });
 
     it('should include thinking blocks when showThinking is true', () => {
@@ -984,9 +987,8 @@ describe('Anthropic', () => {
       };
 
       const result = outputFromMessage(message, true);
-      expect(result).toBe(
-        'Hello\n\nThinking: I need to consider the weather\nSignature: abc123\n\nWorld',
-      );
+      expect(result.output).toBe('Hello\n\nWorld');
+      expect(result.reasoning).toBe('Thinking: I need to consider the weather\nSignature: abc123');
     });
 
     it('should exclude thinking blocks when showThinking is false', () => {
@@ -1015,7 +1017,8 @@ describe('Anthropic', () => {
       };
 
       const result = outputFromMessage(message, false);
-      expect(result).toBe('Hello\n\nWorld');
+      expect(result.output).toBe('Hello\n\nWorld');
+      expect(result.reasoning).toBeUndefined();
     });
 
     it('should include redacted_thinking blocks when showThinking is true', () => {
@@ -1043,7 +1046,8 @@ describe('Anthropic', () => {
       };
 
       const result = outputFromMessage(message, true);
-      expect(result).toBe('Hello\n\nRedacted Thinking: Some redacted thinking data\n\nWorld');
+      expect(result.output).toBe('Hello\n\nWorld');
+      expect(result.reasoning).toBe('Redacted Thinking: Some redacted thinking data');
     });
 
     it('should exclude redacted_thinking blocks when showThinking is false', () => {
@@ -1071,7 +1075,8 @@ describe('Anthropic', () => {
       };
 
       const result = outputFromMessage(message, false);
-      expect(result).toBe('Hello\n\nWorld');
+      expect(result.output).toBe('Hello\n\nWorld');
+      expect(result.reasoning).toBeUndefined();
     });
   });
 

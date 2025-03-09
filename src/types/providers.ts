@@ -98,27 +98,28 @@ export interface GuardrailResponse {
 }
 
 export interface ProviderResponse {
+  audio?: {
+    data?: string; // base64 encoded audio data
+    expiresAt?: number;
+    format?: string;
+    id?: string;
+    transcript?: string;
+  };
   cached?: boolean;
   cost?: number;
   error?: string;
+  guardrails?: GuardrailResponse;
+  isRefusal?: boolean;
   logProbs?: number[];
   metadata?: {
     redteamFinalPrompt?: string;
     [key: string]: any;
   };
-  raw?: string | any;
   output?: string | any;
-  tokenUsage?: TokenUsage;
-  isRefusal?: boolean;
+  raw?: string | any;
+  reasoning?: string | any;
   sessionId?: string;
-  guardrails?: GuardrailResponse;
-  audio?: {
-    id?: string;
-    expiresAt?: number;
-    data?: string; // base64 encoded audio data
-    transcript?: string;
-    format?: string;
-  };
+  tokenUsage?: TokenUsage;
 }
 
 export interface ProviderEmbeddingResponse {

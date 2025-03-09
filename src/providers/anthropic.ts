@@ -107,28 +107,34 @@ export function outputFromMessage(message: Anthropic.Messages.Message, showThink
     (block) => block.type === 'thinking' || block.type === 'redacted_thinking',
   );
 
+  const output: string[] = [];
+  const reasoning: string[] = [];
+
   if (hasToolUse || hasThinking) {
-    return message.content
-      .map((block) => {
-        if (block.type === 'text') {
-          return block.text;
-        } else if (block.type === 'thinking' && showThinking) {
-          return `Thinking: ${block.thinking}\nSignature: ${block.signature}`;
-        } else if (block.type === 'redacted_thinking' && showThinking) {
-          return `Redacted Thinking: ${block.data}`;
-        } else if (block.type !== 'thinking' && block.type !== 'redacted_thinking') {
-          return JSON.stringify(block);
-        }
-        return '';
-      })
-      .filter((text) => text !== '')
-      .join('\n\n');
+    message.content.forEach((block) => {
+      if (block.type === 'text') {
+        output.push(block.text);
+      } else if (block.type === 'thinking' && showThinking) {
+        reasoning.push(`Thinking: ${block.thinking}\nSignature: ${block.signature}`);
+      } else if (block.type === 'redacted_thinking' && showThinking) {
+        reasoning.push(`Redacted Thinking: ${block.data}`);
+      } else if (block.type !== 'thinking' && block.type !== 'redacted_thinking') {
+        output.push(JSON.stringify(block));
+      }
+    });
+
+    return {
+      output: output.join('\n\n'),
+      reasoning: reasoning.length > 0 ? reasoning.join('\n\n') : undefined,
+    };
   }
-  return message.content
-    .map((block) => {
-      return (block as Anthropic.Messages.TextBlock).text;
-    })
-    .join('\n\n');
+
+  return {
+    output: message.content
+      .map((block) => (block as Anthropic.Messages.TextBlock).text)
+      .join('\n\n'),
+    reasoning: undefined,
+  };
 }
 
 export function parseMessages(messages: string): {
@@ -318,7 +324,7 @@ export class AnthropicMessagesProvider implements ApiProvider {
         try {
           const parsedCachedResponse = JSON.parse(cachedResponse) as Anthropic.Messages.Message;
           return {
-            output: outputFromMessage(parsedCachedResponse, this.config.showThinking ?? true),
+            ...outputFromMessage(parsedCachedResponse, this.config.showThinking ?? true),
             tokenUsage: getTokenUsage(parsedCachedResponse, true),
             cost: calculateAnthropicCost(
               this.modelName,
@@ -360,7 +366,7 @@ export class AnthropicMessagesProvider implements ApiProvider {
       }
 
       return {
-        output: outputFromMessage(response, this.config.showThinking ?? true),
+        ...outputFromMessage(response, this.config.showThinking ?? true),
         tokenUsage: getTokenUsage(response, false),
         cost: calculateAnthropicCost(
           this.modelName,
