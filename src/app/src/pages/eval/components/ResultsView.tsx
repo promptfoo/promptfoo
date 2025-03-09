@@ -46,7 +46,7 @@ import { FilterModeSelector } from './FilterModeSelector';
 import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
-import SettingsModal from './TableSettingsModal';
+import SettingsModal from './TableSettings/TableSettingsModal';
 import { useStore as useResultsViewStore } from './store';
 import type { EvaluateTable, FilterMode, ResultLightweightWithLabel } from './types';
 import './ResultsView.css';
