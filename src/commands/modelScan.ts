@@ -43,12 +43,12 @@ export function modelScanCommand(program: Command): void {
       const isModelAuditInstalled = await checkModelAuditInstalled();
       if (!isModelAuditInstalled) {
         logger.error('ModelAudit is not installed.');
-        logger.info('Please install it using: pip install modelaudit');
+        logger.info(`Please install it using: ${chalk.green('pip install modelaudit')}`);
         logger.info('For more information, visit: https://www.promptfoo.dev/docs/model-audit/');
         process.exit(1);
       }
 
-      const args = ['modelaudit'];
+      const args = ['-m', 'modelaudit'];
 
       // Add all paths
       args.push(...paths);
