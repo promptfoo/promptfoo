@@ -1,0 +1,94 @@
+---
+description: Guidelines for working on the web UI and frontend components
+globs: "src/app/**/*.tsx,src/app/**/*.jsx,src/app/**/*.ts,src/app/**/*.js,src/app/**/*.css"
+alwaysApply: false
+---
+# Web UI Development Guidelines
+
+Files: "src/app/**/*.tsx,src/app/**/*.jsx,src/app/**/*.ts,src/app/**/*.js,src/app/**/*.css"
+
+This rule provides guidance for working on the promptfoo web UI and frontend components.
+
+## Overview
+
+The promptfoo web UI is a React app that gets exported as a static site and hosted by a local Express server when bundled.
+
+## Development Workflow
+
+- Run the web UI in development mode: `npm run dev`
+  - This hosts the web UI at http://localhost:3000
+  - The Express server runs on port 15500
+  - Both the API and UI will automatically reload when you make changes
+- Run only the web UI without the Express server: `npm run dev:web`
+- For full end-to-end testing, build the project and link it:
+  ```
+  npm run build
+  promptfoo view
+  ```
+
+## Component Architecture
+
+- Follow a component-based architecture with clear separation of concerns
+- Keep components small and focused on a single responsibility
+- Use functional components with hooks rather than class components
+- Organize related components together in directories with consistent naming
+
+## Component File Structure
+
+- Each component should have its own directory with the following structure:
+  ```
+  ComponentName/
+  ├── index.ts           # Main export
+  ├── ComponentName.tsx  # Component implementation
+  ├── ComponentName.test.tsx  # Tests
+  ├── ComponentName.module.css  # Styles (if applicable)
+  ├── hooks/             # Component-specific hooks (if needed)
+  └── components/        # Sub-components (if needed)
+  ```
+- Export components as named exports from index.ts
+- Group related components logically
+
+## State Management
+
+- Use React hooks for local state management
+- For complex state, consider context API or a state management library
+- Avoid prop drilling by using appropriate state management techniques
+- Keep state as local as possible to the components that need it
+
+## Performance Optimization
+
+- Use React.memo for expensive component renders
+- Implement useMemo and useCallback where appropriate
+- Be mindful of unnecessary re-renders
+- Consider code splitting for large components or routes
+- Optimize images and assets
+
+## Accessibility
+
+- Ensure components are accessible (WCAG guidelines)
+- Use semantic HTML elements
+- Include proper ARIA attributes when appropriate
+- Support keyboard navigation
+- Test with screen readers
+
+## Best Practices
+
+- Focus on creating a clean, intuitive user experience
+- Ensure the UI is responsive and works well on different screen sizes
+- Write clean, maintainable React code
+- Consider accessibility when designing UI components
+- Test your changes in both development and production modes
+- Write clear, descriptive component and prop names
+- Document complex components with JSDoc comments
+- Use TypeScript interfaces or types for component props
+- Implement proper error handling
+- Write comprehensive tests for components
+
+## Important Notes
+
+- The development experience differs from production:
+  - In development, the web UI is served using a Vite server
+  - In production, the front end is built and served as a static site via the Express server
+- After making changes to the code, you need to run `npm run build` again to see the changes in the production build
+
+@file .cursor/rules/vitest.mdc 

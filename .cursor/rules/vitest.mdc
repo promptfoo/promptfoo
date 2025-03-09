@@ -1,0 +1,104 @@
+---
+description: Guidelines for writing Vitest tests in the src/app directory
+globs: "src/app/**/*.test.ts,src/app/**/*.spec.ts,src/app/**/*.test.tsx,src/app/**/*.spec.tsx"
+alwaysApply: false
+---
+# Vitest Testing Guidelines
+
+Files: "src/app/**/*.test.ts,src/app/**/*.spec.ts,src/app/**/*.test.tsx,src/app/**/*.spec.tsx"
+
+This rule provides guidance for writing and running Vitest tests in the promptfoo project, specifically for the `src/app` directory.
+
+## Vitest Setup
+
+- Always run `nvm use` first to ensure you're using the correct Node.js version
+- Run Vitest tests with coverage and randomize options:
+  ```
+  npm run test:vitest -- --coverage --randomize
+  ```
+- For targeted tests, use the specific file pattern:
+  ```
+  npm run test:vitest -- src/app/path/to/component.test.ts --coverage --randomize
+  ```
+- Do NOT use watch mode (`--watch` flag) as it can interfere with CI and other automated processes
+- Always run tests in a single pass to ensure consistent results
+
+## Testing Best Practices
+
+- Mock as few functions as possible to keep tests realistic
+- Never increase the function timeout - fix the test instead
+- Prefer using the Vitest mocking utilities rather than manual mocks:
+  ```typescript
+  import { vi } from 'vitest';
+  
+  const mockFn = vi.fn().mockReturnValue('mocked value');
+  ```
+- Organize tests in descriptive `describe` and `it` blocks:
+  ```typescript
+  describe('Component', () => {
+    describe('someFunction', () => {
+      it('should handle normal input correctly', () => {
+        // test code
+      });
+      
+      it('should handle edge cases', () => {
+        // test code
+      });
+    });
+  });
+  ```
+- When writing expectations, prefer assertions on entire objects rather than individual keys:
+  ```typescript
+  // Preferred:
+  expect(result).toEqual({ id: 1, name: 'test' });
+  
+  // Avoid:
+  expect(result.id).toEqual(1);
+  expect(result.name).toEqual('test');
+  ```
+- Use Vitest's snapshot testing for UI components when appropriate:
+  ```typescript
+  expect(wrapper).toMatchSnapshot();
+  ```
+- Clean up after tests to prevent side effects:
+  ```typescript
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+  ```
+
+## Component Testing Guidelines
+
+- Test component rendering and basic functionality
+- Verify that props are handled correctly
+- Test user interactions using `@testing-library/react` or similar tools
+- Test edge cases and error states
+- For async components, use `await` with proper assertions:
+  ```typescript
+  await vi.waitFor(() => {
+    expect(screen.getByText('Loaded')).toBeInTheDocument();
+  });
+  ```
+- Focus on testing behavior rather than implementation details
+
+## Data Flow Testing
+
+- Verify that data is passed correctly between components
+- Test state management functionality
+- Ensure proper API interaction (using mocks as needed)
+- Validate form submissions and user input handling
+
+## Performance Considerations
+
+- Keep tests fast and focused
+- Avoid unnecessary re-renders in component tests
+- Use `vi.mock()` for expensive dependencies
+- Consider using `bench()` for performance-critical code paths
+
+## Test Execution Requirements
+
+- Always include both `--coverage` and `--randomize` flags
+- Run tests in a single pass (no watch mode)
+- Ensure all tests are independent and can run in any order
+- Clean up any test data or mocks after each test
+- Run the full test suite before committing changes 

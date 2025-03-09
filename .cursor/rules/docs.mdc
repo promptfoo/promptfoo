@@ -1,0 +1,39 @@
+---
+description: This rule provides guidance for working with documentation in the promptfoo project.
+globs: "**/*.md,**/*.mdc,site/docs/**/*"
+alwaysApply: false
+---
+# Documentation Guidelines
+
+## Documentation Standards
+
+- Documentation uses [Docusaurus](mdc:https:/docusaurus.io)
+- Main documentation is located in `site/docs/`
+- Code examples should be runnable and tested
+- Include examples and real-world use cases where possible
+- Keep documentation up-to-date with code changes
+
+## Provider Documentation
+
+When documenting a provider:
+- Include a description of the provider
+- List setup instructions including required environment variables
+- Document configuration options with examples
+- Show usage examples
+- Consider writing a guide comparing the provider to others or highlighting unique features
+
+## Contributing to Documentation
+
+- Fix typos, grammar, and unclear explanations
+- Add examples that demonstrate practical usage
+- Create guides for common use cases
+- Update documentation when adding new features
+- Keep API references in sync with implementation
+
+## Markdown Best Practices
+
+- Use proper Markdown heading hierarchy
+- Include code examples with proper syntax highlighting
+- Keep lines at a reasonable length for readability
+- Use tables for presenting structured information
+- Link to related documentation as appropriate 
