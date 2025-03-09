@@ -21,6 +21,8 @@ alwaysApply: false
   ```bash
   npx promptfoo@latest init --example example-name
   ```
+  ````
+
 ````
 
 - Include a comprehensive README.md that explains:
@@ -189,3 +191,4 @@ tests:
 - Group related examples together
 - Include links to more comprehensive documentation where appropriate
 - Consider creating guides that walk through multiple examples
+````
