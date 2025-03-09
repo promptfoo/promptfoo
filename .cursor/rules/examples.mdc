@@ -1,5 +1,5 @@
 ---
-description: This rule provides guidance for creating and maintaining examples in the promptfoo project, which has an extensive collection of example configurations.gitgi
+description: This rule provides guidance for creating and maintaining examples in the promptfoo project, which has an extensive collection of example configurations.
 globs: examples/**/*
 alwaysApply: false
 ---
@@ -21,11 +21,7 @@ alwaysApply: false
   ```bash
   npx promptfoo@latest init --example example-name
   ```
-  ````
-
-  ```
-
-  ```
+````
 
 - Include a comprehensive README.md that explains:
   - The purpose of the example

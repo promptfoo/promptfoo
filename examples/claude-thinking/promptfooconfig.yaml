@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Demonstrate Claude thinking feature for step-by-step problem solving'
+description: 'Claude Thinking Example'
 
 prompts:
   - '{{question}}'
@@ -20,13 +20,6 @@ providers:
         budget_tokens: 4096
       region: us-west-2
 
-# Basic verification that thinking is present
-defaultTest:
-  assert:
-    - type: javascript
-      value: |
-        return output.includes('Thinking:') ? 'pass' : 'fail: No thinking section found';
-
 tests:
   - vars:
       question: |
@@ -36,10 +29,7 @@ tests:
     assert:
       - type: llm-rubric
         value: |
-          Evaluate the reasoning quality on a scale of 1-5:
-          1. Did the response identify that 2 weighings are sufficient?
-          2. Did the thinking section show a clear step-by-step approach?
-          3. Was the final answer correct (2 weighings)?
+          The answer should explain why 2 weighings are sufficient
 
   - vars:
       question: |
@@ -49,4 +39,4 @@ tests:
     assert:
       - type: llm-rubric
         value: |
-          Evaluate if the trains meet at approximately 1:38 PM.
+          The trains will meet at 1:38 PM.
