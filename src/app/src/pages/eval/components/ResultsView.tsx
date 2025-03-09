@@ -9,6 +9,7 @@ import ClearIcon from '@mui/icons-material/Clear';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import ReplayIcon from '@mui/icons-material/Replay';
 import SearchIcon from '@mui/icons-material/Search';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ShareIcon from '@mui/icons-material/Share';
@@ -42,6 +43,7 @@ import DownloadMenu from './DownloadMenu';
 import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
+import FailedTestsDialog from './FailedTestsDialog';
 import { FilterModeSelector } from './FilterModeSelector';
 import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
@@ -121,6 +123,7 @@ export default function ResultsView({
 
   const [shareModalOpen, setShareModalOpen] = React.useState(false);
   const [shareLoading, setShareLoading] = React.useState(false);
+  const [failedTestsDialogOpen, setFailedTestsDialogOpen] = React.useState(false);
 
   // State for anchor element
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
@@ -564,6 +567,19 @@ export default function ResultsView({
                     View YAML
                   </MenuItem>
                 </Tooltip>
+                <Tooltip title="Download a YAML config with only the failed tests" placement="left">
+                  <MenuItem
+                    onClick={() => {
+                      handleMenuClose();
+                      setFailedTestsDialogOpen(true);
+                    }}
+                  >
+                    <ListItemIcon>
+                      <ReplayIcon fontSize="small" />
+                    </ListItemIcon>
+                    Download Failed Tests
+                  </MenuItem>
+                </Tooltip>
                 <DownloadMenu />
                 {config?.sharing && (
                   <Tooltip title="Generate a unique URL that others can access" placement="left">
@@ -629,6 +645,13 @@ export default function ResultsView({
         onShare={handleShare}
       />
       <SettingsModal open={viewSettingsModalOpen} onClose={() => setViewSettingsModalOpen(false)} />
+      <FailedTestsDialog
+        open={failedTestsDialogOpen}
+        onClose={() => setFailedTestsDialogOpen(false)}
+        evalId={currentEvalId}
+        config={config}
+        table={table}
+      />
       <EvalSelectorKeyboardShortcut
         recentEvals={recentEvals}
         onRecentEvalSelected={onRecentEvalSelected}
