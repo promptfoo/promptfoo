@@ -31,9 +31,7 @@ const TableSettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => 
 
   const { hasChanges, resetToDefaults } = useSettingsState(open);
 
-  // Handle unsaved changes confirmation
   const handleClose = () => {
-    // If there are unsaved changes, you could show a confirmation dialog here
     onClose();
   };
 
@@ -105,10 +103,10 @@ const TableSettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => 
 
       <DialogContent
         sx={{
-          p: 0, // Remove padding since the panel has its own padding
+          p: 0,
           height: {
-            xs: 'calc(100% - 125px)', // Adjusted for removed tabs
-            sm: 480, // Increased height for more content
+            xs: 'calc(100% - 125px)',
+            sm: 480,
           },
           '&::-webkit-scrollbar': {
             width: '6px',

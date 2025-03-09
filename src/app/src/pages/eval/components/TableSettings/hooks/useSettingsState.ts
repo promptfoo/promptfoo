@@ -39,12 +39,10 @@ export const useSettingsState = (isOpen: boolean) => {
     setMaxImageHeight,
   } = store;
 
-  // Local state
   const [localMaxTextLength, setLocalMaxTextLength] = useState(
     maxTextLength === Number.POSITIVE_INFINITY ? 1001 : maxTextLength,
   );
 
-  // Store initial state for comparison
   const initialStateRef = useRef<SettingsState>({
     maxTextLength,
     wordBreak,
@@ -58,7 +56,6 @@ export const useSettingsState = (isOpen: boolean) => {
     maxImageHeight,
   });
 
-  // Update reference values when modal opens
   useEffect(() => {
     if (isOpen) {
       initialStateRef.current = {
@@ -88,7 +85,6 @@ export const useSettingsState = (isOpen: boolean) => {
     maxImageHeight,
   ]);
 
-  // Check for changes between current state and initial state
   const hasChanges = useMemo(() => {
     const initialState = initialStateRef.current;
     return (
@@ -116,7 +112,6 @@ export const useSettingsState = (isOpen: boolean) => {
     maxImageHeight,
   ]);
 
-  // Handle text length slider changes
   const handleSliderChange = useCallback((value: number) => {
     setLocalMaxTextLength(value);
   }, []);
@@ -129,7 +124,6 @@ export const useSettingsState = (isOpen: boolean) => {
     [setMaxTextLength],
   );
 
-  // Reset all settings to defaults
   const resetToDefaults = useCallback(() => {
     setStickyHeader(true);
     setWordBreak('break-word');
@@ -156,14 +150,10 @@ export const useSettingsState = (isOpen: boolean) => {
   ]);
 
   return {
-    // Original store values
     store,
-    // Local state
     localMaxTextLength,
     setLocalMaxTextLength,
-    // Computed values
     hasChanges,
-    // Actions
     resetToDefaults,
     handleSliderChange,
     handleSliderChangeCommitted,

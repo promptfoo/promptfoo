@@ -15,10 +15,8 @@ import EnhancedRangeSlider from './EnhancedRangeSlider';
 import SettingItem from './SettingItem';
 import SettingsSection from './SettingsSection';
 
-// Component doesn't need props
 const SettingsPanel: React.FC = () => {
   const {
-    // Display settings
     stickyHeader,
     setStickyHeader,
     showPrompts,
@@ -28,7 +26,6 @@ const SettingsPanel: React.FC = () => {
     showInferenceDetails,
     setShowInferenceDetails,
 
-    // Content settings
     maxTextLength,
     setMaxTextLength,
     renderMarkdown,

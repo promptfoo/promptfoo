@@ -4,56 +4,56 @@
  */
 export const tokens = {
   spacing: {
-    section: 4, // 32px spacing between major sections
-    subsection: 2.5, // 20px spacing between subsections
-    item: 1.5, // 12px spacing between items
+    section: 4,
+    subsection: 2.5,
+    item: 1.5,
 
     // More specific spacing values for consistency
     padding: {
-      container: 3, // 24px padding for containers
-      item: 1.5, // 12px padding for items
-      compact: 1, // 8px for tight spaces
-      tiny: 0.5, // 4px for very small spacing
+      container: 3,
+      item: 1.5,
+      compact: 1,
+      tiny: 0.5,
     },
 
     // Specific margin values
     margin: {
-      section: 3, // 24px margins between sections
-      item: 1.5, // 12px margins between items
-      element: 1, // 8px margins between elements
-      icon: 0.75, // 6px margins for icons
-      tiny: 0.5, // 4px tiny margin
+      section: 3,
+      item: 1.5,
+      element: 1,
+      icon: 0.75,
+      tiny: 0.5,
     },
 
     // Stack spacing presets
     stack: {
-      large: 2, // 16px between large stacked elements
-      medium: 1.5, // 12px between medium stacked elements
-      small: 1, // 8px between small stacked elements
-      tiny: 0.5, // 4px between tiny stacked elements
-      icon: 0.75, // 6px spacing for icon groupings
+      large: 2,
+      medium: 1.5,
+      small: 1,
+      tiny: 0.5,
+      icon: 0.75,
     },
 
     // Alignment indentation
     indent: {
-      large: 3, // 24px indentation
-      medium: 2, // 16px indentation
-      small: 1, // 8px indentation
-      tiny: 0.5, // 4px indentation
+      large: 3,
+      medium: 2,
+      small: 1,
+      tiny: 0.5,
     },
   },
 
   borderRadius: {
-    small: 1, // 8px
-    medium: 2, // 16px
-    large: 3, // 24px
-    pill: 6, // 48px - for pill buttons
+    small: 1,
+    medium: 2,
+    large: 3,
+    pill: 6,
   },
 
   animation: {
-    fast: 150, // Quick micro-animations
-    medium: 250, // Standard transitions
-    slow: 400, // Emphasis animations
+    fast: 150,
+    medium: 250,
+    slow: 400,
   },
 
   opacity: {
