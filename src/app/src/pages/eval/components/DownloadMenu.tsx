@@ -12,6 +12,7 @@ import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { ResultFailureReason } from '@promptfoo/types';
+import { removeEmpty } from '@promptfoo/util/objectUtils';
 import { stringify as csvStringify } from 'csv-stringify/browser/esm/sync';
 import yaml from 'js-yaml';
 import { useStore as useResultsViewStore } from './store';
@@ -36,9 +37,14 @@ function DownloadMenu() {
   };
 
   const downloadConfig = () => {
-    const configData = yaml.dump(config);
+    const schemaLine = '# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json\n';
+
+    // Get a clean copy of the config with empty arrays and objects removed
+    const cleanConfig = removeEmpty(config);
+
+    const configData = yaml.dump(cleanConfig);
     const mimeType = 'text/yaml;charset=utf-8';
-    const blob = new Blob([configData], { type: mimeType });
+    const blob = new Blob([schemaLine + configData], { type: mimeType });
     openDownloadDialog(blob, 'promptfooconfig.yaml');
     handleClose();
   };
