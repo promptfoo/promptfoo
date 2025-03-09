@@ -28,7 +28,7 @@ export function modelScanCommand(program: Command): void {
     )
     .option('-f, --format <format>', 'Output format (text or json)', 'text')
     .option('-o, --output <path>', 'Output file path (prints to stdout if not specified)')
-    .option('-t, --timeout <seconds>', 'Scan timeout in seconds', parseInt, 300)
+    .option('-t, --timeout <seconds>', 'Scan timeout in seconds', '300')
     .option('-v, --verbose', 'Enable verbose output')
     .option('--max-file-size <bytes>', 'Maximum file size to scan in bytes')
     .action(async (paths: string[], options) => {
@@ -43,12 +43,12 @@ export function modelScanCommand(program: Command): void {
       const isModelAuditInstalled = await checkModelAuditInstalled();
       if (!isModelAuditInstalled) {
         logger.error('ModelAudit is not installed.');
-        logger.info(`Please install it using: ${chalk.green('pip install modelaudit')}`);
+        logger.info('Please install it using: pip install modelaudit');
         logger.info('For more information, visit: https://www.promptfoo.dev/docs/model-audit/');
         process.exit(1);
       }
 
-      const args = ['-m', 'modelaudit'];
+      const args = ['modelaudit'];
 
       // Add all paths
       args.push(...paths);
@@ -101,3 +101,5 @@ export function modelScanCommand(program: Command): void {
       });
     });
 }
+
+export { execAsync, checkModelAuditInstalled };
