@@ -2,7 +2,9 @@ import * as React from 'react';
 import { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useShiftKey } from '@app/hooks/useShiftKey';
+import PsychologyIcon from '@mui/icons-material/Psychology';
 import Tooltip from '@mui/material/Tooltip';
+import { useTheme, alpha } from '@mui/material/styles';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import remarkGfm from 'remark-gfm';
@@ -64,6 +66,8 @@ function EvalOutputCell({
       ?.pass ?? null,
   );
 
+  const theme = useTheme();
+
   // Update activeRating when output changes
   React.useEffect(() => {
     const humanRating = output.gradingResult?.componentResults?.find(
@@ -117,17 +121,18 @@ function EvalOutputCell({
     setCommentText(newCommentText);
   };
 
-  let text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
+  // Determine text to display - use reasoning when enabled and available
+  const originalOutput =
+    typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
+  let reasoningOutput = '';
 
-  // If showing reasoning and reasoning exists, use that instead
-  if (showReasoning && hasReasoning && output.response) {
+  if (hasReasoning && output.response) {
     const reasoning = output.response.reasoning;
-    if (reasoning) {
-      text = typeof reasoning === 'string' ? reasoning : JSON.stringify(reasoning);
-    }
-  } else {
-    text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
+    reasoningOutput = typeof reasoning === 'string' ? reasoning : JSON.stringify(reasoning);
   }
+
+  // Simply use reasoning when available and enabled
+  let text = showReasoning && hasReasoning ? reasoningOutput : originalOutput;
 
   let node: React.ReactNode | undefined;
   let failReasons: string[] = [];
@@ -489,10 +494,37 @@ function EvalOutputCell({
     } as CSSPropertiesWithCustomVars;
   }, [output.gradingResult?.comment, maxImageWidth, maxImageHeight]);
 
-  // Add style for reasoning pill
+  // Add style for reasoning pill - theme-aware version
   const reasoningPillStyle = {
-    backgroundColor: '#e0f7fa',
-    color: '#006064',
+    backgroundColor:
+      theme.palette.mode === 'dark'
+        ? alpha(theme.palette.info.main, 0.2)
+        : alpha(theme.palette.info.light, 0.3),
+    color: theme.palette.mode === 'dark' ? theme.palette.info.light : theme.palette.info.dark,
+    display: 'flex',
+    alignItems: 'center',
+    padding: '4px 12px',
+    borderRadius: '16px',
+    fontSize: '0.75rem',
+    fontWeight: 500,
+    boxShadow: theme.shadows[1],
+    marginRight: '8px',
+  };
+
+  // Add style for the no-reasoning indicator
+  const noReasoningStyle = {
+    backgroundColor:
+      theme.palette.mode === 'dark'
+        ? alpha(theme.palette.grey[700], 0.3)
+        : alpha(theme.palette.grey[300], 0.7),
+    color: theme.palette.mode === 'dark' ? theme.palette.grey[400] : theme.palette.grey[600],
+    display: 'flex',
+    alignItems: 'center',
+    padding: '4px 12px',
+    borderRadius: '16px',
+    fontSize: '0.75rem',
+    fontWeight: 400,
+    marginRight: '8px',
   };
 
   // Pass/fail badge creation
@@ -620,17 +652,35 @@ function EvalOutputCell({
           )}
         </div>
       )}
-      {showPrompts && firstOutput.prompt && (
-        <div className="prompt">
+      {showPrompts && output.prompt && (
+        <div className="prompt-display">
           <span className="pill">Prompt</span>
           {output.prompt}
         </div>
       )}
-      {showReasoning && hasReasoning && (
-        <div className="reasoning-indicator">
-          <span className="pill" style={reasoningPillStyle}>
-            Reasoning
-          </span>
+      {showReasoning && (
+        <div
+          className="reasoning-indicator"
+          style={{
+            marginBottom: '8px',
+            display: 'flex',
+            alignItems: 'center',
+          }}
+        >
+          {hasReasoning ? (
+            <Tooltip title="Showing model's reasoning/thinking process">
+              <span className="pill" style={reasoningPillStyle}>
+                <PsychologyIcon fontSize="small" sx={{ mr: 0.5, fontSize: '1rem' }} />
+                Reasoning
+              </span>
+            </Tooltip>
+          ) : (
+            <Tooltip title="Reasoning is enabled but not available for this response">
+              <span className="pill" style={noReasoningStyle}>
+                No reasoning available
+              </span>
+            </Tooltip>
+          )}
         </div>
       )}
       <TruncatedText text={node || text} maxLength={maxTextLength} />

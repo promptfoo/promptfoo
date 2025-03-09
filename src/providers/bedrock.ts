@@ -15,7 +15,7 @@ import type {
 } from '../types';
 import type { EnvOverrides } from '../types/env';
 import { maybeLoadFromExternalFile } from '../util';
-import { outputFromMessage, parseMessages } from './anthropic';
+import { outputFromMessage } from './anthropic';
 import { novaOutputFromMessage, novaParseMessages } from './bedrockUtil';
 import { parseChatPrompt } from './shared';
 
@@ -528,50 +528,73 @@ export const BEDROCK_MODEL = {
           const systemMessages = parsed.filter((msg) => msg.role === 'system');
           const nonSystemMessages = parsed.filter((msg) => msg.role !== 'system');
 
-          // NOTE: Claude models handle system prompts differently than OpenAI models.
-          // For compatibility with prompts designed for OpenAI like the factuality
-          // llm-as-a-judge prompts, we convert lone system messages into user messages
-          // since Bedrock Claude doesn't support system-only prompts.
-          if (systemMessages.length === 1 && nonSystemMessages.length === 0) {
-            // If only system message, convert to user message
-            messages = [
-              {
-                role: 'user',
-                content: Array.isArray(systemMessages[0].content)
-                  ? systemMessages[0].content
-                  : [{ type: 'text', text: systemMessages[0].content }],
-              },
-            ];
-            systemPrompt = undefined;
-          } else {
-            // Normal case - keep system message as system prompt
-            messages = nonSystemMessages.map((msg) => ({
+          // Get system prompt from the system messages
+          if (systemMessages.length > 0) {
+            systemPrompt = systemMessages.map((msg) => msg.content).join('\n\n');
+          }
+          messages = nonSystemMessages.map((msg) => {
+            return {
               role: msg.role,
               content: Array.isArray(msg.content)
                 ? msg.content
-                : [{ type: 'text', text: msg.content }],
-            }));
-            systemPrompt = systemMessages[0]?.content;
-          }
+                : [
+                    {
+                      type: 'text',
+                      text: msg.content,
+                    },
+                  ],
+            };
+          });
         } else {
-          const { system, extractedMessages } = parseMessages(prompt);
-          messages = extractedMessages;
-          systemPrompt = system;
+          messages = [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: prompt,
+                },
+              ],
+            },
+          ];
         }
       } catch {
-        const { system, extractedMessages } = parseMessages(prompt);
-        messages = extractedMessages;
-        systemPrompt = system;
+        // JSON parse error - treat as plain text
+        messages = [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: prompt,
+              },
+            ],
+          },
+        ];
       }
 
-      const params: any = { messages };
-      addConfigParam(
-        params,
-        'anthropic_version',
-        config?.anthropic_version,
-        undefined,
-        'bedrock-2023-05-31',
-      );
+      const params: any = {
+        anthropic_version: 'bedrock-2023-05-31',
+        messages,
+      };
+
+      // If thinking is enabled, temperature MUST be set to 1.0 for Claude on Bedrock
+      if (config.thinking && config.thinking.type === 'enabled') {
+        params.temperature = 1.0;
+      } else {
+        addConfigParam(
+          params,
+          'temperature',
+          config?.temperature,
+          getEnvFloat('AWS_BEDROCK_TEMPERATURE'),
+          0,
+        );
+      }
+
+      if (systemPrompt) {
+        params.system = systemPrompt;
+      }
+
       addConfigParam(
         params,
         'max_tokens',
@@ -579,25 +602,19 @@ export const BEDROCK_MODEL = {
         getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
         1024,
       );
-      addConfigParam(params, 'temperature', config?.temperature, undefined, 0);
-      addConfigParam(
-        params,
-        'anthropic_version',
-        config?.anthropic_version,
-        undefined,
-        'bedrock-2023-05-31',
-      );
-      addConfigParam(
-        params,
-        'tools',
-        maybeLoadFromExternalFile(config?.tools),
-        undefined,
-        undefined,
-      );
-      addConfigParam(params, 'tool_choice', config?.tool_choice, undefined, undefined);
-      addConfigParam(params, 'thinking', config?.thinking, undefined, undefined);
-      if (systemPrompt) {
-        addConfigParam(params, 'system', systemPrompt, undefined, undefined);
+
+      // Add thinking configuration if provided
+      if (config.thinking) {
+        params.thinking = config.thinking;
+      }
+
+      // Add tools if provided
+      if (config.tools) {
+        params.tools = config.tools;
+        // Add tool_choice if provided
+        if (config.tool_choice) {
+          params.tool_choice = config.tool_choice;
+        }
       }
 
       return params;
