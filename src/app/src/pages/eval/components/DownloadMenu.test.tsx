@@ -5,8 +5,17 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import DownloadMenu from './DownloadMenu';
 import { useStore as useResultsViewStore } from './store';
 
+// Get a reference to the mock
+const showToastMock = vi.fn();
+
 vi.mock('./store', () => ({
   useStore: vi.fn(),
+}));
+
+vi.mock('../../../hooks/useToast', () => ({
+  useToast: () => ({
+    showToast: showToastMock,
+  }),
 }));
 
 vi.mock('js-yaml', () => ({
@@ -144,20 +153,20 @@ describe('DownloadMenu', () => {
     expect(window.URL.createObjectURL).not.toHaveBeenCalled();
   });
 
-  it('shows an alert when table data is not available', async () => {
+  it('shows a toast when table data is not available', async () => {
     (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       table: null,
       config: mockConfig,
       evalId: mockEvalId,
     });
 
-    const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    // Clear any previous calls to the mock
+    showToastMock.mockClear();
 
     render(<DownloadMenu />);
     await userEvent.click(screen.getByText('Download'));
     await userEvent.click(screen.getByText('Download Table CSV'));
 
-    expect(alertMock).toHaveBeenCalledWith('No table data');
-    alertMock.mockRestore();
+    expect(showToastMock).toHaveBeenCalledWith('No table data', 'error');
   });
 });
