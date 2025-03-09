@@ -48,7 +48,7 @@
     "dev:app": "npm run dev --prefix src/app",
     "dev:server": "nodemon -P 1000 src/server/index.ts",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:app\"",
-    "f": "git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(js|jsx|mjs|cjs|ts|tsx|json|css|scss|html|md|mdx|yaml|yml)$' | xargs prettier --write",
+    "f": "git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(js|jsx|mjs|cjs|ts|tsx|json|css|scss|html|md|mdc|mdx|yaml|yml)$' | xargs prettier --write",
     "format:check": "prettier --check .",
     "format": "prettier -w .",
     "jsonSchema:generate": "npx -y tsx scripts/generateJsonSchema.ts > site/static/config-schema.json | npx prettier --write site/static/config-schema.json",
