@@ -1,6 +1,17 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Box, Typography, Slider, TextField, InputAdornment, IconButton, Stack, Tooltip, useTheme, alpha } from '@mui/material';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import {
+  Box,
+  Typography,
+  Slider,
+  TextField,
+  InputAdornment,
+  IconButton,
+  Stack,
+  Tooltip,
+  useTheme,
+  alpha,
+} from '@mui/material';
 import { useDebounce } from 'use-debounce';
 import { tokens } from '../tokens';
 
@@ -57,9 +68,7 @@ const EnhancedRangeSlider: React.FC<EnhancedRangeSliderProps> = ({
     (_: Event | React.SyntheticEvent, newValue: number | number[]) => {
       const newSafeValue = newValue as number;
       setLocalValue(newSafeValue);
-      setInputValue(
-        unlimited && newSafeValue === max ? 'Unlimited' : String(newSafeValue),
-      );
+      setInputValue(unlimited && newSafeValue === max ? 'Unlimited' : String(newSafeValue));
     },
     [max, unlimited],
   );
@@ -123,27 +132,27 @@ const EnhancedRangeSlider: React.FC<EnhancedRangeSliderProps> = ({
       role="group"
       aria-labelledby={`slider-label-${label.replace(/\s+/g, '-').toLowerCase()}`}
     >
-      <Stack 
-        direction="row" 
-        alignItems="center" 
-        spacing={tokens.spacing.stack.medium} 
+      <Stack
+        direction="row"
+        alignItems="center"
+        spacing={tokens.spacing.stack.medium}
         mb={tokens.spacing.margin.element}
       >
         {icon && (
-          <Box 
-            sx={{ 
-              color: theme.palette.primary.main, 
-              display: 'flex', 
+          <Box
+            sx={{
+              color: theme.palette.primary.main,
+              display: 'flex',
               alignItems: 'center',
-              fontSize: '1.1rem'
+              fontSize: '1.1rem',
             }}
           >
             {icon}
           </Box>
         )}
-        <Typography 
-          variant="body1" 
-          fontWeight={500} 
+        <Typography
+          variant="body1"
+          fontWeight={500}
           sx={{ flexGrow: 1 }}
           id={`slider-label-${label.replace(/\s+/g, '-').toLowerCase()}`}
         >
@@ -209,33 +218,42 @@ const EnhancedRangeSlider: React.FC<EnhancedRangeSliderProps> = ({
         </Box>
 
         {tooltipText && (
-          <Tooltip 
-            title={tooltipText} 
-            arrow 
-            placement="top" 
+          <Tooltip
+            title={tooltipText}
+            arrow
+            placement="top"
             enterDelay={500}
             componentsProps={{
               tooltip: {
                 sx: {
-                  bgcolor: theme.palette.mode === 'dark' ? alpha(theme.palette.primary.dark, 0.9) : alpha(theme.palette.primary.main, 0.9),
+                  bgcolor:
+                    theme.palette.mode === 'dark'
+                      ? alpha(theme.palette.primary.dark, 0.9)
+                      : alpha(theme.palette.primary.main, 0.9),
                   borderRadius: tokens.borderRadius.small,
                   boxShadow: theme.shadows[tokens.elevation.tooltip],
                   padding: tokens.spacing.padding.compact,
                   '& .MuiTooltip-arrow': {
-                    color: theme.palette.mode === 'dark' ? alpha(theme.palette.primary.dark, 0.9) : alpha(theme.palette.primary.main, 0.9),
+                    color:
+                      theme.palette.mode === 'dark'
+                        ? alpha(theme.palette.primary.dark, 0.9)
+                        : alpha(theme.palette.primary.main, 0.9),
                   },
-                }
-              }
+                },
+              },
             }}
           >
-            <IconButton 
-              size="small" 
-              sx={{ 
+            <IconButton
+              size="small"
+              sx={{
                 p: tokens.spacing.padding.tiny,
-                color: theme.palette.mode === 'dark' ? alpha(theme.palette.primary.light, 0.7) : alpha(theme.palette.primary.main, 0.7),
+                color:
+                  theme.palette.mode === 'dark'
+                    ? alpha(theme.palette.primary.light, 0.7)
+                    : alpha(theme.palette.primary.main, 0.7),
                 '&:hover': {
                   backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                }
+                },
               }}
               aria-label={`Information about ${label.toLowerCase()}`}
             >
@@ -278,7 +296,7 @@ const EnhancedRangeSlider: React.FC<EnhancedRangeSliderProps> = ({
               boxShadow: `0px 0px 0px 8px ${alpha(theme.palette.primary.main, 0.16)}`,
             },
             '&:before': {
-              boxShadow: `0 0 1px 1px ${alpha(theme.palette.divider, 0.2)}`
+              boxShadow: `0 0 1px 1px ${alpha(theme.palette.divider, 0.2)}`,
             },
           },
           '& .MuiSlider-rail': {
@@ -299,4 +317,4 @@ const EnhancedRangeSlider: React.FC<EnhancedRangeSliderProps> = ({
   );
 };
 
-export default React.memo(EnhancedRangeSlider); 
+export default React.memo(EnhancedRangeSlider);

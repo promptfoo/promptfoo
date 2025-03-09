@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo, useCallback, useEffect } from 'react';
-import { useStore as useResultsViewStore } from '../store';
+import { useStore as useResultsViewStore } from '../../store';
 
 export interface SettingsState {
   maxTextLength: number;
@@ -41,7 +41,7 @@ export const useSettingsState = (isOpen: boolean) => {
 
   // Local state
   const [localMaxTextLength, setLocalMaxTextLength] = useState(
-    maxTextLength === Number.POSITIVE_INFINITY ? 1001 : maxTextLength
+    maxTextLength === Number.POSITIVE_INFINITY ? 1001 : maxTextLength,
   );
 
   // Store initial state for comparison
@@ -168,4 +168,4 @@ export const useSettingsState = (isOpen: boolean) => {
     handleSliderChange,
     handleSliderChangeCommitted,
   };
-}; 
+};

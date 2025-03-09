@@ -1,21 +1,22 @@
 import React, { useState, useCallback } from 'react';
-import { Box, alpha } from '@mui/material';
-import { SettingsSection, SettingItem, EnhancedRangeSlider } from '..';
-import { useStore as useResultsViewStore } from '../../store';
+import CodeIcon from '@mui/icons-material/Code';
+import DoneAllIcon from '@mui/icons-material/DoneAll';
+import FormatAlignLeftIcon from '@mui/icons-material/FormatAlignLeft';
+import ImageIcon from '@mui/icons-material/Image';
+import SpeedIcon from '@mui/icons-material/Speed';
 import TableRowsIcon from '@mui/icons-material/TableRows';
+import TextFormatIcon from '@mui/icons-material/TextFormat';
 import ViewListIcon from '@mui/icons-material/ViewList';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import DoneAllIcon from '@mui/icons-material/DoneAll';
-import SpeedIcon from '@mui/icons-material/Speed';
-import TextFormatIcon from '@mui/icons-material/TextFormat';
-import FormatAlignLeftIcon from '@mui/icons-material/FormatAlignLeft';
-import CodeIcon from '@mui/icons-material/Code';
-import ImageIcon from '@mui/icons-material/Image';
-import { tokens } from '../../tokens';
+import { Box, alpha } from '@mui/material';
+import { useStore as useResultsViewStore } from '../store';
+import { tokens } from '../tokens';
+import EnhancedRangeSlider from './EnhancedRangeSlider';
+import SettingItem from './SettingItem';
+import SettingsSection from './SettingsSection';
 
-interface CombinedSettingsPanelProps {}
-
-const CombinedSettingsPanel: React.FC<CombinedSettingsPanelProps> = () => {
+// Component doesn't need props
+const SettingsPanel: React.FC = () => {
   const {
     // Display settings
     stickyHeader,
@@ -26,7 +27,7 @@ const CombinedSettingsPanel: React.FC<CombinedSettingsPanelProps> = () => {
     setShowPassFail,
     showInferenceDetails,
     setShowInferenceDetails,
-    
+
     // Content settings
     maxTextLength,
     setMaxTextLength,
@@ -61,8 +62,8 @@ const CombinedSettingsPanel: React.FC<CombinedSettingsPanelProps> = () => {
   );
 
   return (
-    <Box 
-      sx={{ 
+    <Box
+      sx={{
         py: tokens.spacing.padding.compact,
         px: tokens.spacing.padding.item,
         height: '100%',
@@ -131,11 +132,11 @@ const CombinedSettingsPanel: React.FC<CombinedSettingsPanelProps> = () => {
           <SettingItem
             label="Force line breaks"
             checked={wordBreak === 'break-all'}
-            onChange={(checked) => setWordBreak(checked ? 'break-all' : 'break-word')}
+            onChange={(checked: boolean) => setWordBreak(checked ? 'break-all' : 'break-word')}
             icon={<FormatAlignLeftIcon fontSize="small" />}
             tooltipText="Force lines to break at any character, making it easier to adjust column widths"
           />
-        
+
           <EnhancedRangeSlider
             value={localMaxTextLength}
             onChange={handleSliderChange}
@@ -216,4 +217,4 @@ const CombinedSettingsPanel: React.FC<CombinedSettingsPanelProps> = () => {
   );
 };
 
-export default React.memo(CombinedSettingsPanel); 
+export default React.memo(SettingsPanel);

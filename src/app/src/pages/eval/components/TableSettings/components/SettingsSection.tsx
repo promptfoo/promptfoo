@@ -19,8 +19,8 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
   const sectionId = `section-${title.replace(/\s+/g, '-').toLowerCase()}`;
 
   return (
-    <Box 
-      sx={{ 
+    <Box
+      sx={{
         mb: tokens.spacing.section,
         position: 'relative',
       }}
@@ -30,7 +30,10 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
       <Paper
         elevation={0}
         sx={{
-          background: alpha(theme.palette.background.paper, theme.palette.mode === 'dark' ? 0.15 : 0.3),
+          background: alpha(
+            theme.palette.background.paper,
+            theme.palette.mode === 'dark' ? 0.15 : 0.3,
+          ),
           borderRadius: tokens.borderRadius.medium,
           p: tokens.spacing.padding.tiny,
           mb: tokens.spacing.margin.element,
@@ -38,18 +41,18 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
           alignItems: 'center',
         }}
       >
-        <Stack 
-          direction="row" 
-          alignItems="center" 
-          spacing={tokens.spacing.stack.small} 
-          sx={{ 
+        <Stack
+          direction="row"
+          alignItems="center"
+          spacing={tokens.spacing.stack.small}
+          sx={{
             px: tokens.spacing.padding.item,
             py: tokens.spacing.padding.tiny,
           }}
         >
           {icon && (
-            <Box 
-              sx={{ 
+            <Box
+              sx={{
                 color: theme.palette.primary.main,
                 display: 'flex',
                 alignItems: 'center',
@@ -59,14 +62,15 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
               {icon}
             </Box>
           )}
-          <Typography 
-            variant="subtitle1" 
+          <Typography
+            variant="subtitle1"
             fontWeight={600}
             id={sectionId}
             sx={{
-              color: theme.palette.mode === 'dark' 
-                ? theme.palette.primary.light 
-                : theme.palette.primary.main,
+              color:
+                theme.palette.mode === 'dark'
+                  ? theme.palette.primary.light
+                  : theme.palette.primary.main,
               letterSpacing: '0.01em',
             }}
           >
@@ -76,10 +80,10 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
       </Paper>
 
       {description && (
-        <Typography 
-          variant="body2" 
-          color="text.secondary" 
-          sx={{ 
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{
             mb: tokens.spacing.margin.item,
             ml: icon ? tokens.spacing.indent.tiny : 0,
             fontWeight: 400,
@@ -90,8 +94,8 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
         </Typography>
       )}
 
-      <Box 
-        sx={{ 
+      <Box
+        sx={{
           ml: tokens.spacing.indent.tiny,
           role: 'list',
         }}
@@ -102,4 +106,4 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
   );
 };
 
-export default React.memo(SettingsSection); 
+export default React.memo(SettingsSection);

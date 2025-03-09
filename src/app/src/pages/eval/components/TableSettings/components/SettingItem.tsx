@@ -1,6 +1,18 @@
 import React from 'react';
-import { Paper, FormControlLabel, Checkbox, Switch, Typography, Box, Stack, IconButton, Tooltip, useTheme, alpha } from '@mui/material';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import {
+  Paper,
+  FormControlLabel,
+  Checkbox,
+  Switch,
+  Typography,
+  Box,
+  Stack,
+  IconButton,
+  Tooltip,
+  useTheme,
+  alpha,
+} from '@mui/material';
 import { tokens } from '../tokens';
 
 interface SettingItemProps {
@@ -35,20 +47,16 @@ const SettingItem: React.FC<SettingItemProps> = ({
         borderRadius: tokens.borderRadius.small,
         opacity: disabled ? tokens.opacity.disabled : 1,
         transition: `all ${tokens.animation.fast}ms ease`,
-        backgroundColor: checked 
-          ? alpha(theme.palette.primary.main, 0.03) 
-          : 'transparent',
+        backgroundColor: checked ? alpha(theme.palette.primary.main, 0.03) : 'transparent',
         '&:hover': {
-          backgroundColor: disabled 
-            ? 'transparent' 
+          backgroundColor: disabled
+            ? 'transparent'
             : alpha(theme.palette.primary.main, checked ? 0.06 : tokens.opacity.hover),
           borderColor: disabled
             ? alpha(theme.palette.divider, 0.15)
             : alpha(theme.palette.primary.main, 0.3),
           transform: disabled ? 'none' : 'translateY(-1px)',
-          boxShadow: disabled 
-            ? 'none' 
-            : `0 2px 4px ${alpha(theme.palette.common.black, 0.05)}`,
+          boxShadow: disabled ? 'none' : `0 2px 4px ${alpha(theme.palette.common.black, 0.05)}`,
         },
       }}
       role="listitem"
@@ -108,20 +116,20 @@ const SettingItem: React.FC<SettingItemProps> = ({
           )
         }
         label={
-          <Stack 
-            direction="row" 
-            alignItems="center" 
+          <Stack
+            direction="row"
+            alignItems="center"
             spacing={tokens.spacing.stack.icon}
-            sx={{ 
+            sx={{
               py: tokens.spacing.padding.tiny / 2,
-              width: '100%' 
+              width: '100%',
             }}
           >
             {icon && (
               <Box
-                sx={{ 
-                  color: theme.palette.primary.main, 
-                  display: 'flex', 
+                sx={{
+                  color: theme.palette.primary.main,
+                  display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   lineHeight: 0,
@@ -133,8 +141,8 @@ const SettingItem: React.FC<SettingItemProps> = ({
                 {icon}
               </Box>
             )}
-            <Typography 
-              variant="body2" 
+            <Typography
+              variant="body2"
               id={labelId}
               sx={{
                 fontWeight: 400,
@@ -149,34 +157,43 @@ const SettingItem: React.FC<SettingItemProps> = ({
               {label}
             </Typography>
             {tooltipText && (
-              <Tooltip 
-                title={tooltipText} 
-                arrow 
+              <Tooltip
+                title={tooltipText}
+                arrow
                 placement="top"
                 enterDelay={400}
                 componentsProps={{
                   tooltip: {
                     sx: {
-                      bgcolor: theme.palette.mode === 'dark' ? alpha(theme.palette.primary.dark, 0.9) : alpha(theme.palette.primary.main, 0.9),
+                      bgcolor:
+                        theme.palette.mode === 'dark'
+                          ? alpha(theme.palette.primary.dark, 0.9)
+                          : alpha(theme.palette.primary.main, 0.9),
                       borderRadius: tokens.borderRadius.small,
                       boxShadow: theme.shadows[tokens.elevation.tooltip],
                       padding: tokens.spacing.padding.compact,
                       '& .MuiTooltip-arrow': {
-                        color: theme.palette.mode === 'dark' ? alpha(theme.palette.primary.dark, 0.9) : alpha(theme.palette.primary.main, 0.9),
+                        color:
+                          theme.palette.mode === 'dark'
+                            ? alpha(theme.palette.primary.dark, 0.9)
+                            : alpha(theme.palette.primary.main, 0.9),
                       },
-                    }
-                  }
+                    },
+                  },
                 }}
               >
-                <IconButton 
-                  size="small" 
-                  sx={{ 
+                <IconButton
+                  size="small"
+                  sx={{
                     p: tokens.spacing.padding.tiny,
                     ml: tokens.spacing.margin.tiny,
-                    color: theme.palette.mode === 'dark' ? alpha(theme.palette.primary.light, 0.7) : alpha(theme.palette.primary.main, 0.7),
+                    color:
+                      theme.palette.mode === 'dark'
+                        ? alpha(theme.palette.primary.light, 0.7)
+                        : alpha(theme.palette.primary.main, 0.7),
                     '&:hover': {
                       backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                    }
+                    },
                   }}
                   aria-label={`Information about ${label}`}
                 >
@@ -186,8 +203,8 @@ const SettingItem: React.FC<SettingItemProps> = ({
             )}
           </Stack>
         }
-        sx={{ 
-          margin: 0, 
+        sx={{
+          margin: 0,
           width: '100%',
           minHeight: 36,
           alignItems: 'center',
@@ -201,4 +218,4 @@ const SettingItem: React.FC<SettingItemProps> = ({
   );
 };
 
-export default React.memo(SettingItem); 
+export default React.memo(SettingItem);

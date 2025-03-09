@@ -1,4 +1,7 @@
 import React from 'react';
+import CloseIcon from '@mui/icons-material/Close';
+import RestoreIcon from '@mui/icons-material/Restore';
+import SettingsIcon from '@mui/icons-material/Settings';
 import {
   Dialog,
   DialogTitle,
@@ -11,13 +14,10 @@ import {
   Divider,
   useTheme,
   alpha,
-  useMediaQuery
+  useMediaQuery,
 } from '@mui/material';
-import SettingsIcon from '@mui/icons-material/Settings';
-import CloseIcon from '@mui/icons-material/Close';
-import RestoreIcon from '@mui/icons-material/Restore';
-import { CombinedSettingsPanel } from './components/TabPanels';
-import { useSettingsState } from './hooks';
+import SettingsPanel from './components/SettingsPanel';
+import { useSettingsState } from './hooks/useSettingsState';
 import { tokens } from './tokens';
 
 interface SettingsModalProps {
@@ -25,14 +25,11 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
+const TableSettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  
-  const {
-    hasChanges,
-    resetToDefaults
-  } = useSettingsState(open);
+
+  const { hasChanges, resetToDefaults } = useSettingsState(open);
 
   // Handle unsaved changes confirmation
   const handleClose = () => {
@@ -51,9 +48,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
         sx: {
           borderRadius: tokens.borderRadius.medium,
           overflow: 'hidden',
-          backgroundImage: theme.palette.mode === 'dark' 
-            ? `linear-gradient(${alpha(theme.palette.background.paper, 0.8)}, ${alpha(theme.palette.background.paper, 0.95)})`
-            : `linear-gradient(${alpha(theme.palette.background.paper, 0.97)}, ${theme.palette.background.paper})`,
+          backgroundImage:
+            theme.palette.mode === 'dark'
+              ? `linear-gradient(${alpha(theme.palette.background.paper, 0.8)}, ${alpha(theme.palette.background.paper, 0.95)})`
+              : `linear-gradient(${alpha(theme.palette.background.paper, 0.97)}, ${theme.palette.background.paper})`,
           backdropFilter: 'blur(8px)',
         },
       }}
@@ -78,27 +76,27 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
         }}
       >
         <Stack direction="row" alignItems="center" spacing={tokens.spacing.stack.medium}>
-          <SettingsIcon 
-            color="primary" 
-            sx={{ 
+          <SettingsIcon
+            color="primary"
+            sx={{
               fontSize: '1.75rem',
               opacity: 0.9,
-            }} 
+            }}
           />
           <Typography variant="h6" fontWeight={600}>
             Table Settings
           </Typography>
         </Stack>
-        <IconButton 
-          edge="end" 
-          color="inherit" 
-          onClick={handleClose} 
+        <IconButton
+          edge="end"
+          color="inherit"
+          onClick={handleClose}
           aria-label="close"
           sx={{
             transition: `all ${tokens.animation.fast}ms ease`,
             '&:hover': {
               backgroundColor: alpha(theme.palette.primary.main, 0.08),
-            }
+            },
           }}
         >
           <CloseIcon />
@@ -124,15 +122,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
           },
         }}
       >
-        <CombinedSettingsPanel />
+        <SettingsPanel />
       </DialogContent>
-      
+
       <Divider sx={{ opacity: 0.6 }} />
 
       <DialogActions
         sx={{
           px: {
-            xs: tokens.spacing.padding.item, 
+            xs: tokens.spacing.padding.item,
             sm: tokens.spacing.padding.container,
           },
           py: tokens.spacing.padding.item,
@@ -158,23 +156,25 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
         >
           Reset to Defaults
         </Button>
-        <Button 
-          onClick={handleClose} 
-          color="primary" 
-          variant="contained" 
+        <Button
+          onClick={handleClose}
+          color="primary"
+          variant="contained"
           disableElevation
           sx={{
             borderRadius: tokens.borderRadius.pill,
             px: tokens.spacing.padding.container,
             py: tokens.spacing.padding.compact - 0.1,
             fontWeight: 600,
-            backgroundColor: hasChanges ? theme.palette.primary.main : alpha(theme.palette.primary.main, 0.8),
+            backgroundColor: hasChanges
+              ? theme.palette.primary.main
+              : alpha(theme.palette.primary.main, 0.8),
             boxShadow: hasChanges ? theme.shadows[2] : 'none',
             transition: `all ${tokens.animation.fast}ms ease-in-out`,
             '&:hover': {
               boxShadow: theme.shadows[3],
               transform: 'translateY(-1px)',
-            }
+            },
           }}
         >
           {hasChanges ? 'Save Changes' : 'Done'}
@@ -184,4 +184,4 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
   );
 };
 
-export default React.memo(SettingsModal); 
+export default React.memo(TableSettingsModal);
