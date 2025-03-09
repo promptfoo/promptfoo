@@ -267,7 +267,7 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Other Tools',
+      label: 'Tools',
       collapsed: true,
       items: [
         {
