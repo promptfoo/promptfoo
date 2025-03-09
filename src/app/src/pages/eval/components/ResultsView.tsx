@@ -9,7 +9,6 @@ import ClearIcon from '@mui/icons-material/Clear';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import ReplayIcon from '@mui/icons-material/Replay';
 import SearchIcon from '@mui/icons-material/Search';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ShareIcon from '@mui/icons-material/Share';
@@ -590,6 +589,7 @@ export default function ResultsView({
                 </Tooltip>
               </Menu>
             )}
+            {/* TODO(Michael): Remove config.metadata.redteam check (2024-08-18) */}
             {(config?.redteam || config?.metadata?.redteam) && (
               <Tooltip title="View vulnerability scan report" placement="bottom">
                 <Button
