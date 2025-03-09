@@ -13,7 +13,7 @@ This rule provides guidance for Python development in the promptfoo project.
 ## Python Guidelines
 
 - Use Python 3.9 or later
-- Follow the [Google Python Style Guide](mdc:https:/google.github.io/styleguide/pyguide.html)
+- Follow the [Google Python Style Guide](mdc:https://google.github.io/styleguide/pyguide.html)
 - Use type hints to improve code readability and catch potential errors
 - Use `ruff` for linting and formatting
   - Run `ruff check --fix` for general linting
