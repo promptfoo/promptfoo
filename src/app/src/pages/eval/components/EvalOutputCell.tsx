@@ -49,8 +49,15 @@ function EvalOutputCell({
   showDiffs: boolean;
   searchText: string;
 }) {
-  const { renderMarkdown, prettifyJson, showPrompts, showPassFail, maxImageWidth, maxImageHeight } =
-    useResultsViewStore();
+  const {
+    renderMarkdown,
+    prettifyJson,
+    showPrompts,
+    showPassFail,
+    maxImageWidth,
+    maxImageHeight,
+    showReasoning,
+  } = useResultsViewStore();
   const [openPrompt, setOpen] = React.useState(false);
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
     output.gradingResult?.componentResults?.find((result) => result.assertion?.type === 'human')
@@ -64,6 +71,9 @@ function EvalOutputCell({
     )?.pass;
     setActiveRating(humanRating ?? null);
   }, [output]);
+
+  // Check if reasoning is available
+  const hasReasoning = !!output.response?.reasoning;
 
   const handlePromptOpen = () => {
     setOpen(true);
@@ -108,6 +118,17 @@ function EvalOutputCell({
   };
 
   let text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
+
+  // If showing reasoning and reasoning exists, use that instead
+  if (showReasoning && hasReasoning && output.response) {
+    const reasoning = output.response.reasoning;
+    if (reasoning) {
+      text = typeof reasoning === 'string' ? reasoning : JSON.stringify(reasoning);
+    }
+  } else {
+    text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
+  }
+
   let node: React.ReactNode | undefined;
   let failReasons: string[] = [];
 
@@ -423,6 +444,7 @@ function EvalOutputCell({
             provider={output.provider}
             gradingResults={output.gradingResult?.componentResults}
             output={text}
+            reasoning={output.response?.reasoning}
             metadata={output.metadata}
           />
         </>
@@ -466,6 +488,12 @@ function EvalOutputCell({
       '--max-image-height': `${maxImageHeight}px`,
     } as CSSPropertiesWithCustomVars;
   }, [output.gradingResult?.comment, maxImageWidth, maxImageHeight]);
+
+  // Add style for reasoning pill
+  const reasoningPillStyle = {
+    backgroundColor: '#e0f7fa',
+    color: '#006064',
+  };
 
   // Pass/fail badge creation
   let passCount = 0;
@@ -596,6 +624,13 @@ function EvalOutputCell({
         <div className="prompt">
           <span className="pill">Prompt</span>
           {output.prompt}
+        </div>
+      )}
+      {showReasoning && hasReasoning && (
+        <div className="reasoning-indicator">
+          <span className="pill" style={reasoningPillStyle}>
+            Reasoning
+          </span>
         </div>
       )}
       <TruncatedText text={node || text} maxLength={maxTextLength} />

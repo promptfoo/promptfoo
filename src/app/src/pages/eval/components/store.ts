@@ -54,6 +54,8 @@ interface TableState {
   setShowPrompts: (showPrompts: boolean) => void;
   showPassFail: boolean;
   setShowPassFail: (showPassFail: boolean) => void;
+  showReasoning: boolean;
+  setShowReasoning: (showReasoning: boolean) => void;
 
   inComparisonMode: boolean;
   setInComparisonMode: (inComparisonMode: boolean) => void;
@@ -109,6 +111,8 @@ export const useStore = create<TableState>()(
       setShowPrompts: (showPrompts: boolean) => set(() => ({ showPrompts })),
       showPassFail: true,
       setShowPassFail: (showPassFail: boolean) => set(() => ({ showPassFail })),
+      showReasoning: false,
+      setShowReasoning: (showReasoning: boolean) => set(() => ({ showReasoning })),
 
       inComparisonMode: false,
       setInComparisonMode: (inComparisonMode: boolean) => set(() => ({ inComparisonMode })),

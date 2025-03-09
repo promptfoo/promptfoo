@@ -97,6 +97,7 @@ interface EvalOutputPromptDialogProps {
   prompt: string;
   provider?: string;
   output?: string;
+  reasoning?: string | any;
   gradingResults?: GradingResult[];
   metadata?: Record<string, any>;
 }
@@ -107,27 +108,42 @@ export default function EvalOutputPromptDialog({
   prompt,
   provider,
   output,
+  reasoning,
   gradingResults,
   metadata,
 }: EvalOutputPromptDialogProps) {
-  const [copied, setCopied] = useState(false);
-  const [expandedMetadata, setExpandedMetadata] = useState<ExpandedMetadataState>({});
+  const [metadataState, setMetadataState] = useState<ExpandedMetadataState>({});
+  const [copyStates, setCopyStates] = useState({
+    output: false,
+    reasoning: false,
+    prompt: false,
+  });
 
   useEffect(() => {
-    setCopied(false);
+    if (prompt) {
+      // Parse the prompt into chat messages if it appears to be in chat format
+      // ... existing code ...
+    }
   }, [prompt]);
 
-  const copyToClipboard = async (text: string) => {
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
+  const copyToClipboard = async (text: string, type: 'output' | 'reasoning' | 'prompt') => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyStates((prev) => ({ ...prev, [type]: true }));
+      setTimeout(() => {
+        setCopyStates((prev) => ({ ...prev, [type]: false }));
+      }, 2000);
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+    }
   };
 
   const handleMetadataClick = (key: string) => {
     const now = Date.now();
-    const lastClick = expandedMetadata[key]?.lastClickTime || 0;
+    const lastClick = metadataState[key]?.lastClickTime || 0;
     const isDoubleClick = now - lastClick < 300; // 300ms threshold
 
-    setExpandedMetadata((prev: ExpandedMetadataState) => ({
+    setMetadataState((prev: ExpandedMetadataState) => ({
       ...prev,
       [key]: {
         expanded: isDoubleClick ? false : true,
@@ -156,10 +172,10 @@ export default function EvalOutputPromptDialog({
             maxRows={20}
           />
           <IconButton
-            onClick={() => copyToClipboard(prompt)}
+            onClick={() => copyToClipboard(prompt, 'prompt')}
             style={{ position: 'absolute', right: '10px', top: '10px' }}
           >
-            {copied ? <CheckIcon /> : <ContentCopyIcon />}
+            {copyStates.prompt ? <CheckIcon /> : <ContentCopyIcon />}
           </IconButton>
         </Box>
         {metadata?.redteamFinalPrompt && (
@@ -175,17 +191,70 @@ export default function EvalOutputPromptDialog({
             />
           </Box>
         )}
-        {output && (
-          <Box my={2}>
-            <Typography variant="subtitle1" style={{ marginBottom: '1rem', marginTop: '1rem' }}>
-              Output
-            </Typography>
+        <Box sx={{ mt: 4 }}>
+          <Typography variant="h6" id="output-title" sx={{ display: 'flex', alignItems: 'center' }}>
+            Output
+            {output && (
+              <IconButton
+                aria-label="copy output"
+                size="small"
+                onClick={() => output && copyToClipboard(output, 'output')}
+              >
+                {copyStates.output ? (
+                  <CheckIcon fontSize="small" />
+                ) : (
+                  <ContentCopyIcon fontSize="small" />
+                )}
+              </IconButton>
+            )}
+          </Typography>
+          <Box sx={{ bgcolor: 'background.paper', p: 2, borderRadius: 1, mt: 1 }}>
             <TextareaAutosize
+              aria-label="output"
+              minRows={3}
+              maxRows={10}
+              value={output || ''}
+              style={{ width: '100%', fontFamily: 'monospace' }}
               readOnly
-              maxRows={20}
-              value={output}
-              style={{ width: '100%', padding: '0.75rem' }}
             />
+          </Box>
+        </Box>
+        {reasoning && (
+          <Box sx={{ mt: 4 }}>
+            <Typography
+              variant="h6"
+              id="reasoning-title"
+              sx={{ display: 'flex', alignItems: 'center' }}
+            >
+              Reasoning
+              <IconButton
+                aria-label="copy reasoning"
+                size="small"
+                onClick={() => {
+                  const reasoningText =
+                    typeof reasoning === 'string' ? reasoning : JSON.stringify(reasoning, null, 2);
+                  copyToClipboard(reasoningText, 'reasoning');
+                }}
+              >
+                {copyStates.reasoning ? (
+                  <CheckIcon fontSize="small" />
+                ) : (
+                  <ContentCopyIcon fontSize="small" />
+                )}
+              </IconButton>
+            </Typography>
+            <Box sx={{ bgcolor: 'background.paper', p: 2, borderRadius: 1, mt: 1 }}>
+              <TextareaAutosize
+                aria-label="reasoning"
+                minRows={3}
+                maxRows={10}
+                value={
+                  typeof reasoning === 'string' ? reasoning : JSON.stringify(reasoning, null, 2)
+                }
+                style={{ width: '100%', fontFamily: 'monospace' }}
+                readOnly
+              />
+            </Box>
           </Box>
         )}
         <AssertionResults gradingResults={gradingResults} />
@@ -209,8 +278,11 @@ export default function EvalOutputPromptDialog({
                 </TableHead>
                 <TableBody>
                   {Object.entries(metadata).map(([key, value]) => {
-                    const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
-                    const truncatedValue = ellipsize(stringValue, 300);
+                    const isObject = value && typeof value === 'object';
+                    const stringValue = isObject ? JSON.stringify(value, null, 2) : String(value);
+                    const truncatedValue = ellipsize(stringValue, 100);
+
+                    const expanded = metadataState[key]?.expanded || false;
 
                     return (
                       <TableRow key={key}>
@@ -219,7 +291,7 @@ export default function EvalOutputPromptDialog({
                           style={{ whiteSpace: 'pre-wrap', cursor: 'pointer' }}
                           onClick={() => handleMetadataClick(key)}
                         >
-                          {expandedMetadata[key]?.expanded ? stringValue : truncatedValue}
+                          {expanded ? stringValue : truncatedValue}
                         </TableCell>
                       </TableRow>
                     );
