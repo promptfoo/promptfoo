@@ -56,6 +56,8 @@ export function urlEncodeRawRequestPath(rawRequest: string) {
     throw new Error(`[Http Provider] HTTP request protocol is not valid. From: ${firstLine}`);
   }
 
+  logger.debug(`[Http Provider] Encoding URL: ${url} from first line of raw request: ${firstLine}`);
+
   try {
     // Use the built-in URL class to parse and encode the URL
     const parsedUrl = new URL(url, 'http://placeholder-base.com');
