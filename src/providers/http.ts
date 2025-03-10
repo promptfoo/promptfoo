@@ -292,43 +292,96 @@ export async function createTransformResponse(
   );
 }
 
-// Function declarations to avoid circular dependency issues
-function processValue(value: any, vars: Record<string, any>): any;
-function processObjects(
-  body: Record<string, any> | any[],
-  vars: Record<string, any>,
-): Record<string, any> | any[];
-
-// Function implementations
-function processValue(value: any, vars: Record<string, any>): any {
-  if (typeof value === 'string') {
-    const renderedValue = getNunjucksEngine().renderString(value, vars || {});
-    try {
-      return JSON.parse(renderedValue);
-    } catch {
-      return renderedValue;
+// Handle circular dependency using a single object with both functions
+/**
+ * Template substitution engine that replaces variables in HTTP request configurations.
+ * It handles:
+ * - String templates: Replaces {{varName}} with the actual variable value
+ * - Arrays: Applies template substitution to each array element
+ * - Objects: Applies template substitution to each property value
+ * - JSON strings: After substitution, attempts to parse them into objects/arrays
+ */
+const processor = {
+  /**
+   * Replaces template expressions in values with their actual values.
+   *
+   * For example:
+   * - "Hello {{name}}!" → "Hello World!" (when vars = {name: "World"})
+   * - "{{number}}" → 42 (when vars = {number: 42})
+   * - ["{{a}}", "{{b}}"] → ["value1", "value2"] (when vars = {a: "value1", b: "value2"})
+   *
+   * @param value The value containing template expressions to substitute
+   * @param vars Dictionary of variable names and their values for substitution
+   * @returns The value with all template expressions replaced with their values
+   */
+  processValue(value: any, vars: Record<string, any>): any {
+    if (typeof value === 'string') {
+      const renderedValue = getNunjucksEngine().renderString(value, vars || {});
+      try {
+        return JSON.parse(renderedValue);
+      } catch {
+        return renderedValue;
+      }
+    } else if (Array.isArray(value)) {
+      return value.map((item) => processor.processValue(item, vars));
+    } else if (value && typeof value === 'object') {
+      return processor.processObjects(value, vars);
     }
-  } else if (Array.isArray(value)) {
-    return value.map((item) => processValue(item, vars));
-  } else if (value && typeof value === 'object') {
-    return processObjects(value, vars);
-  }
-  return value;
+    return value;
+  },
+
+  /**
+   * Recursively replaces template expressions in objects and arrays.
+   *
+   * Walks through each property of objects or elements of arrays and
+   * substitutes any template expressions with their actual values.
+   *
+   * @param body Object or array containing template expressions to substitute
+   * @param vars Dictionary of variable names and their values for substitution
+   * @returns New object or array with all template expressions replaced
+   */
+  processObjects(
+    body: Record<string, any> | any[],
+    vars: Record<string, any>,
+  ): Record<string, any> | any[] {
+    if (Array.isArray(body)) {
+      return body.map((item) => processor.processValue(item, vars));
+    }
+
+    return Object.fromEntries(
+      Object.entries(body).map(([key, value]) => [key, processor.processValue(value, vars)]),
+    );
+  },
+};
+
+// Create standalone functions that use the processor object
+function processValue(value: any, vars: Record<string, any>): any {
+  return processor.processValue(value, vars);
 }
 
 function processObjects(
   body: Record<string, any> | any[],
   vars: Record<string, any>,
 ): Record<string, any> | any[] {
-  if (Array.isArray(body)) {
-    return body.map((item) => processValue(item, vars));
-  }
-
-  return Object.fromEntries(
-    Object.entries(body).map(([key, value]) => [key, processValue(value, vars)]),
-  );
+  return processor.processObjects(body, vars);
 }
 
+/**
+ * Substitutes template variables in a JSON object or array.
+ *
+ * This function walks through all properties of the provided JSON structure
+ * and replaces template expressions (like {{varName}}) with their actual values.
+ * If a substituted string is valid JSON, it will be parsed into an object or array.
+ *
+ * Example:
+ * Input: {"greeting": "Hello {{name}}!", "data": {"id": "{{userId}}"}}
+ * Vars: {name: "World", userId: 123}
+ * Output: {"greeting": "Hello World!", "data": {"id": 123}}
+ *
+ * @param body The JSON object or array containing template expressions
+ * @param vars Dictionary of variable names and their values for substitution
+ * @returns A new object or array with all template expressions replaced
+ */
 export function processJsonBody(
   body: Record<string, any> | any[],
   vars: Record<string, any>,
@@ -344,7 +397,30 @@ export function processJsonBody(
   return processObjects(body, vars);
 }
 
+/**
+ * Substitutes template variables in a text string.
+ *
+ * Replaces template expressions (like {{varName}}) in the string with their
+ * actual values from the provided variables dictionary.
+ *
+ * Example:
+ * Input: "Hello {{name}}! Your user ID is {{userId}}."
+ * Vars: {name: "World", userId: 123}
+ * Output: "Hello World! Your user ID is 123."
+ *
+ * @param body The string containing template expressions to substitute
+ * @param vars Dictionary of variable names and their values for substitution
+ * @returns A new string with all template expressions replaced
+ * @throws Error if body is an object instead of a string
+ */
 export function processTextBody(body: string, vars: Record<string, any>): string {
+  if (body == null) {
+    return body;
+  }
+  invariant(
+    typeof body !== 'object',
+    'Expected body to be a string when content type is not application/json',
+  );
   try {
     return getNunjucksEngine().renderString(body, vars);
   } catch (err) {
@@ -808,7 +884,7 @@ export class HttpProvider implements ApiProvider {
     vars: Record<string, any>,
     context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
-    invariant(this.config.request, 'Raw request is required');
+    invariant(this.config.request, 'Expected request to be set in http provider config');
     const renderedRequest = getNunjucksEngine().renderString(this.config.request, vars);
     const parsedRequest = parseRawRequest(renderedRequest.trim());
 

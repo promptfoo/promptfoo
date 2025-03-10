@@ -13,6 +13,7 @@ import {
   HttpProvider,
   processJsonBody,
   urlEncodeRawRequestPath,
+  processTextBody,
 } from '../../src/providers/http';
 import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared';
 import { maybeLoadFromExternalFile } from '../../src/util';
@@ -584,30 +585,55 @@ describe('HttpProvider', () => {
       });
     });
 
-    it('should handle empty vars', () => {
-      const body = { key: '{{ prompt }}' };
-      const result = processJsonBody(body, {});
-      expect(result).toEqual({ key: '' });
+    it('should process deeply nested objects and arrays', () => {
+      const body = {
+        key: '{{var1}}',
+        nested: {
+          key2: '{{var2}}',
+          items: ['{{var3}}', { nestedKey: '{{var4}}' }],
+        },
+      };
+      const vars = { var1: 'value1', var2: 'value2', var3: 'value3', var4: 'value4' };
+      const result = processJsonBody(body, vars);
+      expect(result).toEqual({
+        key: 'value1',
+        nested: {
+          key2: 'value2',
+          items: ['value3', { nestedKey: 'value4' }],
+        },
+      });
     });
 
-    it('should handle complex nested structures', () => {
+    it('should parse JSON strings if possible', () => {
       const body = {
-        outer: {
-          inner: ['{{ prompt }}', { nestedKey: '{{ prompt }}' }],
-          static: 'value',
-        },
-        jsonArray: '[1, 2, "{{ prompt }}"]',
+        key: '{{var1}}',
+        jsonString: '{"parsed":{{var2}}}',
       };
-      const vars = { prompt: 'test prompt' };
+      const vars = { var1: 'value1', var2: 123 };
       const result = processJsonBody(body, vars);
-
       expect(result).toEqual({
-        outer: {
-          inner: ['test prompt', { nestedKey: 'test prompt' }],
-          static: 'value',
-        },
-        jsonArray: [1, 2, 'test prompt'],
+        key: 'value1',
+        jsonString: { parsed: 123 },
       });
+    });
+  });
+
+  describe('processTextBody', () => {
+    it('should render templates in text bodies', () => {
+      const body = 'Hello {{name}}!';
+      const vars = { name: 'World' };
+      expect(processTextBody(body, vars)).toBe('Hello World!');
+    });
+
+    it('should handle rendering errors gracefully', () => {
+      const body = 'Hello {{ unclosed tag';
+      const vars = { name: 'World' };
+      expect(processTextBody(body, vars)).toBe(body); // Should return original
+    });
+
+    it('should handle null body gracefully', () => {
+      // @ts-ignore - Testing null input
+      expect(processTextBody(null, {})).toBeNull();
     });
   });
 
