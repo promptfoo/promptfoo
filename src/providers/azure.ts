@@ -467,16 +467,6 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
 }
 
 export class AzureCompletionProvider extends AzureGenericProvider {
-  /**
-   * Check if the current deployment is configured as a reasoning model
-   */
-  protected isReasoningModel(): boolean {
-    if (this.config.o1) {
-      logger.warn('The o1 flag is deprecated. Please use isReasoningModel instead.');
-    }
-    return !!this.config.isReasoningModel || !!this.config.o1;
-  }
-
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -489,53 +479,30 @@ export class AzureCompletionProvider extends AzureGenericProvider {
       throwConfigurationError('Azure API host must be set.');
     }
 
-    // Check if this is configured as a reasoning model
-    const isReasoningModel = this.isReasoningModel();
-
-    // Get max tokens based on model type
-    const maxTokens = this.config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024);
-    const maxCompletionTokens = this.config.max_completion_tokens;
-
-    // Get reasoning effort for reasoning models
-    const reasoningEffort = this.config.reasoning_effort ?? 'medium';
-
     let stop: string;
     try {
-      stop = getEnvString('OPENAI_STOP')
-        ? JSON.parse(getEnvString('OPENAI_STOP') || '')
-        : this.config?.stop || ['<|im_end|>', '<|endoftext|>'];
+      const stopEnvVar = getEnvString('OPENAI_STOP');
+      stop = stopEnvVar ? JSON.parse(stopEnvVar) : (this.config.stop ?? '');
     } catch (err) {
       throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);
     }
-
     const body = {
       model: this.deploymentName,
       prompt,
-      ...(isReasoningModel
-        ? {
-            max_completion_tokens: maxCompletionTokens ?? maxTokens,
-            reasoning_effort: renderVarsInObject(reasoningEffort, context?.vars),
-          }
-        : {
-            max_tokens: maxTokens,
-            temperature: this.config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
-          }),
+      max_tokens: this.config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024),
+      temperature: this.config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
       top_p: this.config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1),
       presence_penalty: this.config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0),
       frequency_penalty:
         this.config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0),
       best_of: this.config.best_of ?? getEnvInt('OPENAI_BEST_OF', 1),
-      ...(this.config.seed === undefined ? {} : { seed: this.config.seed }),
-      ...(this.config.deployment_id ? { deployment_id: this.config.deployment_id } : {}),
-      ...(this.config.dataSources ? { dataSources: this.config.dataSources } : {}),
-      ...(this.config.response_format ? { response_format: this.config.response_format } : {}),
-      ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(stop ? { stop } : {}),
       ...(this.config.passthrough || {}),
     };
+
     logger.debug(`Calling Azure API: ${JSON.stringify(body)}`);
-    let data,
-      cached = false;
+    let data;
+    let cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
         `${this.getApiBaseUrl()}/openai/deployments/${
@@ -550,16 +517,29 @@ export class AzureCompletionProvider extends AzureGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
-      )) as unknown as any);
+      )) as any);
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
       };
     }
+
     logger.debug(`Azure API response: ${JSON.stringify(data)}`);
     try {
+      // Check for content filter
+      const choice = data.choices[0];
+      let output = choice.text;
+      if (output == null) {
+        if (choice.finish_reason === 'content_filter') {
+          output =
+            "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.";
+        } else {
+          output = '';
+        }
+      }
+
       return {
-        output: data.choices[0].text,
+        output,
         tokenUsage: cached
           ? { cached: data.usage.total_tokens, total: data.usage.total_tokens }
           : {
@@ -577,6 +557,16 @@ export class AzureCompletionProvider extends AzureGenericProvider {
     } catch (err) {
       return {
         error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
+        tokenUsage: cached
+          ? {
+              cached: data.usage.total_tokens,
+              total: data.usage.total_tokens,
+            }
+          : {
+              total: data?.usage?.total_tokens,
+              prompt: data?.usage?.prompt_tokens,
+              completion: data?.usage?.completion_tokens,
+            },
       };
     }
   }

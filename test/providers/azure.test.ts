@@ -764,65 +764,33 @@ describe('AzureOpenAiChatCompletionProvider', () => {
 
 describe('AzureCompletionProvider', () => {
   it('should handle basic completion with caching', async () => {
-    const provider = new AzureCompletionProvider('test-deployment', {
-      config: {
-        apiHost: 'test.azure.com',
-        apiKey: 'test-key',
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        choices: [{ text: 'hello' }],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
       },
+      cached: false,
+    } as any);
+
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        choices: [{ text: 'hello' }],
+        usage: { total_tokens: 10 },
+      },
+      cached: true,
+    } as any);
+
+    const provider = new AzureCompletionProvider('test', {
+      config: { apiHost: 'test.azure.com' },
     });
+    (provider as any).authHeaders = {};
 
-    const mockResponse = {
-      choices: [{ text: 'Test response' }],
-      usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-    };
+    const result1 = await provider.callApi('test prompt');
+    const result2 = await provider.callApi('test prompt');
 
-    jest
-      .mocked(fetchWithCache)
-      .mockResolvedValueOnce({
-        data: mockResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      })
-      .mockResolvedValueOnce({
-        data: mockResponse,
-        cached: true,
-        status: 200,
-        statusText: 'OK',
-      });
-
-    const result1 = await provider.callApi('Test prompt');
-    const result2 = await provider.callApi('Test prompt');
-
-    expect(fetchWithCache).toHaveBeenCalledTimes(2);
-    expect(result1.output).toBe('Test response');
+    expect(result1.output).toBe('hello');
+    expect(result2.output).toBe('hello');
     expect(result1.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
     expect(result2.tokenUsage).toEqual({ cached: 10, total: 10 });
-  });
-
-  describe('reasoning models', () => {
-    it('should detect reasoning models with isReasoningModel flag in completion provider', () => {
-      const provider = new AzureCompletionProvider('test-deployment', {
-        config: {
-          isReasoningModel: true,
-          apiHost: 'test.azure.com',
-        },
-      });
-      expect((provider as any).isReasoningModel()).toBe(true);
-    });
-
-    it('should use max_completion_tokens for reasoning models in completion provider', () => {
-      const provider = new AzureCompletionProvider('test-deployment', {
-        config: {
-          isReasoningModel: true,
-          max_completion_tokens: 2000,
-          apiHost: 'test.azure.com',
-        },
-      });
-      const body = (provider as any).callApi('test prompt');
-      // We can't easily test the body here since callApi is async
-      // But we're at least ensuring the method doesn't throw errors
-      expect(body).toBeDefined();
-    });
   });
 });
