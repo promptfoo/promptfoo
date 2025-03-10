@@ -31,7 +31,7 @@ describe('maybeEmitAzureOpenAiWarning', () => {
 
   it('should not emit warning when Azure provider is used alone, but no model graded eval', () => {
     const testSuite: TestSuite = {
-      providers: [new AzureCompletionProvider('foo')],
+      providers: [new AzureCompletionProvider('foo', { config: { apiHost: 'test.azure.com' } })],
       defaultTest: {},
       prompts: [],
     };
@@ -46,7 +46,7 @@ describe('maybeEmitAzureOpenAiWarning', () => {
 
   it('should emit warning when Azure provider is used alone, but with model graded eval', () => {
     const testSuite: TestSuite = {
-      providers: [new AzureCompletionProvider('foo')],
+      providers: [new AzureCompletionProvider('foo', { config: { apiHost: 'test.azure.com' } })],
       defaultTest: {},
       prompts: [],
     };
@@ -61,7 +61,10 @@ describe('maybeEmitAzureOpenAiWarning', () => {
 
   it('should emit warning when Azure provider used with non-OpenAI provider', () => {
     const testSuite: TestSuite = {
-      providers: [new AzureCompletionProvider('foo'), new HuggingfaceTextGenerationProvider('bar')],
+      providers: [
+        new AzureCompletionProvider('foo', { config: { apiHost: 'test.azure.com' } }),
+        new HuggingfaceTextGenerationProvider('bar'),
+      ],
       defaultTest: {},
       prompts: [],
     };
@@ -76,7 +79,7 @@ describe('maybeEmitAzureOpenAiWarning', () => {
 
   it('should not emit warning when Azure providers are used with a default provider set', () => {
     const testSuite: TestSuite = {
-      providers: [new AzureCompletionProvider('foo')],
+      providers: [new AzureCompletionProvider('foo', { config: { apiHost: 'test.azure.com' } })],
       defaultTest: { options: { provider: 'azureopenai:....' } },
       prompts: [],
     };
@@ -91,7 +94,10 @@ describe('maybeEmitAzureOpenAiWarning', () => {
 
   it('should not emit warning when both Azure and OpenAI providers are used', () => {
     const testSuite: TestSuite = {
-      providers: [new AzureCompletionProvider('foo'), new OpenAiCompletionProvider('bar')],
+      providers: [
+        new AzureCompletionProvider('foo', { config: { apiHost: 'test.azure.com' } }),
+        new OpenAiCompletionProvider('bar'),
+      ],
       defaultTest: {},
       prompts: [],
     };
@@ -742,11 +748,13 @@ describe('AzureOpenAiChatCompletionProvider', () => {
       const provider = new AzureChatCompletionProvider('test-deployment', {
         config: {
           isReasoningModel: true,
-          reasoning_effort: '{{effort}}',
+          reasoning_effort: '{{effort}}' as any,
+          apiHost: 'test.azure.com',
         },
       });
       const context = {
-        vars: { effort: 'high' },
+        prompt: { label: 'test prompt', raw: 'test prompt' },
+        vars: { effort: 'high' as const },
       };
       const body = (provider as any).getOpenAiBody('test prompt', context).body;
       expect(body).toHaveProperty('reasoning_effort', 'high');
@@ -797,6 +805,7 @@ describe('AzureCompletionProvider', () => {
       const provider = new AzureCompletionProvider('test-deployment', {
         config: {
           isReasoningModel: true,
+          apiHost: 'test.azure.com',
         },
       });
       expect((provider as any).isReasoningModel()).toBe(true);
@@ -807,6 +816,7 @@ describe('AzureCompletionProvider', () => {
         config: {
           isReasoningModel: true,
           max_completion_tokens: 2000,
+          apiHost: 'test.azure.com',
         },
       });
       const body = (provider as any).callApi('test prompt');
