@@ -8,7 +8,7 @@ import type {
 } from '@azure/openai-assistants';
 import dedent from 'dedent';
 import { fetchWithCache } from '../cache';
-import { getEnvString } from '../envars';
+import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import type {
   ApiProvider,
@@ -471,6 +471,9 @@ export class AzureCompletionProvider extends AzureGenericProvider {
    * Check if the current deployment is configured as a reasoning model
    */
   protected isReasoningModel(): boolean {
+    if (this.config.o1) {
+      logger.warn('The o1 flag is deprecated. Please use isReasoningModel instead.');
+    }
     return !!this.config.isReasoningModel || !!this.config.o1;
   }
 
@@ -490,7 +493,7 @@ export class AzureCompletionProvider extends AzureGenericProvider {
     const isReasoningModel = this.isReasoningModel();
 
     // Get max tokens based on model type
-    const maxTokens = this.config.max_tokens ?? 1024;
+    const maxTokens = this.config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024);
     const maxCompletionTokens = this.config.max_completion_tokens;
 
     // Get reasoning effort for reasoning models
@@ -515,12 +518,13 @@ export class AzureCompletionProvider extends AzureGenericProvider {
           }
         : {
             max_tokens: maxTokens,
-            temperature: this.config.temperature ?? 0,
+            temperature: this.config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
           }),
-      top_p: this.config.top_p ?? 1,
-      presence_penalty: this.config.presence_penalty ?? 0,
-      frequency_penalty: this.config.frequency_penalty ?? 0,
-      best_of: this.config.best_of ?? 1,
+      top_p: this.config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1),
+      presence_penalty: this.config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0),
+      frequency_penalty:
+        this.config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0),
+      best_of: this.config.best_of ?? getEnvInt('OPENAI_BEST_OF', 1),
       ...(this.config.seed === undefined ? {} : { seed: this.config.seed }),
       ...(this.config.deployment_id ? { deployment_id: this.config.deployment_id } : {}),
       ...(this.config.dataSources ? { dataSources: this.config.dataSources } : {}),
@@ -583,6 +587,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
    * Check if the current deployment is configured as a reasoning model
    */
   protected isReasoningModel(): boolean {
+    if (this.config.o1) {
+      logger.warn('The o1 flag is deprecated. Please use isReasoningModel instead.');
+    }
     return !!this.config.isReasoningModel || !!this.config.o1;
   }
 
@@ -612,7 +619,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     const isReasoningModel = this.isReasoningModel();
 
     // Get max tokens based on model type
-    const maxTokens = config.max_tokens ?? 1024;
+    const maxTokens = config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024);
     const maxCompletionTokens = config.max_completion_tokens;
 
     // Get reasoning effort for reasoning models
@@ -629,11 +636,11 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           }
         : {
             max_tokens: maxTokens,
-            temperature: config.temperature ?? 0,
+            temperature: config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
           }),
-      top_p: config.top_p ?? 1,
-      presence_penalty: config.presence_penalty ?? 0,
-      frequency_penalty: config.frequency_penalty ?? 0,
+      top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1),
+      presence_penalty: config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0),
+      frequency_penalty: config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0),
       ...(config.seed === undefined ? {} : { seed: config.seed }),
       ...(config.functions
         ? {

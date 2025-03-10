@@ -11,13 +11,6 @@ This example requires the following environment variables:
 
 You can set these in a `.env` file or directly in your environment.
 
-## Features
-
-- Using the `azure:chat` provider format with a deployment name
-- Setting API host via configuration
-- Using embeddings via Azure for similarity comparison
-- **Working with reasoning models** (o1, o3-mini) using the `isReasoningModel` flag
-
 ## Prerequisites
 
 1. An Azure account with access to Azure OpenAI Service
@@ -28,7 +21,7 @@ You can set these in a `.env` file or directly in your environment.
 
 1. Update the `apiHost` in the configuration to your Azure OpenAI endpoint
 2. Set `AZURE_API_KEY` in your environment
-3. Update the deployment names to match your actual deployments
+3. Update the deployment names to match your actual deployments in `promptfooconfig.yaml`
 
 ## Running the Example
 
