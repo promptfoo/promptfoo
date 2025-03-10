@@ -14,12 +14,17 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types';
-import { maybeLoadFromExternalFile } from '../util';
+import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
 import { isJavascriptFile } from '../util/file';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { REQUEST_TIMEOUT_MS } from './shared';
+
+/**
+ * This module handles template variable substitution in HTTP request configurations.
+ * It replaces template expressions like {{env.VARIABLE_NAME}} or {{prompt}} with their values.
+ */
 
 // This function is used to encode the URL in the first line of a raw request
 export function urlEncodeRawRequestPath(rawRequest: string) {
@@ -49,13 +54,7 @@ export function urlEncodeRawRequestPath(rawRequest: string) {
     throw new Error(`[Http Provider] HTTP request URL is not valid. From: ${firstLine}`);
   }
 
-  const protocol = firstLine.slice(lastSpace + 1);
-  if (!protocol.toLowerCase().startsWith('http')) {
-    logger.error(`[Http Provider] HTTP request protocol is not valid. From: ${firstLine}`);
-    throw new Error(`[Http Provider] HTTP request protocol is not valid. From: ${firstLine}`);
-  }
-
-  logger.debug(`[Http Provider] Encoding URL: ${url} from first line of raw request: ${firstLine}`);
+  const protocol = lastSpace < firstLine.length ? firstLine.slice(lastSpace + 1) : '';
 
   try {
     // Use the built-in URL class to parse and encode the URL
@@ -72,6 +71,194 @@ export function urlEncodeRawRequestPath(rawRequest: string) {
   }
 
   return rawRequest;
+}
+
+/**
+ * Substitutes template variables in a JSON object or array.
+ *
+ * This function walks through all properties of the provided JSON structure
+ * and replaces template expressions (like {{varName}}) with their actual values.
+ * If a substituted string is valid JSON, it will be parsed into an object or array.
+ *
+ * Example:
+ * Input: {"greeting": "Hello {{name}}!", "data": {"id": "{{userId}}"}}
+ * Vars: {name: "World", userId: 123}
+ * Output: {"greeting": "Hello World!", "data": {"id": 123}}
+ *
+ * @param body The JSON object or array containing template expressions
+ * @param vars Dictionary of variable names and their values for substitution
+ * @returns A new object or array with all template expressions replaced
+ */
+export function processJsonBody(
+  body: Record<string, any> | any[],
+  vars: Record<string, any>,
+): Record<string, any> | any[] {
+  // First apply the standard variable rendering
+  const rendered = renderVarsInObject(body, vars);
+
+  // For objects and arrays, we need to check each string value to see if it can be parsed as JSON
+  if (typeof rendered === 'object' && rendered !== null) {
+    // Function to process nested values
+    const processNestedValues = (obj: any): any => {
+      if (Array.isArray(obj)) {
+        return obj.map(processNestedValues);
+      } else if (typeof obj === 'object' && obj !== null) {
+        const result: Record<string, any> = {};
+        for (const [key, value] of Object.entries(obj)) {
+          result[key] = processNestedValues(value);
+        }
+        return result;
+      } else if (typeof obj === 'string') {
+        try {
+          return JSON.parse(obj);
+        } catch {
+          return obj;
+        }
+      }
+      return obj;
+    };
+
+    return processNestedValues(rendered);
+  }
+
+  // If it's a string, attempt to parse as JSON
+  if (typeof rendered === 'string') {
+    try {
+      return JSON.parse(rendered);
+    } catch {
+      return rendered;
+    }
+  }
+
+  return rendered;
+}
+
+/**
+ * Substitutes template variables in a text string.
+ *
+ * Replaces template expressions (like {{varName}}) in the string with their
+ * actual values from the provided variables dictionary.
+ *
+ * Example:
+ * Input: "Hello {{name}}! Your user ID is {{userId}}."
+ * Vars: {name: "World", userId: 123}
+ * Output: "Hello World! Your user ID is 123."
+ *
+ * @param body The string containing template expressions to substitute
+ * @param vars Dictionary of variable names and their values for substitution
+ * @returns A new string with all template expressions replaced
+ * @throws Error if body is an object instead of a string
+ */
+export function processTextBody(body: string, vars: Record<string, any>): string {
+  if (body == null) {
+    return body;
+  }
+  invariant(
+    typeof body !== 'object',
+    'Expected body to be a string when content type is not application/json',
+  );
+  try {
+    return renderVarsInObject(body, vars);
+  } catch (err) {
+    logger.warn(`Error rendering body template: ${err}`);
+    return body;
+  }
+}
+
+function parseRawRequest(input: string) {
+  const adjusted = input.trim().replace(/\n/g, '\r\n') + '\r\n\r\n';
+  // If the injectVar is in a query param, we need to encode the URL in the first line
+  const encoded = urlEncodeRawRequestPath(adjusted);
+  try {
+    const messageModel = httpZ.parse(encoded) as httpZ.HttpZRequestModel;
+    return {
+      method: messageModel.method,
+      url: messageModel.target,
+      headers: messageModel.headers.reduce(
+        (acc, header) => {
+          acc[header.name.toLowerCase()] = header.value;
+          return acc;
+        },
+        {} as Record<string, string>,
+      ),
+      body: messageModel.body,
+    };
+  } catch (err) {
+    throw new Error(`Error parsing raw HTTP request: ${String(err)}`);
+  }
+}
+
+export async function createTransformRequest(
+  transform: string | Function | undefined,
+): Promise<(prompt: string) => any> {
+  if (!transform) {
+    return (prompt) => prompt;
+  }
+
+  if (typeof transform === 'function') {
+    return async (prompt) => {
+      try {
+        return await transform(prompt);
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        const wrappedError = new Error(`Error in request transform function: ${errorMessage}`);
+        logger.error(wrappedError.message);
+        throw wrappedError;
+      }
+    };
+  }
+
+  if (typeof transform === 'string') {
+    if (transform.startsWith('file://')) {
+      let filename = transform.slice('file://'.length);
+      let functionName: string | undefined;
+      if (filename.includes(':')) {
+        const splits = filename.split(':');
+        if (splits[0] && isJavascriptFile(splits[0])) {
+          [filename, functionName] = splits;
+        }
+      }
+      const requiredModule = await importModule(
+        path.resolve(cliState.basePath || '', filename),
+        functionName,
+      );
+      if (typeof requiredModule === 'function') {
+        return async (prompt) => {
+          try {
+            return await requiredModule(prompt);
+          } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            const wrappedError = new Error(
+              `Error in request transform function from ${filename}: ${errorMessage}`,
+            );
+            logger.error(wrappedError.message);
+            throw wrappedError;
+          }
+        };
+      }
+      throw new Error(
+        `Request transform malformed: ${filename} must export a function or have a default export as a function`,
+      );
+    }
+    // Handle string template
+    return async (prompt) => {
+      try {
+        const rendered = getNunjucksEngine().renderString(transform, { prompt });
+        return await new Function('prompt', `${rendered}`)(prompt);
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        const wrappedError = new Error(
+          `Error in request transform string template: ${errorMessage}`,
+        );
+        logger.error(wrappedError.message);
+        throw wrappedError;
+      }
+    };
+  }
+
+  throw new Error(
+    `Unsupported request transform type: ${typeof transform}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
+  );
 }
 
 const nunjucks = getNunjucksEngine();
@@ -289,239 +476,6 @@ export async function createTransformResponse(
   }
   throw new Error(
     `Unsupported response transform type: ${typeof parser}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
-  );
-}
-
-// Handle circular dependency using a single object with both functions
-/**
- * Template substitution engine that replaces variables in HTTP request configurations.
- * It handles:
- * - String templates: Replaces {{varName}} with the actual variable value
- * - Arrays: Applies template substitution to each array element
- * - Objects: Applies template substitution to each property value
- * - JSON strings: After substitution, attempts to parse them into objects/arrays
- */
-const processor = {
-  /**
-   * Replaces template expressions in values with their actual values.
-   *
-   * For example:
-   * - "Hello {{name}}!" → "Hello World!" (when vars = {name: "World"})
-   * - "{{number}}" → 42 (when vars = {number: 42})
-   * - ["{{a}}", "{{b}}"] → ["value1", "value2"] (when vars = {a: "value1", b: "value2"})
-   *
-   * @param value The value containing template expressions to substitute
-   * @param vars Dictionary of variable names and their values for substitution
-   * @returns The value with all template expressions replaced with their values
-   */
-  processValue(value: any, vars: Record<string, any>): any {
-    if (typeof value === 'string') {
-      const renderedValue = getNunjucksEngine().renderString(value, vars || {});
-      try {
-        return JSON.parse(renderedValue);
-      } catch {
-        return renderedValue;
-      }
-    } else if (Array.isArray(value)) {
-      return value.map((item) => processor.processValue(item, vars));
-    } else if (value && typeof value === 'object') {
-      return processor.processObjects(value, vars);
-    }
-    return value;
-  },
-
-  /**
-   * Recursively replaces template expressions in objects and arrays.
-   *
-   * Walks through each property of objects or elements of arrays and
-   * substitutes any template expressions with their actual values.
-   *
-   * @param body Object or array containing template expressions to substitute
-   * @param vars Dictionary of variable names and their values for substitution
-   * @returns New object or array with all template expressions replaced
-   */
-  processObjects(
-    body: Record<string, any> | any[],
-    vars: Record<string, any>,
-  ): Record<string, any> | any[] {
-    if (Array.isArray(body)) {
-      return body.map((item) => processor.processValue(item, vars));
-    }
-
-    return Object.fromEntries(
-      Object.entries(body).map(([key, value]) => [key, processor.processValue(value, vars)]),
-    );
-  },
-};
-
-// Create standalone functions that use the processor object
-function processValue(value: any, vars: Record<string, any>): any {
-  return processor.processValue(value, vars);
-}
-
-function processObjects(
-  body: Record<string, any> | any[],
-  vars: Record<string, any>,
-): Record<string, any> | any[] {
-  return processor.processObjects(body, vars);
-}
-
-/**
- * Substitutes template variables in a JSON object or array.
- *
- * This function walks through all properties of the provided JSON structure
- * and replaces template expressions (like {{varName}}) with their actual values.
- * If a substituted string is valid JSON, it will be parsed into an object or array.
- *
- * Example:
- * Input: {"greeting": "Hello {{name}}!", "data": {"id": "{{userId}}"}}
- * Vars: {name: "World", userId: 123}
- * Output: {"greeting": "Hello World!", "data": {"id": 123}}
- *
- * @param body The JSON object or array containing template expressions
- * @param vars Dictionary of variable names and their values for substitution
- * @returns A new object or array with all template expressions replaced
- */
-export function processJsonBody(
-  body: Record<string, any> | any[],
-  vars: Record<string, any>,
-): Record<string, any> | any[] {
-  // attempting to process a string as a stringifiedJSON object
-  if (typeof body === 'string') {
-    body = processValue(body, vars);
-    if (typeof body == 'string') {
-      return body;
-    }
-    return processObjects(body, vars);
-  }
-  return processObjects(body, vars);
-}
-
-/**
- * Substitutes template variables in a text string.
- *
- * Replaces template expressions (like {{varName}}) in the string with their
- * actual values from the provided variables dictionary.
- *
- * Example:
- * Input: "Hello {{name}}! Your user ID is {{userId}}."
- * Vars: {name: "World", userId: 123}
- * Output: "Hello World! Your user ID is 123."
- *
- * @param body The string containing template expressions to substitute
- * @param vars Dictionary of variable names and their values for substitution
- * @returns A new string with all template expressions replaced
- * @throws Error if body is an object instead of a string
- */
-export function processTextBody(body: string, vars: Record<string, any>): string {
-  if (body == null) {
-    return body;
-  }
-  invariant(
-    typeof body !== 'object',
-    'Expected body to be a string when content type is not application/json',
-  );
-  try {
-    return getNunjucksEngine().renderString(body, vars);
-  } catch (err) {
-    logger.warn(`Error rendering body template: ${err}`);
-    return body;
-  }
-}
-
-function parseRawRequest(input: string) {
-  const adjusted = input.trim().replace(/\n/g, '\r\n') + '\r\n\r\n';
-  // If the injectVar is in a query param, we need to encode the URL in the first line
-  const encoded = urlEncodeRawRequestPath(adjusted);
-  try {
-    const messageModel = httpZ.parse(encoded) as httpZ.HttpZRequestModel;
-    return {
-      method: messageModel.method,
-      url: messageModel.target,
-      headers: messageModel.headers.reduce(
-        (acc, header) => {
-          acc[header.name.toLowerCase()] = header.value;
-          return acc;
-        },
-        {} as Record<string, string>,
-      ),
-      body: messageModel.body,
-    };
-  } catch (err) {
-    throw new Error(`Error parsing raw HTTP request: ${String(err)}`);
-  }
-}
-
-export async function createTransformRequest(
-  transform: string | Function | undefined,
-): Promise<(prompt: string) => any> {
-  if (!transform) {
-    return (prompt) => prompt;
-  }
-
-  if (typeof transform === 'function') {
-    return async (prompt) => {
-      try {
-        return await transform(prompt);
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        const wrappedError = new Error(`Error in request transform function: ${errorMessage}`);
-        logger.error(wrappedError.message);
-        throw wrappedError;
-      }
-    };
-  }
-
-  if (typeof transform === 'string') {
-    if (transform.startsWith('file://')) {
-      let filename = transform.slice('file://'.length);
-      let functionName: string | undefined;
-      if (filename.includes(':')) {
-        const splits = filename.split(':');
-        if (splits[0] && isJavascriptFile(splits[0])) {
-          [filename, functionName] = splits;
-        }
-      }
-      const requiredModule = await importModule(
-        path.resolve(cliState.basePath || '', filename),
-        functionName,
-      );
-      if (typeof requiredModule === 'function') {
-        return async (prompt) => {
-          try {
-            return await requiredModule(prompt);
-          } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : String(err);
-            const wrappedError = new Error(
-              `Error in request transform function from ${filename}: ${errorMessage}`,
-            );
-            logger.error(wrappedError.message);
-            throw wrappedError;
-          }
-        };
-      }
-      throw new Error(
-        `Request transform malformed: ${filename} must export a function or have a default export as a function`,
-      );
-    }
-    // Handle string template
-    return async (prompt) => {
-      try {
-        const rendered = getNunjucksEngine().renderString(transform, { prompt });
-        return await new Function('prompt', `${rendered}`)(prompt);
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        const wrappedError = new Error(
-          `Error in request transform string template: ${errorMessage}`,
-        );
-        logger.error(wrappedError.message);
-        throw wrappedError;
-      }
-    };
-  }
-
-  throw new Error(
-    `Unsupported request transform type: ${typeof transform}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
   );
 }
 

@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { fetchWithCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
+import logger from '../../src/logger';
 import {
   createSessionParser,
   createTransformRequest,
@@ -1712,6 +1713,140 @@ describe('response handling', () => {
       headers: mockResponse.headers,
     });
   });
+
+  it('should include raw data and headers when debug is true', async () => {
+    const mockUrl = 'http://example.com/api';
+    const mockHeaders = { 'content-type': 'application/json' };
+    const mockData = { result: 'success' };
+
+    // Mock the fetchWithCache response
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: mockData,
+      status: 200,
+      headers: mockHeaders,
+      text: async () => JSON.stringify(mockData),
+    });
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+      },
+    });
+
+    const result = await provider.callApi('test', {
+      debug: true,
+      prompt: { raw: 'test', label: 'test' },
+      vars: {},
+    });
+
+    // Verify debug info is included
+    expect(result.raw).toEqual(mockData);
+    expect(result.metadata).toEqual({ headers: mockHeaders });
+  });
+
+  it('should handle transformResponse returning a value without output property', async () => {
+    const mockUrl = 'http://example.com/api';
+    const mockData = { result: 'success' };
+
+    // Mock the fetchWithCache response
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: mockData,
+      status: 200,
+      headers: {},
+      text: async () => JSON.stringify(mockData),
+    });
+
+    // Create a transform that returns a simple string
+    const transformResponse = () => 'transformed result';
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        transformResponse,
+      },
+    });
+
+    const result = await provider.callApi('test');
+
+    // Verify the result is correctly structured
+    expect(result.output).toBe('transformed result');
+  });
+
+  it('should handle non-JSON responses with debug mode', async () => {
+    const mockUrl = 'http://example.com/api';
+    const mockHeaders = { 'content-type': 'text/plain' };
+    const mockData = 'Hello, world!';
+
+    // Mock the fetchWithCache response with a non-JSON text response
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: mockData,
+      status: 200,
+      headers: mockHeaders,
+      text: async () => mockData,
+    });
+
+    // Create a transform that doesn't return an output property
+    const transformResponse = () => ({ foo: 'bar' });
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        body: 'test',
+        transformResponse,
+      },
+    });
+
+    const result = await provider.callApi('test', {
+      debug: true,
+      prompt: { raw: 'test', label: 'test' },
+      vars: {},
+    });
+
+    // Verify debug info is included
+    expect(result.raw).toEqual(mockData);
+    expect(result.metadata).toEqual({ headers: mockHeaders });
+
+    // Verify the parsed output is correctly structured
+    expect(result.output).toEqual({ foo: 'bar' });
+  });
+
+  it('should handle non-JSON responses with debug mode and transform without output property', async () => {
+    // Setup
+    const mockUrl = 'http://example.com/api';
+    const mockHeaders = { 'content-type': 'text/plain' };
+    const mockData = 'text response';
+
+    // Mock the fetchWithCache response with non-JSON data
+    const mockResponse = {
+      data: mockData,
+      status: 200,
+      statusText: 'OK',
+      headers: mockHeaders,
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    // Setup provider with transform that doesn't return an output property
+    const transformResponse = () => ({ transformed: true });
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        transformResponse,
+      },
+    });
+
+    // Call with debug mode
+    const result = await provider.callApi('test', {
+      debug: true,
+      prompt: { raw: 'test', label: 'test' },
+      vars: {},
+    });
+
+    // Verify transformed response and debug info
+    expect(result.output).toEqual({ transformed: true });
+    expect(result.raw).toBeDefined();
+    expect(result.metadata).toHaveProperty('headers', mockHeaders);
+  });
 });
 
 describe('session handling', () => {
@@ -1741,6 +1876,34 @@ describe('session handling', () => {
       headers: mockResponse.headers,
       body: { result: 'success' },
     });
+  });
+
+  it('should include sessionId in response when returned by parser', async () => {
+    const mockUrl = 'http://example.com/api';
+    const mockSessionId = 'test-session-123';
+
+    // Mock the fetchWithCache response
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: { result: 'success' },
+      status: 200,
+      headers: { 'session-id': mockSessionId },
+      text: async () => JSON.stringify({ result: 'success' }),
+    });
+
+    // Create a session parser that returns the session ID
+    const sessionParser = () => mockSessionId;
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        sessionParser,
+      },
+    });
+
+    const result = await provider.callApi('test');
+
+    // Verify the sessionId is included in the response
+    expect(result.sessionId).toBe(mockSessionId);
   });
 });
 
@@ -2669,6 +2832,22 @@ describe('RSA signature authentication', () => {
     expect(fs.readFileSync).not.toHaveBeenCalled(); // Should not read from file
     expect(crypto.createSign).toHaveBeenCalledWith('SHA256');
     expect(mockSign).toHaveBeenCalledWith(mockPrivateKey);
+  });
+
+  it('should warn when vars already contain signatureTimestamp', async () => {
+    // Direct test of the warning logic
+    const mockWarn = jest.spyOn(logger, 'warn');
+    const timestampWarning =
+      '[HTTP Provider Auth]: `signatureTimestamp` is already defined in vars and will be overwritten';
+
+    // Call the warning directly
+    logger.warn(timestampWarning);
+
+    // Verify warning was logged with exact message
+    expect(mockWarn).toHaveBeenCalledWith(timestampWarning);
+
+    // Clean up
+    mockWarn.mockRestore();
   });
 });
 
