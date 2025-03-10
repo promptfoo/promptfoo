@@ -1655,6 +1655,7 @@ describe('response handling', () => {
       status: 200,
       statusText: 'OK',
       cached: false,
+      headers: {},
     };
     jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
@@ -1667,54 +1668,24 @@ describe('response handling', () => {
       config: {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
-        body: 'test',
-        transformResponse: (data: Record<string, unknown>, text: string) => text,
+        body: '{{ prompt }}',
       },
     });
 
     const mockResponse = {
-      data: 'Raw response',
+      data: 'success',
       status: 200,
       statusText: 'OK',
       cached: false,
-      headers: {},
+      headers: { 'Content-Type': 'text/plain' },
     };
     jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('test');
-    expect(result.output).toBe(mockResponse.data);
+    expect(result.output).toBe('success');
   });
 
   it('should include debug information when requested', async () => {
-    const provider = new HttpProvider('http://test.com', {
-      config: {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: { key: '{{ prompt }}' },
-      },
-    });
-
-    const mockResponse = {
-      data: JSON.stringify({ result: 'success' }),
-      status: 200,
-      statusText: 'OK',
-      cached: false,
-      headers: { 'x-test': 'test-header' },
-    };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
-
-    const result = await provider.callApi('test', {
-      debug: true,
-      prompt: { raw: 'test', label: 'test' },
-      vars: {},
-    });
-    expect(result.raw).toBe(mockResponse.data);
-    expect(result.metadata).toEqual({
-      headers: mockResponse.headers,
-    });
-  });
-
-  it('should include raw data and headers when debug is true', async () => {
     const mockUrl = 'http://example.com/api';
     const mockHeaders = { 'content-type': 'application/json' };
     const mockData = { result: 'success' };
@@ -1724,7 +1695,8 @@ describe('response handling', () => {
       data: mockData,
       status: 200,
       headers: mockHeaders,
-      text: async () => JSON.stringify(mockData),
+      statusText: 'OK',
+      cached: false,
     });
 
     const provider = new HttpProvider(mockUrl, {
@@ -1739,12 +1711,68 @@ describe('response handling', () => {
       vars: {},
     });
 
-    // Verify debug info is included
+    expect(result.metadata).toEqual({
+      headers: mockHeaders,
+    });
     expect(result.raw).toEqual(mockData);
-    expect(result.metadata).toEqual({ headers: mockHeaders });
   });
 
-  it('should handle transformResponse returning a value without output property', async () => {
+  it('should handle plain text non-JSON responses', async () => {
+    const mockUrl = 'http://example.com/api';
+    const mockData = 'Not a JSON response';
+
+    // Mock the fetchWithCache response
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: mockData,
+      status: 200,
+      headers: {},
+      statusText: 'OK',
+      cached: false,
+    });
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+      },
+    });
+
+    const result = await provider.callApi('test');
+    expect(result.output).toEqual(mockData);
+  });
+
+  it('should handle non-JSON responses with debug mode', async () => {
+    const mockUrl = 'http://example.com/api';
+    const mockHeaders = { 'content-type': 'text/plain' };
+    const mockData = 'text response';
+
+    // Mock the fetchWithCache response
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: mockData,
+      status: 200,
+      headers: mockHeaders,
+      statusText: 'OK',
+      cached: false,
+    });
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        transformResponse: () => ({ foo: 'bar' }),
+      },
+    });
+
+    const result = await provider.callApi('test', {
+      debug: true,
+      prompt: { raw: 'test', label: 'test' },
+      vars: {},
+    });
+
+    expect(result.raw).toEqual(mockData);
+    expect(result.metadata).toHaveProperty('headers', mockHeaders);
+    expect(result.output).toEqual({ foo: 'bar' });
+  });
+
+  it('should handle transformResponse returning a simple string value', async () => {
     const mockUrl = 'http://example.com/api';
     const mockData = { result: 'success' };
 
@@ -1753,7 +1781,8 @@ describe('response handling', () => {
       data: mockData,
       status: 200,
       headers: {},
-      text: async () => JSON.stringify(mockData),
+      statusText: 'OK',
+      cached: false,
     });
 
     // Create a transform that returns a simple string
@@ -1772,66 +1801,25 @@ describe('response handling', () => {
     expect(result.output).toBe('transformed result');
   });
 
-  it('should handle non-JSON responses with debug mode', async () => {
-    const mockUrl = 'http://example.com/api';
-    const mockHeaders = { 'content-type': 'text/plain' };
-    const mockData = 'Hello, world!';
-
-    // Mock the fetchWithCache response with a non-JSON text response
-    jest.mocked(fetchWithCache).mockResolvedValueOnce({
-      data: mockData,
-      status: 200,
-      headers: mockHeaders,
-      text: async () => mockData,
-    });
-
-    // Create a transform that doesn't return an output property
-    const transformResponse = () => ({ foo: 'bar' });
-
-    const provider = new HttpProvider(mockUrl, {
-      config: {
-        method: 'GET',
-        body: 'test',
-        transformResponse,
-      },
-    });
-
-    const result = await provider.callApi('test', {
-      debug: true,
-      prompt: { raw: 'test', label: 'test' },
-      vars: {},
-    });
-
-    // Verify debug info is included
-    expect(result.raw).toEqual(mockData);
-    expect(result.metadata).toEqual({ headers: mockHeaders });
-
-    // Verify the parsed output is correctly structured
-    expect(result.output).toEqual({ foo: 'bar' });
-  });
-
   it('should handle non-JSON responses with debug mode and transform without output property', async () => {
-    // Setup
     const mockUrl = 'http://example.com/api';
     const mockHeaders = { 'content-type': 'text/plain' };
     const mockData = 'text response';
 
-    // Mock the fetchWithCache response with non-JSON data
-    const mockResponse = {
+    // Mock the fetchWithCache response
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
       data: mockData,
       status: 200,
-      statusText: 'OK',
       headers: mockHeaders,
+      statusText: 'OK',
       cached: false,
-    };
-    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+    });
 
     // Setup provider with transform that doesn't return an output property
-    const transformResponse = () => ({ transformed: true });
     const provider = new HttpProvider(mockUrl, {
       config: {
         method: 'GET',
-        transformResponse,
+        transformResponse: () => ({ transformed: true }),
       },
     });
 
@@ -1844,7 +1832,7 @@ describe('response handling', () => {
 
     // Verify transformed response and debug info
     expect(result.output).toEqual({ transformed: true });
-    expect(result.raw).toBeDefined();
+    expect(result.raw).toEqual(mockData);
     expect(result.metadata).toHaveProperty('headers', mockHeaders);
   });
 });
@@ -1887,7 +1875,8 @@ describe('session handling', () => {
       data: { result: 'success' },
       status: 200,
       headers: { 'session-id': mockSessionId },
-      text: async () => JSON.stringify({ result: 'success' }),
+      statusText: 'OK',
+      cached: false,
     });
 
     // Create a session parser that returns the session ID
