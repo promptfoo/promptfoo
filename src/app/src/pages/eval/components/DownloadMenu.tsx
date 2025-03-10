@@ -398,7 +398,7 @@ function DownloadMenu() {
           <Stack direction="column" spacing={2} sx={{ width: '100%', mb: 2 }}>
             {/* Config section */}
             <Typography variant="subtitle1" sx={{ mt: 1 }}>
-              Configuration Files
+              Promptfoo Configs
             </Typography>
 
             <Box>
