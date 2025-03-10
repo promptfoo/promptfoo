@@ -438,6 +438,7 @@ class Evaluator {
     // Add abort checks at key points
     checkAbort();
 
+    // Set redteam mode early in execution
     cliState.isRedteam = Boolean(testSuite.redteam);
 
     const prompts: CompletedPrompt[] = [];

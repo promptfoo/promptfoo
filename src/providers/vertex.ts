@@ -568,15 +568,27 @@ export class VertexChatProvider extends VertexGenericProvider {
         }
 
         if ('promptFeedback' in data[0] && data[0].promptFeedback?.blockReason) {
-          if (cliState.isRedteam) {
+          const defaultTokenUsage = {
+            total: 0,
+            prompt: 0,
+            completion: 0,
+            cached: false,
+          };
+
+          if (cliState.isRedteam || cliState.config?.redteam) {
             // Refusals are not errors during redteams, they're actually successes.
             return {
               output: `Content was blocked due to safety settings: ${data[0].promptFeedback.blockReason}`,
+              tokenUsage: defaultTokenUsage,
+              cached: false,
+            };
+          } else {
+            return {
+              error: `Content was blocked due to safety settings: ${data[0].promptFeedback.blockReason}`,
+              tokenUsage: defaultTokenUsage,
+              cached: false,
             };
           }
-          return {
-            error: `Content was blocked due to safety settings: ${data[0].promptFeedback.blockReason}`,
-          };
         }
 
         if (!output) {

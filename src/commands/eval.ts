@@ -112,6 +112,11 @@ export async function doEval(
       }
     }
 
+    // Ensure isRedteam is set based on config.redteam for backward compatibility
+    if (config?.redteam && !cliState.isRedteam) {
+      cliState.isRedteam = true;
+    }
+
     // Misc settings
     const iterations = cmdObj.repeat ?? Number.NaN;
     const repeat = Number.isSafeInteger(cmdObj.repeat) && iterations > 0 ? iterations : 1;

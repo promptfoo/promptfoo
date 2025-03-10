@@ -836,8 +836,8 @@ describe('Vertex Provider', () => {
         projectId: 'test-project-id',
       });
 
-      // Call the API
-      const result = await provider.callApi('Prompt that triggers safety filter');
+      // Call the API directly on callGeminiApi instead of through callApi
+      const result = await provider.callGeminiApi('Prompt that triggers safety filter');
 
       // Verify we get an output, not an error
       expect(result.error).toBeUndefined();

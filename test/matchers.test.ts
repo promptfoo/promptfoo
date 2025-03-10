@@ -830,8 +830,8 @@ describe('matchesLlmRubric', () => {
     expect(doRemoteGrading).toHaveBeenCalledWith({
       task: 'llm-rubric',
       rubric,
-      output: llmOutput,
-      vars: {},
+      llmOutput,
+      grading,
     });
 
     expect(grading.provider.callApi).not.toHaveBeenCalled();

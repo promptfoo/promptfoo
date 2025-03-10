@@ -186,23 +186,24 @@ function fail(reason: string, tokensUsed?: Partial<TokenUsage>): Omit<GradingRes
 }
 
 export async function matchesSimilarity(
-  expected: string,
-  output: string,
-  threshold: number,
+  expected: string | undefined,
+  actual: string,
+  similarityThreshold: number = 0.8,
   inverse: boolean = false,
   grading?: GradingConfig,
 ): Promise<Omit<GradingResult, 'assertion'>> {
-  if (cliState.isRedteam && shouldGenerateRemote()) {
+  if ((cliState.isRedteam || cliState.config?.redteam) && shouldGenerateRemote()) {
     try {
       return doRemoteGrading({
         task: 'similar',
         expected,
-        output,
-        threshold,
+        actual,
+        threshold: similarityThreshold,
         inverse,
+        grading,
       });
     } catch (error) {
-      return fail(`Could not perform remote grading: ${error}`);
+      logger.debug(`Error during remote grading: ${error.message || error}`);
     }
   }
 
@@ -213,8 +214,8 @@ export async function matchesSimilarity(
     'similarity check',
   )) as ApiEmbeddingProvider | ApiSimilarityProvider;
 
-  let similarity: number;
-  let tokensUsed: TokenUsage = {
+  let similarityScore;
+  let tokensUsed = {
     total: 0,
     prompt: 0,
     completion: 0,
@@ -227,7 +228,7 @@ export async function matchesSimilarity(
   };
 
   if ('callSimilarityApi' in finalProvider) {
-    const similarityResp = await finalProvider.callSimilarityApi(expected, output);
+    const similarityResp = await finalProvider.callSimilarityApi(expected, actual);
     tokensUsed = {
       ...tokensUsed,
       ...similarityResp.tokenUsage,
@@ -238,66 +239,64 @@ export async function matchesSimilarity(
     if (similarityResp.similarity == null) {
       return fail('Unknown error fetching similarity', tokensUsed);
     }
-    similarity = similarityResp.similarity;
+    similarityScore = similarityResp.similarity;
   } else if ('callEmbeddingApi' in finalProvider) {
     const expectedEmbedding = await finalProvider.callEmbeddingApi(expected);
-    const outputEmbedding = await finalProvider.callEmbeddingApi(output);
+    const actualEmbedding = await finalProvider.callEmbeddingApi(actual);
 
     tokensUsed = {
-      total: (expectedEmbedding.tokenUsage?.total || 0) + (outputEmbedding.tokenUsage?.total || 0),
+      total: (expectedEmbedding.tokenUsage?.total || 0) + (actualEmbedding.tokenUsage?.total || 0),
       prompt:
-        (expectedEmbedding.tokenUsage?.prompt || 0) + (outputEmbedding.tokenUsage?.prompt || 0),
+        (expectedEmbedding.tokenUsage?.prompt || 0) + (actualEmbedding.tokenUsage?.prompt || 0),
       completion:
         (expectedEmbedding.tokenUsage?.completion || 0) +
-        (outputEmbedding.tokenUsage?.completion || 0),
+        (actualEmbedding.tokenUsage?.completion || 0),
       cached:
-        (expectedEmbedding.tokenUsage?.cached || 0) + (outputEmbedding.tokenUsage?.cached || 0),
+        (expectedEmbedding.tokenUsage?.cached || 0) + (actualEmbedding.tokenUsage?.cached || 0),
       completionDetails: {
         reasoning:
           (expectedEmbedding.tokenUsage?.completionDetails?.reasoning || 0) +
-          (outputEmbedding.tokenUsage?.completionDetails?.reasoning || 0),
+          (actualEmbedding.tokenUsage?.completionDetails?.reasoning || 0),
         acceptedPrediction:
           (expectedEmbedding.tokenUsage?.completionDetails?.acceptedPrediction || 0) +
-          (outputEmbedding.tokenUsage?.completionDetails?.acceptedPrediction || 0),
+          (actualEmbedding.tokenUsage?.completionDetails?.acceptedPrediction || 0),
         rejectedPrediction:
           (expectedEmbedding.tokenUsage?.completionDetails?.rejectedPrediction || 0) +
-          (outputEmbedding.tokenUsage?.completionDetails?.rejectedPrediction || 0),
+          (actualEmbedding.tokenUsage?.completionDetails?.rejectedPrediction || 0),
       },
     };
 
-    if (expectedEmbedding.error || outputEmbedding.error) {
+    if (expectedEmbedding.error || actualEmbedding.error) {
       return fail(
-        expectedEmbedding.error || outputEmbedding.error || 'Unknown error fetching embeddings',
+        expectedEmbedding.error || actualEmbedding.error || 'Unknown error fetching embeddings',
         tokensUsed,
       );
     }
 
-    if (!expectedEmbedding.embedding || !outputEmbedding.embedding) {
+    if (!expectedEmbedding.embedding || !actualEmbedding.embedding) {
       return fail('Embedding not found', tokensUsed);
     }
 
-    similarity = cosineSimilarity(expectedEmbedding.embedding, outputEmbedding.embedding);
+    similarityScore = cosineSimilarity(expectedEmbedding.embedding, actualEmbedding.embedding);
   } else {
     throw new Error('Provider must implement callSimilarityApi or callEmbeddingApi');
   }
   const pass = inverse
-    ? similarity <= threshold + Number.EPSILON
-    : similarity >= threshold - Number.EPSILON;
-  const greaterThanReason = `Similarity ${similarity.toFixed(
-    2,
-  )} is greater than threshold ${threshold}`;
-  const lessThanReason = `Similarity ${similarity.toFixed(2)} is less than threshold ${threshold}`;
+    ? similarityScore <= similarityThreshold - Number.EPSILON
+    : similarityScore >= similarityThreshold - Number.EPSILON;
+  const greaterThanReason = `Similarity ${similarityScore.toFixed(2)} is greater than threshold ${similarityThreshold}`;
+  const lessThanReason = `Similarity ${similarityScore.toFixed(2)} is less than threshold ${similarityThreshold}`;
   if (pass) {
     return {
       pass: true,
-      score: inverse ? 1 - similarity : similarity,
+      score: inverse ? 1 - similarityScore : similarityScore,
       reason: inverse ? lessThanReason : greaterThanReason,
       tokensUsed,
     };
   }
   return {
     pass: false,
-    score: inverse ? 1 - similarity : similarity,
+    score: inverse ? 1 - similarityScore : similarityScore,
     reason: inverse ? greaterThanReason : lessThanReason,
     tokensUsed,
   };
@@ -415,12 +414,16 @@ export async function matchesLlmRubric(
     );
   }
 
-  if (!grading.rubricPrompt && cliState.isRedteam && shouldGenerateRemote()) {
+  if (
+    !grading.rubricPrompt &&
+    (cliState.isRedteam || cliState.config?.redteam) &&
+    shouldGenerateRemote()
+  ) {
     return doRemoteGrading({
       task: 'llm-rubric',
       rubric,
-      output: llmOutput,
-      vars: vars || {},
+      llmOutput,
+      grading,
     });
   }
 

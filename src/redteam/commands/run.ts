@@ -64,6 +64,8 @@ export function redteamRunCommand(program: Command) {
         if (opts.remote) {
           cliState.remote = true;
         }
+        // Set redteam mode flag
+        cliState.isRedteam = true;
         await doRedteamRun(opts);
       } catch (error) {
         if (error instanceof z.ZodError) {
