@@ -339,7 +339,7 @@ See the guide on [How to eval OpenAI assistants](/docs/guides/evaluate-openai-as
 
 ### `max_tokens` not supported with o1/o3/reasoning models
 
-If you are getting this error, set `max_completion_tokens` or `reasoning_effort` in your config. This helps the test executor know that you are using a reasoning model.
+If you are getting this error, set `reasoning_effort` in your config. This helps the test executor know that you are using a reasoning model.
 
 For example:
 
@@ -348,6 +348,5 @@ providers:
   - id: azure:chat:deploymentNameHere
     config:
       apiHost: 'xxxxxxxx.openai.azure.com'
-      max_completion_tokens: 2048
       reasoning_effort: 'high'
 ```

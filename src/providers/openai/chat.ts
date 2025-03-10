@@ -29,14 +29,18 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     this.config = options.config || {};
   }
 
-  protected isReasoningModel(): boolean {
-    return this.modelName.startsWith('o1') || this.modelName.startsWith('o3');
+  protected isReasoningModel(config: OpenAiCompletionOptions): boolean {
+    return (
+      Boolean(config.reasoning_effort) ||
+      this.modelName.startsWith('o1') ||
+      this.modelName.startsWith('o3')
+    );
   }
 
-  protected supportsTemperature(): boolean {
+  protected supportsTemperature(config: OpenAiCompletionOptions): boolean {
     // OpenAI's o1 and o3 models don't support temperature but some 3rd
     // party reasoning models do.
-    return !this.isReasoningModel();
+    return !this.isReasoningModel(config);
   }
 
   getOpenAiBody(
@@ -52,7 +56,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
-    const isReasoningModel = this.isReasoningModel();
+    const isReasoningModel = this.isReasoningModel(config);
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
@@ -60,7 +64,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ? undefined
       : (config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024));
 
-    const temperature = this.supportsTemperature()
+    const temperature = this.supportsTemperature(config)
       ? (config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0))
       : undefined;
     const reasoningEffort = isReasoningModel

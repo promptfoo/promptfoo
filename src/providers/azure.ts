@@ -583,7 +583,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1),
       presence_penalty: config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0),
       frequency_penalty: config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0),
-      ...(config.o1 || config.max_completion_tokens || config.reasoning_effort
+      ...(config.o1 || config.reasoning_effort
         ? {
             max_completion_tokens: config.max_completion_tokens,
             reasoning_effort: renderVarsInObject(config.reasoning_effort, context?.vars),
