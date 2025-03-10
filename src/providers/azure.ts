@@ -32,7 +32,8 @@ interface AzureCompletionOptions {
   azureTenantId?: string;
   azureAuthorityHost?: string;
   azureTokenScope?: string;
-  o1?: boolean; // Indicates if the model should be treated as an o1 model (deprecated, use isReasoningModel instead)
+  /** @deprecated Use isReasoningModel instead. Indicates if the model should be treated as a reasoning model */
+  o1?: boolean;
   isReasoningModel?: boolean; // Indicates if the model should be treated as a reasoning model (o1, o3-mini, etc.)
   max_completion_tokens?: number; // Maximum number of tokens to generate for reasoning models
 
