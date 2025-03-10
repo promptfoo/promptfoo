@@ -38,18 +38,38 @@ function DownloadMenu() {
     setOpen(false);
   };
 
-  const downloadConfig = () => {
+  /**
+   * Helper function to download YAML configuration
+   * @param configToDownload Configuration object to download
+   * @param fileName Name of the downloaded file
+   * @param successMessage Message to show in the success toast
+   * @param options Additional options (skipInvalid for yaml.dump)
+   */
+  const downloadYamlConfig = (
+    configToDownload: Record<string, unknown>,
+    fileName: string,
+    successMessage: string,
+    options: { skipInvalid?: boolean } = {},
+  ): void => {
     const schemaLine = '# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json\n';
 
-    // Get a clean copy of the config with empty arrays and objects removed
-    const cleanConfig = removeEmpty(config);
+    const cleanConfig = removeEmpty(configToDownload);
 
-    const configData = yaml.dump(cleanConfig);
+    const configData = yaml.dump(cleanConfig, options);
+
     const mimeType = 'text/yaml;charset=utf-8';
     const blob = new Blob([schemaLine + configData], { type: mimeType });
-    openDownloadDialog(blob, 'promptfooconfig.yaml');
-    showToast('Configuration downloaded successfully', 'success');
+    openDownloadDialog(blob, fileName);
+    showToast(successMessage, 'success');
     handleClose();
+  };
+
+  const downloadConfig = () => {
+    downloadYamlConfig(
+      config as Record<string, unknown>,
+      'promptfooconfig.yaml',
+      'Configuration downloaded successfully',
+    );
   };
 
   const downloadFailedTestsConfig = () => {
@@ -58,10 +78,6 @@ function DownloadMenu() {
       return;
     }
 
-    // Create a copy of the config to modify
-    const configCopy = { ...config };
-
-    // Find the failed tests
     const failedTests = table.body
       .filter((row) => row.outputs.some((output) => !output.pass))
       .map((row) => row.test);
@@ -71,22 +87,16 @@ function DownloadMenu() {
       return;
     }
 
-    // Replace the tests array with only the failed tests
-    configCopy.tests = failedTests;
-
-    // Clean top-level empty properties
-    const cleanConfig = removeEmpty(configCopy);
-
-    // Convert to YAML and download
-    const schemaLine = '# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json\n';
-    const configData = yaml.dump(cleanConfig, { skipInvalid: true });
-    const mimeType = 'text/yaml;charset=utf-8';
-    const blob = new Blob([schemaLine + configData], { type: mimeType });
+    const configCopy = { ...config, tests: failedTests };
 
     const fileName = evalId ? `${evalId}-failed-tests.yaml` : 'promptfoo-failed-tests.yaml';
-    openDownloadDialog(blob, fileName);
-    showToast(`Downloaded config with ${failedTests.length} failed tests`, 'success');
-    handleClose();
+
+    downloadYamlConfig(
+      configCopy,
+      fileName,
+      `Downloaded config with ${failedTests.length} failed tests`,
+      { skipInvalid: true },
+    );
   };
 
   const downloadDpoJson = () => {
@@ -94,7 +104,7 @@ function DownloadMenu() {
       showToast('No table data', 'error');
       return;
     }
-    const formattedData = table.body.map((row, index) => ({
+    const formattedData = table.body.map((row) => ({
       chosen: row.outputs.filter((output) => output.pass).map((output) => output.text),
       rejected: row.outputs.filter((output) => !output.pass).map((output) => output.text),
       vars: row.test.vars,
@@ -124,14 +134,12 @@ function DownloadMenu() {
 
     const csvRows = [];
 
-    // Create headers
     const headers = [
       ...table.head.vars,
       ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
     ];
     csvRows.push(headers);
 
-    // Create rows
     table.body.forEach((row) => {
       const rowValues = [
         ...row.vars,
@@ -159,10 +167,10 @@ function DownloadMenu() {
       return;
     }
 
+    type TableRow = (typeof table.body)[number];
+
     const humanEvalCases = table.body
-      .filter((row): row is (typeof table.body)[number] =>
-        row.outputs.some((output) => output.pass !== null),
-      )
+      .filter((row): row is TableRow => row.outputs.some((output) => output.pass !== null))
       .map((row) => ({
         vars: {
           ...row.test.vars,
@@ -200,7 +208,6 @@ function DownloadMenu() {
       return;
     }
 
-    // Extract all unique test inputs and prepare them for Burp
     const varName = config.redteam.injectVar || 'prompt';
     const payloads = table.body
       .map((row) => {
@@ -209,12 +216,10 @@ function DownloadMenu() {
       })
       .filter(Boolean)
       .map((input) => {
-        // JSON escape and URL encode
         const jsonEscaped = JSON.stringify(input).slice(1, -1); // Remove surrounding quotes
         return encodeURIComponent(jsonEscaped);
       });
 
-    // Remove duplicates
     const uniquePayloads = [...new Set(payloads)];
 
     const content = uniquePayloads.join('\n');
