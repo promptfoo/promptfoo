@@ -678,10 +678,12 @@ export class HttpProvider implements ApiProvider {
       Object.entries(configHeaders).map(([key, value]) => [key.toLowerCase(), value]),
     );
 
+    const nunjucks = getNunjucksEngine();
+
     return Object.fromEntries(
       Object.entries({ ...defaultHeaders, ...headers }).map(([key, value]) => [
         key,
-        getNunjucksEngine().renderString(value, vars),
+        nunjucks.renderString(value, vars),
       ]),
     );
   }

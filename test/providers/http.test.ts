@@ -853,6 +853,42 @@ describe('HttpProvider', () => {
         'x-custom': 'TEST',
       });
     });
+
+    it('should render environment variables in headers', async () => {
+      // Setup a provider with environment variables in headers
+      const provider = new HttpProvider('http://example.com', {
+        config: {
+          method: 'GET', // GET method doesn't require body
+          headers: {
+            'X-API-Key': '{{env.API_KEY}}',
+            Authorization: 'Bearer {{env.AUTH_TOKEN}}',
+            Cookie: 'SESSION={{env.SESSION_ID}}; XSRF={{env.XSRF}}',
+          },
+        },
+      });
+
+      // Mock environment variables
+      process.env.API_KEY = 'test-api-key';
+      process.env.AUTH_TOKEN = 'test-auth-token';
+      process.env.SESSION_ID = 'test-session';
+      process.env.XSRF = 'test-xsrf';
+
+      // Call getHeaders method
+      const result = await provider.getHeaders({}, { prompt: 'test', env: process.env });
+
+      // Verify environment variables are rendered correctly
+      expect(result).toEqual({
+        'x-api-key': 'test-api-key',
+        authorization: 'Bearer test-auth-token',
+        cookie: 'SESSION=test-session; XSRF=test-xsrf',
+      });
+
+      // Clean up environment variables
+      delete process.env.API_KEY;
+      delete process.env.AUTH_TOKEN;
+      delete process.env.SESSION_ID;
+      delete process.env.XSRF;
+    });
   });
 
   it('should default to application/json for content-type if body is an object', async () => {
