@@ -856,7 +856,7 @@ describe('Vertex Provider', () => {
 
     // Mock callGeminiApi to return a successful response
     jest.spyOn(provider, 'callGeminiApi').mockResolvedValue({
-      output: 'Test response'
+      output: 'Test response',
     });
 
     // Call the API
