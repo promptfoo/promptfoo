@@ -269,19 +269,22 @@ function DownloadMenu() {
             downloadConfig();
             break;
           case '2':
-            downloadCsv();
+            downloadFailedTestsConfig();
             break;
           case '3':
-            downloadTable();
+            downloadCsv();
             break;
           case '4':
-            downloadDpoJson();
+            downloadTable();
             break;
           case '5':
-            downloadHumanEvalTestCases();
+            downloadBurpPayloads();
             break;
           case '6':
-            downloadBurpPayloads();
+            downloadDpoJson();
+            break;
+          case '7':
+            downloadHumanEvalTestCases();
             break;
         }
       }
