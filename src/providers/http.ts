@@ -73,8 +73,6 @@ export function urlEncodeRawRequestPath(rawRequest: string) {
   return rawRequest;
 }
 
-const nunjucks = getNunjucksEngine();
-
 export async function generateSignature(
   privateKeyPathOrKey: string,
   signatureTimestamp: number,
@@ -84,7 +82,7 @@ export async function generateSignature(
 ): Promise<string> {
   try {
     const privateKey = isPath ? fs.readFileSync(privateKeyPathOrKey, 'utf8') : privateKeyPathOrKey;
-    const data = nunjucks
+    const data = getNunjucksEngine()
       .renderString(signatureDataTemplate, {
         signatureTimestamp,
       })
