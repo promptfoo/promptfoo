@@ -28,7 +28,6 @@ interface BedrockOptions {
   guardrailIdentifier?: string;
   guardrailVersion?: string;
   trace?: Trace;
-  showThinking?: boolean;
 }
 
 export interface TextGenerationOptions {
@@ -519,7 +518,11 @@ export const BEDROCK_MODEL = {
     output: (responseJson: any) => responseJson?.completion,
   },
   CLAUDE_MESSAGES: {
-    params: (config: BedrockClaudeMessagesCompletionOptions, prompt: string) => {
+    params: (
+      config: BedrockClaudeMessagesCompletionOptions,
+      prompt: string,
+      stop: string[],
+    ): any => {
       let messages;
       let systemPrompt;
       try {
@@ -648,10 +651,10 @@ export const BEDROCK_MODEL = {
     },
     output: (config: BedrockClaudeMessagesCompletionOptions, responseJson: any) => {
       try {
-        // For Claude thinking in Bedrock, make sure we're showing the thinking content
-        // when available and the showThinking option is enabled
+        // For Claude thinking in Bedrock, make sure we're extracting the thinking content
+        // as reasoning field when available
         if (responseJson?.content) {
-          return outputFromMessage(responseJson, config?.showThinking ?? true);
+          return outputFromMessage(responseJson);
         } else if (responseJson?.error) {
           // Handle error responses from Bedrock
           throw new Error(
@@ -659,7 +662,7 @@ export const BEDROCK_MODEL = {
           );
         } else {
           // Default response handling
-          return outputFromMessage(responseJson, config?.showThinking ?? true);
+          return outputFromMessage(responseJson);
         }
       } catch (error) {
         // Re-throw with context if there's an error processing the response

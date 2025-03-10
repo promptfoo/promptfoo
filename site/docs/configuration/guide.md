@@ -544,17 +544,9 @@ tests:
 
 promptfoo supports tool use and function calling with OpenAI and Anthropic models, as well as other provider-specific configurations like temperature and number of tokens. For more information on defining functions and tools, see the [OpenAI provider docs](/docs/providers/openai#using-tools) and the [Anthropic provider docs](/docs/providers/anthropic#tool-use).
 
-## Thinking Output
+## Claude Thinking Mode
 
-Some models, like Anthropic's Claude, support an extended thinking capability that allows the model to show its reasoning process before providing a final answer.
-
-This is useful for reasoning tasks or understanding how the model arrived at its conclusion.
-
-### Controlling Thinking Output
-
-By default, thinking content is included in the response. You can hide it by setting `showThinking` to `false`.
-
-For example, for Claude:
+Claude 3 models support a special "thinking" mode that allows the model to allocate a specific token budget for internal reasoning before providing a final answer:
 
 ```yaml
 providers:
@@ -562,13 +554,26 @@ providers:
     config:
       thinking:
         type: 'enabled'
-        budget_tokens: 16000
-      showThinking: false # Exclude thinking content from output
+        budget_tokens: 4096 # Must be ≥1024
 ```
 
-This is useful when you want better reasoning but don't want to expose the thinking process to your assertions.
+When thinking is enabled, the model's reasoning process is available in the `reasoning` field of the response, while the final answer is available in the `output` field. In the promptfoo UI, you can toggle between viewing the output and the reasoning.
 
-For more details on extended thinking capabilities, see the [Anthropic provider docs](/docs/providers/anthropic#extended-thinking) and [AWS Bedrock provider docs](/docs/providers/aws-bedrock#claude-models).
+This feature is also available for Claude models on AWS Bedrock:
+
+```yaml
+providers:
+  - id: bedrock:us.anthropic.claude-3-7-sonnet-20250219-v1:0
+    config:
+      max_tokens: 8192 # Must be greater than budget_tokens
+      anthropic_version: 'bedrock-2023-05-31'
+      temperature: 1.0 # Must be 1.0 when thinking is enabled
+      thinking:
+        type: 'enabled'
+        budget_tokens: 4096
+```
+
+Note: When using thinking mode with Claude on Bedrock, temperature must be set to 1.0.
 
 ## Transforming outputs
 

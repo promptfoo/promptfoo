@@ -275,9 +275,9 @@ Example response with thinking enabled:
 }
 ```
 
-#### Controlling Thinking Output
+#### Accessing Thinking Content
 
-By default, thinking content is included in the response output. You can control this behavior using the `showThinking` parameter:
+When using Claude models with thinking enabled, the thinking content is available in the `reasoning` field of the response. The final output is available in the `output` field.
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -286,54 +286,9 @@ providers:
       thinking:
         type: 'enabled'
         budget_tokens: 16000
-      showThinking: false # Exclude thinking content from the output
 ```
 
-When `showThinking` is set to `false`, the thinking content will be excluded from the output, and only the final response will be returned. This is useful when you want to use thinking for better reasoning but don't want to expose the thinking process to end users.
-
-#### Redacted Thinking
-
-Sometimes Claude's internal reasoning may be flagged by safety systems. When this occurs, the thinking block will be encrypted and returned as a `redacted_thinking` block:
-
-```json
-{
-  "content": [
-    {
-      "type": "redacted_thinking",
-      "data": "EmwKAhgBEgy3va3pzix/LafPsn4aDFIT2Xlxh0L5L8rLVyIwxtE3rAFBa8cr3qpP..."
-    },
-    {
-      "type": "text",
-      "text": "Based on my analysis..."
-    }
-  ]
-}
-```
-
-Redacted thinking blocks are automatically decrypted when passed back to the API, allowing Claude to maintain context without compromising safety guardrails.
-
-#### Extended Output with Thinking (Beta)
-
-Claude 3.7 Sonnet supports up to 128K output tokens when using the `output-128k-2025-02-19` beta feature. To enable this:
-
-```yaml
-providers:
-  - id: anthropic:messages:claude-3-7-sonnet-20250219
-    config:
-      max_tokens: 128000
-      thinking:
-        type: 'enabled'
-        budget_tokens: 32000
-      beta: ['output-128k-2025-02-19']
-```
-
-When using extended output:
-
-- Streaming is required when max_tokens is greater than 21,333
-- For thinking budgets above 32K, batch processing is recommended
-- The model may not use the entire allocated thinking budget
-
-See [Anthropic's Extended Thinking Guide](https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking) for more details on requirements and best practices.
+This separation allows you to access both the final output and the model's reasoning process separately. In the promptfoo UI, there's a toggle to switch between viewing the final output and the reasoning.
 
 ## Model-Graded Tests
 

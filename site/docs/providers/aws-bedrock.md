@@ -183,19 +183,15 @@ When using Claude's extended thinking capability, you can configure it like this
 
 ```yaml
 config:
-  max_tokens: 20000
+  max_tokens: 4096
   thinking:
     type: 'enabled'
-    budget_tokens: 16000 # Must be ≥1024 and less than max_tokens
-  showThinking: true # Whether to include thinking content in the output (default: true)
+    budget_tokens: 2000
 ```
 
-The `showThinking` parameter controls whether thinking content is included in the response output:
+When using Claude models with thinking enabled, the thinking content is available in the `reasoning` field of the response. The final output is available in the `output` field. In the promptfoo UI, there's a toggle to switch between viewing the final output and the reasoning.
 
-- When set to `true` (default), thinking content will be included in the output
-- When set to `false`, thinking content will be excluded from the output
-
-This is useful when you want to use thinking for better reasoning but don't want to expose the thinking process to end users.
+Note: When thinking is enabled for Claude on AWS Bedrock, temperature must be set to 1.0.
 
 ### Titan Models
 

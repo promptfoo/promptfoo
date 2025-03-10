@@ -23,14 +23,17 @@ interface AmazonResponse {
 }
 
 export function novaOutputFromMessage(response: AmazonResponse) {
+  // Check for thinking blocks in the response if they exist in the future
+  // Currently Nova doesn't support thinking blocks, but this will make it future-proof
   const hasToolUse = response.output?.message?.content.some((block) => block.toolUse?.toolUseId);
+  const textBlocks = response.output?.message?.content.filter(block => block.text);
+  
   if (hasToolUse) {
     const toolUseBlocks = response.output?.message?.content
       .map((block) => {
         if (block.text) {
           // Filter out text for tool use blocks.
-          // Observed nova-lite wrapping tool use blocks with text blocks.
-          return null;
+          return '';
         }
         return JSON.stringify(block.toolUse);
       })
@@ -39,10 +42,13 @@ export function novaOutputFromMessage(response: AmazonResponse) {
 
     return {
       output: toolUseBlocks || '',
+      reasoning: undefined, // Nova doesn't support thinking yet, but adding for consistency
     };
   }
+  
   return {
-    output: response.output?.message?.content?.[0]?.text || '',
+    output: textBlocks?.map(block => block.text).join('\n\n') || '',
+    reasoning: undefined, // Nova doesn't support thinking yet, but adding for consistency
   };
 }
 

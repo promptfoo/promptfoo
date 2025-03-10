@@ -82,7 +82,6 @@ interface AnthropicMessageOptions {
   top_k?: number;
   top_p?: number;
   beta?: string[]; // For features like 'output-128k-2025-02-19'
-  showThinking?: boolean;
 }
 
 function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
@@ -101,7 +100,7 @@ function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   return {};
 }
 
-export function outputFromMessage(message: Anthropic.Messages.Message, showThinking: boolean) {
+export function outputFromMessage(message: Anthropic.Messages.Message) {
   const hasToolUse = message.content.some((block) => block.type === 'tool_use');
   const hasThinking = message.content.some(
     (block) => block.type === 'thinking' || block.type === 'redacted_thinking',
@@ -114,9 +113,9 @@ export function outputFromMessage(message: Anthropic.Messages.Message, showThink
     message.content.forEach((block) => {
       if (block.type === 'text') {
         output.push(block.text);
-      } else if (block.type === 'thinking' && showThinking) {
+      } else if (block.type === 'thinking') {
         reasoning.push(`Thinking: ${block.thinking}\nSignature: ${block.signature}`);
-      } else if (block.type === 'redacted_thinking' && showThinking) {
+      } else if (block.type === 'redacted_thinking') {
         reasoning.push(`Redacted Thinking: ${block.data}`);
       } else if (block.type !== 'thinking' && block.type !== 'redacted_thinking') {
         output.push(JSON.stringify(block));
@@ -324,13 +323,13 @@ export class AnthropicMessagesProvider implements ApiProvider {
         try {
           const parsedCachedResponse = JSON.parse(cachedResponse) as Anthropic.Messages.Message;
           return {
-            ...outputFromMessage(parsedCachedResponse, this.config.showThinking ?? true),
+            ...outputFromMessage(parsedCachedResponse),
             tokenUsage: getTokenUsage(parsedCachedResponse, true),
             cost: calculateAnthropicCost(
               this.modelName,
               this.config,
-              parsedCachedResponse.usage?.input_tokens,
-              parsedCachedResponse.usage?.output_tokens,
+              getPromptTokens(parsedCachedResponse),
+              getCompletionTokens(parsedCachedResponse),
             ),
           };
         } catch {
@@ -366,13 +365,13 @@ export class AnthropicMessagesProvider implements ApiProvider {
       }
 
       return {
-        ...outputFromMessage(response, this.config.showThinking ?? true),
+        ...outputFromMessage(response),
         tokenUsage: getTokenUsage(response, false),
         cost: calculateAnthropicCost(
           this.modelName,
           this.config,
-          response.usage?.input_tokens,
-          response.usage?.output_tokens,
+          getPromptTokens(response),
+          getCompletionTokens(response),
         ),
       };
     } catch (err) {

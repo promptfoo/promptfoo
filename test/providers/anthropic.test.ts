@@ -808,7 +808,7 @@ describe('Anthropic', () => {
         },
       };
 
-      const result = outputFromMessage(message, false);
+      const result = outputFromMessage(message);
       expect(result.output).toBe('');
     });
 
@@ -829,7 +829,7 @@ describe('Anthropic', () => {
         },
       };
 
-      const result = outputFromMessage(message, false);
+      const result = outputFromMessage(message);
       expect(result.output).toBe('Hello');
     });
 
@@ -853,7 +853,7 @@ describe('Anthropic', () => {
         },
       };
 
-      const result = outputFromMessage(message, false);
+      const result = outputFromMessage(message);
       expect(result.output).toBe('Hello\n\nWorld');
     });
 
@@ -887,7 +887,7 @@ describe('Anthropic', () => {
         },
       };
 
-      const result = outputFromMessage(message, false);
+      const result = outputFromMessage(message);
       expect(result.output).toBe(
         '{"type":"tool_use","id":"tool1","name":"get_weather","input":{"location":"San Francisco, CA"}}\n\n{"type":"tool_use","id":"tool2","name":"get_time","input":{"location":"New York, NY"}}',
       );
@@ -919,7 +919,7 @@ describe('Anthropic', () => {
         },
       };
 
-      const result = outputFromMessage(message, false);
+      const result = outputFromMessage(message);
       expect(result.output).toBe(
         'Hello\n\n{"type":"tool_use","id":"tool1","name":"get_weather","input":{"location":"San Francisco, CA"}}\n\nWorld',
       );
@@ -957,11 +957,35 @@ describe('Anthropic', () => {
         },
       };
 
-      const result = outputFromMessage(message, false);
+      const result = outputFromMessage(message);
       expect(result.output).toBe('The sky is blue');
     });
 
-    it('should include thinking blocks when showThinking is true', () => {
+    it('should handle content without thinking blocks', () => {
+      const message: Anthropic.Messages.Message = {
+        content: [
+          { type: 'text', text: 'The sky is blue', citations: [] },
+        ],
+        id: '',
+        model: '',
+        role: 'assistant',
+        stop_reason: null,
+        stop_sequence: null,
+        type: 'message',
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      };
+
+      const result = outputFromMessage(message);
+      expect(result.output).toBe('The sky is blue');
+      expect(result.reasoning).toBeUndefined();
+    });
+
+    it('should collect thinking blocks into reasoning field', () => {
       const message: Anthropic.Messages.Message = {
         content: [
           { type: 'text', text: 'Hello', citations: [] },
@@ -986,42 +1010,12 @@ describe('Anthropic', () => {
         },
       };
 
-      const result = outputFromMessage(message, true);
+      const result = outputFromMessage(message);
       expect(result.output).toBe('Hello\n\nWorld');
       expect(result.reasoning).toBe('Thinking: I need to consider the weather\nSignature: abc123');
     });
 
-    it('should exclude thinking blocks when showThinking is false', () => {
-      const message: Anthropic.Messages.Message = {
-        content: [
-          { type: 'text', text: 'Hello', citations: [] },
-          {
-            type: 'thinking',
-            thinking: 'I need to consider the weather',
-            signature: 'abc123',
-          },
-          { type: 'text', text: 'World', citations: [] },
-        ],
-        id: '',
-        model: '',
-        role: 'assistant',
-        stop_reason: null,
-        stop_sequence: null,
-        type: 'message',
-        usage: {
-          input_tokens: 0,
-          output_tokens: 0,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
-        },
-      };
-
-      const result = outputFromMessage(message, false);
-      expect(result.output).toBe('Hello\n\nWorld');
-      expect(result.reasoning).toBeUndefined();
-    });
-
-    it('should include redacted_thinking blocks when showThinking is true', () => {
+    it('should collect redacted_thinking blocks into reasoning field', () => {
       const message: Anthropic.Messages.Message = {
         content: [
           { type: 'text', text: 'Hello', citations: [] },
@@ -1045,38 +1039,9 @@ describe('Anthropic', () => {
         },
       };
 
-      const result = outputFromMessage(message, true);
+      const result = outputFromMessage(message);
       expect(result.output).toBe('Hello\n\nWorld');
       expect(result.reasoning).toBe('Redacted Thinking: Some redacted thinking data');
-    });
-
-    it('should exclude redacted_thinking blocks when showThinking is false', () => {
-      const message: Anthropic.Messages.Message = {
-        content: [
-          { type: 'text', text: 'Hello', citations: [] },
-          {
-            type: 'redacted_thinking',
-            data: 'Some redacted thinking data',
-          },
-          { type: 'text', text: 'World', citations: [] },
-        ],
-        id: '',
-        model: '',
-        role: 'assistant',
-        stop_reason: null,
-        stop_sequence: null,
-        type: 'message',
-        usage: {
-          input_tokens: 0,
-          output_tokens: 0,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
-        },
-      };
-
-      const result = outputFromMessage(message, false);
-      expect(result.output).toBe('Hello\n\nWorld');
-      expect(result.reasoning).toBeUndefined();
     });
   });
 

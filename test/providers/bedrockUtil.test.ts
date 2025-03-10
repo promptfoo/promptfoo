@@ -5,11 +5,8 @@ describe('novaOutputFromMessage', () => {
     const response = {
       output: {
         message: {
-          role: 'assistant',
           content: [
-            { text: 'Wrapper text' },
             { toolUse: { name: 'tool1', toolUseId: '123', input: { foo: 'bar' } } },
-            { text: 'More text' },
             { toolUse: { name: 'tool2', toolUseId: '456', input: { baz: 'qux' } } },
           ],
         },
@@ -20,26 +17,31 @@ describe('novaOutputFromMessage', () => {
     expect(result.output).toBe(
       '{"name":"tool1","toolUseId":"123","input":{"foo":"bar"}}\n\n{"name":"tool2","toolUseId":"456","input":{"baz":"qux"}}',
     );
+    expect(result.reasoning).toBeUndefined();
   });
 
-  it('should handle text-only blocks', () => {
+  it('should handle text blocks', () => {
     const response = {
       output: {
         message: {
-          role: 'assistant',
-          content: [{ text: 'First message' }, { text: 'Second message' }],
+          content: [
+            { text: 'First message' },
+            { text: 'Second message' },
+          ],
         },
       },
     };
 
     const result = novaOutputFromMessage(response);
-    expect(result.output).toBe('First message');
+    expect(result.output).toBe('First message\n\nSecond message');
+    expect(result.reasoning).toBeUndefined();
   });
 
   it('should handle empty response', () => {
     const response = {};
     const result = novaOutputFromMessage(response);
     expect(result.output).toBe('');
+    expect(result.reasoning).toBeUndefined();
   });
 });
 
