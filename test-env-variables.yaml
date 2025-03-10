@@ -1,0 +1,24 @@
+description: Test for environment variables in headers
+providers:
+  - id: 'https://{{env.TENANT}}/{{env.APPLICATION}}/{{env.BASE_URL}}'
+    config:
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/json'
+        'Authorization': 'Bearer {{env.OPENAI_API_KEY}}'
+        'Cookie': 'REGION-SESSION={{ env.REGION_SESSION }}; XSRF-TOKEN={{ env.XSRF_TOKEN }}; SESSION={{ env.SESSION }};'
+        'X-XSRF-TOKEN': '{{env.XSRF_TOKEN}}'
+      body:
+        model: 'gpt-4o-mini'
+        messages:
+          - role: 'user'
+            content: '{{prompt}}'
+      transformResponse: 'json.choices[0].message.content'
+
+prompts:
+  - 'Write a short poem about debugging'
+
+tests:
+  - description: 'Test that environment variables in headers are properly processed'
+    vars:
+      dummy: 'value' # Adding a dummy variable to satisfy promptfoo requirements

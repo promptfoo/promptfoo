@@ -292,14 +292,26 @@ export async function createTransformResponse(
   );
 }
 
+// Function declarations to avoid circular dependency issues
+function processValue(value: any, vars: Record<string, any>): any;
+function processObjects(
+  body: Record<string, any> | any[],
+  vars: Record<string, any>,
+): Record<string, any> | any[];
+
+// Function implementations
 function processValue(value: any, vars: Record<string, any>): any {
   if (typeof value === 'string') {
-    const renderedValue = nunjucks.renderString(value, vars || {});
+    const renderedValue = getNunjucksEngine().renderString(value, vars || {});
     try {
       return JSON.parse(renderedValue);
     } catch {
       return renderedValue;
     }
+  } else if (Array.isArray(value)) {
+    return value.map((item) => processValue(item, vars));
+  } else if (value && typeof value === 'object') {
+    return processObjects(value, vars);
   }
   return value;
 }
@@ -309,23 +321,12 @@ function processObjects(
   vars: Record<string, any>,
 ): Record<string, any> | any[] {
   if (Array.isArray(body)) {
-    return body.map((item) =>
-      typeof item === 'object' && item !== null
-        ? processObjects(item, vars)
-        : processValue(item, vars),
-    );
+    return body.map((item) => processValue(item, vars));
   }
 
-  const processedBody: Record<string, any> = {};
-
-  for (const [key, value] of Object.entries(body)) {
-    if (typeof value === 'object' && value !== null) {
-      processedBody[key] = processObjects(value, vars);
-    } else {
-      processedBody[key] = processValue(value, vars);
-    }
-  }
-  return processedBody;
+  return Object.fromEntries(
+    Object.entries(body).map(([key, value]) => [key, processValue(value, vars)]),
+  );
 }
 
 export function processJsonBody(
@@ -344,14 +345,12 @@ export function processJsonBody(
 }
 
 export function processTextBody(body: string, vars: Record<string, any>): string {
-  if (body == null) {
+  try {
+    return getNunjucksEngine().renderString(body, vars);
+  } catch (err) {
+    logger.warn(`Error rendering body template: ${err}`);
     return body;
   }
-  invariant(
-    typeof body !== 'object',
-    'Expected body to be a string when content type is not application/json',
-  );
-  return nunjucks.renderString(body, vars);
 }
 
 function parseRawRequest(input: string) {
@@ -432,7 +431,7 @@ export async function createTransformRequest(
     // Handle string template
     return async (prompt) => {
       try {
-        const rendered = nunjucks.renderString(transform, { prompt });
+        const rendered = getNunjucksEngine().renderString(transform, { prompt });
         return await new Function('prompt', `${rendered}`)(prompt);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
@@ -652,7 +651,7 @@ export class HttpProvider implements ApiProvider {
     return Object.fromEntries(
       Object.entries({ ...defaultHeaders, ...headers }).map(([key, value]) => [
         key,
-        nunjucks.renderString(value, vars),
+        getNunjucksEngine().renderString(value, vars),
       ]),
     );
   }
@@ -700,7 +699,7 @@ export class HttpProvider implements ApiProvider {
 
     const renderedConfig: Partial<HttpProviderConfig> = {
       url: this.url,
-      method: nunjucks.renderString(this.config.method || 'GET', vars),
+      method: getNunjucksEngine().renderString(this.config.method || 'GET', vars),
       headers,
       body: determineRequestBody(
         contentTypeIsJson(headers),
@@ -712,7 +711,7 @@ export class HttpProvider implements ApiProvider {
         ? Object.fromEntries(
             Object.entries(this.config.queryParams).map(([key, value]) => [
               key,
-              nunjucks.renderString(value, vars),
+              getNunjucksEngine().renderString(value, vars),
             ]),
           )
         : undefined,
@@ -809,8 +808,8 @@ export class HttpProvider implements ApiProvider {
     vars: Record<string, any>,
     context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
-    invariant(this.config.request, 'Expected request to be set in http provider config');
-    const renderedRequest = nunjucks.renderString(this.config.request, vars);
+    invariant(this.config.request, 'Raw request is required');
+    const renderedRequest = getNunjucksEngine().renderString(this.config.request, vars);
     const parsedRequest = parseRawRequest(renderedRequest.trim());
 
     const protocol = this.url.startsWith('https') || this.config.useHttps ? 'https' : 'http';
