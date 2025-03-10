@@ -1,11 +1,23 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Generate one very interesting fact about {{topic}}'
+  - 'Solve this complex problem: {{problem}}'
 
 providers:
   - id: azure:chat:gpt-35-turbo-deployment1
     config:
       apiHost: 'your-org.openai.azure.com'
+
+  # Example of reasoning model setup
+  - id: azure:chat:o3-mini-deployment
+    config:
+      apiHost: 'your-org.openai.azure.com'
+      # Flag to indicate this is a reasoning model (o1, o3-mini, etc.)
+      isReasoningModel: true
+      # Use max_completion_tokens instead of max_tokens
+      max_completion_tokens: 10000
+      # Set reasoning effort level
+      reasoning_effort: 'medium'
 
 defaultTest:
   assert:

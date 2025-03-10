@@ -38,6 +38,8 @@ providers:
       max_tokens: 1024
 ```
 
+> **Note:** OpenAI models can also be accessed through [Azure OpenAI](/docs/providers/azure/), which offers additional enterprise features, compliance options, and regional availability.
+
 ## Formatting chat messages
 
 For information on setting up chat conversation, see [chat threads](/docs/configuration/chat).
@@ -69,7 +71,7 @@ Supported parameters include:
 | `functions`             | Allows you to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`.                                                     |
 | `functionToolCallbacks` | A map of function tool names to function callbacks. Each callback should accept a string and return a string or a `Promise<string>`.                                                  |
 | `headers`               | Additional headers to include in the request.                                                                                                                                         |
-| `max_tokens`            | Controls the maximum length of the output in tokens. Not valid for o1 models.                                                                                                         |
+| `max_tokens`            | Controls the maximum length of the output in tokens. Not valid for reasoning models (o1, o3-mini).                                                                                    |
 | `organization`          | Your OpenAI organization key.                                                                                                                                                         |
 | `passthrough`           | Additional parameters to pass through to the API.                                                                                                                                     |
 | `presence_penalty`      | Applies a penalty to new tokens (tokens that haven't appeared in the input), making them less likely to appear in the output.                                                         |
@@ -80,8 +82,8 @@ Supported parameters include:
 | `tool_choice`           | Controls whether the AI should use a tool. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                             |
 | `tools`                 | Allows you to define custom tools. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                                     |
 | `top_p`                 | Controls the nucleus sampling, a method that helps control the randomness of the AI's output.                                                                                         |
-| `max_completion_tokens` | Maximum number of tokens to generate for o1 models.                                                                                                                                   |
-| `reasoning_effort`      | Allows you to control how long the o1 model thinks before answering, 'low', 'medium' or 'high'.                                                                                       |
+| `max_completion_tokens` | Maximum number of tokens to generate for reasoning models (o1, o3-mini).                                                                                                              |
+| `reasoning_effort`      | Allows you to control how long the reasoning model thinks before answering, 'low', 'medium' or 'high'.                                                                                |
 
 Here are the type declarations of `config` parameters:
 
