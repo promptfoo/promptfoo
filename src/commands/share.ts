@@ -101,7 +101,9 @@ export function shareCommand(program: Command) {
           return;
         }
 
-        const baseUrl = getEnvString('PROMPTFOO_SHARING_APP_BASE_URL');
+        const baseUrl =
+          getEnvString('PROMPTFOO_SHARING_APP_BASE_URL') ||
+          getEnvString('PROMPTFOO_REMOTE_APP_BASE_URL');
         const hostname = baseUrl ? new URL(baseUrl).hostname : 'app.promptfoo.dev';
 
         const confirmed = await askForConfirmation(hostname);

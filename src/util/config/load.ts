@@ -1,4 +1,5 @@
 import $RefParser from '@apidevtools/json-schema-ref-parser';
+import chalk from 'chalk';
 import dedent from 'dedent';
 import * as fs from 'fs';
 import { globSync } from 'glob';
@@ -514,16 +515,19 @@ export async function resolveConfigs(
   const hasConfigFile = Boolean(configPaths);
 
   if (!hasConfigFile && !hasPrompts && !hasProviders && !isCI()) {
-    const runCommand = isRunningUnderNpx() ? 'npx promptfoo eval' : 'promptfoo eval';
+    const runCommand = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
 
     logger.warn(dedent`
-      No promptfooconfig found. Try running with:
+      ${chalk.yellow.bold('⚠️  No promptfooconfig found')}
+
+      ${chalk.white('Try running with:')}
   
-      ${runCommand} -c path/to/promptfooconfig.yaml
+      ${chalk.cyan(`${runCommand} eval -c ${chalk.bold('path/to/promptfooconfig.yaml')}`)}
   
-      Or create a config with:
+      ${chalk.white('Or create a config with:')}
   
-      ${runCommand} init`);
+      ${chalk.green(`${runCommand} init`)}
+    `);
     process.exit(1);
   }
 

@@ -28,6 +28,7 @@ interface BedrockOptions {
   guardrailIdentifier?: string;
   guardrailVersion?: string;
   trace?: Trace;
+  showThinking?: boolean;
 }
 
 export interface TextGenerationOptions {
@@ -60,6 +61,10 @@ export interface BedrockClaudeMessagesCompletionOptions extends BedrockOptions {
   tool_choice?: {
     type: 'any' | 'auto' | 'tool';
     name?: string;
+  };
+  thinking?: {
+    type: 'enabled';
+    budget_tokens: number;
   };
 }
 
@@ -232,7 +237,7 @@ export interface BedrockAmazonNovaGenerationOptions extends BedrockOptions {
 
 interface IBedrockModel {
   params: (config: BedrockOptions, prompt: string, stop: string[]) => any;
-  output: (responseJson: any) => any;
+  output: (config: BedrockOptions, responseJson: any) => any;
 }
 
 export function parseValue(value: string | number, defaultValue: any) {
@@ -397,7 +402,7 @@ export const BEDROCK_MODEL = {
         'max_tokens',
         config?.max_tokens,
         getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
-        1024,
+        undefined,
       );
       addConfigParam(
         params,
@@ -472,7 +477,7 @@ export const BEDROCK_MODEL = {
         'max_new_tokens',
         config?.interfaceConfig?.max_new_tokens,
         getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
-        1024,
+        undefined,
       );
       addConfigParam(
         inferenceConfig,
@@ -487,7 +492,7 @@ export const BEDROCK_MODEL = {
 
       return params;
     },
-    output: (responseJson: any) => novaOutputFromMessage(responseJson),
+    output: (config: BedrockOptions, responseJson: any) => novaOutputFromMessage(responseJson),
   },
   CLAUDE_COMPLETION: {
     params: (config: BedrockClaudeLegacyCompletionOptions, prompt: string, stop: string[]) => {
@@ -590,13 +595,16 @@ export const BEDROCK_MODEL = {
         undefined,
       );
       addConfigParam(params, 'tool_choice', config?.tool_choice, undefined, undefined);
+      addConfigParam(params, 'thinking', config?.thinking, undefined, undefined);
       if (systemPrompt) {
         addConfigParam(params, 'system', systemPrompt, undefined, undefined);
       }
 
       return params;
     },
-    output: (responseJson: any) => outputFromMessage(responseJson),
+    output: (config: BedrockClaudeMessagesCompletionOptions, responseJson: any) => {
+      return outputFromMessage(responseJson, config?.showThinking ?? true);
+    },
   },
   TITAN_TEXT: {
     params: (config: BedrockTextGenerationOptions, prompt: string, stop: string[]) => {
@@ -783,6 +791,9 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.meta.llama3-3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_3,
 
   // EU Models
+  'eu.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'eu.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'eu.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'eu.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -964,7 +975,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
         return {
-          output: model.output(JSON.parse(cachedResponse as string)),
+          output: model.output(this.config, JSON.parse(cachedResponse as string)),
           tokenUsage: {},
         };
       }
@@ -997,7 +1008,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       const output = JSON.parse(new TextDecoder().decode(response.body));
 
       return {
-        output: model.output(output),
+        output: model.output(this.config, output),
         tokenUsage: {
           total: output.total_tokens ?? output.prompt_token_count + output.generation_token_count,
           prompt: output.prompt_tokens ?? output.prompt_token_count,

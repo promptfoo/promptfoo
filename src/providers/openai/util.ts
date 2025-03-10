@@ -45,6 +45,28 @@ export const OPENAI_CHAT_MODELS = [
       output: 4.4 / 1e6,
     },
   })),
+  ...[
+    'gpt-4o-audio-preview',
+    'gpt-4o-audio-preview-2024-12-17',
+    'gpt-4o-audio-preview-2024-10-01',
+  ].map((model) => ({
+    id: model,
+    cost: {
+      input: 2.5 / 1e6,
+      output: 10 / 1e6,
+      audioInput: 40 / 1e6,
+      audioOutput: 80 / 1e6,
+    },
+  })),
+  ...['gpt-4o-mini-audio-preview', 'gpt-4o-mini-audio-preview-2024-12-17'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.15 / 1e6,
+      output: 0.6 / 1e6,
+      audioInput: 10 / 1e6,
+      audioOutput: 20 / 1e6,
+    },
+  })),
   ...['gpt-4o', 'gpt-4o-2024-11-20', 'gpt-4o-2024-08-06'].map((model) => ({
     id: model,
     cost: {
@@ -138,11 +160,50 @@ export function calculateOpenAICost(
   config: ProviderConfig,
   promptTokens?: number,
   completionTokens?: number,
+  audioPromptTokens?: number,
+  audioCompletionTokens?: number,
 ): number | undefined {
-  return calculateCost(modelName, config, promptTokens, completionTokens, [
-    ...OPENAI_CHAT_MODELS,
-    ...OPENAI_COMPLETION_MODELS,
-  ]);
+  if (!audioPromptTokens && !audioCompletionTokens) {
+    return calculateCost(modelName, config, promptTokens, completionTokens, [
+      ...OPENAI_CHAT_MODELS,
+      ...OPENAI_COMPLETION_MODELS,
+    ]);
+  }
+
+  // Calculate with audio tokens
+  if (
+    !Number.isFinite(promptTokens) ||
+    !Number.isFinite(completionTokens) ||
+    !Number.isFinite(audioPromptTokens) ||
+    !Number.isFinite(audioCompletionTokens) ||
+    typeof promptTokens === 'undefined' ||
+    typeof completionTokens === 'undefined' ||
+    typeof audioPromptTokens === 'undefined' ||
+    typeof audioCompletionTokens === 'undefined'
+  ) {
+    return undefined;
+  }
+
+  const model = [...OPENAI_CHAT_MODELS, ...OPENAI_COMPLETION_MODELS].find(
+    (m) => m.id === modelName,
+  );
+  if (!model || !model.cost) {
+    return undefined;
+  }
+
+  let totalCost = 0;
+
+  const inputCost = config.cost ?? model.cost.input;
+  const outputCost = config.cost ?? model.cost.output;
+  totalCost += inputCost * promptTokens + outputCost * completionTokens;
+
+  if ('audioInput' in model.cost && 'audioOutput' in model.cost) {
+    const audioInputCost = config.audioCost ?? (model.cost.audioInput as number);
+    const audioOutputCost = config.audioCost ?? (model.cost.audioOutput as number);
+    totalCost += audioInputCost * audioPromptTokens + audioOutputCost * audioCompletionTokens;
+  }
+
+  return totalCost || undefined;
 }
 
 export function failApiCall(err: any) {
