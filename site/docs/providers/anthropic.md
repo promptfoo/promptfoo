@@ -60,6 +60,7 @@ Claude models are available across multiple platforms. Here's how the model name
 | tools           | -                     | An array of tool or function definitions for the model to call    |
 | tool_choice     | -                     | An object specifying the tool to call                             |
 | thinking        | -                     | Configuration for enabling Claude's extended thinking capability  |
+| showThinking    | -                     | Whether to include thinking content in the output (default: true) |
 | headers         | -                     | Additional headers to be sent with the API request                |
 | extra_body      | -                     | Additional parameters to be included in the API request body      |
 
@@ -273,6 +274,22 @@ Example response with thinking enabled:
   ]
 }
 ```
+
+#### Controlling Thinking Output
+
+By default, thinking content is included in the response output. You can control this behavior using the `showThinking` parameter:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    config:
+      thinking:
+        type: 'enabled'
+        budget_tokens: 16000
+      showThinking: false # Exclude thinking content from the output
+```
+
+When `showThinking` is set to `false`, the thinking content will be excluded from the output, and only the final response will be returned. This is useful when you want to use thinking for better reasoning but don't want to expose the thinking process to end users.
 
 #### Redacted Thinking
 

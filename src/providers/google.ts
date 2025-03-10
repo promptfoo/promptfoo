@@ -9,6 +9,7 @@ import type {
 } from '../types';
 import type { EnvOverrides } from '../types/env';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
+import { getNunjucksEngine } from '../util/templates';
 import { CHAT_MODELS } from './googleShared';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 import { maybeCoerceToGeminiFormat } from './vertexUtil';
@@ -54,24 +55,30 @@ class GoogleGenericProvider implements ApiProvider {
   }
 
   getApiHost(): string | undefined {
-    return (
+    const apiHost =
       this.config.apiHost ||
       this.env?.GOOGLE_API_HOST ||
       this.env?.PALM_API_HOST ||
       getEnvString('GOOGLE_API_HOST') ||
       getEnvString('PALM_API_HOST') ||
-      DEFAULT_API_HOST
-    );
+      DEFAULT_API_HOST;
+    if (apiHost) {
+      return getNunjucksEngine().renderString(apiHost, {});
+    }
+    return undefined;
   }
 
   getApiKey(): string | undefined {
-    return (
+    const apiKey =
       this.config.apiKey ||
       this.env?.GOOGLE_API_KEY ||
       this.env?.PALM_API_KEY ||
       getEnvString('GOOGLE_API_KEY') ||
-      getEnvString('PALM_API_KEY')
-    );
+      getEnvString('PALM_API_KEY');
+    if (apiKey) {
+      return getNunjucksEngine().renderString(apiKey, {});
+    }
+    return undefined;
   }
 
   // @ts-ignore: Prompt is not used in this implementation

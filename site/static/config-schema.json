@@ -266,6 +266,15 @@
                             },
                             "WATSONX_AI_PROJECT_ID": {
                               "type": "string"
+                            },
+                            "AZURE_CONTENT_SAFETY_ENDPOINT": {
+                              "type": "string"
+                            },
+                            "AZURE_CONTENT_SAFETY_API_KEY": {
+                              "type": "string"
+                            },
+                            "AZURE_CONTENT_SAFETY_API_VERSION": {
+                              "type": "string"
                             }
                           },
                           "additionalProperties": false
@@ -869,7 +878,17 @@
             {
               "type": "object",
               "additionalProperties": {
-                "type": "string"
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  }
+                ]
               }
             }
           ]

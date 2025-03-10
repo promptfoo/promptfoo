@@ -123,6 +123,14 @@ export async function doEval(
 
     ({ config, testSuite, basePath: _basePath } = await resolveConfigs(cmdObj, defaultConfig));
 
+    // Ensure evaluateOptions from the config file are applied
+    if (config.evaluateOptions) {
+      evaluateOptions = {
+        ...config.evaluateOptions,
+        ...evaluateOptions,
+      };
+    }
+
     let maxConcurrency = cmdObj.maxConcurrency;
     const delay = cmdObj.delay ?? 0;
 
@@ -161,11 +169,11 @@ export async function doEval(
     );
 
     const options: EvaluateOptions = {
+      ...evaluateOptions,
       showProgressBar: getLogLevel() === 'debug' ? false : cmdObj.progressBar,
-      maxConcurrency,
       repeat,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
-      ...evaluateOptions,
+      maxConcurrency,
     };
 
     if (cmdObj.grader) {

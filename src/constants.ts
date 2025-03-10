@@ -33,3 +33,5 @@ export const TERMINAL_MAX_WIDTH =
   process?.stdout?.isTTY && process?.stdout?.columns && process?.stdout?.columns > 10
     ? process?.stdout?.columns - 10
     : 120;
+
+export const CLOUD_PROVIDER_PREFIX = 'promptfoo://provider/';

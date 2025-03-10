@@ -175,7 +175,27 @@ config:
   anthropic_version: 'bedrock-2023-05-31'
   tools: [...] # Optional: Specify available tools
   tool_choice: { ... } # Optional: Specify tool choice
+  thinking: { ... } # Optional: Enable Claude's extended thinking capability
+  showThinking: true # Optional: Control whether thinking content is included in output
 ```
+
+When using Claude's extended thinking capability, you can configure it like this:
+
+```yaml
+config:
+  max_tokens: 20000
+  thinking:
+    type: 'enabled'
+    budget_tokens: 16000 # Must be ≥1024 and less than max_tokens
+  showThinking: true # Whether to include thinking content in the output (default: true)
+```
+
+The `showThinking` parameter controls whether thinking content is included in the response output:
+
+- When set to `true` (default), thinking content will be included in the output
+- When set to `false`, thinking content will be excluded from the output
+
+This is useful when you want to use thinking for better reasoning but don't want to expose the thinking process to end users.
 
 ### Titan Models
 
@@ -276,6 +296,63 @@ tests:
       - type: llm-rubric
         value: Do not mention that you are an AI or chat assistant
 ```
+
+## Multimodal Capabilities
+
+Some Bedrock models, like Amazon Nova, support multimodal inputs including images and text. To use these capabilities, you'll need to structure your prompts to include both the image data and text content.
+
+Here's an example configuration for running multimodal evaluations:
+
+```yaml
+description: 'Bedrock Nova Eval with Images'
+
+prompts:
+  - file://nova_multimodal_prompt.json
+
+providers:
+  - id: bedrock:amazon.nova-pro-v1:0
+    config:
+      region: 'us-east-1'
+      inferenceConfig:
+        temperature: 0.7
+        max_new_tokens: 256
+
+tests:
+  - vars:
+      image: file://path/to/image.jpg
+```
+
+The prompt file (`nova_multimodal_prompt.json`) should be structured to include both image and text content. This format will depend on the specific model you're using:
+
+```json
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "image": {
+          "format": "jpg",
+          "source": { "bytes": "{{image}}" }
+        }
+      },
+      {
+        "text": "What is this a picture of?"
+      }
+    ]
+  }
+]
+```
+
+See [Github](https://github.com/promptfoo/promptfoo/blob/main/examples/amazon-bedrock/promptfooconfig.nova.multimodal.yaml) for a runnable example.
+
+When loading image files as variables, Promptfoo automatically converts them to the appropriate format for the model. The supported image formats include:
+
+- jpg/jpeg
+- png
+- gif
+- bmp
+- webp
+- svg
 
 ## Embeddings
 

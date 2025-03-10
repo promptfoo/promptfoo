@@ -26,7 +26,10 @@ interface ExtensionEditorProps {
 
 const FILE_PROTOCOL_PREFIX = 'file://';
 
-const validatePath = (value: string): ValidationError | undefined => {
+const validatePath = (value: string, isTyping: boolean): ValidationError | undefined => {
+  if (!value) {
+    return undefined;
+  }
   if (!value.trim()) {
     return undefined;
   }
@@ -34,11 +37,17 @@ const validatePath = (value: string): ValidationError | undefined => {
   const withoutPrefix = value.replace(FILE_PROTOCOL_PREFIX, '');
   const [filePath, functionName] = withoutPrefix.split(':');
 
+  // During typing, only show format error if they've already typed a colon
+  if (isTyping && !value.includes(':')) {
+    return undefined;
+  }
+
   if (!filePath || !functionName) {
     return { message: 'Format: /path/to/file.js:hookFunction' };
   }
 
-  if (!isJavascriptFile(filePath) && !filePath.endsWith('.py')) {
+  // During typing, don't show file type error until they've finished typing the file extension
+  if (!isTyping && !isJavascriptFile(filePath) && !filePath.endsWith('.py')) {
     return { message: 'Must be a JavaScript/TypeScript or Python file' };
   }
 
@@ -50,41 +59,41 @@ export default function ExtensionEditor({
   onExtensionsChange,
   onValidationChange,
 }: ExtensionEditorProps) {
-  const [value, setValue] = React.useState('');
+  const [isTyping, setIsTyping] = React.useState(false);
+  const typingTimeoutRef = React.useRef<ReturnType<typeof setTimeout>>();
 
-  React.useEffect(() => {
-    if (extensions.length > 0) {
-      setValue(extensions[0].replace(FILE_PROTOCOL_PREFIX, ''));
-    } else {
-      setValue('');
-    }
-  }, [extensions]);
-
-  const error = React.useMemo(() => validatePath(value), [value]);
-
-  React.useEffect(() => {
-    onValidationChange?.(!!error);
-  }, [error, onValidationChange]);
+  const error = React.useMemo(() => validatePath(extensions[0], isTyping), [extensions, isTyping]);
 
   const handleChange = React.useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const newValue = e.target.value;
-      setValue(newValue);
+      setIsTyping(true);
 
-      if (!newValue.trim()) {
-        onExtensionsChange([]);
-        return;
+      // Clear any existing timeout
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
       }
 
-      const validationResult = validatePath(newValue);
-      if (validationResult === undefined) {
-        onExtensionsChange([`${FILE_PROTOCOL_PREFIX}${newValue}`]);
-      } else {
-        // Invalid input: Parent state is not updated, error will be shown via onValidationChange
-      }
+      // Set a new timeout to mark typing as finished
+      typingTimeoutRef.current = setTimeout(() => {
+        setIsTyping(false);
+      }, 500);
+      const validationResult = validatePath(newValue, true);
+      onValidationChange?.(!!validationResult);
+
+      onExtensionsChange([`${FILE_PROTOCOL_PREFIX}${newValue}`]);
     },
     [onExtensionsChange],
   );
+
+  // Cleanup timeout on unmount
+  React.useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, []);
 
   return (
     <Accordion defaultExpanded={!!extensions.length}>
@@ -104,6 +113,17 @@ export default function ExtensionEditor({
                     <li>beforeEach - Before each test</li>
                     <li>afterEach - After each test</li>
                   </Box>
+                  <Box sx={{ mt: 1 }}>
+                    <Link
+                      href="https://www.promptfoo.dev/docs/configuration/reference/#extension-hooks"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      color="inherit"
+                      underline="always"
+                    >
+                      View documentation
+                    </Link>
+                  </Box>
                 </Box>
               }
             >
@@ -114,20 +134,20 @@ export default function ExtensionEditor({
           </Box>
           <Typography variant="body2" color="text.secondary">
             {extensions.length > 0
-              ? value
+              ? extensions[0]
               : 'Add custom code to run at specific points in the evaluation lifecycle'}
           </Typography>
         </Box>
       </AccordionSummary>
       <AccordionDetails>
         <Typography variant="body1" sx={{ mb: 2 }}>
-          Add custom code to run at specific lifecycle points. See the{' '}
+          See{' '}
           <Link
             href="https://www.promptfoo.dev/docs/configuration/reference/#extension-hooks"
             target="_blank"
             rel="noopener"
           >
-            extension hooks documentation
+            docs
           </Link>{' '}
           for more details.
         </Typography>
@@ -136,7 +156,7 @@ export default function ExtensionEditor({
             fullWidth
             size="small"
             placeholder="/path/to/hook.js:extensionHook"
-            value={value}
+            value={extensions[0]?.replace(FILE_PROTOCOL_PREFIX, '')}
             onChange={handleChange}
             error={!!error}
             helperText={error?.message}

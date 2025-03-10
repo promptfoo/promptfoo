@@ -70,6 +70,9 @@ export const ProviderEnvOverridesSchema = z.object({
   WATSONX_AI_AUTH_TYPE: z.string().optional(),
   WATSONX_AI_BEARER_TOKEN: z.string().optional(),
   WATSONX_AI_PROJECT_ID: z.string().optional(),
+  AZURE_CONTENT_SAFETY_ENDPOINT: z.string().optional(),
+  AZURE_CONTENT_SAFETY_API_KEY: z.string().optional(),
+  AZURE_CONTENT_SAFETY_API_VERSION: z.string().optional(),
 });
 
 export type EnvOverrides = z.infer<typeof ProviderEnvOverridesSchema>;

@@ -544,6 +544,32 @@ tests:
 
 promptfoo supports tool use and function calling with OpenAI and Anthropic models, as well as other provider-specific configurations like temperature and number of tokens. For more information on defining functions and tools, see the [OpenAI provider docs](/docs/providers/openai#using-tools) and the [Anthropic provider docs](/docs/providers/anthropic#tool-use).
 
+## Thinking Output
+
+Some models, like Anthropic's Claude, support an extended thinking capability that allows the model to show its reasoning process before providing a final answer.
+
+This is useful for reasoning tasks or understanding how the model arrived at its conclusion.
+
+### Controlling Thinking Output
+
+By default, thinking content is included in the response. You can hide it by setting `showThinking` to `false`.
+
+For example, for Claude:
+
+```yaml
+providers:
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    config:
+      thinking:
+        type: 'enabled'
+        budget_tokens: 16000
+      showThinking: false # Exclude thinking content from output
+```
+
+This is useful when you want better reasoning but don't want to expose the thinking process to your assertions.
+
+For more details on extended thinking capabilities, see the [Anthropic provider docs](/docs/providers/anthropic#extended-thinking) and [AWS Bedrock provider docs](/docs/providers/aws-bedrock#claude-models).
+
 ## Transforming outputs
 
 Transforms can be applied at both the provider level and in test cases. The order of application is:
@@ -787,7 +813,7 @@ promptfoo eval -c config1.yaml -c config2.yaml -c config3.yaml
 
 ## Loading tests from CSV
 
-YAML is nice, but some organizations maintain their LLM tests in spreadsheets for ease of collaboration. promptfoo supports a special [CSV file format](/docs/configuration/parameters#tests-file).
+YAML is nice, but some organizations maintain their LLM tests in spreadsheets for ease of collaboration. promptfoo supports a special [CSV file format](/docs/configuration/parameters#tests-and-vars).
 
 ```yaml
 prompts:

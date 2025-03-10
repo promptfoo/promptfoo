@@ -77,14 +77,12 @@ interface AnthropicMessageOptions {
   model?: string;
   temperature?: number;
   thinking?: Anthropic.Messages.ThinkingConfigParam;
-  tool_choice?:
-    | Anthropic.MessageCreateParams.ToolChoiceAny
-    | Anthropic.MessageCreateParams.ToolChoiceAuto
-    | Anthropic.MessageCreateParams.ToolChoiceTool;
+  tool_choice?: Anthropic.Messages.ToolChoice;
   tools?: Anthropic.Tool[];
   top_k?: number;
   top_p?: number;
   beta?: string[]; // For features like 'output-128k-2025-02-19'
+  showThinking?: boolean;
 }
 
 function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
@@ -103,7 +101,7 @@ function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   return {};
 }
 
-export function outputFromMessage(message: Anthropic.Messages.Message) {
+export function outputFromMessage(message: Anthropic.Messages.Message, showThinking: boolean) {
   const hasToolUse = message.content.some((block) => block.type === 'tool_use');
   const hasThinking = message.content.some(
     (block) => block.type === 'thinking' || block.type === 'redacted_thinking',
@@ -114,13 +112,16 @@ export function outputFromMessage(message: Anthropic.Messages.Message) {
       .map((block) => {
         if (block.type === 'text') {
           return block.text;
-        } else if (block.type === 'thinking') {
+        } else if (block.type === 'thinking' && showThinking) {
           return `Thinking: ${block.thinking}\nSignature: ${block.signature}`;
-        } else if (block.type === 'redacted_thinking') {
+        } else if (block.type === 'redacted_thinking' && showThinking) {
           return `Redacted Thinking: ${block.data}`;
+        } else if (block.type !== 'thinking' && block.type !== 'redacted_thinking') {
+          return JSON.stringify(block);
         }
-        return JSON.stringify(block);
+        return '';
       })
+      .filter((text) => text !== '')
       .join('\n\n');
   }
   return message.content
@@ -317,7 +318,7 @@ export class AnthropicMessagesProvider implements ApiProvider {
         try {
           const parsedCachedResponse = JSON.parse(cachedResponse) as Anthropic.Messages.Message;
           return {
-            output: outputFromMessage(parsedCachedResponse),
+            output: outputFromMessage(parsedCachedResponse, this.config.showThinking ?? true),
             tokenUsage: getTokenUsage(parsedCachedResponse, true),
             cost: calculateAnthropicCost(
               this.modelName,
@@ -359,7 +360,7 @@ export class AnthropicMessagesProvider implements ApiProvider {
       }
 
       return {
-        output: outputFromMessage(response),
+        output: outputFromMessage(response, this.config.showThinking ?? true),
         tokenUsage: getTokenUsage(response, false),
         cost: calculateAnthropicCost(
           this.modelName,

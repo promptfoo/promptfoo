@@ -15,6 +15,7 @@ import { generateDatasetCommand } from './commands/generate/dataset';
 import { importCommand } from './commands/import';
 import { initCommand } from './commands/init';
 import { listCommand } from './commands/list';
+import { modelScanCommand } from './commands/modelScan';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { viewCommand } from './commands/view';
@@ -63,10 +64,11 @@ async function main() {
   debugCommand(program, defaultConfig, defaultConfigPath);
   deleteCommand(program);
   exportCommand(program);
-  feedbackCommand(program);
   const generateCommand = program.command('generate').description('Generate synthetic data');
+  feedbackCommand(program);
   importCommand(program);
   listCommand(program);
+  modelScanCommand(program);
   showCommand(program);
 
   generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
