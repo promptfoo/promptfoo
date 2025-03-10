@@ -577,9 +577,6 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
    * Check if the current deployment is configured as a reasoning model
    */
   protected isReasoningModel(): boolean {
-    if (this.config.o1) {
-      logger.warn('The o1 flag is deprecated. Please use isReasoningModel instead.');
-    }
     return !!this.config.isReasoningModel || !!this.config.o1;
   }
 
