@@ -572,7 +572,7 @@ export class VertexChatProvider extends VertexGenericProvider {
             total: 0,
             prompt: 0,
             completion: 0,
-            cached: false,
+            cached: 0,
           };
 
           if (cliState.isRedteam || cliState.config?.redteam) {
