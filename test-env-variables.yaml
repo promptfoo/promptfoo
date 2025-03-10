@@ -4,19 +4,18 @@ providers:
     config:
       method: 'POST'
       headers:
-        'Content-Type': 'application/json'
+        'Content-Type': '{{env.CONTENT_TYPE}}'
         'Authorization': 'Bearer {{env.OPENAI_API_KEY}}'
-        'Cookie': 'REGION-SESSION={{ env.REGION_SESSION }}; XSRF-TOKEN={{ env.XSRF_TOKEN }}; SESSION={{ env.SESSION }};'
-        'X-XSRF-TOKEN': '{{env.XSRF_TOKEN}}'
       body:
-        model: 'gpt-4o-mini'
+        model: '{{env.MODEL}}'
         messages:
           - role: 'user'
             content: '{{prompt}}'
       transformResponse: 'json.choices[0].message.content'
+  - id: openai:chat:gpt-4o-mini
 
 prompts:
-  - 'Write a short poem about debugging'
+  - 'Give me a single word that is the opposite of {{dummy}}'
 
 tests:
   - description: 'Test that environment variables in headers are properly processed'
