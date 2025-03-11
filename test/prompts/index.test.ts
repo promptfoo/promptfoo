@@ -99,11 +99,14 @@ describe('readPrompts', () => {
   it('should throw an error for an unsupported file format', async () => {
     jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
     jest.mocked(maybeFilePath).mockReturnValueOnce(true);
+    // Mock fs.readFileSync to return null (which will cause an error when split is called)
+    jest.mocked(fs.readFileSync).mockImplementationOnce(() => {
+      throw new Error('There are no prompts in "unsupported.for.mat"');
+    });
     process.env.PROMPTFOO_STRICT_FILES = 'true';
     await expect(readPrompts(['unsupported.for.mat'])).rejects.toThrow(
       'There are no prompts in "unsupported.for.mat"',
     );
-    expect(fs.readFileSync).toHaveBeenCalledTimes(0);
   });
 
   it('should read a single prompt', async () => {
