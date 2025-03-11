@@ -11,4 +11,4 @@ overrides:
       parser: 'markdown'
   - files: '*.j2'
     options:
-      parser: 'text'
+      parser: 'markdown'
