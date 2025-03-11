@@ -455,14 +455,43 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const splits = providerPath.split(':');
       const modelName = splits.slice(1).join(':');
-      return new OpenAiChatCompletionProvider(modelName, {
+      
+      // List of known embedding models from GitHub marketplace
+      const knownEmbeddingModels = [
+        'text-embedding-3-small',
+        'text-embedding-3-large',
+        'embed-v3-english',
+        'embed-v3-multilingual',
+        'cohere-embed-v3-english',
+        'cohere-embed-v3-multilingual',
+        'openai-text-embedding-3-small',
+        'openai-text-embedding-3-large'
+      ];
+      
+      // Check if the model name indicates an embedding model
+      const isEmbeddingModel = 
+        knownEmbeddingModels.some(model => modelName.toLowerCase().includes(model.toLowerCase())) ||
+        modelName.toLowerCase().includes('embedding') || 
+        modelName.toLowerCase().includes('embed');
+      
+      // Common configuration for all GitHub models
+      const githubConfig = {
         ...providerOptions,
         config: {
           ...providerOptions.config,
           apiBaseUrl: 'https://models.inference.ai.azure.com',
           apiKeyEnvar: 'GITHUB_TOKEN',
         },
-      });
+      };
+      
+      // Use appropriate provider based on model type
+      if (isEmbeddingModel) {
+        logger.debug(`Using embedding provider for GitHub model: ${modelName}`);
+        return new OpenAiEmbeddingProvider(modelName, githubConfig);
+      } else {
+        logger.debug(`Using chat completion provider for GitHub model: ${modelName}`);
+        return new OpenAiChatCompletionProvider(modelName, githubConfig);
+      }
     },
   },
   {
