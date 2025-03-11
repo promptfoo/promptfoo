@@ -237,7 +237,10 @@ export async function runEval({
       namedScores: {},
       latencyMs,
       cost: response.cost,
-      metadata: response.metadata,
+      metadata: {
+        ...test.metadata,
+        ...response.metadata,
+      },
       promptIdx,
       testIdx,
       testCase: test,
