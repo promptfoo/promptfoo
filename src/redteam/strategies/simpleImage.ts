@@ -33,7 +33,7 @@ export async function textToImage(text: string): Promise<string> {
     const pngBuffer = await sharp(Buffer.from(svgImage)).png().toBuffer();
 
     // Convert to base64
-    return `data:image/png;base64,${pngBuffer.toString('base64')}`;
+    return pngBuffer.toString('base64');
   } catch (error) {
     logger.error(`Error generating image from text: ${error}`);
     // Return fallback if image generation fails

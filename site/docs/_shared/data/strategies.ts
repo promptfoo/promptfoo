@@ -137,6 +137,17 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Static (Single-Turn)',
+    strategy: 'image',
+    displayName: 'Image Encoding',
+    description: 'Text-to-image encoding bypass',
+    longDescription:
+      'Tests handling of text embedded in images and encoded as base64 to potentially bypass text-based content filters',
+    cost: 'Low',
+    asrIncrease: '20-30%',
+    link: '/docs/red-team/strategies/image/',
+  },
+  {
+    category: 'Static (Single-Turn)',
     strategy: 'base64',
     displayName: 'Base64',
     description: 'Base64 encoding bypass',

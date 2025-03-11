@@ -143,11 +143,11 @@ export const Strategies: Strategy[] = [
     },
   },
   {
-    id: 'image:basic',
+    id: 'image',
     action: async (testCases, injectVar) => {
-      logger.debug(`Adding image:basic to ${testCases.length} test cases`);
+      logger.debug(`Adding image encoding to ${testCases.length} test cases`);
       const newTestCases = await addImageToBase64(testCases, injectVar);
-      logger.debug(`Added ${newTestCases.length} image:basic encoded test cases`);
+      logger.debug(`Added ${newTestCases.length} image encoded test cases`);
       return newTestCases;
     },
   },
