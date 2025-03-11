@@ -130,15 +130,15 @@ async function main() {
   // Get text from command line arguments or use default
   const textToConvert = process.argv[2] || 'This is a test of the image encoding strategy.';
 
-  console.log(`Converting text to image: "${textToConvert}"`);
+  logger.info(`Converting text to image: "${textToConvert}"`);
 
   try {
     // Convert text to image
     const base64Image = await textToImage(textToConvert);
 
     // Log the first 100 characters of the base64 image to avoid terminal clutter
-    console.log(`Base64 image (first 100 chars): ${base64Image.substring(0, 100)}...`);
-    console.log(`Total base64 image length: ${base64Image.length} characters`);
+    logger.info(`Base64 image (first 100 chars): ${base64Image.substring(0, 100)}...`);
+    logger.info(`Total base64 image length: ${base64Image.length} characters`);
 
     // Create a simple test case
     const testCase = {
@@ -150,9 +150,11 @@ async function main() {
     // Process the test case
     const processedTestCases = await addImageToBase64([testCase], 'prompt');
 
-    console.log('Test case processed successfully.');
-    console.log(`Original prompt length: ${textToConvert.length} characters`);
-    console.log(`Processed prompt length: ${processedTestCases[0].vars?.prompt.length} characters`);
+    logger.info('Test case processed successfully.');
+    logger.info(`Original prompt length: ${textToConvert.length} characters`);
+    // Add type assertion to ensure TypeScript knows this is a string
+    const processedPrompt = processedTestCases[0].vars?.prompt as string;
+    logger.info(`Processed prompt length: ${processedPrompt.length} characters`);
 
     // Check if we're running this directly (not being imported)
     if (require.main === module) {
@@ -166,11 +168,11 @@ async function main() {
       // Write binary data to file
       fs.writeFileSync(outputFilePath, imageBuffer);
 
-      console.log(`Image file written to: ${outputFilePath}`);
-      console.log(`You can open it with any image viewer to verify the conversion.`);
+      logger.info(`Image file written to: ${outputFilePath}`);
+      logger.info(`You can open it with any image viewer to verify the conversion.`);
     }
   } catch (error) {
-    console.error('Error:', error);
+    logger.error(`Error generating image from text: ${error}`);
   }
 }
 

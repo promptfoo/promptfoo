@@ -1,5 +1,4 @@
 import { SingleBar, Presets } from 'cli-progress';
-import { Readable } from 'stream';
 import logger from '../../logger';
 import type { TestCase } from '../../types';
 import invariant from '../../util/invariant';
@@ -28,18 +27,20 @@ export async function textToAudio(text: string): Promise<string> {
     const gttsModule = await importGtts();
 
     if (!gttsModule) {
-      throw new Error(`Please install node-gtts to use audio-based strategies: npm install node-gtts`);
+      throw new Error(
+        `Please install node-gtts to use audio-based strategies: npm install node-gtts`,
+      );
     }
 
     // Initialize gtts with English language
     const gtts = gttsModule.default('en');
-    
+
     // Get audio stream
     const audioStream = gtts.stream(text);
-    
+
     // Collect stream data in chunks
     const chunks: Buffer[] = [];
-    
+
     // Convert stream to buffer using promises
     const buffer = await new Promise<Buffer>((resolve, reject) => {
       audioStream.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -124,48 +125,50 @@ export async function addAudioToBase64(
 async function main() {
   // Get text from command line arguments or use default
   const textToConvert = process.argv[2] || 'This is a test of the audio encoding strategy.';
-  
-  console.log(`Converting text to audio: "${textToConvert}"`);
+
+  logger.info(`Converting text to audio: "${textToConvert}"`);
 
   try {
     // Convert text to audio
     const base64Audio = await textToAudio(textToConvert);
-    
+
     // Log the first 100 characters of the base64 audio to avoid terminal clutter
-    console.log(`Base64 audio (first 100 chars): ${base64Audio.substring(0, 100)}...`);
-    console.log(`Total base64 audio length: ${base64Audio.length} characters`);
-    
+    logger.info(`Base64 audio (first 100 chars): ${base64Audio.substring(0, 100)}...`);
+    logger.info(`Total base64 audio length: ${base64Audio.length} characters`);
+
     // Create a simple test case
     const testCase = {
       vars: {
-        prompt: textToConvert
-      }
+        prompt: textToConvert,
+      },
     };
-    
+
     // Process the test case
     const processedTestCases = await addAudioToBase64([testCase], 'prompt');
-    
-    console.log('Test case processed successfully.');
-    console.log(`Original prompt length: ${textToConvert.length} characters`);
-    console.log(`Processed prompt length: ${processedTestCases[0].vars?.prompt.length} characters`);
-    
+
+    logger.info('Test case processed successfully.');
+    logger.info(`Original prompt length: ${textToConvert.length} characters`);
+    // Add type assertion to ensure TypeScript knows this is a string
+    const processedPrompt = processedTestCases[0].vars?.prompt as string;
+    logger.info(`Processed prompt length: ${processedPrompt.length} characters`);
+
     // Check if we're running this directly (not being imported)
     if (require.main === module) {
       // Write to a file for testing with audio players
       const fs = await import('fs');
       const outputFilePath = 'test-audio.mp3';
-      
+
       // Decode base64 back to binary
       const audioBuffer = Buffer.from(base64Audio, 'base64');
-      
+
       // Write binary data to file
       fs.writeFileSync(outputFilePath, audioBuffer);
-      
-      console.log(`Audio file written to: ${outputFilePath}`);
-      console.log(`You can play it using any audio player to verify the conversion.`);
+
+      logger.info(`Audio file written to: ${outputFilePath}`);
+      logger.info(`You can play it using any audio player to verify the conversion.`);
     }
   } catch (error) {
-    console.error('Error:', error);
+    logger.error(`Error generating audio from text: ${error}`);
   }
 }
 
