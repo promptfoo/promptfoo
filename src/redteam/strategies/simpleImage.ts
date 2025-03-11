@@ -1,94 +1,106 @@
-import { createCanvas } from 'canvas';
+import { SingleBar, Presets } from 'cli-progress';
+import sharp from 'sharp';
 import logger from '../../logger';
 import type { TestCase } from '../../types';
 import invariant from '../../util/invariant';
 
-/**
- * Converts text to an image and then to base64
- * @param text The text to convert
- * @returns Base64 encoded PNG image of the text
- */
-export function textToImageBase64(text: string): string {
-  // Create a canvas with dimensions based on the text length
-  const fontSize = 20;
-  const padding = 20;
-  const canvas = createCanvas(800, 400); // Fixed width, adjust height later if needed
-  const ctx = canvas.getContext('2d');
-
-  // Set up the canvas
-  ctx.fillStyle = 'white';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.font = `${fontSize}px Arial`;
-  ctx.fillStyle = 'black';
-
-  // Handle text wrapping
-  const words = text.split(' ');
-  const maxWidth = canvas.width - padding * 2;
-  let line = '';
-  let y = padding + fontSize;
-
-  for (const word of words) {
-    const testLine = line + (line ? ' ' : '') + word;
-    const metrics = ctx.measureText(testLine);
-
-    if (metrics.width > maxWidth && line) {
-      ctx.fillText(line, padding, y);
-      line = word;
-      y += fontSize + 5;
-    } else {
-      line = testLine;
-    }
-  }
-
-  // Draw the last line
-  ctx.fillText(line, padding, y);
-
-  // Convert to base64
-  const base64Image = canvas.toDataURL('image/png').split(',')[1];
-  return base64Image;
+// Helper function to escape XML special characters for SVG
+function escapeXml(unsafe: string): string {
+  return unsafe
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
 }
 
 /**
- * Adds test cases with text converted to image base64
+ * Converts text to an image and then to base64 encoded string
+ * using the sharp library which has better cross-platform support than canvas
+ */
+export async function textToImage(text: string): Promise<string> {
+  try {
+    // Create a simple image with the text on a white background
+    // We're using SVG as an intermediate format as it's easy to generate without canvas
+    const svgImage = `
+      <svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
+        <rect width="100%" height="100%" fill="white"/>
+        <text x="50" y="50" font-family="Arial" font-size="16" fill="black">${escapeXml(text)}</text>
+      </svg>
+    `;
+
+    // Convert SVG to PNG using sharp
+    const pngBuffer = await sharp(Buffer.from(svgImage)).png().toBuffer();
+
+    // Convert to base64
+    return `data:image/png;base64,${pngBuffer.toString('base64')}`;
+  } catch (error) {
+    logger.error(`Error generating image from text: ${error}`);
+    // Return fallback if image generation fails
+    return Buffer.from(text).toString('base64');
+  }
+}
+
+/**
+ * Adds image encoding to test cases
  */
 export async function addImageToBase64(
   testCases: TestCase[],
   injectVar: string,
 ): Promise<TestCase[]> {
-  const imageBase64TestCases: TestCase[] = [];
+  const imageTestCases: TestCase[] = [];
+
+  let progressBar: SingleBar | undefined;
+  if (logger.level !== 'debug') {
+    progressBar = new SingleBar(
+      {
+        format: 'Converting to Images {bar} {percentage}% | ETA: {eta}s | {value}/{total}',
+        hideCursor: true,
+      },
+      Presets.shades_classic,
+    );
+    progressBar.start(testCases.length, 0);
+  }
 
   for (const testCase of testCases) {
     invariant(
       testCase.vars,
-      `image:basic: testCase.vars is required, but got ${JSON.stringify(testCase)}`,
+      `Image encoding: testCase.vars is required, but got ${JSON.stringify(testCase)}`,
     );
 
     const originalText = String(testCase.vars[injectVar]);
 
-    try {
-      const base64Image = textToImageBase64(originalText);
+    // Convert text to image and then to base64
+    const base64Image = await textToImage(originalText);
 
-      imageBase64TestCases.push({
-        ...testCase,
-        assert: testCase.assert?.map((assertion) => ({
-          ...assertion,
-          metric: assertion.type?.startsWith('promptfoo:redteam:')
-            ? `${assertion.type?.split(':').pop() || assertion.metric}/ImageBasic`
-            : assertion.metric,
-        })),
-        vars: {
-          ...testCase.vars,
-          [injectVar]: base64Image,
-        },
-        metadata: {
-          ...testCase.metadata,
-          ...(testCase.metadata?.harmCategory && { harmCategory: testCase.metadata.harmCategory }),
-        },
-      });
-    } catch (error) {
-      logger.error(`Error converting text to image base64: ${error}`);
+    imageTestCases.push({
+      ...testCase,
+      assert: testCase.assert?.map((assertion) => ({
+        ...assertion,
+        metric: assertion.type?.startsWith('promptfoo:redteam:')
+          ? `${assertion.type?.split(':').pop() || assertion.metric}/Image-Encoded`
+          : assertion.metric,
+      })),
+      vars: {
+        ...testCase.vars,
+        [injectVar]: base64Image,
+      },
+      metadata: {
+        ...testCase.metadata,
+        ...(testCase.metadata?.harmCategory && { harmCategory: testCase.metadata.harmCategory }),
+      },
+    });
+
+    if (progressBar) {
+      progressBar.increment(1);
+    } else {
+      logger.debug(`Processed ${imageTestCases.length} of ${testCases.length}`);
     }
   }
 
-  return imageBase64TestCases;
+  if (progressBar) {
+    progressBar.stop();
+  }
+
+  return imageTestCases;
 }
