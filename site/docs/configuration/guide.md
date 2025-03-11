@@ -546,7 +546,7 @@ promptfoo supports tool use and function calling with OpenAI and Anthropic model
 
 ## Thinking Output
 
-Some models, like Anthropic's Claude, support an extended thinking capability that allows the model to show its reasoning process before providing a final answer.
+Some models, like Anthropic's Claude and DeepSeek, support thinking/reasoning capabilities that allow the model to show its reasoning process before providing a final answer.
 
 This is useful for reasoning tasks or understanding how the model arrived at its conclusion.
 
@@ -566,7 +566,23 @@ providers:
       showThinking: false # Exclude thinking content from output
 ```
 
+For DeepSeek models that support reasoning content:
+
+```yaml
+providers:
+  - id: openai:deepseek-reasoner
+    config:
+      showThinking: false # Exclude reasoning content from output
+```
+
 This is useful when you want better reasoning but don't want to expose the thinking process to your assertions.
+
+For all supported models, thinking content is formatted consistently as:
+
+```
+Thinking: <reasoning content>
+<final answer>
+```
 
 For more details on extended thinking capabilities, see the [Anthropic provider docs](/docs/providers/anthropic#extended-thinking) and [AWS Bedrock provider docs](/docs/providers/aws-bedrock#claude-models).
 

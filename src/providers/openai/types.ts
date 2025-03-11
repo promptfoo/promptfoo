@@ -26,6 +26,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   tools?: OpenAiTool[];
   tool_choice?: 'none' | 'auto' | 'required' | { type: 'function'; function?: { name: string } };
   tool_resources?: Record<string, any>;
+  showThinking?: boolean;
   response_format?:
     | {
         type: 'json_object';

@@ -1,4 +1,3 @@
-import dedent from 'dedent';
 import { OpenAiGenericProvider } from '.';
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt } from '../../envars';
@@ -259,16 +258,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       if (
         message.reasoning_content &&
         typeof message.reasoning_content === 'string' &&
-        typeof output === 'string'
+        typeof output === 'string' &&
+        (this.config.showThinking ?? true)
       ) {
-        output = dedent`
-          Chain of Thought:
-
-          ${message.reasoning_content}
-
-          Final Answer:
-
-          ${output}`;
+        output = `Thinking: ${message.reasoning_content}\n\n${output}`;
       }
       if (message.audio) {
         return {

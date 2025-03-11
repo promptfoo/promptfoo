@@ -1,4 +1,3 @@
-import dedent from 'dedent';
 import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 
@@ -252,17 +251,42 @@ describe('OpenAI Provider', () => {
       );
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
-      const expectedOutput = dedent`
-        Chain of Thought:
-
-        Let me compare 9.11 and 9.8:
-        9.11 > 9.8 because 11 > 8 in the decimal places.
-        Therefore, 9.11 is greater than 9.8.
-
-        Final Answer:
-
-        The final answer is 9.11 is greater than 9.8.`;
+      const expectedOutput = `Thinking: Let me compare 9.11 and 9.8:
+9.11 > 9.8 because 11 > 8 in the decimal places.
+Therefore, 9.11 is greater than 9.8.\n\nThe final answer is 9.11 is greater than 9.8.`;
       expect(result.output).toBe(expectedOutput);
+      expect(result.tokenUsage).toEqual({ total: 20, prompt: 10, completion: 10 });
+    });
+
+    it('should hide reasoning content when showThinking is false', async () => {
+      const mockResponse = {
+        data: {
+          choices: [
+            {
+              message: {
+                content: 'The final answer is 9.11 is greater than 9.8.',
+                reasoning_content:
+                  'Let me compare 9.11 and 9.8:\n9.11 > 9.8 because 11 > 8 in the decimal places.\nTherefore, 9.11 is greater than 9.8.',
+              },
+            },
+          ],
+          usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('deepseek-reasoner', {
+        config: { showThinking: false },
+      });
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: '9.11 and 9.8, which is greater?' }]),
+      );
+
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe('The final answer is 9.11 is greater than 9.8.');
       expect(result.tokenUsage).toEqual({ total: 20, prompt: 10, completion: 10 });
     });
 
@@ -314,16 +338,9 @@ describe('OpenAI Provider', () => {
         JSON.stringify([{ role: 'user', content: '9.11 and 9.8, which is greater?' }]),
       );
 
-      const expectedOutput1 = dedent`
-        Chain of Thought:
-
-        Let me compare 9.11 and 9.8:
-        9.11 > 9.8 because 11 > 8 in the decimal places.
-        Therefore, 9.11 is greater than 9.8.
-
-        Final Answer:
-
-        The final answer is 9.11 is greater than 9.8.`;
+      const expectedOutput1 = `Thinking: Let me compare 9.11 and 9.8:
+9.11 > 9.8 because 11 > 8 in the decimal places.
+Therefore, 9.11 is greater than 9.8.\n\nThe final answer is 9.11 is greater than 9.8.`;
       expect(result1.output).toBe(expectedOutput1);
 
       // Second round (with conversation history excluding reasoning_content)
@@ -335,17 +352,10 @@ describe('OpenAI Provider', () => {
         ]),
       );
 
-      const expectedOutput2 = dedent`
-        Chain of Thought:
-
-        Let me count the occurrences of the letter "r" in "strawberry":
-        The word is spelled s-t-r-a-w-b-e-r-r-y.
-        I can see that the letter "r" appears twice: once in "str" and once in "rry".
-        Therefore, there are 2 occurrences of the letter "r" in "strawberry".
-
-        Final Answer:
-
-        There are 2 "r"s in the word "strawberry".`;
+      const expectedOutput2 = `Thinking: Let me count the occurrences of the letter "r" in "strawberry":
+The word is spelled s-t-r-a-w-b-e-r-r-y.
+I can see that the letter "r" appears twice: once in "str" and once in "rry".
+Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere are 2 "r"s in the word "strawberry".`;
       expect(result2.output).toBe(expectedOutput2);
       expect(mockFetchWithCache).toHaveBeenCalledTimes(2);
     });
