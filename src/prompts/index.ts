@@ -165,7 +165,8 @@ export async function processPrompt(
   if (extension && ['.yml', '.yaml'].includes(extension)) {
     return processYamlFile(filePath, prompt);
   }
-  return [];
+  logger.debug(`Prompt ${prompt.raw} does not have a known extension, loading as text.`);
+  return processTxtFile(filePath, prompt);
 }
 
 /**
