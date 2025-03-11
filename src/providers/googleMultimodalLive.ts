@@ -150,6 +150,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
       }, this.config.timeoutMs || 10000);
 
       let response_text_total = '';
+      const function_calls_total: string[] = [];
 
       ws.onmessage = async (event) => {
         logger.debug(`Received WebSocket response: ${event.data}`);
@@ -168,6 +169,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
           }
 
           const responseText = await new Response(responseData).text();
+          console.log(responseText);
           const response = JSON.parse(responseText);
 
           // Handle setup complete response
@@ -190,12 +192,28 @@ export class GoogleMMLiveProvider implements ApiProvider {
             response_text_total =
               response_text_total + response.serverContent.modelTurn.parts[0].text;
           } else if (response.toolCall?.functionCalls) {
-            resolve({ output: JSON.stringify(response) });
-            ws.close();
-          } else if (response.serverContent?.turnComplete) {
-            if (response_text_total) {
-              resolve({ output: response_text_total });
+            const functionResponses: any[] = [];
+            for (const functionCall of response.toolCall.functionCalls) {
+              function_calls_total.push(functionCall);
+              functionResponses.push({
+                id: functionCall.id,
+                name: functionCall.name,
+                response: {},
+              });
             }
+            const toolMessage = {
+              tool_response: {
+                function_responses: functionResponses,
+              },
+            };
+            ws.send(JSON.stringify(toolMessage));
+          } else if (response.serverContent?.turnComplete) {
+            resolve({
+              output: JSON.stringify({
+                text: response_text_total,
+                toolCall: { functionCalls: function_calls_total },
+              }),
+            });
             ws.close();
           }
         } catch (err) {

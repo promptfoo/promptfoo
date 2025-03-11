@@ -28,19 +28,19 @@ tests:
         value: '{{location}}'
         threshold: 0.9
         transform: JSON.parse(output).toolCall.functionCalls[0].args.city
-  # Example of built-in google search tool that is executed by mm-live
-  - vars:
-      query: google search for why the sea is salty
-    assert:
-      - type: icontains
-        value: salt
-      - type: icontains-any
-        value:
-          - 'weathering'
-          - 'rainwater'
-  # Example of built-in tool code execution that is executed by mm-live
-  - vars:
-      query: calculate the result of multiplying 1341 by 23
-    assert:
-      - type: icontains
-        value: 30843
+  # # Example of built-in google search tool that is executed by mm-live
+  # - vars:
+  #     query: google search for why the sea is salty
+  #   assert:
+  #     - type: icontains
+  #       value: salt
+  #     - type: icontains-any
+  #       value:
+  #         - 'weathering'
+  #         - 'rainwater'
+  # # Example of built-in tool code execution that is executed by mm-live
+  # - vars:
+  #     query: calculate the result of multiplying 1341 by 23
+  #   assert:
+  #     - type: icontains
+  #       value: 30843

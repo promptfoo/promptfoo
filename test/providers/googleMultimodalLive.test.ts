@@ -73,7 +73,9 @@ describe('GoogleMMLiveProvider', () => {
     });
 
     const response = await provider.callApi('test prompt');
-    expect(response).toEqual({ output: 'test response' });
+    expect(response).toEqual({
+      output: JSON.stringify({ text: 'test response', toolCall: { functionCalls: [] } }),
+    });
   });
 
   it('should send message and handle function call response', async () => {
@@ -118,14 +120,56 @@ describe('GoogleMMLiveProvider', () => {
             }),
           } as WebSocket.MessageEvent);
         }, 10);
-      }, 30);
+        setTimeout(() => {
+          mockWs.onmessage?.({
+            data: JSON.stringify({
+              serverContent: {
+                modelTurn: {
+                  parts: [
+                    {
+                      codeExecutionResult: {
+                        outcome: 'OUTCOME_OK',
+                        output: '{}\n',
+                      },
+                    },
+                  ],
+                },
+              },
+            }),
+          } as WebSocket.MessageEvent);
+        }, 10);
+        setTimeout(() => {
+          mockWs.onmessage?.({
+            data: JSON.stringify({
+              serverContent: {
+                modelTurn: { parts: [{ text: 'I was not able to retrieve weather information.' }] },
+              },
+            }),
+          } as WebSocket.MessageEvent);
+        }, 10);
+        setTimeout(() => {
+          mockWs.onmessage?.({
+            data: JSON.stringify({ serverContent: { turnComplete: true } }),
+          } as WebSocket.MessageEvent);
+        }, 10);
+      }, 60);
       return mockWs;
     });
 
     const response = await provider.callApi('test prompt');
     expect(response).toEqual({
-      output:
-        '{"toolCall":{"functionCalls":[{"name":"get_weather","args":{"city":"San Francisco"},"id":"function-call-14336847574026984983"}]}}',
+      output: JSON.stringify({
+        text: 'I was not able to retrieve weather information.',
+        toolCall: {
+          functionCalls: [
+            {
+              name: 'get_weather',
+              args: { city: 'San Francisco' },
+              id: 'function-call-14336847574026984983',
+            },
+          ],
+        },
+      }),
     });
   });
 
@@ -229,8 +273,10 @@ describe('GoogleMMLiveProvider', () => {
 
     const response = await provider.callApi('test prompt');
     expect(response).toEqual({
-      output:
-        'The sea is salty primarily due to the erosion of rocks on land. Rainwater, which is slightly acidic due to dissolved carbon dioxide, erodes rocks and carries dissolved minerals and salts into rivers.',
+      output: JSON.stringify({
+        text: 'The sea is salty primarily due to the erosion of rocks on land. Rainwater, which is slightly acidic due to dissolved carbon dioxide, erodes rocks and carries dissolved minerals and salts into rivers.',
+        toolCall: { functionCalls: [] },
+      }),
     });
   });
 
@@ -298,7 +344,12 @@ describe('GoogleMMLiveProvider', () => {
     });
 
     const response = await provider.callApi('\n');
-    expect(response).toEqual({ output: '\nThe result of multiplying 1341 by 23 is 30843.\n' });
+    expect(response).toEqual({
+      output: JSON.stringify({
+        text: '\nThe result of multiplying 1341 by 23 is 30843.\n',
+        toolCall: { functionCalls: [] },
+      }),
+    });
   });
 
   it('should handle WebSocket errors', async () => {
