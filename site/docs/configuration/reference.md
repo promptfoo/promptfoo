@@ -230,6 +230,7 @@ ProviderResponse is an object that represents the response from a provider. It i
 interface ProviderResponse {
   error?: string;
   output?: string | object;
+  reasoning?: string | object; // Contains model reasoning/thinking process information
   tokenUsage?: Partial<{
     total: number;
     prompt: number;
@@ -241,6 +242,13 @@ interface ProviderResponse {
   logProbs?: number[]; // required for perplexity assertion
   isRefusal?: boolean; // the provider has explicitly refused to generate a response
   guardrails?: GuardrailResponse;
+  audio?: {
+    id?: string;
+    expiresAt?: number;
+    data?: string; // base64 encoded audio data
+    transcript?: string;
+    format?: string;
+  };
 }
 ```
 
@@ -377,137 +385,6 @@ interface EvaluateOptions {
 
 EvaluateTable is an object that represents the results of the evaluation in a tabular format. It includes a header with the prompts and variables, and a body with the outputs and variables for each test case.
 
-```typescript
-interface EvaluateTable {
-  head: {
-    prompts: Prompt[];
-    vars: string[];
-  };
-  body: {
-    outputs: EvaluateTableOutput[];
-    vars: string[];
-  }[];
-}
 ```
 
-### EvaluateTableOutput
-
-EvaluateTableOutput is an object that represents the output of a single evaluation in a tabular format. It includes the pass/fail result, score, output text, prompt, latency, token usage, and grading result.
-
-```typescript
-interface EvaluateTableOutput {
-  pass: boolean;
-  score: number;
-  text: string;
-  prompt: string;
-  latencyMs: number;
-  tokenUsage?: Partial<TokenUsage>;
-  gradingResult?: GradingResult;
-}
-```
-
-### EvaluateSummary
-
-EvaluateSummary is an object that represents a summary of the evaluation results. It includes the version of the evaluator, the results of each evaluation, a table of the results, and statistics about the evaluation.
-The latest version is 3. It removed the table and added in a new prompts property.
-
-```typescript
-interface EvaluateSummaryV3 {
-  version: 3;
-  timestamp: string; // ISO 8601 datetime
-  results: EvaluateResult[];
-  prompts: CompletedPrompt[];
-  stats: EvaluateStats;
-}
-```
-
-```typescript
-interface EvaluateSummaryV2 {
-  version: 2;
-  timestamp: string; // ISO 8601 datetime
-  results: EvaluateResult[];
-  table: EvaluateTable;
-  stats: EvaluateStats;
-}
-```
-
-### EvaluateStats
-
-EvaluateStats is an object that includes statistics about the evaluation. It includes the number of successful and failed tests, and the total token usage.
-
-```typescript
-interface EvaluateStats {
-  successes: number;
-  failures: number;
-  tokenUsage: Required<TokenUsage>;
-}
-```
-
-### EvaluateResult
-
-EvaluateResult roughly corresponds to a single "cell" in the grid comparison view. It includes information on the provider, prompt, and other inputs, as well as the outputs.
-
-```typescript
-interface EvaluateResult {
-  provider: Pick<ProviderOptions, 'id'>;
-  prompt: Prompt;
-  vars: Record<string, string | object>;
-  response?: ProviderResponse;
-  error?: string;
-  success: boolean;
-  score: number;
-  latencyMs: number;
-  gradingResult?: GradingResult;
-}
-```
-
-### GradingResult
-
-GradingResult is an object that represents the result of grading a test case. It includes whether the test case passed, the score, the reason for the result, the tokens used, and the results of any component assertions.
-
-```typescript
-interface GradingResult {
-  pass: boolean;                        # did test pass?
-  score: number;                        # score between 0 and 1
-  reason: string;                       # plaintext reason for outcome
-  tokensUsed?: TokenUsage;              # tokens consumed by the test
-  componentResults?: GradingResult[];   # if this is a composite score, it can have nested results
-  assertion: Assertion | null;          # source of assertion
-  latencyMs?: number;                   # latency of LLM call
-}
-```
-
-### CompletedPrompt
-
-CompletedPrompt is an object that represents a prompt that has been evaluated. It includes the raw prompt, the provider, metrics, and other information.
-
-```typescript
-interface CompletedPrompt {
-  id?: string;
-  raw: string;
-  label: string;
-  function?: PromptFunction;
-
-  // These config options are merged into the provider config.
-  config?: any;
-  provider: string;
-  metrics?: {
-    score: number;
-    testPassCount: number;
-    testFailCount: number;
-    assertPassCount: number;
-    assertFailCount: number;
-    totalLatencyMs: number;
-    tokenUsage: TokenUsage;
-    namedScores: Record<string, number>;
-    namedScoresCount: Record<string, number>;
-    redteam?: {
-      pluginPassCount: Record<string, number>;
-      pluginFailCount: Record<string, number>;
-      strategyPassCount: Record<string, number>;
-      strategyFailCount: Record<string, number>;
-    };
-    cost: number;
-  };
-}
 ```

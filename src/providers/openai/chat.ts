@@ -278,8 +278,15 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         };
       }
 
+      // Handle DeepSeek reasoning model's reasoning_content by storing it in reasoning field
+      const reasoning =
+        message.reasoning_content && typeof message.reasoning_content === 'string'
+          ? message.reasoning_content
+          : undefined;
+
       return {
         output,
+        reasoning,
         tokenUsage: getTokenUsage(data, cached),
         cached,
         logProbs,

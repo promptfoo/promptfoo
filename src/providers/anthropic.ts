@@ -110,9 +110,9 @@ export function outputFromMessage(message: Anthropic.Messages.Message) {
     if (!block || typeof block !== 'object') {
       continue;
     }
-    
+
     const blockType = 'type' in block ? block.type : null;
-    
+
     if (blockType === 'text') {
       output += (block as Anthropic.Messages.TextBlock).text;
     } else if (blockType === 'thinking') {

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ProviderEnvOverridesSchema } from '../types/env';
+import { GuardrailResponseSchema } from '../types/guardrails';
 import type {
   ApiProvider,
   CallApiFunction,
@@ -80,8 +81,22 @@ export const ProviderResponseSchema = z.object({
     })
     .catchall(z.any())
     .optional(),
+  raw: z.union([z.string(), z.any()]).optional(),
   output: z.union([z.string(), z.any()]).optional(),
+  reasoning: z.union([z.string(), z.any()]).optional(),
   tokenUsage: TokenUsageSchema.optional(),
+  isRefusal: z.boolean().optional(),
+  sessionId: z.string().optional(),
+  guardrails: GuardrailResponseSchema.optional(),
+  audio: z
+    .object({
+      id: z.string().optional(),
+      expiresAt: z.number().optional(),
+      data: z.string().optional(),
+      transcript: z.string().optional(),
+      format: z.string().optional(),
+    })
+    .optional(),
 });
 
 export const ProviderEmbeddingResponseSchema = z.object({

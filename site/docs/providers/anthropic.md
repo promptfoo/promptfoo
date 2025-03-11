@@ -221,6 +221,7 @@ See [Anthropic's Citations Guide](https://docs.anthropic.com/en/docs/build-with-
 Claude models support an extended thinking capability that lets the model "think aloud" before providing a response. This can lead to more thorough and accurate answers for complex reasoning tasks.
 
 When you enable extended thinking, Claude uses separate parts of its context window for:
+
 1. Thinking: The model reasons through the problem step-by-step
 2. Responding: The model gives its final answer
 

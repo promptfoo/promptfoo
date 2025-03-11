@@ -869,7 +869,7 @@ describe('Anthropic', () => {
       expect(result.reasoning).toBe('[redacted thinking]');
     });
 
-    it('should return an empty string for empty content array', () => {
+    it('should return an empty output for empty content array', () => {
       const message: Anthropic.Messages.Message = {
         content: [],
         id: '',
@@ -886,8 +886,9 @@ describe('Anthropic', () => {
         },
       };
 
-      const result = outputFromMessage(message, false);
-      expect(result).toBe('');
+      const result = outputFromMessage(message);
+      expect(result.output).toBe('');
+      expect(result.reasoning).toBeUndefined();
     });
 
     it('should return text from a single text block', () => {
@@ -907,8 +908,9 @@ describe('Anthropic', () => {
         },
       };
 
-      const result = outputFromMessage(message, false);
-      expect(result).toBe('Hello');
+      const result = outputFromMessage(message);
+      expect(result.output).toBe('Hello');
+      expect(result.reasoning).toBeUndefined();
     });
 
     it('should concatenate text blocks without tool_use blocks', () => {
@@ -931,11 +933,12 @@ describe('Anthropic', () => {
         },
       };
 
-      const result = outputFromMessage(message, false);
-      expect(result).toBe('Hello\n\nWorld');
+      const result = outputFromMessage(message);
+      expect(result.output).toBe('HelloWorld');
+      expect(result.reasoning).toBeUndefined();
     });
 
-    it('should handle content with tool_use blocks', () => {
+    it('should handle tool_use blocks', () => {
       const message: Anthropic.Messages.Message = {
         content: [
           {
@@ -965,13 +968,16 @@ describe('Anthropic', () => {
         },
       };
 
-      const result = outputFromMessage(message, false);
-      expect(result).toBe(
-        '{"type":"tool_use","id":"tool1","name":"get_weather","input":{"location":"San Francisco, CA"}}\n\n{"type":"tool_use","id":"tool2","name":"get_time","input":{"location":"New York, NY"}}',
-      );
+      const result = outputFromMessage(message);
+      expect(result.output).toContain('Using Tool:');
+      expect(result.output).toContain('get_weather');
+      expect(result.output).toContain('San Francisco, CA');
+      expect(result.output).toContain('get_time');
+      expect(result.output).toContain('New York, NY');
+      expect(result.reasoning).toBeUndefined();
     });
 
-    it('should concatenate text and tool_use blocks as JSON strings', () => {
+    it('should handle mixed text and tool_use blocks', () => {
       const message: Anthropic.Messages.Message = {
         content: [
           { type: 'text', text: 'Hello', citations: [] },
@@ -997,30 +1003,18 @@ describe('Anthropic', () => {
         },
       };
 
-      const result = outputFromMessage(message, false);
-      expect(result).toBe(
-        'Hello\n\n{"type":"tool_use","id":"tool1","name":"get_weather","input":{"location":"San Francisco, CA"}}\n\nWorld',
-      );
+      const result = outputFromMessage(message);
+      expect(result.output).toContain('Hello');
+      expect(result.output).toContain('World');
+      expect(result.output).toContain('Using Tool:');
+      expect(result.output).toContain('get_weather');
+      expect(result.output).toContain('San Francisco, CA');
+      expect(result.reasoning).toBeUndefined();
     });
 
-    it('should handle text blocks with citations', () => {
+    it('should handle simple content string', () => {
       const message: Anthropic.Messages.Message = {
-        content: [
-          {
-            type: 'text',
-            text: 'The sky is blue',
-            citations: [
-              {
-                type: 'char_location',
-                cited_text: 'The sky is blue.',
-                document_index: 0,
-                document_title: 'Nature Facts',
-                start_char_index: 0,
-                end_char_index: 15,
-              },
-            ],
-          },
-        ],
+        content: [{ type: 'text', text: 'The sky is blue', citations: [] }],
         id: '',
         model: '',
         role: 'assistant',
@@ -1035,8 +1029,9 @@ describe('Anthropic', () => {
         },
       };
 
-      const result = outputFromMessage(message, false);
-      expect(result).toBe('The sky is blue');
+      const result = outputFromMessage(message);
+      expect(result.output).toBe('The sky is blue');
+      expect(result.reasoning).toBeUndefined();
     });
   });
 

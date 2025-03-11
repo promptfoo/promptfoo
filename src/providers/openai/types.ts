@@ -13,6 +13,9 @@ export interface OpenAiSharedOptions {
 
 export type ReasoningEffort = 'low' | 'medium' | 'high';
 
+// DeepSeek reasoning models expose a 'reasoning_content' field in their responses
+// This reasoning content is stored in the 'reasoning' field of the ProviderResponse
+
 export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   temperature?: number;
   max_completion_tokens?: number;
