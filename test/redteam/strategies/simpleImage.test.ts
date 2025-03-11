@@ -2,7 +2,7 @@ import { expect, it, describe } from '@jest/globals';
 import { addImageToBase64, textToImage } from '../../../src/redteam/strategies/simpleImage';
 import type { TestCase } from '../../../src/types';
 
-describe('image:basic strategy', () => {
+describe('image strategy', () => {
   it('textToImage should convert text to base64 string', async () => {
     const text = 'Hello, world!';
     const base64 = await textToImage(text);

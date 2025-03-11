@@ -1,5 +1,4 @@
 import { SingleBar, Presets } from 'cli-progress';
-import sharp from 'sharp';
 import logger from '../../logger';
 import type { TestCase } from '../../types';
 import invariant from '../../util/invariant';
@@ -12,6 +11,20 @@ function escapeXml(unsafe: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
+}
+
+/**
+ * Dynamically imports the sharp library
+ * @returns The sharp module or null if not available
+ */
+async function importSharp() {
+  try {
+    // Dynamic import of sharp
+    return await import('sharp');
+  } catch (error) {
+    logger.warn(`Sharp library not available: ${error}`);
+    return null;
+  }
 }
 
 /**
@@ -29,8 +42,15 @@ export async function textToImage(text: string): Promise<string> {
       </svg>
     `;
 
+    // Dynamically import sharp
+    const sharpModule = await importSharp();
+
+    if (!sharpModule) {
+      throw new Error(`Please install sharp to use image-based strategies: npm install sharp`);
+    }
+
     // Convert SVG to PNG using sharp
-    const pngBuffer = await sharp(Buffer.from(svgImage)).png().toBuffer();
+    const pngBuffer = await sharpModule.default(Buffer.from(svgImage)).png().toBuffer();
 
     // Convert to base64
     return pngBuffer.toString('base64');

@@ -103,7 +103,8 @@
     "pdf-parse": "^1.1.1",
     "playwright": "^1.47.2",
     "playwright-extra": "^4.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2"
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "sharp": "^0.33.5"
   },
   "devDependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.758.0",
@@ -149,7 +150,6 @@
     "nock": "^13.5.6",
     "nodemon": "^3.1.9",
     "prettier": "^3.5.2",
-    "sharp": "^0.33.5",
     "shx": "^0.3.4",
     "supertest": "^7.0.0",
     "ts-node": "^10.9.2",
