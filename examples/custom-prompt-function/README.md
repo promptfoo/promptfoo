@@ -24,10 +24,11 @@ npx promptfoo@latest view
 ### Supported Prompt Formats
 
 - Raw text prompts
-- File-based prompts (txt, yaml, json, jsonl, md)
+- File-based prompts (txt, yaml, json, jsonl, md, j2)
 - Glob patterns for multiple files
 - JSON chat formats
 - Markdown formatted prompts
+- Jinja2 template files
 
 ### Prompt Functions
 
@@ -40,6 +41,7 @@ npx promptfoo@latest view
 ## Example Structure
 
 - `prompt.txt`, `prompt.yaml`, etc. - Various prompt file formats
+- `prompt.j2` - Jinja2 template format
 - `prompt_chat.js/ts` - Chat format examples
 - `prompt_multiple.js` - Multiple functions in one file
 - `prompt_esm.mjs` - ESM module format
