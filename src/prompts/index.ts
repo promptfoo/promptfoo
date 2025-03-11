@@ -14,6 +14,7 @@ import { isJavascriptFile } from '../util/file';
 import invariant from '../util/invariant';
 import { PromptSchema } from '../validators/prompts';
 import { processJsFile } from './processors/javascript';
+import { processJinjaFile } from './processors/jinja';
 import { processJsonFile } from './processors/json';
 import { processJsonlFile } from './processors/jsonl';
 import { processMarkdownFile } from './processors/markdown';
@@ -155,6 +156,9 @@ export async function processPrompt(
   }
   if (extension === '.md') {
     return processMarkdownFile(filePath, prompt);
+  }
+  if (extension === '.j2') {
+    return processJinjaFile(filePath, prompt);
   }
   if (extension === '.py') {
     return processPythonFile(filePath, prompt, functionName);

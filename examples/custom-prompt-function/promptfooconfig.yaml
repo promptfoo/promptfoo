@@ -26,6 +26,9 @@ prompts:
   - id: file://prompt.md
     label: markdown prompt
 
+  - id: file://prompt.j2
+    label: jinja2 template
+
   - id: file://prompt.jsonl
     label: prompt_jsonl
   - file://prompt.jsonl
