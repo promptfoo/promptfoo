@@ -198,6 +198,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
               functionResponses.push({
                 id: functionCall.id,
                 name: functionCall.name,
+                // TODO: add mocking of function response here
                 response: {},
               });
             }
