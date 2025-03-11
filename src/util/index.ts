@@ -1053,18 +1053,15 @@ export function parsePathOrGlob(
     path.isAbsolute(pathWithoutFunction) ? pathWithoutFunction : path.resolve(basePath, pathWithoutFunction),
   );
   
-  // Always use extension with dot for backward compatibility
   let extension: string | undefined;
   if (isPathPattern) {
     extension = undefined;
   } else {
-    // path.parse().ext already includes the leading period
     extension = path.parse(pathWithoutFunction).ext || '';
   }
   
   const resultPath = safeFilename.startsWith(basePath) ? safeFilename : path.join(basePath, safeFilename);
   
-  // Create the return object with all required properties
   return {
     extension,
     filePath: resultPath,
@@ -1110,7 +1107,6 @@ export async function maybeLoadFromExternalFile(
     throw new Error(`File does not exist: ${finalPath}`);
   }
 
-  // For JS and Python files, we need to parse the path to get function names
   const { filePath: pathWithoutFunction, functionName, extension } = parsePathOrGlob(cliState.basePath || '', renderedFilePath);
   if (isJavascriptFile(pathWithoutFunction)) {
     const mod = await importModule(pathWithoutFunction, functionName ?? defaultFunctionName);
