@@ -21,7 +21,6 @@ describe('CustomPlugin', () => {
       grader: 'Grade the response based on {{ purpose }}',
     });
 
-    // Use static factory method instead of constructor
     plugin = await CustomPlugin.create(
       mockProvider,
       'test-purpose',
