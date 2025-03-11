@@ -169,7 +169,6 @@ export class GoogleMMLiveProvider implements ApiProvider {
           }
 
           const responseText = await new Response(responseData).text();
-          console.log(responseText);
           const response = JSON.parse(responseText);
 
           // Handle setup complete response
