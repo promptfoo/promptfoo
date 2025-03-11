@@ -3,20 +3,23 @@ import logger from '../../logger';
 import type { TestCase } from '../../types';
 import invariant from '../../util/invariant';
 
-declare module 'node-gtts' {
-  export default function gtts(lang: string): {
-    stream(text: string): NodeJS.ReadableStream;
-  };
-}
+// Types for the node-gtts module
+type GttsInstance = {
+  stream(text: string): NodeJS.ReadableStream;
+};
+
+type GttsModule = {
+  default(lang: string): GttsInstance;
+};
 
 /**
  * Dynamically imports the node-gtts library
  * @returns The gTTS module or null if not available
  */
-async function importGtts() {
+async function importGtts(): Promise<GttsModule | null> {
   try {
     // Dynamic import of gtts
-    return await import('node-gtts');
+    return (await import('node-gtts')) as GttsModule;
   } catch (error) {
     logger.warn(`node-gtts library not available: ${error}`);
     return null;
@@ -109,7 +112,6 @@ export async function addAudioToBase64(
       },
       metadata: {
         ...testCase.metadata,
-        ...(testCase.metadata?.harmCategory && { harmCategory: testCase.metadata.harmCategory }),
       },
     });
 

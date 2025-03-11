@@ -107,7 +107,6 @@ export async function addImageToBase64(
       },
       metadata: {
         ...testCase.metadata,
-        ...(testCase.metadata?.harmCategory && { harmCategory: testCase.metadata.harmCategory }),
       },
     });
 
