@@ -120,17 +120,6 @@ Prompts can be JSON too. Use this to configure multi-shot prompt formats:
 ]
 ```
 
-### Prompts as Jinja2 Templates
-
-Jinja2 template files (`.j2`) are supported and processed similarly to Markdown files. Jinja2 uses syntax that's compatible with Nunjucks (which promptfoo uses for templating), including the same variable interpolation with `{{ variable }}` syntax.
-
-```jinja title="prompt.j2"
-You are a helpful assistant for Promptfoo.
-Please answer the following question about {{ topic }}: {{ question }}
-```
-
-Like Markdown files, each `.j2` file is treated as a single prompt - the prompt separator (`---`) is not used to split the file into multiple prompts.
-
 ### Multiple prompts in a single text file
 
 If you have only one text file, you can include multiple prompts in the file, separated by the separator `---`. If you have multiple files, each prompt should be in a separate file.
@@ -156,6 +145,17 @@ You are a helpful assistant for Promptfoo. Please answer the following question:
 ```
 
 Note that only one prompt per markdown file is supported.
+
+### Prompts as Jinja2 Templates
+
+Jinja2 template files (`.j2`) are supported. Like Markdown files, each `.j2` file is treated as a single prompt.
+
+Jinja2 uses syntax that's compatible with Nunjucks (which promptfoo uses for templating), including the same variable interpolation with `{{ variable }}` syntax.
+
+```jinja title="prompt.j2"
+You are a helpful assistant for Promptfoo.
+Please answer the following question about {{ topic }}: {{ question }}
+```
 
 ### Different prompts per model
 
