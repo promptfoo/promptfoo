@@ -546,7 +546,7 @@ promptfoo supports tool use and function calling with OpenAI and Anthropic model
 
 ## Thinking Output
 
-Some models, like Anthropic's Claude, support an extended thinking capability that allows the model to show its reasoning process before providing a final answer.
+Some models, like Anthropic's Claude and DeepSeek, support thinking/reasoning capabilities that allow the model to show its reasoning process before providing a final answer.
 
 This is useful for reasoning tasks or understanding how the model arrived at its conclusion.
 
