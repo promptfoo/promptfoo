@@ -550,9 +550,9 @@ Some models, like Anthropic's Claude, support an extended thinking capability th
 
 This is useful for reasoning tasks or understanding how the model arrived at its conclusion.
 
-### Controlling Thinking Output
+### How Thinking Output Works
 
-By default, thinking content is included in the response. You can hide it by setting `showThinking` to `false`.
+When using models with thinking capability, the thinking content is captured in a separate `reasoning` field in the provider response, while the final answer is in the `output` field.
 
 For example, for Claude:
 
@@ -563,10 +563,15 @@ providers:
       thinking:
         type: 'enabled'
         budget_tokens: 16000
-      showThinking: false # Exclude thinking content from output
 ```
 
-This is useful when you want better reasoning but don't want to expose the thinking process to your assertions.
+This separation allows you to:
+
+1. Access the model's reasoning process independently from its final output
+2. Create assertions that specifically target either the output or reasoning
+3. Analyze the model's thought process to better understand its decision-making
+
+This is particularly useful for complex reasoning tasks or when you want to evaluate both the final answer and the path the model took to reach it.
 
 For more details on extended thinking capabilities, see the [Anthropic provider docs](/docs/providers/anthropic#extended-thinking) and [AWS Bedrock provider docs](/docs/providers/aws-bedrock#claude-models).
 

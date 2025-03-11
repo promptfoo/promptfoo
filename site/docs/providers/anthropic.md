@@ -218,122 +218,34 @@ See [Anthropic's Citations Guide](https://docs.anthropic.com/en/docs/build-with-
 
 ### Extended Thinking
 
-Claude supports an extended thinking capability that allows you to see the model's internal reasoning process before it provides the final answer. This can be configured using the `thinking` parameter:
+Claude models support an extended thinking capability that lets the model "think aloud" before providing a response. This can lead to more thorough and accurate answers for complex reasoning tasks.
 
-```yaml title="promptfooconfig.yaml"
-providers:
-  - id: anthropic:messages:claude-3-7-sonnet-20250219
-    config:
-      max_tokens: 20000
-      thinking:
-        type: 'enabled'
-        budget_tokens: 16000 # Must be ≥1024 and less than max_tokens
-```
+When you enable extended thinking, Claude uses separate parts of its context window for:
+1. Thinking: The model reasons through the problem step-by-step
+2. Responding: The model gives its final answer
 
-The thinking configuration has two possible values:
+This approach helps with tasks requiring careful analysis and multi-step reasoning.
 
-1. Enabled thinking:
+#### Configuring Extended Thinking
 
-```yaml
-thinking:
-  type: 'enabled'
-  budget_tokens: number # Must be ≥1024 and less than max_tokens
-```
-
-2. Disabled thinking:
-
-```yaml
-thinking:
-  type: 'disabled'
-```
-
-When thinking is enabled:
-
-- Responses will include `thinking` content blocks showing Claude's reasoning process
-- Requires a minimum budget of 1,024 tokens
-- The budget_tokens value must be less than the max_tokens parameter
-- The tokens used for thinking count towards your max_tokens limit
-- A specialized 28 or 29 token system prompt is automatically included
-- Previous turn thinking blocks are ignored and not counted as input tokens
-- Thinking is not compatible with temperature, top_p, or top_k modifications
-
-Example response with thinking enabled:
-
-```json
-{
-  "content": [
-    {
-      "type": "thinking",
-      "thinking": "Let me analyze this step by step...",
-      "signature": "WaUjzkypQ2mUEVM36O2TxuC06KN8xyfbJwyem2dw3URve/op91XWHOEBLLqIOMfFG/UvLEczmEsUjavL...."
-    },
-    {
-      "type": "text",
-      "text": "Based on my analysis, here is the answer..."
-    }
-  ]
-}
-```
-
-#### Controlling Thinking Output
-
-By default, thinking content is included in the response output. You can control this behavior using the `showThinking` parameter:
-
-```yaml title="promptfooconfig.yaml"
-providers:
-  - id: anthropic:messages:claude-3-7-sonnet-20250219
-    config:
-      thinking:
-        type: 'enabled'
-        budget_tokens: 16000
-      showThinking: false # Exclude thinking content from the output
-```
-
-When `showThinking` is set to `false`, the thinking content will be excluded from the output, and only the final response will be returned. This is useful when you want to use thinking for better reasoning but don't want to expose the thinking process to end users.
-
-#### Redacted Thinking
-
-Sometimes Claude's internal reasoning may be flagged by safety systems. When this occurs, the thinking block will be encrypted and returned as a `redacted_thinking` block:
-
-```json
-{
-  "content": [
-    {
-      "type": "redacted_thinking",
-      "data": "EmwKAhgBEgy3va3pzix/LafPsn4aDFIT2Xlxh0L5L8rLVyIwxtE3rAFBa8cr3qpP..."
-    },
-    {
-      "type": "text",
-      "text": "Based on my analysis..."
-    }
-  ]
-}
-```
-
-Redacted thinking blocks are automatically decrypted when passed back to the API, allowing Claude to maintain context without compromising safety guardrails.
-
-#### Extended Output with Thinking (Beta)
-
-Claude 3.7 Sonnet supports up to 128K output tokens when using the `output-128k-2025-02-19` beta feature. To enable this:
+To enable extended thinking, add a `thinking` parameter to your provider config:
 
 ```yaml
 providers:
   - id: anthropic:messages:claude-3-7-sonnet-20250219
     config:
-      max_tokens: 128000
       thinking:
         type: 'enabled'
-        budget_tokens: 32000
-      beta: ['output-128k-2025-02-19']
+        budget_tokens: 16000 # Must be ≥1024
 ```
 
-When using extended output:
+The thinking content will be available in the `reasoning` field of the provider response, while the final answer will be in the `output` field. This separation allows you to:
 
-- Streaming is required when max_tokens is greater than 21,333
-- For thinking budgets above 32K, batch processing is recommended
-- The model may not use the entire allocated thinking budget
+1. Access the model's reasoning process separately from its final output
+2. Create assertions that specifically target either the output or reasoning
+3. Analyze the model's thought process to better understand its decision-making
 
-See [Anthropic's Extended Thinking Guide](https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking) for more details on requirements and best practices.
+This is particularly useful for complex reasoning tasks or when you want to evaluate both the final answer and the path the model took to reach it.
 
 ## Model-Graded Tests
 
@@ -407,3 +319,21 @@ We provide several example implementations demonstrating Claude's capabilities:
 - [Google Vertex AI](https://github.com/promptfoo/promptfoo/tree/main/examples/google-vertex) - Using Claude through Google Vertex AI
 
 For more examples and general usage patterns, visit our [examples directory](https://github.com/promptfoo/promptfoo/tree/main/examples) on GitHub.
+
+Configuration options:
+
+| Parameter   | Default    | Description                                    |
+| ----------- | ---------- | ---------------------------------------------- |
+| apiKey      | -          | Anthropic API key                              |
+| apiBaseUrl  | -          | API base URL override                          |
+| extra_body  | -          | Additional body parameters to pass to the API  |
+| headers     | -          | Additional headers to pass to the API          |
+| model       | claude-2.1 | Model name                                     |
+| max_tokens  | 1024       | Maximum number of tokens to generate           |
+| thinking    | -          | Enable extended Claude thinking capability     |
+| tools       | -          | Tool definitions                               |
+| tool_choice | -          | Tool selection preference                      |
+| temperature | 0          | Temperature parameter for response randomness  |
+| top_p       | -          | Top-p sampling parameter                       |
+| top_k       | -          | Top-k sampling parameter                       |
+| beta        | -          | Beta features (e.g., 'output-128k-2025-02-19') |

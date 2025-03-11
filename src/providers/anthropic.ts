@@ -82,7 +82,6 @@ interface AnthropicMessageOptions {
   top_k?: number;
   top_p?: number;
   beta?: string[]; // For features like 'output-128k-2025-02-19'
-  showThinking?: boolean;
 }
 
 function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
@@ -101,34 +100,37 @@ function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   return {};
 }
 
-export function outputFromMessage(message: Anthropic.Messages.Message, showThinking: boolean) {
-  const hasToolUse = message.content.some((block) => block.type === 'tool_use');
-  const hasThinking = message.content.some(
-    (block) => block.type === 'thinking' || block.type === 'redacted_thinking',
-  );
+export function outputFromMessage(message: Anthropic.Messages.Message) {
+  let output = '';
+  let reasoning = '';
 
-  if (hasToolUse || hasThinking) {
-    return message.content
-      .map((block) => {
-        if (block.type === 'text') {
-          return block.text;
-        } else if (block.type === 'thinking' && showThinking) {
-          return `Thinking: ${block.thinking}\nSignature: ${block.signature}`;
-        } else if (block.type === 'redacted_thinking' && showThinking) {
-          return `Redacted Thinking: ${block.data}`;
-        } else if (block.type !== 'thinking' && block.type !== 'redacted_thinking') {
-          return JSON.stringify(block);
-        }
-        return '';
-      })
-      .filter((text) => text !== '')
-      .join('\n\n');
+  const blocksToProcess = Array.isArray(message.content) ? message.content : [];
+
+  for (const block of blocksToProcess) {
+    if (!block || typeof block !== 'object') {
+      continue;
+    }
+    
+    const blockType = 'type' in block ? block.type : null;
+    
+    if (blockType === 'text') {
+      output += (block as Anthropic.Messages.TextBlock).text;
+    } else if (blockType === 'thinking') {
+      reasoning += (block as Anthropic.Messages.ThinkingBlock).thinking;
+    } else if (blockType === 'redacted_thinking') {
+      reasoning += '[redacted thinking]';
+    } else if (blockType === 'tool_use') {
+      const toolContent = JSON.stringify((block as Anthropic.Messages.ToolUseBlock).input);
+      output += `\n\n[Using Tool: ${toolContent}]\n\n`;
+    } else if (blockType === 'image') {
+      output += `[Image]\n`;
+    }
   }
-  return message.content
-    .map((block) => {
-      return (block as Anthropic.Messages.TextBlock).text;
-    })
-    .join('\n\n');
+
+  return {
+    output: output.trim(),
+    reasoning: reasoning.trim() || undefined,
+  };
 }
 
 export function parseMessages(messages: string): {
@@ -317,15 +319,19 @@ export class AnthropicMessagesProvider implements ApiProvider {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
         try {
           const parsedCachedResponse = JSON.parse(cachedResponse) as Anthropic.Messages.Message;
+          const processed = outputFromMessage(parsedCachedResponse);
           return {
-            output: outputFromMessage(parsedCachedResponse, this.config.showThinking ?? true),
-            tokenUsage: getTokenUsage(parsedCachedResponse, true),
+            cached: true,
             cost: calculateAnthropicCost(
               this.modelName,
               this.config,
               parsedCachedResponse.usage?.input_tokens,
               parsedCachedResponse.usage?.output_tokens,
             ),
+            output: processed.output,
+            reasoning: processed.reasoning,
+            raw: parsedCachedResponse,
+            tokenUsage: getTokenUsage(parsedCachedResponse, true),
           };
         } catch {
           // Could be an old cache item, which was just the text content from TextBlock.
@@ -359,15 +365,20 @@ export class AnthropicMessagesProvider implements ApiProvider {
         };
       }
 
+      const processed = outputFromMessage(response);
+      const tokenUsage = getTokenUsage(response, false);
       return {
-        output: outputFromMessage(response, this.config.showThinking ?? true),
-        tokenUsage: getTokenUsage(response, false),
+        cached: false,
         cost: calculateAnthropicCost(
           this.modelName,
           this.config,
           response.usage?.input_tokens,
           response.usage?.output_tokens,
         ),
+        output: processed.output,
+        reasoning: processed.reasoning,
+        raw: response,
+        tokenUsage,
       };
     } catch (err) {
       logger.error(

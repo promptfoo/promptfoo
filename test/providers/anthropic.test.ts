@@ -788,6 +788,87 @@ describe('Anthropic', () => {
   });
 
   describe('outputFromMessage', () => {
+    it('should handle simple text messages', () => {
+      const message: Anthropic.Messages.Message = {
+        content: [{ type: 'text', text: 'The sky is blue', citations: [] }],
+        id: '',
+        model: '',
+        role: 'assistant',
+        stop_reason: null,
+        stop_sequence: null,
+        type: 'message',
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      };
+
+      const result = outputFromMessage(message);
+      expect(result.output).toBe('The sky is blue');
+      expect(result.reasoning).toBeUndefined();
+    });
+
+    it('should extract thinking blocks into reasoning field', () => {
+      const message: Anthropic.Messages.Message = {
+        content: [
+          { type: 'text', text: 'Hello', citations: [] },
+          {
+            type: 'thinking',
+            thinking: 'I need to consider the weather',
+            signature: 'abc123',
+          },
+          { type: 'text', text: 'World', citations: [] },
+        ],
+        id: '',
+        model: '',
+        role: 'assistant',
+        stop_reason: null,
+        stop_sequence: null,
+        type: 'message',
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      };
+
+      const result = outputFromMessage(message);
+      expect(result.output).toBe('Hello\n\nWorld');
+      expect(result.reasoning).toBe('I need to consider the weather');
+    });
+
+    it('should extract redacted_thinking blocks into reasoning field', () => {
+      const message: Anthropic.Messages.Message = {
+        content: [
+          { type: 'text', text: 'Hello', citations: [] },
+          {
+            type: 'redacted_thinking',
+            data: 'Some redacted thinking data',
+          },
+          { type: 'text', text: 'World', citations: [] },
+        ],
+        id: '',
+        model: '',
+        role: 'assistant',
+        stop_reason: null,
+        stop_sequence: null,
+        type: 'message',
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      };
+
+      const result = outputFromMessage(message);
+      expect(result.output).toBe('Hello\n\nWorld');
+      expect(result.reasoning).toBe('[redacted thinking]');
+    });
+
     it('should return an empty string for empty content array', () => {
       const message: Anthropic.Messages.Message = {
         content: [],
@@ -956,122 +1037,6 @@ describe('Anthropic', () => {
 
       const result = outputFromMessage(message, false);
       expect(result).toBe('The sky is blue');
-    });
-
-    it('should include thinking blocks when showThinking is true', () => {
-      const message: Anthropic.Messages.Message = {
-        content: [
-          { type: 'text', text: 'Hello', citations: [] },
-          {
-            type: 'thinking',
-            thinking: 'I need to consider the weather',
-            signature: 'abc123',
-          },
-          { type: 'text', text: 'World', citations: [] },
-        ],
-        id: '',
-        model: '',
-        role: 'assistant',
-        stop_reason: null,
-        stop_sequence: null,
-        type: 'message',
-        usage: {
-          input_tokens: 0,
-          output_tokens: 0,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
-        },
-      };
-
-      const result = outputFromMessage(message, true);
-      expect(result).toBe(
-        'Hello\n\nThinking: I need to consider the weather\nSignature: abc123\n\nWorld',
-      );
-    });
-
-    it('should exclude thinking blocks when showThinking is false', () => {
-      const message: Anthropic.Messages.Message = {
-        content: [
-          { type: 'text', text: 'Hello', citations: [] },
-          {
-            type: 'thinking',
-            thinking: 'I need to consider the weather',
-            signature: 'abc123',
-          },
-          { type: 'text', text: 'World', citations: [] },
-        ],
-        id: '',
-        model: '',
-        role: 'assistant',
-        stop_reason: null,
-        stop_sequence: null,
-        type: 'message',
-        usage: {
-          input_tokens: 0,
-          output_tokens: 0,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
-        },
-      };
-
-      const result = outputFromMessage(message, false);
-      expect(result).toBe('Hello\n\nWorld');
-    });
-
-    it('should include redacted_thinking blocks when showThinking is true', () => {
-      const message: Anthropic.Messages.Message = {
-        content: [
-          { type: 'text', text: 'Hello', citations: [] },
-          {
-            type: 'redacted_thinking',
-            data: 'Some redacted thinking data',
-          },
-          { type: 'text', text: 'World', citations: [] },
-        ],
-        id: '',
-        model: '',
-        role: 'assistant',
-        stop_reason: null,
-        stop_sequence: null,
-        type: 'message',
-        usage: {
-          input_tokens: 0,
-          output_tokens: 0,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
-        },
-      };
-
-      const result = outputFromMessage(message, true);
-      expect(result).toBe('Hello\n\nRedacted Thinking: Some redacted thinking data\n\nWorld');
-    });
-
-    it('should exclude redacted_thinking blocks when showThinking is false', () => {
-      const message: Anthropic.Messages.Message = {
-        content: [
-          { type: 'text', text: 'Hello', citations: [] },
-          {
-            type: 'redacted_thinking',
-            data: 'Some redacted thinking data',
-          },
-          { type: 'text', text: 'World', citations: [] },
-        ],
-        id: '',
-        model: '',
-        role: 'assistant',
-        stop_reason: null,
-        stop_sequence: null,
-        type: 'message',
-        usage: {
-          input_tokens: 0,
-          output_tokens: 0,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
-        },
-      };
-
-      const result = outputFromMessage(message, false);
-      expect(result).toBe('Hello\n\nWorld');
     });
   });
 

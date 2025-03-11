@@ -187,15 +187,15 @@ config:
   thinking:
     type: 'enabled'
     budget_tokens: 16000 # Must be ≥1024 and less than max_tokens
-  showThinking: true # Whether to include thinking content in the output (default: true)
 ```
 
-The `showThinking` parameter controls whether thinking content is included in the response output:
+The model's thinking process will be captured in the `reasoning` field of the provider response, separate from the main `output`. This allows you to:
 
-- When set to `true` (default), thinking content will be included in the output
-- When set to `false`, thinking content will be excluded from the output
+1. Analyze the model's reasoning process separately from its final output
+2. Design assertions that target either the final output or the reasoning process
+3. Improve model evaluation by examining how the model arrived at its conclusion
 
-This is useful when you want to use thinking for better reasoning but don't want to expose the thinking process to end users.
+This is useful when you want to use thinking for better reasoning while keeping the thinking content separate from the final output for end users.
 
 ### Titan Models
 

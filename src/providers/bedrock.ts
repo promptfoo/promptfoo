@@ -28,7 +28,6 @@ interface BedrockOptions {
   guardrailIdentifier?: string;
   guardrailVersion?: string;
   trace?: Trace;
-  showThinking?: boolean;
 }
 
 export interface TextGenerationOptions {
@@ -603,7 +602,11 @@ export const BEDROCK_MODEL = {
       return params;
     },
     output: (config: BedrockClaudeMessagesCompletionOptions, responseJson: any) => {
-      return outputFromMessage(responseJson, config?.showThinking ?? true);
+      const result = outputFromMessage(responseJson);
+      return {
+        output: result.output,
+        reasoning: result.reasoning,
+      };
     },
   },
   TITAN_TEXT: {
