@@ -90,23 +90,24 @@ describe('readPrompts', () => {
     jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
     jest.mocked(maybeFilePath).mockReturnValueOnce(true);
     process.env.PROMPTFOO_STRICT_FILES = 'true';
-    await expect(readPrompts(['prompts.txt'])).rejects.toThrow(
-      'There are no prompts in "prompts.txt"',
-    );
+    await expect(readPrompts(['empty.txt'])).rejects.toThrow('There are no prompts in "empty.txt"');
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
   });
 
-  it('should throw an error for an unsupported file format', async () => {
+  it('should treat unsupported file formats as text files', async () => {
+    const content = 'This is content from an unsupported file format';
     jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
     jest.mocked(maybeFilePath).mockReturnValueOnce(true);
-    // Mock fs.readFileSync to return null (which will cause an error when split is called)
-    jest.mocked(fs.readFileSync).mockImplementationOnce(() => {
-      throw new Error('There are no prompts in "unsupported.for.mat"');
-    });
-    process.env.PROMPTFOO_STRICT_FILES = 'true';
-    await expect(readPrompts(['unsupported.for.mat'])).rejects.toThrow(
-      'There are no prompts in "unsupported.for.mat"',
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(content);
+
+    const result = await readPrompts(['file.unsupported']);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].raw).toBe(content);
+    expect(result[0].label).toBe(
+      'file.unsupported: This is content from an unsupported file format',
     );
+    expect(fs.readFileSync).toHaveBeenCalledWith('file.unsupported', 'utf-8');
   });
 
   it('should read a single prompt', async () => {
