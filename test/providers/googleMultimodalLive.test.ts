@@ -173,6 +173,113 @@ describe('GoogleMMLiveProvider', () => {
     });
   });
 
+  it('should send message and handle sequential function calls', async () => {
+    jest.mocked(WebSocket).mockImplementation(() => {
+      setTimeout(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        setTimeout(() => {
+          mockWs.onmessage?.({
+            data: JSON.stringify({ setupComplete: {} }),
+          } as WebSocket.MessageEvent);
+        }, 10);
+        setTimeout(() => {
+          mockWs.onmessage?.({
+            data: JSON.stringify({
+              serverContent: {
+                modelTurn: {
+                  parts: [
+                    {
+                      executableCode: {
+                        language: 'PYTHON',
+                        code: 'default_api.call_me()\n',
+                      },
+                    },
+                  ],
+                },
+              },
+            }),
+          } as WebSocket.MessageEvent);
+        }, 10);
+        setTimeout(() => {
+          mockWs.onmessage?.({
+            data: JSON.stringify({
+              toolCall: {
+                functionCalls: [
+                  {
+                    name: 'call_me',
+                    args: {},
+                    id: 'function-call-10316808485615376693',
+                  },
+                ],
+              },
+            }),
+          } as WebSocket.MessageEvent);
+        }, 10);
+        setTimeout(() => {
+          mockWs.onmessage?.({
+            data: JSON.stringify({
+              serverContent: {
+                modelTurn: {
+                  parts: [
+                    {
+                      executableCode: {
+                        language: 'PYTHON',
+                        code: 'default_api.call_me()\n',
+                      },
+                    },
+                  ],
+                },
+              },
+            }),
+          } as WebSocket.MessageEvent);
+        }, 10);
+        setTimeout(() => {
+          mockWs.onmessage?.({
+            data: JSON.stringify({
+              toolCall: {
+                functionCalls: [
+                  {
+                    name: 'call_me',
+                    args: {},
+                    id: 'function-call-15919291184864374131',
+                  },
+                ],
+              },
+            }),
+          } as WebSocket.MessageEvent);
+        }, 10);
+        setTimeout(() => {
+          mockWs.onmessage?.({
+            data: JSON.stringify({
+              serverContent: {
+                modelTurn: { parts: [{ text: "\n```tool_outputs\n{'status': 'called'}\n```\n" }] },
+              },
+            }),
+          } as WebSocket.MessageEvent);
+        }, 10);
+        setTimeout(() => {
+          mockWs.onmessage?.({
+            data: JSON.stringify({ serverContent: { turnComplete: true } }),
+          } as WebSocket.MessageEvent);
+        }, 10);
+      }, 60);
+      return mockWs;
+    });
+
+    const response = await provider.callApi('test prompt');
+    expect(response).toEqual({
+      output: JSON.stringify({
+        text: "\n```tool_outputs\n{'status': 'called'}\n```\n",
+        toolCall: {
+          functionCalls: [
+            { name: 'call_me', args: {}, id: 'function-call-10316808485615376693' },
+            { name: 'call_me', args: {}, id: 'function-call-15919291184864374131' },
+          ],
+        },
+      }),
+    });
+  });
+
   it('should send message and handle in-built google search tool', async () => {
     jest.mocked(WebSocket).mockImplementation(() => {
       setTimeout(() => {
