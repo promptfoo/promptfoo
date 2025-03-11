@@ -175,7 +175,27 @@ config:
   anthropic_version: 'bedrock-2023-05-31'
   tools: [...] # Optional: Specify available tools
   tool_choice: { ... } # Optional: Specify tool choice
+  thinking: { ... } # Optional: Enable Claude's extended thinking capability
+  showThinking: true # Optional: Control whether thinking content is included in output
 ```
+
+When using Claude's extended thinking capability, you can configure it like this:
+
+```yaml
+config:
+  max_tokens: 20000
+  thinking:
+    type: 'enabled'
+    budget_tokens: 16000 # Must be ≥1024 and less than max_tokens
+  showThinking: true # Whether to include thinking content in the output (default: true)
+```
+
+The `showThinking` parameter controls whether thinking content is included in the response output:
+
+- When set to `true` (default), thinking content will be included in the output
+- When set to `false`, thinking content will be excluded from the output
+
+This is useful when you want to use thinking for better reasoning but don't want to expose the thinking process to end users.
 
 ### Titan Models
 

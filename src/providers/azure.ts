@@ -32,8 +32,10 @@ interface AzureCompletionOptions {
   azureTenantId?: string;
   azureAuthorityHost?: string;
   azureTokenScope?: string;
-  o1?: boolean; // Indicates if the model should be treated as an o1 model
-  max_completion_tokens?: number; // Maximum number of tokens to generate for o1 models
+  /** @deprecated Use isReasoningModel instead. Indicates if the model should be treated as a reasoning model */
+  o1?: boolean;
+  isReasoningModel?: boolean; // Indicates if the model should be treated as a reasoning model (o1, o3-mini, etc.)
+  max_completion_tokens?: number; // Maximum number of tokens to generate for reasoning models
 
   // Azure cognitive services params
   deployment_id?: string;
@@ -480,9 +482,8 @@ export class AzureCompletionProvider extends AzureGenericProvider {
 
     let stop: string;
     try {
-      stop = getEnvString('OPENAI_STOP')
-        ? JSON.parse(getEnvString('OPENAI_STOP') || '')
-        : this.config?.stop || ['<|im_end|>', '<|endoftext|>'];
+      const stopEnvVar = getEnvString('OPENAI_STOP');
+      stop = stopEnvVar ? JSON.parse(stopEnvVar) : (this.config.stop ?? '');
     } catch (err) {
       throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);
     }
@@ -496,17 +497,13 @@ export class AzureCompletionProvider extends AzureGenericProvider {
       frequency_penalty:
         this.config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0),
       best_of: this.config.best_of ?? getEnvInt('OPENAI_BEST_OF', 1),
-      ...(this.config.seed === undefined ? {} : { seed: this.config.seed }),
-      ...(this.config.deployment_id ? { deployment_id: this.config.deployment_id } : {}),
-      ...(this.config.dataSources ? { dataSources: this.config.dataSources } : {}),
-      ...(this.config.response_format ? { response_format: this.config.response_format } : {}),
-      ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(stop ? { stop } : {}),
       ...(this.config.passthrough || {}),
     };
+
     logger.debug(`Calling Azure API: ${JSON.stringify(body)}`);
-    let data,
-      cached = false;
+    let data;
+    let cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
         `${this.getApiBaseUrl()}/openai/deployments/${
@@ -521,16 +518,29 @@ export class AzureCompletionProvider extends AzureGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
-      )) as unknown as any);
+      )) as any);
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
       };
     }
+
     logger.debug(`Azure API response: ${JSON.stringify(data)}`);
     try {
+      // Check for content filter
+      const choice = data.choices[0];
+      let output = choice.text;
+      if (output == null) {
+        if (choice.finish_reason === 'content_filter') {
+          output =
+            "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.";
+        } else {
+          output = '';
+        }
+      }
+
       return {
-        output: data.choices[0].text,
+        output,
         tokenUsage: cached
           ? { cached: data.usage.total_tokens, total: data.usage.total_tokens }
           : {
@@ -548,12 +558,29 @@ export class AzureCompletionProvider extends AzureGenericProvider {
     } catch (err) {
       return {
         error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
+        tokenUsage: cached
+          ? {
+              cached: data.usage.total_tokens,
+              total: data.usage.total_tokens,
+            }
+          : {
+              total: data?.usage?.total_tokens,
+              prompt: data?.usage?.prompt_tokens,
+              completion: data?.usage?.completion_tokens,
+            },
       };
     }
   }
 }
 
 export class AzureChatCompletionProvider extends AzureGenericProvider {
+  /**
+   * Check if the current deployment is configured as a reasoning model
+   */
+  protected isReasoningModel(): boolean {
+    return !!this.config.isReasoningModel || !!this.config.o1;
+  }
+
   getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
@@ -564,10 +591,10 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       ...context?.prompt?.config,
     };
 
-    // Fix: Match OpenAI's message handling exactly
+    // Parse chat prompt
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
-    // Fix: Match OpenAI's response format handling with variable rendering
+    // Response format with variable rendering
     const responseFormat = config.response_format
       ? {
           response_format: maybeLoadFromExternalFile(
@@ -576,21 +603,33 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         }
       : {};
 
+    // Check if this is configured as a reasoning model
+    const isReasoningModel = this.isReasoningModel();
+
+    // Get max tokens based on model type
+    const maxTokens = config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024);
+    const maxCompletionTokens = config.max_completion_tokens;
+
+    // Get reasoning effort for reasoning models
+    const reasoningEffort = config.reasoning_effort ?? 'medium';
+
+    // Build the request body
     const body = {
       model: this.deploymentName,
       messages,
+      ...(isReasoningModel
+        ? {
+            max_completion_tokens: maxCompletionTokens ?? maxTokens,
+            reasoning_effort: renderVarsInObject(reasoningEffort, context?.vars),
+          }
+        : {
+            max_tokens: maxTokens,
+            temperature: config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
+          }),
       top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1),
       presence_penalty: config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0),
       frequency_penalty: config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0),
-      ...(config.o1
-        ? {
-            max_completion_tokens: config.max_completion_tokens,
-            reasoning_effort: renderVarsInObject(config.reasoning_effort, context?.vars),
-          }
-        : {
-            max_tokens: config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024),
-            temperature: config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
-          }),
+      ...(config.seed === undefined ? {} : { seed: config.seed }),
       ...(config.functions
         ? {
             functions: maybeLoadFromExternalFile(
@@ -599,7 +638,6 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           }
         : {}),
       ...(config.function_call ? { function_call: config.function_call } : {}),
-      ...(config.seed === undefined ? {} : { seed: config.seed }),
       ...(config.tools
         ? {
             tools: maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)),
@@ -713,7 +751,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       if (output == null) {
         if (choice.finish_reason === 'content_filter') {
           output =
-            'The generated content was filtered due to triggering Azure OpenAI Service’s content filtering system.';
+            "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.";
         } else {
           // Restore tool_calls and function_call handling
           output = message.tool_calls ?? message.function_call;

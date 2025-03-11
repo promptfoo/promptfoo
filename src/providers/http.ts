@@ -14,7 +14,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types';
-import { maybeLoadFromExternalFile } from '../util';
+import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
 import { isJavascriptFile } from '../util/file';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
@@ -49,7 +49,8 @@ export function urlEncodeRawRequestPath(rawRequest: string) {
     throw new Error(`[Http Provider] HTTP request URL is not valid. From: ${firstLine}`);
   }
 
-  const protocol = firstLine.slice(lastSpace + 1);
+  const protocol = lastSpace < firstLine.length ? firstLine.slice(lastSpace + 1) : '';
+
   if (!protocol.toLowerCase().startsWith('http')) {
     logger.error(`[Http Provider] HTTP request protocol is not valid. From: ${firstLine}`);
     throw new Error(`[Http Provider] HTTP request protocol is not valid. From: ${firstLine}`);
@@ -74,8 +75,6 @@ export function urlEncodeRawRequestPath(rawRequest: string) {
   return rawRequest;
 }
 
-const nunjucks = getNunjucksEngine();
-
 export async function generateSignature(
   privateKeyPathOrKey: string,
   signatureTimestamp: number,
@@ -85,7 +84,7 @@ export async function generateSignature(
 ): Promise<string> {
   try {
     const privateKey = isPath ? fs.readFileSync(privateKeyPathOrKey, 'utf8') : privateKeyPathOrKey;
-    const data = nunjucks
+    const data = getNunjucksEngine()
       .renderString(signatureDataTemplate, {
         signatureTimestamp,
       })
@@ -292,57 +291,82 @@ export async function createTransformResponse(
   );
 }
 
-function processValue(value: any, vars: Record<string, any>): any {
-  if (typeof value === 'string') {
-    const renderedValue = nunjucks.renderString(value, vars || {});
-    try {
-      return JSON.parse(renderedValue);
-    } catch {
-      return renderedValue;
-    }
-  }
-  return value;
-}
-
-function processObjects(
-  body: Record<string, any> | any[],
-  vars: Record<string, any>,
-): Record<string, any> | any[] {
-  if (Array.isArray(body)) {
-    return body.map((item) =>
-      typeof item === 'object' && item !== null
-        ? processObjects(item, vars)
-        : processValue(item, vars),
-    );
-  }
-
-  const processedBody: Record<string, any> = {};
-
-  for (const [key, value] of Object.entries(body)) {
-    if (typeof value === 'object' && value !== null) {
-      processedBody[key] = processObjects(value, vars);
-    } else {
-      processedBody[key] = processValue(value, vars);
-    }
-  }
-  return processedBody;
-}
-
+/**
+ * Substitutes template variables in a JSON object or array.
+ *
+ * This function walks through all properties of the provided JSON structure
+ * and replaces template expressions (like {{varName}}) with their actual values.
+ * If a substituted string is valid JSON, it will be parsed into an object or array.
+ *
+ * Example:
+ * Input: {"greeting": "Hello {{name}}!", "data": {"id": "{{userId}}"}}
+ * Vars: {name: "World", userId: 123}
+ * Output: {"greeting": "Hello World!", "data": {"id": 123}}
+ *
+ * @param body The JSON object or array containing template expressions
+ * @param vars Dictionary of variable names and their values for substitution
+ * @returns A new object or array with all template expressions replaced
+ */
 export function processJsonBody(
   body: Record<string, any> | any[],
   vars: Record<string, any>,
 ): Record<string, any> | any[] {
-  // attempting to process a string as a stringifiedJSON object
-  if (typeof body === 'string') {
-    body = processValue(body, vars);
-    if (typeof body == 'string') {
-      return body;
-    }
-    return processObjects(body, vars);
+  // First apply the standard variable rendering
+  const rendered = renderVarsInObject(body, vars);
+
+  // For objects and arrays, we need to check each string value to see if it can be parsed as JSON
+  if (typeof rendered === 'object' && rendered !== null) {
+    // Function to process nested values
+    const processNestedValues = (obj: any): any => {
+      if (Array.isArray(obj)) {
+        return obj.map(processNestedValues);
+      } else if (typeof obj === 'object' && obj !== null) {
+        const result: Record<string, any> = {};
+        for (const [key, value] of Object.entries(obj)) {
+          result[key] = processNestedValues(value);
+        }
+        return result;
+      } else if (typeof obj === 'string') {
+        try {
+          return JSON.parse(obj);
+        } catch {
+          return obj;
+        }
+      }
+      return obj;
+    };
+
+    return processNestedValues(rendered);
   }
-  return processObjects(body, vars);
+
+  // If it's a string, attempt to parse as JSON
+  if (typeof rendered === 'string') {
+    try {
+      return JSON.parse(rendered);
+    } catch {
+      return rendered;
+    }
+  }
+
+  return rendered;
 }
 
+/**
+ * Substitutes template variables in a text string.
+ *
+ * Replaces template expressions (like {{varName}}) in the string with their
+ * actual values from the provided variables dictionary.
+ *
+ * Example:
+ * Input: "Hello {{name}}! Your user ID is {{userId}}."
+ * Vars: {name: "World", userId: 123}
+ * Output: "Hello World! Your user ID is 123."
+ *
+ * @param body The string containing template expressions to substitute
+ * @param vars Dictionary of variable names and their values for substitution
+ * @returns A new string with all template expressions replaced
+ * @throws Error if body is an object instead of a string
+ */
 export function processTextBody(body: string, vars: Record<string, any>): string {
   if (body == null) {
     return body;
@@ -351,7 +375,12 @@ export function processTextBody(body: string, vars: Record<string, any>): string
     typeof body !== 'object',
     'Expected body to be a string when content type is not application/json',
   );
-  return nunjucks.renderString(body, vars);
+  try {
+    return renderVarsInObject(body, vars);
+  } catch (err) {
+    logger.warn(`Error rendering body template: ${err}`);
+    return body;
+  }
 }
 
 function parseRawRequest(input: string) {
@@ -432,7 +461,7 @@ export async function createTransformRequest(
     // Handle string template
     return async (prompt) => {
       try {
-        const rendered = nunjucks.renderString(transform, { prompt });
+        const rendered = getNunjucksEngine().renderString(transform, { prompt });
         return await new Function('prompt', `${rendered}`)(prompt);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
@@ -649,6 +678,8 @@ export class HttpProvider implements ApiProvider {
       Object.entries(configHeaders).map(([key, value]) => [key.toLowerCase(), value]),
     );
 
+    const nunjucks = getNunjucksEngine();
+
     return Object.fromEntries(
       Object.entries({ ...defaultHeaders, ...headers }).map(([key, value]) => [
         key,
@@ -700,7 +731,7 @@ export class HttpProvider implements ApiProvider {
 
     const renderedConfig: Partial<HttpProviderConfig> = {
       url: this.url,
-      method: nunjucks.renderString(this.config.method || 'GET', vars),
+      method: getNunjucksEngine().renderString(this.config.method || 'GET', vars),
       headers,
       body: determineRequestBody(
         contentTypeIsJson(headers),
@@ -712,7 +743,7 @@ export class HttpProvider implements ApiProvider {
         ? Object.fromEntries(
             Object.entries(this.config.queryParams).map(([key, value]) => [
               key,
-              nunjucks.renderString(value, vars),
+              getNunjucksEngine().renderString(value, vars),
             ]),
           )
         : undefined,
@@ -810,7 +841,7 @@ export class HttpProvider implements ApiProvider {
     context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
     invariant(this.config.request, 'Expected request to be set in http provider config');
-    const renderedRequest = nunjucks.renderString(this.config.request, vars);
+    const renderedRequest = getNunjucksEngine().renderString(this.config.request, vars);
     const parsedRequest = parseRawRequest(renderedRequest.trim());
 
     const protocol = this.url.startsWith('https') || this.config.useHttps ? 'https' : 'http';

@@ -73,8 +73,10 @@ prompts:
   - file://path/to/prompt.yaml
   - file://path/to/prompt.yml
   - file://path/to/prompt.md
+  - file://path/to/prompt.j2
   # Globs are supported
   - file://prompts/*.txt
+  - file://prompts/*.j2
   - file://path/**/*
   # Prompt functions
   # Executes entire file
@@ -143,6 +145,17 @@ You are a helpful assistant for Promptfoo. Please answer the following question:
 ```
 
 Note that only one prompt per markdown file is supported.
+
+### Prompts as Jinja2 Templates
+
+Jinja2 template files (`.j2`) are supported. Like Markdown files, each `.j2` file is treated as a single prompt.
+
+Jinja2 uses syntax that's compatible with Nunjucks (which promptfoo uses for templating), including the same variable interpolation with `{{ variable }}` syntax.
+
+```jinja title="prompt.j2"
+You are a helpful assistant for Promptfoo.
+Please answer the following question about {{ topic }}: {{ question }}
+```
 
 ### Different prompts per model
 

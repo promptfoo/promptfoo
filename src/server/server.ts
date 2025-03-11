@@ -1,5 +1,6 @@
 import compression from 'compression';
 import cors from 'cors';
+import dotenv from 'dotenv';
 import type { Request, Response } from 'express';
 import express from 'express';
 import http from 'node:http';
@@ -34,6 +35,8 @@ import { evalRouter } from './routes/eval';
 import { providersRouter } from './routes/providers';
 import { redteamRouter } from './routes/redteam';
 import { userRouter } from './routes/user';
+
+dotenv.config();
 
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;

@@ -1,0 +1,195 @@
+---
+description: This rule provides guidance for creating and maintaining examples in the promptfoo project, which has an extensive collection of example configurations.
+globs: examples/**/*
+alwaysApply: false
+---
+
+# Examples Development Guidelines
+
+## Example Structure
+
+- Each example should have its own directory with a clear, descriptive name
+- The README.md must begin with the folder name as an H1 heading:
+  ```markdown
+  # example-name (human readable name)
+  ```
+- Every example README must include how to run it with:
+
+  ````markdown
+  You can run this example with:
+
+  ```bash
+  npx promptfoo@latest init --example example-name
+  ```
+  ````
+
+- Include a comprehensive README.md that explains:
+  - The purpose of the example
+  - Required prerequisites or setup
+  - Step-by-step instructions for running the example
+  - Expected outputs or results
+- Structure examples consistently with common patterns across the project
+- Include a working `promptfooconfig.yaml` (or equivalent) file
+
+## Configuration File Structure
+
+- Always include the YAML schema reference at the top of configuration files:
+  ```yaml
+  # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+  ```
+- Follow this specific field order in all configuration files:
+  1. `description` - A SHORT clear description of what the example demonstrates. Between 3 and 10 words
+  2. `env` (optional) - Environment variable settings. Only define if absolutely necessary
+  3. `prompts` - The prompts to evaluate
+  4. `providers` - The models/providers to test
+  5. `defaultTest` (optional) - Default assertions for all tests
+  6. `scenarios` (optional) - Named test scenarios
+  7. `tests` - Test cases with variables and assertions
+- Ensure all configuration files pass YAML lint validation
+- When referencing external files, always use the `file://` prefix:
+  ```yaml
+  prompts:
+    - file://prompts/system_message.txt
+  ```
+- For trivial test cases, make them quirky and fun to increase engagement
+
+## Model Selection
+
+- Always use the latest model versions available in 2025
+- For OpenAI, prefer models like:
+  - `openai:o3-mini`
+  - `openai:gpt-4o-mini`
+- For Anthropic, prefer models like:
+  - `anthropic:claude-3-7-sonnet-20250219`
+- For open-source models, use the latest versions available:
+  - Latest Llama
+- Include a mix of providers when comparing model performance
+- Document any model-specific capabilities or limitations in examples
+- When demonstrating specialized capabilities (vision, audio, etc.), use models that support those features
+
+## Environment Variables
+
+- Clearly list all required environment variables at the beginning of the README
+- For each environment variable, explain:
+  - Its purpose
+  - How to obtain it (for API keys)
+  - Any default values or constraints
+- Include a sample `.env` file or instructions when multiple variables are needed:
+
+  ```markdown
+  ## Environment Variables
+
+  This example requires the following environment variables:
+
+  - `OPENAI_API_KEY` - Your OpenAI API key
+  - `ANTHROPIC_API_KEY` - Your Anthropic API key
+
+  You can set these in a `.env` file or directly in your environment.
+  ```
+
+## Example Quality
+
+- Ensure all examples are functional and up-to-date
+- Keep examples as simple as possible while still demonstrating the concept
+- Examples should work with publicly available APIs when possible
+- Document any required API keys or credentials
+- Include placeholder values for secrets/credentials
+- Provide instructions for cleaning up resources after running the example
+
+## Configuration Examples
+
+### Basic Example
+
+```yaml
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: A simple evaluation of translation quality
+prompts:
+  - Translate "{{input}}" to {{language}}
+providers:
+  - openai:o3-mini
+  - anthropic:claude-3-7-sonnet-latest
+tests:
+  - vars:
+      input: Hello, world!
+      language: French
+    assert:
+      - type: contains
+        value: Bonjour
+  - vars:
+      input: How are you today?
+      language: German
+    assert:
+      - type: contains
+        value: heute
+```
+
+### Example with Optional Fields
+
+```yaml
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Evaluating joke quality across different models
+env:
+  TEMPERATURE: 0.7
+prompts:
+  - file://prompts/joke_prompt.txt
+providers:
+  - id: gpt-5-creative
+    provider: openai:gpt-5-preview
+    temperature: $TEMPERATURE
+  - anthropic:claude-3-7-sonnet-latest
+defaultTest:
+  assert:
+    - type: javascript
+      value: return output.length > 20 ? 'pass' : 'fail'
+scenarios:
+  funny-animals:
+    vars:
+      topic: animals
+      style: slapstick
+tests:
+  - vars:
+      topic: computers
+      style: dad joke
+    assert:
+      - type: llm-rubric
+        value: Rate this joke on a scale of 1-10 for humor
+```
+
+## Code Style
+
+- Follow the same code style guidelines as the main project
+- Include comments to explain non-obvious parts
+- Use descriptive variable and function names
+- Format configuration files consistently
+- Keep code DRY within reason (examples may duplicate code for clarity)
+
+## Provider Examples
+
+- When creating examples for specific providers:
+  - Explain any provider-specific configuration
+  - Document required environment variables
+  - Include information about pricing or usage limits
+  - Highlight unique features or capabilities
+  - Compare to similar providers where appropriate
+  - Always use the latest available model versions for that provider
+
+## Maintenance
+
+- Review examples periodically to ensure they still work
+- Update examples when APIs or dependencies change
+- Remove outdated examples or mark them as deprecated
+- Test examples as part of the CI process when feasible
+- Keep dependencies updated in example requirements files
+- Update model versions when new ones become available
+
+## Documentation Integration
+
+- Reference examples in relevant documentation
+- Make it clear which features each example demonstrates
+- Group related examples together
+- Include links to more comprehensive documentation where appropriate
+- Consider creating guides that walk through multiple examples
+
+```
+
+```

@@ -59,6 +59,7 @@ const sidebars = {
     {
       type: 'category',
       label: 'Usage',
+      collapsed: true,
       link: {
         type: 'generated-index',
       },
@@ -137,10 +138,6 @@ const sidebars = {
     {
       type: 'doc',
       id: 'red-team/architecture',
-    },
-    {
-      type: 'doc',
-      id: 'red-team/guardrails',
     },
     {
       type: 'doc',
@@ -265,6 +262,36 @@ const sidebars = {
           label: 'Custom',
           collapsed: true,
           items: ['red-team/strategies/custom'],
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Tools',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'red-team/guardrails',
+        },
+        {
+          type: 'category',
+          label: 'Model Scanner',
+          collapsed: true,
+          items: [
+            {
+              type: 'doc',
+              id: 'model-audit/index',
+            },
+            {
+              type: 'doc',
+              id: 'model-audit/usage',
+            },
+            {
+              type: 'doc',
+              id: 'model-audit/scanners',
+            },
+          ],
         },
       ],
     },

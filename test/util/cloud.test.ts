@@ -1,9 +1,14 @@
 import { fetchWithProxy } from '../../src/fetch';
 import { cloudConfig } from '../../src/globalConfig/cloud';
-import { makeRequest } from '../../src/util/cloud';
+import { makeRequest, getProviderFromCloud, getConfigFromCloud } from '../../src/util/cloud';
+import * as cloudUtils from '../../src/util/cloud';
 
 jest.mock('../../src/fetch');
 jest.mock('../../src/globalConfig/cloud');
+jest.mock('../../src/util/cloud', () => ({
+  ...jest.requireActual('../../src/util/cloud'),
+  cloudCanBuildFormattedConfig: jest.fn().mockResolvedValue(true),
+}));
 
 describe('cloud utils', () => {
   const mockFetchWithProxy = jest.mocked(fetchWithProxy);
@@ -166,6 +171,184 @@ describe('cloud utils', () => {
         body: undefined,
         headers: { Authorization: 'Bearer test-api-key' },
       });
+    });
+  });
+
+  describe('getProviderFromCloud', () => {
+    beforeEach(() => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+    });
+
+    it('should fetch and parse provider successfully', async () => {
+      const mockProvider = {
+        config: {
+          id: 'test-provider',
+          label: 'Test Provider',
+        },
+      };
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: () => Promise.resolve(mockProvider),
+        ok: true,
+      } as Response);
+
+      const result = await getProviderFromCloud('test-provider');
+
+      expect(result).toEqual({ ...mockProvider.config });
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/providers/test-provider',
+        {
+          method: 'GET',
+          headers: { Authorization: 'Bearer test-api-key' },
+        },
+      );
+    });
+
+    it('should throw error when cloud config is not enabled', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(false);
+
+      await expect(getProviderFromCloud('test-provider')).rejects.toThrow(
+        'Could not fetch Provider test-provider from cloud. Cloud config is not enabled.',
+      );
+    });
+
+    it('should throw error when provider fetch fails', async () => {
+      mockFetchWithProxy.mockRejectedValueOnce(new Error('Network error'));
+
+      await expect(getProviderFromCloud('test-provider')).rejects.toThrow(
+        'Failed to fetch provider from cloud: test-provider.',
+      );
+    });
+
+    it('should throw error when provider has no id', async () => {
+      const mockProvider = {
+        config: {
+          label: 'Test Provider',
+          // Missing id field
+        },
+      };
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: () => Promise.resolve({ buildDate: '2025-03-011' }),
+      } as Response);
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: () => Promise.resolve(mockProvider),
+      } as Response);
+
+      await expect(getProviderFromCloud('test-provider')).rejects.toThrow(
+        'Failed to fetch provider from cloud: test-provider.',
+      );
+    });
+  });
+
+  describe('getConfigFromCloud', () => {
+    beforeEach(() => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+      jest.mocked(cloudUtils.cloudCanBuildFormattedConfig).mockResolvedValueOnce(true);
+    });
+
+    it('should fetch unified config when formatted config is supported', async () => {
+      const mockUnifiedConfig = {
+        description: 'Test Config',
+        providers: ['test-provider'],
+        prompts: ['test prompt'],
+        tests: [{ vars: { input: 'test' } }],
+      };
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: () => Promise.resolve({ buildDate: '2025-03-011' }),
+        ok: true,
+      } as Response);
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: () => Promise.resolve(mockUnifiedConfig),
+        ok: true,
+      } as Response);
+
+      const result = await getConfigFromCloud('test-config');
+
+      expect(result).toEqual(mockUnifiedConfig);
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/redteam/configs/test-config/unified',
+        {
+          method: 'GET',
+          headers: { Authorization: 'Bearer test-api-key' },
+        },
+      );
+    });
+
+    it('should fetch and transform regular config when formatted config is not supported', async () => {
+      const mockConfig = {
+        config: {
+          description: 'Test Config',
+          target: {
+            id: 'test-provider',
+            config: {
+              type: 'openai',
+              model: 'gpt-4',
+            },
+          },
+          prompts: ['test prompt'],
+          plugins: ['test-plugin'],
+          strategies: ['test-strategy'],
+        },
+      };
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: () => Promise.resolve({ buildDate: '2024-03-011' }),
+      } as Response);
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockConfig),
+      } as Response);
+
+      const result = await getConfigFromCloud('test-config');
+
+      expect(result).toMatchObject({
+        description: 'Test Config',
+        targets: [{ id: 'test-provider' }],
+        prompts: ['test prompt'],
+        redteam: {
+          plugins: [{ id: 'test-plugin' }],
+          strategies: [{ id: 'test-strategy' }],
+        },
+      });
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/redteam/configs/test-config',
+        {
+          method: 'GET',
+          headers: { Authorization: 'Bearer test-api-key' },
+        },
+      );
+    });
+
+    it('should throw error when cloud config is not enabled', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(false);
+
+      await expect(getConfigFromCloud('test-config')).rejects.toThrow(
+        'Could not fetch Config test-config from cloud. Cloud config is not enabled.',
+      );
+    });
+
+    it('should throw error when config fetch fails', async () => {
+      jest.mocked(cloudUtils.cloudCanBuildFormattedConfig).mockResolvedValueOnce(true);
+      mockFetchWithProxy.mockRejectedValueOnce(new Error('Network error'));
+
+      await expect(getConfigFromCloud('test-config')).rejects.toThrow(
+        'Failed to fetch config from cloud: test-config.',
+      );
+    });
+
+    it('should throw error when response is not ok', async () => {
+      jest.mocked(cloudUtils.cloudCanBuildFormattedConfig).mockResolvedValueOnce(false);
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Not Found',
+        json: () => Promise.resolve({}),
+      } as Response);
+
+      await expect(getConfigFromCloud('test-config')).rejects.toThrow(
+        'Failed to fetch config from cloud: test-config.',
+      );
     });
   });
 });

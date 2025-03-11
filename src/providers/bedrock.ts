@@ -28,6 +28,7 @@ interface BedrockOptions {
   guardrailIdentifier?: string;
   guardrailVersion?: string;
   trace?: Trace;
+  showThinking?: boolean;
 }
 
 export interface TextGenerationOptions {
@@ -236,7 +237,7 @@ export interface BedrockAmazonNovaGenerationOptions extends BedrockOptions {
 
 interface IBedrockModel {
   params: (config: BedrockOptions, prompt: string, stop: string[]) => any;
-  output: (responseJson: any) => any;
+  output: (config: BedrockOptions, responseJson: any) => any;
 }
 
 export function parseValue(value: string | number, defaultValue: any) {
@@ -491,7 +492,7 @@ export const BEDROCK_MODEL = {
 
       return params;
     },
-    output: (responseJson: any) => novaOutputFromMessage(responseJson),
+    output: (config: BedrockOptions, responseJson: any) => novaOutputFromMessage(responseJson),
   },
   CLAUDE_COMPLETION: {
     params: (config: BedrockClaudeLegacyCompletionOptions, prompt: string, stop: string[]) => {
@@ -601,30 +602,8 @@ export const BEDROCK_MODEL = {
 
       return params;
     },
-    output: (responseJson: any) => {
-      // Handle thinking content if present
-      if (responseJson.content && Array.isArray(responseJson.content)) {
-        interface ThinkingContentItem {
-          type: string;
-          thinking?: string;
-          text?: string;
-        }
-
-        const thinkingContent = responseJson.content.find(
-          (item: ThinkingContentItem) => item.type === 'thinking',
-        );
-        const textContent = responseJson.content.find(
-          (item: ThinkingContentItem) => item.type === 'text',
-        );
-
-        if (thinkingContent && textContent) {
-          // Prepend thinking to the main output
-          return `[Thinking] ${thinkingContent.thinking}\n\n[Response] ${textContent.text}`;
-        }
-      }
-
-      // Fall back to standard output handling if no thinking content
-      return outputFromMessage(responseJson);
+    output: (config: BedrockClaudeMessagesCompletionOptions, responseJson: any) => {
+      return outputFromMessage(responseJson, config?.showThinking ?? true);
     },
   },
   TITAN_TEXT: {
@@ -812,6 +791,9 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.meta.llama3-3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_3,
 
   // EU Models
+  'eu.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'eu.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'eu.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'eu.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -993,7 +975,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
         return {
-          output: model.output(JSON.parse(cachedResponse as string)),
+          output: model.output(this.config, JSON.parse(cachedResponse as string)),
           tokenUsage: {},
         };
       }
@@ -1026,7 +1008,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       const output = JSON.parse(new TextDecoder().decode(response.body));
 
       return {
-        output: model.output(output),
+        output: model.output(this.config, output),
         tokenUsage: {
           total: output.total_tokens ?? output.prompt_token_count + output.generation_token_count,
           prompt: output.prompt_tokens ?? output.prompt_token_count,
