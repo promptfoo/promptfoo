@@ -3,6 +3,12 @@ import logger from '../../logger';
 import type { TestCase } from '../../types';
 import invariant from '../../util/invariant';
 
+declare module 'node-gtts' {
+  export default function gtts(lang: string): {
+    stream(text: string): NodeJS.ReadableStream;
+  };
+}
+
 /**
  * Dynamically imports the node-gtts library
  * @returns The gTTS module or null if not available
