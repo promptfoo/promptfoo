@@ -7,7 +7,6 @@ export class EchoProvider implements ApiProvider {
   public label?: string;
   public config?: any;
   public delay?: number;
-  public transform?: string;
 
   constructor(options: ProviderOptions = {}) {
     this.options = options;
