@@ -1171,6 +1171,36 @@ describe('evaluator', () => {
     });
   });
 
+  it('merges response metadata with test metadata', async () => {
+    const mockProviderWithMetadata: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-with-metadata'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+        metadata: { responseKey: 'responseValue' },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockProviderWithMetadata],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          metadata: { testKey: 'testValue' },
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const results = await evalRecord.getResults();
+
+    // Check that both test metadata and response metadata are present in the result
+    expect(results[0].metadata).toEqual({
+      testKey: 'testValue',
+      responseKey: 'responseValue',
+    });
+  });
+
   it('evaluate with _conversation variable', async () => {
     const mockApiProvider: ApiProvider = {
       id: jest.fn().mockReturnValue('test-provider'),
