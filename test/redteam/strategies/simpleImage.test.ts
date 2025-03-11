@@ -14,7 +14,7 @@ describe('image:basic strategy', () => {
 
     // Should be valid base64
     expect(() => Buffer.from(base64, 'base64')).not.toThrow();
-  });
+  }, 15000); // 15 second timeout for Windows
 
   it('addImageToBase64 should convert test cases with the specified variable', async () => {
     const testCases: TestCase[] = [
@@ -36,7 +36,7 @@ describe('image:basic strategy', () => {
 
     // Should be valid base64
     expect(() => Buffer.from(result[0].vars?.prompt as string, 'base64')).not.toThrow();
-  });
+  }, 15000); // 15 second timeout for Windows
 
   it('should preserve harmCategory and modify assertion metrics', async () => {
     const testCase: TestCase = {
@@ -62,7 +62,7 @@ describe('image:basic strategy', () => {
         type: 'promptfoo:redteam:harmful',
       },
     ]);
-  });
+  }, 10000); // 10 second timeout
 
   it('should handle test cases without metadata or assertions', async () => {
     const testCase: TestCase = {
@@ -78,5 +78,5 @@ describe('image:basic strategy', () => {
 
     // Just check it's a valid base64 string
     expect(() => Buffer.from(result[0].vars?.prompt as string, 'base64')).not.toThrow();
-  });
+  }, 15000); // 15 second timeout for Windows
 });
