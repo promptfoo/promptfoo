@@ -237,7 +237,10 @@ export async function runEval({
       namedScores: {},
       latencyMs,
       cost: response.cost,
-      metadata: response.metadata,
+      metadata: {
+        ...test.metadata,
+        ...response.metadata,
+      },
       promptIdx,
       testIdx,
       testCase: test,
@@ -641,6 +644,8 @@ class Evaluator {
       testCase.assert = [...(testSuite.defaultTest?.assert || []), ...(testCase.assert || [])];
       testCase.threshold = testCase.threshold ?? testSuite.defaultTest?.threshold;
       testCase.options = { ...testSuite.defaultTest?.options, ...testCase.options };
+      // Ensure we're consistently merging metadata the same way as in scenarios
+      // This allows filtering by metadata specified in defaultTest
       testCase.metadata = { ...testSuite.defaultTest?.metadata, ...testCase.metadata };
       testCase.provider = testCase.provider || testSuite.defaultTest?.provider;
       testCase.assertScoringFunction =

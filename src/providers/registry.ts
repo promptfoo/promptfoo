@@ -371,7 +371,11 @@ export const providerMap: ProviderFactory[] = [
       const provider: ApiProvider = {
         id: () => 'echo',
         async callApi(input: string, options?: Record<string, any>, context?: any) {
-          return { output: input };
+          // Pass through the test metadata to the response so it can be displayed in the UI
+          return {
+            output: input,
+            metadata: context?.testCase?.metadata || {},
+          };
         },
       };
       return provider;

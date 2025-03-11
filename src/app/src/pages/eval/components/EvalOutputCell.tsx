@@ -9,6 +9,7 @@ import remarkGfm from 'remark-gfm';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
+import MetadataPreview from './MetadataPreview';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
 import { useStore as useResultsViewStore } from './store';
@@ -599,6 +600,17 @@ function EvalOutputCell({
         </div>
       )}
       <TruncatedText text={node || text} maxLength={maxTextLength} />
+      {output.metadata && Object.keys(output.metadata).length > 0 && (
+        <div
+          style={{
+            marginTop: '8px',
+            paddingTop: '6px',
+            borderTop: '1px dashed rgba(128, 128, 128, 0.2)',
+          }}
+        >
+          <MetadataPreview metadata={output.metadata} />
+        </div>
+      )}
       {comment}
       {detail}
       {actions}
