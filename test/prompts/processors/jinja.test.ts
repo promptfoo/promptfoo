@@ -1,90 +1,100 @@
 import * as fs from 'fs';
 import { processJinjaFile } from '../../../src/prompts/processors/jinja';
-import type { Prompt } from '../../../src/types';
 
 jest.mock('fs');
 
 describe('processJinjaFile', () => {
+  const mockReadFileSync = jest.mocked(fs.readFileSync);
+
   beforeEach(() => {
-    jest.resetAllMocks();
+    jest.clearAllMocks();
   });
 
-  it('should process a Jinja file and return a prompt array', () => {
-    const mockContent = 'Hello {{ name }}!';
-    const filePath = 'test.jinja';
-    const prompt: Partial<Prompt> = {
-      label: 'Test Label',
-      config: { foo: 'bar' },
-    };
+  it('should process a Jinja2 file without a label', () => {
+    const filePath = 'template.j2';
+    const fileContent =
+      'You are a helpful assistant for Promptfoo.\nPlease answer the following question about {{ topic }}: {{ question }}';
+    mockReadFileSync.mockReturnValue(fileContent);
 
-    jest.mocked(fs.readFileSync).mockReturnValue(mockContent);
+    const result = processJinjaFile(filePath, {});
 
-    const result = processJinjaFile(filePath, prompt);
-
-    expect(fs.readFileSync).toHaveBeenCalledWith(filePath, 'utf8');
-    expect(result).toHaveLength(1);
-    expect(result[0]).toEqual({
-      raw: mockContent,
-      label: 'Test Label',
-      config: { foo: 'bar' },
-    });
+    expect(result).toEqual([
+      {
+        raw: fileContent,
+        label: `${filePath}: ${fileContent.slice(0, 50)}...`,
+        config: undefined,
+      },
+    ]);
+    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
   });
 
-  it('should generate label from file path and content when no label provided', () => {
-    const mockContent = 'A very long template content that should be truncated';
-    const filePath = 'templates/greeting.jinja';
-    const prompt: Partial<Prompt> = {
-      config: { foo: 'bar' },
-    };
+  it('should process a Jinja2 file with a label', () => {
+    const filePath = 'template.j2';
+    const fileContent =
+      'You are a helpful assistant for Promptfoo.\nPlease answer the following question about {{ topic }}: {{ question }}';
+    mockReadFileSync.mockReturnValue(fileContent);
 
-    jest.mocked(fs.readFileSync).mockReturnValue(mockContent);
+    const result = processJinjaFile(filePath, { label: 'Custom Label' });
 
-    const result = processJinjaFile(filePath, prompt);
-
-    expect(result).toHaveLength(1);
-    expect(result[0].label).toBe(
-      'templates/greeting.jinja: A very long template content that should be trunca...',
-    );
+    expect(result).toEqual([
+      {
+        raw: fileContent,
+        label: 'Custom Label',
+        config: undefined,
+      },
+    ]);
+    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
   });
 
-  it('should handle empty content', () => {
-    const mockContent = '';
-    const filePath = 'empty.jinja';
-    const prompt: Partial<Prompt> = {};
+  it('should include config when provided', () => {
+    const filePath = 'template.j2';
+    const fileContent =
+      'You are a helpful assistant for Promptfoo.\nPlease answer the following question about {{ topic }}: {{ question }}';
+    const config = { temperature: 0.7, max_tokens: 150 };
+    mockReadFileSync.mockReturnValue(fileContent);
 
-    jest.mocked(fs.readFileSync).mockReturnValue(mockContent);
+    const result = processJinjaFile(filePath, { config });
 
-    const result = processJinjaFile(filePath, prompt);
-
-    expect(result).toHaveLength(1);
-    expect(result[0]).toEqual({
-      raw: '',
-      label: 'empty.jinja: ...',
-      config: undefined,
-    });
+    expect(result).toEqual([
+      {
+        raw: fileContent,
+        label: `${filePath}: ${fileContent.slice(0, 50)}...`,
+        config,
+      },
+    ]);
+    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
   });
 
-  it('should handle file read errors', () => {
-    const filePath = 'nonexistent.jinja';
-    const prompt: Partial<Prompt> = {};
-
-    jest.mocked(fs.readFileSync).mockImplementation(() => {
+  it('should throw an error if the file cannot be read', () => {
+    const filePath = 'nonexistent.j2';
+    mockReadFileSync.mockImplementation(() => {
       throw new Error('File not found');
     });
 
-    expect(() => processJinjaFile(filePath, prompt)).toThrow('File not found');
+    expect(() => processJinjaFile(filePath, {})).toThrow('File not found');
+    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
   });
 
-  it('should handle undefined prompt config', () => {
-    const mockContent = 'Some content';
-    const filePath = 'test.jinja';
-    const prompt: Partial<Prompt> = {};
+  it('should handle variable interpolation syntax properly', () => {
+    const filePath = 'complex.j2';
+    const fileContent = `
+    {% if condition %}
+      Handle {{ variable1 }} with condition
+    {% else %}
+      Handle {{ variable2 }} without condition
+    {% endif %}
+    `;
+    mockReadFileSync.mockReturnValue(fileContent);
 
-    jest.mocked(fs.readFileSync).mockReturnValue(mockContent);
+    const result = processJinjaFile(filePath, {});
 
-    const result = processJinjaFile(filePath, prompt);
-
-    expect(result).toHaveLength(1);
-    expect(result[0].config).toBeUndefined();
+    expect(result).toEqual([
+      {
+        raw: fileContent,
+        label: `${filePath}: ${fileContent.slice(0, 50)}...`,
+        config: undefined,
+      },
+    ]);
+    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
   });
 });
