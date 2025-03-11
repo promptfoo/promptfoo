@@ -148,6 +148,17 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Static (Single-Turn)',
+    strategy: 'audio',
+    displayName: 'Audio Encoding',
+    description: 'Text-to-speech encoding bypass',
+    longDescription:
+      'Tests handling of text converted to speech audio and encoded as base64 to potentially bypass text-based content filters',
+    cost: 'Low',
+    asrIncrease: '20-30%',
+    link: '/docs/red-team/strategies/audio/',
+  },
+  {
+    category: 'Static (Single-Turn)',
     strategy: 'base64',
     displayName: 'Base64',
     description: 'Base64 encoding bypass',
