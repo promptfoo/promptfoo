@@ -129,15 +129,12 @@ describe('loadApiProvider', () => {
   });
 
   it('should load HTTP provider', async () => {
-    // Since we've changed HttpProvider to use a static create method,
-    // we need to update how we mock it for the test
     const mockProvider = {
       id: jest.fn().mockReturnValue('http://test.com'),
       toString: jest.fn().mockReturnValue('[HTTP Provider http://test.com]'),
       callApi: jest.fn().mockResolvedValue({ output: 'mocked response' })
     };
     
-    // Mock the create method for this test only
     HttpProvider.create = jest.fn().mockResolvedValue(mockProvider);
     
     const provider = await loadApiProvider('http://test.com');
@@ -146,15 +143,12 @@ describe('loadApiProvider', () => {
   });
 
   it('should load HTTPS provider', async () => {
-    // Since we've changed HttpProvider to use a static create method,
-    // we need to update how we mock it for the test
     const mockProvider = {
       id: jest.fn().mockReturnValue('https://test.com'),
       toString: jest.fn().mockReturnValue('[HTTP Provider https://test.com]'),
       callApi: jest.fn().mockResolvedValue({ output: 'mocked response' })
     };
     
-    // Mock the create method for this test only
     HttpProvider.create = jest.fn().mockResolvedValue(mockProvider);
     
     const provider = await loadApiProvider('https://test.com');

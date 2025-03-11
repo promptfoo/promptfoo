@@ -91,7 +91,6 @@ export const handleIsValidOpenAiToolsCall = async ({
     )}`,
   );
   try {
-    // Use Promise.all to properly await all async validateFunctionCall operations
     await Promise.all(
       toolsOutput.map((toolOutput) => 
         validateFunctionCall(

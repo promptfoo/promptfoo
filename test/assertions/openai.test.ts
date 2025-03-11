@@ -20,18 +20,14 @@ jest.mock('path');
 const mockedFs = jest.mocked(fs);
 const mockedPath = jest.mocked(path);
 
-// Use a more comprehensive mocking approach to solve the ext issue
 beforeEach(() => {
-  // Reset all mocks
   jest.clearAllMocks();
   
-  // Mock existsSync to return true for our test files
   mockedFs.existsSync.mockImplementation((path) => {
     const pathStr = path.toString();
     return pathStr.includes('weather_tools.yaml') || pathStr.includes('weather_functions.yaml');
   });
   
-  // Mock readFileSync
   mockedFs.readFileSync.mockImplementation((path, encoding) => {
     const pathStr = path.toString();
     if (pathStr.includes('weather_tools.yaml') || pathStr.includes('weather_functions.yaml')) {
@@ -40,9 +36,7 @@ beforeEach(() => {
     return '';
   });
   
-  // Mock the path utility functions
   mockedPath.parse.mockImplementation((p) => {
-    // Always return a valid object with ext property
     return {
       root: '/',
       dir: '/test/fixtures',
@@ -53,7 +47,6 @@ beforeEach(() => {
   });
   
   mockedPath.resolve.mockImplementation((...args) => {
-    // Just return the last argument which should be the path
     const path = args[args.length - 1];
     if (typeof path === 'string' && path.startsWith('file://')) {
       return path.slice('file://'.length);
@@ -61,15 +54,12 @@ beforeEach(() => {
     return path || './test/fixtures/default.yaml';
   });
   
-  // Fix the relative path implementation
   mockedPath.relative.mockImplementation((basePath, filePath) => {
     return './test/fixtures/weather_tools.yaml';
   });
   
   mockedPath.isAbsolute.mockReturnValue(true);
   mockedPath.join.mockImplementation((...args) => './test/fixtures/weather_tools.yaml');
-  
-  // Mock fs.statSync to return a proper stats object that implements Stats interface
   mockedFs.statSync.mockImplementation((path) => {
     return {
       isDirectory: () => false,
@@ -320,10 +310,8 @@ describe('OpenAI assertions', () => {
     required: [location, unit]
 `;
 
-      // Setup specific mocks for this test
       mockedFs.readFileSync.mockReturnValue(mockYamlContent);
       
-      // For functions test specifically
       mockedPath.parse.mockImplementation((p) => {
         return {
           root: '/',
@@ -758,10 +746,8 @@ describe('OpenAI assertions', () => {
       required: [location, unit]
 `;
 
-      // Setup specific mocks for this test
       mockedFs.readFileSync.mockReturnValue(mockYamlContent);
       
-      // For tools test specifically
       mockedPath.parse.mockImplementation((p) => {
         return {
           root: '/',

@@ -454,16 +454,11 @@ describe('util', () => {
   it('readFilters', async () => {
     const mockFilter = jest.fn();
 
-    // Mock globSync to return the filter path
     jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
-
-    // Mock importModule to return our mock filter
     jest.mocked(importModule).mockResolvedValue(mockFilter);
 
-    // Call the function we're testing
     const filters = await readFilters({ testFilter: 'filter.js' });
 
-    // Verify correct behavior
     expect(importModule).toHaveBeenCalledWith(expect.stringContaining('filter.js'));
     expect(filters.testFilter).toBe(mockFilter);
   });

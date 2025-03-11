@@ -40,7 +40,6 @@ export async function loadCustomPluginDefinition(filePath: string): Promise<Cust
 export class CustomPlugin extends RedteamPluginBase {
   private definition: CustomPluginDefinition;
 
-  // Private constructor - only called by static factory method
   private constructor(
     provider: ApiProvider, 
     purpose: string, 
@@ -50,8 +49,6 @@ export class CustomPlugin extends RedteamPluginBase {
     super(provider, purpose, injectVar);
     this.definition = definition;
   }
-
-  // Static factory method for async initialization
   public static async create(
     provider: ApiProvider,
     purpose: string,

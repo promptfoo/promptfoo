@@ -265,6 +265,7 @@ export class VertexChatProvider extends VertexGenericProvider {
         }
       }
     }
+    // https://ai.google.dev/api/rest/v1/models/streamGenerateContent
     // Build the body with all properties, awaiting the async ones inline
     const body = {
       contents: contents as GeminiFormat,

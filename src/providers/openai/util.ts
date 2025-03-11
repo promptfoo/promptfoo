@@ -204,7 +204,6 @@ export async function validateFunctionCall(
   const functionName = functionCall.name;
   const functionSchema = interpolatedFunctions?.find((f) => f.name === functionName)?.parameters;
   if (!functionSchema) {
-    // Include available function names in the error message for better debugging
     const availableFunctions = interpolatedFunctions?.map(f => f.name).join(', ') || 'none';
     throw new Error(`Called "${functionName}", but there is no function with that name. Available functions: ${availableFunctions}`);
   }
