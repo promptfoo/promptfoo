@@ -22,6 +22,7 @@ import { addPandamonium } from './pandamonium';
 import { addInjections } from './promptInjections';
 import { addRetryTestCases } from './retry';
 import { addRot13 } from './rot13';
+import { addAudioToBase64 } from './simpleAudio';
 import { addImageToBase64 } from './simpleImage';
 import { addCompositeTestCases } from './singleTurnComposite';
 
@@ -148,6 +149,15 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding image encoding to ${testCases.length} test cases`);
       const newTestCases = await addImageToBase64(testCases, injectVar);
       logger.debug(`Added ${newTestCases.length} image encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'audio',
+    action: async (testCases, injectVar) => {
+      logger.debug(`Adding audio encoding to ${testCases.length} test cases`);
+      const newTestCases = await addAudioToBase64(testCases, injectVar);
+      logger.debug(`Added ${newTestCases.length} audio encoded test cases`);
       return newTestCases;
     },
   },

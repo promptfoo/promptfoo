@@ -124,3 +124,57 @@ export async function addImageToBase64(
 
   return imageTestCases;
 }
+
+// Main function for direct testing via: npx tsx simpleImage.ts "Text to convert to image"
+async function main() {
+  // Get text from command line arguments or use default
+  const textToConvert = process.argv[2] || 'This is a test of the image encoding strategy.';
+
+  console.log(`Converting text to image: "${textToConvert}"`);
+
+  try {
+    // Convert text to image
+    const base64Image = await textToImage(textToConvert);
+
+    // Log the first 100 characters of the base64 image to avoid terminal clutter
+    console.log(`Base64 image (first 100 chars): ${base64Image.substring(0, 100)}...`);
+    console.log(`Total base64 image length: ${base64Image.length} characters`);
+
+    // Create a simple test case
+    const testCase = {
+      vars: {
+        prompt: textToConvert,
+      },
+    };
+
+    // Process the test case
+    const processedTestCases = await addImageToBase64([testCase], 'prompt');
+
+    console.log('Test case processed successfully.');
+    console.log(`Original prompt length: ${textToConvert.length} characters`);
+    console.log(`Processed prompt length: ${processedTestCases[0].vars?.prompt.length} characters`);
+
+    // Check if we're running this directly (not being imported)
+    if (require.main === module) {
+      // Write to a file for testing with image viewers
+      const fs = await import('fs');
+      const outputFilePath = 'test-image.png';
+
+      // Decode base64 back to binary
+      const imageBuffer = Buffer.from(base64Image, 'base64');
+
+      // Write binary data to file
+      fs.writeFileSync(outputFilePath, imageBuffer);
+
+      console.log(`Image file written to: ${outputFilePath}`);
+      console.log(`You can open it with any image viewer to verify the conversion.`);
+    }
+  } catch (error) {
+    console.error('Error:', error);
+  }
+}
+
+// Run the main function if this file is executed directly
+if (require.main === module) {
+  main();
+}
