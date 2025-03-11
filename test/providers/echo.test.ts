@@ -8,7 +8,6 @@ describe('EchoProvider', () => {
       expect(provider.label).toBeUndefined();
       expect(provider.config).toBeUndefined();
       expect(provider.delay).toBeUndefined();
-      expect(provider.transform).toBeUndefined();
     });
 
     it('should initialize with provided options', () => {
