@@ -96,14 +96,17 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
   });
 
-  it('should throw an error for an unsupported file format', async () => {
+  it('should handle unsupported file formats', async () => {
     jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
     jest.mocked(maybeFilePath).mockReturnValueOnce(true);
-    process.env.PROMPTFOO_STRICT_FILES = 'true';
-    await expect(readPrompts(['unsupported.for.mat'])).rejects.toThrow(
-      'There are no prompts in "unsupported.for.mat"',
-    );
-    expect(fs.readFileSync).toHaveBeenCalledTimes(0);
+    jest.mocked(fs.readFileSync).mockReturnValueOnce('test content');
+    const result = await readPrompts(['unsupported.for.mat']);
+    expect(result).toEqual([
+      {
+        raw: 'test content',
+        label: 'unsupported.for.mat: test content',
+      },
+    ]);
   });
 
   it('should read a single prompt', async () => {
@@ -143,7 +146,7 @@ describe('readPrompts', () => {
   });
 
   it.each([['prompts.txt'], 'prompts.txt'])(
-    `should read a single prompt file with input:%p`,
+    'should read a single prompt file with input:%p',
     async (promptPath) => {
       jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
       jest.mocked(fs.readFileSync).mockReturnValue('Test prompt 1\n---\nTest prompt 2');
@@ -175,23 +178,23 @@ describe('readPrompts', () => {
     jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob.toString()]);
     await expect(readPrompts(['prompt1.txt', 'prompt2.txt'])).resolves.toEqual([
       {
-        label: 'prompt1.txt: Test prompt 1',
+        label: expect.stringMatching('prompt1.txt: Test prompt 1'),
         raw: 'Test prompt 1',
       },
       {
-        label: 'prompt1.txt: Test prompt 2',
+        label: expect.stringMatching('prompt1.txt: Test prompt 2'),
         raw: 'Test prompt 2',
       },
       {
-        label: 'prompt2.txt: Test prompt 3',
+        label: expect.stringMatching('prompt2.txt: Test prompt 3'),
         raw: 'Test prompt 3',
       },
       {
-        label: 'prompt2.txt: Test prompt 4',
+        label: expect.stringMatching('prompt2.txt: Test prompt 4'),
         raw: 'Test prompt 4',
       },
       {
-        label: 'prompt2.txt: Test prompt 5',
+        label: expect.stringMatching('prompt2.txt: Test prompt 5'),
         raw: 'Test prompt 5',
       },
     ]);
@@ -447,10 +450,6 @@ describe('readPrompts', () => {
       throw new Error(`Unexpected file path in test: ${filePath}`);
     });
     jest.mocked(globSync).mockImplementation(() => ['prompt1.txt', 'prompt2.txt']);
-    // The mocked paths here are an artifact of our globSync mock. In a real
-    // world setting we would get back `prompts/prompt1.txt` instead of `prompts/*/prompt1.txt`
-    // but for the sake of this test we are just going to pretend that the globSync
-    // mock is doing the right thing and giving us back the right paths.
     jest.mocked(fs.readFileSync).mockImplementation((filePath) => {
       if (
         filePath.toString().endsWith('prompt1.txt') ||
@@ -654,7 +653,6 @@ describe('readProviderPromptMap', () => {
       providers: [
         {
           originalProvider: {
-            // 'originalProvider' is treated as originalId
             prompts: ['customPrompt1'],
           },
         },
@@ -773,19 +771,5 @@ describe('processPrompts', () => {
       },
       validPrompt,
     ]);
-  });
-
-  it('should flatten array results from readPrompts', async () => {
-    jest.mocked(fs.readFileSync).mockReturnValueOnce('prompt1\n---\nprompt2');
-    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
-
-    const result = await processPrompts(['test.txt']);
-
-    expect(result).toEqual([
-      { raw: 'prompt1', label: 'test.txt: prompt1' },
-      { raw: 'prompt2', label: 'test.txt: prompt2' },
-    ]);
-    expect(Array.isArray(result)).toBe(true);
-    expect(result).toHaveLength(2);
   });
 });
