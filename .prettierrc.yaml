@@ -9,3 +9,6 @@ overrides:
   - files: '*.mdc'
     options:
       parser: 'markdown'
+  - files: '*.j2'
+    options:
+      parser: 'text'
