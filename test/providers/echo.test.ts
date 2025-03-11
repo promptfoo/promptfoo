@@ -5,12 +5,28 @@ describe('EchoProvider', () => {
     it('should initialize with default options', () => {
       const provider = new EchoProvider();
       expect(provider['options']).toEqual({});
+      expect(provider.label).toBeUndefined();
+      expect(provider.config).toBeUndefined();
+      expect(provider.delay).toBeUndefined();
+      expect(provider.transform).toBeUndefined();
     });
 
     it('should initialize with provided options', () => {
-      const options = { config: { test: 'value' } };
+      const options = {
+        config: { test: 'value' },
+        label: 'Test Echo',
+        delay: 100,
+        transform: 'return { output: input.toUpperCase() };',
+      };
       const provider = new EchoProvider(options);
-      expect(provider['options']).toEqual(options);
+      expect(provider).toEqual(
+        expect.objectContaining({
+          options,
+          label: 'Test Echo',
+          config: { test: 'value' },
+          delay: 100,
+        }),
+      );
     });
 
     it('should initialize with id function if id is provided', () => {
@@ -80,7 +96,7 @@ describe('EchoProvider', () => {
       expect(result.isRefusal).toBe(false);
     });
 
-    it('should merge provided metadata with default metadata', async () => {
+    it('should preserve context metadata', async () => {
       const input = 'Test input';
       const context = { metadata: { test: 'value' } };
       const provider = new EchoProvider();
@@ -89,6 +105,17 @@ describe('EchoProvider', () => {
       expect(result.metadata).toEqual({
         test: 'value',
       });
+    });
+
+    it('should respect the configured delay', async () => {
+      const input = 'Test input';
+      const provider = new EchoProvider({ delay: 100 });
+
+      const startTime = Date.now();
+      await provider.callApi(input);
+      const endTime = Date.now();
+
+      expect(endTime - startTime).toBeGreaterThanOrEqual(90); // Allow for small timing variations
     });
 
     it('should handle empty input', async () => {
