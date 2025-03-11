@@ -73,34 +73,18 @@ describe('GoogleMMLiveProvider', () => {
     });
 
     const response = await provider.callApi('test prompt');
-    expect(response).toEqual({ output: 'test response' });
+    expect(response).toEqual({
+      output: JSON.stringify({ text: 'test response', toolCall: { functionCalls: [] } }),
+    });
   });
 
-  it('should send message and handle function call response', async () => {
+  it('should handle function calls and send tool responses', async () => {
     jest.mocked(WebSocket).mockImplementation(() => {
       setTimeout(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         setTimeout(() => {
           mockWs.onmessage?.({
             data: JSON.stringify({ setupComplete: {} }),
-          } as WebSocket.MessageEvent);
-        }, 10);
-        setTimeout(() => {
-          mockWs.onmessage?.({
-            data: JSON.stringify({
-              serverContent: {
-                modelTurn: {
-                  parts: [
-                    {
-                      executableCode: {
-                        language: 'PYTHON',
-                        code: 'weather_info = default_api.get_weather(city="San Francisco")\nprint(weather_info)\n',
-                      },
-                    },
-                  ],
-                },
-              },
-            }),
           } as WebSocket.MessageEvent);
         }, 10);
         setTimeout(() => {
@@ -109,27 +93,64 @@ describe('GoogleMMLiveProvider', () => {
               toolCall: {
                 functionCalls: [
                   {
-                    name: 'get_weather',
-                    args: { city: 'San Francisco' },
-                    id: 'function-call-14336847574026984983',
+                    id: 'func1',
+                    name: 'test_function',
+                    args: { param1: 'value1' },
                   },
                 ],
               },
             }),
           } as WebSocket.MessageEvent);
-        }, 10);
-      }, 30);
+        }, 20);
+        setTimeout(() => {
+          mockWs.onmessage?.({
+            data: JSON.stringify({
+              serverContent: { modelTurn: { parts: [{ text: 'Function called' }] } },
+            }),
+          } as WebSocket.MessageEvent);
+        }, 30);
+        setTimeout(() => {
+          mockWs.onmessage?.({
+            data: JSON.stringify({ serverContent: { turnComplete: true } }),
+          } as WebSocket.MessageEvent);
+        }, 40);
+      }, 50);
       return mockWs;
     });
 
     const response = await provider.callApi('test prompt');
+
+    expect(mockWs.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        tool_response: {
+          function_responses: [
+            {
+              id: 'func1',
+              name: 'test_function',
+              response: {},
+            },
+          ],
+        },
+      }),
+    );
+
     expect(response).toEqual({
-      output:
-        '{"toolCall":{"functionCalls":[{"name":"get_weather","args":{"city":"San Francisco"},"id":"function-call-14336847574026984983"}]}}',
+      output: JSON.stringify({
+        text: 'Function called',
+        toolCall: {
+          functionCalls: [
+            {
+              id: 'func1',
+              name: 'test_function',
+              args: { param1: 'value1' },
+            },
+          ],
+        },
+      }),
     });
   });
 
-  it('should send message and handle in-built google search tool', async () => {
+  it('should handle multiple function calls in sequence', async () => {
     jest.mocked(WebSocket).mockImplementation(() => {
       setTimeout(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
@@ -141,164 +162,65 @@ describe('GoogleMMLiveProvider', () => {
         setTimeout(() => {
           mockWs.onmessage?.({
             data: JSON.stringify({
-              serverContent: {
-                modelTurn: {
-                  parts: [
-                    {
-                      executableCode: {
-                        language: 'PYTHON',
-                        code: 'concise_search("why is the sea salty", max_num_results=5)\n',
-                      },
-                    },
-                  ],
-                },
-              },
-            }),
-          } as WebSocket.MessageEvent);
-        }, 10);
-        setTimeout(() => {
-          mockWs.onmessage?.({
-            data: JSON.stringify({
-              serverContent: {
-                modelTurn: {
-                  parts: [
-                    {
-                      codeExecutionResult: {
-                        outcome: 'OUTCOME_OK',
-                        output: 'Looking up information on Google Search.\n',
-                      },
-                    },
-                  ],
-                },
-              },
-            }),
-          } as WebSocket.MessageEvent);
-        }, 10);
-        setTimeout(() => {
-          mockWs.onmessage?.({
-            data: JSON.stringify({
-              serverContent: {
-                modelTurn: {
-                  parts: [
-                    {
-                      text: 'The sea is salty primarily due to the erosion of rocks on land. Rainwater,',
-                    },
-                  ],
-                },
-              },
-            }),
-          } as WebSocket.MessageEvent);
-        }, 10);
-        setTimeout(() => {
-          mockWs.onmessage?.({
-            data: JSON.stringify({
-              serverContent: {
-                modelTurn: {
-                  parts: [
-                    {
-                      text: ' which is slightly acidic due to dissolved carbon dioxide, erodes rocks and carries dissolved minerals and salts into rivers.',
-                    },
-                  ],
-                },
-              },
-            }),
-          } as WebSocket.MessageEvent);
-        }, 10);
-        setTimeout(() => {
-          mockWs.onmessage?.({
-            data: JSON.stringify({
-              serverContent: {
-                groundingMetadata: {
-                  searchEntryPoint: {
-                    renderedContent:
-                      '<style>\n.container {\n  align-items: center;\n  border-radius: 8px;\n  display: flex;\n  font-family: Google Sans, Roboto, sans-serif;\n  font-size: 14px;\n  line-height: 20px;\n  padding: 8px 12px;\n}\n.chip {\n  dis}',
+              toolCall: {
+                functionCalls: [
+                  {
+                    id: 'func1',
+                    name: 'function1',
+                    args: {},
                   },
-                },
+                ],
               },
             }),
           } as WebSocket.MessageEvent);
-        }, 10);
+        }, 20);
+        setTimeout(() => {
+          mockWs.onmessage?.({
+            data: JSON.stringify({
+              toolCall: {
+                functionCalls: [
+                  {
+                    id: 'func2',
+                    name: 'function2',
+                    args: {},
+                  },
+                ],
+              },
+            }),
+          } as WebSocket.MessageEvent);
+        }, 30);
         setTimeout(() => {
           mockWs.onmessage?.({
             data: JSON.stringify({ serverContent: { turnComplete: true } }),
           } as WebSocket.MessageEvent);
-        }, 10);
-      }, 70);
+        }, 40);
+      }, 50);
       return mockWs;
     });
 
     const response = await provider.callApi('test prompt');
+
+    // Account for setup message + user message + 2 tool responses
+    expect(mockWs.send).toHaveBeenCalledTimes(4);
     expect(response).toEqual({
-      output:
-        'The sea is salty primarily due to the erosion of rocks on land. Rainwater, which is slightly acidic due to dissolved carbon dioxide, erodes rocks and carries dissolved minerals and salts into rivers.',
+      output: JSON.stringify({
+        text: '',
+        toolCall: {
+          functionCalls: [
+            {
+              id: 'func1',
+              name: 'function1',
+              args: {},
+            },
+            {
+              id: 'func2',
+              name: 'function2',
+              args: {},
+            },
+          ],
+        },
+      }),
     });
-  });
-
-  it('should send message and handle in-built code execution tool', async () => {
-    jest.mocked(WebSocket).mockImplementation(() => {
-      setTimeout(() => {
-        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-        setTimeout(() => {
-          mockWs.onmessage?.({
-            data: JSON.stringify({ setupComplete: {} }),
-          } as WebSocket.MessageEvent);
-        }, 10);
-        setTimeout(() => {
-          mockWs.onmessage?.({
-            data: JSON.stringify({
-              serverContent: {
-                modelTurn: {
-                  parts: [
-                    {
-                      executableCode: {
-                        language: 'PYTHON',
-                        code: 'result = 1341 * 23\nprint(result)\n',
-                      },
-                    },
-                  ],
-                },
-              },
-            }),
-          } as WebSocket.MessageEvent);
-        }, 10);
-        setTimeout(() => {
-          mockWs.onmessage?.({
-            data: JSON.stringify({ serverContent: { modelTurn: { parts: [{ text: '\n' }] } } }),
-          } as WebSocket.MessageEvent);
-        }, 10);
-        setTimeout(() => {
-          mockWs.onmessage?.({
-            data: JSON.stringify({
-              serverContent: {
-                modelTurn: {
-                  parts: [{ codeExecutionResult: { outcome: 'OUTCOME_OK', output: '30843\n' } }],
-                },
-              },
-            }),
-          } as WebSocket.MessageEvent);
-        }, 10);
-        setTimeout(() => {
-          mockWs.onmessage?.({
-            data: JSON.stringify({
-              serverContent: {
-                modelTurn: {
-                  parts: [{ text: 'The result of multiplying 1341 by 23 is 30843.\n' }],
-                },
-              },
-            }),
-          } as WebSocket.MessageEvent);
-        }, 10);
-        setTimeout(() => {
-          mockWs.onmessage?.({
-            data: JSON.stringify({ serverContent: { turnComplete: true } }),
-          } as WebSocket.MessageEvent);
-        }, 10);
-      }, 60);
-      return mockWs;
-    });
-
-    const response = await provider.callApi('\n');
-    expect(response).toEqual({ output: '\nThe result of multiplying 1341 by 23 is 30843.\n' });
   });
 
   it('should handle WebSocket errors', async () => {
@@ -329,5 +251,86 @@ describe('GoogleMMLiveProvider', () => {
 
     const response = await provider.callApi('test prompt');
     expect(response).toEqual({ error: 'WebSocket request timed out' });
+  });
+
+  it('should handle invalid response data format', async () => {
+    jest.mocked(WebSocket).mockImplementation(() => {
+      setTimeout(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        setTimeout(() => {
+          mockWs.onmessage?.({
+            data: new Uint8Array([1, 2, 3]), // Invalid data format
+          } as unknown as WebSocket.MessageEvent);
+        }, 10);
+      }, 20);
+      return mockWs;
+    });
+
+    const response = await provider.callApi('test prompt');
+    expect(response.error).toBe('Unexpected response data format');
+  });
+
+  it('should handle mixed text and function calls', async () => {
+    jest.mocked(WebSocket).mockImplementation(() => {
+      setTimeout(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        setTimeout(() => {
+          mockWs.onmessage?.({
+            data: JSON.stringify({ setupComplete: {} }),
+          } as WebSocket.MessageEvent);
+        }, 10);
+        setTimeout(() => {
+          mockWs.onmessage?.({
+            data: JSON.stringify({
+              serverContent: { modelTurn: { parts: [{ text: 'Initial text' }] } },
+            }),
+          } as WebSocket.MessageEvent);
+        }, 20);
+        setTimeout(() => {
+          mockWs.onmessage?.({
+            data: JSON.stringify({
+              toolCall: {
+                functionCalls: [
+                  {
+                    id: 'func1',
+                    name: 'testFunc',
+                    args: { test: true },
+                  },
+                ],
+              },
+            }),
+          } as WebSocket.MessageEvent);
+        }, 30);
+        setTimeout(() => {
+          mockWs.onmessage?.({
+            data: JSON.stringify({
+              serverContent: { modelTurn: { parts: [{ text: ' Final text' }] } },
+            }),
+          } as WebSocket.MessageEvent);
+        }, 40);
+        setTimeout(() => {
+          mockWs.onmessage?.({
+            data: JSON.stringify({ serverContent: { turnComplete: true } }),
+          } as WebSocket.MessageEvent);
+        }, 50);
+      }, 60);
+      return mockWs;
+    });
+
+    const response = await provider.callApi('test prompt');
+    expect(response).toEqual({
+      output: JSON.stringify({
+        text: 'Initial text Final text',
+        toolCall: {
+          functionCalls: [
+            {
+              id: 'func1',
+              name: 'testFunc',
+              args: { test: true },
+            },
+          ],
+        },
+      }),
+    });
   });
 });
