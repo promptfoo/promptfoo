@@ -329,7 +329,7 @@ describe('shared redteam provider utilities', () => {
       };
 
       await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
-        'Expected target output or error to be set',
+        /Target returned malformed response: expected either `output` or `error` to be set./,
       );
     });
 

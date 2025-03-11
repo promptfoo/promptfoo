@@ -146,7 +146,13 @@ export async function getTargetResponse(
     };
   }
 
-  throw new Error('Expected target output or error to be set');
+  throw new Error(
+    `
+    Target returned malformed response: expected either \`output\` or \`error\` to be set.
+    
+    Instead got: ${safeJsonStringify(targetRespRaw)}
+    `,
+  );
 }
 
 export interface Message {

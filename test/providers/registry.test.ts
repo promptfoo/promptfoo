@@ -78,10 +78,14 @@ describe('Provider Registry', () => {
       expect(factory).toBeDefined();
 
       const provider = await factory!.create('echo', mockProviderOptions, mockContext);
-      expect(provider.id()).toBe('echo');
+      const expectedId = mockProviderOptions.id || 'echo';
+      expect(provider.id()).toBe(expectedId);
 
       const result = await provider.callApi('test input');
       expect(result.output).toBe('test input');
+      expect(result.raw).toBe('test input');
+      expect(result.cost).toBe(0);
+      expect(result.isRefusal).toBe(false);
     });
 
     it('should handle python provider correctly', async () => {

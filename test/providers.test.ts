@@ -33,7 +33,19 @@ describe('loadApiProvider', () => {
   it('should load echo provider', async () => {
     const provider = await loadApiProvider('echo');
     expect(provider.id()).toBe('echo');
-    await expect(provider.callApi('test')).resolves.toEqual({ output: 'test' });
+    await expect(provider.callApi('test')).resolves.toEqual({
+      output: 'test',
+      raw: 'test',
+      cost: 0,
+      cached: false,
+      isRefusal: false,
+      tokenUsage: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+      },
+      metadata: {},
+    });
   });
 
   it('should load file provider from yaml', async () => {
