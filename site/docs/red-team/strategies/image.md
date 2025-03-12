@@ -6,13 +6,14 @@ sidebar_label: Image Inputs
 
 The Image strategy converts prompt text into an image and then encodes that image as a base64 string. This approach enables testing how AI systems handle images of text, which may potentially bypass text-based guardrails / content filters or lead to different behaviors than when processing plain text.
 
-## Use Case
+## Why Use This Strategy
 
-This strategy is useful for:
+This strategy helps security researchers and AI developers:
 
-1. Testing if models can extract and process text from base64-encoded images
-2. Evaluating if image-encoded text can bypass content filters that typically scan plain text
-3. Assessing model behavior when handling multi-modal inputs (text embedded in an image format)
+1. **Test model capabilities**: Assess if models can extract and process text from base64-encoded images
+2. **Evaluate security measures**: Determine if image-encoded text can bypass content filters that typically scan plain text
+3. **Assess multi-modal behavior**: Identify differences in how models respond to the same content in different formats
+4. **Discover inconsistencies**: Reveal potential vulnerabilities by comparing text-based and image-based processing pathways
 
 ## How It Works
 
@@ -24,6 +25,34 @@ The strategy performs the following operations:
 4. Replaces the original text in your test case with the base64-encoded image
 
 The resulting test case contains the same semantic content as the original but in a different format that may be processed differently by AI systems.
+
+## Text-to-Image Conversion Example
+
+Below is an example of converting a text prompt into an image:
+
+Original text prompt:
+
+```
+This text will be converted to an image. Models processing this as an image rather than plain text may respond differently.
+```
+
+[IMAGE PLACEHOLDER - Will show the rendered image representation of the text]
+
+After encoding, this image is converted to base64, which begins like:
+
+```
+iVBORw0KGgoAAAANSUhEUgAAA...
+```
+
+## Understanding the `{{image}}` Variable
+
+The `{{image}}` syntax in the examples is a Nunjucks template variable. When promptfoo processes your test cases:
+
+1. It identifies this variable in your prompt template
+2. Converts your text to an image
+3. Replaces `{{image}}` with the base64-encoded image data
+
+This template variable approach allows you to precisely control where in your prompt structure the image should be inserted, which is particularly important for multimodal models that expect specific formats.
 
 ## Implementation
 
@@ -80,12 +109,8 @@ npm i sharp
 
 :::
 
-## Importance
+## Related Concepts
 
-This strategy is valuable because:
-
-1. It tests the robustness of content filtering mechanisms against non-plaintext formats
-2. It evaluates the model's ability to handle and extract information from encoded data
-3. It can reveal inconsistencies in how models handle the same content presented in different formats
+- [Audio Jailbreaking](/docs/red-team/strategies/audio.md) - Similar approach using speech audio instead of images
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
