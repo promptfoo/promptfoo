@@ -50,8 +50,8 @@ const PRIORITY_STRATEGIES = ['jailbreak:composite', 'pliny', 'prompt-injections'
 
 // Sort function for prioritizing specific strategies
 function sortByPriorityStrategies(
-  a: { gradingResult?: GradingResult; metadata?: any },
-  b: { gradingResult?: GradingResult; metadata?: any },
+  a: { gradingResult?: GradingResult; metadata?: Record<string, any> },
+  b: { gradingResult?: GradingResult; metadata?: Record<string, any> },
 ): number {
   const strategyA = getStrategyIdFromTest(a);
   const strategyB = getStrategyIdFromTest(b);
