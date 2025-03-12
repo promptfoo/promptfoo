@@ -28,31 +28,15 @@ The resulting test case contains the same semantic content as the original but i
 
 ## Text-to-Image Conversion Example
 
-Below is an example of converting a text prompt into an image:
+Below is an example of converting a text prompt into an image from our `harmful:hate` plugin.
 
-Original text prompt:
-
-```
-This text will be converted to an image. Models processing this as an image rather than plain text may respond differently.
-```
-
-[IMAGE PLACEHOLDER - Will show the rendered image representation of the text]
+![Example of text converted to an image](/img/docs/redteam/harmful-content-example.png)
 
 After encoding, this image is converted to base64, which begins like:
 
 ```
 iVBORw0KGgoAAAANSUhEUgAAA...
 ```
-
-## Understanding the `{{image}}` Variable
-
-The `{{image}}` syntax in the examples is a Nunjucks template variable. When promptfoo processes your test cases:
-
-1. It identifies this variable in your prompt template
-2. Converts your text to an image
-3. Replaces `{{image}}` with the base64-encoded image data
-
-This template variable approach allows you to precisely control where in your prompt structure the image should be inserted, which is particularly important for multimodal models that expect specific formats.
 
 ## Implementation
 
@@ -103,6 +87,10 @@ Your prompt.json file should look like this:
 
 :::note
 You should update the prompt.json to match the prompt format of your LLM provider. Base64 images are all encoded as PNG images.
+:::
+
+:::note
+The `{{image}}` syntax in the examples is a Nunjucks template variable. When promptfoo processes your prompt, it replaces `{{image}}` with the base64-encoded image data.
 :::
 
 :::tip
