@@ -185,6 +185,19 @@ function fail(reason: string, tokensUsed?: Partial<TokenUsage>): Omit<GradingRes
   };
 }
 
+/**
+ * Adds the assertion property to a grading result
+ */
+function addAssertionToGradingResult(
+  result: Omit<GradingResult, 'assertion'>,
+  assertion?: Assertion | null,
+): GradingResult {
+  return {
+    ...result,
+    assertion,
+  };
+}
+
 export async function matchesSimilarity(
   expected: string,
   output: string,
@@ -442,14 +455,17 @@ export async function matchesLlmRubric(
   );
   const resp = await finalProvider.callApi(prompt);
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', resp.tokenUsage);
+    return addAssertionToGradingResult(fail(resp.error || 'No output', resp.tokenUsage), assertion);
   }
 
   invariant(typeof resp.output === 'string', 'llm-rubric produced malformed response');
   try {
     const jsonObjects = extractJsonObjects(resp.output);
     if (jsonObjects.length === 0) {
-      return fail('Could not extract JSON from llm-rubric response', resp.tokenUsage);
+      return addAssertionToGradingResult(
+        fail('Could not extract JSON from llm-rubric response', resp.tokenUsage),
+        assertion,
+      );
     }
 
     // expects properties pass, score, and reason
@@ -492,9 +508,9 @@ export async function matchesLlmRubric(
       },
     };
   } catch (err) {
-    return fail(
-      `llm-rubric produced malformed response: ${err}\n\n${resp.output}`,
-      resp.tokenUsage,
+    return addAssertionToGradingResult(
+      fail(`llm-rubric produced malformed response: ${err}\n\n${resp.output}`, resp.tokenUsage),
+      assertion,
     );
   }
 }

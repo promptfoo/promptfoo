@@ -21,11 +21,16 @@ export const handleRedteam = async ({
     provider,
     renderedValue,
   );
+  const finalAssertion = {
+    ...assertion,
+    value: rubric,
+  };
+  console.log('finalAssertion', finalAssertion);
+  grade.componentResults?.forEach((componentResult) => {
+    componentResult.assertion = finalAssertion;
+  });
   return {
-    assertion: {
-      ...assertion,
-      value: rubric,
-    },
+    assertion: finalAssertion,
     ...grade,
     suggestions,
     metadata: {
