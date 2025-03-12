@@ -59,15 +59,20 @@ This template variable approach allows you to precisely control where in your pr
 Use it in your promptfooconfig.yaml like this:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Multi-modal redteam'
 targets:
   - bedrock:amazon.nova-lite-v1:0
 prompts:
   - file://path/to/your/prompt.json
-strategies:
-  - image
-  - id: basic
-    config:
-      enabled: false
+redteam:
+  plugins:
+    - ...
+  strategies:
+    - image
+    - id: basic
+      config:
+        enabled: false
 ```
 
 :::note

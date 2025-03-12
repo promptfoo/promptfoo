@@ -104,6 +104,7 @@ export async function addImageToBase64(
       vars: {
         ...testCase.vars,
         [injectVar]: base64Image,
+        image_text: originalText,
       },
       metadata: {
         ...testCase.metadata,
