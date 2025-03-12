@@ -13,14 +13,23 @@ function escapeXml(unsafe: string): string {
     .replace(/'/g, '&apos;');
 }
 
+// Cache for the sharp module to avoid repeated dynamic imports
+let sharpCache: any = null;
+
 /**
  * Dynamically imports the sharp library
  * @returns The sharp module or null if not available
  */
 async function importSharp() {
+  // Return the cached module if available
+  if (sharpCache) {
+    return sharpCache;
+  }
+
   try {
     // Dynamic import of sharp
-    return await import('sharp');
+    sharpCache = await import('sharp');
+    return sharpCache;
   } catch (error) {
     logger.warn(`Sharp library not available: ${error}`);
     return null;

@@ -5,6 +5,26 @@ import type { TestCase } from '../../../src/types';
 
 jest.mock('cli-progress');
 
+jest.mock('../../../src/logger', () => ({
+  debug: jest.fn(),
+  info: jest.fn(),
+  warn: jest.fn(),
+  error: jest.fn(),
+  level: 'info',
+}));
+
+jest.mock('../../../src/redteam/strategies/simpleImage', () => {
+  const originalModule = jest.requireActual('../../../src/redteam/strategies/simpleImage');
+
+  return {
+    ...originalModule,
+    textToImage: jest.fn().mockImplementation(async (text) => {
+      // Return a base64 string that starts with iVBOR (standard PNG header in base64)
+      return 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    }),
+  };
+});
+
 describe('Image strategy', () => {
   const testCases: TestCase[] = [
     {
