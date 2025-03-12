@@ -160,6 +160,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       let responseDone = false;
       let usage = null;
 
+      // Audio content accumulators
+      const audioContent: Buffer[] = [];
+      let audioFormat = 'wav';
+      let hasAudioContent = false;
+
       // Track message IDs and function call state
       let messageId = '';
       let responseId = '';
@@ -217,7 +222,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   role: 'user',
                   content: [
                     {
-                      type: 'text',
+                      type: 'input_text',
                       text: prompt,
                     },
                   ],
@@ -274,12 +279,22 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               responseText = message.text;
               break;
 
-            // Handle new response event types
+            // Handle content part events
             case 'response.content_part.added':
               // Log that we received a content part
-              logger.debug('Received content part');
+              logger.debug(`Received content part: ${JSON.stringify(message.content_part)}`);
+
+              // Track content part ID if needed for later reference
+              if (message.content_part && message.content_part.id) {
+                logger.debug(`Content part added with ID: ${message.content_part.id}`);
+              }
               break;
 
+            case 'response.content_part.done':
+              logger.debug('Content part completed');
+              break;
+
+            // Handle audio transcript events
             case 'response.audio_transcript.delta':
               // Accumulate audio transcript deltas - this is the text content
               responseText += message.delta;
@@ -294,6 +309,31 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               }
               break;
 
+            // Handle audio data events - store in metadata if needed
+            case 'response.audio.delta':
+              // Handle audio data (could store in metadata for playback if needed)
+              logger.debug('Received audio data chunk');
+              if (message.audio && message.audio.length > 0) {
+                // Store the audio data for later use
+                try {
+                  const audioBuffer = Buffer.from(message.audio, 'base64');
+                  audioContent.push(audioBuffer);
+                  hasAudioContent = true;
+                } catch (error) {
+                  logger.error(`Error processing audio data: ${error}`);
+                }
+              }
+              break;
+
+            case 'response.audio.done':
+              logger.debug('Audio data complete');
+              // If audio format is specified in the message, capture it
+              if (message.format) {
+                audioFormat = message.format;
+              }
+              break;
+
+            // Handle output items (including function calls)
             case 'response.output_item.added':
               if (message.item.type === 'function_call') {
                 functionCallOccurred = true;
@@ -304,10 +344,20 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   name: message.item.name,
                   arguments: message.item.arguments || '{}',
                 });
+              } else if (message.item.type === 'text') {
+                // Handle text output item - also add to responseText
+                if (message.item.text) {
+                  responseText += message.item.text;
+                  logger.debug(`Added text output item: "${message.item.text}"`);
+                }
               } else {
                 // Log other output item types
                 logger.debug(`Received output item of type: ${message.item.type}`);
               }
+              break;
+
+            case 'response.output_item.done':
+              logger.debug('Output item complete');
               break;
 
             case 'response.function_call_arguments.done':
@@ -384,6 +434,13 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   responseId,
                   messageId,
                   usage,
+                  // Include audio data in metadata if available
+                  ...(hasAudioContent && {
+                    audio: {
+                      data: Buffer.concat(audioContent),
+                      format: audioFormat,
+                    },
+                  }),
                 },
                 functionCallOccurred,
                 functionCallResults:
@@ -520,15 +577,27 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         finalOutput += '\n\n[Function calls were made during processing]';
       }
 
+      // Construct the metadata with audio if available
+      const metadata = {
+        ...result.metadata,
+        functionCallOccurred: result.functionCallOccurred,
+        functionCallResults: result.functionCallResults,
+      };
+
+      // If the response has audio data, format it according to the promptfoo audio interface
+      if (result.metadata?.audio) {
+        metadata.audio = {
+          data: result.metadata.audio.data,
+          format: result.metadata.audio.format,
+          transcript: result.output, // Use the text output as transcript
+        };
+      }
+
       return {
         output: finalOutput,
         tokenUsage: result.tokenUsage,
         cached: result.cached,
-        metadata: {
-          ...result.metadata,
-          functionCallOccurred: result.functionCallOccurred,
-          functionCallResults: result.functionCallResults,
-        },
+        metadata,
       };
     } catch (err) {
       const errorMessage = `WebSocket error: ${String(err)}`;
@@ -587,6 +656,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       let responseDone = false;
       let usage = null;
 
+      // Audio content accumulators
+      const audioContent: Buffer[] = [];
+      let audioFormat = 'wav';
+      let hasAudioContent = false;
+
       // Track message IDs and function call state
       let messageId = '';
       let responseId = '';
@@ -616,7 +690,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             role: 'user',
             content: [
               {
-                type: 'text',
+                type: 'input_text',
                 text: prompt,
               },
             ],
@@ -686,12 +760,22 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               responseText = message.text;
               break;
 
-            // Handle new response event types
+            // Handle content part events
             case 'response.content_part.added':
               // Log that we received a content part
-              logger.debug('Received content part');
+              logger.debug(`Received content part: ${JSON.stringify(message.content_part)}`);
+
+              // Track content part ID if needed for later reference
+              if (message.content_part && message.content_part.id) {
+                logger.debug(`Content part added with ID: ${message.content_part.id}`);
+              }
               break;
 
+            case 'response.content_part.done':
+              logger.debug('Content part completed');
+              break;
+
+            // Handle audio transcript events
             case 'response.audio_transcript.delta':
               // Accumulate audio transcript deltas - this is the text content
               responseText += message.delta;
@@ -706,6 +790,31 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               }
               break;
 
+            // Handle audio data events - store in metadata if needed
+            case 'response.audio.delta':
+              // Handle audio data (could store in metadata for playback if needed)
+              logger.debug('Received audio data chunk');
+              if (message.audio && message.audio.length > 0) {
+                // Store the audio data for later use
+                try {
+                  const audioBuffer = Buffer.from(message.audio, 'base64');
+                  audioContent.push(audioBuffer);
+                  hasAudioContent = true;
+                } catch (error) {
+                  logger.error(`Error processing audio data: ${error}`);
+                }
+              }
+              break;
+
+            case 'response.audio.done':
+              logger.debug('Audio data complete');
+              // If audio format is specified in the message, capture it
+              if (message.format) {
+                audioFormat = message.format;
+              }
+              break;
+
+            // Handle output items (including function calls)
             case 'response.output_item.added':
               if (message.item.type === 'function_call') {
                 functionCallOccurred = true;
@@ -716,10 +825,20 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   name: message.item.name,
                   arguments: message.item.arguments || '{}',
                 });
+              } else if (message.item.type === 'text') {
+                // Handle text output item - also add to responseText
+                if (message.item.text) {
+                  responseText += message.item.text;
+                  logger.debug(`Added text output item: "${message.item.text}"`);
+                }
               } else {
                 // Log other output item types
                 logger.debug(`Received output item of type: ${message.item.type}`);
               }
+              break;
+
+            case 'response.output_item.done':
+              logger.debug('Output item complete');
               break;
 
             case 'response.function_call_arguments.done':
@@ -796,6 +915,13 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   responseId,
                   messageId,
                   usage,
+                  // Include audio data in metadata if available
+                  ...(hasAudioContent && {
+                    audio: {
+                      data: Buffer.concat(audioContent),
+                      format: audioFormat,
+                    },
+                  }),
                 },
                 functionCallOccurred,
                 functionCallResults:
