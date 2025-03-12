@@ -150,7 +150,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
       }, this.config.timeoutMs || 10000);
 
       let response_text_total = '';
-      const function_calls_total: string[] = [];
+      const function_calls_total: FunctionCall[] = [];
 
       ws.onmessage = async (event) => {
         logger.debug(`Received WebSocket response: ${event.data}`);
@@ -194,12 +194,14 @@ export class GoogleMMLiveProvider implements ApiProvider {
             const functionResponses: any[] = [];
             for (const functionCall of response.toolCall.functionCalls) {
               function_calls_total.push(functionCall);
-              functionResponses.push({
-                id: functionCall.id,
-                name: functionCall.name,
-                // TODO: add mocking of function response here
-                response: {},
-              });
+              if (functionCall && functionCall.id && functionCall.name) {
+                functionResponses.push({
+                  id: functionCall.id,
+                  name: functionCall.name,
+                  // TODO: add mocking of function response here
+                  response: {},
+                });
+              }
             }
             const toolMessage = {
               tool_response: {
