@@ -31,7 +31,7 @@ import RiskCategories from './RiskCategories';
 import StrategyStats from './StrategyStats';
 import TestSuites from './TestSuites';
 import ToolsDialog from './ToolsDialog';
-import { getPluginIdFromResult, getStrategyIdFromMetric } from './shared';
+import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import './Report.css';
 
 const App: React.FC = () => {
@@ -84,6 +84,10 @@ const App: React.FC = () => {
   }, []);
 
   const failuresByPlugin = React.useMemo(() => {
+    if (!evalData) {
+      return {};
+    }
+
     const failures: Record<
       string,
       { prompt: string; output: string; gradingResult?: GradingResult; result?: EvaluateResult }[]
@@ -116,6 +120,10 @@ const App: React.FC = () => {
   }, [evalData]);
 
   const passesByPlugin = React.useMemo(() => {
+    if (!evalData) {
+      return {};
+    }
+
     const passes: Record<
       string,
       { prompt: string; output: string; gradingResult?: GradingResult; result?: EvaluateResult }[]
@@ -123,11 +131,9 @@ const App: React.FC = () => {
     evalData?.results.results.forEach((result) => {
       const pluginId = getPluginIdFromResult(result);
       if (!pluginId) {
-        // Skip results without plugin ID
         return;
       }
 
-      // Check if the test passed - now using the same criteria as categoryStats
       if (result.success && result.gradingResult?.pass) {
         if (!passes[pluginId]) {
           passes[pluginId] = [];
@@ -143,6 +149,73 @@ const App: React.FC = () => {
     });
     return passes;
   }, [evalData]);
+
+  // Calculate categoryStats and strategyStats even if we might return early
+  const categoryStats = React.useMemo(() => {
+    if (!evalData) {
+      return {};
+    }
+
+    return evalData.results.results.reduce(
+      (acc, row) => {
+        const pluginId = getPluginIdFromResult(row);
+        if (!pluginId) {
+          return acc;
+        }
+
+        acc[pluginId] = acc[pluginId] || { pass: 0, total: 0, passWithFilter: 0 };
+        acc[pluginId].total++;
+
+        if (row.success && row.gradingResult?.pass) {
+          acc[pluginId].pass++;
+          acc[pluginId].passWithFilter++;
+        }
+
+        return acc;
+      },
+      {} as Record<string, { pass: number; total: number; passWithFilter: number }>,
+    );
+  }, [evalData]);
+
+  // Updated strategy stats calculation that leverages failuresByPlugin and passesByPlugin
+  const strategyStats = React.useMemo(() => {
+    if (!failuresByPlugin || !passesByPlugin) {
+      return {};
+    }
+
+    const stats: Record<string, { pass: number; total: number }> = {};
+
+    // Process tests in failuresByPlugin (attack successes)
+    Object.values(failuresByPlugin).forEach((tests) => {
+      tests.forEach((test) => {
+        const strategyId =
+          test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
+
+        if (!stats[strategyId]) {
+          stats[strategyId] = { pass: 0, total: 0 };
+        }
+
+        stats[strategyId].pass += 1;
+        stats[strategyId].total += 1;
+      });
+    });
+
+    // Process tests in passesByPlugin (attack failures)
+    Object.values(passesByPlugin).forEach((tests) => {
+      tests.forEach((test) => {
+        const strategyId =
+          test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
+
+        if (!stats[strategyId]) {
+          stats[strategyId] = { pass: 0, total: 0 };
+        }
+
+        stats[strategyId].total += 1;
+      });
+    });
+
+    return stats;
+  }, [failuresByPlugin, passesByPlugin]);
 
   React.useEffect(() => {
     document.title = `Report: ${evalData?.config.description || evalId || 'Red Team'} | promptfoo`;
@@ -194,64 +267,6 @@ const App: React.FC = () => {
     const providerTools = evalData.config.providers[0].config?.tools;
     tools = Array.isArray(providerTools) ? providerTools : [providerTools];
   }
-
-  const categoryStats = evalData.results.results.reduce(
-    (acc, row) => {
-      const pluginId = getPluginIdFromResult(row);
-      if (!pluginId) {
-        // Skip results without plugin ID
-        return acc;
-      }
-
-      // Initialize stats for this plugin if not already present
-      acc[pluginId] = acc[pluginId] || { pass: 0, total: 0, passWithFilter: 0 };
-      acc[pluginId].total++;
-
-      // Count as passed if the test was successful
-      if (row.success && row.gradingResult?.pass) {
-        acc[pluginId].pass++;
-        acc[pluginId].passWithFilter++;
-      }
-
-      return acc;
-    },
-    {} as Record<string, { pass: number; total: number; passWithFilter: number }>,
-  );
-
-  const strategyStats = evalData.results.results.reduce(
-    (acc, row) => {
-      const metricNames =
-        row.gradingResult?.componentResults?.map((result) => result.assertion?.metric) || [];
-
-      for (const metric of metricNames) {
-        if (typeof metric !== 'string') {
-          continue;
-        }
-
-        let strategyId = getStrategyIdFromMetric(metric);
-        if (!strategyId) {
-          strategyId = 'basic';
-        }
-
-        if (!acc[strategyId]) {
-          acc[strategyId] = { pass: 0, total: 0 };
-        }
-
-        acc[strategyId].total++;
-
-        const passed = row.gradingResult?.componentResults?.some(
-          (result) => result.assertion?.metric === metric && result.pass,
-        );
-
-        if (passed) {
-          acc[strategyId].pass++;
-        }
-      }
-
-      return acc;
-    },
-    {} as Record<string, { pass: number; total: number }>,
-  );
 
   const handlePromptChipClick = () => {
     setIsPromptModalOpen(true);

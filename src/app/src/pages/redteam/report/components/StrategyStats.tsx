@@ -119,45 +119,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<Error | null>(null);
 
-  // Create accurate strategy stats by properly analyzing the data
-  const accurateStrategyStats = React.useMemo(() => {
-    const stats: Record<string, { pass: number; total: number }> = {};
-
-    // Process tests in failuresByPlugin (attack successes)
-    Object.values(failuresByPlugin).forEach((tests) => {
-      tests.forEach((test) => {
-        const strategyId =
-          test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
-        const key = strategyId || 'basic';
-
-        if (!stats[key]) {
-          stats[key] = { pass: 0, total: 0 };
-        }
-
-        stats[key].pass += 1;
-        stats[key].total += 1;
-      });
-    });
-
-    // Process tests in passesByPlugin (attack failures)
-    Object.values(passesByPlugin).forEach((tests) => {
-      tests.forEach((test) => {
-        const strategyId =
-          test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
-        const key = strategyId || 'basic';
-
-        if (!stats[key]) {
-          stats[key] = { pass: 0, total: 0 };
-        }
-
-        stats[key].total += 1;
-      });
-    });
-
-    return stats;
-  }, [failuresByPlugin, passesByPlugin]);
-
-  const strategies = Object.entries(accurateStrategyStats).sort(
+  const strategies = Object.entries(strategyStats).sort(
     (a, b) => (b[1].total - b[1].pass) / b[1].total - (a[1].total - a[1].pass) / a[1].total,
   );
 
@@ -186,7 +148,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
       Object.values(failuresByPlugin).forEach((tests) => {
         tests.forEach((test) => {
           const testStrategy = getStrategyIdFromTest(test);
-          if ((strategy === 'basic' && !testStrategy) || testStrategy === strategy) {
+          if (testStrategy === strategy) {
             failures.push(test);
           }
         });
@@ -196,7 +158,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
       Object.values(passesByPlugin).forEach((tests) => {
         tests.forEach((test) => {
           const testStrategy = getStrategyIdFromTest(test);
-          if ((strategy === 'basic' && !testStrategy) || testStrategy === strategy) {
+          if (testStrategy === strategy) {
             passes.push(test);
           }
         });
@@ -267,7 +229,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
               const testStrategy =
                 test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
 
-              if ((strategy === 'basic' && !testStrategy) || testStrategy === strategy) {
+              if (testStrategy === strategy) {
                 if (!pluginStats[plugin]) {
                   pluginStats[plugin] = { passes: 0, total: 0 };
                 }
@@ -283,7 +245,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
               const testStrategy =
                 test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
 
-              if ((strategy === 'basic' && !testStrategy) || testStrategy === strategy) {
+              if (testStrategy === strategy) {
                 if (!pluginStats[plugin]) {
                   pluginStats[plugin] = { passes: 0, total: 0 };
                 }
@@ -734,7 +696,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
           onTabChange={(newValue) => setTabValue(newValue)}
           failuresByPlugin={failuresByPlugin}
           passesByPlugin={passesByPlugin}
-          strategyStats={accurateStrategyStats}
+          strategyStats={strategyStats}
         />
       </Drawer>
     </>
