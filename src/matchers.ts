@@ -416,15 +416,17 @@ export async function matchesLlmRubric(
   }
 
   if (!grading.rubricPrompt && cliState.config?.redteam && shouldGenerateRemote()) {
-    return {
-      ...(await doRemoteGrading({
-        task: 'llm-rubric',
-        rubric,
-        output: llmOutput,
-        vars: vars || {},
-      })),
-      assertion,
-    };
+    const gradingResult = (await doRemoteGrading({
+      task: 'llm-rubric',
+      rubric,
+      output: llmOutput,
+      vars: vars || {},
+    })) as GradingResult;
+    gradingResult.assertion = assertion;
+    gradingResult.componentResults?.forEach((componentResult) => {
+      componentResult.assertion = assertion;
+    });
+    return gradingResult;
   }
 
   const prompt = await renderLlmRubricPrompt(rubric, llmOutput, grading, vars);
