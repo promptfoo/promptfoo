@@ -99,13 +99,13 @@
     "google-auth-library": "^9.7.0",
     "ibm-cloud-sdk-core": "^5.0.2",
     "langfuse": "^3.7.0",
+    "node-gtts": "^2.0.2",
     "node-sql-parser": "^5.2.0",
     "pdf-parse": "^1.1.1",
     "playwright": "^1.47.2",
     "playwright-extra": "^4.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "sharp": "^0.33.5",
-    "node-gtts": "^2.0.2"
+    "sharp": "^0.33.5"
   },
   "devDependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.758.0",
@@ -162,6 +162,7 @@
     "@anthropic-ai/sdk": "^0.39.0",
     "@apidevtools/json-schema-ref-parser": "^11.9.1",
     "@googleapis/sheets": "^9.3.1",
+    "@types/ws": "^8.18.0",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "async": "^3.2.6",
