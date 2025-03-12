@@ -184,9 +184,7 @@ describe('Plugins', () => {
         }),
         expect.any(Number),
       );
-      expect(result).toEqual([
-        { test: 'case', metadata: { pluginId: 'promptfoo:redteam:contracts' } },
-      ]);
+      expect(result).toEqual([{ test: 'case', metadata: { pluginId: 'contracts' } }]);
     });
 
     it('should handle remote generation errors', async () => {
@@ -257,7 +255,7 @@ describe('Plugins', () => {
           testVar: 'test content',
         },
         metadata: {
-          pluginId: 'promptfoo:redteam:ssrf',
+          pluginId: 'ssrf',
         },
       };
 
@@ -275,7 +273,7 @@ describe('Plugins', () => {
       });
 
       expect(result).toHaveLength(1);
-      expect(result![0]).toEqual(originalTestCase);
+      expect(result?.[0]).toEqual(originalTestCase);
     });
   });
 

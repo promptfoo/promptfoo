@@ -112,7 +112,7 @@ function createPluginFactory<T extends PluginConfig>(
           ...testCase,
           metadata: {
             ...testCase.metadata,
-            pluginId: `promptfoo:redteam:${key}`,
+            pluginId: key,
           },
         }));
       }
@@ -140,7 +140,7 @@ const pluginFactories: PluginFactory[] = [
     createPluginFactory(
       class extends AlignedHarmfulPlugin {
         get id(): string {
-          return `promptfoo:redteam:${category}`;
+          return category;
         }
 
         constructor(
@@ -192,7 +192,7 @@ const pluginFactories: PluginFactory[] = [
         ...testCase,
         metadata: {
           ...testCase.metadata,
-          pluginId: `promptfoo:redteam:${category}`,
+          pluginId: category,
         },
       }));
     },
@@ -213,7 +213,7 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
         ...testCase,
         metadata: {
           ...testCase.metadata,
-          pluginId: `promptfoo:redteam:${category}`,
+          pluginId: category,
         },
       }));
     }
@@ -223,7 +223,7 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
       ...testCase,
       metadata: {
         ...testCase.metadata,
-        pluginId: `promptfoo:redteam:${category}`,
+        pluginId: category,
       },
     }));
   },
@@ -245,7 +245,7 @@ function createRemotePlugin<T extends PluginConfig>(
         ...testCase,
         metadata: {
           ...testCase.metadata,
-          pluginId: `promptfoo:redteam:${key}`,
+          pluginId: key,
         },
       }));
 
