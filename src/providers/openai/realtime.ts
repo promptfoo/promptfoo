@@ -421,6 +421,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               clearTimeout(timeout);
               ws.close();
 
+              // Prepare audio data if available
+              const finalAudioData = hasAudioContent
+                ? Buffer.concat(audioContent).toString('base64')
+                : null;
+
               resolve({
                 output: responseText,
                 tokenUsage: {
@@ -437,7 +442,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   // Include audio data in metadata if available
                   ...(hasAudioContent && {
                     audio: {
-                      data: Buffer.concat(audioContent),
+                      data: finalAudioData,
                       format: audioFormat,
                     },
                   }),
@@ -586,8 +591,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
       // If the response has audio data, format it according to the promptfoo audio interface
       if (result.metadata?.audio) {
+        // Convert Buffer to base64 string for the audio data
+        const audioDataBase64 = result.metadata.audio.data;
+
         metadata.audio = {
-          data: result.metadata.audio.data,
+          data: audioDataBase64,
           format: result.metadata.audio.format,
           transcript: result.output, // Use the text output as transcript
         };
@@ -598,6 +606,14 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         tokenUsage: result.tokenUsage,
         cached: result.cached,
         metadata,
+        // Add audio at top level if available (EvalOutputCell expects this)
+        ...(result.metadata?.audio && {
+          audio: {
+            data: result.metadata.audio.data,
+            format: result.metadata.audio.format,
+            transcript: result.output, // Use the text output as transcript
+          },
+        }),
       };
     } catch (err) {
       const errorMessage = `WebSocket error: ${String(err)}`;
@@ -902,6 +918,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               clearTimeout(timeout);
               ws.close();
 
+              // Prepare audio data if available
+              const finalAudioData = hasAudioContent
+                ? Buffer.concat(audioContent).toString('base64')
+                : null;
+
               resolve({
                 output: responseText,
                 tokenUsage: {
@@ -918,7 +939,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   // Include audio data in metadata if available
                   ...(hasAudioContent && {
                     audio: {
-                      data: Buffer.concat(audioContent),
+                      data: finalAudioData,
                       format: audioFormat,
                     },
                   }),
