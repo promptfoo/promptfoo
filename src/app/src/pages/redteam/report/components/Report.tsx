@@ -13,7 +13,6 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { categoryAliasesReverse, type categoryAliases } from '@promptfoo/redteam/constants';
 import {
   type EvaluateResult,
   type ResultsFile,
@@ -93,14 +92,11 @@ const App: React.FC = () => {
     evalData?.results.results.forEach((result) => {
       const pluginId = getPluginIdFromResult(result);
       if (!pluginId) {
-        console.warn(`Could not get failures for plugin ${pluginId}`);
+        console.warn(`Could not get plugin ID for result: ${result.id}`);
         return;
       }
-      if (
-        pluginId &&
-        !result.gradingResult?.pass &&
-        result.failureReason !== ResultFailureReason.ERROR
-      ) {
+      
+      if (!result.gradingResult?.pass && result.failureReason !== ResultFailureReason.ERROR) {
         if (!failures[pluginId]) {
           failures[pluginId] = [];
         }
@@ -127,10 +123,11 @@ const App: React.FC = () => {
     evalData?.results.results.forEach((result) => {
       const pluginId = getPluginIdFromResult(result);
       if (!pluginId) {
-        console.warn(`Could not get passes for plugin ${pluginId}`);
+        console.warn(`Could not get plugin ID for result: ${result.id}`);
         return;
       }
-      if (pluginId && result.gradingResult?.pass) {
+      
+      if (result.gradingResult?.pass) {
         if (!passes[pluginId]) {
           passes[pluginId] = [];
         }
@@ -199,50 +196,42 @@ const App: React.FC = () => {
 
   const categoryStats = evalData.results.results.reduce(
     (acc, row) => {
-      const harm = row.vars['harmCategory'];
-      const metricNames =
-        row.gradingResult?.componentResults?.map((result) => result.assertion?.metric) || [];
-
-      const categoriesToCount = [harm, ...metricNames].filter((c) => c);
-      for (const category of categoriesToCount) {
-        if (typeof category !== 'string') {
-          continue;
-        }
-        const pluginName =
-          categoryAliasesReverse[category.split('/')[0] as keyof typeof categoryAliases];
-        if (!pluginName) {
-          console.log('Unknown harm category:', category);
-          return acc;
-        }
-
-        const rowPassedModeration = row.gradingResult?.componentResults?.some((result) => {
-          const isModeration = result.assertion?.type === 'moderation';
-          const isPass = result.pass;
-          return isModeration && isPass;
-        });
-        const rowPassedLlmRubric = row.gradingResult?.componentResults?.some((result) => {
-          const isLlmRubric =
-            result.assertion?.type === 'llm-rubric' ||
-            result.assertion?.type.startsWith('promptfoo:redteam');
-          const isPass = result.pass;
-          return isLlmRubric && isPass;
-        });
-        const rowPassedHuman = row.gradingResult?.componentResults?.some((result) => {
-          const isHuman = result.assertion?.type === 'human';
-          const isPass = result.pass;
-          return isHuman && isPass;
-        });
-
-        acc[pluginName] = acc[pluginName] || { pass: 0, total: 0, passWithFilter: 0 };
-        acc[pluginName].total++;
-        if (rowPassedLlmRubric || rowPassedHuman) {
-          // Note: We count the row as passed if it passed the LLM rubric or human, even if it failed moderation
-          acc[pluginName].pass++;
-          acc[pluginName].passWithFilter++;
-        } else if (!rowPassedModeration) {
-          acc[pluginName].passWithFilter++;
-        }
+      const pluginId = getPluginIdFromResult(row);
+      if (!pluginId) {
+        console.warn(`Could not determine plugin ID for result: ${row.id}`);
+        return acc;
       }
+      
+      acc[pluginId] = acc[pluginId] || { pass: 0, total: 0, passWithFilter: 0 };
+      acc[pluginId].total++;
+      
+      const rowPassedModeration = row.gradingResult?.componentResults?.some((result) => {
+        const isModeration = result.assertion?.type === 'moderation';
+        const isPass = result.pass;
+        return isModeration && isPass;
+      });
+      
+      const rowPassedLlmRubric = row.gradingResult?.componentResults?.some((result) => {
+        const isLlmRubric =
+          result.assertion?.type === 'llm-rubric' ||
+          result.assertion?.type.startsWith('promptfoo:redteam');
+        const isPass = result.pass;
+        return isLlmRubric && isPass;
+      });
+      
+      const rowPassedHuman = row.gradingResult?.componentResults?.some((result) => {
+        const isHuman = result.assertion?.type === 'human';
+        const isPass = result.pass;
+        return isHuman && isPass;
+      });
+      
+      if (rowPassedLlmRubric || rowPassedHuman) {
+        acc[pluginId].pass++;
+        acc[pluginId].passWithFilter++;
+      } else if (!rowPassedModeration) {
+        acc[pluginId].passWithFilter++;
+      }
+      
       return acc;
     },
     {} as Record<string, { pass: number; total: number; passWithFilter: number }>,
