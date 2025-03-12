@@ -95,8 +95,9 @@ const App: React.FC = () => {
         console.warn(`Could not get plugin ID for result: ${result.id}`);
         return;
       }
-      
-      if (!result.gradingResult?.pass && result.failureReason !== ResultFailureReason.ERROR) {
+
+      // Check if the test failed - now using the same criteria as categoryStats
+      if (!result.success || !result.gradingResult?.pass) {
         if (!failures[pluginId]) {
           failures[pluginId] = [];
         }
@@ -126,8 +127,9 @@ const App: React.FC = () => {
         console.warn(`Could not get plugin ID for result: ${result.id}`);
         return;
       }
-      
-      if (result.gradingResult?.pass) {
+
+      // Check if the test passed - now using the same criteria as categoryStats
+      if (result.success && result.gradingResult?.pass) {
         if (!passes[pluginId]) {
           passes[pluginId] = [];
         }
@@ -201,37 +203,26 @@ const App: React.FC = () => {
         console.warn(`Could not determine plugin ID for result: ${row.id}`);
         return acc;
       }
-      
+
+      // Initialize stats for this plugin if not already present
       acc[pluginId] = acc[pluginId] || { pass: 0, total: 0, passWithFilter: 0 };
       acc[pluginId].total++;
-      
-      const rowPassedModeration = row.gradingResult?.componentResults?.some((result) => {
-        const isModeration = result.assertion?.type === 'moderation';
-        const isPass = result.pass;
-        return isModeration && isPass;
-      });
-      
-      const rowPassedLlmRubric = row.gradingResult?.componentResults?.some((result) => {
-        const isLlmRubric =
-          result.assertion?.type === 'llm-rubric' ||
-          result.assertion?.type.startsWith('promptfoo:redteam');
-        const isPass = result.pass;
-        return isLlmRubric && isPass;
-      });
-      
-      const rowPassedHuman = row.gradingResult?.componentResults?.some((result) => {
-        const isHuman = result.assertion?.type === 'human';
-        const isPass = result.pass;
-        return isHuman && isPass;
-      });
-      
-      if (rowPassedLlmRubric || rowPassedHuman) {
+
+      // Add debug to see the actual test status
+      console.debug(
+        `Test ${row.id} for plugin ${pluginId}: success=${row.success}, pass=${row.gradingResult?.pass}, failureReason=${row.failureReason}`,
+      );
+
+      // Count as passed if the test was successful
+      // Changed from complex LLM rubric logic to simpler success flag
+      if (row.success && row.gradingResult?.pass) {
         acc[pluginId].pass++;
         acc[pluginId].passWithFilter++;
-      } else if (!rowPassedModeration) {
-        acc[pluginId].passWithFilter++;
+        console.debug(`  ✅ Test passed for ${pluginId}`);
+      } else {
+        console.debug(`  ❌ Test failed for ${pluginId}`);
       }
-      
+
       return acc;
     },
     {} as Record<string, { pass: number; total: number; passWithFilter: number }>,

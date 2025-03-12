@@ -54,12 +54,12 @@ const RiskCategories: React.FC<{
               const numPassed = stats?.pass || 0;
               const totalForSubcategory = stats?.total || 0;
               const numFailed = totalForSubcategory - numPassed;
-              
+
               return {
                 name: subCategory,
                 categoryPassed: numPassed === totalForSubcategory && totalForSubcategory > 0,
                 numPassed,
-                numFailed
+                numFailed,
               };
             })}
             evalId={evalId}

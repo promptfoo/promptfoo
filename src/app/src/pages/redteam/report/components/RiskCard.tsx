@@ -108,7 +108,13 @@ const RiskCard: React.FC<{
                 }}
               />
             </Box>
-            <Typography variant="h6" className="risk-card-issues">
+            <Typography
+              variant="h6"
+              sx={{
+                color: numTestsFailed === 0 ? '#888888' : 'red',
+                fontWeight: 'medium',
+              }}
+            >
               {numTestsFailed} failed probes
             </Typography>
             <Typography
@@ -123,11 +129,18 @@ const RiskCard: React.FC<{
             <List dense>
               {filteredTestTypes.map((test, index) => {
                 const percentage = test.numPassed / (test.numPassed + test.numFailed);
-                console.debug('Test type:', test.name, 
-                  'numPassed:', test.numPassed, 
-                  'numFailed:', test.numFailed, 
-                  'percentage:', percentage,
-                  'categoryPassed:', test.categoryPassed);
+                console.debug(
+                  'Test type:',
+                  test.name,
+                  'numPassed:',
+                  test.numPassed,
+                  'numFailed:',
+                  test.numFailed,
+                  'percentage:',
+                  percentage,
+                  'categoryPassed:',
+                  test.categoryPassed,
+                );
                 return (
                   <Tooltip
                     key={index}

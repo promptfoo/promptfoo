@@ -65,31 +65,31 @@ export function getPluginIdFromResult(result: EvaluateResult): string | null {
   if (result.metadata?.pluginId) {
     return result.metadata.pluginId as string;
   }
-  
+
   // Fallback to previous logic
   const harmCategory = result.vars['harmCategory'];
   if (harmCategory) {
     return categoryAliasesReverse[harmCategory as keyof typeof categoryAliases];
   }
-  
+
   // Look for metric names and extract the plugin name correctly
   const metricNames =
     result.gradingResult?.componentResults?.map((result) => result.assertion?.metric) || [];
-  
+
   for (const metric of metricNames) {
     if (!metric) {
       continue;
     }
-    
+
     // Metric could be in format "PluginName" or "PluginName/StrategyName"
     const metricParts = metric.split('/');
     const baseName = metricParts[0];
-    
+
     if (baseName && categoryAliasesReverse[baseName as keyof typeof categoryAliases]) {
       return categoryAliasesReverse[baseName as keyof typeof categoryAliases];
     }
   }
-  
+
   // Could not determine plugin ID
   return null;
 }

@@ -11,6 +11,7 @@
   margin-bottom: 1rem;
 }
 
+/* Note: This color is overridden in the component for zero failures */
 .risk-card-issues {
   color: red;
 }
