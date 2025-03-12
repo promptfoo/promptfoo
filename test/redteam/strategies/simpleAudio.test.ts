@@ -2,7 +2,17 @@ import { expect, it, describe } from '@jest/globals';
 import { addAudioToBase64, textToAudio } from '../../../src/redteam/strategies/simpleAudio';
 import type { TestCase } from '../../../src/types';
 
+const originalConsoleLog = console.log;
+
 describe('audio strategy', () => {
+  beforeAll(() => {
+    jest.spyOn(console, 'log').mockImplementation();
+  });
+
+  afterAll(() => {
+    console.log = originalConsoleLog;
+  });
+
   it('textToAudio should convert text to base64 string', async () => {
     const text = 'Hello, world!';
     const base64 = await textToAudio(text);
