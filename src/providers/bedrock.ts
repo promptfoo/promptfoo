@@ -739,71 +739,26 @@ export const BEDROCK_MODEL = {
   },
   DEEPSEEK: {
     params: (config: BedrockDeepseekGenerationOptions, prompt: string) => {
-      let messages;
-      let systemPrompt;
-      try {
-        const parsed = JSON.parse(prompt);
-        if (Array.isArray(parsed)) {
-          const systemMessages = parsed.filter((msg) => msg.role === 'system');
-          const nonSystemMessages = parsed.filter((msg) => msg.role !== 'system');
+      const wrappedPrompt = `<｜begin▁of▁sentence｜><｜User｜>${prompt}<｜Assistant｜><think>\n`;
+      const params: any = {
+        prompt: wrappedPrompt,
+      };
 
-          messages = nonSystemMessages.map((msg) => ({
-            role: msg.role,
-            content: Array.isArray(msg.content) ? msg.content : [{ text: msg.content }],
-          }));
-          systemPrompt = systemMessages[0]?.content;
-        } else {
-          const { system, extractedMessages } = parseMessages(prompt);
-          messages = extractedMessages;
-          systemPrompt = system;
-        }
-      } catch {
-        const { system, extractedMessages } = parseMessages(prompt);
-        messages = extractedMessages;
-        systemPrompt = system;
-      }
-
-      const params: any = { messages };
-
-      const inferenceConfig: any = {};
       addConfigParam(
-        inferenceConfig,
-        'maxTokens',
+        params,
+        'max_tokens',
         config?.max_tokens,
         getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
         undefined,
       );
       addConfigParam(
-        inferenceConfig,
+        params,
         'temperature',
         config?.temperature,
         getEnvFloat('AWS_BEDROCK_TEMPERATURE'),
         0,
       );
-      addConfigParam(inferenceConfig, 'topP', config?.top_p, getEnvFloat('AWS_BEDROCK_TOP_P'), 1.0);
-      addConfigParam(
-        inferenceConfig,
-        'stopSequences',
-        config?.stop,
-        getEnvString('AWS_BEDROCK_STOP'),
-      );
-
-      if (Object.keys(inferenceConfig).length > 0) {
-        params.inferenceConfig = inferenceConfig;
-      }
-
-      if (systemPrompt) {
-        params.system = Array.isArray(systemPrompt) ? systemPrompt : [{ text: systemPrompt }];
-      }
-
-      // Add guardrail configuration if provided
-      if (config?.guardrailIdentifier) {
-        params.guardrailConfig = {
-          guardrailIdentifier: config.guardrailIdentifier,
-          guardrailVersion: config.guardrailVersion,
-          trace: config.trace,
-        };
-      }
+      addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('AWS_BEDROCK_TOP_P'), 1.0);
 
       return params;
     },
@@ -812,17 +767,22 @@ export const BEDROCK_MODEL = {
         throw new Error(`DeepSeek API error: ${responseJson.error}`);
       }
 
-      // Extract the text content from the message
-      const content = responseJson.message?.content;
-      if (Array.isArray(content) && content.length > 0) {
-        // Find the text content (usually the first item)
-        const textContent = content.find((item) => item.text);
-        if (textContent) {
-          return textContent.text;
+      if (responseJson.choices && Array.isArray(responseJson.choices)) {
+        const choice = responseJson.choices[0];
+        if (choice && choice.text) {
+          const fullResponse = choice.text;
+          const [thinking, finalResponse] = fullResponse.split('</think>');
+          if (!thinking || !finalResponse) {
+            return fullResponse;
+          }
+          if (config.showThinking !== false) {
+            return fullResponse;
+          }
+          return finalResponse.trim();
         }
       }
 
-      return responseJson.message?.content;
+      return undefined;
     },
   },
 };
@@ -1082,20 +1042,27 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       }
     }
 
-    const bedrockInstance = await this.getBedrockInstance();
-    const response = await bedrockInstance.invokeModel({
-      modelId: this.modelName,
-      ...(this.config.guardrailIdentifier
-        ? { guardrailIdentifier: String(this.config.guardrailIdentifier) }
-        : {}),
-      ...(this.config.guardrailVersion
-        ? { guardrailVersion: String(this.config.guardrailVersion) }
-        : {}),
-      ...(this.config.trace ? { trace: this.config.trace } : {}),
-      accept: 'application/json',
-      contentType: 'application/json',
-      body: JSON.stringify(params),
-    });
+    let response;
+    try {
+      const bedrockInstance = await this.getBedrockInstance();
+      response = await bedrockInstance.invokeModel({
+        modelId: this.modelName,
+        ...(this.config.guardrailIdentifier
+          ? { guardrailIdentifier: String(this.config.guardrailIdentifier) }
+          : {}),
+        ...(this.config.guardrailVersion
+          ? { guardrailVersion: String(this.config.guardrailVersion) }
+          : {}),
+        ...(this.config.trace ? { trace: this.config.trace } : {}),
+        accept: 'application/json',
+        contentType: 'application/json',
+        body: JSON.stringify(params),
+      });
+    } catch (err) {
+      return {
+        error: `Bedrock API invoke model error: ${String(err)}`,
+      };
+    }
 
     logger.debug(`Amazon Bedrock API response: ${response.body.transformToString()}`);
     if (isCacheEnabled()) {
@@ -1124,6 +1091,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
           : {}),
       };
     } catch (err) {
+      logger.error(`Bedrock API response error: ${String(err)}: ${JSON.stringify(response)}`);
       return {
         error: `API response error: ${String(err)}: ${JSON.stringify(response)}`,
       };
