@@ -63,11 +63,11 @@ A company wants to enhance the performance of its LLM and fine-tunes it on the c
 
 What makes sensitive information disclosure different from other types of vulnerabilities listed in the OWASP Top 10 for LLMs? 
 
-In many ways, sensitive information disclosure can be considered a model-layer risk. Restricted is memorized by the model and can subsequently be regurgitated during inference. Controls such as more robust anonymization and data sanitation practices, stronger alignment, and guardrails can mitigate the risk. 
+In many ways, sensitive information disclosure can be considered a model-layer risk. Restricted information is memorized by the model and can subsequently be regurgitated during inference. Controls such as more robust anonymization and data sanitation practices, stronger alignment, and guardrails can mitigate the risk.
 
 This is different from leaked data from AI applications using Retrieval Augmented Generation, where sensitive data may intentionally be exposed to the LLM but the access control mechanisms may be misconfigured–subsequently leading to a data breach. 
 
-All LLMs are vulnerable to sensitive information disclosure. The risk depends on the level of exploitably based on how jailbreakable the model is and the types of controls that are in place during deployment. This risk can be amplified depending on the type of data used to fine-tune a model, the number of times the data is duplicated during training, and the general size of the model in terms of parameter and context window. 
+All LLMs are vulnerable to sensitive information disclosure. The risk depends on the level of exploitability based on how jailbreakable the model is and the types of controls that are in place during deployment. This risk can be amplified depending on the type of data used to fine-tune a model, the number of times the data is duplicated during training, and the general size of the model in terms of parameter and context window.
 
 For models that are fine-tuned with restricted information, companies must also decide how the model is accessed and make informed decisions based on the principles of least privilege and need-to-know. 
 
