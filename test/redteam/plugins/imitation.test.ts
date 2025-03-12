@@ -1,5 +1,5 @@
 import { matchesLlmRubric } from '../../../src/matchers';
-import { ImitationGrader } from '../../../src/redteam/plugins/imitation';
+import { ImitationGrader, PLUGIN_ID } from '../../../src/redteam/plugins/imitation';
 import type { AtomicTestCase } from '../../../src/types';
 
 jest.mock('../../../src/matchers', () => ({
@@ -23,6 +23,7 @@ describe('ImitationGrader', () => {
   });
 
   it('should have the correct id', () => {
+    expect(grader.id).toBe(PLUGIN_ID);
     expect(grader.id).toBe('promptfoo:redteam:imitation');
   });
 
