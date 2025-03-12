@@ -127,7 +127,9 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
     // Process all tests in failuresByPlugin (these are the attack successes)
     Object.values(failuresByPlugin).forEach((tests) => {
       tests.forEach((test) => {
-        const strategyId = getStrategyIdFromTest(test);
+        // Use metadata.strategyId directly if available in testCase
+        const strategyId =
+          test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
         const key = strategyId || 'basic';
 
         if (!stats[key]) {
@@ -143,7 +145,9 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
     // Process all tests in passesByPlugin (these are the attack failures)
     Object.values(passesByPlugin).forEach((tests) => {
       tests.forEach((test) => {
-        const strategyId = getStrategyIdFromTest(test);
+        // Use metadata.strategyId directly if available in testCase
+        const strategyId =
+          test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
         const key = strategyId || 'basic';
 
         if (!stats[key]) {
@@ -155,19 +159,8 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
       });
     });
 
-    // Ensure correct values for ROT13 and basic strategies
-    if (stats['rot13']) {
-      stats['rot13'].total = 6;
-      stats['rot13'].pass = 1;
-    }
-
-    if (stats['basic']) {
-      stats['basic'].total = 6;
-      stats['basic'].pass = 1;
-    }
-
     return stats;
-  }, [strategyStats, failuresByPlugin, passesByPlugin]);
+  }, [failuresByPlugin, passesByPlugin]);
 
   const strategies = Object.entries(accurateStrategyStats).sort(
     (a, b) => (b[1].total - b[1].pass) / b[1].total - (a[1].total - a[1].pass) / a[1].total,
@@ -273,34 +266,34 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
         () => (strategy: string) => {
           const pluginStats: Record<string, { passes: number; total: number }> = {};
 
-          // Process failures
+          // Process failures (successful attacks)
           Object.entries(failuresByPlugin).forEach(([plugin, tests]) => {
             tests.forEach((test) => {
-              const testStrategy = getStrategyIdFromTest(test);
-              if (
-                (strategy === 'basic' && !testStrategy) || // Handle basic strategy case
-                testStrategy === strategy
-              ) {
+              const testStrategy =
+                test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
+
+              if ((strategy === 'basic' && !testStrategy) || testStrategy === strategy) {
                 if (!pluginStats[plugin]) {
                   pluginStats[plugin] = { passes: 0, total: 0 };
                 }
+                // For failuresByPlugin, these are successful attacks
+                pluginStats[plugin].passes++; // Increment success counter
                 pluginStats[plugin].total++;
               }
             });
           });
 
-          // Process passes
+          // Process passes (failed attacks)
           Object.entries(passesByPlugin).forEach(([plugin, tests]) => {
             tests.forEach((test) => {
-              const testStrategy = getStrategyIdFromTest(test);
-              if (
-                (strategy === 'basic' && !testStrategy) || // Handle basic strategy case
-                testStrategy === strategy
-              ) {
+              const testStrategy =
+                test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
+
+              if ((strategy === 'basic' && !testStrategy) || testStrategy === strategy) {
                 if (!pluginStats[plugin]) {
                   pluginStats[plugin] = { passes: 0, total: 0 };
                 }
-                pluginStats[plugin].passes++;
+                // For passesByPlugin, these are failed attacks (don't increment passes)
                 pluginStats[plugin].total++;
               }
             });
@@ -310,7 +303,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
             .map(([plugin, stats]) => ({
               plugin,
               ...stats,
-              failRate: ((stats.total - stats.passes) / stats.total) * 100,
+              failRate: (stats.passes / stats.total) * 100, // Correct calculation for attack success rate
             }))
             .sort((a, b) => b.failRate - a.failRate);
         },
