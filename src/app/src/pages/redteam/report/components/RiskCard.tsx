@@ -129,18 +129,6 @@ const RiskCard: React.FC<{
             <List dense>
               {filteredTestTypes.map((test, index) => {
                 const percentage = test.numPassed / (test.numPassed + test.numFailed);
-                console.debug(
-                  'Test type:',
-                  test.name,
-                  'numPassed:',
-                  test.numPassed,
-                  'numFailed:',
-                  test.numFailed,
-                  'percentage:',
-                  percentage,
-                  'categoryPassed:',
-                  test.categoryPassed,
-                );
                 return (
                   <Tooltip
                     key={index}

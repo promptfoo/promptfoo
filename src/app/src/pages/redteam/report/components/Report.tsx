@@ -21,7 +21,6 @@ import {
   type ResultLightweightWithLabel,
   type EvaluateSummaryV2,
   isProviderOptions,
-  ResultFailureReason,
 } from '@promptfoo/types';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import FrameworkCompliance from './FrameworkCompliance';
@@ -208,19 +207,10 @@ const App: React.FC = () => {
       acc[pluginId] = acc[pluginId] || { pass: 0, total: 0, passWithFilter: 0 };
       acc[pluginId].total++;
 
-      // Add debug to see the actual test status
-      console.debug(
-        `Test ${row.id} for plugin ${pluginId}: success=${row.success}, pass=${row.gradingResult?.pass}, failureReason=${row.failureReason}`,
-      );
-
       // Count as passed if the test was successful
-      // Changed from complex LLM rubric logic to simpler success flag
       if (row.success && row.gradingResult?.pass) {
         acc[pluginId].pass++;
         acc[pluginId].passWithFilter++;
-        console.debug(`  ✅ Test passed for ${pluginId}`);
-      } else {
-        console.debug(`  ❌ Test failed for ${pluginId}`);
       }
 
       return acc;
