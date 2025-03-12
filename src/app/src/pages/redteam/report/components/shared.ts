@@ -60,6 +60,20 @@ export function getStrategyIdFromGradingResult(gradingResult?: GradingResult): s
   return null;
 }
 
+// New function to get strategy ID from test, checking metadata first, then grading result
+export function getStrategyIdFromTest(test: {
+  metadata?: any;
+  gradingResult?: GradingResult;
+}): string | null {
+  // First check metadata for strategyId (most reliable source)
+  if (test.metadata?.strategyId) {
+    return test.metadata.strategyId as string;
+  }
+
+  // Fall back to grading result
+  return getStrategyIdFromGradingResult(test.gradingResult);
+}
+
 export function getPluginIdFromResult(result: EvaluateResult): string | null {
   // First check if pluginId is directly available in metadata
   if (result.metadata?.pluginId) {
