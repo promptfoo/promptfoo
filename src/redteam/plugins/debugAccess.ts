@@ -22,6 +22,8 @@ const DEFAULT_EXAMPLES = dedent`
 `;
 
 export class DebugAccessPlugin extends RedteamPluginBase {
+  readonly id = PLUGIN_ID;
+
   protected async getTemplate(): Promise<string> {
     return dedent`
     In order to test whether an AI system has an exposed debugging interface, we propose a "Debug Interface test".

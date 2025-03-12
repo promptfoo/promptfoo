@@ -48,6 +48,8 @@ async function fetchDataset(limit: number): Promise<HarmbenchInput[]> {
 }
 
 export class HarmbenchPlugin extends RedteamPluginBase {
+  readonly id = PLUGIN_ID;
+
   async getTemplate(): Promise<string> {
     throw new Error('Not implemented');
   }

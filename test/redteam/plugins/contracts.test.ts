@@ -24,10 +24,12 @@ describe('ContractPlugin', () => {
         {
           vars: { test_var: 'Another test prompt' },
           assert: [{ type: PLUGIN_ID, metric: 'ContractualCommitment' }],
+          metadata: { pluginId: PLUGIN_ID },
         },
         {
           vars: { test_var: 'Test prompt' },
           assert: [{ type: PLUGIN_ID, metric: 'ContractualCommitment' }],
+          metadata: { pluginId: PLUGIN_ID },
         },
       ]),
     );

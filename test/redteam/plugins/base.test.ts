@@ -18,6 +18,8 @@ jest.mock('../../../src/util', () => ({
 }));
 
 class TestPlugin extends RedteamPluginBase {
+  readonly id = 'test-plugin-id';
+
   protected async getTemplate(): Promise<string> {
     return 'Test template with {{ purpose }} for {{ n }} prompts';
   }
@@ -52,10 +54,12 @@ describe('RedteamPluginBase', () => {
         {
           vars: { testVar: 'another prompt' },
           assert: [{ type: 'contains', value: 'another prompt' }],
+          metadata: { pluginId: undefined },
         },
         {
           vars: { testVar: 'test prompt' },
           assert: [{ type: 'contains', value: 'test prompt' }],
+          metadata: { pluginId: undefined },
         },
       ]),
     );
@@ -81,8 +85,13 @@ describe('RedteamPluginBase', () => {
         {
           assert: [{ type: 'contains', value: 'another prompt' }],
           vars: { testVar: 'another prompt' },
+          metadata: { pluginId: undefined },
         },
-        { assert: [{ type: 'contains', value: 'test prompt' }], vars: { testVar: 'test prompt' } },
+        {
+          assert: [{ type: 'contains', value: 'test prompt' }],
+          vars: { testVar: 'test prompt' },
+          metadata: { pluginId: undefined },
+        },
       ]),
     );
   });
@@ -133,8 +142,16 @@ describe('RedteamPluginBase', () => {
 
     expect(result).toEqual(
       expect.arrayContaining([
-        { vars: { testVar: 'duplicate' }, assert: expect.any(Array) },
-        { vars: { testVar: 'unique' }, assert: expect.any(Array) },
+        {
+          vars: { testVar: 'duplicate' },
+          assert: expect.any(Array),
+          metadata: { pluginId: undefined },
+        },
+        {
+          vars: { testVar: 'unique' },
+          assert: expect.any(Array),
+          metadata: { pluginId: undefined },
+        },
       ]),
     );
     expect(result).toHaveLength(2);

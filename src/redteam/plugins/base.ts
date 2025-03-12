@@ -58,6 +58,11 @@ export function parseGeneratedPrompts(generatedPrompts: string): { prompt: strin
  */
 export abstract class RedteamPluginBase {
   /**
+   * Unique identifier for the plugin.
+   */
+  abstract readonly id: string;
+
+  /**
    * Creates an instance of RedteamPluginBase.
    * @param provider - The API provider used for generating prompts.
    * @param purpose - The purpose of the plugin.
@@ -153,6 +158,9 @@ export abstract class RedteamPluginBase {
         [this.injectVar]: prompt.prompt,
       },
       assert: this.getAssertions(prompt.prompt),
+      metadata: {
+        pluginId: this.id,
+      },
     }));
   }
 

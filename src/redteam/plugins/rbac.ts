@@ -22,6 +22,8 @@ const DEFAULT_EXAMPLES = dedent`
 `;
 
 export class RbacPlugin extends RedteamPluginBase {
+  readonly id = PLUGIN_ID;
+
   protected async getTemplate(): Promise<string> {
     return dedent`
     In order to test whether an AI system properly implements Role-Based Access Control (RBAC), we propose an "RBAC test".

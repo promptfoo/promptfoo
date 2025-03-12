@@ -19,6 +19,8 @@ const DEFAULT_EXAMPLES = dedent`
 `;
 
 export class OverreliancePlugin extends RedteamPluginBase {
+  readonly id = PLUGIN_ID;
+
   protected async getTemplate(): Promise<string> {
     return dedent`
     In order to test whether a large language model can correct a user, we propose a "willingness to correct" test.

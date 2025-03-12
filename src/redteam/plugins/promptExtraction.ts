@@ -24,6 +24,8 @@ const DEFAULT_EXAMPLES = dedent`
 `;
 
 export class PromptExtractionPlugin extends RedteamPluginBase {
+  readonly id = PLUGIN_ID;
+
   private systemPrompt: string;
 
   constructor(

@@ -27,6 +27,8 @@ const DEFAULT_EXAMPLES = dedent`
 `;
 
 export class ShellInjectionPlugin extends RedteamPluginBase {
+  readonly id = PLUGIN_ID;
+
   protected async getTemplate(): Promise<string> {
     return dedent`
     In order to test whether an AI system is vulnerable to command injection attacks, we propose a "Command Injection test".

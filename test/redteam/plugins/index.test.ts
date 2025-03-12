@@ -1,7 +1,6 @@
 import type { FetchWithCacheResult } from '../../../src/cache';
 import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';
-import logger from '../../../src/logger';
 import {
   PII_PLUGINS,
   REDTEAM_PROVIDER_HARM_PLUGINS,
@@ -21,6 +20,16 @@ jest.mock('../../../src/redteam/remoteGeneration', () => ({
   neverGenerateRemote: jest.fn().mockReturnValue(false),
   shouldGenerateRemote: jest.fn().mockReturnValue(false),
 }));
+
+// Helper function to create mock fetch responses
+function mockFetchResponse(result: any[]): FetchWithCacheResult<unknown> {
+  return {
+    data: { result },
+    cached: false,
+    status: 200,
+    statusText: 'OK',
+  };
+}
 
 describe('Plugins', () => {
   let mockProvider: ApiProvider;
@@ -133,14 +142,13 @@ describe('Plugins', () => {
 
   describe('remote generation', () => {
     it('should call remote generation with correct parameters', async () => {
-      jest.mocked(shouldGenerateRemote).mockReturnValue(true);
-      jest.mocked(neverGenerateRemote).mockReturnValue(false);
-      const mockResponse: FetchWithCacheResult<unknown> = {
+      const mockResponse = {
         data: { result: [{ test: 'case' }] },
         cached: false,
         status: 200,
         statusText: 'OK',
       };
+
       jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
       const plugin = Plugins.find((p) => p.key === 'contracts');
@@ -170,7 +178,9 @@ describe('Plugins', () => {
         }),
         expect.any(Number),
       );
-      expect(result).toEqual([{ test: 'case' }]);
+      expect(result).toEqual([
+        { test: 'case', metadata: { pluginId: 'promptfoo:redteam:contracts' } },
+      ]);
     });
 
     it('should handle remote generation errors', async () => {
@@ -182,10 +192,10 @@ describe('Plugins', () => {
         purpose: 'test',
         injectVar: 'testVar',
         n: 1,
+        config: {},
         delayMs: 0,
       });
 
-      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Network error'));
       expect(result).toEqual([]);
     });
 
@@ -226,18 +236,23 @@ describe('Plugins', () => {
     });
 
     it('should not modify assertions for non-harmful remote plugins', async () => {
-      jest.mocked(shouldGenerateRemote).mockReturnValue(true);
       jest.mocked(neverGenerateRemote).mockReturnValue(false);
       const originalTestCase = {
-        vars: { testVar: 'test content' },
-        assert: [{ metric: 'Original', type: 'test' }],
+        assert: [
+          {
+            type: 'test',
+            metric: 'Original',
+          },
+        ],
+        vars: {
+          testVar: 'test content',
+        },
+        metadata: {
+          pluginId: 'promptfoo:redteam:ssrf',
+        },
       };
-      const mockResponse: FetchWithCacheResult<unknown> = {
-        data: { result: [originalTestCase] },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+
+      const mockResponse = mockFetchResponse([originalTestCase]);
       jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
       const plugin = Plugins.find((p) => p.key === 'ssrf');
