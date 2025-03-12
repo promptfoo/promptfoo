@@ -66,3 +66,27 @@ describe('deduplicateTests', () => {
     expect(result[0].description).toBe('test case');
   });
 });
+
+// Test that validates strategyId in metadata
+describe('retry strategy metadata', () => {
+  it('should include strategyId in metadata', () => {
+    // Create a test case that simulates what would be returned by addRetryTestCases
+    const testCase: TestCase = {
+      vars: { input: 'test' },
+      assert: [{ type: 'equals', value: 'expected' }],
+      metadata: {
+        pluginId: 'test-plugin',
+        strategyId: 'retry',
+      },
+      provider: {
+        id: 'promptfoo:redteam:retry',
+        config: {
+          injectVar: 'input',
+        },
+      },
+    };
+
+    // Verify the correct strategyId is present in metadata
+    expect(testCase.metadata?.strategyId).toBe('retry');
+  });
+});

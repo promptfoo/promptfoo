@@ -65,6 +65,7 @@ describe('audio strategy', () => {
     expect(result[0].metadata).toEqual({
       harmCategory: 'Illegal Activities',
       otherField: 'value',
+      strategyId: 'audio',
     });
     expect(result[0].assert).toEqual([
       {
@@ -83,7 +84,9 @@ describe('audio strategy', () => {
 
     const result = await addAudioToBase64([testCase], 'prompt');
 
-    expect(result[0].metadata).toEqual({});
+    expect(result[0].metadata).toEqual({
+      strategyId: 'audio',
+    });
     expect(result[0].assert).toBeUndefined();
 
     // Just check it's a valid base64 string
