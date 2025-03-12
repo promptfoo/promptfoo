@@ -234,7 +234,12 @@ export interface BedrockAmazonNovaGenerationOptions extends BedrockOptions {
     };
   };
 }
-
+export interface BedrockDeepseekGenerationOptions extends BedrockOptions {
+  max_tokens?: number;
+  temperature?: number;
+  top_p?: number;
+  stop?: string[];
+}
 interface IBedrockModel {
   params: (config: BedrockOptions, prompt: string, stop: string[]) => any;
   output: (config: BedrockOptions, responseJson: any) => any;
@@ -732,6 +737,94 @@ export const BEDROCK_MODEL = {
     },
     output: (responseJson: any) => responseJson?.outputs[0]?.text,
   },
+  DEEPSEEK: {
+    params: (config: BedrockDeepseekGenerationOptions, prompt: string) => {
+      let messages;
+      let systemPrompt;
+      try {
+        const parsed = JSON.parse(prompt);
+        if (Array.isArray(parsed)) {
+          const systemMessages = parsed.filter((msg) => msg.role === 'system');
+          const nonSystemMessages = parsed.filter((msg) => msg.role !== 'system');
+
+          messages = nonSystemMessages.map((msg) => ({
+            role: msg.role,
+            content: Array.isArray(msg.content) ? msg.content : [{ text: msg.content }],
+          }));
+          systemPrompt = systemMessages[0]?.content;
+        } else {
+          const { system, extractedMessages } = parseMessages(prompt);
+          messages = extractedMessages;
+          systemPrompt = system;
+        }
+      } catch {
+        const { system, extractedMessages } = parseMessages(prompt);
+        messages = extractedMessages;
+        systemPrompt = system;
+      }
+
+      const params: any = { messages };
+
+      const inferenceConfig: any = {};
+      addConfigParam(
+        inferenceConfig,
+        'maxTokens',
+        config?.max_tokens,
+        getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
+        undefined,
+      );
+      addConfigParam(
+        inferenceConfig,
+        'temperature',
+        config?.temperature,
+        getEnvFloat('AWS_BEDROCK_TEMPERATURE'),
+        0,
+      );
+      addConfigParam(inferenceConfig, 'topP', config?.top_p, getEnvFloat('AWS_BEDROCK_TOP_P'), 1.0);
+      addConfigParam(
+        inferenceConfig,
+        'stopSequences',
+        config?.stop,
+        getEnvString('AWS_BEDROCK_STOP'),
+      );
+
+      if (Object.keys(inferenceConfig).length > 0) {
+        params.inferenceConfig = inferenceConfig;
+      }
+
+      if (systemPrompt) {
+        params.system = Array.isArray(systemPrompt) ? systemPrompt : [{ text: systemPrompt }];
+      }
+
+      // Add guardrail configuration if provided
+      if (config?.guardrailIdentifier) {
+        params.guardrailConfig = {
+          guardrailIdentifier: config.guardrailIdentifier,
+          guardrailVersion: config.guardrailVersion,
+          trace: config.trace,
+        };
+      }
+
+      return params;
+    },
+    output: (config: BedrockOptions, responseJson: any) => {
+      if (responseJson.error) {
+        throw new Error(`DeepSeek API error: ${responseJson.error}`);
+      }
+
+      // Extract the text content from the message
+      const content = responseJson.message?.content;
+      if (Array.isArray(content) && content.length > 0) {
+        // Find the text content (usually the first item)
+        const textContent = content.find((item) => item.text);
+        if (textContent) {
+          return textContent.text;
+        }
+      }
+
+      return responseJson.message?.content;
+    },
+  },
 };
 
 export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
@@ -752,17 +845,19 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-instant-v1': BEDROCK_MODEL.CLAUDE_COMPLETION,
   'anthropic.claude-v1': BEDROCK_MODEL.CLAUDE_COMPLETION,
-  'anthropic.claude-v2:1': BEDROCK_MODEL.CLAUDE_COMPLETION,
   'anthropic.claude-v2': BEDROCK_MODEL.CLAUDE_COMPLETION,
+  'anthropic.claude-v2:1': BEDROCK_MODEL.CLAUDE_COMPLETION,
   'cohere.command-light-text-v14': BEDROCK_MODEL.COHERE_COMMAND,
   'cohere.command-r-plus-v1:0': BEDROCK_MODEL.COHERE_COMMAND_R,
   'cohere.command-r-v1:0': BEDROCK_MODEL.COHERE_COMMAND_R,
   'cohere.command-text-v14': BEDROCK_MODEL.COHERE_COMMAND,
+  'deepseek.r1-v1:0': BEDROCK_MODEL.DEEPSEEK,
   'meta.llama2-13b-chat-v1': BEDROCK_MODEL.LLAMA2,
   'meta.llama2-70b-chat-v1': BEDROCK_MODEL.LLAMA2,
   'meta.llama3-1-405b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
   'meta.llama3-1-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
   'meta.llama3-1-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
+  'meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'meta.llama3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
   'meta.llama3-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
   'mistral.mistral-7b-instruct-v0:2': BEDROCK_MODEL.MISTRAL,
@@ -781,6 +876,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.deepseek.r1-v1:0': BEDROCK_MODEL.DEEPSEEK,
   'us.meta.llama3-1-405b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
   'us.meta.llama3-1-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
   'us.meta.llama3-1-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
@@ -797,6 +893,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'eu.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.deepseek.r1-v1:0': BEDROCK_MODEL.DEEPSEEK,
   'eu.meta.llama3-2-1b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'eu.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
 
@@ -804,6 +901,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'apac.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'apac.deepseek.r1-v1:0': BEDROCK_MODEL.DEEPSEEK,
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
@@ -844,6 +942,9 @@ function getHandlerForModel(modelName: string) {
   }
   if (modelName.startsWith('mistral.')) {
     return BEDROCK_MODEL.MISTRAL;
+  }
+  if (modelName.startsWith('deepseek.')) {
+    return BEDROCK_MODEL.DEEPSEEK;
   }
   throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
 }
