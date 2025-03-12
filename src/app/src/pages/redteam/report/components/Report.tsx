@@ -71,7 +71,7 @@ const App: React.FC = () => {
               setEvalId(latestEvalId);
               fetchEvalById(latestEvalId);
             } else {
-              // No recent evaluations available
+              console.log('No recent evals found');
             }
           } catch (error) {
             console.error('Error fetching latest eval:', error);
@@ -191,8 +191,7 @@ const App: React.FC = () => {
     // Process tests in failuresByPlugin (attack successes)
     Object.values(failuresByPlugin).forEach((tests) => {
       tests.forEach((test) => {
-        const strategyId =
-          test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
+        const strategyId = getStrategyIdFromTest(test);
 
         if (!stats[strategyId]) {
           stats[strategyId] = { pass: 0, total: 0 };
@@ -206,8 +205,7 @@ const App: React.FC = () => {
     // Process tests in passesByPlugin (attack failures)
     Object.values(passesByPlugin).forEach((tests) => {
       tests.forEach((test) => {
-        const strategyId =
-          test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
+        const strategyId = getStrategyIdFromTest(test);
 
         if (!stats[strategyId]) {
           stats[strategyId] = { pass: 0, total: 0 };

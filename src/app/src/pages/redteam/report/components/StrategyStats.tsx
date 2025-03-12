@@ -226,8 +226,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
           // Process failures (successful attacks)
           Object.entries(failuresByPlugin).forEach(([plugin, tests]) => {
             tests.forEach((test) => {
-              const testStrategy =
-                test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
+              const testStrategy = getStrategyIdFromTest(test);
 
               if (testStrategy === strategy) {
                 if (!pluginStats[plugin]) {
@@ -242,8 +241,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
           // Process passes (failed attacks)
           Object.entries(passesByPlugin).forEach(([plugin, tests]) => {
             tests.forEach((test) => {
-              const testStrategy =
-                test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
+              const testStrategy = getStrategyIdFromTest(test);
 
               if (testStrategy === strategy) {
                 if (!pluginStats[plugin]) {

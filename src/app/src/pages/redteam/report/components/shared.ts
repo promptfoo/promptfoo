@@ -4,7 +4,7 @@ import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 // TODO(ian): Need a much easier way to get the pluginId (and strategyId) from a result
 
 export function getStrategyIdFromTest(test: {
-  metadata?: any;
+  metadata?: Record<string, any>;
   gradingResult?: GradingResult;
   result?: {
     testCase?: {
