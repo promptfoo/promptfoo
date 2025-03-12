@@ -16,5 +16,8 @@ describe('addBase64Encoding', () => {
   it('should encode the inject variable to base64', () => {
     const result = addBase64Encoding(mockTestCases, 'query');
     expect(result[0].vars?.query).toBe('SGVsbG8sIHdvcmxkIQ==');
+    expect(result[0].metadata).toEqual({
+      strategyId: 'base64',
+    });
   });
 });

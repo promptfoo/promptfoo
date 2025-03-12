@@ -16,6 +16,9 @@ describe('addLeetspeak', () => {
   it('should convert the inject variable to leetspeak', () => {
     const result = addLeetspeak(mockTestCases, 'query');
     expect(result[0].vars?.query).toBe('H3110, w0r1d!');
+    expect(result[0].metadata).toEqual({
+      strategyId: 'leetspeak',
+    });
   });
 
   it('should handle uppercase and lowercase letters', () => {

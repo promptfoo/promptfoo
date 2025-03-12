@@ -176,7 +176,9 @@ describe('Image strategy', () => {
 
       const result = await addImageToBase64([testCaseWithoutMetadata], 'prompt');
 
-      expect(result[0].metadata).toEqual({});
+      expect(result[0].metadata).toEqual({
+        strategyId: 'image',
+      });
     });
 
     it('should preserve existing metadata in the test case', async () => {
@@ -195,6 +197,7 @@ describe('Image strategy', () => {
       expect(result[0].metadata).toEqual({
         source: 'test',
         category: 'image-test',
+        strategyId: 'image',
       });
     });
   });
