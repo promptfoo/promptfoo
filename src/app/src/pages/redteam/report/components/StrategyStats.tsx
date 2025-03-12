@@ -179,7 +179,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
         }
       }
     } catch {
-      // Using raw string if parsing fails
+      console.debug('Failed to parse prompt as JSON, using raw string');
     }
     return prompt;
   };
@@ -633,7 +633,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
           </Typography>
           <StyledGrid>
             {strategies.map(([strategy, { pass, total }]) => {
-              const failRate = ((total - pass) / total) * 100;
+              const failRate = 100 - ((total - pass) / total) * 100;
               return (
                 <StyledStrategyItem
                   key={strategy}
@@ -666,7 +666,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                     </StyledFailRate>
                   </StyledProgressContainer>
                   <Typography variant="caption" color="text.secondary">
-                    {total - pass} / {total} attacks succeeded
+                    {pass} / {total} attacks succeeded
                   </Typography>
                 </StyledStrategyItem>
               );

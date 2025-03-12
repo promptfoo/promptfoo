@@ -95,11 +95,10 @@ const App: React.FC = () => {
     evalData?.results.results.forEach((result) => {
       const pluginId = getPluginIdFromResult(result);
       if (!pluginId) {
-        // Skip results without plugin ID
+        console.warn(`Could not get failures for plugin ${pluginId}`);
         return;
       }
 
-      // Check if the test failed - now using the same criteria as categoryStats
       if (!result.success || !result.gradingResult?.pass) {
         if (!failures[pluginId]) {
           failures[pluginId] = [];
@@ -131,6 +130,7 @@ const App: React.FC = () => {
     evalData?.results.results.forEach((result) => {
       const pluginId = getPluginIdFromResult(result);
       if (!pluginId) {
+        console.warn(`Could not get passes for plugin ${pluginId}`);
         return;
       }
 
@@ -150,7 +150,6 @@ const App: React.FC = () => {
     return passes;
   }, [evalData]);
 
-  // Calculate categoryStats and strategyStats even if we might return early
   const categoryStats = React.useMemo(() => {
     if (!evalData) {
       return {};
@@ -182,7 +181,6 @@ const App: React.FC = () => {
     );
   }, [evalData]);
 
-  // Updated strategy stats calculation that leverages failuresByPlugin and passesByPlugin
   const strategyStats = React.useMemo(() => {
     if (!failuresByPlugin || !passesByPlugin) {
       return {};
