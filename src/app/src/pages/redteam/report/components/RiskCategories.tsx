@@ -50,7 +50,6 @@ const RiskCategories: React.FC<{
             numTestsFailed={totalTests - totalPasses}
             testTypes={subCategories.map((subCategory) => {
               const stats = categoryStats[subCategory];
-              // Default values if no stats found
               const numPassed = stats?.pass || 0;
               const totalForSubcategory = stats?.total || 0;
               const numFailed = totalForSubcategory - numPassed;

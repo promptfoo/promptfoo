@@ -77,7 +77,7 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
         document.body.removeChild(link);
       }
     } catch (error) {
-      console.error('Error generating CSV:', error);
+      // Silent error handling
     } finally {
       setIsDownloading(false);
     }

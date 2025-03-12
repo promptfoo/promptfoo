@@ -121,13 +121,11 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
 
   // Create accurate strategy stats by properly analyzing the data
   const accurateStrategyStats = React.useMemo(() => {
-    // Start with fresh stats
     const stats: Record<string, { pass: number; total: number }> = {};
 
-    // Process all tests in failuresByPlugin (these are the attack successes)
+    // Process tests in failuresByPlugin (attack successes)
     Object.values(failuresByPlugin).forEach((tests) => {
       tests.forEach((test) => {
-        // Use metadata.strategyId directly if available in testCase
         const strategyId =
           test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
         const key = strategyId || 'basic';
@@ -136,16 +134,14 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
           stats[key] = { pass: 0, total: 0 };
         }
 
-        // A failure represents an attack that succeeded
         stats[key].pass += 1;
         stats[key].total += 1;
       });
     });
 
-    // Process all tests in passesByPlugin (these are the attack failures)
+    // Process tests in passesByPlugin (attack failures)
     Object.values(passesByPlugin).forEach((tests) => {
       tests.forEach((test) => {
-        // Use metadata.strategyId directly if available in testCase
         const strategyId =
           test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
         const key = strategyId || 'basic';
@@ -154,7 +150,6 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
           stats[key] = { pass: 0, total: 0 };
         }
 
-        // A pass represents an attack that failed
         stats[key].total += 1;
       });
     });
@@ -222,7 +217,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
         }
       }
     } catch {
-      console.debug('Failed to parse prompt as JSON, using raw string');
+      // Using raw string if parsing fails
     }
     return prompt;
   };
@@ -276,8 +271,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                 if (!pluginStats[plugin]) {
                   pluginStats[plugin] = { passes: 0, total: 0 };
                 }
-                // For failuresByPlugin, these are successful attacks
-                pluginStats[plugin].passes++; // Increment success counter
+                pluginStats[plugin].passes++;
                 pluginStats[plugin].total++;
               }
             });
@@ -293,7 +287,6 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                 if (!pluginStats[plugin]) {
                   pluginStats[plugin] = { passes: 0, total: 0 };
                 }
-                // For passesByPlugin, these are failed attacks (don't increment passes)
                 pluginStats[plugin].total++;
               }
             });
@@ -303,7 +296,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
             .map(([plugin, stats]) => ({
               plugin,
               ...stats,
-              failRate: (stats.passes / stats.total) * 100, // Correct calculation for attack success rate
+              failRate: (stats.passes / stats.total) * 100,
             }))
             .sort((a, b) => b.failRate - a.failRate);
         },

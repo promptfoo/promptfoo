@@ -65,28 +65,23 @@ export function getStrategyIdFromTest(test: {
   metadata?: any;
   gradingResult?: GradingResult;
 }): string | null {
-  // First check metadata for strategyId (most reliable source)
   if (test.metadata?.strategyId) {
     return test.metadata.strategyId as string;
   }
 
-  // Fall back to grading result
   return getStrategyIdFromGradingResult(test.gradingResult);
 }
 
 export function getPluginIdFromResult(result: EvaluateResult): string | null {
-  // First check if pluginId is directly available in metadata
   if (result.metadata?.pluginId) {
     return result.metadata.pluginId as string;
   }
 
-  // Fallback to previous logic
   const harmCategory = result.vars['harmCategory'];
   if (harmCategory) {
     return categoryAliasesReverse[harmCategory as keyof typeof categoryAliases];
   }
 
-  // Look for metric names and extract the plugin name correctly
   const metricNames =
     result.gradingResult?.componentResults?.map((result) => result.assertion?.metric) || [];
 
@@ -95,7 +90,6 @@ export function getPluginIdFromResult(result: EvaluateResult): string | null {
       continue;
     }
 
-    // Metric could be in format "PluginName" or "PluginName/StrategyName"
     const metricParts = metric.split('/');
     const baseName = metricParts[0];
 
@@ -104,6 +98,5 @@ export function getPluginIdFromResult(result: EvaluateResult): string | null {
     }
   }
 
-  // Could not determine plugin ID
   return null;
 }

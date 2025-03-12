@@ -71,7 +71,7 @@ const App: React.FC = () => {
               setEvalId(latestEvalId);
               fetchEvalById(latestEvalId);
             } else {
-              console.log('No recent evals found');
+              // No recent evaluations available
             }
           } catch (error) {
             console.error('Error fetching latest eval:', error);
@@ -91,7 +91,7 @@ const App: React.FC = () => {
     evalData?.results.results.forEach((result) => {
       const pluginId = getPluginIdFromResult(result);
       if (!pluginId) {
-        console.warn(`Could not get plugin ID for result: ${result.id}`);
+        // Skip results without plugin ID
         return;
       }
 
@@ -123,7 +123,7 @@ const App: React.FC = () => {
     evalData?.results.results.forEach((result) => {
       const pluginId = getPluginIdFromResult(result);
       if (!pluginId) {
-        console.warn(`Could not get plugin ID for result: ${result.id}`);
+        // Skip results without plugin ID
         return;
       }
 
@@ -199,7 +199,7 @@ const App: React.FC = () => {
     (acc, row) => {
       const pluginId = getPluginIdFromResult(row);
       if (!pluginId) {
-        console.warn(`Could not determine plugin ID for result: ${row.id}`);
+        // Skip results without plugin ID
         return acc;
       }
 
