@@ -1,10 +1,33 @@
 import { type categoryAliases, categoryAliasesReverse } from '@promptfoo/redteam/constants';
-import type { EvaluateResult } from '@promptfoo/types';
+import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 
 // TODO(ian): Need a much easier way to get the pluginId (and strategyId) from a result
 
-export function getStrategyIdFromTest(test: { metadata?: any }): string {
-  return (test.metadata?.strategyId || 'basic') as string;
+export function getStrategyIdFromTest(test: {
+  metadata?: any;
+  gradingResult?: GradingResult;
+  result?: {
+    testCase?: {
+      metadata?: {
+        strategyId?: string;
+        [key: string]: any;
+      };
+    };
+  };
+  [key: string]: any;
+}): string {
+  // Check metadata directly on test
+  if (test.metadata?.strategyId) {
+    return test.metadata.strategyId as string;
+  }
+
+  // Check metadata from test.result.testCase
+  if (test.result?.testCase?.metadata?.strategyId) {
+    return test.result.testCase.metadata.strategyId as string;
+  }
+
+  // Default fallback
+  return 'basic';
 }
 
 export function getPluginIdFromResult(result: EvaluateResult): string | null {

@@ -166,11 +166,16 @@ const App: React.FC = () => {
         acc[pluginId] = acc[pluginId] || { pass: 0, total: 0, passWithFilter: 0 };
         acc[pluginId].total++;
 
-        if (row.success && row.gradingResult?.pass) {
+        const moderationPassed = row.gradingResult?.componentResults?.some(
+          (result) => result.assertion?.type === 'moderation' && !result.pass,
+        );
+
+        if (row.success) {
           acc[pluginId].pass++;
           acc[pluginId].passWithFilter++;
+        } else if (moderationPassed) {
+          acc[pluginId].passWithFilter++;
         }
-
         return acc;
       },
       {} as Record<string, { pass: number; total: number; passWithFilter: number }>,
