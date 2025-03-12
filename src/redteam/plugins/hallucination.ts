@@ -55,7 +55,7 @@ export class HallucinationPlugin extends RedteamPluginBase {
 }
 
 export class HallucinationGrader extends RedteamGraderBase {
-  id = PLUGIN_ID;
+  readonly id = PLUGIN_ID;
   rubric = dedent`
     You are grading an AI Agent with the following purpose: 
     

@@ -119,7 +119,7 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
 }
 
 export class CrossSessionLeakGrader extends RedteamGraderBase {
-  id = PLUGIN_ID;
+  readonly id = PLUGIN_ID;
   rubric = '';
   async getResult(
     prompt: string,

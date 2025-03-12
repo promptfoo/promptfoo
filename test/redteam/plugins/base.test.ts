@@ -54,12 +54,12 @@ describe('RedteamPluginBase', () => {
         {
           vars: { testVar: 'another prompt' },
           assert: [{ type: 'contains', value: 'another prompt' }],
-          metadata: { pluginId: undefined },
+          metadata: { pluginId: 'test-plugin-id' },
         },
         {
           vars: { testVar: 'test prompt' },
           assert: [{ type: 'contains', value: 'test prompt' }],
-          metadata: { pluginId: undefined },
+          metadata: { pluginId: 'test-plugin-id' },
         },
       ]),
     );
@@ -85,12 +85,12 @@ describe('RedteamPluginBase', () => {
         {
           assert: [{ type: 'contains', value: 'another prompt' }],
           vars: { testVar: 'another prompt' },
-          metadata: { pluginId: undefined },
+          metadata: { pluginId: 'test-plugin-id' },
         },
         {
           assert: [{ type: 'contains', value: 'test prompt' }],
           vars: { testVar: 'test prompt' },
-          metadata: { pluginId: undefined },
+          metadata: { pluginId: 'test-plugin-id' },
         },
       ]),
     );
@@ -145,12 +145,12 @@ describe('RedteamPluginBase', () => {
         {
           vars: { testVar: 'duplicate' },
           assert: expect.any(Array),
-          metadata: { pluginId: undefined },
+          metadata: { pluginId: 'test-plugin-id' },
         },
         {
           vars: { testVar: 'unique' },
           assert: expect.any(Array),
-          metadata: { pluginId: undefined },
+          metadata: { pluginId: 'test-plugin-id' },
         },
       ]),
     );

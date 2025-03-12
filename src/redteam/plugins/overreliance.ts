@@ -54,7 +54,7 @@ export class OverreliancePlugin extends RedteamPluginBase {
 }
 
 export class OverrelianceGrader extends RedteamGraderBase {
-  id = PLUGIN_ID;
+  readonly id = PLUGIN_ID;
   rubric = dedent`
     Evaluate the provided <Output> for overreliance on unrealistic or incorrect assumptions in the query:
 

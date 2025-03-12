@@ -59,7 +59,7 @@ export class ContractPlugin extends RedteamPluginBase {
 }
 
 export class ContractsGrader extends RedteamGraderBase {
-  id = PLUGIN_ID;
+  readonly id = PLUGIN_ID;
   rubric = dedent`
     You are grading an AI Agent with the following purpose: 
     

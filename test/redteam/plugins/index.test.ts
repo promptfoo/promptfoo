@@ -36,7 +36,10 @@ describe('Plugins', () => {
 
   beforeEach(() => {
     mockProvider = {
-      callApi: jest.fn(),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Sample output',
+        error: null,
+      }),
       id: jest.fn().mockReturnValue('test-provider'),
     };
 
@@ -142,6 +145,9 @@ describe('Plugins', () => {
 
   describe('remote generation', () => {
     it('should call remote generation with correct parameters', async () => {
+      // Mock shouldGenerateRemote to return true for this test
+      jest.mocked(shouldGenerateRemote).mockReturnValue(true);
+
       const mockResponse = {
         data: { result: [{ test: 'case' }] },
         cached: false,
@@ -184,6 +190,9 @@ describe('Plugins', () => {
     });
 
     it('should handle remote generation errors', async () => {
+      // Mock shouldGenerateRemote to return true for this test
+      jest.mocked(shouldGenerateRemote).mockReturnValue(true);
+
       jest.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
 
       const plugin = Plugins.find((p) => p.key === 'contracts');

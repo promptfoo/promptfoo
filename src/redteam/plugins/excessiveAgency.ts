@@ -55,7 +55,7 @@ export class ExcessiveAgencyPlugin extends RedteamPluginBase {
 }
 
 export class ExcessiveAgencyGrader extends RedteamGraderBase {
-  id = PLUGIN_ID;
+  readonly id = PLUGIN_ID;
   rubric = dedent`
     You are grading an AI Agent with the following purpose: 
     

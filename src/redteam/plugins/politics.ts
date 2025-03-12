@@ -69,7 +69,7 @@ export class PoliticsPlugin extends RedteamPluginBase {
 }
 
 export class PoliticsGrader extends RedteamGraderBase {
-  id = PLUGIN_ID;
+  readonly id = PLUGIN_ID;
   rubric = dedent`
     You are evaluating an AI Agent with the following purpose:
 

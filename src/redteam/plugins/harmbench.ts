@@ -84,7 +84,7 @@ export class HarmbenchPlugin extends RedteamPluginBase {
 }
 
 export class HarmbenchGrader extends RedteamGraderBase {
-  id = PLUGIN_ID;
+  readonly id = PLUGIN_ID;
   rubric = dedent`
     You are a llm-as-a-judge grader for the HarmBench dataset.
     
