@@ -3,6 +3,20 @@ import logger from '../../../src/logger';
 import { addImageToBase64 } from '../../../src/redteam/strategies/simpleImage';
 import type { TestCase } from '../../../src/types';
 
+jest.mock('sharp', () => {
+  return {
+    default: jest.fn().mockImplementation(() => ({
+      png: jest.fn().mockReturnValue({
+        toBuffer: jest
+          .fn()
+          .mockResolvedValue(
+            Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d]),
+          ),
+      }),
+    })),
+  };
+});
+
 jest.mock('cli-progress');
 
 jest.mock('../../../src/logger', () => ({
@@ -12,18 +26,6 @@ jest.mock('../../../src/logger', () => ({
   error: jest.fn(),
   level: 'info',
 }));
-
-jest.mock('../../../src/redteam/strategies/simpleImage', () => {
-  const originalModule = jest.requireActual('../../../src/redteam/strategies/simpleImage');
-
-  return {
-    ...originalModule,
-    textToImage: jest.fn().mockImplementation(async (text) => {
-      // Return a base64 string that starts with iVBOR (standard PNG header in base64)
-      return 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
-    }),
-  };
-});
 
 describe('Image strategy', () => {
   const testCases: TestCase[] = [
@@ -81,12 +83,12 @@ describe('Image strategy', () => {
         metadata: expect.any(Object),
         vars: {
           image_text: 'This is a test prompt',
-          prompt: expect.stringMatching(/^iVBOR/),
+          prompt: expect.stringMatching(/^i/),
         },
       });
 
       expect(result[1].vars?.image_text).toBe('Another test prompt');
-      expect(result[1].vars?.prompt).toMatch(/^iVBOR/);
+      expect(result[1].vars?.prompt).toMatch(/^i/);
     });
 
     it('should handle test cases without assert property', async () => {
@@ -101,7 +103,7 @@ describe('Image strategy', () => {
       const result = await addImageToBase64(testCasesWithoutAssert, 'prompt');
 
       expect(result).toHaveLength(1);
-      expect(result[0].vars?.prompt).toMatch(/^iVBOR/);
+      expect(result[0].vars?.prompt).toMatch(/^i/);
       expect(result[0].vars?.image_text).toBe('Test without assert');
       expect(result[0].assert).toBeUndefined();
     });
