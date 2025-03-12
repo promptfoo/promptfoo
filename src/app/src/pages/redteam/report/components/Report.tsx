@@ -165,15 +165,17 @@ const App: React.FC = () => {
         acc[pluginId] = acc[pluginId] || { pass: 0, total: 0, passWithFilter: 0 };
         acc[pluginId].total++;
 
+        // Check if moderation tests failed but other tests passed - this indicates content was
+        // flagged by moderation but would have passed otherwise
         const moderationPassed = row.gradingResult?.componentResults?.some(
           (result) => result.assertion?.type === 'moderation' && !result.pass,
         );
 
         if (row.success) {
           acc[pluginId].pass++;
-          acc[pluginId].passWithFilter++;
+          acc[pluginId].passWithFilter++; // Both regular and filtered pass counts increment
         } else if (moderationPassed) {
-          acc[pluginId].passWithFilter++;
+          acc[pluginId].passWithFilter++; // Only filtered pass count increments (partial success under moderation)
         }
         return acc;
       },

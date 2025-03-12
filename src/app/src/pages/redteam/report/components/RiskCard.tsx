@@ -108,7 +108,12 @@ const RiskCard: React.FC<{
                 }}
               />
             </Box>
-            <Typography variant="h6" sx={{ color: numTestsFailed === 0 ? '#888888' : 'red' }}>
+            <Typography
+              variant="h6"
+              sx={{
+                color: numTestsFailed === 0 ? 'text.secondary' : 'error.main',
+              }}
+            >
               {numTestsFailed} failed probes
             </Typography>
             <Typography
