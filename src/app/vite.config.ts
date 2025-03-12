@@ -1,9 +1,7 @@
-/// <reference types="vitest" />
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import type { PluginOption } from 'vite';
 import { defineConfig } from 'vite';
-import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import packageJson from '../../package.json';
 
 const API_PORT = process.env.API_PORT || '15500';
@@ -25,7 +23,7 @@ export default defineConfig({
     port: 3000,
   },
   base: process.env.VITE_PUBLIC_BASENAME || '/',
-  plugins: [react(), nodePolyfills()] as PluginOption[],
+  plugins: [react()] as PluginOption[],
   resolve: {
     alias: {
       '@app': path.resolve(__dirname, './src'),
@@ -35,16 +33,19 @@ export default defineConfig({
   build: {
     emptyOutDir: true,
     outDir: '../../dist/src/app',
-  },
-  test: {
-    environment: 'jsdom',
-    setupFiles: ['./src/setupTests.ts'],
-    globals: true,
+    rollupOptions: {
+      external: [
+        'vite-plugin-node-polyfills/shims/buffer',
+        'vite-plugin-node-polyfills/shims/process'
+      ]
+    }
   },
   define: {
     'import.meta.env.VITE_PROMPTFOO_VERSION': JSON.stringify(packageJson.version),
     'import.meta.env.VITE_PROMPTFOO_DISABLE_TELEMETRY': JSON.stringify(
       process.env.PROMPTFOO_DISABLE_TELEMETRY || 'false',
     ),
+    'process.env': JSON.stringify({}),
+    'global': 'window',
   },
 });
