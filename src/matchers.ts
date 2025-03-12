@@ -416,12 +416,15 @@ export async function matchesLlmRubric(
   }
 
   if (!grading.rubricPrompt && cliState.config?.redteam && shouldGenerateRemote()) {
-    return doRemoteGrading({
-      task: 'llm-rubric',
-      rubric,
-      output: llmOutput,
-      vars: vars || {},
-    });
+    return {
+      ...(await doRemoteGrading({
+        task: 'llm-rubric',
+        rubric,
+        output: llmOutput,
+        vars: vars || {},
+      })),
+      assertion,
+    };
   }
 
   const prompt = await renderLlmRubricPrompt(rubric, llmOutput, grading, vars);
