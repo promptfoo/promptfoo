@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach, jest, afterAll } from '@jest/globals';
 import loggerModule from '../../src/logger';
 import { AzureModerationProvider } from '../../src/providers/azure/moderation';
 import {
@@ -364,26 +364,28 @@ describe('Provider defaults module', () => {
         const mockProviders = [
           {
             name: 'first-provider',
-            hasCredentials: jest.fn().mockResolvedValue(false),
-            config: jest.fn().mockResolvedValue({}),
+            hasCredentials: jest.fn().mockImplementation(() => Promise.resolve(false)),
+            config: jest.fn().mockImplementation(() => Promise.resolve({})),
           },
           {
             name: 'second-provider',
-            hasCredentials: jest.fn().mockResolvedValue(true), // This one will be selected
-            config: jest.fn().mockResolvedValue({
-              datasetGenerationProvider: new MockProvider('selected-provider'),
-              embeddingProvider: new MockProvider('selected-provider'),
-              gradingJsonProvider: new MockProvider('selected-provider'),
-              gradingProvider: new MockProvider('selected-provider'),
-              moderationProvider: new MockProvider('selected-provider'),
-              suggestionsProvider: new MockProvider('selected-provider'),
-              synthesizeProvider: new MockProvider('selected-provider'),
-            }),
+            hasCredentials: jest.fn().mockImplementation(() => Promise.resolve(true)), // This one will be selected
+            config: jest.fn().mockImplementation(() =>
+              Promise.resolve({
+                datasetGenerationProvider: new MockProvider('selected-provider'),
+                embeddingProvider: new MockProvider('selected-provider'),
+                gradingJsonProvider: new MockProvider('selected-provider'),
+                gradingProvider: new MockProvider('selected-provider'),
+                moderationProvider: new MockProvider('selected-provider'),
+                suggestionsProvider: new MockProvider('selected-provider'),
+                synthesizeProvider: new MockProvider('selected-provider'),
+              }),
+            ),
           },
           {
             name: 'third-provider',
-            hasCredentials: jest.fn().mockResolvedValue(false),
-            config: jest.fn().mockResolvedValue({}),
+            hasCredentials: jest.fn().mockImplementation(() => Promise.resolve(false)),
+            config: jest.fn().mockImplementation(() => Promise.resolve({})),
           },
         ];
 
@@ -393,7 +395,7 @@ describe('Provider defaults module', () => {
 
         // Try each provider in order
         for (const provider of mockProviders) {
-          const hasCredentials = await Promise.resolve(provider.hasCredentials(expect.anything()));
+          const hasCredentials = await Promise.resolve(provider.hasCredentials({} as EnvOverrides));
           if (hasCredentials) {
             selectedProvider = provider;
             break;
@@ -406,12 +408,12 @@ describe('Provider defaults module', () => {
         }
 
         // Call the selected provider's config method
-        const _result = await selectedProvider.config(expect.anything());
+        const _result = await selectedProvider.config({} as EnvOverrides);
 
         // Verify the right provider was chosen
-        expect(mockProviders[0].hasCredentials).toHaveBeenCalledWith(expect.anything());
-        expect(mockProviders[1].hasCredentials).toHaveBeenCalledWith(expect.anything());
-        expect(mockProviders[1].config).toHaveBeenCalledWith(expect.anything());
+        expect(mockProviders[0].hasCredentials).toHaveBeenCalledWith({} as EnvOverrides);
+        expect(mockProviders[1].hasCredentials).toHaveBeenCalledWith({} as EnvOverrides);
+        expect(mockProviders[1].config).toHaveBeenCalledWith({} as EnvOverrides);
         // The third provider should never be called because the second one matched
         expect(mockProviders[2].hasCredentials).not.toHaveBeenCalled();
 
@@ -526,9 +528,9 @@ describe('Provider defaults module', () => {
         process.env.AZURE_OPENAI_API_KEY = 'test-key';
         process.env.AZURE_OPENAI_DEPLOYMENT_NAME = 'test-deployment';
 
-        // Spy on the logger
-        const debugSpy = jest.spyOn(console, 'debug').mockImplementation(() => undefined);
-        const loggerSpy = jest.spyOn(logger, 'debug').mockImplementation(() => undefined);
+        // Spy on the logger - ignore the return value requirement for the test
+        const debugSpy = jest.spyOn(console, 'debug').mockImplementation(() => null as any);
+        const loggerSpy = jest.spyOn(logger, 'debug').mockImplementation(() => null as any);
 
         // Get providers
         const providers = await getDefaultProviders();
@@ -582,7 +584,7 @@ describe('Provider defaults module', () => {
           for (const provider of PROVIDERS) {
             // Check if it has credentials
             const hasCredentials = await Promise.resolve(
-              provider.hasCredentials(expect.anything()),
+              provider.hasCredentials({} as EnvOverrides),
             );
 
             if (hasCredentials) {
@@ -600,18 +602,18 @@ describe('Provider defaults module', () => {
 
         // Set up spies on the hasCredentials methods
         const spies = PROVIDERS.map((provider) =>
-          jest.spyOn(provider, 'hasCredentials').mockResolvedValue(false),
+          jest.spyOn(provider, 'hasCredentials').mockImplementation(() => Promise.resolve(false)),
         );
 
         // Make the second provider return true for credentials
-        spies[1].mockResolvedValue(true);
+        spies[1].mockImplementation(() => Promise.resolve(true));
 
         // Run the test loop
         const result = await testProviderLoop();
 
         // Verify the first and second were checked, the second was selected
-        expect(spies[0]).toHaveBeenCalledWith(expect.anything());
-        expect(spies[1]).toHaveBeenCalledWith(expect.anything());
+        expect(spies[0]).toHaveBeenCalledWith({} as EnvOverrides);
+        expect(spies[1]).toHaveBeenCalledWith({} as EnvOverrides);
         expect(result.selectedProvider).toBe(PROVIDERS[1]);
 
         // Verify providers after the match were not checked
@@ -799,11 +801,11 @@ describe('Provider defaults module', () => {
 
         // Mock all providers to have no credentials
         const spies = PROVIDERS.map((provider) =>
-          jest.spyOn(provider, 'hasCredentials').mockResolvedValue(false),
+          jest.spyOn(provider, 'hasCredentials').mockImplementation(() => Promise.resolve(false)),
         );
 
         // Mock the logger to verify the fallback message
-        const loggerSpy = jest.spyOn(logger, 'debug').mockImplementation(() => undefined);
+        const loggerSpy = jest.spyOn(logger, 'debug').mockImplementation(() => null as any);
 
         // Call getDefaultProviders
         const providers = await getDefaultProviders();
