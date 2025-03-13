@@ -118,12 +118,12 @@ interface CompletionOptions {
   systemInstruction?: Content;
 }
 
-const formatContentMessage = (contents: GeminiFormat , contentIndex: number) => {
+const formatContentMessage = (contents: GeminiFormat, contentIndex: number) => {
   if (contents[contentIndex].role != 'user') {
-    throw new Error("Can only take user role inputs.")
+    throw new Error('Can only take user role inputs.');
   }
   if (contents[contentIndex].parts.length != 1) {
-    throw new Error("Unexpected number of parts in user input.")
+    throw new Error('Unexpected number of parts in user input.');
   }
   const userMessage = contents[contentIndex].parts[0].text;
 
@@ -140,7 +140,6 @@ const formatContentMessage = (contents: GeminiFormat , contentIndex: number) => 
   };
   return contentMessage;
 };
-
 
 export class GoogleMMLiveProvider implements ApiProvider {
   config: CompletionOptions;
@@ -166,15 +165,16 @@ export class GoogleMMLiveProvider implements ApiProvider {
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
 
-    let contents: GeminiFormat = parseChatPrompt(
-      prompt,
-      [{
+    let contents: GeminiFormat = parseChatPrompt(prompt, [
+      {
         role: 'user',
-        parts: [{
-          text: prompt,
-        }],
-      }],
-    );
+        parts: [
+          {
+            text: prompt,
+          },
+        ],
+      },
+    ]);
     const { contents: updatedContents, coerced } = maybeCoerceToGeminiFormat(contents);
     if (coerced) {
       logger.debug(`Coerced JSON prompt to Gemini format: ${JSON.stringify(contents)}`);
@@ -215,7 +215,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
 
           // Handle setup complete response
           if (response.setupComplete) {
-            const contentMessage = formatContentMessage(contents, contentIndex)
+            const contentMessage = formatContentMessage(contents, contentIndex);
             contentIndex += 1;
             logger.debug(`WebSocket sent: ${JSON.stringify(contentMessage)}`);
             ws.send(JSON.stringify(contentMessage));
@@ -245,7 +245,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
             ws.send(JSON.stringify(toolMessage));
           } else if (response.serverContent?.turnComplete) {
             if (Array.isArray(contents) && contentIndex < contents.length) {
-              const contentMessage = formatContentMessage(contents, contentIndex)
+              const contentMessage = formatContentMessage(contents, contentIndex);
               contentIndex += 1;
               logger.debug(`WebSocket sent: ${JSON.stringify(contentMessage)}`);
               ws.send(JSON.stringify(contentMessage));
@@ -260,9 +260,13 @@ export class GoogleMMLiveProvider implements ApiProvider {
             }
           }
         } catch (err) {
-          logger.debug(`Failed to process response: ${JSON.stringify(err)} ${JSON.stringify(contents)}`);
+          logger.debug(
+            `Failed to process response: ${JSON.stringify(err)} ${JSON.stringify(contents)}`,
+          );
           ws.close();
-          resolve({ error: `Failed to process response: ${JSON.stringify(err)} ${JSON.stringify(contents)}` });
+          resolve({
+            error: `Failed to process response: ${JSON.stringify(err)} ${JSON.stringify(contents)}`,
+          });
         }
       };
 
