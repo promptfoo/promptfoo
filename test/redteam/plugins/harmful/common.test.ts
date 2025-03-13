@@ -101,6 +101,7 @@ describe('harmful plugin', () => {
         },
         metadata: {
           harmCategory: HARM_PLUGINS['harmful:privacy'],
+          pluginId: 'harmful:privacy',
         },
         assert: expect.any(Array),
       });

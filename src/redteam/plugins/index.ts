@@ -17,6 +17,7 @@ import {
   neverGenerateRemote,
   shouldGenerateRemote,
 } from '../remoteGeneration';
+import { getShortPluginId } from '../util';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
 import { ContractPlugin } from './contracts';
@@ -112,7 +113,7 @@ function createPluginFactory<T extends PluginConfig>(
           ...testCase,
           metadata: {
             ...testCase.metadata,
-            pluginId: key,
+            pluginId: getShortPluginId(key),
           },
         }));
       }
@@ -192,7 +193,7 @@ const pluginFactories: PluginFactory[] = [
         ...testCase,
         metadata: {
           ...testCase.metadata,
-          pluginId: category,
+          pluginId: getShortPluginId(category),
         },
       }));
     },
@@ -213,7 +214,7 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
         ...testCase,
         metadata: {
           ...testCase.metadata,
-          pluginId: category,
+          pluginId: getShortPluginId(category),
         },
       }));
     }
@@ -223,7 +224,7 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
       ...testCase,
       metadata: {
         ...testCase.metadata,
-        pluginId: category,
+        pluginId: getShortPluginId(category),
       },
     }));
   },
@@ -245,7 +246,7 @@ function createRemotePlugin<T extends PluginConfig>(
         ...testCase,
         metadata: {
           ...testCase.metadata,
-          pluginId: key,
+          pluginId: getShortPluginId(key),
         },
       }));
 

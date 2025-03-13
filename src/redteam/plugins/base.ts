@@ -17,7 +17,7 @@ import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { redteamProviderManager } from '../providers/shared';
-import { removePrefix } from '../util';
+import { getShortPluginId, removePrefix } from '../util';
 import { isBasicRefusal, isEmptyResponse } from '../util';
 
 /**
@@ -159,7 +159,7 @@ export abstract class RedteamPluginBase {
       },
       assert: this.getAssertions(prompt.prompt),
       metadata: {
-        pluginId: this.id,
+        pluginId: getShortPluginId(this.id),
       },
     }));
   }
