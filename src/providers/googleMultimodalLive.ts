@@ -9,6 +9,9 @@ import type {
 } from '../types';
 import '../util';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
+import { parseChatPrompt } from './shared';
+import type { GeminiFormat } from './vertexUtil';
+import { maybeCoerceToGeminiFormat } from './vertexUtil';
 
 interface Blob {
   mimeType: string;
@@ -139,7 +142,22 @@ export class GoogleMMLiveProvider implements ApiProvider {
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
 
-    const userMessage = prompt;
+    let contents: GeminiFormat | { role: string; parts: { text: string } } = parseChatPrompt(
+      prompt,
+      {
+        role: 'user',
+        parts: {
+          text: prompt,
+        },
+      },
+    );
+    const { contents: updatedContents, coerced } = maybeCoerceToGeminiFormat(contents);
+    if (coerced) {
+      logger.debug(`Coerced JSON prompt to Gemini format: ${JSON.stringify(contents)}`);
+      logger.debug(`Coerced JSON prompt to Gemini format: ${JSON.stringify(updatedContents)}`);
+      contents = updatedContents;
+    }
+    let contentIndex = 1;
 
     return new Promise<ProviderResponse>((resolve) => {
       const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${this.getApiKey()}`;
@@ -171,7 +189,19 @@ export class GoogleMMLiveProvider implements ApiProvider {
           const response = JSON.parse(responseText);
 
           // Handle setup complete response
+          let userMessage;
           if (response.setupComplete) {
+            if (Array.isArray(contents)) {
+              if (contents[0].role != 'user') {
+                throw new Error("Can only take user role inputs.")
+              }
+              userMessage = contents[0].parts[0].text;
+            } else {
+              if (contents.role != 'user') {
+                throw new Error("Can only take user role inputs.")
+              }
+              userMessage = contents.parts.text;
+            }
             const contentMessage = {
               client_content: {
                 turns: [
@@ -183,6 +213,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
                 turn_complete: true,
               },
             };
+            logger.debug(`WebSocket sent: ${JSON.stringify(contentMessage)}`);
             ws.send(JSON.stringify(contentMessage));
           }
           // Handle model response
@@ -196,7 +227,28 @@ export class GoogleMMLiveProvider implements ApiProvider {
             if (response_text_total) {
               resolve({ output: response_text_total });
             }
-            ws.close();
+            if (Array.isArray(contents) && contentIndex < contents.length) {
+              if (contents[0].role != 'user') {
+                throw new Error("Can only take user role inputs.")
+              }
+              userMessage = contents[contentIndex].parts[0].text;
+              contentIndex += 1;
+              const contentMessage = {
+                client_content: {
+                  turns: [
+                    {
+                      role: 'user',
+                      parts: [{ text: userMessage }],
+                    },
+                  ],
+                  turn_complete: true,
+                },
+              };
+              logger.debug(`WebSocket sent: ${JSON.stringify(contentMessage)}`);
+              ws.send(JSON.stringify(contentMessage));
+            } else {
+              ws.close();
+            }
           }
         } catch (err) {
           logger.debug(`Failed to process response: ${err}`);
@@ -245,6 +297,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
               : {}),
           },
         };
+        logger.debug(`WebSocket sent: ${JSON.stringify(setupMessage)}`);
         ws.send(JSON.stringify(setupMessage));
       };
     });
