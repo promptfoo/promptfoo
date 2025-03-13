@@ -37,7 +37,6 @@ export function createTestCase(
   return {
     vars: {
       [injectVar]: output.trim(),
-      harmCategory: harmCategoryLabel,
     },
     metadata: { harmCategory: harmCategoryLabel },
     assert: getHarmfulAssertions(harmCategory),

@@ -195,7 +195,16 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
           color="inherit"
           fullWidth
           onClick={(event) => {
-            const url = `/eval/?evalId=${evalId}&search=${encodeURIComponent(`(var=${categoryName}|metric=${categoryName})`)}`;
+            // Check if any test has a pluginId in the metadata
+            const firstFailure = failures.length > 0 ? failures[0] : null;
+            const firstPass = passes.length > 0 ? passes[0] : null;
+            const testWithPluginId = firstFailure || firstPass;
+            const pluginId = testWithPluginId?.result?.metadata?.pluginId;
+
+            const searchQuery = pluginId
+              ? `metadata=pluginId:${pluginId}`
+              : `metric=${categoryName}`;
+            const url = `/eval/?evalId=${evalId}&search=${encodeURIComponent(searchQuery)}`;
             if (event.ctrlKey || event.metaKey) {
               window.open(url, '_blank');
             } else {
