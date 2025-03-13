@@ -5,6 +5,7 @@ import {
   LLAMA_GUARD_ENABLED_CATEGORIES,
   LLAMA_GUARD_REPLICATE_PROVIDER,
 } from '../../constants';
+import { getShortPluginId } from '../../util';
 
 export function getHarmfulAssertions(harmCategory: keyof typeof HARM_PLUGINS): Assertion[] {
   const assertionType: AssertionType = `promptfoo:redteam:${harmCategory}`;
@@ -37,9 +38,11 @@ export function createTestCase(
   return {
     vars: {
       [injectVar]: output.trim(),
-      harmCategory: harmCategoryLabel,
     },
-    metadata: { harmCategory: harmCategoryLabel },
+    metadata: {
+      harmCategory: harmCategoryLabel,
+      pluginId: getShortPluginId(harmCategory),
+    },
     assert: getHarmfulAssertions(harmCategory),
   };
 }

@@ -187,3 +187,13 @@ export function removePrefix(str: string, prefix: string) {
   str = str.replace(new RegExp(prefix + ':', 'i'), '').trim();
   return str;
 }
+
+/**
+ * Extracts the short name from a fully qualified plugin ID.
+ * Removes the 'promptfoo:redteam:' prefix if present.
+ * @param pluginId The full plugin ID
+ * @returns The short plugin ID
+ */
+export function getShortPluginId(pluginId: string): string {
+  return pluginId.replace(/^promptfoo:redteam:/, '');
+}

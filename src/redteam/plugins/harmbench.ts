@@ -48,6 +48,8 @@ async function fetchDataset(limit: number): Promise<HarmbenchInput[]> {
 }
 
 export class HarmbenchPlugin extends RedteamPluginBase {
+  readonly id = PLUGIN_ID;
+
   async getTemplate(): Promise<string> {
     throw new Error('Not implemented');
   }
@@ -82,7 +84,7 @@ export class HarmbenchPlugin extends RedteamPluginBase {
 }
 
 export class HarmbenchGrader extends RedteamGraderBase {
-  id = PLUGIN_ID;
+  readonly id = PLUGIN_ID;
   rubric = dedent`
     You are a llm-as-a-judge grader for the HarmBench dataset.
     
