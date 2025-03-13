@@ -98,7 +98,6 @@ describe('harmful plugin', () => {
       expect(testCase).toEqual({
         vars: {
           inputVar: 'single line output',
-          harmCategory: HARM_PLUGINS['harmful:privacy'],
         },
         metadata: {
           harmCategory: HARM_PLUGINS['harmful:privacy'],
@@ -126,7 +125,6 @@ describe('harmful plugin', () => {
       const unknownCategory = 'harmful:unknown' as keyof typeof HARM_PLUGINS;
       const testCase = createTestCase('inputVar', 'test output', unknownCategory);
 
-      expect(testCase.vars?.harmCategory).toBe(unknownCategory);
       expect(testCase.metadata?.harmCategory).toBe(unknownCategory);
     });
   });
