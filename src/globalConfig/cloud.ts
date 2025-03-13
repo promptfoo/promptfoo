@@ -124,3 +124,5 @@ export class CloudConfig {
 
 // Export a singleton instance
 export const cloudConfig = new CloudConfig();
+
+export { API_HOST };
