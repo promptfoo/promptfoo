@@ -1,5 +1,5 @@
 import { getGraderById } from '../redteam/graders';
-import type { AssertionParams, GradingResult } from '../types';
+import type { Assertion, AssertionParams, GradingResult } from '../types';
 import invariant from '../util/invariant';
 
 export const handleRedteam = async ({
@@ -21,12 +21,11 @@ export const handleRedteam = async ({
     provider,
     renderedValue,
   );
-  const finalAssertion = {
+  const finalAssertion: Assertion = {
     ...assertion,
     value: rubric,
   };
-  console.log('finalAssertion', finalAssertion);
-  grade.componentResults?.forEach((componentResult) => {
+  grade.componentResults?.forEach((componentResult: GradingResult) => {
     componentResult.assertion = finalAssertion;
   });
   return {
