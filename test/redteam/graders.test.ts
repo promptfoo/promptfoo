@@ -1,6 +1,7 @@
 import { getGraderById } from '../../src/redteam/graders';
 import { AsciiSmugglingGrader } from '../../src/redteam/plugins/asciiSmuggling';
 import { BeavertailsGrader } from '../../src/redteam/plugins/beavertails';
+import { FunctionDiscoveryGrader } from '../../src/redteam/plugins/functionDiscovery';
 import { HarmfulGrader } from '../../src/redteam/plugins/harmful/graders';
 
 describe('getGraderById', () => {
@@ -13,6 +14,9 @@ describe('getGraderById', () => {
 
     const harmfulGrader = getGraderById('promptfoo:redteam:harmful');
     expect(harmfulGrader).toBeInstanceOf(HarmfulGrader);
+
+    const functionDiscoveryGrader = getGraderById('promptfoo:redteam:function-discovery');
+    expect(functionDiscoveryGrader).toBeInstanceOf(FunctionDiscoveryGrader);
   });
 
   it('should return harmful grader for IDs starting with promptfoo:redteam:harmful', () => {
