@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+providers:
+  - id: github:DeepSeek-V3
+prompts:
+  - 'what color is the {{topic}}?'
+defaultTest:
+  options:
+    provider:
+      embedding: github:text-embedding-3-large
+tests:
+  - vars:
+      topic: sky
+    assert:
+      - type: similar
+        value: blue

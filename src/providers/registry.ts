@@ -450,7 +450,7 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const splits = providerPath.split(':');
       const modelName = splits.slice(1).join(':');
-      
+
       // List of known embedding models from GitHub marketplace
       const knownEmbeddingModels = [
         'text-embedding-3-small',
@@ -460,15 +460,17 @@ export const providerMap: ProviderFactory[] = [
         'cohere-embed-v3-english',
         'cohere-embed-v3-multilingual',
         'openai-text-embedding-3-small',
-        'openai-text-embedding-3-large'
+        'openai-text-embedding-3-large',
       ];
-      
+
       // Check if the model name indicates an embedding model
-      const isEmbeddingModel = 
-        knownEmbeddingModels.some(model => modelName.toLowerCase().includes(model.toLowerCase())) ||
-        modelName.toLowerCase().includes('embedding') || 
+      const isEmbeddingModel =
+        knownEmbeddingModels.some((model) =>
+          modelName.toLowerCase().includes(model.toLowerCase()),
+        ) ||
+        modelName.toLowerCase().includes('embedding') ||
         modelName.toLowerCase().includes('embed');
-      
+
       // Common configuration for all GitHub models
       const githubConfig = {
         ...providerOptions,
@@ -478,7 +480,7 @@ export const providerMap: ProviderFactory[] = [
           apiKeyEnvar: 'GITHUB_TOKEN',
         },
       };
-      
+
       // Use appropriate provider based on model type
       if (isEmbeddingModel) {
         logger.debug(`Using embedding provider for GitHub model: ${modelName}`);
