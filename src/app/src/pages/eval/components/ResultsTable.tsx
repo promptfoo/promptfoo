@@ -329,7 +329,7 @@ function ResultsTable({
           if (searchText && searchText.startsWith('metadata=') && searchText.includes(':')) {
             // Extract key and value from metadata search
             const [_, metadataQuery] = searchText.split('metadata=');
-            const [metadataKey, metadataValue] = metadataQuery.split(':');
+            const [metadataKey, metadataValue] = metadataQuery.split(':').map(s => s.trim());
 
             if (metadataKey && metadataValue) {
               return row.outputs.some((output) => {
