@@ -73,9 +73,6 @@ describe('Plugin IDs', () => {
     // Filter out duplicates
     const uniqueIds = [...new Set(usedPluginIds)];
 
-    // Log all found IDs for debugging
-    console.log('Found plugin IDs in implementations:', uniqueIds);
-
     // Create a comprehensive list of all expected plugin IDs, including the prefixed versions
     const expectedPrefixedPluginIds = new Set<string>();
 
