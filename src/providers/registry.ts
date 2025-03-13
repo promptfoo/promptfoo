@@ -28,6 +28,7 @@ import { ClouderaAiChatCompletionProvider } from './cloudera';
 import * as CloudflareAiProviders from './cloudflare-ai';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere';
 import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
+import { EchoProvider } from './echo';
 import { FalImageGenerationProvider } from './fal';
 import { GolangProvider } from './golangCompletion';
 import { GoogleChatProvider } from './google';
@@ -368,13 +369,7 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      const provider: ApiProvider = {
-        id: () => 'echo',
-        async callApi(input: string, options?: Record<string, any>, context?: any) {
-          return { output: input };
-        },
-      };
-      return provider;
+      return new EchoProvider(providerOptions);
     },
   },
   {

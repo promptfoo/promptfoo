@@ -590,9 +590,13 @@ providers:
         # Optional fields with defaults shown
         signatureValidityMs: 300000 # 5 minutes
         signatureAlgorithm: 'SHA256'
-        signatureDataTemplate: '{{clientId}}{{timestamp}}\n' # \n is interpreted as a newline
+        signatureDataTemplate: '{{clientId}}{{timestamp}}\n' # \n is interpreted as a newline character
         signatureRefreshBufferMs: 30000 # Optional: custom refresh buffer
 ```
+
+:::note
+You can use environment variables throughout your HTTP provider configuration using the `{{env.VARIABLE_NAME}}` syntax.
+:::
 
 When signature authentication is enabled, the following variables are available for use in headers or other templated fields:
 

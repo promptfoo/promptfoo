@@ -254,6 +254,15 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         }
       }
 
+      // Handle DeepSeek reasoning model's reasoning_content by prepending it to the output
+      if (
+        message.reasoning_content &&
+        typeof message.reasoning_content === 'string' &&
+        typeof output === 'string' &&
+        (this.config.showThinking ?? true)
+      ) {
+        output = `Thinking: ${message.reasoning_content}\n\n${output}`;
+      }
       if (message.audio) {
         return {
           output: message.audio.transcript || '',

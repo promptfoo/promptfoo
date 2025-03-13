@@ -31,6 +31,7 @@ providers:
 - `max_tokens`
 - `top_p`, `presence_penalty`, `frequency_penalty`
 - `stream`
+- `showThinking` - Control whether reasoning content is included in the output (default: `true`, applies to deepseek-reasoner model)
 
 ## Available Models
 
@@ -47,6 +48,7 @@ providers:
 - 64K context, 32K reasoning tokens, 8K output tokens
 - Input: $0.14/1M (cache), $0.55/1M (no cache)
 - Output: $2.19/1M
+- Supports showing or hiding reasoning content through the `showThinking` parameter
 
 ## Example Usage
 
@@ -57,6 +59,7 @@ providers:
   - id: deepseek:deepseek-reasoner
     config:
       temperature: 0.0
+      showThinking: true # Include reasoning content in output (default)
   - id: openai:o-1
     config:
       temperature: 0.0
@@ -68,6 +71,27 @@ tests:
   - vars:
       math_problem: 'What is the derivative of x^3 + 2x with respect to x?'
 ```
+
+### Controlling Reasoning Output
+
+The DeepSeek-R1 model (deepseek-reasoner) includes detailed reasoning steps in its output. You can control whether this reasoning content is shown using the `showThinking` parameter:
+
+```yaml
+providers:
+  - id: deepseek:deepseek-reasoner
+    config:
+      showThinking: false # Hide reasoning content from output
+```
+
+When `showThinking` is set to `true` (default), the output includes both reasoning and the final answer in a standardized format:
+
+```
+Thinking: <reasoning content>
+
+<final answer>
+```
+
+When set to `false`, only the final answer is included in the output. This is useful when you want better reasoning quality but don't want to expose the reasoning process to end users or in your assertions.
 
 See our [complete example](https://github.com/promptfoo/promptfoo/tree/main/examples/deepseek-r1-vs-openai-o1) that benchmarks it against OpenAI's o1 model on the MMLU reasoning tasks.
 

@@ -15,6 +15,14 @@ describe('getGraderById', () => {
     expect(harmfulGrader).toBeInstanceOf(HarmfulGrader);
   });
 
+  it('should return harmful grader for IDs starting with promptfoo:redteam:harmful', () => {
+    const specificHarmfulGrader = getGraderById('promptfoo:redteam:harmful:specific-type');
+    expect(specificHarmfulGrader).toBeInstanceOf(HarmfulGrader);
+
+    const anotherHarmfulGrader = getGraderById('promptfoo:redteam:harmful-with-suffix');
+    expect(anotherHarmfulGrader).toBeInstanceOf(HarmfulGrader);
+  });
+
   it('should return undefined for invalid ID', () => {
     const invalidGrader = getGraderById('invalid-id');
     expect(invalidGrader).toBeUndefined();

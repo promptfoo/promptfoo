@@ -345,6 +345,27 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledWith('test.md', 'utf8');
   });
 
+  it('should read a Jinja2 file', async () => {
+    const jinjaContent =
+      'You are a helpful assistant.\nPlease answer the following question about {{ topic }}: {{ question }}';
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(jinjaContent);
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+    jest.mocked(maybeFilePath).mockReturnValueOnce(true);
+
+    const result = await readPrompts('template.j2');
+
+    // Check that we get a result with the right content
+    expect(result).toHaveLength(1);
+    expect(result[0].raw).toEqual(jinjaContent);
+    expect(result[0].config).toBeUndefined();
+
+    // Check that the label contains the expected text but don't test exact truncation
+    expect(result[0].label).toContain('template.j2: You are a helpful assistant.');
+
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    expect(fs.readFileSync).toHaveBeenCalledWith('template.j2', 'utf8');
+  });
+
   it('should read a .py prompt object array', async () => {
     const prompts = [
       { id: 'prompts.py:prompt1', label: 'First prompt' },
@@ -717,6 +738,27 @@ describe('processPrompts', () => {
         label: 'test.txt: test prompt',
       },
     ]);
+  });
+
+  it('should process Jinja2 files', async () => {
+    const jinjaContent =
+      'You are a helpful assistant for {{ user }}.\nPlease provide information about {{ topic }}.';
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(jinjaContent);
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+    jest.mocked(maybeFilePath).mockReturnValueOnce(true);
+
+    const result = await processPrompts(['template.j2']);
+
+    // Check that we get a result with the right content
+    expect(result).toHaveLength(1);
+    expect(result[0].raw).toEqual(jinjaContent);
+    expect(result[0].config).toBeUndefined();
+
+    // Check that the label contains the expected text but don't test exact truncation
+    expect(result[0].label).toContain('template.j2: You are a helpful assistant for {{ user }}.');
+
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    expect(fs.readFileSync).toHaveBeenCalledWith('template.j2', 'utf8');
   });
 
   it('should process valid prompt schema objects', async () => {

@@ -20,5 +20,9 @@ export async function addGoatTestCases(
       ...assertion,
       metric: `${assertion.metric}/GOAT`,
     })),
+    metadata: {
+      ...testCase.metadata,
+      strategyId: 'goat',
+    },
   }));
 }

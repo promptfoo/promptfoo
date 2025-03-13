@@ -11,7 +11,9 @@ describe('ShellInjectionPlugin', () => {
   beforeEach(() => {
     mockProvider = {
       id: 'test-provider',
-      callApi: jest.fn(),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Prompt: rm -rf /\nPrompt: cat /etc/passwd',
+      }),
     } as unknown as ApiProvider;
   });
 
@@ -33,6 +35,18 @@ describe('ShellInjectionPlugin', () => {
     expect(assertions[0]).toEqual({
       type: PLUGIN_ID,
       metric: 'ShellInjection',
+    });
+  });
+
+  it('should generate test cases with correct plugin ID in assertions', async () => {
+    const plugin = new ShellInjectionPlugin(mockProvider, 'test purpose', 'test_var');
+    const tests = await plugin.generateTests(2);
+
+    expect(tests).toHaveLength(2);
+    tests.forEach((test) => {
+      expect(test.assert).toHaveLength(1);
+      expect(test.assert?.[0].type).toBe(PLUGIN_ID);
+      expect(test.assert?.[0].type).toBe('promptfoo:redteam:shell-injection');
     });
   });
 });

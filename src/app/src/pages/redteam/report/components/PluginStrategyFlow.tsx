@@ -4,7 +4,7 @@ import { useTheme } from '@mui/material/styles';
 import { displayNameOverrides } from '@promptfoo/redteam/constants';
 import { type EvaluateResult, type GradingResult } from '@promptfoo/types';
 import { Sankey, Tooltip, ResponsiveContainer, Layer, Rectangle } from 'recharts';
-import { getPluginIdFromResult, getStrategyIdFromGradingResult } from './shared';
+import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 
 interface TestRecord {
   prompt: string;
@@ -146,11 +146,9 @@ const PluginStrategyFlow: React.FC<PluginStrategyFlowProps> = ({
     function processTests(tests: TestRecord[], isPassing: boolean) {
       for (const t of tests) {
         const pluginId = t.result ? getPluginIdFromResult(t.result) : undefined;
-        const strategyId = t.gradingResult
-          ? getStrategyIdFromGradingResult(t.gradingResult)
-          : undefined;
+        const strategyId = getStrategyIdFromTest(t);
 
-        if (!pluginId || !strategyId) {
+        if (!pluginId || strategyId === 'basic') {
           continue;
         }
 
