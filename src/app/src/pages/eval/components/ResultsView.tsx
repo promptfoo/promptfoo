@@ -64,7 +64,6 @@ interface ResultsViewProps {
   defaultEvalId?: string;
 }
 
-// Add an optimized search input component for better responsiveness
 const SearchInputField = React.memo(
   ({
     value,

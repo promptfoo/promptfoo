@@ -160,6 +160,36 @@ function useScrollHandler() {
   return { isCollapsed };
 }
 
+function stringifyMetadataValue(value: any): string {
+  try {
+    if (value === null || value === undefined) {
+      return '';
+    }
+    return typeof value === 'object' ? JSON.stringify(value) : String(value);
+  } catch (err) {
+    console.error('Error stringifying metadata value:', err);
+    return '';
+  }
+}
+
+function generateMetadataSearchString(metadata: Record<string, any> | undefined): string {
+  if (!metadata) {
+    return '';
+  }
+
+  return Object.entries(metadata)
+    .map(([key, value]) => {
+      try {
+        const valueStr = stringifyMetadataValue(value);
+        return `metadata=${key}:${valueStr}`;
+      } catch (err) {
+        console.error('Error processing metadata entry:', err);
+        return '';
+      }
+    })
+    .join(' ');
+}
+
 function ResultsTable({
   maxTextLength,
   columnVisibility,
@@ -206,7 +236,6 @@ function ResultsTable({
 
       const componentResults = updatedOutputs[promptIndex].gradingResult?.componentResults || [];
       if (typeof isPass !== 'undefined') {
-        // Add component result for manual grading
         const humanResultIndex = componentResults.findIndex(
           (result) => result.assertion?.type === 'human',
         );
@@ -284,7 +313,6 @@ function ResultsTable({
   const [isSearching, setIsSearching] = useState(false);
 
   React.useEffect(() => {
-    // Set searching state based on whether the debounced value has caught up
     setIsSearching(searchText !== debouncedSearchText && searchText !== '');
   }, [searchText, debouncedSearchText]);
 
@@ -339,61 +367,47 @@ function ResultsTable({
             return false;
           }
 
-          // Special handling for metadata= searches
           if (
             debouncedSearchText &&
             debouncedSearchText.startsWith('metadata=') &&
             debouncedSearchText.includes(':')
           ) {
-            // Extract key and value from metadata search
-            const [_, metadataQuery] = debouncedSearchText.split('metadata=');
-            const [metadataKey, metadataValue] = metadataQuery.split(':');
+            const metadataPattern = /^metadata=([^:]+):(.*)/;
+            const match = debouncedSearchText.match(metadataPattern);
 
-            if (metadataKey && metadataValue) {
-              return row.outputs.some((output) => {
-                if (!output.metadata || !(metadataKey in output.metadata)) {
-                  return false;
-                }
+            if (match && match.length >= 3) {
+              const metadataKey = match[1];
+              const metadataValue = match[2];
 
-                const value = output.metadata[metadataKey];
-                const valueStr =
-                  typeof value === 'object' && value !== null
-                    ? JSON.stringify(value)
-                    : String(value);
+              if (metadataKey && metadataValue !== undefined) {
+                return row.outputs.some((output) => {
+                  if (!output.metadata || !(metadataKey in output.metadata)) {
+                    return false;
+                  }
 
-                return valueStr.toLowerCase().includes(metadataValue.toLowerCase());
-              });
+                  const value = output.metadata[metadataKey];
+                  const valueStr = stringifyMetadataValue(value);
+
+                  return valueStr.toLowerCase().includes(metadataValue.toLowerCase());
+                });
+              }
             }
           }
 
-          // Regular search if not metadata search or if metadata search format is invalid
           return debouncedSearchText && searchRegex
             ? row.outputs.some((output) => {
                 const vars = row.vars.map((v) => `var=${v}`).join(' ');
-                const stringifiedOutput = `${output.text} ${Object.keys(output.namedScores)
-                  .map((k) => `metric=${k}:${output.namedScores[k]}`)
+                const stringifiedOutput = `${output.text} ${Object.keys(output.namedScores || {})
+                  .map((k) => {
+                    const namedScores = output.namedScores || {};
+                    const score = namedScores[k as keyof typeof namedScores];
+                    return `metric=${k}:${score}`;
+                  })
                   .join(' ')} ${
                   output.gradingResult?.reason || ''
                 } ${output.gradingResult?.comment || ''}`;
 
-                // Include metadata in search if available
-                const metadataString = output.metadata
-                  ? Object.entries(output.metadata)
-                      .map(([key, value]) => {
-                        try {
-                          // Handle complex objects by stringifying them
-                          const valueStr =
-                            typeof value === 'object' && value !== null
-                              ? JSON.stringify(value)
-                              : String(value);
-                          return `metadata=${key}:${valueStr}`;
-                        } catch (err) {
-                          console.error('Error stringifying metadata:', err);
-                          return '';
-                        }
-                      })
-                      .join(' ')
-                  : '';
+                const metadataString = generateMetadataSearchString(output.metadata);
 
                 const searchString = `${vars} ${stringifiedOutput} ${metadataString}`;
                 return searchRegex.test(searchString);
