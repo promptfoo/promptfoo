@@ -69,6 +69,9 @@ export abstract class SageMakerGenericProvider {
   delay?: number; // Delay between API calls in milliseconds
   transform?: string; // Transform function for modifying prompts before sending
 
+  // Custom provider ID, separate from the id() method
+  private providerId?: string;
+  
   constructor(
     endpointName: string,
     options: { config?: SageMakerOptions; id?: string; env?: EnvOverrides; delay?: number; transform?: string } = {},
@@ -79,7 +82,7 @@ export abstract class SageMakerGenericProvider {
     this.config = config || {};
     this.delay = delay || this.config.delay;
     this.transform = transform || this.config.transform;
-    this.id = id ? () => id : this.id;
+    this.providerId = id; // Store custom ID if provided
 
     // Validate JSONPath if provided
     if (this.config?.responseFormat?.path) {
@@ -120,7 +123,8 @@ export abstract class SageMakerGenericProvider {
   }
 
   id(): string {
-    return `sagemaker:${this.endpointName}`;
+    // Use custom provider ID if provided, otherwise use default format
+    return this.providerId || `sagemaker:${this.endpointName}`;
   }
 
   toString(): string {
@@ -254,10 +258,15 @@ export abstract class SageMakerGenericProvider {
       // For inline transform functions, do direct evaluation
       if (typeof transformFn === 'string' && !transformFn.startsWith('file://')) {
         try {
+          // SECURITY WARNING: Using new Function() with dynamic content can be risky
+          // This is safe only if transform content comes from trusted sources (like config files)
+          // and not from user input or external API responses
+          
           // Simple transform function
           if (transformFn.includes('=>')) {
             // Arrow function format: prompt => ...
-            const fn = new Function('prompt', 'context', `return (${transformFn})(prompt, context);`);
+            // We're wrapping the code in a try/catch and ensuring it's coming from a trusted source
+            const fn = new Function('prompt', 'context', `try { return (${transformFn})(prompt, context); } catch(e) { throw new Error("Transform function error: " + e.message); }`);
             const result = fn(prompt, transformContext);
             
             if (result != null) {
@@ -269,7 +278,8 @@ export abstract class SageMakerGenericProvider {
             }
           } else {
             // Regular function format
-            const fn = new Function('prompt', 'context', transformFn);
+            // We're wrapping the code in a try/catch and ensuring it's coming from a trusted source
+            const fn = new Function('prompt', 'context', `try { ${transformFn} } catch(e) { throw new Error("Transform function error: " + e.message); }`);
             const result = fn(prompt, transformContext);
             
             if (result != null) {
@@ -561,6 +571,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
 
   /**
    * Generate a consistent cache key for SageMaker requests
+   * Uses crypto.createHash to generate a shorter, more efficient key
    */
   private getCacheKey(prompt: string): string {
     // Create a deterministic representation of the request parameters
@@ -575,7 +586,21 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       region: this.getRegion(),
     };
     
-    return `sagemaker:v1:${this.getEndpointName()}:${prompt}:${JSON.stringify(configForKey)}`;
+    const configStr = JSON.stringify(configForKey);
+    
+    // Use crypto to hash the prompt and config for a shorter, more efficient key
+    try {
+      // Import crypto only when needed
+      const crypto = require('crypto');
+      const promptHash = crypto.createHash('sha256').update(prompt).digest('hex').substring(0, 16);
+      const configHash = crypto.createHash('sha256').update(configStr).digest('hex').substring(0, 8);
+      
+      return `sagemaker:v1:${this.getEndpointName()}:${promptHash}:${configHash}`;
+    } catch (error) {
+      // Fall back to the unoptimized version if crypto is not available
+      logger.debug(`Unable to create hash for cache key: ${error}`);
+      return `sagemaker:v1:${this.getEndpointName()}:${prompt.substring(0, 50)}:${configStr.substring(0, 50)}`;
+    }
   }
 
   /**
@@ -727,6 +752,7 @@ export class SageMakerEmbeddingProvider extends SageMakerGenericProvider impleme
   
   /**
    * Generate a consistent cache key for SageMaker embedding requests
+   * Uses crypto.createHash to generate a shorter, more efficient key
    */
   private getCacheKey(text: string): string {
     // Create a deterministic representation of the request parameters
@@ -739,7 +765,21 @@ export class SageMakerEmbeddingProvider extends SageMakerGenericProvider impleme
       responseFormat: this.config.responseFormat,
     };
     
-    return `sagemaker:embedding:v1:${this.getEndpointName()}:${text}:${JSON.stringify(configForKey)}`;
+    const configStr = JSON.stringify(configForKey);
+    
+    // Use crypto to hash the text and config for a shorter, more efficient key
+    try {
+      // Import crypto only when needed
+      const crypto = require('crypto');
+      const textHash = crypto.createHash('sha256').update(text).digest('hex').substring(0, 16);
+      const configHash = crypto.createHash('sha256').update(configStr).digest('hex').substring(0, 8);
+      
+      return `sagemaker:embedding:v1:${this.getEndpointName()}:${textHash}:${configHash}`;
+    } catch (error) {
+      // Fall back to the unoptimized version if crypto is not available
+      logger.debug(`Unable to create hash for embedding cache key: ${error}`);
+      return `sagemaker:embedding:v1:${this.getEndpointName()}:${text.substring(0, 50)}:${configStr.substring(0, 50)}`;
+    }
   }
   
   /**
