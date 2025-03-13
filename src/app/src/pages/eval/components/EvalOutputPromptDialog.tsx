@@ -20,9 +20,17 @@ import { ellipsize } from '../../../../../util/text';
 import ChatMessages, { type Message } from './ChatMessages';
 import type { GradingResult } from './types';
 
+// Common style object for copy buttons
+const copyButtonSx = {
+  position: 'absolute',
+  right: '8px',
+  top: '4px',
+  bgcolor: 'rgba(255, 255, 255, 0.7)',
+};
+
 function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[] }) {
   const [expandedValues, setExpandedValues] = useState<{ [key: number]: boolean }>({});
-  const [copiedAssertions, setCopiedAssertions] = useState<{ [key: string | number]: boolean }>({});
+  const [copiedAssertions, setCopiedAssertions] = useState<{ [key: string]: boolean }>({});
   const [hoveredAssertion, setHoveredAssertion] = useState<string | null>(null);
 
   if (!gradingResults) {
@@ -35,11 +43,7 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
     setExpandedValues((prev) => ({ ...prev, [index]: !prev[index] }));
   };
 
-  const copyAssertionToClipboard = async (
-    key: number | string,
-    text: string,
-    e: React.MouseEvent,
-  ) => {
+  const copyAssertionToClipboard = async (key: string, text: string, e: React.MouseEvent) => {
     e.stopPropagation();
     await navigator.clipboard.writeText(text);
     setCopiedAssertions((prev) => ({ ...prev, [key]: true }));
@@ -76,6 +80,7 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                 : '-';
               const truncatedValue = ellipsize(value, 300);
               const isExpanded = expandedValues[i] || false;
+              const valueKey = `value-${i}`;
 
               return (
                 <TableRow key={i}>
@@ -86,22 +91,18 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                   <TableCell
                     style={{ whiteSpace: 'pre-wrap', cursor: 'pointer', position: 'relative' }}
                     onClick={() => toggleExpand(i)}
-                    onMouseEnter={() => setHoveredAssertion(`value-${i}`)}
+                    onMouseEnter={() => setHoveredAssertion(valueKey)}
                     onMouseLeave={() => setHoveredAssertion(null)}
                   >
                     {isExpanded ? value : truncatedValue}
-                    {(hoveredAssertion === `value-${i}` || copiedAssertions[i]) && (
+                    {(hoveredAssertion === valueKey || copiedAssertions[valueKey]) && (
                       <IconButton
                         size="small"
-                        onClick={(e) => copyAssertionToClipboard(i, value, e)}
-                        style={{
-                          position: 'absolute',
-                          right: '8px',
-                          top: '4px',
-                          backgroundColor: 'rgba(255, 255, 255, 0.7)',
-                        }}
+                        onClick={(e) => copyAssertionToClipboard(valueKey, value, e)}
+                        sx={copyButtonSx}
+                        aria-label={`Copy assertion value ${i}`}
                       >
-                        {copiedAssertions[i] ? (
+                        {copiedAssertions[valueKey] ? (
                           <CheckIcon fontSize="small" />
                         ) : (
                           <ContentCopyIcon fontSize="small" />
@@ -123,12 +124,8 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                             e.stopPropagation();
                             copyAssertionToClipboard(`reason-${i}`, result.reason || '', e);
                           }}
-                          style={{
-                            position: 'absolute',
-                            right: '8px',
-                            top: '4px',
-                            backgroundColor: 'rgba(255, 255, 255, 0.7)',
-                          }}
+                          sx={copyButtonSx}
+                          aria-label={`Copy assertion reason ${i}`}
                         >
                           {copiedAssertions[`reason-${i}`] ? (
                             <CheckIcon fontSize="small" />
@@ -241,13 +238,9 @@ export default function EvalOutputPromptDialog({
             {(hoveredElement === 'prompt' || copied) && (
               <IconButton
                 onClick={() => copyToClipboard(prompt)}
-                style={{
-                  position: 'absolute',
-                  right: '8px',
-                  top: '4px',
-                  backgroundColor: 'rgba(255, 255, 255, 0.7)',
-                }}
+                sx={copyButtonSx}
                 size="small"
+                aria-label="Copy prompt"
               >
                 {copied ? <CheckIcon /> : <ContentCopyIcon />}
               </IconButton>
@@ -276,13 +269,12 @@ export default function EvalOutputPromptDialog({
                   onClick={() =>
                     copyFieldToClipboard('redteamFinalPrompt', metadata.redteamFinalPrompt)
                   }
-                  style={{
-                    position: 'absolute',
-                    right: '8px',
+                  sx={{
+                    ...copyButtonSx,
                     top: '8px',
-                    backgroundColor: 'rgba(255, 255, 255, 0.7)',
                   }}
                   size="small"
+                  aria-label="Copy modified user input"
                 >
                   {copiedFields['redteamFinalPrompt'] ? <CheckIcon /> : <ContentCopyIcon />}
                 </IconButton>
@@ -310,13 +302,12 @@ export default function EvalOutputPromptDialog({
               {(hoveredElement === 'output' || copiedFields['output']) && (
                 <IconButton
                   onClick={() => copyFieldToClipboard('output', output)}
-                  style={{
-                    position: 'absolute',
-                    right: '8px',
+                  sx={{
+                    ...copyButtonSx,
                     top: '8px',
-                    backgroundColor: 'rgba(255, 255, 255, 0.7)',
                   }}
                   size="small"
+                  aria-label="Copy output"
                 >
                   {copiedFields['output'] ? <CheckIcon /> : <ContentCopyIcon />}
                 </IconButton>
@@ -369,12 +360,8 @@ export default function EvalOutputPromptDialog({
                                 e.stopPropagation();
                                 copyFieldToClipboard(key, stringValue);
                               }}
-                              style={{
-                                position: 'absolute',
-                                right: '8px',
-                                top: '4px',
-                                backgroundColor: 'rgba(255, 255, 255, 0.7)',
-                              }}
+                              sx={copyButtonSx}
+                              aria-label={`Copy metadata value for ${key}`}
                             >
                               {copiedFields[key] ? (
                                 <CheckIcon fontSize="small" />
