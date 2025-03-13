@@ -24,6 +24,7 @@ import { AzureModerationProvider } from './azure/moderation';
 import { BAMProvider } from './bam';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock';
 import { BrowserProvider } from './browser';
+import { SageMakerCompletionProvider, SageMakerEmbeddingProvider } from './sagemaker';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
 import * as CloudflareAiProviders from './cloudflare-ai';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere';
@@ -253,6 +254,47 @@ export const providerMap: ProviderFactory[] = [
         `${modelType}${modelName ? `:${modelName}` : ''}`,
         providerOptions,
       );
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('sagemaker:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const modelType = splits[1];
+      const endpointName = splits.slice(2).join(':');
+      
+      if (modelType === 'embedding' || modelType === 'embeddings') {
+        return new SageMakerEmbeddingProvider(endpointName || modelType, providerOptions);
+      }
+      
+      // Handle the 'sagemaker:<endpoint>' format (no model type specified)
+      if (splits.length === 2) {
+        return new SageMakerCompletionProvider(modelType, providerOptions);
+      }
+      
+      // Handle special case for JumpStart models
+      if (endpointName.includes('jumpstart') || modelType === 'jumpstart') {
+        return new SageMakerCompletionProvider(endpointName, {
+          ...providerOptions,
+          config: {
+            ...providerOptions.config,
+            modelType: 'jumpstart',
+          },
+        });
+      }
+      
+      // Handle 'sagemaker:<model-type>:<endpoint>' format for other model types
+      return new SageMakerCompletionProvider(endpointName, {
+        ...providerOptions,
+        config: {
+          ...providerOptions.config,
+          modelType,
+        },
+      });
     },
   },
   {

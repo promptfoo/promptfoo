@@ -1,0 +1,26 @@
+description: "Testing SageMaker embedding endpoints with similarity assertions"
+
+prompts:
+  - "Describe {{concept}} in detail."
+
+providers:
+  - id: sagemaker:your-text-generation-endpoint
+    config:
+      region: us-east-1
+      temperature: 0
+      maxTokens: 256
+
+tests:
+  - vars:
+      concept: artificial intelligence
+    options:
+      provider:
+        embedding:
+          id: sagemaker:embedding:your-embedding-endpoint
+          config:
+            region: us-east-1
+            modelType: openai
+    assert:
+      - type: similar
+        value: "AI is a field of computer science focused on creating machines that can perform tasks that typically require human intelligence."
+        threshold: 0.85
