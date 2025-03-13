@@ -208,7 +208,11 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
                         onClick={() => {
                           const searchParams = new URLSearchParams(window.location.search);
                           const evalId = searchParams.get('evalId');
-                          window.location.href = `/eval/?evalId=${evalId}&search=${encodeURIComponent(`(var=${subCategory.type}|metric=${subCategory.type})`)}`;
+                          const pluginId = subCategory.pluginName;
+                          const searchQuery = pluginId
+                            ? `metadata=pluginId:${pluginId}`
+                            : `metric=${subCategory.type}`;
+                          window.location.href = `/eval/?evalId=${evalId}&search=${encodeURIComponent(searchQuery)}`;
                         }}
                       >
                         View logs
