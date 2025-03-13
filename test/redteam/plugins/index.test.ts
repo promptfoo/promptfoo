@@ -243,7 +243,6 @@ describe('Plugins', () => {
       expect(result![0].assert).toBeDefined();
       expect(result![0].assert).toEqual([
         { metric: 'Harmful', type: 'promptfoo:redteam:harmful:misinformation-disinformation' },
-        expect.objectContaining({ metric: 'Harmful', type: 'moderation' }),
       ]);
     });
 

@@ -165,6 +165,12 @@ export class GoogleMMLiveProvider implements ApiProvider {
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
 
+    if (!this.getApiKey()) {
+      throw new Error(
+        'Google API key is not set. Set the GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
+      );
+    }
+
     let contents: GeminiFormat = parseChatPrompt(prompt, [
       {
         role: 'user',

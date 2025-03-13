@@ -53,6 +53,7 @@ describe('GoogleMMLiveProvider', () => {
           response_modalities: ['text'],
         },
         timeoutMs: 500,
+        apiKey: 'test-api-key',
       },
     });
   });
@@ -302,10 +303,32 @@ describe('GoogleMMLiveProvider', () => {
           response_modalities: ['text'],
         },
         timeoutMs: 100,
+        apiKey: 'test-api-key',
       },
     });
 
     const response = await provider.callApi('test prompt');
     expect(response).toEqual({ error: 'WebSocket request timed out' });
+  });
+
+  it('should throw an error if API key is not set', async () => {
+    const providerWithoutKey = new GoogleMMLiveProvider('gemini-2.0-flash-exp', {
+      config: {
+        generationConfig: {
+          response_modalities: ['text'],
+        },
+      },
+    });
+
+    const originalApiKey = process.env.GOOGLE_API_KEY;
+    delete process.env.GOOGLE_API_KEY;
+
+    await expect(providerWithoutKey.callApi('test prompt')).rejects.toThrow(
+      'Google API key is not set. Set the GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
+    );
+
+    if (originalApiKey) {
+      process.env.GOOGLE_API_KEY = originalApiKey;
+    }
   });
 });
