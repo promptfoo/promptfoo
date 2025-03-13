@@ -276,6 +276,9 @@ function ResultsTable({
 
   const columnVisibilityIsSet = Object.keys(columnVisibility).length > 0;
   const searchRegex = React.useMemo(() => {
+    if (!searchText) {
+      return null;
+    }
     try {
       return new RegExp(searchText, 'i');
     } catch (err) {
@@ -322,6 +325,30 @@ function ResultsTable({
             return false;
           }
 
+          // Special handling for metadata= searches
+          if (searchText && searchText.startsWith('metadata=') && searchText.includes(':')) {
+            // Extract key and value from metadata search
+            const [_, metadataQuery] = searchText.split('metadata=');
+            const [metadataKey, metadataValue] = metadataQuery.split(':');
+
+            if (metadataKey && metadataValue) {
+              return row.outputs.some((output) => {
+                if (!output.metadata || !(metadataKey in output.metadata)) {
+                  return false;
+                }
+
+                const value = output.metadata[metadataKey];
+                const valueStr =
+                  typeof value === 'object' && value !== null
+                    ? JSON.stringify(value)
+                    : String(value);
+
+                return valueStr.toLowerCase().includes(metadataValue.toLowerCase());
+              });
+            }
+          }
+
+          // Regular search if not metadata search or if metadata search format is invalid
           return searchText && searchRegex
             ? row.outputs.some((output) => {
                 const vars = row.vars.map((v) => `var=${v}`).join(' ');
@@ -331,7 +358,26 @@ function ResultsTable({
                   output.gradingResult?.reason || ''
                 } ${output.gradingResult?.comment || ''}`;
 
-                const searchString = `${vars} ${stringifiedOutput}`;
+                // Include metadata in search if available
+                const metadataString = output.metadata
+                  ? Object.entries(output.metadata)
+                      .map(([key, value]) => {
+                        try {
+                          // Handle complex objects by stringifying them
+                          const valueStr =
+                            typeof value === 'object' && value !== null
+                              ? JSON.stringify(value)
+                              : String(value);
+                          return `metadata=${key}:${valueStr}`;
+                        } catch (err) {
+                          console.error('Error stringifying metadata:', err);
+                          return '';
+                        }
+                      })
+                      .join(' ')
+                  : '';
+
+                const searchString = `${vars} ${stringifiedOutput} ${metadataString}`;
                 return searchRegex.test(searchString);
               })
             : true;
