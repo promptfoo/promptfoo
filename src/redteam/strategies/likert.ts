@@ -81,7 +81,7 @@ async function generateLikertPrompts(
         })),
         metadata: {
           ...testCase.metadata,
-          strategy: 'jailbreak:likert',
+          strategyId: 'jailbreak:likert',
         },
       }));
 

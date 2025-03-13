@@ -21,5 +21,9 @@ export function addIterativeJailbreaks(
       ...assertion,
       metric: `${assertion.metric}/${strategy === 'iterative' ? 'Iterative' : 'IterativeTree'}`,
     })),
+    metadata: {
+      ...testCase.metadata,
+      strategyId: strategy,
+    },
   }));
 }

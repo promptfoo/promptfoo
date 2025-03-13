@@ -102,7 +102,6 @@ describe('AlignedHarmfulPlugin', () => {
         expect(testCase).toMatchObject({
           vars: {
             testVar: expect.any(String),
-            harmCategory: HARM_PLUGINS[harmCategory],
           },
           metadata: {
             harmCategory: HARM_PLUGINS[harmCategory],

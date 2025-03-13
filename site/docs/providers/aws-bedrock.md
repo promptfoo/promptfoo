@@ -245,6 +245,28 @@ config:
   top_k: 50
 ```
 
+### DeepSeek Models
+
+For DeepSeek models, you can use the following configuration options:
+
+```yaml
+config:
+  # Deepseek params
+  max_tokens: 256
+  temperature: 0.7
+  top_p: 0.9
+
+  # Promptfoo control params
+  showThinking: true # Optional: Control whether thinking content is included in output
+```
+
+DeepSeek models support an extended thinking capability. The `showThinking` parameter controls whether thinking content is included in the response output:
+
+- When set to `true` (default), thinking content will be included in the output
+- When set to `false`, thinking content will be excluded from the output
+
+This allows you to access the model's reasoning process during generation while having the option to present only the final response to end users.
+
 ## Model-graded tests
 
 You can use Bedrock models to grade outputs. By default, model-graded tests use OpenAI and require the `OPENAI_API_KEY` environment variable to be set. However, when using AWS Bedrock, you have the option of overriding the grader for [model-graded assertions](/docs/configuration/expected-outputs/model-graded/) to point to AWS Bedrock or other providers.

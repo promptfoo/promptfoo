@@ -80,7 +80,7 @@ async function generateCompositePrompts(
         })),
         metadata: {
           ...testCase.metadata,
-          strategy: 'jailbreak:composite',
+          strategyId: 'jailbreak:composite',
         },
       }));
 
