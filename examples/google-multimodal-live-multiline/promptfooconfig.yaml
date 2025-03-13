@@ -16,16 +16,16 @@ providers:
 
 
 tests:
-  # - vars:
-  #     first_message: why is the the sea salty?
-  #     second_message: can you give a more brief explanation
-  #   assert:
-  #     - type: icontains
-  #       value: salt
-  #       transform: JSON.parse(output).text
-  #     - type: icontains
-  #       value: weathering
-  #       transform: JSON.parse(output).text
+  - vars:
+      first_message: why is the the sea salty?
+      second_message: can you give a more brief explanation
+    assert:
+      - type: icontains
+        value: salt
+        transform: JSON.parse(output).text
+      - type: icontains
+        value: weathering
+        transform: JSON.parse(output).text
   - vars:
       first_message: hey
       second_message: tell me about hawaii
