@@ -825,6 +825,28 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'mistral.mistral-small-2402-v1:0': BEDROCK_MODEL.MISTRAL,
   'mistral.mixtral-8x7b-instruct-v0:1': BEDROCK_MODEL.MISTRAL,
 
+  // APAC Models
+  'apac.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'apac.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'apac.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'apac.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'apac.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'apac.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+
+  // EU Models
+  'eu.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'eu.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'eu.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'eu.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.meta.llama3-2-1b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
+  'eu.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
+
+  // Gov Cloud Models
+  'us-gov.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us-gov.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+
   // US Models
   'us.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'us.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
@@ -845,30 +867,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'us.meta.llama3-2-90b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'us.meta.llama3-3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_3,
-
-  // EU Models
-  'eu.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
-  'eu.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
-  'eu.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
-  'eu.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'eu.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'eu.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'eu.meta.llama3-2-1b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
-  'eu.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
-
-  // APAC Models
-  'apac.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'apac.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'apac.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-
-  // US-GOV Models
-  'us-gov.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'us-gov.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-
-  // APAC Nova Models
-  'apac.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
-  'apac.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
-  'apac.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
