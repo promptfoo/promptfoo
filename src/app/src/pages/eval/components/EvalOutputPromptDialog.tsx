@@ -20,8 +20,18 @@ import { ellipsize } from '../../../../../util/text';
 import ChatMessages, { type Message } from './ChatMessages';
 import type { GradingResult } from './types';
 
+// Common style object for copy buttons
+const copyButtonSx = {
+  position: 'absolute',
+  right: '8px',
+  top: '4px',
+  bgcolor: 'rgba(255, 255, 255, 0.7)',
+};
+
 function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[] }) {
   const [expandedValues, setExpandedValues] = useState<{ [key: number]: boolean }>({});
+  const [copiedAssertions, setCopiedAssertions] = useState<{ [key: string]: boolean }>({});
+  const [hoveredAssertion, setHoveredAssertion] = useState<string | null>(null);
 
   if (!gradingResults) {
     return null;
@@ -31,6 +41,16 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
 
   const toggleExpand = (index: number) => {
     setExpandedValues((prev) => ({ ...prev, [index]: !prev[index] }));
+  };
+
+  const copyAssertionToClipboard = async (key: string, text: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    await navigator.clipboard.writeText(text);
+    setCopiedAssertions((prev) => ({ ...prev, [key]: true }));
+
+    setTimeout(() => {
+      setCopiedAssertions((prev) => ({ ...prev, [key]: false }));
+    }, 2000);
   };
 
   return (
@@ -60,6 +80,7 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                 : '-';
               const truncatedValue = ellipsize(value, 300);
               const isExpanded = expandedValues[i] || false;
+              const valueKey = `value-${i}`;
 
               return (
                 <TableRow key={i}>
@@ -68,12 +89,52 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                   <TableCell>{result.score?.toFixed(2)}</TableCell>
                   <TableCell>{result.assertion?.type || ''}</TableCell>
                   <TableCell
-                    style={{ whiteSpace: 'pre-wrap', cursor: 'pointer' }}
+                    style={{ whiteSpace: 'pre-wrap', cursor: 'pointer', position: 'relative' }}
                     onClick={() => toggleExpand(i)}
+                    onMouseEnter={() => setHoveredAssertion(valueKey)}
+                    onMouseLeave={() => setHoveredAssertion(null)}
                   >
                     {isExpanded ? value : truncatedValue}
+                    {(hoveredAssertion === valueKey || copiedAssertions[valueKey]) && (
+                      <IconButton
+                        size="small"
+                        onClick={(e) => copyAssertionToClipboard(valueKey, value, e)}
+                        sx={copyButtonSx}
+                        aria-label={`Copy assertion value ${i}`}
+                      >
+                        {copiedAssertions[valueKey] ? (
+                          <CheckIcon fontSize="small" />
+                        ) : (
+                          <ContentCopyIcon fontSize="small" />
+                        )}
+                      </IconButton>
+                    )}
                   </TableCell>
-                  <TableCell style={{ whiteSpace: 'pre-wrap' }}>{result.reason}</TableCell>
+                  <TableCell
+                    style={{ whiteSpace: 'pre-wrap', position: 'relative' }}
+                    onMouseEnter={() => setHoveredAssertion(`reason-${i}`)}
+                    onMouseLeave={() => setHoveredAssertion(null)}
+                  >
+                    {result.reason}
+                    {result.reason &&
+                      (hoveredAssertion === `reason-${i}` || copiedAssertions[`reason-${i}`]) && (
+                        <IconButton
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            copyAssertionToClipboard(`reason-${i}`, result.reason || '', e);
+                          }}
+                          sx={copyButtonSx}
+                          aria-label={`Copy assertion reason ${i}`}
+                        >
+                          {copiedAssertions[`reason-${i}`] ? (
+                            <CheckIcon fontSize="small" />
+                          ) : (
+                            <ContentCopyIcon fontSize="small" />
+                          )}
+                        </IconButton>
+                      )}
+                  </TableCell>
                 </TableRow>
               );
             })}
@@ -111,15 +172,28 @@ export default function EvalOutputPromptDialog({
   metadata,
 }: EvalOutputPromptDialogProps) {
   const [copied, setCopied] = useState(false);
+  const [copiedFields, setCopiedFields] = useState<{ [key: string]: boolean }>({});
   const [expandedMetadata, setExpandedMetadata] = useState<ExpandedMetadataState>({});
+  const [hoveredElement, setHoveredElement] = useState<string | null>(null);
 
   useEffect(() => {
     setCopied(false);
+    setCopiedFields({});
   }, [prompt]);
 
   const copyToClipboard = async (text: string) => {
     await navigator.clipboard.writeText(text);
     setCopied(true);
+  };
+
+  const copyFieldToClipboard = async (key: string, text: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopiedFields((prev) => ({ ...prev, [key]: true }));
+
+    // Reset copied status after 2 seconds
+    setTimeout(() => {
+      setCopiedFields((prev) => ({ ...prev, [key]: false }));
+    }, 2000);
   };
 
   const handleMetadataClick = (key: string) => {
@@ -145,47 +219,100 @@ export default function EvalOutputPromptDialog({
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
       <DialogTitle>Details{provider && `: ${provider}`}</DialogTitle>
       <DialogContent>
-        <Box mb={2}>
+        <Box
+          mb={2}
+          position="relative"
+          onMouseEnter={() => setHoveredElement('prompt')}
+          onMouseLeave={() => setHoveredElement(null)}
+        >
           <Typography variant="subtitle1" style={{ marginBottom: '1rem' }}>
             Prompt
           </Typography>
-          <TextareaAutosize
-            readOnly
-            value={prompt}
-            style={{ width: '100%', padding: '0.75rem' }}
-            maxRows={20}
-          />
-          <IconButton
-            onClick={() => copyToClipboard(prompt)}
-            style={{ position: 'absolute', right: '10px', top: '10px' }}
-          >
-            {copied ? <CheckIcon /> : <ContentCopyIcon />}
-          </IconButton>
+          <div style={{ position: 'relative' }}>
+            <TextareaAutosize
+              readOnly
+              value={prompt}
+              style={{ width: '100%', padding: '0.75rem' }}
+              maxRows={20}
+            />
+            {(hoveredElement === 'prompt' || copied) && (
+              <IconButton
+                onClick={() => copyToClipboard(prompt)}
+                sx={copyButtonSx}
+                size="small"
+                aria-label="Copy prompt"
+              >
+                {copied ? <CheckIcon /> : <ContentCopyIcon />}
+              </IconButton>
+            )}
+          </div>
         </Box>
         {metadata?.redteamFinalPrompt && (
-          <Box my={2}>
+          <Box
+            my={2}
+            position="relative"
+            onMouseEnter={() => setHoveredElement('redteamFinalPrompt')}
+            onMouseLeave={() => setHoveredElement(null)}
+          >
             <Typography variant="subtitle1" style={{ marginBottom: '1rem', marginTop: '1rem' }}>
               Modified User Input (Red Team)
             </Typography>
-            <TextareaAutosize
-              readOnly
-              maxRows={20}
-              value={metadata.redteamFinalPrompt}
-              style={{ width: '100%', padding: '0.75rem' }}
-            />
+            <div style={{ position: 'relative' }}>
+              <TextareaAutosize
+                readOnly
+                maxRows={20}
+                value={metadata.redteamFinalPrompt}
+                style={{ width: '100%', padding: '0.75rem' }}
+              />
+              {(hoveredElement === 'redteamFinalPrompt' || copiedFields['redteamFinalPrompt']) && (
+                <IconButton
+                  onClick={() =>
+                    copyFieldToClipboard('redteamFinalPrompt', metadata.redteamFinalPrompt)
+                  }
+                  sx={{
+                    ...copyButtonSx,
+                    top: '8px',
+                  }}
+                  size="small"
+                  aria-label="Copy modified user input"
+                >
+                  {copiedFields['redteamFinalPrompt'] ? <CheckIcon /> : <ContentCopyIcon />}
+                </IconButton>
+              )}
+            </div>
           </Box>
         )}
         {output && (
-          <Box my={2}>
+          <Box
+            my={2}
+            position="relative"
+            onMouseEnter={() => setHoveredElement('output')}
+            onMouseLeave={() => setHoveredElement(null)}
+          >
             <Typography variant="subtitle1" style={{ marginBottom: '1rem', marginTop: '1rem' }}>
               Output
             </Typography>
-            <TextareaAutosize
-              readOnly
-              maxRows={20}
-              value={output}
-              style={{ width: '100%', padding: '0.75rem' }}
-            />
+            <div style={{ position: 'relative' }}>
+              <TextareaAutosize
+                readOnly
+                maxRows={20}
+                value={output}
+                style={{ width: '100%', padding: '0.75rem' }}
+              />
+              {(hoveredElement === 'output' || copiedFields['output']) && (
+                <IconButton
+                  onClick={() => copyFieldToClipboard('output', output)}
+                  sx={{
+                    ...copyButtonSx,
+                    top: '8px',
+                  }}
+                  size="small"
+                  aria-label="Copy output"
+                >
+                  {copiedFields['output'] ? <CheckIcon /> : <ContentCopyIcon />}
+                </IconButton>
+              )}
+            </div>
           </Box>
         )}
         <AssertionResults gradingResults={gradingResults} />
@@ -216,10 +343,33 @@ export default function EvalOutputPromptDialog({
                       <TableRow key={key}>
                         <TableCell>{key}</TableCell>
                         <TableCell
-                          style={{ whiteSpace: 'pre-wrap', cursor: 'pointer' }}
+                          style={{
+                            whiteSpace: 'pre-wrap',
+                            cursor: 'pointer',
+                            position: 'relative',
+                          }}
                           onClick={() => handleMetadataClick(key)}
+                          onMouseEnter={() => setHoveredElement(`metadata-${key}`)}
+                          onMouseLeave={() => setHoveredElement(null)}
                         >
                           {expandedMetadata[key]?.expanded ? stringValue : truncatedValue}
+                          {(hoveredElement === `metadata-${key}` || copiedFields[key]) && (
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                copyFieldToClipboard(key, stringValue);
+                              }}
+                              sx={copyButtonSx}
+                              aria-label={`Copy metadata value for ${key}`}
+                            >
+                              {copiedFields[key] ? (
+                                <CheckIcon fontSize="small" />
+                              ) : (
+                                <ContentCopyIcon fontSize="small" />
+                              )}
+                            </IconButton>
+                          )}
                         </TableCell>
                       </TableRow>
                     );
