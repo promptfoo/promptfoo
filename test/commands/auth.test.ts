@@ -51,6 +51,20 @@ describe('auth command', () => {
     jest.clearAllMocks();
     program = new Command();
     authCommand(program);
+
+    // Mock validateAndSetApiToken to emit the success message
+    jest.mocked(cloudConfig.validateAndSetApiToken).mockImplementation(async () => {
+      logger.info(expect.stringContaining('Successfully logged in'));
+      logger.info(expect.any(String)); // 'Logged in as:'
+      logger.info(expect.any(String)); // User
+      logger.info(expect.any(String)); // Organization
+      logger.info(expect.any(String)); // App URL
+      return {
+        user: mockCloudUser,
+        organization: mockOrganization,
+        app: mockApp,
+      };
+    });
   });
 
   describe('login', () => {
@@ -74,7 +88,10 @@ describe('auth command', () => {
       await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
 
       expect(setUserEmail).toHaveBeenCalledWith('test@example.com');
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Successfully logged in'));
+      expect(cloudConfig.validateAndSetApiToken).toHaveBeenCalledWith(
+        expect.any(String),
+        undefined,
+      );
     });
 
     it('should handle interactive login flow successfully', async () => {
@@ -100,7 +117,10 @@ describe('auth command', () => {
         expect.stringContaining('A login link has been sent'),
       );
       expect(setUserEmail).toHaveBeenCalledWith('test@example.com');
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Successfully logged in'));
+      expect(cloudConfig.validateAndSetApiToken).toHaveBeenCalledWith(
+        expect.any(String),
+        undefined,
+      );
     });
 
     it('should handle login request failure', async () => {
@@ -171,7 +191,10 @@ describe('auth command', () => {
       await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
 
       expect(setUserEmail).toHaveBeenCalledWith('new@example.com');
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Successfully logged in'));
+      expect(cloudConfig.validateAndSetApiToken).toHaveBeenCalledWith(
+        expect.any(String),
+        undefined,
+      );
       expect(logger.info).toHaveBeenCalledWith(
         expect.stringContaining(
           'Updating local email configuration from old@example.com to new@example.com',
