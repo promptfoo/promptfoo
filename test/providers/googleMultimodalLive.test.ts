@@ -53,6 +53,7 @@ describe('GoogleMMLiveProvider', () => {
           response_modalities: ['text'],
         },
         timeoutMs: 500,
+        apiKey: 'test-api-key',
       },
     });
   });
@@ -251,6 +252,34 @@ describe('GoogleMMLiveProvider', () => {
     });
   });
 
+  it('should handle multiple user inputs', async () => {
+    jest.mocked(WebSocket).mockImplementation(() => {
+      setTimeout(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateTextMessage(mockWs, 'Hey there! How can I help you today?\n');
+        simulateCompletionMessage(mockWs);
+        simulateTextMessage(
+          mockWs,
+          "Okay, let's talk about Hawaii! It's a truly fascinating place with",
+        );
+        simulateTextMessage(mockWs, ' a unique culture, history, and geography.');
+        simulateCompletionMessage(mockWs);
+      }, 60);
+      return mockWs;
+    });
+
+    const response = await provider.callApi(
+      '[{"role":"user","content":"hey"},{"role":"user","content":"tell me about hawaii"}]',
+    );
+    expect(response).toEqual({
+      output: JSON.stringify({
+        text: "Hey there! How can I help you today?\nOkay, let's talk about Hawaii! It's a truly fascinating place with a unique culture, history, and geography.",
+        toolCall: { functionCalls: [] },
+      }),
+    });
+  });
+
   it('should handle WebSocket errors', async () => {
     jest.mocked(WebSocket).mockImplementation(() => {
       setTimeout(() => {
@@ -274,10 +303,32 @@ describe('GoogleMMLiveProvider', () => {
           response_modalities: ['text'],
         },
         timeoutMs: 100,
+        apiKey: 'test-api-key',
       },
     });
 
     const response = await provider.callApi('test prompt');
     expect(response).toEqual({ error: 'WebSocket request timed out' });
+  });
+
+  it('should throw an error if API key is not set', async () => {
+    const providerWithoutKey = new GoogleMMLiveProvider('gemini-2.0-flash-exp', {
+      config: {
+        generationConfig: {
+          response_modalities: ['text'],
+        },
+      },
+    });
+
+    const originalApiKey = process.env.GOOGLE_API_KEY;
+    delete process.env.GOOGLE_API_KEY;
+
+    await expect(providerWithoutKey.callApi('test prompt')).rejects.toThrow(
+      'Google API key is not set. Set the GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
+    );
+
+    if (originalApiKey) {
+      process.env.GOOGLE_API_KEY = originalApiKey;
+    }
   });
 });
