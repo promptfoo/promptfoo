@@ -26,6 +26,7 @@ import { CyberSecEvalPlugin } from './cyberseceval';
 import { DebugAccessPlugin } from './debugAccess';
 import { DivergentRepetitionPlugin } from './divergentRepetition';
 import { ExcessiveAgencyPlugin } from './excessiveAgency';
+import { FunctionDiscoveryPlugin } from './functionDiscovery';
 import { HallucinationPlugin } from './hallucination';
 import { HarmbenchPlugin } from './harmbench';
 import { AlignedHarmfulPlugin } from './harmful/aligned';
@@ -157,6 +158,7 @@ const pluginFactories: PluginFactory[] = [
     ),
   ),
   createPluginFactory(ExcessiveAgencyPlugin, 'excessive-agency'),
+  createPluginFactory(FunctionDiscoveryPlugin, 'function-discovery'),
   createPluginFactory(HarmbenchPlugin, 'harmbench'),
   createPluginFactory(HallucinationPlugin, 'hallucination'),
   createPluginFactory(ImitationPlugin, 'imitation'),
