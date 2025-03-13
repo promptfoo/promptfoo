@@ -174,7 +174,7 @@ export async function addMultilingual(
         },
         metadata: {
           ...testCase.metadata,
-          ...(testCase.metadata?.harmCategory && { harmCategory: testCase.metadata.harmCategory }),
+          strategyId: 'multilingual',
         },
       });
 

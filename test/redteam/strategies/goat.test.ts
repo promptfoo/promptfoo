@@ -30,6 +30,10 @@ describe('GOAT Strategy', () => {
     });
 
     expect(result[0].assert?.[0].metric).toBe('exactMatch/GOAT');
+    expect(result[0].metadata).toEqual({
+      pluginId: 'test-plugin',
+      strategyId: 'goat',
+    });
   });
 
   it('should preserve original test case properties', async () => {
@@ -46,6 +50,10 @@ describe('GOAT Strategy', () => {
     const result = await addGoatTestCases(testCases, 'goal', {});
 
     expect(result[0].vars).toEqual(testCases[0].vars);
-    expect(result[0].metadata).toEqual(testCases[0].metadata);
+    expect(result[0].metadata).toEqual({
+      pluginId: 'test-plugin',
+      key: 'value',
+      strategyId: 'goat',
+    });
   });
 });

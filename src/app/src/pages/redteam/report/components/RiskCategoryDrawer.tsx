@@ -21,7 +21,7 @@ import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
 import PluginStrategyFlow from './PluginStrategyFlow';
 import SuggestionsDialog from './SuggestionsDialog';
-import { getStrategyIdFromGradingResult } from './shared';
+import { getStrategyIdFromTest } from './shared';
 import './RiskCategoryDrawer.css';
 
 interface RiskCategoryDrawerProps {
@@ -50,11 +50,11 @@ const PRIORITY_STRATEGIES = ['jailbreak:composite', 'pliny', 'prompt-injections'
 
 // Sort function for prioritizing specific strategies
 function sortByPriorityStrategies(
-  a: { gradingResult?: GradingResult },
-  b: { gradingResult?: GradingResult },
+  a: { gradingResult?: GradingResult; metadata?: Record<string, any> },
+  b: { gradingResult?: GradingResult; metadata?: Record<string, any> },
 ): number {
-  const strategyA = a.gradingResult ? getStrategyIdFromGradingResult(a.gradingResult) : '';
-  const strategyB = b.gradingResult ? getStrategyIdFromGradingResult(b.gradingResult) : '';
+  const strategyA = getStrategyIdFromTest(a);
+  const strategyB = getStrategyIdFromTest(b);
 
   const priorityA = PRIORITY_STRATEGIES.indexOf(strategyA || '');
   const priorityB = PRIORITY_STRATEGIES.indexOf(strategyB || '');
@@ -239,7 +239,7 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
                       </Typography>
                       {failure.gradingResult &&
                         (() => {
-                          const strategyId = getStrategyIdFromGradingResult(failure.gradingResult);
+                          const strategyId = getStrategyIdFromTest(failure);
                           return (
                             strategyId && (
                               <Tooltip title={strategyDescriptions[strategyId as Strategy] || ''}>

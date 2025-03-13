@@ -559,6 +559,7 @@ export const AGENTIC_STRATEGIES = [
 export type AgenticStrategy = (typeof AGENTIC_STRATEGIES)[number];
 
 export const ADDITIONAL_STRATEGIES = [
+  'audio',
   'base64',
   'best-of-n',
   'citation',
@@ -566,6 +567,7 @@ export const ADDITIONAL_STRATEGIES = [
   'gcg',
   'goat',
   'hex',
+  'image',
   'jailbreak:likert',
   'jailbreak:tree',
   'leetspeak',
