@@ -196,7 +196,11 @@ export class GoogleMMLiveProvider implements ApiProvider {
               if (contents[0].role != 'user') {
                 throw new Error("Can only take user role inputs.")
               }
-              userMessage = contents[0].parts[0].text;
+              if (Array.isArray(contents[0].parts)) {
+                userMessage = contents[0].parts[0].text;
+              } else {
+                userMessage = contents[0].parts.text;
+              }
             } else {
               if (contents.role != 'user') {
                 throw new Error("Can only take user role inputs.")
@@ -271,9 +275,9 @@ export class GoogleMMLiveProvider implements ApiProvider {
             }
           }
         } catch (err) {
-          logger.debug(`Failed to process response: ${err}`);
+          logger.debug(`Failed to process response: ${JSON.stringify(err)} ${JSON.stringify(contents)}`);
           ws.close();
-          resolve({ error: `Failed to process response: ${JSON.stringify(err)}` });
+          resolve({ error: `Failed to process response: ${JSON.stringify(err)} ${JSON.stringify(contents)}` });
         }
       };
 

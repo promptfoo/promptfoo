@@ -251,6 +251,29 @@ describe('GoogleMMLiveProvider', () => {
     });
   });
 
+  it('should handle multiple user inputs', async () => {
+    jest.mocked(WebSocket).mockImplementation(() => {
+      setTimeout(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateTextMessage(mockWs, 'Hey there! How can I help you today?\n');
+        simulateCompletionMessage(mockWs);
+        simulateTextMessage(mockWs, "Okay, let's talk about Hawaii! It's a truly fascinating place with");
+        simulateTextMessage(mockWs, " a unique culture, history, and geography.");
+        simulateCompletionMessage(mockWs);
+      }, 60);
+      return mockWs;
+    });
+
+    const response = await provider.callApi('[{"role":"user","content":"hey"},{"role":"user","content":"tell me about hawaii"}]');
+    expect(response).toEqual({
+      output: JSON.stringify({
+        text: "Hey there! How can I help you today?\nOkay, let's talk about Hawaii! It's a truly fascinating place with a unique culture, history, and geography.",
+        toolCall: { functionCalls: [] },
+      }),
+    });
+  });
+
   it('should handle WebSocket errors', async () => {
     jest.mocked(WebSocket).mockImplementation(() => {
       setTimeout(() => {
