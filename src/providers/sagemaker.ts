@@ -7,12 +7,11 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderEmbeddingResponse,
-  ProviderOptions,
   ProviderResponse
 } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { maybeLoadFromExternalFile } from '../util';
-import { transform, TransformContext } from '../util/transform';
+import { transform } from '../util/transform';
+import type { TransformContext } from '../util/transform';
 import { parseChatPrompt } from './shared';
 
 /**
@@ -103,7 +102,7 @@ export abstract class SageMakerGenericProvider {
    * @param path JSONPath expression to validate
    * @returns Object with validation result and optional error message
    */
-  protected validateJsonPath(path: string): { valid: boolean; error?: string } {
+  protected async validateJsonPath(path: string): Promise<{ valid: boolean; error?: string }> {
     try {
       // Basic syntax check
       if (!path.startsWith('$')) {
@@ -111,10 +110,11 @@ export abstract class SageMakerGenericProvider {
       }
       
       // Try to compile/validate with jsonpath
-      const jsonpath = require('jsonpath');
+      const jsonpath = await import('jsonpath');
       jsonpath.parse(path); // Will throw if invalid
       return { valid: true };
-    } catch (error: any) {
+    } catch (_error: unknown) {
+      const error = _error as Error;
       return { 
         valid: false, 
         error: `Invalid JSONPath syntax: ${error.message || String(error)}` 
@@ -148,9 +148,9 @@ export abstract class SageMakerGenericProvider {
       try {
         const { fromSSO } = await import('@aws-sdk/credential-provider-sso');
         return fromSSO({ profile: this.config.profile });
-      } catch (error) {
+      } catch (_error) {
         throw new Error(
-          `Failed to load AWS SSO profile. Please install @aws-sdk/credential-provider-sso: ${error}`
+          `Failed to load AWS SSO profile. Please install @aws-sdk/credential-provider-sso: ${_error}`
         );
       }
     }
@@ -177,7 +177,7 @@ export abstract class SageMakerGenericProvider {
         });
         
         logger.debug(`SageMaker client initialized for region ${this.getRegion()}`);
-      } catch (error) {
+      } catch (_error) {
         throw new Error(
           'The @aws-sdk/client-sagemaker-runtime package is required. Please install it with: npm install @aws-sdk/client-sagemaker-runtime'
         );
@@ -269,25 +269,41 @@ export abstract class SageMakerGenericProvider {
             const fn = new Function('prompt', 'context', `try { return (${transformFn})(prompt, context); } catch(e) { throw new Error("Transform function error: " + e.message); }`);
             const result = fn(prompt, transformContext);
             
-            if (result != null) {
-              if (typeof result === 'string') {
-                return result;
-              } else if (typeof result === 'object') {
-                return JSON.stringify(result);
-              }
+            // Handle all possible return types, including falsy values (empty string, 0, etc.)
+            if (result === undefined || result === null) {
+              // Only skip undefined/null, allowing empty strings, false, 0, etc.
+              logger.debug('Transform function returned null or undefined, using original prompt');
+              return prompt;
             }
+            
+            if (typeof result === 'string') {
+              return result; // Return string results directly (even empty strings)
+            } else if (typeof result === 'object') {
+              return JSON.stringify(result); // Convert objects to JSON
+            } else {
+              // Handle other types (numbers, booleans) by converting to string
+              return String(result);
+            }}
           } else {
             // Regular function format
             // We're wrapping the code in a try/catch and ensuring it's coming from a trusted source
             const fn = new Function('prompt', 'context', `try { ${transformFn} } catch(e) { throw new Error("Transform function error: " + e.message); }`);
             const result = fn(prompt, transformContext);
             
-            if (result != null) {
-              if (typeof result === 'string') {
-                return result;
-              } else if (typeof result === 'object') {
-                return JSON.stringify(result);
-              }
+            // Handle all possible return types, including falsy values (empty string, 0, etc.)
+            if (result === undefined || result === null) {
+              // Only skip undefined/null, allowing empty strings, false, 0, etc.
+              logger.debug('Transform function returned null or undefined, using original prompt');
+              return prompt;
+            }
+            
+            if (typeof result === 'string') {
+              return result; // Return string results directly (even empty strings)
+            } else if (typeof result === 'object') {
+              return JSON.stringify(result); // Convert objects to JSON
+            } else {
+              // Handle other types (numbers, booleans) by converting to string
+              return String(result);
             }
           }
         } catch (transformError) {
@@ -299,12 +315,20 @@ export abstract class SageMakerGenericProvider {
           const { TransformInputType } = await import('../util/transform');
           const transformed = await transform(transformFn, prompt, transformContext, false, TransformInputType.OUTPUT);
           
-          if (transformed != null) {
-            if (typeof transformed === 'string') {
-              return transformed;
-            } else if (typeof transformed === 'object') {
-              return JSON.stringify(transformed);
-            }
+          // Handle all possible return types, including falsy values (empty string, 0, etc.)
+          if (transformed === undefined || transformed === null) {
+            // Only skip undefined/null, allowing empty strings, false, 0, etc.
+            logger.debug('Transform function returned null or undefined, using original prompt');
+            return prompt;
+          }
+          
+          if (typeof transformed === 'string') {
+            return transformed; // Return string results directly (even empty strings)
+          } else if (typeof transformed === 'object') {
+            return JSON.stringify(transformed); // Convert objects to JSON
+          } else {
+            // Handle other types (numbers, booleans) by converting to string
+            return String(transformed);
           }
         } catch (transformError) {
           logger.error(`Error using transform utility: ${transformError}`);
@@ -314,8 +338,8 @@ export abstract class SageMakerGenericProvider {
       // Fall back to the original prompt if the transform result is not usable
       logger.warn(`Transform did not produce a valid result, using original prompt`);
       return prompt;
-    } catch (error) {
-      logger.error(`Error applying transform to prompt: ${error}`);
+    } catch (_error) {
+      logger.error(`Error applying transform to prompt: ${_error}`);
       return prompt; // Return original prompt on error
     }
   }
@@ -357,7 +381,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
           } else {
             throw new Error('Not valid messages format');
           }
-        } catch (error) {
+        } catch (_error) {
           // Fall back to text completion format
           payload = {
             prompt,
@@ -383,7 +407,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
           } else {
             throw new Error('Not valid messages format');
           }
-        } catch (error) {
+        } catch (_error) {
           // Extract system and user messages using the same logic as Anthropic provider
           const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
           
@@ -419,7 +443,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
           } else {
             throw new Error('Not valid messages format');
           }
-        } catch (error) {
+        } catch (_error) {
           // Simple text completion for Llama
           payload = {
             prompt,
@@ -464,7 +488,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
           // Try to parse as JSON
           const parsedPrompt = JSON.parse(prompt);
           payload = parsedPrompt;
-        } catch (error) {
+        } catch (_error) {
           // If not valid JSON, wrap in a simple object
           payload = { prompt };
         }
@@ -485,7 +509,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     
     try {
       responseJson = JSON.parse(responseBody);
-    } catch (error) {
+    } catch (_error) {
       logger.debug('Response is not JSON, returning as-is');
       return responseBody; // Return as is if not JSON
     }
@@ -493,7 +517,8 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     // If response format specifies a path, extract it using JSONPath
     if (this.config.responseFormat?.path) {
       try {
-        const jsonpath = require('jsonpath');
+        // Use dynamic import instead of require
+        const jsonpath = await import('jsonpath');
         
         // Validate JSONPath before using it
         const pathValidation = this.validateJsonPath(this.config.responseFormat.path);
@@ -515,8 +540,8 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
         logger.debug(`Extracted data type: ${typeof extracted[0]}, isArray: ${Array.isArray(extracted[0])}`);
         
         return extracted[0] ?? responseJson;
-      } catch (error) {
-        logger.warn(`Failed to extract from JSON path: ${this.config.responseFormat.path}, Error: ${error}`);
+      } catch (_error) {
+        logger.warn(`Failed to extract from JSON path: ${this.config.responseFormat.path}, Error: ${_error}`);
         logger.debug(`Response JSON structure: ${JSON.stringify(responseJson).substring(0, 200)}...`);
         return responseJson;
       }
@@ -590,15 +615,15 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     
     // Use crypto to hash the prompt and config for a shorter, more efficient key
     try {
-      // Import crypto only when needed
-      const crypto = require('crypto');
+      // Use dynamic import instead of require
+      const crypto = await import('crypto');
       const promptHash = crypto.createHash('sha256').update(prompt).digest('hex').substring(0, 16);
       const configHash = crypto.createHash('sha256').update(configStr).digest('hex').substring(0, 8);
       
       return `sagemaker:v1:${this.getEndpointName()}:${promptHash}:${configHash}`;
-    } catch (error) {
+    } catch (_error) {
       // Fall back to the unoptimized version if crypto is not available
-      logger.debug(`Unable to create hash for cache key: ${error}`);
+      logger.debug(`Unable to create hash for cache key: ${_error}`);
       return `sagemaker:v1:${this.getEndpointName()}:${prompt.substring(0, 50)}:${configStr.substring(0, 50)}`;
     }
   }
@@ -650,8 +675,8 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
           }
           
           return parsedResult;
-        } catch (error) {
-          logger.warn(`Failed to parse cached SageMaker response: ${error}`);
+        } catch (_error) {
+          logger.warn(`Failed to parse cached SageMaker response: ${_error}`);
           // Continue with API call if parsing fails
         }
       }
@@ -683,7 +708,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       const startTime = Date.now();
       const response = await runtime.send(command);
       const endTime = Date.now();
-      const latency = endTime - startTime;
+      const _latency = endTime - startTime;
       
       if (!response.Body) {
         logger.error('No response body returned from SageMaker endpoint');
@@ -711,7 +736,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
           cached: 0, // No caching for this request
         },
         metadata: {
-          latencyMs: latency,
+          latencyMs: _latency,
           modelType: this.config.modelType || 'custom',
           transformed: isTransformed,
           originalPrompt: isTransformed ? prompt : undefined,
@@ -727,8 +752,8 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
         try {
           await cache.set(cacheKey, resultToCache);
           logger.debug(`Stored SageMaker response in cache with key: ${cacheKey.substring(0, 100)}...`);
-        } catch (error) {
-          logger.warn(`Failed to store SageMaker response in cache: ${error}`);
+        } catch (_error) {
+          logger.warn(`Failed to store SageMaker response in cache: ${_error}`);
         }
       }
       
@@ -769,15 +794,15 @@ export class SageMakerEmbeddingProvider extends SageMakerGenericProvider impleme
     
     // Use crypto to hash the text and config for a shorter, more efficient key
     try {
-      // Import crypto only when needed
-      const crypto = require('crypto');
+      // Use dynamic import instead of require
+      const crypto = await import('crypto');
       const textHash = crypto.createHash('sha256').update(text).digest('hex').substring(0, 16);
       const configHash = crypto.createHash('sha256').update(configStr).digest('hex').substring(0, 8);
       
       return `sagemaker:embedding:v1:${this.getEndpointName()}:${textHash}:${configHash}`;
-    } catch (error) {
+    } catch (_error) {
       // Fall back to the unoptimized version if crypto is not available
-      logger.debug(`Unable to create hash for embedding cache key: ${error}`);
+      logger.debug(`Unable to create hash for embedding cache key: ${_error}`);
       return `sagemaker:embedding:v1:${this.getEndpointName()}:${text.substring(0, 50)}:${configStr.substring(0, 50)}`;
     }
   }
@@ -823,8 +848,8 @@ export class SageMakerEmbeddingProvider extends SageMakerGenericProvider impleme
           }
           
           return parsedResult;
-        } catch (error) {
-          logger.warn(`Failed to parse cached SageMaker embedding response: ${error}`);
+        } catch (_error) {
+          logger.warn(`Failed to parse cached SageMaker embedding response: ${_error}`);
           // Continue with API call if parsing fails
         }
       }
@@ -885,7 +910,7 @@ export class SageMakerEmbeddingProvider extends SageMakerGenericProvider impleme
       const startTime = Date.now();
       const response = await runtime.send(command);
       const endTime = Date.now();
-      const latency = endTime - startTime;
+      const _latency = endTime - startTime;
       
       if (!response.Body) {
         logger.error('No response body returned from SageMaker embedding endpoint');
@@ -900,23 +925,21 @@ export class SageMakerEmbeddingProvider extends SageMakerGenericProvider impleme
       let responseJson;
       try {
         responseJson = JSON.parse(responseBody);
-      } catch (error) {
+      } catch (_error) {
         return {
-          error: `Failed to parse embedding response as JSON: ${error}`,
+          error: `Failed to parse embedding response as JSON: ${_error}`,
         };
       }
       
       // If response format specifies a path, extract it using JSONPath
       if (this.config.responseFormat?.path) {
         try {
-          const jsonpath = require('jsonpath');
+          // Use dynamic import instead of require
+          const jsonpath = await import('jsonpath');
           
           // Validate JSONPath before using it
           const pathValidation = this.validateJsonPath(this.config.responseFormat.path);
-          if (!pathValidation.valid) {
-            logger.warn(`Skipping extraction with invalid JSONPath: ${pathValidation.error}`);
-            // Continue to try other extraction methods
-          } else {
+          if (pathValidation.valid) {
             const extracted = jsonpath.query(responseJson, this.config.responseFormat.path);
             
             if (extracted.length === 0) {
@@ -948,9 +971,12 @@ export class SageMakerEmbeddingProvider extends SageMakerGenericProvider impleme
                 logger.warn('Extracted data is not a valid embedding array, trying other extraction methods');
               }
             }
+          } else {
+            logger.warn(`Skipping extraction with invalid JSONPath: ${pathValidation.error}`);
+            // Continue to try other extraction methods
           }
-        } catch (error) {
-          logger.warn(`Failed to extract embedding from JSON path: ${this.config.responseFormat.path}, Error: ${error}`);
+        } catch (_error) {
+          logger.warn(`Failed to extract embedding from JSON path: ${this.config.responseFormat.path}, Error: ${_error}`);
           logger.debug(`Response JSON structure: ${JSON.stringify(responseJson).substring(0, 200)}...`);
           // Continue to try other extraction methods
         }
@@ -1026,8 +1052,8 @@ export class SageMakerEmbeddingProvider extends SageMakerGenericProvider impleme
       try {
         await cache.set(cacheKey, resultToCache);
         logger.debug(`Stored SageMaker embedding response in cache with key: ${cacheKey.substring(0, 100)}...`);
-      } catch (error) {
-        logger.warn(`Failed to store SageMaker embedding response in cache: ${error}`);
+      } catch (_error) {
+        logger.warn(`Failed to store SageMaker embedding response in cache: ${_error}`);
       }
     }
   }
