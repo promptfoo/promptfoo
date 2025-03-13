@@ -47,6 +47,8 @@ async function fetchAllTexts(): Promise<string[]> {
 }
 
 export class PlinyPlugin extends RedteamPluginBase {
+  readonly id = PLUGIN_ID;
+
   async getTemplate(): Promise<string> {
     return this.injectVar;
   }
