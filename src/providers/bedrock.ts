@@ -805,6 +805,15 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'apac.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+
+  // US-GOV Models
+  'us-gov.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us-gov.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+
+  // APAC Nova Models
+  'apac.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'apac.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'apac.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
