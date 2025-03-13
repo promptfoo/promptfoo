@@ -1044,7 +1044,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'divergent-repetition':
     'Tests repetitive patterns that can cause the model to diverge from normal behavior and leak training data',
   'excessive-agency': 'Evaluates system boundary enforcement and unauthorized action prevention',
-  'function-discovery': 'Tests system protection against enumeration of available tools, functions, and API calls',
+  'function-discovery':
+    'Tests system protection against enumeration of available tools, functions, and API calls',
   foundation: 'Tests a collection of plugins designed to run against foundation models',
   hallucination: 'Tests system resilience against false information generation and propagation',
   harmbench:
