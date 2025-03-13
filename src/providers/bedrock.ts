@@ -234,7 +234,12 @@ export interface BedrockAmazonNovaGenerationOptions extends BedrockOptions {
     };
   };
 }
-
+export interface BedrockDeepseekGenerationOptions extends BedrockOptions {
+  max_tokens?: number;
+  temperature?: number;
+  top_p?: number;
+  stop?: string[];
+}
 interface IBedrockModel {
   params: (config: BedrockOptions, prompt: string, stop: string[]) => any;
   output: (config: BedrockOptions, responseJson: any) => any;
@@ -732,6 +737,54 @@ export const BEDROCK_MODEL = {
     },
     output: (responseJson: any) => responseJson?.outputs[0]?.text,
   },
+  DEEPSEEK: {
+    params: (config: BedrockDeepseekGenerationOptions, prompt: string) => {
+      const wrappedPrompt = `<｜begin▁of▁sentence｜><｜User｜>${prompt}<｜Assistant｜><think>\n`;
+      const params: any = {
+        prompt: wrappedPrompt,
+      };
+
+      addConfigParam(
+        params,
+        'max_tokens',
+        config?.max_tokens,
+        getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
+        undefined,
+      );
+      addConfigParam(
+        params,
+        'temperature',
+        config?.temperature,
+        getEnvFloat('AWS_BEDROCK_TEMPERATURE'),
+        0,
+      );
+      addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('AWS_BEDROCK_TOP_P'), 1.0);
+
+      return params;
+    },
+    output: (config: BedrockOptions, responseJson: any) => {
+      if (responseJson.error) {
+        throw new Error(`DeepSeek API error: ${responseJson.error}`);
+      }
+
+      if (responseJson.choices && Array.isArray(responseJson.choices)) {
+        const choice = responseJson.choices[0];
+        if (choice && choice.text) {
+          const fullResponse = choice.text;
+          const [thinking, finalResponse] = fullResponse.split('</think>');
+          if (!thinking || !finalResponse) {
+            return fullResponse;
+          }
+          if (config.showThinking !== false) {
+            return fullResponse;
+          }
+          return finalResponse.trim();
+        }
+      }
+
+      return undefined;
+    },
+  },
 };
 
 export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
@@ -752,23 +805,47 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-instant-v1': BEDROCK_MODEL.CLAUDE_COMPLETION,
   'anthropic.claude-v1': BEDROCK_MODEL.CLAUDE_COMPLETION,
-  'anthropic.claude-v2:1': BEDROCK_MODEL.CLAUDE_COMPLETION,
   'anthropic.claude-v2': BEDROCK_MODEL.CLAUDE_COMPLETION,
+  'anthropic.claude-v2:1': BEDROCK_MODEL.CLAUDE_COMPLETION,
   'cohere.command-light-text-v14': BEDROCK_MODEL.COHERE_COMMAND,
   'cohere.command-r-plus-v1:0': BEDROCK_MODEL.COHERE_COMMAND_R,
   'cohere.command-r-v1:0': BEDROCK_MODEL.COHERE_COMMAND_R,
   'cohere.command-text-v14': BEDROCK_MODEL.COHERE_COMMAND,
+  'deepseek.r1-v1:0': BEDROCK_MODEL.DEEPSEEK,
   'meta.llama2-13b-chat-v1': BEDROCK_MODEL.LLAMA2,
   'meta.llama2-70b-chat-v1': BEDROCK_MODEL.LLAMA2,
   'meta.llama3-1-405b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
   'meta.llama3-1-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
   'meta.llama3-1-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
+  'meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'meta.llama3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
   'meta.llama3-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
   'mistral.mistral-7b-instruct-v0:2': BEDROCK_MODEL.MISTRAL,
   'mistral.mistral-large-2402-v1:0': BEDROCK_MODEL.MISTRAL,
   'mistral.mistral-small-2402-v1:0': BEDROCK_MODEL.MISTRAL,
   'mistral.mixtral-8x7b-instruct-v0:1': BEDROCK_MODEL.MISTRAL,
+
+  // APAC Models
+  'apac.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'apac.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'apac.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'apac.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'apac.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'apac.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+
+  // EU Models
+  'eu.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'eu.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'eu.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'eu.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.meta.llama3-2-1b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
+  'eu.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
+
+  // Gov Cloud Models
+  'us-gov.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us-gov.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
 
   // US Models
   'us.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
@@ -781,6 +858,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.deepseek.r1-v1:0': BEDROCK_MODEL.DEEPSEEK,
   'us.meta.llama3-1-405b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
   'us.meta.llama3-1-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
   'us.meta.llama3-1-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
@@ -789,21 +867,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'us.meta.llama3-2-90b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'us.meta.llama3-3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_3,
-
-  // EU Models
-  'eu.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
-  'eu.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
-  'eu.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
-  'eu.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'eu.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'eu.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'eu.meta.llama3-2-1b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
-  'eu.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
-
-  // APAC Models
-  'apac.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'apac.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'apac.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
@@ -844,6 +907,9 @@ function getHandlerForModel(modelName: string) {
   }
   if (modelName.startsWith('mistral.')) {
     return BEDROCK_MODEL.MISTRAL;
+  }
+  if (modelName.startsWith('deepseek.')) {
+    return BEDROCK_MODEL.DEEPSEEK;
   }
   throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
 }
@@ -981,20 +1047,27 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       }
     }
 
-    const bedrockInstance = await this.getBedrockInstance();
-    const response = await bedrockInstance.invokeModel({
-      modelId: this.modelName,
-      ...(this.config.guardrailIdentifier
-        ? { guardrailIdentifier: String(this.config.guardrailIdentifier) }
-        : {}),
-      ...(this.config.guardrailVersion
-        ? { guardrailVersion: String(this.config.guardrailVersion) }
-        : {}),
-      ...(this.config.trace ? { trace: this.config.trace } : {}),
-      accept: 'application/json',
-      contentType: 'application/json',
-      body: JSON.stringify(params),
-    });
+    let response;
+    try {
+      const bedrockInstance = await this.getBedrockInstance();
+      response = await bedrockInstance.invokeModel({
+        modelId: this.modelName,
+        ...(this.config.guardrailIdentifier
+          ? { guardrailIdentifier: String(this.config.guardrailIdentifier) }
+          : {}),
+        ...(this.config.guardrailVersion
+          ? { guardrailVersion: String(this.config.guardrailVersion) }
+          : {}),
+        ...(this.config.trace ? { trace: this.config.trace } : {}),
+        accept: 'application/json',
+        contentType: 'application/json',
+        body: JSON.stringify(params),
+      });
+    } catch (err) {
+      return {
+        error: `Bedrock API invoke model error: ${String(err)}`,
+      };
+    }
 
     logger.debug(`Amazon Bedrock API response: ${response.body.transformToString()}`);
     if (isCacheEnabled()) {
@@ -1023,6 +1096,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
           : {}),
       };
     } catch (err) {
+      logger.error(`Bedrock API response error: ${String(err)}: ${JSON.stringify(response)}`);
       return {
         error: `API response error: ${String(err)}: ${JSON.stringify(response)}`,
       };

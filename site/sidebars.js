@@ -259,6 +259,12 @@ const sidebars = {
         },
         {
           type: 'category',
+          label: 'Multimodal',
+          collapsed: true,
+          items: ['red-team/strategies/image', 'red-team/strategies/audio'],
+        },
+        {
+          type: 'category',
           label: 'Custom',
           collapsed: true,
           items: ['red-team/strategies/custom'],

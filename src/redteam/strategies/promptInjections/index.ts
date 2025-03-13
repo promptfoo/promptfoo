@@ -33,6 +33,10 @@ export async function addInjections(
         ...testCase.vars,
         [injectVar]: `${fn(String(testCase.vars![injectVar]))}`,
       },
+      metadata: {
+        ...testCase.metadata,
+        strategyId: 'prompt-injection',
+      },
     })),
   );
 }

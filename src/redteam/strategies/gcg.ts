@@ -81,7 +81,7 @@ async function generateGcgPrompts(
         })),
         metadata: {
           ...testCase.metadata,
-          strategy: 'gcg',
+          strategyId: 'gcg',
         },
       }));
 
