@@ -9,6 +9,9 @@ import type {
 } from '../types';
 import '../util';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
+import { parseChatPrompt } from './shared';
+import type { GeminiFormat } from './vertexUtil';
+import { maybeCoerceToGeminiFormat } from './vertexUtil';
 
 interface Blob {
   mimeType: string;
@@ -115,6 +118,29 @@ interface CompletionOptions {
   systemInstruction?: Content;
 }
 
+const formatContentMessage = (contents: GeminiFormat, contentIndex: number) => {
+  if (contents[contentIndex].role != 'user') {
+    throw new Error('Can only take user role inputs.');
+  }
+  if (contents[contentIndex].parts.length != 1) {
+    throw new Error('Unexpected number of parts in user input.');
+  }
+  const userMessage = contents[contentIndex].parts[0].text;
+
+  const contentMessage = {
+    client_content: {
+      turns: [
+        {
+          role: 'user',
+          parts: [{ text: userMessage }],
+        },
+      ],
+      turn_complete: true,
+    },
+  };
+  return contentMessage;
+};
+
 export class GoogleMMLiveProvider implements ApiProvider {
   config: CompletionOptions;
   modelName: string;
@@ -139,7 +165,29 @@ export class GoogleMMLiveProvider implements ApiProvider {
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
 
-    const userMessage = prompt;
+    if (!this.getApiKey()) {
+      throw new Error(
+        'Google API key is not set. Set the GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
+      );
+    }
+
+    let contents: GeminiFormat = parseChatPrompt(prompt, [
+      {
+        role: 'user',
+        parts: [
+          {
+            text: prompt,
+          },
+        ],
+      },
+    ]);
+    const { contents: updatedContents, coerced } = maybeCoerceToGeminiFormat(contents);
+    if (coerced) {
+      logger.debug(`Coerced JSON prompt to Gemini format: ${JSON.stringify(contents)}`);
+      logger.debug(`Coerced JSON prompt to Gemini format: ${JSON.stringify(updatedContents)}`);
+      contents = updatedContents;
+    }
+    let contentIndex = 0;
 
     return new Promise<ProviderResponse>((resolve) => {
       const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${this.getApiKey()}`;
@@ -150,6 +198,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
       }, this.config.timeoutMs || 10000);
 
       let response_text_total = '';
+      const function_calls_total: FunctionCall[] = [];
 
       ws.onmessage = async (event) => {
         logger.debug(`Received WebSocket response: ${event.data}`);
@@ -172,17 +221,9 @@ export class GoogleMMLiveProvider implements ApiProvider {
 
           // Handle setup complete response
           if (response.setupComplete) {
-            const contentMessage = {
-              client_content: {
-                turns: [
-                  {
-                    role: 'user',
-                    parts: [{ text: userMessage }],
-                  },
-                ],
-                turn_complete: true,
-              },
-            };
+            const contentMessage = formatContentMessage(contents, contentIndex);
+            contentIndex += 1;
+            logger.debug(`WebSocket sent: ${JSON.stringify(contentMessage)}`);
             ws.send(JSON.stringify(contentMessage));
           }
           // Handle model response
@@ -190,16 +231,42 @@ export class GoogleMMLiveProvider implements ApiProvider {
             response_text_total =
               response_text_total + response.serverContent.modelTurn.parts[0].text;
           } else if (response.toolCall?.functionCalls) {
-            resolve({ output: JSON.stringify(response) });
-            ws.close();
-          } else if (response.serverContent?.turnComplete) {
-            if (response_text_total) {
-              resolve({ output: response_text_total });
+            const functionResponses: any[] = [];
+            for (const functionCall of response.toolCall.functionCalls) {
+              function_calls_total.push(functionCall);
+              if (functionCall && functionCall.id && functionCall.name) {
+                functionResponses.push({
+                  id: functionCall.id,
+                  name: functionCall.name,
+                  // TODO: add mocking of function response here
+                  response: {},
+                });
+              }
             }
-            ws.close();
+            const toolMessage = {
+              tool_response: {
+                function_responses: functionResponses,
+              },
+            };
+            ws.send(JSON.stringify(toolMessage));
+          } else if (response.serverContent?.turnComplete) {
+            if (contentIndex < contents.length) {
+              const contentMessage = formatContentMessage(contents, contentIndex);
+              contentIndex += 1;
+              logger.debug(`WebSocket sent: ${JSON.stringify(contentMessage)}`);
+              ws.send(JSON.stringify(contentMessage));
+            } else {
+              resolve({
+                output: JSON.stringify({
+                  text: response_text_total,
+                  toolCall: { functionCalls: function_calls_total },
+                }),
+              });
+              ws.close();
+            }
           }
         } catch (err) {
-          logger.debug(`Failed to process response: ${err}`);
+          logger.debug(`Failed to process response: ${JSON.stringify(err)}`);
           ws.close();
           resolve({ error: `Failed to process response: ${JSON.stringify(err)}` });
         }
@@ -245,6 +312,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
               : {}),
           },
         };
+        logger.debug(`WebSocket sent: ${JSON.stringify(setupMessage)}`);
         ws.send(JSON.stringify(setupMessage));
       };
     });

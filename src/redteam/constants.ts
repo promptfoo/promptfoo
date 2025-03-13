@@ -559,6 +559,7 @@ export const AGENTIC_STRATEGIES = [
 export type AgenticStrategy = (typeof AGENTIC_STRATEGIES)[number];
 
 export const ADDITIONAL_STRATEGIES = [
+  'audio',
   'base64',
   'best-of-n',
   'citation',
@@ -566,6 +567,7 @@ export const ADDITIONAL_STRATEGIES = [
   'gcg',
   'goat',
   'hex',
+  'image',
   'jailbreak:likert',
   'jailbreak:tree',
   'leetspeak',
@@ -1094,6 +1096,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
+  audio: 'Tests detection and handling of audio-based malicious payloads',
   base64: 'Tests detection and handling of Base64-encoded malicious payloads',
   basic: 'Equivalent to no strategy. Always included. Can be disabled in configuration.',
   'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
@@ -1103,6 +1106,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Deploys dynamic attack generation using advanced adversarial techniques',
   hex: 'Tests detection and handling of hex-encoded malicious payloads',
+  image: 'Tests detection and handling of image-based malicious payloads',
   jailbreak: 'Optimizes single-turn attacks to bypass security controls',
   'jailbreak:composite': 'Chains multiple attack vectors for enhanced effectiveness',
   'jailbreak:likert': 'Uses Likert scale-based prompts to bypass content filters',
@@ -1118,6 +1122,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
 };
 
 export const strategyDisplayNames: Record<Strategy, string> = {
+  audio: 'Audio',
   base64: 'Base64 Encoding',
   basic: 'Basic',
   'best-of-n': 'Best-of-N',
@@ -1127,6 +1132,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   gcg: 'Greedy Coordinate Gradient',
   goat: 'Generative Offensive Agent Tester',
   hex: 'Hex Encoding',
+  image: 'Image',
   jailbreak: 'Single-shot Optimization',
   'jailbreak:composite': 'Composite Jailbreaks',
   'jailbreak:likert': 'Likert Scale Jailbreak',
