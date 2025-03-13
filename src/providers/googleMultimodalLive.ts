@@ -244,7 +244,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
             };
             ws.send(JSON.stringify(toolMessage));
           } else if (response.serverContent?.turnComplete) {
-            if (Array.isArray(contents) && contentIndex < contents.length) {
+            if (contentIndex < contents.length) {
               const contentMessage = formatContentMessage(contents, contentIndex);
               contentIndex += 1;
               logger.debug(`WebSocket sent: ${JSON.stringify(contentMessage)}`);
@@ -260,13 +260,9 @@ export class GoogleMMLiveProvider implements ApiProvider {
             }
           }
         } catch (err) {
-          logger.debug(
-            `Failed to process response: ${JSON.stringify(err)} ${JSON.stringify(contents)}`,
-          );
+          logger.debug(`Failed to process response: ${JSON.stringify(err)}`);
           ws.close();
-          resolve({
-            error: `Failed to process response: ${JSON.stringify(err)} ${JSON.stringify(contents)}`,
-          });
+          resolve({ error: `Failed to process response: ${JSON.stringify(err)}` });
         }
       };
 
