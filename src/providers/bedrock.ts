@@ -820,7 +820,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'meta.llama3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
   'meta.llama3-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
-  'meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'mistral.mistral-7b-instruct-v0:2': BEDROCK_MODEL.MISTRAL,
   'mistral.mistral-large-2402-v1:0': BEDROCK_MODEL.MISTRAL,
   'mistral.mistral-small-2402-v1:0': BEDROCK_MODEL.MISTRAL,
