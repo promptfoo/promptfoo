@@ -983,6 +983,20 @@ export const PLUGINS = [
     vulnerabilityType: 'security',
     isRemote: true,
   },
+  {
+    applicationTypes: {
+      agent: true,
+      chat: true,
+      rag: true,
+    },
+    category: 'Security and Access Control',
+    description: 'Tests if the model reveals its available function calls or tools.',
+    label: null,
+    link: '/docs/red-team/plugins/function-discovery/',
+    name: 'Function Discovery',
+    pluginId: 'function-discovery',
+    vulnerabilityType: 'security',
+  },
 ] as const as readonly Plugin[];
 
 // Compile-time check
