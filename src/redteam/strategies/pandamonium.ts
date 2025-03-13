@@ -20,6 +20,7 @@ export function addPandamonium(
       metadata: {
         ...testCases[0].metadata,
         pluginIds: Array.from(plugins),
+        strategyId: 'pandamonium',
       },
       assert: testCases[0].assert?.map((assertion) => ({
         ...assertion,

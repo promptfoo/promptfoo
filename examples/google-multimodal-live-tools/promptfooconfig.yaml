@@ -34,13 +34,16 @@ tests:
     assert:
       - type: icontains
         value: salt
+        transform: JSON.parse(output).text
       - type: icontains-any
         value:
           - 'weathering'
           - 'rainwater'
+        transform: JSON.parse(output).text
   # Example of built-in tool code execution that is executed by mm-live
   - vars:
       query: calculate the result of multiplying 1341 by 23
     assert:
       - type: icontains
         value: 30843
+        transform: JSON.parse(output).text

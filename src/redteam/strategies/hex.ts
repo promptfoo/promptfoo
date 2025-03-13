@@ -14,5 +14,9 @@ export function addHexEncoding(testCases: TestCase[], injectVar: string): TestCa
         .map((char) => char.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))
         .join(' '),
     },
+    metadata: {
+      ...testCase.metadata,
+      strategyId: 'hex',
+    },
   }));
 }

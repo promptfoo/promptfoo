@@ -18,5 +18,9 @@ export function addCrescendo(
       ...assertion,
       metric: `${assertion.metric}/Crescendo`,
     })),
+    metadata: {
+      ...testCase.metadata,
+      strategyId: 'crescendo',
+    },
   }));
 }

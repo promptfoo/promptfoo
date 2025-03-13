@@ -168,6 +168,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
       }, this.config.timeoutMs || 10000);
 
       let response_text_total = '';
+      const function_calls_total: FunctionCall[] = [];
 
       ws.onmessage = async (event) => {
         logger.debug(`Received WebSocket response: ${event.data}`);
@@ -221,12 +222,25 @@ export class GoogleMMLiveProvider implements ApiProvider {
             response_text_total =
               response_text_total + response.serverContent.modelTurn.parts[0].text;
           } else if (response.toolCall?.functionCalls) {
-            resolve({ output: JSON.stringify(response) });
-            ws.close();
-          } else if (response.serverContent?.turnComplete) {
-            if (response_text_total) {
-              resolve({ output: response_text_total });
+            const functionResponses: any[] = [];
+            for (const functionCall of response.toolCall.functionCalls) {
+              function_calls_total.push(functionCall);
+              if (functionCall && functionCall.id && functionCall.name) {
+                functionResponses.push({
+                  id: functionCall.id,
+                  name: functionCall.name,
+                  // TODO: add mocking of function response here
+                  response: {},
+                });
+              }
             }
+            const toolMessage = {
+              tool_response: {
+                function_responses: functionResponses,
+              },
+            };
+            ws.send(JSON.stringify(toolMessage));
+          } else if (response.serverContent?.turnComplete) {
             if (Array.isArray(contents) && contentIndex < contents.length) {
               if (contents[0].role != 'user') {
                 throw new Error("Can only take user role inputs.")
@@ -247,6 +261,12 @@ export class GoogleMMLiveProvider implements ApiProvider {
               logger.debug(`WebSocket sent: ${JSON.stringify(contentMessage)}`);
               ws.send(JSON.stringify(contentMessage));
             } else {
+              resolve({
+                output: JSON.stringify({
+                  text: response_text_total,
+                  toolCall: { functionCalls: function_calls_total },
+                }),
+              });
               ws.close();
             }
           }

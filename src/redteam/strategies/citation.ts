@@ -79,6 +79,7 @@ async function generateCitations(
         metadata: {
           ...testCase.metadata,
           citation: data.result.citation,
+          strategyId: 'citation',
         },
       };
 

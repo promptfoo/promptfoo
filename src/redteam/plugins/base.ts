@@ -17,7 +17,7 @@ import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { redteamProviderManager } from '../providers/shared';
-import { removePrefix } from '../util';
+import { getShortPluginId, removePrefix } from '../util';
 import { isBasicRefusal, isEmptyResponse } from '../util';
 
 /**
@@ -57,6 +57,11 @@ export function parseGeneratedPrompts(generatedPrompts: string): { prompt: strin
  * Abstract base class for creating plugins that generate test cases.
  */
 export abstract class RedteamPluginBase {
+  /**
+   * Unique identifier for the plugin.
+   */
+  abstract readonly id: string;
+
   /**
    * Creates an instance of RedteamPluginBase.
    * @param provider - The API provider used for generating prompts.
@@ -153,6 +158,9 @@ export abstract class RedteamPluginBase {
         [this.injectVar]: prompt.prompt,
       },
       assert: this.getAssertions(prompt.prompt),
+      metadata: {
+        pluginId: getShortPluginId(this.id),
+      },
     }));
   }
 
