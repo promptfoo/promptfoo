@@ -115,7 +115,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
 
 export function getGraderById(id: string): RedteamGraderBase | undefined {
   // First try to get the exact grader
-  const grader = GRADERS[id as keyof typeof GRADERS];
+  const grader = id in GRADERS ? GRADERS[id] : undefined;
 
   // If not found but the ID starts with 'promptfoo:redteam:harmful', use the general harmful grader
   if (!grader && id.startsWith('promptfoo:redteam:harmful')) {
