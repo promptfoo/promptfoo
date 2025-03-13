@@ -168,3 +168,10 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
   logger.debug('No credentials found, falling back to OpenAI providers');
   return OpenAiProviderConfig(env);
 }
+
+export {
+  COMPLETION_PROVIDERS,
+  EMBEDDING_PROVIDERS,
+  defaultCompletionProvider,
+  defaultEmbeddingProvider,
+};
