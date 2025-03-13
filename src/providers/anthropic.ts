@@ -504,9 +504,13 @@ export class AnthropicCompletionProvider implements ApiProvider {
   }
 }
 
-export const DefaultGradingProvider = new AnthropicMessagesProvider('claude-3-7-sonnet-latest');
-export const DefaultGradingJsonProvider = new AnthropicMessagesProvider('claude-3-7-sonnet-latest');
-export const DefaultSuggestionsProvider = new AnthropicMessagesProvider('claude-3-7-sonnet-latest');
+export const DefaultGradingProvider = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219');
+export const DefaultGradingJsonProvider = new AnthropicMessagesProvider(
+  'claude-3-7-sonnet-20250219',
+);
+export const DefaultSuggestionsProvider = new AnthropicMessagesProvider(
+  'claude-3-7-sonnet-20250219',
+);
 
 export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
   constructor(modelName: string) {
@@ -569,8 +573,9 @@ export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
     }
   }
 }
-export const DefaultLlmRubricProvider = new AnthropicLlmRubricProvider('claude-3-7-sonnet-latest');
-
+export const DefaultLlmRubricProvider = new AnthropicLlmRubricProvider(
+  'claude-3-7-sonnet-20250219',
+);
 /**
  * Anthropic provider configuration
  */
