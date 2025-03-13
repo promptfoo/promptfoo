@@ -197,6 +197,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
                 throw new Error("Can only take user role inputs.")
               }
               if (Array.isArray(contents[0].parts)) {
+                // TODO: think about multi part as well
                 userMessage = contents[0].parts[0].text;
               } else {
                 userMessage = contents[0].parts.text;
@@ -249,6 +250,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
               if (contents[0].role != 'user') {
                 throw new Error("Can only take user role inputs.")
               }
+              // TODO: think about multi part as well
               userMessage = contents[contentIndex].parts[0].text;
               contentIndex += 1;
               const contentMessage = {
