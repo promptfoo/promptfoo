@@ -14,12 +14,34 @@ import { transform } from '../util/transform';
 import type { TransformContext } from '../util/transform';
 import { parseChatPrompt } from './shared';
 
+// Make sure jsonpath is available
+let jsonpathAvailable = false;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+  require('jsonpath');
+  jsonpathAvailable = true;
+} catch (e) {
+  // jsonpath not available, we'll handle this gracefully
+}
+
 /**
  * Sleep utility function for implementing delays
  * @param ms Milliseconds to sleep
  * @returns Promise that resolves after the specified delay
  */
 const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Simple synchronous JSONPath validation
+ * Only checks basic syntax requirements
+ */
+function validateJsonPathSync(path: string): {valid: boolean; error?: string} {
+  if (!path.startsWith('$')) {
+    return { valid: false, error: 'JSONPath must start with $ root selector' };
+  }
+  // Basic validation passed
+  return { valid: true };
+}
 
 /**
  * Options for configuring SageMaker provider
@@ -83,9 +105,9 @@ export abstract class SageMakerGenericProvider {
     this.transform = transform || this.config.transform;
     this.providerId = id; // Store custom ID if provided
 
-    // Validate JSONPath if provided
+    // Perform simple synchronous validation in constructor
     if (this.config?.responseFormat?.path) {
-      const validation = this.validateJsonPath(this.config.responseFormat.path);
+      const validation = validateJsonPathSync(this.config.responseFormat.path);
       if (!validation.valid) {
         logger.warn(`Invalid responseFormat.path: ${validation.error}`);
       }
@@ -95,31 +117,6 @@ export abstract class SageMakerGenericProvider {
     telemetry.recordAndSendOnce('feature_used', {
       feature: 'sagemaker',
     });
-  }
-  
-  /**
-   * Validate a JSONPath expression
-   * @param path JSONPath expression to validate
-   * @returns Object with validation result and optional error message
-   */
-  protected async validateJsonPath(path: string): Promise<{ valid: boolean; error?: string }> {
-    try {
-      // Basic syntax check
-      if (!path.startsWith('$')) {
-        return { valid: false, error: 'JSONPath must start with $ root selector' };
-      }
-      
-      // Try to compile/validate with jsonpath
-      const jsonpath = await import('jsonpath');
-      jsonpath.parse(path); // Will throw if invalid
-      return { valid: true };
-    } catch (_error: unknown) {
-      const error = _error as Error;
-      return { 
-        valid: false, 
-        error: `Invalid JSONPath syntax: ${error.message || String(error)}` 
-      };
-    }
   }
 
   id(): string {
@@ -283,7 +280,7 @@ export abstract class SageMakerGenericProvider {
             } else {
               // Handle other types (numbers, booleans) by converting to string
               return String(result);
-            }}
+            }
           } else {
             // Regular function format
             // We're wrapping the code in a try/catch and ensuring it's coming from a trusted source
@@ -517,17 +514,23 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     // If response format specifies a path, extract it using JSONPath
     if (this.config.responseFormat?.path) {
       try {
-        // Use dynamic import instead of require
-        const jsonpath = await import('jsonpath');
-        
-        // Validate JSONPath before using it
-        const pathValidation = this.validateJsonPath(this.config.responseFormat.path);
-        if (!pathValidation.valid) {
-          logger.warn(`Skipping extraction with invalid JSONPath: ${pathValidation.error}`);
+        // Make sure jsonpath is available - if not, we'll skip this section
+        if (!jsonpathAvailable) {
+          logger.warn('JSONPath extraction skipped: jsonpath module not available');
           return responseJson;
         }
         
-        const extracted = jsonpath.query(responseJson, this.config.responseFormat.path);
+        // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+        const jsonpathModule = require('jsonpath');
+        
+        // Validate JSONPath - synchronous version
+        const validation = validateJsonPathSync(this.config.responseFormat.path);
+        if (!validation.valid) {
+          logger.warn(`Skipping extraction with invalid JSONPath: ${validation.error}`);
+          return responseJson;
+        }
+        
+        const extracted = jsonpathModule.query(responseJson, this.config.responseFormat.path);
         logger.debug(`Extracted value using JSONPath: ${this.config.responseFormat.path}`);
         
         if (extracted.length === 0) {
@@ -615,10 +618,11 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     
     // Use crypto to hash the prompt and config for a shorter, more efficient key
     try {
-      // Use dynamic import instead of require
-      const crypto = await import('crypto');
-      const promptHash = crypto.createHash('sha256').update(prompt).digest('hex').substring(0, 16);
-      const configHash = crypto.createHash('sha256').update(configStr).digest('hex').substring(0, 8);
+      // Use require for crypto to match our jsonpath approach
+      // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+      const cryptoModule = require('crypto');
+      const promptHash = cryptoModule.createHash('sha256').update(prompt).digest('hex').substring(0, 16);
+      const configHash = cryptoModule.createHash('sha256').update(configStr).digest('hex').substring(0, 8);
       
       return `sagemaker:v1:${this.getEndpointName()}:${promptHash}:${configHash}`;
     } catch (_error) {
@@ -723,8 +727,9 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       const output = this.parseResponse(responseBody);
       
       // Calculate token usage estimation (very rough estimate)
-      const promptTokens = Math.ceil(payload.length / 4); // Very rough estimate
-      const completionTokens = Math.ceil((output?.length || 0) / 4); // Very rough estimate
+      // Note: 4 characters per token is a simplified approximation
+      const promptTokens = Math.ceil(payload.length / 4);
+      const completionTokens = Math.ceil((typeof output === 'string' ? output.length : 0) / 4);
       
       const result: ProviderResponse = {
         output,
@@ -794,10 +799,11 @@ export class SageMakerEmbeddingProvider extends SageMakerGenericProvider impleme
     
     // Use crypto to hash the text and config for a shorter, more efficient key
     try {
-      // Use dynamic import instead of require
-      const crypto = await import('crypto');
-      const textHash = crypto.createHash('sha256').update(text).digest('hex').substring(0, 16);
-      const configHash = crypto.createHash('sha256').update(configStr).digest('hex').substring(0, 8);
+      // Use require for crypto to match our jsonpath approach
+      // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+      const cryptoModule = require('crypto');
+      const textHash = cryptoModule.createHash('sha256').update(text).digest('hex').substring(0, 16);
+      const configHash = cryptoModule.createHash('sha256').update(configStr).digest('hex').substring(0, 8);
       
       return `sagemaker:embedding:v1:${this.getEndpointName()}:${textHash}:${configHash}`;
     } catch (_error) {
@@ -931,16 +937,28 @@ export class SageMakerEmbeddingProvider extends SageMakerGenericProvider impleme
         };
       }
       
+      // Try various common embedding response formats first
+      const embedding = responseJson.embedding || 
+                       responseJson.embeddings || 
+                       responseJson.data?.[0]?.embedding ||
+                       (Array.isArray(responseJson) ? responseJson[0] : responseJson);
+
       // If response format specifies a path, extract it using JSONPath
       if (this.config.responseFormat?.path) {
         try {
-          // Use dynamic import instead of require
-          const jsonpath = await import('jsonpath');
+          // Make sure jsonpath is available - if not, we'll skip this section
+          if (!jsonpathAvailable) {
+            logger.warn('JSONPath extraction skipped: jsonpath module not available');
+            return embedding; // Use the standard embedding extraction instead
+          }
           
-          // Validate JSONPath before using it
-          const pathValidation = this.validateJsonPath(this.config.responseFormat.path);
-          if (pathValidation.valid) {
-            const extracted = jsonpath.query(responseJson, this.config.responseFormat.path);
+          // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+          const jsonpathModule = require('jsonpath');
+          
+          // Validate JSONPath - synchronous version
+          const validation = validateJsonPathSync(this.config.responseFormat.path);
+          if (validation.valid) {
+            const extracted = jsonpathModule.query(responseJson, this.config.responseFormat.path);
             
             if (extracted.length === 0) {
               logger.warn(`JSONPath matched no data: ${this.config.responseFormat.path}`);
@@ -954,7 +972,7 @@ export class SageMakerEmbeddingProvider extends SageMakerGenericProvider impleme
                 const result = {
                   embedding: extracted[0],
                   tokenUsage: {
-                    prompt: Math.ceil(text.length / 4), // Very rough estimate
+                    prompt: Math.ceil(text.length / 4), // Approximate token count
                     cached: 0,
                   },
                   metadata: {
@@ -964,7 +982,7 @@ export class SageMakerEmbeddingProvider extends SageMakerGenericProvider impleme
                 };
                 
                 // Cache the result if caching is enabled
-                this.cacheEmbeddingResult(result, transformedText, context, isTransformed, isTransformed ? text : undefined);
+                await this.cacheEmbeddingResult(result, transformedText, context, isTransformed, isTransformed ? text : undefined);
                 
                 return result;
               } else {
@@ -972,7 +990,7 @@ export class SageMakerEmbeddingProvider extends SageMakerGenericProvider impleme
               }
             }
           } else {
-            logger.warn(`Skipping extraction with invalid JSONPath: ${pathValidation.error}`);
+            logger.warn(`Skipping extraction with invalid JSONPath: ${validation.error}`);
             // Continue to try other extraction methods
           }
         } catch (_error) {
@@ -981,12 +999,6 @@ export class SageMakerEmbeddingProvider extends SageMakerGenericProvider impleme
           // Continue to try other extraction methods
         }
       }
-      
-      // Try various common embedding response formats
-      const embedding = responseJson.embedding || 
-                       responseJson.embeddings || 
-                       responseJson.data?.[0]?.embedding ||
-                       (Array.isArray(responseJson) ? responseJson[0] : responseJson);
                        
       if (!embedding || !Array.isArray(embedding)) {
         return {
@@ -997,7 +1009,7 @@ export class SageMakerEmbeddingProvider extends SageMakerGenericProvider impleme
       const result = {
         embedding,
         tokenUsage: {
-          prompt: Math.ceil(text.length / 4), // Very rough estimate
+          prompt: Math.ceil(text.length / 4), // Approximate token count
           cached: 0,
         },
         metadata: {
@@ -1007,7 +1019,7 @@ export class SageMakerEmbeddingProvider extends SageMakerGenericProvider impleme
       };
       
       // Cache the result if caching is enabled
-      this.cacheEmbeddingResult(result, transformedText, context, isTransformed, isTransformed ? text : undefined);
+      await this.cacheEmbeddingResult(result, transformedText, context, isTransformed, isTransformed ? text : undefined);
       
       return result;
     } catch (error: any) {
