@@ -25,9 +25,9 @@
     "@docusaurus/theme-mermaid": "^3.7.0",
     "@docusaurus/theme-search-algolia": "^3.7.0",
     "@mdx-js/react": "^3.1.0",
-    "@monaco-editor/react": "^4.6.0",
+    "@monaco-editor/react": "^4.7.0",
     "@mui/icons-material": "^6.1.10",
-    "@segment/ajv-human-errors": "^2.14.1",
+    "@segment/ajv-human-errors": "^2.15.0",
     "canvas-confetti": "^1.9.3",
     "clsx": "^2.1.1",
     "dedent": "^1.5.3",
@@ -39,7 +39,7 @@
     "react-dom": "^18.3.1",
     "@docusaurus/module-type-aliases": "^3.7.0",
     "@tsconfig/docusaurus": "^2.0.3",
-    "typescript": "^5.7.3"
+    "typescript": "^5.8.2"
   },
   "browserslist": {
     "production": [
