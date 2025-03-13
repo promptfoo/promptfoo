@@ -201,15 +201,9 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
             const testWithPluginId = firstFailure || firstPass;
             const pluginId = testWithPluginId?.result?.metadata?.pluginId;
 
-            let searchQuery;
-            if (pluginId) {
-              // If we have a pluginId, only search by that for more precise results
-              searchQuery = `metadata=pluginId:${pluginId}`;
-            } else {
-              // Otherwise fall back to the category-based search
-              searchQuery = `metric=${categoryName}`;
-            }
-
+            const searchQuery = pluginId
+              ? `metadata=pluginId:${pluginId}`
+              : `metric=${categoryName}`;
             const url = `/eval/?evalId=${evalId}&search=${encodeURIComponent(searchQuery)}`;
             if (event.ctrlKey || event.metaKey) {
               window.open(url, '_blank');
