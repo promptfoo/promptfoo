@@ -118,6 +118,30 @@ interface CompletionOptions {
   systemInstruction?: Content;
 }
 
+const formatContentMessage = (contents: GeminiFormat , contentIndex: number) => {
+  if (contents[contentIndex].role != 'user') {
+    throw new Error("Can only take user role inputs.")
+  }
+  if (contents[contentIndex].parts.length != 1) {
+    throw new Error("Unexpected number of parts in user input.")
+  }
+  const userMessage = contents[contentIndex].parts[0].text;
+
+  const contentMessage = {
+    client_content: {
+      turns: [
+        {
+          role: 'user',
+          parts: [{ text: userMessage }],
+        },
+      ],
+      turn_complete: true,
+    },
+  };
+  return contentMessage;
+};
+
+
 export class GoogleMMLiveProvider implements ApiProvider {
   config: CompletionOptions;
   modelName: string;
@@ -142,14 +166,14 @@ export class GoogleMMLiveProvider implements ApiProvider {
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
 
-    let contents: GeminiFormat | { role: string; parts: { text: string } } = parseChatPrompt(
+    let contents: GeminiFormat = parseChatPrompt(
       prompt,
-      {
+      [{
         role: 'user',
-        parts: {
+        parts: [{
           text: prompt,
-        },
-      },
+        }],
+      }],
     );
     const { contents: updatedContents, coerced } = maybeCoerceToGeminiFormat(contents);
     if (coerced) {
@@ -157,7 +181,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
       logger.debug(`Coerced JSON prompt to Gemini format: ${JSON.stringify(updatedContents)}`);
       contents = updatedContents;
     }
-    let contentIndex = 1;
+    let contentIndex = 0;
 
     return new Promise<ProviderResponse>((resolve) => {
       const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${this.getApiKey()}`;
@@ -190,35 +214,9 @@ export class GoogleMMLiveProvider implements ApiProvider {
           const response = JSON.parse(responseText);
 
           // Handle setup complete response
-          let userMessage;
           if (response.setupComplete) {
-            if (Array.isArray(contents)) {
-              if (contents[0].role != 'user') {
-                throw new Error("Can only take user role inputs.")
-              }
-              if (Array.isArray(contents[0].parts)) {
-                // TODO: think about multi part as well
-                userMessage = contents[0].parts[0].text;
-              } else {
-                userMessage = contents[0].parts.text;
-              }
-            } else {
-              if (contents.role != 'user') {
-                throw new Error("Can only take user role inputs.")
-              }
-              userMessage = contents.parts.text;
-            }
-            const contentMessage = {
-              client_content: {
-                turns: [
-                  {
-                    role: 'user',
-                    parts: [{ text: userMessage }],
-                  },
-                ],
-                turn_complete: true,
-              },
-            };
+            const contentMessage = formatContentMessage(contents, contentIndex)
+            contentIndex += 1;
             logger.debug(`WebSocket sent: ${JSON.stringify(contentMessage)}`);
             ws.send(JSON.stringify(contentMessage));
           }
@@ -247,23 +245,8 @@ export class GoogleMMLiveProvider implements ApiProvider {
             ws.send(JSON.stringify(toolMessage));
           } else if (response.serverContent?.turnComplete) {
             if (Array.isArray(contents) && contentIndex < contents.length) {
-              if (contents[0].role != 'user') {
-                throw new Error("Can only take user role inputs.")
-              }
-              // TODO: think about multi part as well
-              userMessage = contents[contentIndex].parts[0].text;
+              const contentMessage = formatContentMessage(contents, contentIndex)
               contentIndex += 1;
-              const contentMessage = {
-                client_content: {
-                  turns: [
-                    {
-                      role: 'user',
-                      parts: [{ text: userMessage }],
-                    },
-                  ],
-                  turn_complete: true,
-                },
-              };
               logger.debug(`WebSocket sent: ${JSON.stringify(contentMessage)}`);
               ws.send(JSON.stringify(contentMessage));
             } else {
