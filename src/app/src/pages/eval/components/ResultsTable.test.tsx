@@ -287,8 +287,9 @@ describe('ResultsTable Metadata Search', () => {
     // Test that metadata is included in the searchable text
     const vars = row.outputs.map((v) => `var=${v}`).join(' ');
     const output = row.outputs[0];
-    const stringifiedOutput = `${output.text} ${Object.keys(output.namedScores || {})
-      .map((k) => `metric=${k}:${output.namedScores[k]}`)
+    const namedScores = output.namedScores || {};
+    const stringifiedOutput = `${output.text} ${Object.keys(namedScores)
+      .map((k) => `metric=${k}:${namedScores[k as keyof typeof namedScores]}`)
       .join(' ')}`;
 
     // Create metadata string

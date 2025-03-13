@@ -34,6 +34,7 @@ import invariant from '@promptfoo/util/invariant';
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
 import yaml from 'js-yaml';
 import remarkGfm from 'remark-gfm';
+import { useDebounce } from 'use-debounce';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
@@ -117,6 +118,7 @@ interface ResultsTableProps {
   filterMode: FilterMode;
   failureFilter: { [key: string]: boolean };
   searchText: string;
+  debouncedSearchText?: string;
   showStats: boolean;
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
   onSearchTextChange: (text: string) => void;
@@ -165,6 +167,7 @@ function ResultsTable({
   filterMode,
   failureFilter,
   searchText,
+  debouncedSearchText: externalDebouncedSearchText,
   showStats,
   onFailureFilterToggle,
   onSearchTextChange,
@@ -275,17 +278,28 @@ function ResultsTable({
   );
 
   const columnVisibilityIsSet = Object.keys(columnVisibility).length > 0;
+
+  const [localDebouncedSearchText] = useDebounce(searchText, 200);
+  const debouncedSearchText = externalDebouncedSearchText || localDebouncedSearchText;
+  const [isSearching, setIsSearching] = useState(false);
+
+  React.useEffect(() => {
+    // Set searching state based on whether the debounced value has caught up
+    setIsSearching(searchText !== debouncedSearchText && searchText !== '');
+  }, [searchText, debouncedSearchText]);
+
   const searchRegex = React.useMemo(() => {
-    if (!searchText) {
+    if (!debouncedSearchText) {
       return null;
     }
     try {
-      return new RegExp(searchText, 'i');
+      return new RegExp(debouncedSearchText, 'i');
     } catch (err) {
       console.error('Invalid regular expression:', (err as Error).message);
       return null;
     }
-  }, [searchText]);
+  }, [debouncedSearchText]);
+
   const filteredBody = React.useMemo(() => {
     try {
       return body
@@ -326,10 +340,14 @@ function ResultsTable({
           }
 
           // Special handling for metadata= searches
-          if (searchText && searchText.startsWith('metadata=') && searchText.includes(':')) {
+          if (
+            debouncedSearchText &&
+            debouncedSearchText.startsWith('metadata=') &&
+            debouncedSearchText.includes(':')
+          ) {
             // Extract key and value from metadata search
-            const [_, metadataQuery] = searchText.split('metadata=');
-            const [metadataKey, metadataValue] = metadataQuery.split(':').map(s => s.trim());
+            const [_, metadataQuery] = debouncedSearchText.split('metadata=');
+            const [metadataKey, metadataValue] = metadataQuery.split(':');
 
             if (metadataKey && metadataValue) {
               return row.outputs.some((output) => {
@@ -349,7 +367,7 @@ function ResultsTable({
           }
 
           // Regular search if not metadata search or if metadata search format is invalid
-          return searchText && searchRegex
+          return debouncedSearchText && searchRegex
             ? row.outputs.some((output) => {
                 const vars = row.vars.map((v) => `var=${v}`).join(' ');
                 const stringifiedOutput = `${output.text} ${Object.keys(output.namedScores)
@@ -390,7 +408,7 @@ function ResultsTable({
     body,
     failureFilter,
     filterMode,
-    searchText,
+    debouncedSearchText,
     columnVisibility,
     columnVisibilityIsSet,
     searchRegex,
@@ -400,7 +418,7 @@ function ResultsTable({
 
   React.useEffect(() => {
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-  }, [failureFilter, filterMode, searchText]);
+  }, [failureFilter, filterMode, debouncedSearchText]);
 
   // TODO(ian): Switch this to use prompt.metrics field once most clients have updated.
   const numGoodTests = React.useMemo(
@@ -699,7 +717,7 @@ function ResultsTable({
                   )}
                   firstOutput={getFirstOutput(info.row.index)}
                   showDiffs={filterMode === 'different'}
-                  searchText={searchText}
+                  searchText={debouncedSearchText}
                   showStats={showStats}
                 />
               ) : (
@@ -728,7 +746,7 @@ function ResultsTable({
     numGoodTests,
     onFailureFilterToggle,
     onSearchTextChange,
-    searchText,
+    debouncedSearchText,
     showStats,
   ]);
 
@@ -776,6 +794,26 @@ function ResultsTable({
 
   return (
     <div>
+      {isSearching && searchText && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: '60px',
+            right: '20px',
+            zIndex: 1000,
+            backgroundColor: 'rgba(25, 118, 210, 0.1)',
+            padding: '5px 10px',
+            borderRadius: '4px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <Typography variant="body2" color="primary">
+            Searching...
+          </Typography>
+        </Box>
+      )}
       <table
         className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
         style={{

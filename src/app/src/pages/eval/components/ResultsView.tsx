@@ -29,7 +29,6 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import { styled } from '@mui/material/styles';
-import { alpha } from '@mui/material/styles';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import invariant from '@promptfoo/util/invariant';
 import type { VisibilityState } from '@tanstack/table-core';
@@ -65,6 +64,95 @@ interface ResultsViewProps {
   defaultEvalId?: string;
 }
 
+// Add an optimized search input component for better responsiveness
+const SearchInputField = React.memo(
+  ({
+    value,
+    onChange,
+    onKeyDown,
+    placeholder = 'Search...',
+  }: {
+    value: string;
+    onChange: (value: string) => void;
+    onKeyDown?: React.KeyboardEventHandler;
+    placeholder?: string;
+  }) => {
+    // Use local state to handle immediate updates
+    const [localValue, setLocalValue] = React.useState(value);
+
+    // Sync with parent when external value changes
+    React.useEffect(() => {
+      setLocalValue(value);
+    }, [value]);
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const newValue = e.target.value;
+      // Update local state immediately for responsive typing
+      setLocalValue(newValue);
+      // Notify parent of change
+      onChange(newValue);
+    };
+
+    const handleClear = () => {
+      setLocalValue('');
+      onChange('');
+    };
+
+    return (
+      <TextField
+        sx={{
+          width: '100%',
+          maxWidth: '400px',
+          '& .MuiInputBase-root': {
+            borderRadius: '20px',
+          },
+          '& .MuiInputAdornment-root': {
+            transition:
+              'opacity 225ms cubic-bezier(0.4, 0, 0.2, 1), width 225ms cubic-bezier(0.4, 0, 0.2, 1), transform 225ms cubic-bezier(0.4, 0, 0.2, 1)',
+          },
+          '& .clear-button': {
+            opacity: localValue ? 1 : 0,
+            width: localValue ? 'auto' : 0,
+            transform: localValue ? 'scale(1)' : 'scale(0.8)',
+            transition:
+              'opacity 225ms cubic-bezier(0.4, 0, 0.2, 1), width 225ms cubic-bezier(0.4, 0, 0.2, 1), transform 225ms cubic-bezier(0.4, 0, 0.2, 1)',
+          },
+        }}
+        size="small"
+        label="Search"
+        placeholder={placeholder}
+        value={localValue}
+        onChange={handleChange}
+        onKeyDown={onKeyDown}
+        InputProps={{
+          startAdornment: (
+            <InputAdornment position="start">
+              <SearchIcon color="action" fontSize="small" />
+            </InputAdornment>
+          ),
+          endAdornment: (
+            <InputAdornment position="end" className="clear-button">
+              <Tooltip title="Clear search (Esc)">
+                <IconButton
+                  aria-label="clear search"
+                  onClick={handleClear}
+                  edge="end"
+                  size="small"
+                  sx={{
+                    visibility: localValue ? 'visible' : 'hidden',
+                  }}
+                >
+                  <ClearIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </InputAdornment>
+          ),
+        }}
+      />
+    );
+  },
+);
+
 export default function ResultsView({
   recentEvals,
   onRecentEvalSelected,
@@ -90,7 +178,7 @@ export default function ResultsView({
   const { setStateFromConfig } = useMainStore();
   const { showToast } = useToast();
   const [searchText, setSearchText] = React.useState(searchParams.get('search') || '');
-  const [debouncedSearchText] = useDebounce(searchText, 1000);
+  const [debouncedSearchText] = useDebounce(searchText, 200);
   const handleSearchTextChange = (text: string) => {
     setSearchText(text);
   };
@@ -376,8 +464,8 @@ export default function ResultsView({
     }
   };
 
-  const handleSearchKeyDown = React.useCallback(
-    (event: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleSearchKeyDown = React.useCallback<React.KeyboardEventHandler>(
+    (event) => {
       if (event.key === 'Escape') {
         handleSearchTextChange('');
         event.preventDefault();
@@ -448,59 +536,11 @@ export default function ResultsView({
           <FilterModeSelector filterMode={filterMode} onChange={handleFilterModeChange} />
         </Box>
         <Box>
-          <TextField
-            sx={(theme) => ({
-              minWidth: 180,
-              '& .MuiInputBase-root': {
-                transition: theme.transitions.create(['background-color']),
-                '&:hover': {
-                  backgroundColor: alpha(theme.palette.primary.main, 0.04),
-                },
-              },
-              '& .MuiInputAdornment-root': {
-                transition: theme.transitions.create(['opacity', 'width', 'transform'], {
-                  duration: theme.transitions.duration.shorter,
-                }),
-              },
-              '& .clear-button': {
-                opacity: searchText ? 1 : 0,
-                width: searchText ? 'auto' : 0,
-                transform: searchText ? 'scale(1)' : 'scale(0.8)',
-                transition: theme.transitions.create(['opacity', 'width', 'transform'], {
-                  duration: theme.transitions.duration.shorter,
-                }),
-              },
-            })}
-            size="small"
-            label="Search"
-            placeholder="Text or regex"
+          <SearchInputField
             value={searchText}
-            onChange={(e) => handleSearchTextChange(e.target.value)}
+            onChange={handleSearchTextChange}
             onKeyDown={handleSearchKeyDown}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon color="action" fontSize="small" />
-                </InputAdornment>
-              ),
-              endAdornment: (
-                <InputAdornment position="end" className="clear-button">
-                  <Tooltip title="Clear search (Esc)">
-                    <IconButton
-                      aria-label="clear search"
-                      onClick={() => handleSearchTextChange('')}
-                      edge="end"
-                      size="small"
-                      sx={{
-                        visibility: searchText ? 'visible' : 'hidden',
-                      }}
-                    >
-                      <ClearIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </InputAdornment>
-              ),
-            }}
+            placeholder="Text or regex"
           />
         </Box>
         <Box flexGrow={1} />
@@ -616,7 +656,8 @@ export default function ResultsView({
         showStats={showInferenceDetails}
         filterMode={filterMode}
         failureFilter={failureFilter}
-        searchText={debouncedSearchText}
+        searchText={searchText}
+        debouncedSearchText={debouncedSearchText}
         onFailureFilterToggle={handleFailureFilterToggle}
         onSearchTextChange={handleSearchTextChange}
         setFilterMode={setFilterMode}
