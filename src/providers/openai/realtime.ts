@@ -10,12 +10,10 @@ import type {
 import type { EnvOverrides } from '../../types/env';
 import { renderVarsInObject } from '../../util';
 import type { OpenAiCompletionOptions } from './types';
+import { OPENAI_REALTIME_MODELS } from './util';
 
 // Define supported Realtime models
-export const OPENAI_REALTIME_MODELS = [
-  { id: 'gpt-4o-realtime-preview-2024-12-17', type: 'chat' },
-  { id: 'gpt-4o-mini-realtime-preview-2024-12-17', type: 'chat' },
-];
+export { OPENAI_REALTIME_MODELS } from './util';
 
 export interface OpenAiRealtimeOptions extends OpenAiCompletionOptions {
   modalities?: string[];
