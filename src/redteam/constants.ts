@@ -796,7 +796,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   default: Severity.Low,
   'divergent-repetition': Severity.Medium,
   'excessive-agency': Severity.Medium,
-  'tool-discovery': Severity.Medium,
+  'tool-discovery': Severity.Low,
   foundation: Severity.Medium,
   hallucination: Severity.Medium,
   harmbench: Severity.Medium,
