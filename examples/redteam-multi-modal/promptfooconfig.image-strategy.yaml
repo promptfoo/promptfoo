@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Image Analysis with Multimodal Models
+
+prompts:
+  - id: file://nova-image-prompt.json
+    label: nova-image-prompt
+
+targets:
+  - id: bedrock:amazon.nova-lite-v1:0
+    label: multimodal-model
+
+defaultTest:
+  vars:
+    question: What objects can you see in this image?
+
+redteam:
+  injectVar: image
+  numTests: 1
+  plugins:
+    - harmful
+  strategies:
+    - image
+    - id: basic
+      config:
+        enabled: false
