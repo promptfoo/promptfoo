@@ -1,4 +1,3 @@
-import type OpenAI from 'openai';
 import { type OpenAiFunction, type OpenAiTool } from './util';
 
 export interface OpenAiSharedOptions {
@@ -60,8 +59,5 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
    * If set, automatically call these functions when the assistant activates
    * these function tools.
    */
-  functionToolCallbacks?: Record<
-    OpenAI.FunctionDefinition['name'],
-    (arg: string) => Promise<string>
-  >;
+  functionToolCallbacks?: Record<string, (arg: string) => Promise<string>>;
 };
