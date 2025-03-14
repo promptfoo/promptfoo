@@ -522,6 +522,26 @@ The tests file optionally supports several special columns:
 - `__description`: The test description
 - `__metric`: The metric assigned to every assertion in the test case
 - `__threshold`: The threshold assigned to the test case
+- `__metadata:*`: Add metadata to the test case that can be filtered using `--filter-metadata`. Replace `*` with your metadata key (e.g., `__metadata:topic`).
+  - For array values, use `__metadata:*[]` format (e.g., `__metadata:topic[]`). Array values are comma-separated and support escaping commas with `\,`.
+
+Example CSV with metadata columns:
+
+```csv
+input,__metadata:topic,__metadata:categories[]
+"Hello world","greeting","basic,introduction"
+"What's 2+2?","math","arithmetic,basic\,math"
+```
+
+You can filter tests by metadata using the `--filter-metadata` option:
+
+```bash
+# Filter by single value metadata
+promptfoo eval --filter-metadata topic=greeting
+
+# Filter by array value metadata (matches any value in the array)
+promptfoo eval --filter-metadata categories=arithmetic
+```
 
 :::tip
 You can load your tests from [Google Sheets](/docs/configuration/guide#loading-tests-from-csv).
