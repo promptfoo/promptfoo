@@ -16,23 +16,51 @@ import {
   alpha,
   useMediaQuery,
 } from '@mui/material';
+import type { AlertColor } from '@mui/material';
 import SettingsPanel from './components/SettingsPanel';
-import { useSettingsState } from './hooks/useSettingsState';
+import { useSettingsState, type UseSettingsStateReturn } from './hooks/useSettingsState';
 import { tokens } from './tokens';
 
+/**
+ * Props for the TableSettingsModal component
+ */
 interface SettingsModalProps {
+  /** Whether the modal is currently open */
   open: boolean;
+  /** Callback function invoked when the modal is closed */
   onClose: () => void;
+  /** Optional function for displaying toast notifications */
+  showToast?: (message: string, severity?: AlertColor) => void;
+  /** Optional pre-initialized settings state (from useSettingsState hook) */
+  state?: UseSettingsStateReturn;
 }
 
-const TableSettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
+/**
+ * A modal dialog for configuring table display settings
+ * 
+ * This component allows users to customize how the results table is displayed,
+ * including text formatting, layout options, and content visibility.
+ * It can receive pre-initialized state and a toast notification function.
+ */
+const TableSettingsModal: React.FC<SettingsModalProps> = ({
+  open,
+  onClose,
+  showToast,
+  state,
+}) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-  const { hasChanges, resetToDefaults } = useSettingsState(open);
+  // If state is provided, use it; otherwise, use the hook
+  const settingsState = state || useSettingsState(open);
+  const { hasChanges, resetToDefaults } = settingsState;
 
   const handleClose = () => {
     onClose();
+    // If showToast is provided and there are changes, show a toast
+    if (showToast && hasChanges) {
+      showToast('Settings saved successfully', 'success');
+    }
   };
 
   return (

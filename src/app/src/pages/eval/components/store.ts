@@ -23,7 +23,7 @@ interface ColumnState {
   columnVisibility: VisibilityState;
 }
 
-interface TableState {
+export interface TableState {
   evalId: string | null;
   setEvalId: (evalId: string) => void;
 
