@@ -898,23 +898,32 @@ function ResultsTable({
                   const value = cell.getValue();
                   if (
                     typeof value === 'string' &&
-                    (value.match(/^data:(image\/[a-z]+|application\/octet-stream|audio\/|video\/);base64,/) ||
-                     value.match(/^[0-9A-Za-z+/]{4,}={0,2}$/) ||
-                     // Check for WAV file signature (both raw and base64)
-                     value.startsWith('RIFF') || value.startsWith('UklGR') ||
-                     // Check for MP3 file signature (both raw and base64)
-                     value.startsWith('ID3') || value.startsWith('SUQz'))
+                    (value.match(
+                      /^data:(image\/[a-z]+|application\/octet-stream|audio\/|video\/);base64,/,
+                    ) ||
+                      value.match(/^[0-9A-Za-z+/]{4,}={0,2}$/) ||
+                      // Check for WAV file signature (both raw and base64)
+                      value.startsWith('RIFF') ||
+                      value.startsWith('UklGR') ||
+                      // Check for MP3 file signature (both raw and base64)
+                      value.startsWith('ID3') ||
+                      value.startsWith('SUQz'))
                   ) {
                     // Look for metadata in the output if this is a variable cell
                     let mediaMetadata = null;
                     if (isMetadataCol && cell.column.id.startsWith('Variable')) {
                       // Try to find the variable name
-                      const varIndex = Number.parseInt(cell.column.id.replace('Variable ', ''), 10) - 1;
+                      const varIndex =
+                        Number.parseInt(cell.column.id.replace('Variable ', ''), 10) - 1;
                       const visibleVars = (window as any).__visibleVars || [];
-                      if (!Number.isNaN(varIndex) && varIndex >= 0 && varIndex < visibleVars.length) {
+                      if (
+                        !Number.isNaN(varIndex) &&
+                        varIndex >= 0 &&
+                        varIndex < visibleVars.length
+                      ) {
                         const varName = visibleVars[varIndex];
                         console.log('ResultsTable: Looking for metadata for variable', varName);
-                        
+
                         // Find the associated output for this row
                         const rowData = row.original;
                         if (rowData && rowData.outputs && rowData.outputs.length > 0) {
@@ -924,15 +933,21 @@ function ResultsTable({
                               // Try to find metadata by variable name (normal case)
                               mediaMetadata = findMediaMetadata(output.metadata, varName);
                               if (mediaMetadata) {
-                                console.log('ResultsTable: Found metadata by variable name', { varName, mediaMetadata });
+                                console.log('ResultsTable: Found metadata by variable name', {
+                                  varName,
+                                  mediaMetadata,
+                                });
                                 break;
                               }
-                              
+
                               // Fallback: Check if there's any __meta_ keys in metadata
                               // This is useful if the metadata is directly defined for an audio_file variable
                               for (const key in output.metadata) {
                                 if (key.startsWith(METADATA_PREFIX)) {
-                                  console.log('ResultsTable: Found metadata with prefix', { key, metadata: output.metadata[key] });
+                                  console.log('ResultsTable: Found metadata with prefix', {
+                                    key,
+                                    metadata: output.metadata[key],
+                                  });
                                   // Try to use this metadata
                                   mediaMetadata = output.metadata[key];
                                   if (mediaMetadata && typeof mediaMetadata === 'object') {
@@ -948,36 +963,40 @@ function ResultsTable({
 
                     // Prepare the content based on whether it's already a data URL
                     const content = value;
-                    
+
                     // Check for audio file signature if no metadata was found
                     if (!mediaMetadata && typeof value === 'string') {
                       // Check for WAV or MP3 signature
                       if (value.startsWith('RIFF') || value.startsWith('UklGR')) {
-                        console.log('ResultsTable: Detected WAV file from signature without metadata');
+                        console.log(
+                          'ResultsTable: Detected WAV file from signature without metadata',
+                        );
                         mediaMetadata = {
                           type: 'audio',
                           mime: 'audio/wav',
                           extension: 'wav',
-                          filename: 'audio_file.wav'
+                          filename: 'audio_file.wav',
                         };
                       } else if (value.startsWith('ID3') || value.startsWith('SUQz')) {
-                        console.log('ResultsTable: Detected MP3 file from signature without metadata');
+                        console.log(
+                          'ResultsTable: Detected MP3 file from signature without metadata',
+                        );
                         mediaMetadata = {
                           type: 'audio',
                           mime: 'audio/mpeg',
                           extension: 'mp3',
-                          filename: 'audio_file.mp3'
+                          filename: 'audio_file.mp3',
                         };
                       }
                     }
-                    
-                    console.log('ResultsTable: Rendering media content', { 
+
+                    console.log('ResultsTable: Rendering media content', {
                       content: content.substring(0, 30) + '...',
                       hasMetadata: !!mediaMetadata,
                       metadataType: mediaMetadata?.type,
-                      mimeType: mediaMetadata?.mime 
+                      mimeType: mediaMetadata?.mime,
                     });
-                    
+
                     // Use the MediaRenderer for all media types (image, audio, video)
                     cellContent = (
                       <>

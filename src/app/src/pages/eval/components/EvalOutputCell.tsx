@@ -3,15 +3,13 @@ import { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useShiftKey } from '@app/hooks/useShiftKey';
 import Tooltip from '@mui/material/Tooltip';
-import { METADATA_PREFIX } from '@promptfoo/constants';
-import { type EvaluateTableOutput, ResultFailureReason, type MediaMetadata } from '@promptfoo/types';
+import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import remarkGfm from 'remark-gfm';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
 import CommentDialog from './TableCommentDialog';
-import MediaRenderer, { findMediaMetadata as findMediaMetadataUtil, detectMediaType } from './MediaRenderer';
 import TruncatedText from './TruncatedText';
 import { useStore as useResultsViewStore } from './store';
 
@@ -25,22 +23,6 @@ function scoreToString(score: number | null) {
     return '';
   }
   return `(${score.toFixed(2)})`;
-}
-
-/**
- * Finds media metadata for a base64-encoded media file.
- * Uses the METADATA_PREFIX to look for corresponding metadata in the output.
- * 
- * @param output The EvaluateTableOutput that might contain media metadata
- * @param varName The variable name to check for media content
- * @returns The media metadata if found, null otherwise
- */
-function findMediaMetadata(output: EvaluateTableOutput, varName: string): MediaMetadata | null {
-  if (!output.metadata) {
-    return null;
-  }
-  
-  return findMediaMetadataUtil(output.metadata, varName);
 }
 
 export interface EvalOutputCellProps {
@@ -128,121 +110,6 @@ function EvalOutputCell({
   let text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
   let node: React.ReactNode | undefined;
   let failReasons: string[] = [];
-
-  // Check if this output contains media content
-  const detectMediaContent = () => {
-    // Try to find media metadata in the output metadata 
-    if (output.metadata) {
-      // First check if the text itself might be a var name with metadata
-      const mediaMetadata = findMediaMetadata(output, text);
-      if (mediaMetadata) {
-        const mediaType = detectMediaType(text, mediaMetadata.filename);
-        console.log('EvalOutputCell: Found metadata by variable name', { 
-          text: text.substring(0, 30) + '...',
-          mediaType,
-          metadata: mediaMetadata
-        });
-        return {
-          isMedia: true,
-          mediaType,
-          metadata: mediaMetadata,
-          content: text // The actual base64 content
-        };
-      }
-      
-      // If not, check output metadata keys directly
-      for (const key in output.metadata) {
-        if (key.startsWith(METADATA_PREFIX) && typeof output.metadata[key] === 'object') {
-          // Just use the first media metadata we find and assume content is in output.text
-          const metadata = output.metadata[key] as MediaMetadata;
-          const mediaType = detectMediaType(text, metadata.filename);
-          console.log('EvalOutputCell: Found metadata with prefix', { 
-            key, 
-            mediaType,
-            metadata 
-          });
-          return {
-            isMedia: true,
-            mediaType,
-            metadata,
-            content: text
-          };
-        }
-      }
-    }
-    
-    // Default detection for backward compatibility
-    if (typeof text === 'string') {
-      // Check for common audio file signatures
-      if (text.startsWith('RIFF') || text.startsWith('UklGR')) {
-        console.log('EvalOutputCell: Detected WAV file from signature');
-        return {
-          isMedia: true,
-          mediaType: 'audio',
-          metadata: {
-            type: 'audio',
-            mime: 'audio/wav',
-            extension: 'wav',
-            filename: 'audio_file.wav'
-          },
-          content: text
-        };
-      } else if (text.startsWith('ID3') || text.startsWith('SUQz')) {
-        console.log('EvalOutputCell: Detected MP3 file from signature');
-        return {
-          isMedia: true,
-          mediaType: 'audio',
-          metadata: {
-            type: 'audio',
-            mime: 'audio/mpeg',
-            extension: 'mp3',
-            filename: 'audio_file.mp3'
-          },
-          content: text
-        };
-      }
-      
-      // Generic media detection
-      const mediaType = detectMediaType(text);
-      const isMedia = mediaType !== 'unknown';
-      
-      if (isMedia) {
-        console.log('EvalOutputCell: Detected media type from content', { 
-          mediaType, 
-          textSample: text.substring(0, 30) + '...'
-        });
-        
-        // Create appropriate metadata based on the detected media type
-        let metadata = null;
-        if (mediaType === 'audio') {
-          metadata = {
-            type: 'audio',
-            mime: 'audio/wav', // Default to WAV for unknown audio
-            extension: 'wav',
-            filename: 'audio_file.wav'
-          };
-        } else if (mediaType === 'video') {
-          metadata = {
-            type: 'video',
-            mime: 'video/mp4', // Default to MP4 for unknown video
-            extension: 'mp4',
-            filename: 'video_file.mp4'
-          };
-        }
-        
-        return {
-          isMedia,
-          mediaType,
-          metadata,
-          content: text
-        };
-      }
-    }
-
-    return { isMedia: false, mediaType: null };
-  };
-
-  const mediaContent = detectMediaContent();
 
   // Handle failure messages by splitting the text at '---'
   if (!output.pass && text.includes('---')) {
@@ -332,57 +199,33 @@ function EvalOutputCell({
     } catch (error) {
       console.error('Invalid regular expression:', (error as Error).message);
     }
-  } else if (mediaContent.isMedia) {
-    // Use the MediaRenderer component for all media types
-    console.log('EvalOutputCell: Rendering media content', { 
-      mediaContent,
-      maxWidth: maxImageWidth,
-      maxHeight: maxImageHeight
-    });
+  } else if (
+    text.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/)
+  ) {
     node = (
-      <MediaRenderer
-        content={mediaContent.content || ''}
-        metadata={mediaContent.metadata}
-        alt={output.prompt || 'Media content'}
-        maxWidth={maxImageWidth}
-        maxHeight={maxImageHeight}
-        onImageClick={toggleLightbox}
+      <img
+        src={text}
+        alt={output.prompt}
+        style={{ width: '100%' }}
+        onClick={() => toggleLightbox(text)}
       />
     );
   } else if (output.audio) {
-    // For direct output.audio format, create audio player directly
-    console.log('EvalOutputCell: Rendering audio from output.audio field', output.audio);
-    
-    // Determine the format and create a proper MIME type
-    const audioFormat = output.audio.format || 'wav';
-    const audioMime = `audio/${audioFormat}`;
-    
-    // Create a unique filename from the ID or a fallback
-    const audioFilename = output.audio.id || `audio_file_${new Date().getTime()}`;
-    
-    // Log more details for debugging
-    console.log('EvalOutputCell: Creating audio MediaRenderer with', {
-      dataLength: output.audio.data?.length,
-      format: audioFormat,
-      mime: audioMime,
-      filename: audioFilename,
-      hasTranscript: !!output.audio.transcript
-    });
-    
     node = (
-      <MediaRenderer
-        content={output.audio.data || ''}
-        metadata={{
-          type: 'audio',
-          mime: audioMime,
-          extension: audioFormat,
-          filename: audioFilename,
-          transcript: output.audio.transcript
-        }}
-        alt="Audio content"
-        maxWidth={maxImageWidth}
-        maxHeight={maxImageHeight}
-      />
+      <div className="audio-output">
+        <audio controls style={{ width: '100%' }} data-testid="audio-player">
+          <source
+            src={`data:audio/${output.audio.format || 'wav'};base64,${output.audio.data}`}
+            type={`audio/${output.audio.format || 'wav'}`}
+          />
+          Your browser does not support the audio element.
+        </audio>
+        {output.audio.transcript && (
+          <div className="transcript">
+            <strong>Transcript:</strong> {output.audio.transcript}
+          </div>
+        )}
+      </div>
     );
   } else if (renderMarkdown && !showDiffs) {
     node = (
@@ -761,13 +604,7 @@ function EvalOutputCell({
       {actions}
       {lightboxOpen && lightboxImage && (
         <div className="lightbox" onClick={() => toggleLightbox()}>
-          <MediaRenderer
-            content={lightboxImage}
-            metadata={mediaContent.isMedia ? mediaContent.metadata : null}
-            alt="Lightbox view"
-            maxWidth={window.innerWidth * 0.9}
-            maxHeight={window.innerHeight * 0.9}
-          />
+          <img src={lightboxImage} alt="Lightbox" />
         </div>
       )}
       <CommentDialog
