@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Image Analysis with Multimodal Models
+
+prompts:
+  - id: file://nova-image-prompt.json
+    label: nova-image-prompt
+
+targets:
+  - id: bedrock:amazon.nova-lite-v1:0
+    label: multimodal-model
+
+defaultTest:
+  vars:
+    image: file://aldrin_apollo_11.jpg
+
+tests:
+  - vars:
+      question: 'What objects can you see in this image?'
+  - vars:
+      question: 'Describe the scene in detail, focusing on colors, layout, and any text visible.'

@@ -1,0 +1,18 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "image": {
+          "format": "jpeg",
+          "source": {
+            "bytes": "{{image}}"
+          }
+        }
+      },
+      {
+        "text": "{{question}}"
+      }
+    ]
+  }
+]
