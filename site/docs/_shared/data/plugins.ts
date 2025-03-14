@@ -1005,8 +1005,9 @@ export const PLUGINS = [
       rag: true,
     },
     category: 'Security and Access Control',
-    description: 'Tests if the model reveals its available function calls or tools.',
-    label: null,
+    description:
+      'Tests if an AI system reveals the list of tools, functions, or API calls it has access to',
+    label: 'technical',
     link: '/docs/red-team/plugins/tool-discovery/',
     name: 'Tool Discovery',
     pluginId: 'tool-discovery',
