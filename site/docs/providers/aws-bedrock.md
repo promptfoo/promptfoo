@@ -329,7 +329,7 @@ Some Bedrock models, like Amazon Nova, support multimodal inputs including image
 Amazon Nova supports comprehensive vision understanding for both images and videos:
 
 - **Images**: Supports PNG, JPG, JPEG, GIF, WebP formats via Base-64 encoding. Multiple images allowed per payload (up to 25MB total).
-- **Videos**: Supports various formats (MP4, MKV, MOV, WEBM, etc.) via Base-64 (<25MB) or Amazon S3 URI (up to 1GB).
+- **Videos**: Supports various formats (MP4, MKV, MOV, WEBM, etc.) via Base-64 (less than 25MB) or Amazon S3 URI (up to 1GB).
 
 Here's an example configuration for running multimodal evaluations:
 
