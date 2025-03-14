@@ -35,3 +35,6 @@ export const TERMINAL_MAX_WIDTH =
     : 120;
 
 export const CLOUD_PROVIDER_PREFIX = 'promptfoo://provider/';
+
+// Prefix for metadata variables that should be hidden in UI displays
+export const METADATA_PREFIX = '__meta_';

@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import yaml from 'js-yaml';
 import * as path from 'path';
 import cliState from './cliState';
+import { METADATA_PREFIX } from './constants';
 import { getEnvBool } from './envars';
 import { importModule } from './esm';
 import { getPrompt as getHeliconePrompt } from './integrations/helicone';
@@ -17,6 +18,103 @@ import { isJavascriptFile, isImageFile, isVideoFile, isAudioFile } from './util/
 import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
+
+/**
+ * Gets the MIME type for a file based on its extension
+ * @param filePath The path to the file
+ * @returns The MIME type as a string
+ */
+function getMimeTypeFromPath(filePath: string): string {
+  const ext = path.extname(filePath).slice(1).toLowerCase();
+
+  // Image types
+  if (['jpg', 'jpeg'].includes(ext)) {
+    return 'image/jpeg';
+  }
+  if (ext === 'png') {
+    return 'image/png';
+  }
+  if (ext === 'gif') {
+    return 'image/gif';
+  }
+  if (ext === 'webp') {
+    return 'image/webp';
+  }
+  if (ext === 'svg') {
+    return 'image/svg+xml';
+  }
+  if (ext === 'bmp') {
+    return 'image/bmp';
+  }
+
+  // Video types
+  if (ext === 'mp4') {
+    return 'video/mp4';
+  }
+  if (ext === 'webm') {
+    return 'video/webm';
+  }
+  if (ext === 'ogg') {
+    return 'video/ogg';
+  }
+  if (ext === 'mov') {
+    return 'video/quicktime';
+  }
+  if (ext === 'avi') {
+    return 'video/x-msvideo';
+  }
+  if (ext === 'wmv') {
+    return 'video/x-ms-wmv';
+  }
+  if (ext === 'mkv') {
+    return 'video/x-matroska';
+  }
+  if (ext === 'm4v') {
+    return 'video/x-m4v';
+  }
+
+  // Audio types
+  if (ext === 'mp3') {
+    return 'audio/mpeg';
+  }
+  if (ext === 'wav') {
+    return 'audio/wav';
+  }
+  if (ext === 'ogg' && isAudioFile(filePath)) {
+    return 'audio/ogg';
+  }
+  if (ext === 'aac') {
+    return 'audio/aac';
+  }
+  if (ext === 'm4a') {
+    return 'audio/m4a';
+  }
+  if (ext === 'flac') {
+    return 'audio/flac';
+  }
+  if (ext === 'wma') {
+    return 'audio/x-ms-wma';
+  }
+  if (ext === 'aiff') {
+    return 'audio/aiff';
+  }
+  if (ext === 'opus') {
+    return 'audio/opus';
+  }
+
+  // Fallback to generic types
+  if (isImageFile(filePath)) {
+    return `image/${ext}`;
+  }
+  if (isVideoFile(filePath)) {
+    return `video/${ext}`;
+  }
+  if (isAudioFile(filePath)) {
+    return `audio/${ext}`;
+  }
+
+  return 'application/octet-stream'; // Default fallback
+}
 
 export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   logger.debug(`Extracting text from PDF: ${pdfPath}`);
@@ -144,7 +242,30 @@ export async function renderPrompt(
         logger.debug(`Loading ${fileType} as base64: ${filePath}`);
         try {
           const fileBuffer = fs.readFileSync(filePath);
-          vars[varName] = fileBuffer.toString('base64');
+          const base64Data = fileBuffer.toString('base64');
+
+          // Create metadata for the file
+          const metaKey = `${METADATA_PREFIX}${varName}`;
+          const fileExtension = path.extname(filePath).slice(1).toLowerCase();
+          const fileName = path.basename(filePath);
+
+          // Get the MIME type
+          const mimeType = getMimeTypeFromPath(filePath);
+
+          // Store the actual base64 content
+          vars[varName] = base64Data;
+
+          // Store metadata separately
+          vars[metaKey] = {
+            type: fileType,
+            mime: mimeType,
+            extension: fileExtension,
+            filename: fileName,
+          };
+
+          telemetry.recordOnce('feature_used', {
+            feature: 'file_metadata',
+          });
         } catch (error) {
           throw new Error(
             `Failed to load ${fileType} ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
