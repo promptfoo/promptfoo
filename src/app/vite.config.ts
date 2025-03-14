@@ -1,8 +1,8 @@
 import react from '@vitejs/plugin-react';
+import { nodeResolve } from '@rollup/plugin-node-resolve';
 import path from 'path';
-import type { PluginOption } from 'vite';
+import nodePolyfills from 'rollup-plugin-polyfill-node';
 import { defineConfig } from 'vite';
-import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import packageJson from '../../package.json';
 
 const API_PORT = process.env.API_PORT || '15500';
@@ -24,7 +24,14 @@ export default defineConfig({
     port: 3000,
   },
   base: process.env.VITE_PUBLIC_BASENAME || '/',
-  plugins: [react(), nodePolyfills()] as PluginOption[],
+  plugins: [
+    react(),
+    nodeResolve({
+      browser: true,
+      preferBuiltins: false,
+    }),
+    nodePolyfills(),
+  ],
   resolve: {
     alias: {
       '@app': path.resolve(__dirname, './src'),
@@ -34,11 +41,17 @@ export default defineConfig({
   build: {
     emptyOutDir: true,
     outDir: '../../dist/src/app',
+    rollupOptions: {
+      external: ['csv-parse', 'csv-stringify', 'stream', 'buffer'],
+    },
   },
   define: {
     'import.meta.env.VITE_PROMPTFOO_VERSION': JSON.stringify(packageJson.version),
     'import.meta.env.VITE_PROMPTFOO_DISABLE_TELEMETRY': JSON.stringify(
       process.env.PROMPTFOO_DISABLE_TELEMETRY || 'false',
     ),
+    // Polyfills
+    'process.env': '{}',
+    global: 'globalThis',
   },
 });
