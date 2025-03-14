@@ -8,7 +8,7 @@
     "content": [
       {
         "image": {
-          "format": "jpeg",
+          "format": "{{format}}",
           "source": {
             "bytes": "{{image}}"
           }
