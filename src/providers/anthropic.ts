@@ -4,7 +4,10 @@ import { getEnvString, getEnvFloat, getEnvInt } from '../envars';
 import logger from '../logger';
 import type { ApiProvider, ProviderResponse, TokenUsage } from '../types';
 import type { EnvOverrides } from '../types/env';
+import type { ProviderConfiguration } from '../types/providerConfig';
 import { maybeLoadFromExternalFile } from '../util';
+import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { OpenAiModerationProvider } from './openai/moderation';
 import { calculateCost } from './shared';
 
 const ANTHROPIC_MODELS = [
@@ -573,3 +576,20 @@ export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
 export const DefaultLlmRubricProvider = new AnthropicLlmRubricProvider(
   'claude-3-7-sonnet-20250219',
 );
+/**
+ * Anthropic provider configuration
+ */
+export const AnthropicProviderConfig: ProviderConfiguration = (env) => {
+  logger.debug('Using Anthropic default providers');
+  return {
+    datasetGenerationProvider: DefaultGradingProvider,
+    // TODO(ian): Use Voyager instead?
+    embeddingProvider: new OpenAiEmbeddingProvider('text-embedding-3-large'),
+    gradingJsonProvider: DefaultGradingJsonProvider,
+    gradingProvider: DefaultGradingProvider,
+    llmRubricProvider: DefaultLlmRubricProvider,
+    moderationProvider: new OpenAiModerationProvider('omni-moderation-latest'),
+    suggestionsProvider: DefaultSuggestionsProvider,
+    synthesizeProvider: DefaultGradingJsonProvider,
+  };
+};
