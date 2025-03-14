@@ -41,6 +41,7 @@ import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import GenerateTestCases from './GenerateTestCases';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
+import MediaRenderer, { findMediaMetadata } from './MediaRenderer';
 import type { TruncatedTextProps } from './TruncatedText';
 import TruncatedText from './TruncatedText';
 import { useStore as useMainStore } from './store';
@@ -486,6 +487,9 @@ function ResultsTable({
       // Create a map of variable indices after filtering
       const varIndices = visibleVars.map((varName) => head.vars.indexOf(varName));
 
+      // Make visibleVars accessible to cell rendering
+      (window as any).__visibleVars = visibleVars;
+
       return [
         columnHelper.group({
           id: 'vars',
@@ -894,34 +898,105 @@ function ResultsTable({
                   const value = cell.getValue();
                   if (
                     typeof value === 'string' &&
-                    (value.match(/^data:(image\/[a-z]+|application\/octet-stream);base64,/) ||
-                      value.match(/^\/[0-9A-Za-z+/]{4}.*/))
+                    (value.match(/^data:(image\/[a-z]+|application\/octet-stream|audio\/|video\/);base64,/) ||
+                     value.match(/^[0-9A-Za-z+/]{4,}={0,2}$/) ||
+                     // Check for WAV file signature (both raw and base64)
+                     value.startsWith('RIFF') || value.startsWith('UklGR') ||
+                     // Check for MP3 file signature (both raw and base64)
+                     value.startsWith('ID3') || value.startsWith('SUQz'))
                   ) {
-                    const imgSrc = value.startsWith('data:')
-                      ? value
-                      : `data:image/jpeg;base64,${value}`;
+                    // Look for metadata in the output if this is a variable cell
+                    let mediaMetadata = null;
+                    if (isMetadataCol && cell.column.id.startsWith('Variable')) {
+                      // Try to find the variable name
+                      const varIndex = Number.parseInt(cell.column.id.replace('Variable ', ''), 10) - 1;
+                      const visibleVars = (window as any).__visibleVars || [];
+                      if (!Number.isNaN(varIndex) && varIndex >= 0 && varIndex < visibleVars.length) {
+                        const varName = visibleVars[varIndex];
+                        console.log('ResultsTable: Looking for metadata for variable', varName);
+                        
+                        // Find the associated output for this row
+                        const rowData = row.original;
+                        if (rowData && rowData.outputs && rowData.outputs.length > 0) {
+                          // Check all outputs for metadata
+                          for (const output of rowData.outputs) {
+                            if (output.metadata) {
+                              // Try to find metadata by variable name (normal case)
+                              mediaMetadata = findMediaMetadata(output.metadata, varName);
+                              if (mediaMetadata) {
+                                console.log('ResultsTable: Found metadata by variable name', { varName, mediaMetadata });
+                                break;
+                              }
+                              
+                              // Fallback: Check if there's any __meta_ keys in metadata
+                              // This is useful if the metadata is directly defined for an audio_file variable
+                              for (const key in output.metadata) {
+                                if (key.startsWith(METADATA_PREFIX)) {
+                                  console.log('ResultsTable: Found metadata with prefix', { key, metadata: output.metadata[key] });
+                                  // Try to use this metadata
+                                  mediaMetadata = output.metadata[key];
+                                  if (mediaMetadata && typeof mediaMetadata === 'object') {
+                                    break;
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+
+                    // Prepare the content based on whether it's already a data URL
+                    const content = value;
+                    
+                    // Check for audio file signature if no metadata was found
+                    if (!mediaMetadata && typeof value === 'string') {
+                      // Check for WAV or MP3 signature
+                      if (value.startsWith('RIFF') || value.startsWith('UklGR')) {
+                        console.log('ResultsTable: Detected WAV file from signature without metadata');
+                        mediaMetadata = {
+                          type: 'audio',
+                          mime: 'audio/wav',
+                          extension: 'wav',
+                          filename: 'audio_file.wav'
+                        };
+                      } else if (value.startsWith('ID3') || value.startsWith('SUQz')) {
+                        console.log('ResultsTable: Detected MP3 file from signature without metadata');
+                        mediaMetadata = {
+                          type: 'audio',
+                          mime: 'audio/mpeg',
+                          extension: 'mp3',
+                          filename: 'audio_file.mp3'
+                        };
+                      }
+                    }
+                    
+                    console.log('ResultsTable: Rendering media content', { 
+                      content: content.substring(0, 30) + '...',
+                      hasMetadata: !!mediaMetadata,
+                      metadataType: mediaMetadata?.type,
+                      mimeType: mediaMetadata?.mime 
+                    });
+                    
+                    // Use the MediaRenderer for all media types (image, audio, video)
                     cellContent = (
                       <>
-                        <img
-                          src={imgSrc}
-                          alt="Base64 encoded image"
-                          style={{
-                            maxWidth: '100%',
-                            height: 'auto',
-                            cursor: 'pointer',
-                          }}
-                          onClick={() => toggleLightbox(imgSrc)}
+                        <MediaRenderer
+                          content={content}
+                          metadata={mediaMetadata}
+                          alt="Media content"
+                          maxWidth={600}
+                          maxHeight={400}
+                          onImageClick={() => toggleLightbox(content)}
                         />
-                        {lightboxOpen && lightboxImage === imgSrc && (
+                        {lightboxOpen && lightboxImage === content && (
                           <div className="lightbox" onClick={() => toggleLightbox()}>
-                            <img
-                              src={lightboxImage}
+                            <MediaRenderer
+                              content={lightboxImage}
+                              metadata={mediaMetadata}
                               alt="Lightbox"
-                              style={{
-                                maxWidth: '90%',
-                                maxHeight: '90vh',
-                                objectFit: 'contain',
-                              }}
+                              maxWidth={window.innerWidth * 0.9}
+                              maxHeight={window.innerHeight * 0.9}
                             />
                           </div>
                         )}

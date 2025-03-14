@@ -15,3 +15,14 @@ export interface TokenUsage {
 }
 
 export type NunjucksFilterMap = Record<string, (...args: any[]) => string>;
+
+/**
+ * Metadata for media files (images, audio, video)
+ */
+export interface MediaMetadata {
+  type: string;
+  mime: string;
+  extension: string;
+  filename: string;
+  transcript?: string; // Optional transcript for audio files
+}
