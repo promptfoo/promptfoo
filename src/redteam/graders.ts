@@ -10,7 +10,6 @@ import { DebugAccessGrader } from './plugins/debugAccess';
 import { DivergentRepetitionGrader } from './plugins/divergentRepetition';
 import { ExcessiveAgencyGrader } from './plugins/excessiveAgency';
 import { HallucinationGrader } from './plugins/hallucination';
-import { ToolDiscoveryGrader } from './plugins/toolDiscovery';
 import { HarmbenchGrader } from './plugins/harmbench';
 import {
   ChildExploitationGrader,
@@ -50,6 +49,7 @@ import { ReligionGrader } from './plugins/religion';
 import { ShellInjectionGrader } from './plugins/shellInjection';
 import { SqlInjectionGrader } from './plugins/sqlInjection';
 import { SsrfGrader } from './plugins/ssrf';
+import { ToolDiscoveryGrader } from './plugins/toolDiscovery';
 import type { RedteamAssertionTypes } from './types';
 
 export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {

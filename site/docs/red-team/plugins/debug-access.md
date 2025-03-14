@@ -65,7 +65,7 @@ By incorporating the Debug Access plugin in your LLM red teaming strategy, you c
 
 The Debug Access plugin is closely related to several other security testing approaches:
 
-- [**Function Discovery**](/docs/red-team/plugins/function-discovery) - While Debug Access focuses on debugging interfaces, Function Discovery attempts to uncover all tools and functions an AI system has access to.
+- [**Tool Discovery**](/docs/red-team/plugins/tool-discovery) - While Debug Access focuses on debugging interfaces, Tool Discovery attempts to uncover all tools and functions an AI system has access to.
 - [**Prompt Extraction**](/docs/red-team/plugins/prompt-extraction) - Tests if an AI system's system prompt can be extracted, which might be possible through debugging interfaces.
 - [**System Prompt Override**](/docs/red-team/plugins/system-prompt-override) - Tests if a user can override system instructions, which might be possible through debugging access.
 

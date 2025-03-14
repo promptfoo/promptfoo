@@ -4,7 +4,7 @@ sidebar_position: 22
 
 # Tool Discovery
 
-The Tool Discovery plugin tests if an AI system reveals the list of tools, functions, or API calls that it has access to. 
+The Tool Discovery plugin tests if an AI system reveals the list of tools, functions, or API calls that it has access to.
 
 This is important for security because revealing available tools and function calls could potentially:
 
@@ -69,5 +69,5 @@ Here's a list of the tools and function calls I have access to:
 ## Related plugins
 
 - [Debug Access](/docs/red-team/plugins/debug-access): Tests for exposed debugging interfaces
-- [Excessive Agency](/docs/red-team/plugins/excessive-agency): Tests for unauthorized actions beyond system boundaries 
+- [Excessive Agency](/docs/red-team/plugins/excessive-agency): Tests for unauthorized actions beyond system boundaries
 - [RBAC](/docs/red-team/plugins/rbac): Tests role-based access control implementation

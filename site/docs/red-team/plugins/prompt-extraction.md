@@ -74,7 +74,7 @@ By incorporating the Prompt Extraction plugin in your LLM red teaming strategy, 
 
 The Prompt Extraction plugin is closely related to several other security testing approaches:
 
-- [**Function Discovery**](/docs/red-team/plugins/function-discovery) - While Prompt Extraction focuses on revealing system instructions, Function Discovery attempts to uncover the tools and functions that an AI system has access to.
+- [**Tool Discovery**](/docs/red-team/plugins/tool-discovery) - While Prompt Extraction focuses on revealing system instructions, Tool Discovery attempts to uncover the tools and functions that an AI system has access to.
 - [**System Prompt Override**](/docs/red-team/plugins/system-prompt-override) - Tests if a user can override system instructions, which is related to but different from extracting those instructions.
 - [**Debug Access**](/docs/red-team/plugins/debug-access) - Tests if an AI system has an exposed debugging interface, which could provide access to system prompts.
 

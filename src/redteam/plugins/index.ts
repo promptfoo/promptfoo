@@ -28,7 +28,6 @@ import { DivergentRepetitionPlugin } from './divergentRepetition';
 import { ExcessiveAgencyPlugin } from './excessiveAgency';
 import { HallucinationPlugin } from './hallucination';
 import { HarmbenchPlugin } from './harmbench';
-import { ToolDiscoveryPlugin } from './toolDiscovery';
 import { AlignedHarmfulPlugin } from './harmful/aligned';
 import { getHarmfulAssertions } from './harmful/common';
 import { getHarmfulTests } from './harmful/unaligned';
@@ -43,6 +42,7 @@ import { PromptExtractionPlugin } from './promptExtraction';
 import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
+import { ToolDiscoveryPlugin } from './toolDiscovery';
 
 export interface PluginFactory {
   key: string;

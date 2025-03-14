@@ -81,7 +81,7 @@ plugins:
   - 'pii' # Checks for leakage of Personally Identifiable Information
   - 'excessive-agency' # Checks if the agent exceeds its intended capabilities
   - 'hijacking' # Checks for goal hijacking of the agent's objectives
-  - 'function-discovery' # Tests if the model reveals its available function calls or tools
+  - 'tool-discovery' # Tests if the model reveals its available function calls or tools
 ```
 
 ## Implementation

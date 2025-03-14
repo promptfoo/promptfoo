@@ -70,7 +70,7 @@ Any successful override suggests that the model's system prompt protections have
 
 The System Prompt Override plugin is closely related to several other security testing approaches:
 
-- [**Function Discovery**](/docs/red-team/plugins/function-discovery) - Tests if an AI system reveals its internal functions and tools, which might be enabled through system prompt overrides.
+- [**Tool Discovery**](/docs/red-team/plugins/tool-discovery) - Tests if an AI system reveals its internal functions and tools, which might be enabled through system prompt overrides.
 - [**Prompt Extraction**](/docs/red-team/plugins/prompt-extraction) - Tests if an AI system's system prompt can be extracted, which is related to but different from overriding those instructions.
 - [**Debug Access**](/docs/red-team/plugins/debug-access) - Tests if an AI system has an exposed debugging interface, which could provide access to modify system prompts.
 

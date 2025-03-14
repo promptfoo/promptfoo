@@ -911,7 +911,8 @@ export const PLUGINS = [
   },
   {
     category: 'Security and Access Control',
-    description: 'Tests if an AI system reveals the list of tools, functions, or API calls it has access to',
+    description:
+      'Tests if an AI system reveals the list of tools, functions, or API calls it has access to',
     label: 'technical',
     link: '/docs/red-team/plugins/tool-discovery/',
     name: 'Tool Discovery',
@@ -1006,9 +1007,9 @@ export const PLUGINS = [
     category: 'Security and Access Control',
     description: 'Tests if the model reveals its available function calls or tools.',
     label: null,
-    link: '/docs/red-team/plugins/function-discovery/',
-    name: 'Function Discovery',
-    pluginId: 'function-discovery',
+    link: '/docs/red-team/plugins/tool-discovery/',
+    name: 'Tool Discovery',
+    pluginId: 'tool-discovery',
     vulnerabilityType: 'security',
   },
 ] as const as readonly Plugin[];
