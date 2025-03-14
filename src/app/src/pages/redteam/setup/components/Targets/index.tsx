@@ -20,7 +20,9 @@ import type { ProviderResponse, ProviderTestResponse } from '@promptfoo/types';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import type { ProviderOptions } from '../../types';
 import Prompts from '../Prompts';
+import { predefinedTargets, customTargetOption } from '../constants';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
+import CommonConfigurationOptions from './CommonConfigurationOptions';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
 import TestTargetConfiguration from './TestTargetConfiguration';
@@ -31,19 +33,6 @@ interface TargetsProps {
   onBack: () => void;
   setupModalOpen: boolean;
 }
-
-const predefinedTargets = [
-  { value: '', label: 'Select a target' },
-  { value: 'http', label: 'HTTP/HTTPS Endpoint' },
-  { value: 'websocket', label: 'WebSocket Endpoint' },
-  { value: 'browser', label: 'Web Browser Automation' },
-  { value: 'openai:gpt-4o-mini', label: 'OpenAI GPT-4o Mini' },
-  { value: 'openai:gpt-4o', label: 'OpenAI GPT-4o' },
-  { value: 'claude-3-5-sonnet-latest', label: 'Anthropic Claude 3.5 Sonnet' },
-  { value: 'vertex:gemini-pro', label: 'Google Vertex AI Gemini Pro' },
-];
-
-const customTargetOption = { value: 'custom', label: 'Custom Target' };
 
 const selectOptions = [...predefinedTargets, customTargetOption];
 
@@ -63,10 +52,6 @@ const validateUrl = (url: string, type: 'http' | 'websocket' = 'http'): boolean 
   } catch {
     return false;
   }
-};
-
-const requiresTransformResponse = (target: ProviderOptions) => {
-  return target.id === 'http' || target.id === 'websocket';
 };
 
 const requiresPrompt = (target: ProviderOptions) => {
@@ -89,7 +74,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
     suggestions?: string[];
     providerResponse?: ProviderResponse;
   } | null>(null);
-  const [hasTestedTarget, setHasTestedTarget] = useState(false);
+
   const [bodyError, setBodyError] = useState<string | null>(null);
   const [urlError, setUrlError] = useState<string | null>(null);
   const [missingFields, setMissingFields] = useState<string[]>([]);
@@ -216,7 +201,9 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
     if (typeof selectedTarget === 'object') {
       const updatedTarget = { ...selectedTarget } as ProviderOptions;
 
-      if (field === 'url') {
+      if (field === 'id') {
+        updatedTarget.id = value;
+      } else if (field === 'url') {
         updatedTarget.config.url = value;
         if (validateUrl(value)) {
           setUrlError(null);
@@ -265,6 +252,8 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         }
       } else if (field === 'label') {
         updatedTarget.label = value;
+      } else if (field === 'delay') {
+        updatedTarget.delay = value;
       } else {
         updatedTarget.config[field] = value;
       }
@@ -328,7 +317,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
           message: 'Target configuration is valid!',
           providerResponse: data.providerResponse,
         });
-        setHasTestedTarget(true);
       }
     } catch (error) {
       console.error('Error testing target:', error);
@@ -486,15 +474,29 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         )}
       </Box>
 
+      <Typography variant="h6" gutterBottom>
+        Additional Configuration
+      </Typography>
+      <CommonConfigurationOptions
+        selectedTarget={selectedTarget}
+        updateCustomTarget={updateCustomTarget}
+        extensions={config.extensions}
+        onExtensionsChange={(extensions) => updateConfig('extensions', extensions)}
+        onValidationChange={(hasErrors) => {
+          setMissingFields((prev) =>
+            hasErrors
+              ? [...prev.filter((f) => f !== 'Extensions'), 'Extensions']
+              : prev.filter((f) => f !== 'Extensions'),
+          );
+        }}
+      />
+
       {testingEnabled && (
         <TestTargetConfiguration
           testingTarget={testingTarget}
           handleTestTarget={handleTestTarget}
           selectedTarget={selectedTarget}
           testResult={testResult}
-          requiresTransformResponse={requiresTransformResponse}
-          updateCustomTarget={updateCustomTarget}
-          hasTestedTarget={hasTestedTarget}
         />
       )}
 
@@ -504,7 +506,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         sx={{
           display: 'flex',
           justifyContent: 'space-between',
-          alignItems: 'center',
+          gap: 2,
           mt: 4,
           width: '100%',
           position: 'relative',
@@ -531,10 +533,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
           variant="outlined"
           startIcon={<KeyboardArrowLeftIcon />}
           onClick={onBack}
-          sx={{
-            px: 4,
-            py: 1,
-          }}
+          sx={{ px: 4, py: 1 }}
         >
           Back
         </Button>
@@ -542,7 +541,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
           variant="contained"
           onClick={onNext}
           endIcon={<KeyboardArrowRightIcon />}
-          disabled={missingFields.length > 0 /*|| (testingEnabled && !hasTestedTarget)*/}
+          disabled={missingFields.length > 0}
           sx={{
             backgroundColor: theme.palette.primary.main,
             '&:hover': { backgroundColor: theme.palette.primary.dark },

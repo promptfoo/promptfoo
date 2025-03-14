@@ -21,7 +21,6 @@ export default class EvalResult {
   static async createFromEvaluateResult(
     evalId: string,
     result: EvaluateResult,
-    testCase: AtomicTestCase,
     opts?: { persist: boolean },
   ) {
     const persist = opts?.persist == null ? true : opts.persist;
@@ -37,6 +36,7 @@ export default class EvalResult {
       cost,
       metadata,
       failureReason,
+      testCase,
     } = result;
     const args = {
       id: randomUUID(),

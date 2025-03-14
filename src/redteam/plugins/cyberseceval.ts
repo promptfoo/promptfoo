@@ -72,6 +72,8 @@ async function fetchDataset(
 }
 
 export class CyberSecEvalPlugin extends RedteamPluginBase {
+  readonly id = PLUGIN_ID;
+
   async getTemplate(): Promise<string> {
     throw new Error('Not implemented');
   }

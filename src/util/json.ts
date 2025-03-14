@@ -1,3 +1,4 @@
+import yaml from 'js-yaml';
 import invariant from '../util/invariant';
 
 export function isValidJson(str: string): boolean {
@@ -30,6 +31,67 @@ export function safeJsonStringify<T>(value: T, prettyPrint: boolean = false): st
   );
 }
 
+export function convertSlashCommentsToHash(str: string): string {
+  // Split into lines, process each line, then join back
+  return str
+    .split('\n')
+    .map((line) => {
+      let state = 'normal'; // 'normal' | 'singleQuote' | 'doubleQuote'
+      let result = '';
+      let i = 0;
+
+      while (i < line.length) {
+        const char = line[i];
+        const nextChar = line[i + 1];
+        const prevChar = i > 0 ? line[i - 1] : '';
+
+        switch (state) {
+          case 'normal':
+            // Check for string start, but ignore apostrophes in words
+            if (char === "'" && !/[a-zA-Z]/.test(prevChar)) {
+              state = 'singleQuote';
+              result += char;
+            } else if (char === '"') {
+              state = 'doubleQuote';
+              result += char;
+            } else if (char === '/' && nextChar === '/') {
+              // Count consecutive slashes
+              let slashCount = 2;
+              while (i + slashCount < line.length && line[i + slashCount] === '/') {
+                slashCount++;
+              }
+              // Convert to equivalent number of #s
+              const hashes = '#'.repeat(Math.floor(slashCount / 2));
+              return result + hashes + line.slice(i + slashCount);
+            } else {
+              result += char;
+            }
+            break;
+
+          case 'singleQuote':
+            result += char;
+            // Check for string end, but ignore apostrophes in words
+            if (char === "'" && prevChar !== '\\' && !/[a-zA-Z]/.test(nextChar)) {
+              state = 'normal';
+            }
+            break;
+
+          case 'doubleQuote':
+            result += char;
+            if (char === '"' && prevChar !== '\\') {
+              state = 'normal';
+            }
+            break;
+        }
+
+        i++;
+      }
+
+      return result;
+    })
+    .join('\n');
+}
+
 export function extractJsonObjects(str: string): object[] {
   const jsonObjects: object[] = [];
   const maxJsonLength = 100000; // Prevent processing extremely large invalid JSON
@@ -39,12 +101,15 @@ export function extractJsonObjects(str: string): object[] {
       for (let j = i + 1; j <= Math.min(i + maxJsonLength, str.length); j++) {
         try {
           const potentialJson = str.slice(i, j);
-          const parsedObj = JSON.parse(potentialJson);
-          jsonObjects.push(parsedObj);
-          i = j - 1; // Move i to the end of the valid JSON object
-          break;
+          const processedJson = convertSlashCommentsToHash(potentialJson);
+          const parsedObj = yaml.load(processedJson, { json: true });
+          if (typeof parsedObj === 'object' && parsedObj !== null) {
+            jsonObjects.push(parsedObj);
+            i = j - 1; // Move i to the end of the valid JSON object
+            break;
+          }
         } catch {
-          // If it's not valid JSON yet, continue to the next character
+          // If it's not valid YAML yet, continue to the next character
           if (j === str.length || j === i + maxJsonLength) {
             // If we've reached the end of the string or max length, stop trying with this starting point
             break;

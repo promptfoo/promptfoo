@@ -3,7 +3,13 @@ import { strategies } from './data/strategies';
 
 type GroupedStrategies = Record<string, typeof strategies>;
 
-const categoryOrder = ['Static (Single-Turn)', 'Dynamic (Single-Turn)', 'Multi-turn', 'Custom'];
+const categoryOrder: (typeof strategies)[number]['category'][] = [
+  'Static (Single-Turn)',
+  'Dynamic (Single-Turn)',
+  'Multi-turn',
+  'Regression',
+  'Custom',
+];
 
 const groupedStrategies = strategies.reduce((acc, strategy) => {
   if (!acc[strategy.category]) {

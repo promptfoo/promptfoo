@@ -7,17 +7,13 @@ import type {
   RedteamFileConfig,
   StrategyConfig,
 } from '../redteam/types';
-import { isJavascriptFile } from '../util/file';
+import type { EnvOverrides } from '../types/env';
+import { ProviderEnvOverridesSchema } from '../types/env';
+import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/file';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
-import {
-  ApiProviderSchema,
-  ProviderEnvOverridesSchema,
-  ProviderOptionsSchema,
-  ProvidersSchema,
-} from '../validators/providers';
+import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
 import { RedteamConfigSchema } from '../validators/redteam';
 import { NunjucksFilterMapSchema, TokenUsageSchema } from '../validators/shared';
-import type { EnvOverrides } from './env';
 import type { Prompt, PromptFunction } from './prompts';
 import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
@@ -27,7 +23,7 @@ export * from './providers';
 export * from '../redteam/types';
 export * from './shared';
 
-export type { EnvOverrides } from './env';
+export type { EnvOverrides };
 
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
@@ -56,6 +52,7 @@ export const CommandLineOptionsSchema = z.object({
   share: z.boolean().optional(),
   progressBar: z.boolean().optional(),
   watch: z.boolean().optional(),
+  filterErrorsOnly: z.string().optional(),
   filterFailing: z.string().optional(),
   filterFirstN: z.coerce.number().int().positive().optional(),
   filterMetadata: z.string().optional(),
@@ -123,6 +120,13 @@ export const OutputConfigSchema = z.object({
 
 export type OutputConfig = z.infer<typeof OutputConfigSchema>;
 
+export type EvalConversations = Record<
+  string,
+  { prompt: string | object; input: string; output: string | object }[]
+>;
+
+export type EvalRegisters = Record<string, string | object>;
+
 export interface RunEvalOptions {
   provider: ApiProvider;
   prompt: Prompt;
@@ -130,11 +134,19 @@ export interface RunEvalOptions {
 
   test: AtomicTestCase;
   nunjucksFilters?: NunjucksFilterMap;
-  evaluateOptions: EvaluateOptions;
+  evaluateOptions?: EvaluateOptions;
 
   testIdx: number;
   promptIdx: number;
   repeatIndex: number;
+
+  conversations?: EvalConversations;
+  registers?: EvalRegisters;
+  isRedteam: boolean;
+
+  // Used by pandamonium, this should never be passed to callApi, it could be a massive object that will break the stack
+  allTests?: RunEvalOptions[];
+  concurrency?: number;
 }
 
 const EvaluateOptionsSchema = z.object({
@@ -150,7 +162,16 @@ const EvaluateOptionsSchema = z.object({
   interactiveProviders: z.boolean().optional(),
   maxConcurrency: z.number().optional(),
   progressCallback: z
-    .function(z.tuple([z.number(), z.number(), z.number(), z.custom<RunEvalOptions>()]), z.void())
+    .function(
+      z.tuple([
+        z.number(),
+        z.number(),
+        z.number(),
+        z.custom<RunEvalOptions>(),
+        z.custom<PromptMetrics>(),
+      ]),
+      z.void(),
+    )
     .optional(),
   repeat: z.number().optional(),
   showProgressBar: z.boolean().optional(),
@@ -231,6 +252,7 @@ export interface EvaluateResult {
   namedScores: Record<string, number>;
   cost?: number;
   metadata?: Record<string, any>;
+  tokenUsage?: Required<TokenUsage>;
 }
 
 export interface EvaluateTableOutput {
@@ -249,6 +271,13 @@ export interface EvaluateTableOutput {
   testCase: AtomicTestCase;
   text: string;
   tokenUsage?: Partial<TokenUsage>;
+  audio?: {
+    id?: string;
+    expiresAt?: number;
+    data?: string; // base64 encoded audio data
+    transcript?: string;
+    format?: string;
+  };
 }
 
 export interface EvaluateTableRow {
@@ -256,6 +285,7 @@ export interface EvaluateTableRow {
   outputs: EvaluateTableOutput[];
   vars: string[];
   test: AtomicTestCase;
+  testIdx: number;
 }
 
 export interface EvaluateTable {
@@ -534,6 +564,23 @@ export const VarsSchema = z.record(
 
 export type Vars = z.infer<typeof VarsSchema>;
 
+export type ScoringFunction = (
+  namedScores: Record<string, number>,
+  context?: {
+    threshold?: number;
+    parentAssertionSet?: {
+      index: number;
+      assertionSet: AssertionSet;
+    };
+    componentResults?: GradingResult[];
+    tokensUsed?: {
+      total: number;
+      prompt: number;
+      completion: number;
+    };
+  },
+) => Promise<GradingResult> | GradingResult;
+
 // Each test case is graded pass/fail with a score.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.
 // HEADS UP: When you add a property here, you probably need to load it from `defaultTest` in evaluator.ts.
 export const TestCaseSchema = z.object({
@@ -551,6 +598,16 @@ export const TestCaseSchema = z.object({
 
   // Optional list of automatic checks to run on the LLM output
   assert: z.array(z.union([AssertionSetSchema, AssertionSchema])).optional(),
+
+  // Optional scoring function to run on the LLM output
+  assertScoringFunction: z
+    .union([
+      z
+        .string()
+        .regex(new RegExp(`^file://.*\\.(${JAVASCRIPT_EXTENSIONS.join('|')}|py)(?::[\\w.]+)?$`)),
+      z.custom<ScoringFunction>(),
+    ])
+    .optional(),
 
   // Additional configuration settings for the prompt
   options: z
@@ -775,7 +832,19 @@ export const TestSuiteConfigSchema = z.object({
   nunjucksFilters: z.record(z.string(), z.string()).optional(),
 
   // Envvar overrides
-  env: ProviderEnvOverridesSchema.optional(),
+  env: z
+    .union([
+      ProviderEnvOverridesSchema,
+      z.record(
+        z.string(),
+        z.union([
+          z.string(),
+          z.number().transform((n) => String(n)),
+          z.boolean().transform((b) => String(b)),
+        ]),
+      ),
+    ])
+    .optional(),
 
   // Metrics to calculate after the eval has been completed
   derivedMetrics: z.array(DerivedMetricSchema).optional(),

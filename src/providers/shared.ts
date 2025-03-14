@@ -9,6 +9,8 @@ export const REQUEST_TIMEOUT_MS = getEnvInt('REQUEST_TIMEOUT_MS', 300_000);
 interface ModelCost {
   input: number;
   output: number;
+  audioInput?: number;
+  audioOutput?: number;
 }
 
 interface ProviderModel {
@@ -16,8 +18,9 @@ interface ProviderModel {
   cost?: ModelCost;
 }
 
-interface ProviderConfig {
+export interface ProviderConfig {
   cost?: number;
+  audioCost?: number;
 }
 
 /**

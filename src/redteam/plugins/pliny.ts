@@ -1,9 +1,9 @@
 /*
- * The prompts used by this CLI are licensed under the AGPL-3.0 license and are
- * dynamically downloaded from Github. For details, see
- * https://github.com/elder-plinius/L1B3RT4S/blob/main/LICENSE.
+ * This plugin downloads prompt templates from the L1B3RT4S project
+ * (https://github.com/elder-plinius/L1B3RT4S).
  */
 import { fetchWithProxy } from '../../fetch';
+import { logger } from '../../logger';
 import type { Assertion, TestCase } from '../../types';
 import { RedteamPluginBase } from './base';
 
@@ -29,7 +29,7 @@ async function fetchAndParseUrl(url: string): Promise<string[]> {
       .filter(Boolean)
       .filter((section) => section.includes('\n'));
   } catch (error) {
-    console.error(`Error fetching ${url}:`, error);
+    logger.error(`Error fetching ${url}: ${error}`);
     return [];
   }
 }
@@ -41,12 +41,14 @@ async function fetchAllTexts(): Promise<string[]> {
     // Flatten array of arrays and filter out empty strings
     return allSections.flat().filter(Boolean);
   } catch (error) {
-    console.error('Error fetching texts:', error);
+    logger.error(`Error fetching texts: ${error}`);
     return [];
   }
 }
 
 export class PlinyPlugin extends RedteamPluginBase {
+  readonly id = PLUGIN_ID;
+
   async getTemplate(): Promise<string> {
     return this.injectVar;
   }

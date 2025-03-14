@@ -7,7 +7,6 @@ import type { TestCase } from '../../../src/types';
 
 jest.mock('../../../src/cache');
 jest.mock('../../../src/globalConfig/accounts');
-jest.mock('../../../src/logger');
 jest.mock('../../../src/redteam/remoteGeneration');
 jest.mock('cli-progress');
 
@@ -53,7 +52,7 @@ describe('gcg strategy', () => {
 
     expect(result?.[0]?.vars?.prompt).toBe('generated response 1');
     expect(result?.[1]?.vars?.prompt).toBe('generated response 2');
-    expect(result?.[0]?.metadata?.strategy).toBe('gcg');
+    expect(result?.[0]?.metadata?.strategyId).toBe('gcg');
     expect(result?.[0]?.assert?.[0].metric).toBe('test-metric/GCG');
 
     expect(mockFetchWithCache).toHaveBeenCalledWith(

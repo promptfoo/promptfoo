@@ -113,16 +113,16 @@ export const ColumnSelector: React.FC<ColumnSelectorProps> = ({
             >
               {columns.map((column) => (
                 <ListItem key={column.value} dense disablePadding>
-                  <Tooltip title={column.description || column.label} placement="right">
-                    <FormControlLabel
-                      control={
-                        <Checkbox
-                          edge="start"
-                          checked={selectedColumns.includes(column.value)}
-                          onChange={() => handleToggle(column.value)}
-                        />
-                      }
-                      label={
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        edge="start"
+                        checked={selectedColumns.includes(column.value)}
+                        onChange={() => handleToggle(column.value)}
+                      />
+                    }
+                    label={
+                      <Tooltip title={column.description || column.label} placement="right">
                         <Typography
                           variant="body2"
                           sx={{
@@ -134,10 +134,10 @@ export const ColumnSelector: React.FC<ColumnSelectorProps> = ({
                         >
                           {column.label}
                         </Typography>
-                      }
-                      sx={{ ml: 1, width: '100%' }}
-                    />
-                  </Tooltip>
+                      </Tooltip>
+                    }
+                    sx={{ ml: 1, width: '100%' }}
+                  />
                 </ListItem>
               ))}
             </List>

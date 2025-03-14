@@ -21,11 +21,13 @@ export interface Config {
   };
   entities: string[];
   defaultTest?: TestCase;
+  extensions?: string[];
 }
 
 export interface ProviderOptions {
   id: string;
   label?: string;
+  delay?: number;
   config: {
     // Custom provider config can have anything
     [key: string]: any;
@@ -52,6 +54,7 @@ export interface ProviderOptions {
         }>
       | string;
     stateful?: boolean;
+    sessionSource?: 'client' | 'server';
   };
 }
 
@@ -102,4 +105,9 @@ export interface LocalPluginConfig {
     targetUrls?: string[];
     [key: string]: string | string[] | undefined;
   };
+}
+
+export interface RedteamUITarget {
+  value: string;
+  label: string;
 }

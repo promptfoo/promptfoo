@@ -3,22 +3,23 @@ import logger from '../logger';
 import type { ApiProvider } from '../types';
 import type { EnvOverrides } from '../types/env';
 import {
-  DefaultGradingProvider as AnthropicGradingProvider,
   DefaultGradingJsonProvider as AnthropicGradingJsonProvider,
-  DefaultSuggestionsProvider as AnthropicSuggestionsProvider,
+  DefaultGradingProvider as AnthropicGradingProvider,
   DefaultLlmRubricProvider as AnthropicLlmRubricProvider,
+  DefaultSuggestionsProvider as AnthropicSuggestionsProvider,
 } from './anthropic';
 import { AzureChatCompletionProvider, AzureEmbeddingProvider } from './azure';
+import { AzureModerationProvider } from './azure/moderation';
 import {
   DefaultEmbeddingProvider as OpenAiEmbeddingProvider,
   DefaultGradingJsonProvider as OpenAiGradingJsonProvider,
   DefaultGradingProvider as OpenAiGradingProvider,
-  DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
   DefaultModerationProvider as OpenAiModerationProvider,
-} from './openai';
+  DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
+} from './openai/defaults';
 import {
-  DefaultGradingProvider as GeminiGradingProvider,
   DefaultEmbeddingProvider as GeminiEmbeddingProvider,
+  DefaultGradingProvider as GeminiGradingProvider,
 } from './vertex';
 import { hasGoogleDefaultCredentials } from './vertexUtil';
 
@@ -150,6 +151,12 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       synthesizeProvider: OpenAiGradingJsonProvider,
     };
   }
+
+  // If Azure Content Safety endpoint is available, use it for moderation
+  if (getEnvString('AZURE_CONTENT_SAFETY_ENDPOINT') || env?.AZURE_CONTENT_SAFETY_ENDPOINT) {
+    providers.moderationProvider = new AzureModerationProvider('text-content-safety', { env });
+  }
+
   if (defaultCompletionProvider) {
     logger.debug(`Overriding default completion provider: ${defaultCompletionProvider.id()}`);
     COMPLETION_PROVIDERS.forEach((provider) => {

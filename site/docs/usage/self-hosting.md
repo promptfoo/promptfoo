@@ -84,6 +84,16 @@ docker run -d --name promptfoo_container -p 3000:3000 -v /path/to/local_promptfo
 
 promptfoo uses a SQLite database (`promptfoo.db`) located in `/home/promptfoo/.promptfoo` on the image. Ensure this directory is persisted to save your evals. Pass `-v /path/to/local_promptfoo:/home/promptfoo/.promptfoo` to the `docker run` command to persist the evals.
 
+### Config Directory
+
+You can override the default configuration directory and SQLite database location by setting the `PROMPTFOO_CONFIG_DIR` environment variable. For example, if you run the container with:
+
+```sh
+docker run -d --name promptfoo_container -p 3000:3000 -v /path/to/local_promptfoo:/home/promptfoo/.promptfoo -e PROMPTFOO_CONFIG_DIR=/path/to/local_promptfoo promptfoo
+```
+
+then promptfoo will use `/path/to/local_promptfoo` for its configuration and the `promptfoo.db` file.
+
 ## Pointing promptfoo to your hosted instance
 
 When self-hosting, you need to set the environment variables so that the `promptfoo share` command knows how to reach your hosted application. Here's an example:

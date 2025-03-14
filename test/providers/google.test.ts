@@ -1,15 +1,20 @@
 import * as cache from '../../src/cache';
 import { GoogleChatProvider } from '../../src/providers/google';
 import * as vertexUtil from '../../src/providers/vertexUtil';
+import * as templates from '../../src/util/templates';
 
 jest.mock('../../src/cache', () => ({
   fetchWithCache: jest.fn(),
 }));
 
-jest.mock('../../src/logger');
-
 jest.mock('../../src/providers/vertexUtil', () => ({
   maybeCoerceToGeminiFormat: jest.fn(),
+}));
+
+jest.mock('../../src/util/templates', () => ({
+  getNunjucksEngine: jest.fn(() => ({
+    renderString: jest.fn((str) => str),
+  })),
 }));
 
 describe('GoogleChatProvider', () => {
@@ -24,39 +29,61 @@ describe('GoogleChatProvider', () => {
         topK: 40,
       },
     });
-  });
-
-  afterEach(() => {
     jest.clearAllMocks();
   });
 
   describe('constructor and configuration', () => {
-    it('should handle API key from different sources', () => {
+    it('should handle API key from different sources and render with Nunjucks', () => {
+      const mockRenderString = jest.fn((str) => `rendered-${str}`);
+      jest.mocked(templates.getNunjucksEngine).mockReturnValue({
+        renderString: mockRenderString,
+      } as any);
+
       // From config
       const providerWithConfigKey = new GoogleChatProvider('gemini-pro', {
         config: { apiKey: 'config-key' },
       });
-      expect(providerWithConfigKey.getApiKey()).toBe('config-key');
+      expect(providerWithConfigKey.getApiKey()).toBe('rendered-config-key');
+      expect(mockRenderString).toHaveBeenCalledWith('config-key', {});
 
       // From env override
       const providerWithEnvOverride = new GoogleChatProvider('gemini-pro', {
         env: { GOOGLE_API_KEY: 'env-key' },
       });
-      expect(providerWithEnvOverride.getApiKey()).toBe('env-key');
+      expect(providerWithEnvOverride.getApiKey()).toBe('rendered-env-key');
+      expect(mockRenderString).toHaveBeenCalledWith('env-key', {});
+
+      // No API key
+      const providerWithNoKey = new GoogleChatProvider('gemini-pro');
+      expect(providerWithNoKey.getApiKey()).toBeUndefined();
     });
 
-    it('should handle API host from different sources', () => {
+    it('should handle API host from different sources and render with Nunjucks', () => {
+      const mockRenderString = jest.fn((str) => `rendered-${str}`);
+      jest.mocked(templates.getNunjucksEngine).mockReturnValue({
+        renderString: mockRenderString,
+      } as any);
+
       // From config
       const providerWithConfigHost = new GoogleChatProvider('gemini-pro', {
         config: { apiHost: 'custom.host.com' },
       });
-      expect(providerWithConfigHost.getApiHost()).toBe('custom.host.com');
+      expect(providerWithConfigHost.getApiHost()).toBe('rendered-custom.host.com');
+      expect(mockRenderString).toHaveBeenCalledWith('custom.host.com', {});
 
       // From env override
       const providerWithEnvOverride = new GoogleChatProvider('gemini-pro', {
         env: { GOOGLE_API_HOST: 'env.host.com' },
       });
-      expect(providerWithEnvOverride.getApiHost()).toBe('env.host.com');
+      expect(providerWithEnvOverride.getApiHost()).toBe('rendered-env.host.com');
+      expect(mockRenderString).toHaveBeenCalledWith('env.host.com', {});
+
+      // Default host
+      const providerWithDefaultHost = new GoogleChatProvider('gemini-pro');
+      expect(providerWithDefaultHost.getApiHost()).toBe(
+        'rendered-generativelanguage.googleapis.com',
+      );
+      expect(mockRenderString).toHaveBeenCalledWith('generativelanguage.googleapis.com', {});
     });
 
     it('should handle custom provider ID', () => {
@@ -65,12 +92,6 @@ describe('GoogleChatProvider', () => {
         id: customId,
       });
       expect(providerWithCustomId.id()).toBe(customId);
-    });
-
-    it('should handle default configuration', () => {
-      const defaultProvider = new GoogleChatProvider('gemini-pro');
-      expect(defaultProvider.getApiHost()).toBe('generativelanguage.googleapis.com');
-      expect(defaultProvider.id()).toBe('google:gemini-pro');
     });
 
     it('should handle configuration with safety settings', () => {
@@ -98,14 +119,12 @@ describe('GoogleChatProvider', () => {
         },
       });
 
-      // Mock maybeCoerceToGeminiFormat
       jest.mocked(vertexUtil.maybeCoerceToGeminiFormat).mockReturnValueOnce({
         contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
         coerced: false,
         systemInstruction: undefined,
       });
 
-      // Mock fetchWithCache to return empty candidates
       jest.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: {
           candidates: [],
@@ -127,20 +146,18 @@ describe('GoogleChatProvider', () => {
         },
       });
 
-      // Mock maybeCoerceToGeminiFormat
       jest.mocked(vertexUtil.maybeCoerceToGeminiFormat).mockReturnValueOnce({
         contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
         coerced: false,
         systemInstruction: undefined,
       });
 
-      // Mock fetchWithCache to return malformed response
       jest.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: {
           candidates: [
             {
               content: {
-                parts: null, // This will cause the map function to throw
+                parts: null,
               },
             },
           ],
@@ -174,7 +191,6 @@ describe('GoogleChatProvider', () => {
         },
       });
 
-      // Mock fetchWithCache to return error response
       jest.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: {
           error: {
@@ -383,14 +399,12 @@ describe('GoogleChatProvider', () => {
         },
       });
 
-      // Mock maybeCoerceToGeminiFormat
       jest.mocked(vertexUtil.maybeCoerceToGeminiFormat).mockReturnValueOnce({
         contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
         coerced: false,
         systemInstruction: undefined,
       });
 
-      // Mock fetchWithCache to return error
       jest.mocked(cache.fetchWithCache).mockRejectedValueOnce(new Error('API call failed'));
 
       const response = await provider.callGemini('test prompt');

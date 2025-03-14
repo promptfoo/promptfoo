@@ -31,11 +31,10 @@ import {
   OllamaCompletionProvider,
   OllamaEmbeddingProvider,
 } from '../../src/providers/ollama';
-import {
-  OpenAiAssistantProvider,
-  OpenAiCompletionProvider,
-  OpenAiChatCompletionProvider,
-} from '../../src/providers/openai';
+import { OpenAiAssistantProvider } from '../../src/providers/openai/assistant';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
+import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import {
   ReplicateImageProvider,
@@ -89,12 +88,6 @@ jest.mock('glob', () => ({
 
 jest.mock('../../src/database', () => ({
   getDb: jest.fn(),
-}));
-jest.mock('../../src/logger', () => ({
-  error: jest.fn(),
-  debug: jest.fn(),
-  info: jest.fn(),
-  warn: jest.fn(),
 }));
 
 jest.mock('../../src/redteam/remoteGeneration', () => ({
@@ -1142,14 +1135,54 @@ describe('loadApiProvider', () => {
     delete process.env.MY_PORT;
   });
 
+  it('loadApiProvider with yaml filepath containing multiple providers', async () => {
+    const mockYamlContent = dedent`
+    - id: 'openai:gpt-4o-mini'
+      config:
+        key: 'value1'
+    - id: 'anthropic:messages:claude-3-5-sonnet-20241022'
+      config:
+        key: 'value2'`;
+    const mockReadFileSync = jest.mocked(fs.readFileSync);
+    mockReadFileSync.mockReturnValue(mockYamlContent);
+
+    const providers = await loadApiProviders('file://path/to/mock-providers-file.yaml');
+    expect(providers).toHaveLength(2);
+    expect(providers[0].id()).toBe('openai:gpt-4o-mini');
+    expect(providers[1].id()).toBe('anthropic:messages:claude-3-5-sonnet-20241022');
+    expect(mockReadFileSync).toHaveBeenCalledWith(
+      expect.stringMatching(/path[\\\/]to[\\\/]mock-providers-file\.yaml/),
+      'utf8',
+    );
+  });
+
+  it('loadApiProvider with json filepath containing multiple providers', async () => {
+    const mockJsonContent = JSON.stringify([
+      {
+        id: 'openai:gpt-4o-mini',
+        config: { key: 'value1' },
+      },
+      {
+        id: 'anthropic:messages:claude-3-5-sonnet-20241022',
+        config: { key: 'value2' },
+      },
+    ]);
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(mockJsonContent);
+
+    const providers = await loadApiProviders('file://path/to/mock-providers-file.json');
+    expect(providers).toHaveLength(2);
+    expect(providers[0].id()).toBe('openai:gpt-4o-mini');
+    expect(providers[1].id()).toBe('anthropic:messages:claude-3-5-sonnet-20241022');
+  });
+
   it('throws an error for unidentified providers', async () => {
-    const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
-      throw new Error('process.exit called');
-    });
+    const mockError = jest.spyOn(logger, 'error');
     const unknownProviderPath = 'unknown:provider';
 
-    await expect(loadApiProvider(unknownProviderPath)).rejects.toThrow('process.exit called');
-    expect(logger.error).toHaveBeenCalledWith(
+    await expect(loadApiProvider(unknownProviderPath)).rejects.toThrow(
+      `Could not identify provider: ${chalk.bold(unknownProviderPath)}`,
+    );
+    expect(mockError).toHaveBeenCalledWith(
       dedent`
         Could not identify provider: ${chalk.bold(unknownProviderPath)}.
 
@@ -1159,8 +1192,7 @@ describe('loadApiProvider', () => {
           For more information on supported providers, visit: `)} ${chalk.cyan('https://promptfoo.dev/docs/providers/')}
       `,
     );
-    expect(mockExit).toHaveBeenCalledWith(1);
-    mockExit.mockRestore();
+    mockError.mockRestore();
   });
 
   it('renders label using Nunjucks', async () => {
@@ -1195,6 +1227,40 @@ describe('loadApiProvider', () => {
   it('should throw error for invalid adaline provider path', async () => {
     await expect(loadApiProvider('adaline:invalid')).rejects.toThrow(
       "Invalid adaline provider path: adaline:invalid. path format should be 'adaline:<provider_name>:<model_type>:<model_name>' eg. 'adaline:openai:chat:gpt-4o'",
+    );
+  });
+
+  it.each([
+    ['dashscope:chat:qwen-max', 'qwen-max'],
+    ['dashscope:vl:qwen-vl-max', 'qwen-vl-max'],
+    ['alibaba:qwen-plus', 'qwen-plus'],
+    ['alibaba:chat:qwen-max', 'qwen-max'],
+    ['alibaba:vl:qwen-vl-max', 'qwen-vl-max'],
+    ['alicloud:qwen-plus', 'qwen-plus'],
+    ['aliyun:qwen-plus', 'qwen-plus'],
+  ])('loadApiProvider with %s', async (providerId, expectedModelId) => {
+    const provider = await loadApiProvider(providerId);
+    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(provider.id()).toBe(expectedModelId);
+    expect(provider.config.apiBaseUrl).toBe(
+      'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+    );
+    expect(provider.config.apiKeyEnvar).toBe('DASHSCOPE_API_KEY');
+  });
+
+  it('loadApiProvider with alibaba embedding', async () => {
+    const provider = await loadApiProvider('alibaba:embedding:text-embedding-v3');
+    expect(provider).toBeInstanceOf(OpenAiEmbeddingProvider);
+    expect(provider.id()).toBe('text-embedding-v3');
+    expect(provider.config.apiBaseUrl).toBe(
+      'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+    );
+    expect(provider.config.apiKeyEnvar).toBe('DASHSCOPE_API_KEY');
+  });
+
+  it('loadApiProvider with alibaba unknown model', async () => {
+    await expect(loadApiProvider('alibaba:unknown-model')).rejects.toThrow(
+      'Invalid Alibaba Cloud model: unknown-model',
     );
   });
 });

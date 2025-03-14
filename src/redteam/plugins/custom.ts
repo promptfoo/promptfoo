@@ -11,6 +11,7 @@ const CustomPluginDefinitionSchema = z
   .object({
     generator: z.string().min(1, 'Generator must not be empty').trim(),
     grader: z.string().min(1, 'Grader must not be empty').trim(),
+    id: z.string().optional(),
   })
   .strict();
 
@@ -38,6 +39,10 @@ export function loadCustomPluginDefinition(filePath: string): CustomPluginDefini
 
 export class CustomPlugin extends RedteamPluginBase {
   private definition: CustomPluginDefinition;
+
+  get id(): string {
+    return this.definition.id || `promptfoo:redteam:custom`;
+  }
 
   constructor(provider: ApiProvider, purpose: string, injectVar: string, filePath: string) {
     super(provider, purpose, injectVar);

@@ -1,10 +1,11 @@
 import cliState from '../../cliState';
 import logger from '../../logger';
-import { OpenAiChatCompletionProvider } from '../../providers/openai';
+import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import {
   type ApiProvider,
   type CallApiContextParams,
   type CallApiOptionsParams,
+  type EvaluateResult,
   type GuardrailResponse,
   isApiProvider,
   isProviderOptions,
@@ -145,7 +146,13 @@ export async function getTargetResponse(
     };
   }
 
-  throw new Error('Expected target output or error to be set');
+  throw new Error(
+    `
+    Target returned malformed response: expected either \`output\` or \`error\` to be set.
+    
+    Instead got: ${safeJsonStringify(targetRespRaw)}
+    `,
+  );
 }
 
 export interface Message {
@@ -215,4 +222,5 @@ export interface BaseRedteamResponse {
   metadata: BaseRedteamMetadata;
   tokenUsage: TokenUsage;
   guardrails?: GuardrailResponse;
+  additionalResults?: EvaluateResult[];
 }

@@ -7,11 +7,6 @@ import {
   isCacheEnabled,
 } from '../src/cache';
 
-jest.mock('../src/logger', () => ({
-  debug: jest.fn(),
-  info: jest.fn(),
-}));
-
 jest.mock('../src/util/config/manage', () => ({
   getConfigDirectoryPath: jest.fn().mockReturnValue('/mock/config/path'),
 }));
@@ -172,21 +167,26 @@ describe('fetchWithCache', () => {
       const result = await fetchWithCache(url, {}, 1000);
 
       expect(mockedFetch).toHaveBeenCalledTimes(1);
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         cached: false,
         data: response,
         status: 200,
         statusText: 'OK',
         headers: { 'x-session-id': '45', 'content-type': 'application/json' },
       });
+      expect(result.deleteFromCache).toBeInstanceOf(Function);
 
       // Second call should use cache
       const cachedResult = await fetchWithCache(url, {}, 1000);
       expect(mockedFetch).toHaveBeenCalledTimes(1); // No additional fetch calls
-      expect(cachedResult).toEqual({
-        ...result,
+      expect(cachedResult).toMatchObject({
+        data: response,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'x-session-id': '45', 'content-type': 'application/json' },
         cached: true,
       });
+      expect(cachedResult.deleteFromCache).toBeInstanceOf(Function);
     });
 
     it('should not cache failed requests', async () => {
@@ -309,19 +309,27 @@ describe('fetchWithCache', () => {
 
       const firstResult = await fetchWithCache(url, {}, 1000);
       expect(mockedFetch).toHaveBeenCalledTimes(1);
-      expect(firstResult).toEqual({
+      expect(firstResult).toMatchObject({
         cached: false,
         data: response,
         status: 200,
         statusText: 'OK',
         headers: { 'content-type': 'application/json', 'x-session-id': '45' },
       });
+      expect(firstResult.deleteFromCache).toBeInstanceOf(Function);
 
       // Second call should fetch again
       mockedFetch.mockResolvedValueOnce(mockResponse);
       const secondResult = await fetchWithCache(url, {}, 1000);
       expect(mockedFetch).toHaveBeenCalledTimes(2);
-      expect(secondResult).toEqual(firstResult);
+      expect(secondResult).toMatchObject({
+        cached: false,
+        data: response,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'application/json', 'x-session-id': '45' },
+      });
+      expect(secondResult.deleteFromCache).toBeInstanceOf(Function);
     });
   });
 
