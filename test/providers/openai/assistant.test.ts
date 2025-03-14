@@ -542,7 +542,7 @@ describe('OpenAI Provider', () => {
 
       expect(result.output).toBe('[Assistant] Non-function tool response');
       expect(mockClient.beta.threads.createAndRun).toHaveBeenCalledTimes(1);
-      expect(mockClient.beta.threads.runs.retrieve).toHaveBeenCalled();
+      expect(mockClient.beta.threads.runs.retrieve).toHaveBeenCalledWith('thread_123', 'run_123');
       expect(mockClient.beta.threads.runs.submitToolOutputs).not.toHaveBeenCalled();
     });
   });
