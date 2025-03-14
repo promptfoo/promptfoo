@@ -1,4 +1,3 @@
-/// <reference types="vitest" />
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import type { PluginOption } from 'vite';
@@ -35,11 +34,6 @@ export default defineConfig({
   build: {
     emptyOutDir: true,
     outDir: '../../dist/src/app',
-  },
-  test: {
-    environment: 'jsdom',
-    setupFiles: ['./src/setupTests.ts'],
-    globals: true,
   },
   define: {
     'import.meta.env.VITE_PROMPTFOO_VERSION': JSON.stringify(packageJson.version),
