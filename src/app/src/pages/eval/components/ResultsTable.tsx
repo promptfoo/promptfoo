@@ -30,6 +30,7 @@ import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { METADATA_PREFIX } from '@promptfoo/constants';
 import invariant from '@promptfoo/util/invariant';
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
 import yaml from 'js-yaml';
@@ -479,12 +480,18 @@ function ResultsTable({
   const { renderMarkdown } = useResultsViewStore();
   const variableColumns = React.useMemo(() => {
     if (head.vars.length > 0) {
+      // Filter out metadata variables
+      const visibleVars = head.vars.filter((varName) => !varName.startsWith(METADATA_PREFIX));
+
+      // Create a map of variable indices after filtering
+      const varIndices = visibleVars.map((varName) => head.vars.indexOf(varName));
+
       return [
         columnHelper.group({
           id: 'vars',
           header: () => <span className="font-bold">Variables</span>,
-          columns: head.vars.map((varName, idx) =>
-            columnHelper.accessor((row: EvaluateTableRow) => row.vars[idx], {
+          columns: visibleVars.map((varName, idx) =>
+            columnHelper.accessor((row: EvaluateTableRow) => row.vars[varIndices[idx]], {
               id: `Variable ${idx + 1}`,
               header: () => (
                 <TableHeader text={varName} maxLength={maxTextLength} className="font-bold" />

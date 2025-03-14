@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useShiftKey } from '@app/hooks/useShiftKey';
 import Tooltip from '@mui/material/Tooltip';
+import { METADATA_PREFIX } from '@promptfoo/constants';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import remarkGfm from 'remark-gfm';
@@ -33,6 +34,14 @@ export interface EvalOutputCellProps {
   showStats: boolean;
   onRating: (isPass?: boolean, score?: number, comment?: string) => void;
 }
+
+// Define MediaMetadata type
+type MediaMetadata = {
+  type: string;
+  mime: string;
+  extension: string;
+  filename: string;
+};
 
 function EvalOutputCell({
   output,
