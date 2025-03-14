@@ -14,15 +14,19 @@ import { failApiCall, getTokenUsage } from './util';
 export type OpenAiAssistantOptions = OpenAiSharedOptions & {
   modelName?: string;
   instructions?: string;
-  tools?: OpenAI.Beta.Threads.ThreadCreateAndRunParams['tools'];
+  tools?: Array<{
+    type: string;
+    function?: {
+      name: string;
+      description?: string;
+      parameters?: Record<string, any>;
+    };
+  }>;
   /**
    * If set, automatically call these functions when the assistant activates
    * these function tools.
    */
-  functionToolCallbacks?: Record<
-    OpenAI.FunctionDefinition['name'],
-    (arg: string) => Promise<string>
-  >;
+  functionToolCallbacks?: Record<string, (arg: string) => Promise<string>>;
   metadata?: Metadata;
   temperature?: number;
   toolChoice?:
@@ -31,8 +35,25 @@ export type OpenAiAssistantOptions = OpenAiSharedOptions & {
     | 'required'
     | { type: 'function'; function?: { name: string } }
     | { type: 'file_search' };
-  attachments?: OpenAI.Beta.Threads.Message.Attachment[];
-  tool_resources?: OpenAI.Beta.Threads.ThreadCreateAndRunParams['tool_resources'];
+  attachments?: Array<{
+    type: string;
+    [key: string]: any;
+  }>;
+  tool_resources?: {
+    code_interpreter?: { file_ids?: string[] };
+    file_search?: { vector_store_ids?: string[] };
+  };
+};
+
+type AssistantMessage = {
+  role: string;
+  content: Array<{
+    type: string;
+    text?: {
+      value: string;
+      annotations: any[];
+    };
+  }>;
 };
 
 export class OpenAiAssistantProvider extends OpenAiGenericProvider {
@@ -76,8 +97,9 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
           ? { attachments: this.assistantConfig.attachments }
           : {}),
       },
-    ]) as OpenAI.Beta.Threads.ThreadCreateParams.Message[];
-    const body: OpenAI.Beta.Threads.ThreadCreateAndRunParams = {
+    ]) as any[];
+
+    const body: any = {
       assistant_id: this.assistantId,
       model: this.assistantConfig.modelName || undefined,
       instructions: this.assistantConfig.instructions || undefined,
@@ -94,7 +116,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     };
 
     logger.debug(`Calling OpenAI API, creating thread run: ${JSON.stringify(body)}`);
-    let run: OpenAI.Beta.Threads.Run;
+    let run: any;
     try {
       run = await openai.beta.threads.createAndRun(body);
     } catch (err) {
@@ -117,24 +139,29 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
           run = currentRun;
           break;
         }
-        const functionCallsWithCallbacks: OpenAI.Beta.Threads.Runs.RequiredActionFunctionToolCall[] =
-          requiredAction.submit_tool_outputs.tool_calls.filter((toolCall) => {
+
+        const functionCallsWithCallbacks = requiredAction.submit_tool_outputs.tool_calls.filter(
+          (toolCall: any) => {
             return (
               toolCall.type === 'function' &&
               toolCall.function.name in (this.assistantConfig.functionToolCallbacks ?? {})
             );
-          });
+          },
+        );
+
         if (functionCallsWithCallbacks.length === 0) {
           run = currentRun;
           break;
         }
+
         logger.debug(
           `Calling functionToolCallbacks for functions: ${functionCallsWithCallbacks.map(
-            ({ function: { name } }) => name,
+            ({ function: { name } }: any) => name,
           )}`,
         );
+
         const toolOutputs = await Promise.all(
-          functionCallsWithCallbacks.map(async (toolCall) => {
+          functionCallsWithCallbacks.map(async (toolCall: any) => {
             logger.debug(
               `Calling functionToolCallbacks[${toolCall.function.name}]('${toolCall.function.arguments}')`,
             );
@@ -147,11 +174,13 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
             };
           }),
         );
+
         logger.debug(
           `Calling OpenAI API, submitting tool outputs for ${currentRun.thread_id}: ${JSON.stringify(
             toolOutputs,
           )}`,
         );
+
         try {
           run = await openai.beta.threads.runs.submitToolOutputs(
             currentRun.thread_id,
@@ -205,12 +234,12 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     for (const step of steps.data) {
       if (step.step_details.type === 'message_creation') {
         logger.debug(`Calling OpenAI API, getting message ${step.id}`);
-        let message;
+        let message: AssistantMessage;
         try {
-          message = await openai.beta.threads.messages.retrieve(
+          message = (await openai.beta.threads.messages.retrieve(
             run.thread_id,
             step.step_details.message_creation.message_id,
-          );
+          )) as any;
         } catch (err) {
           return failApiCall(err);
         }
@@ -218,7 +247,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
 
         const content = message.content
           .map((content) =>
-            content.type === 'text' ? content.text.value : `<${content.type} output>`,
+            content.type === 'text' ? content.text!.value : `<${content.type} output>`,
           )
           .join('\n');
         outputBlocks.push(`[${toTitleCase(message.role)}] ${content}`);
@@ -233,7 +262,9 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
             outputBlocks.push(`[Ran file search]`);
           } else if (toolCall.type === 'code_interpreter') {
             const output = toolCall.code_interpreter.outputs
-              .map((output) => (output.type === 'logs' ? output.logs : `<${output.type} output>`))
+              .map((output: any) =>
+                output.type === 'logs' ? output.logs : `<${output.type} output>`,
+              )
               .join('\n');
             outputBlocks.push(`[Code interpreter input]`);
             outputBlocks.push(toolCall.code_interpreter.input);

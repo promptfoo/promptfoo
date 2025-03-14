@@ -223,5 +223,327 @@ describe('OpenAI Provider', () => {
 
       process.env.OPENAI_API_KEY = 'test-key'; // Restore for other tests
     });
+
+    it('should handle code interpreter tool calls', async () => {
+      const mockRun = {
+        id: 'run_123',
+        thread_id: 'thread_123',
+        status: 'completed',
+      };
+
+      const mockSteps = {
+        data: [
+          {
+            id: 'step_1',
+            step_details: {
+              type: 'tool_calls',
+              tool_calls: [
+                {
+                  type: 'code_interpreter',
+                  code_interpreter: {
+                    input: 'print("Hello World")',
+                    outputs: [
+                      {
+                        type: 'logs',
+                        logs: 'Hello World',
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      };
+
+      mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.retrieve.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.steps.list.mockResolvedValue(mockSteps);
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.output).toBe(
+        '[Code interpreter input]\n\nprint("Hello World")\n\n[Code interpreter output]\n\nHello World',
+      );
+      expect(mockClient.beta.threads.createAndRun).toHaveBeenCalledTimes(1);
+      expect(mockClient.beta.threads.runs.retrieve).toHaveBeenCalledTimes(1);
+      expect(mockClient.beta.threads.runs.steps.list).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle file search tool calls', async () => {
+      const mockRun = {
+        id: 'run_123',
+        thread_id: 'thread_123',
+        status: 'completed',
+      };
+
+      const mockSteps = {
+        data: [
+          {
+            id: 'step_1',
+            step_details: {
+              type: 'tool_calls',
+              tool_calls: [
+                {
+                  type: 'file_search',
+                },
+              ],
+            },
+          },
+        ],
+      };
+
+      mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.retrieve.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.steps.list.mockResolvedValue(mockSteps);
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.output).toBe('[Ran file search]');
+      expect(mockClient.beta.threads.createAndRun).toHaveBeenCalledTimes(1);
+      expect(mockClient.beta.threads.runs.retrieve).toHaveBeenCalledTimes(1);
+      expect(mockClient.beta.threads.runs.steps.list).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle unknown tool call types', async () => {
+      const mockRun = {
+        id: 'run_123',
+        thread_id: 'thread_123',
+        status: 'completed',
+      };
+
+      const mockSteps = {
+        data: [
+          {
+            id: 'step_1',
+            step_details: {
+              type: 'tool_calls',
+              tool_calls: [
+                {
+                  type: 'unknown_tool',
+                },
+              ],
+            },
+          },
+        ],
+      };
+
+      mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.retrieve.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.steps.list.mockResolvedValue(mockSteps);
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.output).toBe('[Unknown tool call type: unknown_tool]');
+      expect(mockClient.beta.threads.createAndRun).toHaveBeenCalledTimes(1);
+      expect(mockClient.beta.threads.runs.retrieve).toHaveBeenCalledTimes(1);
+      expect(mockClient.beta.threads.runs.steps.list).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle unknown step types', async () => {
+      const mockRun = {
+        id: 'run_123',
+        thread_id: 'thread_123',
+        status: 'completed',
+      };
+
+      const mockSteps = {
+        data: [
+          {
+            id: 'step_1',
+            step_details: {
+              type: 'unknown_step',
+            },
+          },
+        ],
+      };
+
+      mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.retrieve.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.steps.list.mockResolvedValue(mockSteps);
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.output).toBe('[Unknown step type: unknown_step]');
+      expect(mockClient.beta.threads.createAndRun).toHaveBeenCalledTimes(1);
+      expect(mockClient.beta.threads.runs.retrieve).toHaveBeenCalledTimes(1);
+      expect(mockClient.beta.threads.runs.steps.list).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle run step retrieval errors', async () => {
+      const mockRun = {
+        id: 'run_123',
+        thread_id: 'thread_123',
+        status: 'completed',
+      };
+
+      const error = new Error('Run steps retrieval error');
+
+      mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.retrieve.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.steps.list.mockRejectedValue(error);
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toBeDefined();
+      expect(mockClient.beta.threads.createAndRun).toHaveBeenCalledTimes(1);
+      expect(mockClient.beta.threads.runs.retrieve).toHaveBeenCalledTimes(1);
+      expect(mockClient.beta.threads.runs.steps.list).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle message retrieval errors', async () => {
+      const mockRun = {
+        id: 'run_123',
+        thread_id: 'thread_123',
+        status: 'completed',
+      };
+
+      const mockSteps = {
+        data: [
+          {
+            id: 'step_1',
+            step_details: {
+              type: 'message_creation',
+              message_creation: {
+                message_id: 'msg_1',
+              },
+            },
+          },
+        ],
+      };
+
+      const error = new Error('Message retrieval error');
+
+      mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.retrieve.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.steps.list.mockResolvedValue(mockSteps);
+      mockClient.beta.threads.messages.retrieve.mockRejectedValue(error);
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toBeDefined();
+      expect(mockClient.beta.threads.createAndRun).toHaveBeenCalledTimes(1);
+      expect(mockClient.beta.threads.runs.retrieve).toHaveBeenCalledTimes(1);
+      expect(mockClient.beta.threads.runs.steps.list).toHaveBeenCalledTimes(1);
+      expect(mockClient.beta.threads.messages.retrieve).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle cancelled run status', async () => {
+      const mockRun = {
+        id: 'run_123',
+        thread_id: 'thread_123',
+        status: 'cancelled',
+      };
+
+      mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.retrieve.mockResolvedValue(mockRun);
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toBe('Thread run failed: cancelled');
+      expect(mockClient.beta.threads.createAndRun).toHaveBeenCalledTimes(1);
+      expect(mockClient.beta.threads.runs.retrieve).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle tool output submission errors', async () => {
+      const mockRun = {
+        id: 'run_123',
+        thread_id: 'thread_123',
+        status: 'requires_action',
+        required_action: {
+          type: 'submit_tool_outputs',
+          submit_tool_outputs: {
+            tool_calls: [
+              {
+                id: 'call_123',
+                type: 'function',
+                function: {
+                  name: 'test_function',
+                  arguments: '{"arg": "value"}',
+                },
+              },
+            ],
+          },
+        },
+      };
+
+      const error = new Error('Tool output submission error');
+
+      mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.retrieve.mockResolvedValueOnce(mockRun);
+      mockClient.beta.threads.runs.submitToolOutputs.mockRejectedValue(error);
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toBeDefined();
+      expect(mockClient.beta.threads.createAndRun).toHaveBeenCalledTimes(1);
+      expect(mockClient.beta.threads.runs.retrieve).toHaveBeenCalledTimes(1);
+      expect(mockClient.beta.threads.runs.submitToolOutputs).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle non-function tool calls with required_action', async () => {
+      const mockRun = {
+        id: 'run_123',
+        thread_id: 'thread_123',
+        status: 'requires_action',
+        required_action: {
+          type: 'submit_tool_outputs',
+          submit_tool_outputs: {
+            tool_calls: [
+              {
+                id: 'call_123',
+                type: 'not_a_function',
+              },
+            ],
+          },
+        },
+      };
+
+      const mockCompletedRun = {
+        ...mockRun,
+        status: 'completed',
+        required_action: null,
+      };
+
+      const mockSteps = {
+        data: [
+          {
+            id: 'step_1',
+            step_details: {
+              type: 'message_creation',
+              message_creation: {
+                message_id: 'msg_1',
+              },
+            },
+          },
+        ],
+      };
+
+      const mockMessage = {
+        role: 'assistant',
+        content: [
+          {
+            type: 'text',
+            text: {
+              value: 'Non-function tool response',
+            },
+          },
+        ],
+      };
+
+      mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.retrieve
+        .mockResolvedValueOnce(mockRun)
+        .mockResolvedValueOnce(mockCompletedRun);
+      mockClient.beta.threads.runs.steps.list.mockResolvedValue(mockSteps);
+      mockClient.beta.threads.messages.retrieve.mockResolvedValue(mockMessage);
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.output).toBe('[Assistant] Non-function tool response');
+      expect(mockClient.beta.threads.createAndRun).toHaveBeenCalledTimes(1);
+      expect(mockClient.beta.threads.runs.retrieve).toHaveBeenCalled();
+      expect(mockClient.beta.threads.runs.submitToolOutputs).not.toHaveBeenCalled();
+    });
   });
 });
