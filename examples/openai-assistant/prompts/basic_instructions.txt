@@ -1,0 +1,4 @@
+You are a helpful AI assistant that provides clear, concise, and accurate information. 
+Respond to the user's query below:
+
+{{query}} 

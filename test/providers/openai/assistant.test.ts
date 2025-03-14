@@ -4,6 +4,53 @@ import { OpenAiAssistantProvider } from '../../../src/providers/openai/assistant
 // Mock fetch
 jest.spyOn(global, 'fetch').mockImplementation();
 
+// Helper functions to create properly typed mock responses
+function createSuccessResponse<T>(data: T): Response {
+  const response = {
+    ok: true,
+    status: 200,
+    statusText: 'OK',
+    headers: new Headers(),
+    redirected: false,
+    type: 'basic' as ResponseType,
+    url: 'https://api.openai.com/v1',
+    body: null,
+    bodyUsed: false,
+    clone: () => response,
+    arrayBuffer: async () => new ArrayBuffer(0),
+    blob: async () => new Blob(),
+    formData: async () => new FormData(),
+    text: async () => JSON.stringify(data),
+    json: async () => data,
+  };
+  return response as unknown as Response;
+}
+
+function createErrorResponse(
+  status = 500,
+  statusText = 'Internal Server Error',
+  error: any = {},
+): Response {
+  const response = {
+    ok: false,
+    status,
+    statusText,
+    headers: new Headers(),
+    redirected: false,
+    type: 'basic' as ResponseType,
+    url: 'https://api.openai.com/v1',
+    body: null,
+    bodyUsed: false,
+    clone: () => response,
+    arrayBuffer: async () => new ArrayBuffer(0),
+    blob: async () => new Blob(),
+    formData: async () => new FormData(),
+    text: async () => JSON.stringify({ error }),
+    json: async () => ({ error }),
+  };
+  return response as unknown as Response;
+}
+
 describe('OpenAI Provider with Fetch', () => {
   beforeEach(() => {
     jest.resetAllMocks();
@@ -65,28 +112,16 @@ describe('OpenAI Provider with Fetch', () => {
       const mockFetch = jest.mocked(global.fetch);
 
       // Mock thread run creation
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockRun,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
 
       // Mock run retrieval
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockRun,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
 
       // Mock steps list
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockSteps,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockSteps));
 
       // Mock message retrieval
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockMessage,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockMessage));
 
       const result = await provider.callApi('Test prompt');
 
@@ -127,9 +162,10 @@ describe('OpenAI Provider with Fetch', () => {
       };
 
       const mockCompletedRun = {
-        ...mockRun,
         status: 'completed',
         required_action: null,
+        id: 'run_123',
+        thread_id: 'thread_123',
       };
 
       const mockSteps = {
@@ -157,34 +193,19 @@ describe('OpenAI Provider with Fetch', () => {
       const mockFetch = jest.mocked(global.fetch);
 
       // Mock thread run creation
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockRun,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
 
       // Mock run retrieval (requires action)
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockRun,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
 
       // Mock submit tool outputs
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockCompletedRun,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockCompletedRun));
 
       // Mock run retrieval (completed)
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockCompletedRun,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockCompletedRun));
 
       // Mock steps list
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockSteps,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockSteps));
 
       const result = await provider.callApi('Test prompt');
 
@@ -208,16 +229,10 @@ describe('OpenAI Provider with Fetch', () => {
       const mockFetch = jest.mocked(global.fetch);
 
       // Mock thread run creation
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockRun,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
 
       // Mock run retrieval
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockRun,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
 
       const result = await provider.callApi('Test prompt');
 
@@ -230,12 +245,12 @@ describe('OpenAI Provider with Fetch', () => {
       const mockFetch = jest.mocked(global.fetch);
 
       // Mock thread run creation with error
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: false,
-        status: 500,
-        statusText: 'Internal Server Error',
-        json: async () => ({ error: { type: 'API Error', message: 'API Error' } }),
-      }));
+      mockFetch.mockImplementationOnce(async () =>
+        createErrorResponse(500, 'Internal Server Error', {
+          type: 'API Error',
+          message: 'API Error',
+        }),
+      );
 
       const result = await provider.callApi('Test prompt');
 
@@ -252,7 +267,7 @@ describe('OpenAI Provider with Fetch', () => {
         'OpenAI API key is not set',
       );
 
-      process.env.OPENAI_API_KEY = 'test-key'; // Restore for other tests
+      process.env.OPENAI_API_KEY = 'test-key';
     });
 
     it('should handle code interpreter tool calls', async () => {
@@ -291,22 +306,13 @@ describe('OpenAI Provider with Fetch', () => {
       const mockFetch = jest.mocked(global.fetch);
 
       // Mock thread run creation
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockRun,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
 
       // Mock run retrieval
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockRun,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
 
       // Mock steps list
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockSteps,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockSteps));
 
       const result = await provider.callApi('Test prompt');
 
@@ -343,22 +349,13 @@ describe('OpenAI Provider with Fetch', () => {
       const mockFetch = jest.mocked(global.fetch);
 
       // Mock thread run creation
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockRun,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
 
       // Mock run retrieval
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockRun,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
 
       // Mock steps list
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockSteps,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockSteps));
 
       const result = await provider.callApi('Test prompt');
 
@@ -393,22 +390,13 @@ describe('OpenAI Provider with Fetch', () => {
       const mockFetch = jest.mocked(global.fetch);
 
       // Mock thread run creation
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockRun,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
 
       // Mock run retrieval
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockRun,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
 
       // Mock steps list
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockSteps,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockSteps));
 
       const result = await provider.callApi('Test prompt');
 
@@ -438,22 +426,13 @@ describe('OpenAI Provider with Fetch', () => {
       const mockFetch = jest.mocked(global.fetch);
 
       // Mock thread run creation
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockRun,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
 
       // Mock run retrieval
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockRun,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
 
       // Mock steps list
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockSteps,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockSteps));
 
       const result = await provider.callApi('Test prompt');
 
@@ -472,24 +451,15 @@ describe('OpenAI Provider with Fetch', () => {
       const mockFetch = jest.mocked(global.fetch);
 
       // Mock thread run creation
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockRun,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
 
       // Mock run retrieval
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockRun,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
 
       // Mock steps list with error
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: false,
-        status: 500,
-        statusText: 'Internal Server Error',
-        json: async () => ({ error: { message: 'Run steps retrieval error' } }),
-      }));
+      mockFetch.mockImplementationOnce(async () =>
+        createErrorResponse(500, 'Internal Server Error', { message: 'Run steps retrieval error' }),
+      );
 
       const result = await provider.callApi('Test prompt');
 
@@ -522,30 +492,18 @@ describe('OpenAI Provider with Fetch', () => {
       const mockFetch = jest.mocked(global.fetch);
 
       // Mock thread run creation
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockRun,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
 
       // Mock run retrieval
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockRun,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
 
       // Mock steps list
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockSteps,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockSteps));
 
       // Mock message retrieval with error
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: false,
-        status: 500,
-        statusText: 'Internal Server Error',
-        json: async () => ({ error: { message: 'Message retrieval error' } }),
-      }));
+      mockFetch.mockImplementationOnce(async () =>
+        createErrorResponse(500, 'Internal Server Error', { message: 'Message retrieval error' }),
+      );
 
       const result = await provider.callApi('Test prompt');
 
@@ -564,16 +522,10 @@ describe('OpenAI Provider with Fetch', () => {
       const mockFetch = jest.mocked(global.fetch);
 
       // Mock thread run creation
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockRun,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
 
       // Mock run retrieval
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockRun,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
 
       const result = await provider.callApi('Test prompt');
 
@@ -607,24 +559,17 @@ describe('OpenAI Provider with Fetch', () => {
       const mockFetch = jest.mocked(global.fetch);
 
       // Mock thread run creation
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockRun,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
 
       // Mock run retrieval
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockRun,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
 
       // Mock submit tool outputs with error
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: false,
-        status: 500,
-        statusText: 'Internal Server Error',
-        json: async () => ({ error: { message: 'Tool output submission error' } }),
-      }));
+      mockFetch.mockImplementationOnce(async () =>
+        createErrorResponse(500, 'Internal Server Error', {
+          message: 'Tool output submission error',
+        }),
+      );
 
       const result = await provider.callApi('Test prompt');
 
@@ -654,24 +599,15 @@ describe('OpenAI Provider with Fetch', () => {
       const mockFetch = jest.mocked(global.fetch);
 
       // Mock thread run creation
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockRun,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
 
       // Mock first run retrieval (requires action)
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: true,
-        json: async () => mockRun,
-      }));
+      mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
 
       // Mock steps list
-      mockFetch.mockImplementationOnce(async () => ({
-        ok: false,
-        status: 404,
-        statusText: 'Not Found',
-        json: async () => ({ error: { message: 'Steps not found' } }),
-      }));
+      mockFetch.mockImplementationOnce(async () =>
+        createErrorResponse(404, 'Not Found', { message: 'Steps not found' }),
+      );
 
       const result = await provider.callApi('Test prompt');
 
