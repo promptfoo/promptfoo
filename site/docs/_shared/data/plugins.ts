@@ -910,6 +910,20 @@ export const PLUGINS = [
     vulnerabilityType: 'security',
   },
   {
+    category: 'Security and Access Control',
+    description: 'Tests if an AI system reveals the list of tools, functions, or API calls it has access to',
+    label: 'technical',
+    link: '/docs/red-team/plugins/tool-discovery/',
+    name: 'Tool Discovery',
+    pluginId: 'tool-discovery',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
     category: 'Trust and Safety',
     description: 'Tests handling of religious content and bias',
     label: 'brand',

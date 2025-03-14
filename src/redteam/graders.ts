@@ -9,8 +9,8 @@ import { CrossSessionLeakGrader } from './plugins/crossSessionLeak';
 import { DebugAccessGrader } from './plugins/debugAccess';
 import { DivergentRepetitionGrader } from './plugins/divergentRepetition';
 import { ExcessiveAgencyGrader } from './plugins/excessiveAgency';
-import { FunctionDiscoveryGrader } from './plugins/functionDiscovery';
 import { HallucinationGrader } from './plugins/hallucination';
+import { ToolDiscoveryGrader } from './plugins/toolDiscovery';
 import { HarmbenchGrader } from './plugins/harmbench';
 import {
   ChildExploitationGrader,
@@ -63,7 +63,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:debug-access': new DebugAccessGrader(),
   'promptfoo:redteam:divergent-repetition': new DivergentRepetitionGrader(),
   'promptfoo:redteam:excessive-agency': new ExcessiveAgencyGrader(),
-  'promptfoo:redteam:function-discovery': new FunctionDiscoveryGrader(),
+  'promptfoo:redteam:tool-discovery': new ToolDiscoveryGrader(),
   'promptfoo:redteam:hallucination': new HallucinationGrader(),
   'promptfoo:redteam:harmbench': new HarmbenchGrader(),
   'promptfoo:redteam:harmful:chemical-biological-weapons': new HarmfulGrader(),
