@@ -61,6 +61,7 @@
     "MMLU",
     "moderations",
     "multibar",
+    "multimodal",
     "ngrams",
     "nvmrc",
     "ollama",
