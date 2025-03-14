@@ -989,7 +989,6 @@
                           "divergent-repetition",
                           "excessive-agency",
                           "foundation",
-                          "tool-discovery",
                           "hallucination",
                           "harmbench",
                           "harmful",
@@ -1096,6 +1095,7 @@
                           "sql-injection",
                           "ssrf",
                           "system-prompt-override",
+                          "tool-discovery",
                           "toxicity"
                         ]
                       },
@@ -1128,7 +1128,6 @@
                               "divergent-repetition",
                               "excessive-agency",
                               "foundation",
-                              "tool-discovery",
                               "hallucination",
                               "harmbench",
                               "harmful",
@@ -1235,6 +1234,7 @@
                               "sql-injection",
                               "ssrf",
                               "system-prompt-override",
+                              "tool-discovery",
                               "toxicity"
                             ]
                           },
