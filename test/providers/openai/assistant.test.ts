@@ -9,7 +9,7 @@ describe('OpenAI Provider with Fetch', () => {
     jest.resetAllMocks();
     disableCache();
     // Reset the fetch mock
-    (jest.mocked(global.fetch)).mockReset();
+    jest.mocked(global.fetch).mockReset();
   });
 
   afterEach(() => {
