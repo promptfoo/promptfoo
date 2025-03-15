@@ -1,13 +1,8 @@
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import type { ApiProvider } from '../types';
+import type { ApiProvider, DefaultProviders } from '../types';
 import type { EnvOverrides } from '../types/env';
-import {
-  getDefaultGradingProvider as getAnthropicGradingProvider,
-  getDefaultGradingJsonProvider as getAnthropicGradingJsonProvider,
-  getDefaultLlmRubricProvider as getAnthropicLlmRubricProvider,
-  getDefaultSuggestionsProvider as getAnthropicSuggestionsProvider,
-} from './anthropic';
+import { getAnthropicProviders } from './anthropic/index';
 import { AzureChatCompletionProvider, AzureEmbeddingProvider } from './azure';
 import { AzureModerationProvider } from './azure/moderation';
 import {
@@ -22,17 +17,6 @@ import {
   DefaultGradingProvider as GeminiGradingProvider,
 } from './vertex';
 import { hasGoogleDefaultCredentials } from './vertexUtil';
-
-interface DefaultProviders {
-  datasetGenerationProvider: ApiProvider;
-  embeddingProvider: ApiProvider;
-  gradingJsonProvider: ApiProvider;
-  gradingProvider: ApiProvider;
-  llmRubricProvider?: ApiProvider;
-  moderationProvider: ApiProvider;
-  suggestionsProvider: ApiProvider;
-  synthesizeProvider: ApiProvider;
-}
 
 const COMPLETION_PROVIDERS: (keyof DefaultProviders)[] = [
   'datasetGenerationProvider',
@@ -61,10 +45,12 @@ export async function setDefaultEmbeddingProviders(provider: ApiProvider) {
 }
 
 export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultProviders> {
-  const preferAnthropic =
-    !getEnvString('OPENAI_API_KEY') &&
-    !env?.OPENAI_API_KEY &&
-    (getEnvString('ANTHROPIC_API_KEY') || env?.ANTHROPIC_API_KEY);
+  // Check for provider credentials
+  const hasAnthropicCredentials = Boolean(
+    getEnvString('ANTHROPIC_API_KEY') || env?.ANTHROPIC_API_KEY,
+  );
+  const hasOpenAiCredentials = Boolean(getEnvString('OPENAI_API_KEY') || env?.OPENAI_API_KEY);
+  const preferAnthropic = !hasOpenAiCredentials && hasAnthropicCredentials;
 
   const hasAzureApiKey =
     getEnvString('AZURE_OPENAI_API_KEY') ||
@@ -114,15 +100,16 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     };
   } else if (preferAnthropic) {
     logger.debug('Using Anthropic default providers');
+    const anthropicProviders = getAnthropicProviders(env);
     providers = {
-      datasetGenerationProvider: getAnthropicGradingProvider(),
+      datasetGenerationProvider: anthropicProviders.datasetGenerationProvider,
       embeddingProvider: OpenAiEmbeddingProvider, // TODO(ian): Voyager instead?
-      gradingJsonProvider: getAnthropicGradingJsonProvider(),
-      gradingProvider: getAnthropicGradingProvider(),
-      llmRubricProvider: getAnthropicLlmRubricProvider(),
+      gradingJsonProvider: anthropicProviders.gradingJsonProvider,
+      gradingProvider: anthropicProviders.gradingProvider,
+      llmRubricProvider: anthropicProviders.llmRubricProvider,
       moderationProvider: OpenAiModerationProvider,
-      suggestionsProvider: getAnthropicSuggestionsProvider(),
-      synthesizeProvider: getAnthropicGradingJsonProvider(),
+      suggestionsProvider: anthropicProviders.suggestionsProvider,
+      synthesizeProvider: anthropicProviders.synthesizeProvider,
     };
   } else if (
     !getEnvString('OPENAI_API_KEY') &&
