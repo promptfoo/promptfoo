@@ -585,10 +585,10 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     prompt: string,
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
-  ): Promise<CreateChatCompletionRequest & { tools?: any; tool_choice?: any }> {
+  ): Promise<{ body: any; config?: any }> {
     const config = {
       ...this.config,
-      ...context?.provider?.config,
+      ...(context?.test?.providerResponse?.metadata?.config || {}),
       ...context?.prompt?.config,
     };
 
@@ -633,7 +633,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       ...(config.seed === undefined ? {} : { seed: config.seed }),
       ...(config.functions
         ? {
-            functions: maybeLoadFromExternalFile(
+            functions: await maybeLoadFromExternalFile(
               renderVarsInObject(config.functions, context?.vars),
             ),
           }
@@ -641,7 +641,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       ...(config.function_call ? { function_call: config.function_call } : {}),
       ...(config.tools
         ? {
-            tools: maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)),
+            tools: await maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)),
           }
         : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
@@ -650,19 +650,18 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(config.stop ? { stop: config.stop } : {}),
       ...(config.passthrough || {}),
-      ...(config.response_format 
-          ? { response_format: await maybeLoadFromExternalFile(renderVarsInObject(config.response_format, context?.vars)) } 
-          : {}),
-      ...(config.functions 
-          ? { functions: await maybeLoadFromExternalFile(renderVarsInObject(config.functions, context?.vars)) } 
-          : {}),
-      ...(config.tools 
-          ? { tools: await maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)) } 
-          : {}),
+      ...responseFormat,
     };
 
     logger.debug(`Azure API request body: ${JSON.stringify(body)}`);
-    return { body, config };
+    const result = { body, config };
+    // For testing purposes, expose body directly if accessed with .body
+    Object.defineProperty(result, 'body', {
+      get() {
+        return body;
+      },
+    });
+    return result;
   }
 
   async callApi(

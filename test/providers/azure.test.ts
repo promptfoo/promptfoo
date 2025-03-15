@@ -241,7 +241,7 @@ describe('AzureOpenAiChatCompletionProvider', () => {
           response_format: { type: 'json_object' },
         },
       });
-      
+
       // Mock the getOpenAiBody method to directly return the expected structure
       jest.spyOn(provider as any, 'getOpenAiBody').mockImplementationOnce(async () => {
         return {
@@ -249,16 +249,10 @@ describe('AzureOpenAiChatCompletionProvider', () => {
             functions: [{ name: 'provider_func', parameters: {} }],
             response_format: { type: 'json_object' },
           },
-          config: {},
-          get body() {
-            return {
-              functions: [{ name: 'provider_func', parameters: {} }],
-              response_format: { type: 'json_object' },
-            };
-          }
+          config: {}
         };
       });
-      
+
       // Call the method with params that would normally override functions
       const result = await (provider as any).getOpenAiBody('test prompt', {
         provider: {
@@ -267,7 +261,7 @@ describe('AzureOpenAiChatCompletionProvider', () => {
           },
         },
       });
-      
+
       // Verify the correct values are in the body
       expect(result.body.functions).toEqual([{ name: 'provider_func', parameters: {} }]);
       expect(result.body.response_format).toEqual({ type: 'json_object' });
@@ -275,116 +269,118 @@ describe('AzureOpenAiChatCompletionProvider', () => {
 
     it('should handle json_schema response format', async () => {
       const responseFormat = {
-        type: 'json_schema' as const,
+        type: 'json_schema',
         json_schema: {
           name: 'test_schema',
+          strict: true,
           schema: {
             type: 'object',
             properties: {
               name: { type: 'string' },
             },
+            additionalProperties: false
           },
         },
       };
-      
+
       const provider = new AzureChatCompletionProvider('test-deployment', {
         config: {
           response_format: responseFormat,
         },
       });
-      
+
       // Mock the getOpenAiBody method to directly return the expected structure
       jest.spyOn(provider as any, 'getOpenAiBody').mockResolvedValueOnce({
         body: {
-          response_format: responseFormat
+          response_format: responseFormat,
         },
-        config: {}
+        config: {},
       });
-      
+
       const context = {
         prompt: { label: 'test prompt', raw: 'test prompt' },
       };
-      
+
       const result = await (provider as any).getOpenAiBody('test prompt', context);
       expect(result.body.response_format).toMatchObject(responseFormat);
     });
 
-    it('should render variables in response format', async () => {
+    it('should render variables in response_format', async () => {
+      const context = {
+        vars: {
+          schema_name: 'dynamic_schema',
+        },
+      };
+
       const responseFormat = {
-        type: 'json_schema' as const,
+        type: 'json_schema',
         json_schema: {
-          name: '{{schema_name}}',
+          name: '{{ schema_name }}',
+          strict: true,
           schema: {
             type: 'object',
             properties: {
               name: { type: 'string' },
             },
+            additionalProperties: false
           },
         },
       };
-      
-      const resolvedFormat = {
-        type: 'json_schema' as const,
-        json_schema: {
-          name: 'dynamic_schema',
-          schema: {
-            type: 'object',
-            properties: {
-              name: { type: 'string' },
-            },
-          },
-        },
-      };
-      
+
       const provider = new AzureChatCompletionProvider('test-deployment', {
         config: {
           response_format: responseFormat,
         },
       });
-      
-      // Mock the getOpenAiBody method to directly return the expected structure
+
+      // Mock the getOpenAiBody method to directly return the expected structure with the resolved variable
       jest.spyOn(provider as any, 'getOpenAiBody').mockResolvedValueOnce({
         body: {
-          response_format: resolvedFormat
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'dynamic_schema',
+              strict: true,
+              schema: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                },
+                additionalProperties: false
+              },
+            },
+          },
         },
-        config: {}
+        config: {},
       });
-      
-      const context = {
-        prompt: { label: 'test prompt', raw: 'test prompt' },
-        vars: { schema_name: 'dynamic_schema' },
-      };
-      
+
       const result = await (provider as any).getOpenAiBody('test prompt', context);
       expect(result.body.response_format?.json_schema?.name).toBe('dynamic_schema');
     });
 
     it('should preserve functions and response_format in config', async () => {
       const provider = new AzureChatCompletionProvider('gpt-4', {
-        apiKey: 'test',
-        apiHost: 'test.com',
         config: {
+          apiKey: 'test',
+          apiHost: 'test.com',
           functions: [{ name: 'provider_func', parameters: {} }],
           response_format: { type: 'json_object' },
         },
       });
-      
+
       // Mock the getOpenAiBody method to directly return the expected structure
       const mockBody = {
         functions: [{ name: 'provider_func', parameters: {} }],
         response_format: { type: 'json_object' },
       };
-      
+
       jest.spyOn(provider as any, 'getOpenAiBody').mockImplementationOnce(async () => {
         return {
           body: mockBody,
-          config: {},
-          get body() {
-            return mockBody;
-          }
+          config: {}
         };
       });
-      
+
       // Call the method with params that would normally override functions
       const result = await (provider as any).getOpenAiBody('test prompt', {
         provider: {
@@ -393,7 +389,7 @@ describe('AzureOpenAiChatCompletionProvider', () => {
           },
         },
       });
-      
+
       // Verify the correct values are in the body
       expect(result.body.functions).toEqual([{ name: 'provider_func', parameters: {} }]);
       expect(result.body.response_format).toEqual({ type: 'json_object' });
@@ -793,15 +789,15 @@ describe('AzureOpenAiChatCompletionProvider', () => {
           max_tokens: 1000,
         },
       });
-      
+
       // Mock the getOpenAiBody method to directly return the expected structure
       jest.spyOn(provider as any, 'getOpenAiBody').mockResolvedValueOnce({
         body: {
           max_completion_tokens: 2000,
         },
-        config: {}
+        config: {},
       });
-      
+
       const body = (await (provider as any).getOpenAiBody('test prompt')).body;
       expect(body).toHaveProperty('max_completion_tokens', 2000);
       expect(body).not.toHaveProperty('max_tokens');
@@ -814,15 +810,15 @@ describe('AzureOpenAiChatCompletionProvider', () => {
           reasoning_effort: 'high',
         },
       });
-      
+
       // Mock the getOpenAiBody method to directly return the expected structure
       jest.spyOn(provider as any, 'getOpenAiBody').mockResolvedValueOnce({
         body: {
           reasoning_effort: 'high',
         },
-        config: {}
+        config: {},
       });
-      
+
       const body = (await (provider as any).getOpenAiBody('test prompt')).body;
       expect(body).toHaveProperty('reasoning_effort', 'high');
     });
@@ -834,15 +830,15 @@ describe('AzureOpenAiChatCompletionProvider', () => {
           temperature: 0.7,
         },
       });
-      
+
       // Mock the getOpenAiBody method to directly return the expected structure
       jest.spyOn(provider as any, 'getOpenAiBody').mockResolvedValueOnce({
         body: {
           // No temperature property
         },
-        config: {}
+        config: {},
       });
-      
+
       const body = (await (provider as any).getOpenAiBody('test prompt')).body;
       expect(body).not.toHaveProperty('temperature');
     });
@@ -855,20 +851,20 @@ describe('AzureOpenAiChatCompletionProvider', () => {
           apiHost: 'test.azure.com',
         },
       });
-      
+
       // Mock the getOpenAiBody method to directly return the expected structure
       jest.spyOn(provider as any, 'getOpenAiBody').mockResolvedValueOnce({
         body: {
           reasoning_effort: 'high',
         },
-        config: {}
+        config: {},
       });
-      
+
       const context = {
         prompt: { label: 'test prompt', raw: 'test prompt' },
         vars: { effort: 'high' as const },
       };
-      
+
       const body = (await (provider as any).getOpenAiBody('test prompt', context)).body;
       expect(body).toHaveProperty('reasoning_effort', 'high');
     });
