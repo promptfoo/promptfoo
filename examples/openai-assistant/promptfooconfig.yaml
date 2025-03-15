@@ -1,9 +1,8 @@
-# yaml-language-server: $schema=https://promptfoo.dev/schemas/promptfooconfig.json
-$schema: https://promptfoo.dev/schemas/promptfooconfig.json
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Test OpenAI Assistants API capabilities
 
 prompts:
-  - 'Answer the following question: {{query}}'
+  - file://prompts/basic_instructions.txt
 
 providers:
   - id: openai:assistant:asst_CCDJc0V4MoAZ5WGEmtozI3bt
@@ -49,3 +48,21 @@ tests:
     assert:
       - type: contains
         value: 'San Francisco'
+      - type: contains
+        value: 'temperature'
+
+  - vars:
+      query: Please tell me the temperature in New York in celsius.
+    assert:
+      - type: contains
+        value: 'New York'
+      - type: contains
+        value: 'celsius'
+
+  - vars:
+      query: Tell me about the current weather conditions in Seattle.
+    assert:
+      - type: contains
+        value: 'Seattle'
+      - type: contains
+        value: 'weather'

@@ -143,7 +143,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
             this.parsedFunctionCallbacks[name] = async (args: string) => {
               // Create a function from the string and execute it with the args
               const fnBody = callback.trim();
-               
+
               const fn = new Function(
                 'args',
                 `
