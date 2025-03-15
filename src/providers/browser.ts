@@ -137,7 +137,7 @@ export class BrowserProvider implements ApiProvider {
   private async setCookies(browserContext: BrowserContext): Promise<void> {
     if (typeof this.config.cookies === 'string') {
       // Handle big blob string of cookies
-      const cookieString = await maybeLoadFromExternalFile(this.config.cookies) as string;
+      const cookieString = (await maybeLoadFromExternalFile(this.config.cookies)) as string;
       const cookiePairs = cookieString.split(';').map((pair) => pair.trim());
       const cookies = cookiePairs.map((pair) => {
         const [name, value] = pair.split('=');

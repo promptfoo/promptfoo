@@ -681,7 +681,11 @@ export const BEDROCK_MODEL = {
     output: (responseJson: any) => responseJson?.generations[0]?.text,
   },
   COHERE_COMMAND_R: {
-    params: async (config: BedrockCohereCommandRGenerationOptions, prompt: string, stop?: string[]) => {
+    params: async (
+      config: BedrockCohereCommandRGenerationOptions,
+      prompt: string,
+      stop?: string[],
+    ) => {
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
       const lastMessage = messages[messages.length - 1].content;
       if (!messages.every((m) => typeof m.content === 'string')) {

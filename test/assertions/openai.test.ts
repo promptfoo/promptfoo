@@ -20,77 +20,6 @@ jest.mock('path');
 const mockedFs = jest.mocked(fs);
 const mockedPath = jest.mocked(path);
 
-beforeEach(() => {
-  jest.clearAllMocks();
-  
-  mockedFs.existsSync.mockImplementation((path) => {
-    const pathStr = path.toString();
-    return pathStr.includes('weather_tools.yaml') || pathStr.includes('weather_functions.yaml');
-  });
-  
-  mockedFs.readFileSync.mockImplementation((path, encoding) => {
-    const pathStr = path.toString();
-    if (pathStr.includes('weather_tools.yaml') || pathStr.includes('weather_functions.yaml')) {
-      return 'mock yaml content';
-    }
-    return '';
-  });
-  
-  mockedPath.parse.mockImplementation((p) => {
-    return {
-      root: '/',
-      dir: '/test/fixtures',
-      base: p && p.includes('.yaml') ? 'weather_tools.yaml' : 'file',
-      ext: p && p.includes('.yaml') ? '.yaml' : '',
-      name: p && p.includes('.yaml') ? 'weather_tools' : 'file',
-    };
-  });
-  
-  mockedPath.resolve.mockImplementation((...args) => {
-    const path = args[args.length - 1];
-    if (typeof path === 'string' && path.startsWith('file://')) {
-      return path.slice('file://'.length);
-    }
-    return path || './test/fixtures/default.yaml';
-  });
-  
-  mockedPath.relative.mockImplementation((basePath, filePath) => {
-    return './test/fixtures/weather_tools.yaml';
-  });
-  
-  mockedPath.isAbsolute.mockReturnValue(true);
-  mockedPath.join.mockImplementation((...args) => './test/fixtures/weather_tools.yaml');
-  mockedFs.statSync.mockImplementation((path) => {
-    return {
-      isDirectory: () => false,
-      isFile: () => true,
-      isBlockDevice: () => false,
-      isCharacterDevice: () => false,
-      isSymbolicLink: () => false,
-      isFIFO: () => false,
-      isSocket: () => false,
-      dev: 0,
-      ino: 0,
-      mode: 0,
-      nlink: 0,
-      uid: 0,
-      gid: 0,
-      rdev: 0,
-      size: 0,
-      blksize: 0,
-      blocks: 0,
-      atimeMs: 0,
-      mtimeMs: 0,
-      ctimeMs: 0,
-      birthtimeMs: 0,
-      atime: new Date(),
-      mtime: new Date(),
-      ctime: new Date(),
-      birthtime: new Date()
-    };
-  });
-});
-
 const toolsAssertion: Assertion = {
   type: 'is-valid-openai-tools-call',
 };
@@ -145,6 +74,77 @@ const mockContext: AssertionValueFunctionContext = {
 };
 
 describe('OpenAI assertions', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    mockedFs.existsSync.mockImplementation((path) => {
+      const pathStr = path.toString();
+      return pathStr.includes('weather_tools.yaml') || pathStr.includes('weather_functions.yaml');
+    });
+
+    mockedFs.readFileSync.mockImplementation((path, encoding) => {
+      const pathStr = path.toString();
+      if (pathStr.includes('weather_tools.yaml') || pathStr.includes('weather_functions.yaml')) {
+        return 'mock yaml content';
+      }
+      return '';
+    });
+
+    mockedPath.parse.mockImplementation((p) => {
+      return {
+        root: '/',
+        dir: '/test/fixtures',
+        base: p && p.includes('.yaml') ? 'weather_tools.yaml' : 'file',
+        ext: p && p.includes('.yaml') ? '.yaml' : '',
+        name: p && p.includes('.yaml') ? 'weather_tools' : 'file',
+      };
+    });
+
+    mockedPath.resolve.mockImplementation((...args) => {
+      const path = args[args.length - 1];
+      if (typeof path === 'string' && path.startsWith('file://')) {
+        return path.slice('file://'.length);
+      }
+      return path || './test/fixtures/default.yaml';
+    });
+
+    mockedPath.relative.mockImplementation((basePath, filePath) => {
+      return './test/fixtures/weather_tools.yaml';
+    });
+
+    mockedPath.isAbsolute.mockReturnValue(true);
+    mockedPath.join.mockImplementation((...args) => './test/fixtures/weather_tools.yaml');
+    mockedFs.statSync.mockImplementation((path) => {
+      return {
+        isDirectory: () => false,
+        isFile: () => true,
+        isBlockDevice: () => false,
+        isCharacterDevice: () => false,
+        isSymbolicLink: () => false,
+        isFIFO: () => false,
+        isSocket: () => false,
+        dev: 0,
+        ino: 0,
+        mode: 0,
+        nlink: 0,
+        uid: 0,
+        gid: 0,
+        rdev: 0,
+        size: 0,
+        blksize: 0,
+        blocks: 0,
+        atimeMs: 0,
+        mtimeMs: 0,
+        ctimeMs: 0,
+        birthtimeMs: 0,
+        atime: new Date(),
+        mtime: new Date(),
+        ctime: new Date(),
+        birthtime: new Date(),
+      };
+    });
+  });
+
   beforeEach(() => {
     jest.resetAllMocks();
     mockedPath.resolve.mockImplementation((...args) => args[args.length - 1]);
@@ -265,6 +265,26 @@ describe('OpenAI assertions', () => {
   });
 
   describe('handleIsValidOpenAiFunctionCall', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+
+      mockedFs.existsSync.mockReturnValue(true);
+      mockedFs.readFileSync.mockReturnValue('mock yaml content');
+
+      mockedPath.parse.mockImplementation((p) => {
+        return {
+          root: '/',
+          dir: '/test/fixtures',
+          base: 'weather_functions.yaml',
+          ext: '.yaml',
+          name: 'weather_functions',
+        };
+      });
+
+      mockedPath.relative.mockReturnValue('./test/fixtures/weather_functions.yaml');
+      mockedPath.join.mockReturnValue('./test/fixtures/weather_functions.yaml');
+    });
+
     it('should pass when function call matches schema', async () => {
       const functionOutput = {
         name: 'getCurrentTemperature',
@@ -311,7 +331,7 @@ describe('OpenAI assertions', () => {
 `;
 
       mockedFs.readFileSync.mockReturnValue(mockYamlContent);
-      
+
       mockedPath.parse.mockImplementation((p) => {
         return {
           root: '/',
@@ -321,7 +341,7 @@ describe('OpenAI assertions', () => {
           name: 'weather_functions',
         };
       });
-      
+
       mockedPath.relative.mockReturnValue('./test/fixtures/weather_functions.yaml');
       mockedPath.join.mockReturnValue('./test/fixtures/weather_functions.yaml');
 
@@ -351,8 +371,11 @@ describe('OpenAI assertions', () => {
         assertion: functionAssertion,
       });
 
-      expect(mockedFs.existsSync).toHaveBeenCalled();
-      expect(mockedFs.readFileSync).toHaveBeenCalled();
+      expect(mockedFs.existsSync).toHaveBeenCalledWith('./test/fixtures/weather_functions.yaml');
+      expect(mockedFs.readFileSync).toHaveBeenCalledWith(
+        './test/fixtures/weather_functions.yaml',
+        'utf8',
+      );
     });
 
     it('should render variables in function definitions', async () => {
@@ -426,7 +449,9 @@ describe('OpenAI assertions', () => {
       expect(result).toEqual({
         pass: false,
         score: 0,
-        reason: expect.stringContaining('Called "getCurrentTemperature", but there is no function with that name'),
+        reason: expect.stringContaining(
+          'Called "getCurrentTemperature", but there is no function with that name',
+        ),
         assertion: functionAssertion,
       });
     });
@@ -685,6 +710,26 @@ describe('OpenAI assertions', () => {
   });
 
   describe('handleIsValidOpenAiToolsCall', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+
+      mockedFs.existsSync.mockReturnValue(true);
+      mockedFs.readFileSync.mockReturnValue('mock yaml content');
+
+      mockedPath.parse.mockImplementation((p) => {
+        return {
+          root: '/',
+          dir: '/test/fixtures',
+          base: 'weather_tools.yaml',
+          ext: '.yaml',
+          name: 'weather_tools',
+        };
+      });
+
+      mockedPath.relative.mockReturnValue('./test/fixtures/weather_tools.yaml');
+      mockedPath.join.mockReturnValue('./test/fixtures/weather_tools.yaml');
+    });
+
     // Basic validation tests
     it('should pass when tool calls match schema', async () => {
       const toolsOutput = [
@@ -747,7 +792,7 @@ describe('OpenAI assertions', () => {
 `;
 
       mockedFs.readFileSync.mockReturnValue(mockYamlContent);
-      
+
       mockedPath.parse.mockImplementation((p) => {
         return {
           root: '/',
@@ -757,7 +802,7 @@ describe('OpenAI assertions', () => {
           name: 'weather_tools',
         };
       });
-      
+
       mockedPath.relative.mockReturnValue('./test/fixtures/weather_tools.yaml');
       mockedPath.join.mockReturnValue('./test/fixtures/weather_tools.yaml');
 
@@ -787,8 +832,11 @@ describe('OpenAI assertions', () => {
         assertion: toolsAssertion,
       });
 
-      expect(mockedFs.existsSync).toHaveBeenCalled();
-      expect(mockedFs.readFileSync).toHaveBeenCalled();
+      expect(mockedFs.existsSync).toHaveBeenCalledWith('./test/fixtures/weather_tools.yaml');
+      expect(mockedFs.readFileSync).toHaveBeenCalledWith(
+        './test/fixtures/weather_tools.yaml',
+        'utf8',
+      );
     });
 
     // Variable rendering tests
@@ -875,7 +923,7 @@ describe('OpenAI assertions', () => {
           inverse: false,
           outputString: JSON.stringify(toolsOutput),
           providerResponse: { output: toolsOutput },
-        })
+        }),
       ).rejects.toThrow('Tools are expected to be an array of objects with a function property');
     });
 

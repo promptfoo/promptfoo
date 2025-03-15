@@ -249,7 +249,7 @@ describe('AzureOpenAiChatCompletionProvider', () => {
             functions: [{ name: 'provider_func', parameters: {} }],
             response_format: { type: 'json_object' },
           },
-          config: {}
+          config: {},
         };
       });
 
@@ -377,7 +377,7 @@ describe('AzureOpenAiChatCompletionProvider', () => {
       jest.spyOn(provider as any, 'getOpenAiBody').mockImplementationOnce(async () => {
         return {
           body: mockBody,
-          config: {}
+          config: {},
         };
       });
 

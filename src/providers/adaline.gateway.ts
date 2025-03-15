@@ -286,7 +286,9 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
   }
 
   async checkRequestFormat(prompt: string): Promise<{ formatType: 'gateway' | 'openai' }> {
-    const checkFormatRequestUsingConfig = async (): Promise<{ formatType: 'gateway' | 'openai' }> => {
+    const checkFormatRequestUsingConfig = async (): Promise<{
+      formatType: 'gateway' | 'openai';
+    }> => {
       if (this.config.tools && this.config.tools.length > 0) {
         const loadedTools = await maybeLoadFromExternalFile(this.config.tools);
         if (loadedTools && loadedTools.length > 0) {

@@ -276,12 +276,14 @@ export abstract class RedteamGraderBase {
     renderedValue: AssertionValue | undefined,
   ): Promise<{ grade: GradingResult; rubric: string; suggestions?: ResultSuggestion[] }> {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
-    
+
     const vars = {
       ...test.metadata,
       prompt,
       entities: test.metadata?.entities ?? [],
-      tools: provider?.config?.tools ? await maybeLoadFromExternalFile(provider.config.tools) : undefined,
+      tools: provider?.config?.tools
+        ? await maybeLoadFromExternalFile(provider.config.tools)
+        : undefined,
       value: renderedValue,
     };
     // Grader examples are appended to all rubrics if present.

@@ -17,7 +17,9 @@ const CustomPluginDefinitionSchema = z
 
 type CustomPluginDefinition = z.infer<typeof CustomPluginDefinitionSchema>;
 
-export async function loadCustomPluginDefinition(filePath: string): Promise<CustomPluginDefinition> {
+export async function loadCustomPluginDefinition(
+  filePath: string,
+): Promise<CustomPluginDefinition> {
   logger.debug(`Loading custom plugin from ${filePath}`);
 
   const pluginData = await maybeLoadFromExternalFile(filePath);
@@ -46,20 +48,20 @@ export class CustomPlugin extends RedteamPluginBase {
   }
 
   private constructor(
-    provider: ApiProvider, 
-    purpose: string, 
+    provider: ApiProvider,
+    purpose: string,
     injectVar: string,
-    definition: CustomPluginDefinition
+    definition: CustomPluginDefinition,
   ) {
     super(provider, purpose, injectVar);
     this.definition = definition;
   }
-  
+
   public static async create(
     provider: ApiProvider,
     purpose: string,
     injectVar: string,
-    filePath: string
+    filePath: string,
   ): Promise<CustomPlugin> {
     const definition = await loadCustomPluginDefinition(filePath);
     return new CustomPlugin(provider, purpose, injectVar, definition);

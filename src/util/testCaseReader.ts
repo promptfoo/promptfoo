@@ -21,8 +21,8 @@ import type {
   TestCaseWithVarsFile,
   TestSuiteConfig,
 } from '../types';
-import { parsePathOrGlob } from './index';
 import { isJavascriptFile } from './file';
+import { parsePathOrGlob } from './index';
 
 export async function readTestFiles(
   pathOrGlobs: string | string[],

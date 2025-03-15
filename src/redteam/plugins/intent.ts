@@ -20,12 +20,12 @@ export class IntentPlugin extends RedteamPluginBase {
     provider: ApiProvider,
     purpose: string,
     injectVar: string,
-    intents: Intent[]
+    intents: Intent[],
   ) {
     super(provider, purpose, injectVar);
     this.intents = intents;
   }
-  
+
   public static async create(
     provider: ApiProvider,
     purpose: string,
@@ -35,7 +35,7 @@ export class IntentPlugin extends RedteamPluginBase {
     invariant(config.intent, 'An "intent" property is required for the intent plugin.');
 
     // Handle both string and array configs
-    const loadedIntents = await maybeLoadFromExternalFile(config.intent) as Intent | Intent[];
+    const loadedIntents = (await maybeLoadFromExternalFile(config.intent)) as Intent | Intent[];
     const intents = Array.isArray(loadedIntents) ? loadedIntents : [loadedIntents];
 
     return new IntentPlugin(provider, purpose, injectVar, intents);

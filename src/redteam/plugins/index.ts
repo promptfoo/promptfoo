@@ -166,14 +166,22 @@ const pluginFactories: PluginFactory[] = [
   // TODO: verify we want to do this instead of updating createPluginFactory to handle async .create classes
   {
     key: 'intent',
-    validate: (config: PluginConfig) => 
-      invariant((config as { intent: string }).intent, 'Intent plugin requires `config.intent` to be set'),
+    validate: (config: PluginConfig) =>
+      invariant(
+        (config as { intent: string }).intent,
+        'Intent plugin requires `config.intent` to be set',
+      ),
     action: async ({ provider, purpose, injectVar, n, delayMs, config }: PluginActionParams) => {
       if (shouldGenerateRemote()) {
         return fetchRemoteTestCases('intent', purpose, injectVar, n, config);
       }
       logger.debug(`Using local redteam generation for intent`);
-      const plugin = await IntentPlugin.create(provider, purpose, injectVar, config as { intent: string });
+      const plugin = await IntentPlugin.create(
+        provider,
+        purpose,
+        injectVar,
+        config as { intent: string },
+      );
       return plugin.generateTests(n, delayMs);
     },
   },

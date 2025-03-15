@@ -103,9 +103,11 @@ describe('IntentPlugin', () => {
   });
 
   it('should throw error when no intent is provided', async () => {
-    await expect(IntentPlugin.create(mockProvider, 'test-purpose', 'prompt', {
-      intent: undefined as any,
-    })).rejects.toThrow(expect.any(Error));
+    await expect(
+      IntentPlugin.create(mockProvider, 'test-purpose', 'prompt', {
+        intent: undefined as any,
+      }),
+    ).rejects.toThrow(expect.any(Error));
   });
 });
 

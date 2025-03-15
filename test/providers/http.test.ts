@@ -202,9 +202,11 @@ describe('HttpProvider', () => {
 
   it('should throw an error when creating HttpProvider with invalid config', async () => {
     const invalidConfig = 'this isnt json';
-    await expect(HttpProvider.create(mockUrl, {
-      config: invalidConfig as any,
-    })).rejects.toThrow(/Expected object, received string/);
+    await expect(
+      HttpProvider.create(mockUrl, {
+        config: invalidConfig as any,
+      }),
+    ).rejects.toThrow(/Expected object, received string/);
   });
 
   it('should return provider id and string representation', async () => {
@@ -793,7 +795,9 @@ describe('HttpProvider', () => {
     });
 
     it('should return application/x-www-form-urlencoded for string body', async () => {
-      const provider = await HttpProvider.create(mockUrl, { config: { method: 'POST', body: 'test' } });
+      const provider = await HttpProvider.create(mockUrl, {
+        config: { method: 'POST', body: 'test' },
+      });
       const result = provider['getDefaultHeaders']('string body');
       expect(result).toEqual({ 'content-type': 'application/x-www-form-urlencoded' });
     });
@@ -1501,20 +1505,26 @@ describe('determineRequestBody', () => {
 
 describe('constructor validation', () => {
   it('should validate config using Zod schema', async () => {
-    await expect(HttpProvider.create('http://test.com', {
-      config: {
-        headers: { 'Content-Type': 123 }, // Invalid header type
-      },
-    })).rejects.toThrow('Expected string, received number');
+    await expect(
+      HttpProvider.create('http://test.com', {
+        config: {
+          headers: { 'Content-Type': 123 }, // Invalid header type
+        },
+      }),
+    ).rejects.toThrow('Expected string, received number');
   });
 
   it('should require body or GET method', async () => {
-    await expect(HttpProvider.create('http://test.com', {
-      config: {
-        method: 'POST',
-        // Missing body
-      },
-    })).rejects.toThrow(/Expected HTTP provider http:\/\/test.com to have a config containing {body}/);
+    await expect(
+      HttpProvider.create('http://test.com', {
+        config: {
+          method: 'POST',
+          // Missing body
+        },
+      }),
+    ).rejects.toThrow(
+      /Expected HTTP provider http:\/\/test.com to have a config containing {body}/,
+    );
   });
 });
 

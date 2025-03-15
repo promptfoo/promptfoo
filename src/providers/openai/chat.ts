@@ -99,15 +99,25 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(config.stop ? { stop: config.stop } : {}),
       ...(config.passthrough || {}),
-      ...(config.functions 
-          ? { functions: await maybeLoadFromExternalFile(renderVarsInObject(config.functions, context?.vars)) }
-          : {}),
-      ...(config.tools 
-          ? { tools: await maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)) } 
-          : {}),
-      ...(config.response_format 
-          ? { response_format: await maybeLoadFromExternalFile(renderVarsInObject(config.response_format, context?.vars)) }
-          : {}),
+      ...(config.functions
+        ? {
+            functions: await maybeLoadFromExternalFile(
+              renderVarsInObject(config.functions, context?.vars),
+            ),
+          }
+        : {}),
+      ...(config.tools
+        ? {
+            tools: await maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)),
+          }
+        : {}),
+      ...(config.response_format
+        ? {
+            response_format: await maybeLoadFromExternalFile(
+              renderVarsInObject(config.response_format, context?.vars),
+            ),
+          }
+        : {}),
       ...(this.modelName.includes('audio')
         ? {
             modalities: config.modalities || ['text', 'audio'],

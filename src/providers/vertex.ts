@@ -465,9 +465,13 @@ export class VertexChatProvider extends VertexGenericProvider {
       ...(this.config.safetySettings ? { safetySettings: this.config.safetySettings } : {}),
       ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
       ...(systemInstruction ? { systemInstruction } : {}),
-      ...(this.config.tools 
-          ? { tools: await maybeLoadFromExternalFile(renderVarsInObject(this.config.tools, context?.vars)) }
-          : {}),
+      ...(this.config.tools
+        ? {
+            tools: await maybeLoadFromExternalFile(
+              renderVarsInObject(this.config.tools, context?.vars),
+            ),
+          }
+        : {}),
     };
     logger.debug(`Preparing to call Google Vertex API (Gemini) with body: ${JSON.stringify(body)}`);
 

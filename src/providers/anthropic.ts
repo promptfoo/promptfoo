@@ -4,7 +4,7 @@ import { getEnvString, getEnvFloat, getEnvInt } from '../envars';
 import logger from '../logger';
 import type { ApiProvider, ProviderResponse, TokenUsage } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { maybeLoadFromExternalFile, maybeLoadToolsFromExternalFile } from '../util';
+import { maybeLoadToolsFromExternalFile } from '../util';
 import { calculateCost } from './shared';
 
 const ANTHROPIC_MODELS = [
@@ -288,7 +288,9 @@ export class AnthropicMessagesProvider implements ApiProvider {
         this.config.thinking || thinking
           ? this.config.temperature
           : this.config.temperature || getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
-      ...(this.config.tools ? { tools: await maybeLoadToolsFromExternalFile(this.config.tools) } : {}),
+      ...(this.config.tools
+        ? { tools: await maybeLoadToolsFromExternalFile(this.config.tools) }
+        : {}),
       ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
       ...(this.config.thinking || thinking ? { thinking: this.config.thinking || thinking } : {}),
       ...(typeof this.config?.extra_body === 'object' && this.config.extra_body

@@ -580,12 +580,14 @@ export class HttpProvider implements ApiProvider {
     this.transformRequest = createTransformRequest(this.config.transformRequest);
     this.validateStatus = createValidateStatus(this.config.validateStatus);
   }
-  
+
   public static async create(url: string, options: ProviderOptions): Promise<HttpProvider> {
     const provider = new HttpProvider(url, options);
 
     if (provider.config.request) {
-      provider.config.request = await maybeLoadFromExternalFile(provider.config.request) as string;
+      provider.config.request = (await maybeLoadFromExternalFile(
+        provider.config.request,
+      )) as string;
     } else {
       invariant(
         provider.config.body || provider.config.method === 'GET',
