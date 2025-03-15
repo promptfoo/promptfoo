@@ -20,11 +20,19 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     super(modelName, options);
     this.id = options.id
       ? () => options.id!
-      : () => `anthropic:messages:${this.modelName || 'claude-2.1'}`;
+      : () => {
+          if (!this.modelName) {
+            throw new Error('Anthropic model name is not set. Please provide a valid model name.');
+          }
+          return `anthropic:messages:${this.modelName}`;
+        };
   }
 
   toString(): string {
-    return `[Anthropic Messages Provider ${this.modelName || 'claude-2.1'}]`;
+    if (!this.modelName) {
+      throw new Error('Anthropic model name is not set. Please provide a valid model name.');
+    }
+    return `[Anthropic Messages Provider ${this.modelName}]`;
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
@@ -32,6 +40,10 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       throw new Error(
         'Anthropic API key is not set. Set the ANTHROPIC_API_KEY environment variable or add `apiKey` to the provider config.',
       );
+    }
+
+    if (!this.modelName) {
+      throw new Error('Anthropic model name is not set. Please provide a valid model name.');
     }
 
     const { system, extractedMessages, thinking } = parseMessages(prompt);
