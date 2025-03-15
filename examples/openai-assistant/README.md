@@ -31,4 +31,4 @@ This example tests:
 3. Different prompt structures and instructions
 4. Response quality and adherence to instructions
 
-The tests evaluate how well the OpenAI Assistant API handles various instructions and function definitions, comparing the outputs against expected formats and content. 
+The tests evaluate how well the OpenAI Assistant API handles various instructions and function definitions, comparing the outputs against expected formats and content.

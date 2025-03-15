@@ -1,16 +1,14 @@
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Testing OpenAI Assistants API capabilities
-env:
-  OPENAI_API_KEY: $OPENAI_API_KEY
+# yaml-language-server: $schema=https://promptfoo.dev/schemas/promptfooconfig.json
+$schema: https://promptfoo.dev/schemas/promptfooconfig.json
+description: Test OpenAI Assistants API capabilities
 
 prompts:
-  - file://prompts/basic_instructions.txt
-  - file://prompts/function_instructions.txt
-  - file://prompts/advanced_instructions.txt
+  - 'Answer the following question: {{query}}'
 
 providers:
   - id: openai:assistant:asst_CCDJc0V4MoAZ5WGEmtozI3bt
     config:
+      temperature: 0
       tools:
         - type: function
           function:
@@ -24,48 +22,30 @@ providers:
                   description: The city and state, e.g., San Francisco, CA
                 unit:
                   type: string
-                  enum: ["celsius", "fahrenheit"]
-                  description: The unit of temperature
-              required: ["location"]
+                  enum: [celsius, fahrenheit]
+                  description: The unit of temperature to use
+              required:
+                - location
+      functionToolCallbacks:
+        get_weather: |
+          (args) => {
+            const parsedArgs = JSON.parse(args);
+            const location = parsedArgs.location;
+            const unit = parsedArgs.unit || 'fahrenheit';
+            return Promise.resolve(
+              JSON.stringify({
+                location,
+                temperature: 72,
+                unit,
+                forecast: ["sunny", "windy"],
+                humidity: 0.44
+              })
+            );
+          }
 
 tests:
   - vars:
       query: What's the weather like in San Francisco?
-      prompt: 0
-    assert:
-      - type: non-empty
-        value: true
-
-  - vars:
-      query: Tell me a joke about programming
-      prompt: 0
     assert:
       - type: contains
-        value: program
-      - type: llm-rubric
-        value: Is this response humorous and related to programming? Score 1-10
-
-  - vars:
-      query: Get the weather in New York with temperature in celsius
-      prompt: 1
-    assert:
-      - type: javascript
-        value: |
-          return output.includes('function') || output.includes('tool')
-            ? 'pass'
-            : 'Function calling not detected';
-      - type: javascript
-        value: |
-          return output.includes('New York') && output.includes('celsius')
-            ? 'pass'
-            : 'Location or temperature unit not correctly processed';
-
-  - vars:
-      query: Explain quantum computing in simple terms
-      prompt: 2
-    assert:
-      - type: llm-rubric
-        value: Does this explanation of quantum computing use simple language a non-expert could understand? Score 1-10
-      - type: similar
-        value: Quantum computing uses quantum bits or qubits
-        threshold: 0.6 
+        value: 'San Francisco'
