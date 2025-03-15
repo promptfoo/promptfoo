@@ -24,7 +24,6 @@ function createLazyProvider<T>(factory: (env?: EnvOverrides) => T): {
       if (!instances.has(cacheKey)) {
         instances.set(cacheKey, factory(env));
       }
-
       return instances.get(cacheKey)!;
     },
   };
@@ -32,7 +31,11 @@ function createLazyProvider<T>(factory: (env?: EnvOverrides) => T): {
 
 // LLM Rubric Provider
 export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
-  constructor(modelName: string, env?: EnvOverrides) {
+  constructor(
+    modelName: string,
+    options: { env?: EnvOverrides; config?: Record<string, any> } = {},
+  ) {
+    const { env, config = {} } = options;
     super(modelName, {
       env,
       config: {
@@ -61,6 +64,7 @@ export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
             },
           },
         ],
+        ...config,
       },
     });
   }
@@ -100,7 +104,7 @@ const gradingProviderFactory = createLazyProvider(
 );
 
 const llmRubricProviderFactory = createLazyProvider(
-  (env?: EnvOverrides) => new AnthropicLlmRubricProvider(DEFAULT_ANTHROPIC_MODEL, env),
+  (env?: EnvOverrides) => new AnthropicLlmRubricProvider(DEFAULT_ANTHROPIC_MODEL, { env }),
 );
 
 /**
