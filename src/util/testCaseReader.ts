@@ -24,7 +24,7 @@ import type {
 import { parsePathOrGlob } from './index';
 import { isJavascriptFile } from './file';
 
-export async function readVarsFiles(
+export async function readTestFiles(
   pathOrGlobs: string | string[],
   basePath: string = '',
 ): Promise<Record<string, string | string[] | object>> {
@@ -179,7 +179,7 @@ async function loadTestWithVars(
 ): Promise<TestCase> {
   const ret: TestCase = { ...testCase, vars: undefined };
   if (typeof testCase.vars === 'string' || Array.isArray(testCase.vars)) {
-    ret.vars = await readVarsFiles(testCase.vars, testBasePath);
+    ret.vars = await readTestFiles(testCase.vars, testBasePath);
   } else {
     ret.vars = testCase.vars;
   }

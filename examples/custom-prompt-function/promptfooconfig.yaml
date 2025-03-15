@@ -26,6 +26,9 @@ prompts:
   - id: file://prompt.md
     label: markdown prompt
 
+  - id: file://prompt.j2
+    label: jinja2 template
+
   - id: file://prompt.jsonl
     label: prompt_jsonl
   - file://prompt.jsonl
@@ -62,8 +65,23 @@ prompts:
     label: prompt_python_class
   - file://prompt_python.py:Prompt.prompt_with_cot
 
+  - id: file://prompt_config.js:promptWithConfig
+    label: JS Prompt with Dynamic Config
+
+  - id: file://prompt_config.py:prompt_with_config
+    label: Python Prompt with Dynamic Config
+
 providers:
-  - echo
+  # Use the echo provider only to see rendered prompts without LLM calls
+  # - echo
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    label: Claude 3.7 Sonnet
+  - id: openai:gpt-4o-mini
+    label: GPT-4o Mini
+    # config below is overridden by prompt functions with config
+    config:
+      temperature: 0.0 # Default temperature, will be overridden by prompt function
+      max_tokens: 50 # Default max_tokens, will be overridden by prompt function
 
 tests:
   - vars:

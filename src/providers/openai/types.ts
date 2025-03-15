@@ -25,6 +25,8 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   function_call?: 'none' | 'auto' | { name: string };
   tools?: OpenAiTool[];
   tool_choice?: 'none' | 'auto' | 'required' | { type: 'function'; function?: { name: string } };
+  tool_resources?: Record<string, any>;
+  showThinking?: boolean;
   response_format?:
     | {
         type: 'json_object';
@@ -46,6 +48,13 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   seed?: number;
   passthrough?: object;
   reasoning_effort?: ReasoningEffort;
+  modalities?: string[];
+  audio?: {
+    bitrate?: string;
+    format?: string;
+    speed?: number;
+    voice?: string;
+  };
 
   /**
    * If set, automatically call these functions when the assistant activates

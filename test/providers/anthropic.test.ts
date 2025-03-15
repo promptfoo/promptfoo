@@ -273,10 +273,12 @@ describe('Anthropic', () => {
         .mockResolvedValue({
           content: [],
         } as unknown as Anthropic.Messages.Message);
-      getCache().set(
-        'anthropic:{"model":"claude-3-5-sonnet-20241022","max_tokens":1024,"messages":[{"role":"user","content":[{"type":"text","text":"What is the forecast in San Francisco?"}]}],"stream":false,"temperature":0,"tools":[{"name":"get_weather","description":"Get the current weather in a given location","input_schema":{"type":"object","properties":{"location":{"type":"string","description":"The city and state, e.g. San Francisco, CA"},"unit":{"type":"string","enum":["celsius","fahrenheit"]}},"required":["location"]}}]}',
-        'Test output',
-      );
+
+      const cacheKey =
+        'anthropic:{"model":"claude-3-5-sonnet-20241022","max_tokens":1024,"messages":[{"role":"user","content":[{"type":"text","text":"What is the forecast in San Francisco?"}]}],"stream":false,"temperature":0,"tools":[{"name":"get_weather","description":"Get the current weather in a given location","input_schema":{"type":"object","properties":{"location":{"type":"string","description":"The city and state, e.g. San Francisco, CA"},"unit":{"type":"string","enum":["celsius","fahrenheit"]}},"required":["location"]}}]}';
+
+      await getCache().set(cacheKey, 'Test output');
+
       const result = await provider.callApi('What is the forecast in San Francisco?');
       expect(result).toMatchObject({
         output: 'Test output',
@@ -355,6 +357,242 @@ describe('Anthropic', () => {
         output: 'Test output',
         tokenUsage: { total: 100, prompt: 50, completion: 50 },
         cost: 1.5,
+      });
+    });
+
+    it('should handle thinking configuration', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219', {
+        config: {
+          thinking: {
+            type: 'enabled',
+            budget_tokens: 2048,
+          },
+        },
+      });
+
+      jest
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockImplementation()
+        .mockResolvedValue({
+          content: [
+            {
+              type: 'thinking',
+              thinking: 'Let me analyze this step by step...',
+              signature: 'test-signature',
+            },
+            {
+              type: 'text',
+              text: 'Final answer',
+            },
+          ],
+        } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('What is 2+2?');
+      expect(provider.anthropic.messages.create).toHaveBeenCalledWith(
+        {
+          model: 'claude-3-7-sonnet-20250219',
+          max_tokens: 2048,
+          messages: [
+            {
+              role: 'user',
+              content: [{ type: 'text', text: 'What is 2+2?' }],
+            },
+          ],
+          stream: false,
+          temperature: undefined,
+          thinking: {
+            type: 'enabled',
+            budget_tokens: 2048,
+          },
+        },
+        {},
+      );
+      expect(result.output).toBe(
+        'Thinking: Let me analyze this step by step...\nSignature: test-signature\n\nFinal answer',
+      );
+    });
+
+    it('should handle redacted thinking blocks', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219');
+      jest
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockImplementation()
+        .mockResolvedValue({
+          content: [
+            {
+              type: 'redacted_thinking',
+              data: 'encrypted-data',
+            },
+            {
+              type: 'text',
+              text: 'Final answer',
+            },
+          ],
+        } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('What is 2+2?');
+      expect(result.output).toBe('Redacted Thinking: encrypted-data\n\nFinal answer');
+    });
+
+    it('should handle API errors for thinking configuration', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219');
+
+      // Mock API error for invalid budget
+      const mockApiError = Object.create(APIError.prototype);
+      Object.assign(mockApiError, {
+        name: 'APIError',
+        message: 'API Error',
+        status: 400,
+        error: {
+          error: {
+            message: 'Thinking budget must be at least 1024 tokens when enabled',
+            type: 'invalid_request_error',
+          },
+        },
+      });
+
+      jest.spyOn(provider.anthropic.messages, 'create').mockRejectedValue(mockApiError);
+
+      const result = await provider.callApi(
+        JSON.stringify([
+          {
+            role: 'user',
+            content: 'test',
+            thinking: {
+              type: 'enabled',
+              budget_tokens: 512,
+            },
+          },
+        ]),
+      );
+
+      expect(result.error).toBe(
+        'API call error: Thinking budget must be at least 1024 tokens when enabled, status 400, type invalid_request_error',
+      );
+
+      // Test budget exceeding max_tokens
+      const providerWithMaxTokens = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219', {
+        config: {
+          max_tokens: 2048,
+        },
+      });
+
+      const mockMaxTokensError = Object.create(APIError.prototype);
+      Object.assign(mockMaxTokensError, {
+        name: 'APIError',
+        message: 'API Error',
+        status: 400,
+        error: {
+          error: {
+            message: 'Thinking budget must be less than max_tokens',
+            type: 'invalid_request_error',
+          },
+        },
+      });
+
+      jest
+        .spyOn(providerWithMaxTokens.anthropic.messages, 'create')
+        .mockRejectedValue(mockMaxTokensError);
+
+      const result2 = await providerWithMaxTokens.callApi(
+        JSON.stringify([
+          {
+            role: 'user',
+            content: 'test',
+            thinking: {
+              type: 'enabled',
+              budget_tokens: 3000,
+            },
+          },
+        ]),
+      );
+
+      expect(result2.error).toBe(
+        'API call error: Thinking budget must be less than max_tokens, status 400, type invalid_request_error',
+      );
+    });
+
+    it('should respect explicit temperature when thinking is enabled', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219', {
+        config: {
+          thinking: {
+            type: 'enabled',
+            budget_tokens: 2048,
+          },
+          temperature: 0.7,
+        },
+      });
+
+      jest
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockImplementation()
+        .mockResolvedValue({
+          content: [{ type: 'text', text: 'Test response' }],
+        } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+      expect(provider.anthropic.messages.create).toHaveBeenCalledWith(
+        {
+          model: 'claude-3-7-sonnet-20250219',
+          max_tokens: 2048,
+          messages: [
+            {
+              role: 'user',
+              content: [{ type: 'text', text: 'Test prompt' }],
+            },
+          ],
+          stream: false,
+          temperature: 0.7,
+          thinking: {
+            type: 'enabled',
+            budget_tokens: 2048,
+          },
+        },
+        {},
+      );
+    });
+
+    it('should include beta features header when specified', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219', {
+        config: {
+          beta: ['output-128k-2025-02-19'],
+        },
+      });
+
+      jest
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockImplementation()
+        .mockResolvedValue({
+          content: [{ type: 'text', text: 'Test response' }],
+        } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+      expect(provider.anthropic.messages.create).toHaveBeenCalledWith(expect.anything(), {
+        headers: {
+          'anthropic-beta': 'output-128k-2025-02-19',
+        },
+      });
+    });
+
+    it('should include multiple beta features in header', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219', {
+        config: {
+          beta: ['output-128k-2025-02-19', 'another-beta-feature'],
+        },
+      });
+
+      jest
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockImplementation()
+        .mockResolvedValue({
+          content: [{ type: 'text', text: 'Test response' }],
+        } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+      expect(provider.anthropic.messages.create).toHaveBeenCalledWith(expect.anything(), {
+        headers: {
+          'anthropic-beta': 'output-128k-2025-02-19,another-beta-feature',
+        },
       });
     });
   });
@@ -523,8 +761,17 @@ describe('Anthropic', () => {
   describe('calculateAnthropicCost', () => {
     it('should calculate cost for valid input and output tokens', () => {
       const cost = calculateAnthropicCost('claude-3-5-sonnet-20241022', { cost: 0.015 }, 100, 200);
+      expect(cost).toBe(4.5); // (0.003 * 100) + (0.015 * 200)
+    });
 
-      expect(cost).toBe(4.5); // (0.015 * 100) + (0.075 * 200)
+    it('should calculate cost for Claude 3.7 model', () => {
+      const cost = calculateAnthropicCost('claude-3-7-sonnet-20250219', { cost: 0.02 }, 100, 200);
+      expect(cost).toBe(6); // (0.004 * 100) + (0.02 * 200)
+    });
+
+    it('should calculate cost for Claude 3.7 latest model', () => {
+      const cost = calculateAnthropicCost('claude-3-7-sonnet-latest', { cost: 0.02 }, 100, 200);
+      expect(cost).toBe(6); // (0.004 * 100) + (0.02 * 200)
     });
 
     it('should return undefined for missing model', () => {
@@ -558,7 +805,7 @@ describe('Anthropic', () => {
         },
       };
 
-      const result = outputFromMessage(message);
+      const result = outputFromMessage(message, false);
       expect(result).toBe('');
     });
 
@@ -579,7 +826,7 @@ describe('Anthropic', () => {
         },
       };
 
-      const result = outputFromMessage(message);
+      const result = outputFromMessage(message, false);
       expect(result).toBe('Hello');
     });
 
@@ -603,7 +850,7 @@ describe('Anthropic', () => {
         },
       };
 
-      const result = outputFromMessage(message);
+      const result = outputFromMessage(message, false);
       expect(result).toBe('Hello\n\nWorld');
     });
 
@@ -637,7 +884,7 @@ describe('Anthropic', () => {
         },
       };
 
-      const result = outputFromMessage(message);
+      const result = outputFromMessage(message, false);
       expect(result).toBe(
         '{"type":"tool_use","id":"tool1","name":"get_weather","input":{"location":"San Francisco, CA"}}\n\n{"type":"tool_use","id":"tool2","name":"get_time","input":{"location":"New York, NY"}}',
       );
@@ -669,7 +916,7 @@ describe('Anthropic', () => {
         },
       };
 
-      const result = outputFromMessage(message);
+      const result = outputFromMessage(message, false);
       expect(result).toBe(
         'Hello\n\n{"type":"tool_use","id":"tool1","name":"get_weather","input":{"location":"San Francisco, CA"}}\n\nWorld',
       );
@@ -707,8 +954,124 @@ describe('Anthropic', () => {
         },
       };
 
-      const result = outputFromMessage(message);
+      const result = outputFromMessage(message, false);
       expect(result).toBe('The sky is blue');
+    });
+
+    it('should include thinking blocks when showThinking is true', () => {
+      const message: Anthropic.Messages.Message = {
+        content: [
+          { type: 'text', text: 'Hello', citations: [] },
+          {
+            type: 'thinking',
+            thinking: 'I need to consider the weather',
+            signature: 'abc123',
+          },
+          { type: 'text', text: 'World', citations: [] },
+        ],
+        id: '',
+        model: '',
+        role: 'assistant',
+        stop_reason: null,
+        stop_sequence: null,
+        type: 'message',
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      };
+
+      const result = outputFromMessage(message, true);
+      expect(result).toBe(
+        'Hello\n\nThinking: I need to consider the weather\nSignature: abc123\n\nWorld',
+      );
+    });
+
+    it('should exclude thinking blocks when showThinking is false', () => {
+      const message: Anthropic.Messages.Message = {
+        content: [
+          { type: 'text', text: 'Hello', citations: [] },
+          {
+            type: 'thinking',
+            thinking: 'I need to consider the weather',
+            signature: 'abc123',
+          },
+          { type: 'text', text: 'World', citations: [] },
+        ],
+        id: '',
+        model: '',
+        role: 'assistant',
+        stop_reason: null,
+        stop_sequence: null,
+        type: 'message',
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      };
+
+      const result = outputFromMessage(message, false);
+      expect(result).toBe('Hello\n\nWorld');
+    });
+
+    it('should include redacted_thinking blocks when showThinking is true', () => {
+      const message: Anthropic.Messages.Message = {
+        content: [
+          { type: 'text', text: 'Hello', citations: [] },
+          {
+            type: 'redacted_thinking',
+            data: 'Some redacted thinking data',
+          },
+          { type: 'text', text: 'World', citations: [] },
+        ],
+        id: '',
+        model: '',
+        role: 'assistant',
+        stop_reason: null,
+        stop_sequence: null,
+        type: 'message',
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      };
+
+      const result = outputFromMessage(message, true);
+      expect(result).toBe('Hello\n\nRedacted Thinking: Some redacted thinking data\n\nWorld');
+    });
+
+    it('should exclude redacted_thinking blocks when showThinking is false', () => {
+      const message: Anthropic.Messages.Message = {
+        content: [
+          { type: 'text', text: 'Hello', citations: [] },
+          {
+            type: 'redacted_thinking',
+            data: 'Some redacted thinking data',
+          },
+          { type: 'text', text: 'World', citations: [] },
+        ],
+        id: '',
+        model: '',
+        role: 'assistant',
+        stop_reason: null,
+        stop_sequence: null,
+        type: 'message',
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      };
+
+      const result = outputFromMessage(message, false);
+      expect(result).toBe('Hello\n\nWorld');
     });
   });
 

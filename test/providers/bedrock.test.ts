@@ -372,13 +372,13 @@ describe('AwsBedrockGenericProvider', () => {
     });
 
     it('should use default values when config is not provided', () => {
-      const config: BedrockAI21GenerationOptions = { region: 'us-east-1' };
+      const config = {};
       const prompt = 'Tell me a joke.';
+
       const params = modelHandler.params(config, prompt);
 
       expect(params).toEqual({
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: 1024,
         temperature: 0,
         top_p: 1.0,
       });
@@ -919,7 +919,6 @@ describe('BEDROCK_MODEL AMAZON_NOVA', () => {
       ],
       system: [{ text: 'You are a helpful assistant.' }],
       inferenceConfig: {
-        max_new_tokens: 1024,
         temperature: 0,
       },
     });
@@ -946,7 +945,6 @@ describe('BEDROCK_MODEL AMAZON_NOVA', () => {
         },
       ],
       inferenceConfig: {
-        max_new_tokens: 1024,
         temperature: 0,
       },
     });
@@ -994,7 +992,6 @@ describe('BEDROCK_MODEL AMAZON_NOVA', () => {
       ],
       system: [{ text: 'You are a helpful assistant.' }],
       inferenceConfig: {
-        max_new_tokens: 1024,
         temperature: 0,
       },
     });
@@ -1014,7 +1011,6 @@ describe('BEDROCK_MODEL AMAZON_NOVA', () => {
         },
       ],
       inferenceConfig: {
-        max_new_tokens: 1024,
         temperature: 0,
       },
     });

@@ -225,6 +225,141 @@ describe('OpenAI Provider', () => {
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
     });
 
+    it('should handle DeepSeek reasoning model content correctly', async () => {
+      const mockResponse = {
+        data: {
+          choices: [
+            {
+              message: {
+                content: 'The final answer is 9.11 is greater than 9.8.',
+                reasoning_content:
+                  'Let me compare 9.11 and 9.8:\n9.11 > 9.8 because 11 > 8 in the decimal places.\nTherefore, 9.11 is greater than 9.8.',
+              },
+            },
+          ],
+          usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('deepseek-reasoner');
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: '9.11 and 9.8, which is greater?' }]),
+      );
+
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      const expectedOutput = `Thinking: Let me compare 9.11 and 9.8:
+9.11 > 9.8 because 11 > 8 in the decimal places.
+Therefore, 9.11 is greater than 9.8.\n\nThe final answer is 9.11 is greater than 9.8.`;
+      expect(result.output).toBe(expectedOutput);
+      expect(result.tokenUsage).toEqual({ total: 20, prompt: 10, completion: 10 });
+    });
+
+    it('should hide reasoning content when showThinking is false', async () => {
+      const mockResponse = {
+        data: {
+          choices: [
+            {
+              message: {
+                content: 'The final answer is 9.11 is greater than 9.8.',
+                reasoning_content:
+                  'Let me compare 9.11 and 9.8:\n9.11 > 9.8 because 11 > 8 in the decimal places.\nTherefore, 9.11 is greater than 9.8.',
+              },
+            },
+          ],
+          usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('deepseek-reasoner', {
+        config: { showThinking: false },
+      });
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: '9.11 and 9.8, which is greater?' }]),
+      );
+
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe('The final answer is 9.11 is greater than 9.8.');
+      expect(result.tokenUsage).toEqual({ total: 20, prompt: 10, completion: 10 });
+    });
+
+    it('should handle multi-round conversations with DeepSeek reasoning model', async () => {
+      // Round 1 response
+      const mockResponse1 = {
+        data: {
+          choices: [
+            {
+              message: {
+                content: 'The final answer is 9.11 is greater than 9.8.',
+                reasoning_content:
+                  'Let me compare 9.11 and 9.8:\n9.11 > 9.8 because 11 > 8 in the decimal places.\nTherefore, 9.11 is greater than 9.8.',
+              },
+            },
+          ],
+          usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+
+      // Round 2 response
+      const mockResponse2 = {
+        data: {
+          choices: [
+            {
+              message: {
+                content: 'There are 2 "r"s in the word "strawberry".',
+                reasoning_content:
+                  'Let me count the occurrences of the letter "r" in "strawberry":\nThe word is spelled s-t-r-a-w-b-e-r-r-y.\nI can see that the letter "r" appears twice: once in "str" and once in "rry".\nTherefore, there are 2 occurrences of the letter "r" in "strawberry".',
+              },
+            },
+          ],
+          usage: { total_tokens: 25, prompt_tokens: 15, completion_tokens: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+
+      mockFetchWithCache.mockResolvedValueOnce(mockResponse1).mockResolvedValueOnce(mockResponse2);
+
+      const provider = new OpenAiChatCompletionProvider('deepseek-reasoner');
+
+      // First round
+      const result1 = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: '9.11 and 9.8, which is greater?' }]),
+      );
+
+      const expectedOutput1 = `Thinking: Let me compare 9.11 and 9.8:
+9.11 > 9.8 because 11 > 8 in the decimal places.
+Therefore, 9.11 is greater than 9.8.\n\nThe final answer is 9.11 is greater than 9.8.`;
+      expect(result1.output).toBe(expectedOutput1);
+
+      // Second round (with conversation history excluding reasoning_content)
+      const result2 = await provider.callApi(
+        JSON.stringify([
+          { role: 'user', content: '9.11 and 9.8, which is greater?' },
+          { role: 'assistant', content: 'The final answer is 9.11 is greater than 9.8.' },
+          { role: 'user', content: 'How many Rs are there in the word "strawberry"?' },
+        ]),
+      );
+
+      const expectedOutput2 = `Thinking: Let me count the occurrences of the letter "r" in "strawberry":
+The word is spelled s-t-r-a-w-b-e-r-r-y.
+I can see that the letter "r" appears twice: once in "str" and once in "rry".
+Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere are 2 "r"s in the word "strawberry".`;
+      expect(result2.output).toBe(expectedOutput2);
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(2);
+    });
+
     it('should handle function tool callbacks correctly', async () => {
       const mockResponse = {
         data: {
@@ -790,6 +925,215 @@ describe('OpenAI Provider', () => {
       const regularCall = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
       const regularBody = JSON.parse(regularCall[1].body);
       expect(regularBody.reasoning_effort).toBeUndefined();
+    });
+
+    it('should handle audio responses correctly', async () => {
+      const mockAudioResponse = {
+        data: {
+          choices: [
+            {
+              message: {
+                audio: {
+                  id: 'audio-id-123',
+                  expires_at: '2023-12-31T23:59:59Z',
+                  data: 'base64audiodata',
+                  transcript: 'This is the audio transcript',
+                  format: 'mp3',
+                },
+              },
+            },
+          ],
+          usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockAudioResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const result = await provider.callApi('Generate audio response');
+
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe('This is the audio transcript');
+      expect(result.audio).toEqual({
+        id: 'audio-id-123',
+        expiresAt: '2023-12-31T23:59:59Z',
+        data: 'base64audiodata',
+        transcript: 'This is the audio transcript',
+        format: 'mp3',
+      });
+      expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5 });
+    });
+
+    it('should handle audio responses without transcript', async () => {
+      const mockAudioResponse = {
+        data: {
+          choices: [
+            {
+              message: {
+                audio: {
+                  id: 'audio-id-456',
+                  expires_at: '2023-12-31T23:59:59Z',
+                  data: 'base64audiodata',
+                  format: 'wav',
+                },
+              },
+            },
+          ],
+          usage: { total_tokens: 12, prompt_tokens: 8, completion_tokens: 4 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockAudioResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const result = await provider.callApi('Generate audio without transcript');
+
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe(''); // Empty string when no transcript
+      expect(result.audio).toEqual({
+        id: 'audio-id-456',
+        expiresAt: '2023-12-31T23:59:59Z',
+        data: 'base64audiodata',
+        transcript: undefined,
+        format: 'wav',
+      });
+      expect(result.tokenUsage).toEqual({ total: 12, prompt: 8, completion: 4 });
+    });
+
+    it('should use default wav format when not specified', async () => {
+      const mockAudioResponse = {
+        data: {
+          choices: [
+            {
+              message: {
+                audio: {
+                  id: 'audio-id-789',
+                  expires_at: '2023-12-31T23:59:59Z',
+                  data: 'base64audiodata',
+                  transcript: 'Audio without format specified',
+                },
+              },
+            },
+          ],
+          usage: { total_tokens: 18, prompt_tokens: 12, completion_tokens: 6 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockAudioResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const result = await provider.callApi('Generate audio without format');
+
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe('Audio without format specified');
+      expect(result.audio).toEqual({
+        id: 'audio-id-789',
+        expiresAt: '2023-12-31T23:59:59Z',
+        data: 'base64audiodata',
+        transcript: 'Audio without format specified',
+        format: 'wav', // Default format
+      });
+      expect(result.tokenUsage).toEqual({ total: 18, prompt: 12, completion: 6 });
+    });
+
+    it('should handle cached audio responses correctly', async () => {
+      const mockAudioResponse = {
+        data: {
+          choices: [
+            {
+              message: {
+                audio: {
+                  id: 'audio-id-cached',
+                  expires_at: '2023-12-31T23:59:59Z',
+                  data: 'base64audiodatacached',
+                  transcript: 'This is a cached audio response',
+                  format: 'mp3',
+                },
+              },
+            },
+          ],
+          usage: { total_tokens: 20, prompt_tokens: 15, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockAudioResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const result = await provider.callApi('Generate cached audio');
+
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe('This is a cached audio response');
+      expect(result.audio).toEqual({
+        id: 'audio-id-cached',
+        expiresAt: '2023-12-31T23:59:59Z',
+        data: 'base64audiodatacached',
+        transcript: 'This is a cached audio response',
+        format: 'mp3',
+      });
+      expect(result.cached).toBe(false);
+
+      // Now test with cached response
+      const cachedResponse = {
+        ...mockAudioResponse,
+        cached: true,
+      };
+      mockFetchWithCache.mockResolvedValue(cachedResponse);
+
+      const cachedResult = await provider.callApi('Generate cached audio');
+
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(2);
+      expect(cachedResult.output).toBe('This is a cached audio response');
+      expect(cachedResult.audio).toEqual({
+        id: 'audio-id-cached',
+        expiresAt: '2023-12-31T23:59:59Z',
+        data: 'base64audiodatacached',
+        transcript: 'This is a cached audio response',
+        format: 'mp3',
+      });
+      expect(cachedResult.cached).toBe(true);
+      expect(cachedResult.tokenUsage).toEqual({ total: 20, cached: 20 });
+    });
+
+    it('should properly handle audio requested with response_format option', async () => {
+      // Setup provider with response_format that specifies audio
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: {
+          response_format: { type: 'audio' } as any,
+        },
+      });
+
+      // Mock a non-audio response (model doesn't support audio format)
+      const mockTextResponse = {
+        data: {
+          choices: [{ message: { content: 'Model responded with text instead of audio' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockTextResponse);
+
+      // Call the API with audio format requested
+      const result = await provider.callApi('Generate audio please');
+
+      // Verify request sent with audio format
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const requestBody = JSON.parse(call[1].body);
+      expect(requestBody.response_format).toEqual({ type: 'audio' });
+
+      // Verify result handled gracefully
+      expect(result.output).toBe('Model responded with text instead of audio');
+      expect(result.audio).toBeUndefined(); // No audio returned
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
     });
   });
 });

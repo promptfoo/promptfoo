@@ -59,6 +59,7 @@ const sidebars = {
     {
       type: 'category',
       label: 'Usage',
+      collapsed: true,
       link: {
         type: 'generated-index',
       },
@@ -140,10 +141,6 @@ const sidebars = {
     },
     {
       type: 'doc',
-      id: 'red-team/guardrails',
-    },
-    {
-      type: 'doc',
       id: 'red-team/llm-vulnerability-types',
     },
     {
@@ -180,6 +177,7 @@ const sidebars = {
             'red-team/plugins/sql-injection',
             'red-team/plugins/ssrf',
             'red-team/plugins/system-prompt-override',
+            'red-team/plugins/tool-discovery',
           ],
         },
         {
@@ -262,9 +260,45 @@ const sidebars = {
         },
         {
           type: 'category',
+          label: 'Multimodal',
+          collapsed: true,
+          items: ['red-team/strategies/image', 'red-team/strategies/audio'],
+        },
+        {
+          type: 'category',
           label: 'Custom',
           collapsed: true,
           items: ['red-team/strategies/custom'],
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Tools',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'red-team/guardrails',
+        },
+        {
+          type: 'category',
+          label: 'Model Scanner',
+          collapsed: true,
+          items: [
+            {
+              type: 'doc',
+              id: 'model-audit/index',
+            },
+            {
+              type: 'doc',
+              id: 'model-audit/usage',
+            },
+            {
+              type: 'doc',
+              id: 'model-audit/scanners',
+            },
+          ],
         },
       ],
     },

@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Function calling demonstration'
+
+prompts: '{{query}}'
+
+providers:
+  - id: 'google:live:gemini-2.0-flash-exp'
+    config:
+      tools: file://tools.json
+      generationConfig:
+        response_modalities: ['text']
+      timeoutMs: 10000
+
+tests:
+  # Example of non-built-in tool that the user must execute
+  - vars:
+      query: What is the weather in {{location}}?
+      location: San Francisco
+    assert:
+      - type: equals
+        value: get_weather
+        transform: JSON.parse(output).toolCall.functionCalls[0].name
+      - type: similar
+        value: '{{location}}'
+        threshold: 0.9
+        transform: JSON.parse(output).toolCall.functionCalls[0].args.city
+  # Example of built-in google search tool that is executed by mm-live
+  - vars:
+      query: google search for why the sea is salty
+    assert:
+      - type: icontains
+        value: salt
+        transform: JSON.parse(output).text
+      - type: icontains-any
+        value:
+          - 'weathering'
+          - 'rainwater'
+        transform: JSON.parse(output).text
+  # Example of built-in tool code execution that is executed by mm-live
+  - vars:
+      query: calculate the result of multiplying 1341 by 23
+    assert:
+      - type: icontains
+        value: 30843
+        transform: JSON.parse(output).text

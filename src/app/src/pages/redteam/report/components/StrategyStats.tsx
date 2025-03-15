@@ -20,52 +20,31 @@ import { alpha } from '@mui/material/styles';
 import { styled } from '@mui/material/styles';
 import { displayNameOverrides, subCategoryDescriptions } from '@promptfoo/redteam/constants';
 import type { GradingResult, EvaluateResult } from '@promptfoo/types';
-import { getStrategyIdFromGradingResult, getPluginIdFromResult } from './shared';
+import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
+
+interface TestWithMetadata {
+  prompt: string;
+  output: string;
+  gradingResult?: GradingResult;
+  result?: EvaluateResult;
+  metadata?: {
+    strategyId?: string;
+    [key: string]: any;
+  };
+}
 
 interface StrategyStatsProps {
   strategyStats: Record<string, { pass: number; total: number }>;
-  failuresByPlugin?: Record<
-    string,
-    {
-      prompt: string;
-      output: string;
-      gradingResult?: GradingResult;
-      result?: EvaluateResult;
-    }[]
-  >;
-  passesByPlugin?: Record<
-    string,
-    {
-      prompt: string;
-      output: string;
-      gradingResult?: GradingResult;
-      result?: EvaluateResult;
-    }[]
-  >;
+  failuresByPlugin?: Record<string, TestWithMetadata[]>;
+  passesByPlugin?: Record<string, TestWithMetadata[]>;
 }
 
 interface DrawerContentProps {
   selectedStrategy: string | null;
   tabValue: number;
   onTabChange: (value: number) => void;
-  failuresByPlugin: Record<
-    string,
-    {
-      prompt: string;
-      output: string;
-      gradingResult?: GradingResult;
-      result?: EvaluateResult;
-    }[]
-  >;
-  passesByPlugin: Record<
-    string,
-    {
-      prompt: string;
-      output: string;
-      gradingResult?: GradingResult;
-      result?: EvaluateResult;
-    }[]
-  >;
+  failuresByPlugin: Record<string, TestWithMetadata[]>;
+  passesByPlugin: Record<string, TestWithMetadata[]>;
   strategyStats: Record<string, { pass: number; total: number }>;
 }
 
@@ -139,6 +118,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
   const [selectedStrategy, setSelectedStrategy] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<Error | null>(null);
+
   const strategies = Object.entries(strategyStats).sort(
     (a, b) => (b[1].total - b[1].pass) / b[1].total - (a[1].total - a[1].pass) / a[1].total,
   );
@@ -167,8 +147,8 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
       // Collect failures for this strategy
       Object.values(failuresByPlugin).forEach((tests) => {
         tests.forEach((test) => {
-          const testStrategy = getStrategyIdFromGradingResult(test.gradingResult);
-          if ((strategy === 'basic' && !testStrategy) || testStrategy === strategy) {
+          const testStrategy = getStrategyIdFromTest(test);
+          if (testStrategy === strategy) {
             failures.push(test);
           }
         });
@@ -177,8 +157,8 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
       // Collect passes for this strategy
       Object.values(passesByPlugin).forEach((tests) => {
         tests.forEach((test) => {
-          const testStrategy = getStrategyIdFromGradingResult(test.gradingResult);
-          if ((strategy === 'basic' && !testStrategy) || testStrategy === strategy) {
+          const testStrategy = getStrategyIdFromTest(test);
+          if (testStrategy === strategy) {
             passes.push(test);
           }
         });
@@ -243,30 +223,12 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
         () => (strategy: string) => {
           const pluginStats: Record<string, { passes: number; total: number }> = {};
 
-          // Process failures
+          // Process failures (successful attacks)
           Object.entries(failuresByPlugin).forEach(([plugin, tests]) => {
             tests.forEach((test) => {
-              const testStrategy = getStrategyIdFromGradingResult(test.gradingResult);
-              if (
-                (strategy === 'basic' && !testStrategy) || // Handle basic strategy case
-                testStrategy === strategy
-              ) {
-                if (!pluginStats[plugin]) {
-                  pluginStats[plugin] = { passes: 0, total: 0 };
-                }
-                pluginStats[plugin].total++;
-              }
-            });
-          });
+              const testStrategy = getStrategyIdFromTest(test);
 
-          // Process passes
-          Object.entries(passesByPlugin).forEach(([plugin, tests]) => {
-            tests.forEach((test) => {
-              const testStrategy = getStrategyIdFromGradingResult(test.gradingResult);
-              if (
-                (strategy === 'basic' && !testStrategy) || // Handle basic strategy case
-                testStrategy === strategy
-              ) {
+              if (testStrategy === strategy) {
                 if (!pluginStats[plugin]) {
                   pluginStats[plugin] = { passes: 0, total: 0 };
                 }
@@ -276,11 +238,25 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
             });
           });
 
+          // Process passes (failed attacks)
+          Object.entries(passesByPlugin).forEach(([plugin, tests]) => {
+            tests.forEach((test) => {
+              const testStrategy = getStrategyIdFromTest(test);
+
+              if (testStrategy === strategy) {
+                if (!pluginStats[plugin]) {
+                  pluginStats[plugin] = { passes: 0, total: 0 };
+                }
+                pluginStats[plugin].total++;
+              }
+            });
+          });
+
           return Object.entries(pluginStats)
             .map(([plugin, stats]) => ({
               plugin,
               ...stats,
-              failRate: ((stats.total - stats.passes) / stats.total) * 100,
+              failRate: (stats.passes / stats.total) * 100,
             }))
             .sort((a, b) => b.failRate - a.failRate);
         },
@@ -655,7 +631,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
           </Typography>
           <StyledGrid>
             {strategies.map(([strategy, { pass, total }]) => {
-              const failRate = ((total - pass) / total) * 100;
+              const failRate = 100 - ((total - pass) / total) * 100;
               return (
                 <StyledStrategyItem
                   key={strategy}
@@ -688,7 +664,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                     </StyledFailRate>
                   </StyledProgressContainer>
                   <Typography variant="caption" color="text.secondary">
-                    {total - pass} / {total} attacks succeeded
+                    {pass} / {total} attacks succeeded
                   </Typography>
                 </StyledStrategyItem>
               );

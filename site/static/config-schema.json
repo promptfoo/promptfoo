@@ -266,6 +266,15 @@
                             },
                             "WATSONX_AI_PROJECT_ID": {
                               "type": "string"
+                            },
+                            "AZURE_CONTENT_SAFETY_ENDPOINT": {
+                              "type": "string"
+                            },
+                            "AZURE_CONTENT_SAFETY_API_KEY": {
+                              "type": "string"
+                            },
+                            "AZURE_CONTENT_SAFETY_API_VERSION": {
+                              "type": "string"
                             }
                           },
                           "additionalProperties": false
@@ -563,6 +572,15 @@
                           ]
                         }
                       },
+                      "assertScoringFunction": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^file:\\/\\/.*\\.(js|cjs|mjs|ts|cts|mts|py)(?::[\\w.]+)?$"
+                          },
+                          {}
+                        ]
+                      },
                       "options": {
                         "allOf": [
                           {
@@ -752,6 +770,9 @@
                         "assert": {
                           "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assert"
                         },
+                        "assertScoringFunction": {
+                          "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assertScoringFunction"
+                        },
                         "options": {
                           "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/options"
                         },
@@ -795,6 +816,9 @@
             },
             "assert": {
               "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assert"
+            },
+            "assertScoringFunction": {
+              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assertScoringFunction"
             },
             "options": {
               "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/options"
@@ -847,7 +871,27 @@
           }
         },
         "env": {
-          "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/1/additionalProperties/properties/env"
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/1/additionalProperties/properties/env"
+            },
+            {
+              "type": "object",
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  }
+                ]
+              }
+            }
+          ]
         },
         "derivedMetrics": {
           "type": "array",
@@ -1051,6 +1095,7 @@
                           "sql-injection",
                           "ssrf",
                           "system-prompt-override",
+                          "tool-discovery",
                           "toxicity"
                         ]
                       },
@@ -1189,6 +1234,7 @@
                               "sql-injection",
                               "ssrf",
                               "system-prompt-override",
+                              "tool-discovery",
                               "toxicity"
                             ]
                           },
@@ -1232,6 +1278,7 @@
                       {
                         "type": "string",
                         "enum": [
+                          "audio",
                           "base64",
                           "basic",
                           "best-of-n",
@@ -1241,6 +1288,7 @@
                           "gcg",
                           "goat",
                           "hex",
+                          "image",
                           "jailbreak",
                           "jailbreak:composite",
                           "jailbreak:likert",
@@ -1279,7 +1327,7 @@
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports base64, basic, best-of-n, citation, crescendo, default, gcg, goat, hex, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, multilingual, pandamonium, prompt-injection, retry, rot13",
+              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, base64, basic, best-of-n, citation, crescendo, default, gcg, goat, hex, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, multilingual, pandamonium, prompt-injection, retry, rot13",
               "default": [
                 "default"
               ]
@@ -1412,6 +1460,9 @@
             },
             "watch": {
               "type": "boolean"
+            },
+            "filterErrorsOnly": {
+              "type": "string"
             },
             "filterFailing": {
               "type": "string"

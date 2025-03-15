@@ -100,14 +100,20 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ...(config.stop ? { stop: config.stop } : {}),
       ...(config.passthrough || {}),
       ...(config.functions 
-          ? { functions: await maybeLoadFromExternalFile(renderVarsInObject(config.functions, context?.vars)) } 
+          ? { functions: await maybeLoadFromExternalFile(renderVarsInObject(config.functions, context?.vars)) }
           : {}),
       ...(config.tools 
           ? { tools: await maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)) } 
           : {}),
       ...(config.response_format 
-          ? { response_format: await maybeLoadFromExternalFile(renderVarsInObject(config.response_format, context?.vars)) } 
+          ? { response_format: await maybeLoadFromExternalFile(renderVarsInObject(config.response_format, context?.vars)) }
           : {}),
+      ...(this.modelName.includes('audio')
+        ? {
+            modalities: config.modalities || ['text', 'audio'],
+            audio: config.audio || { voice: 'alloy', format: 'wav' },
+          }
+        : {}),
     };
 
     return { body, config };
@@ -184,7 +190,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         } else {
           output = message;
         }
-      } else if (message.content === null || message.content === undefined) {
+      } else if (
+        message.content === null ||
+        message.content === undefined ||
+        (message.content === '' && message.tool_calls)
+      ) {
         output = message.function_call || message.tool_calls;
       } else {
         output = message.content;
@@ -230,9 +240,44 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               config,
               data.usage?.prompt_tokens,
               data.usage?.completion_tokens,
+              data.usage?.audio_prompt_tokens,
+              data.usage?.audio_completion_tokens,
             ),
           };
         }
+      }
+
+      // Handle DeepSeek reasoning model's reasoning_content by prepending it to the output
+      if (
+        message.reasoning_content &&
+        typeof message.reasoning_content === 'string' &&
+        typeof output === 'string' &&
+        (this.config.showThinking ?? true)
+      ) {
+        output = `Thinking: ${message.reasoning_content}\n\n${output}`;
+      }
+      if (message.audio) {
+        return {
+          output: message.audio.transcript || '',
+          audio: {
+            id: message.audio.id,
+            expiresAt: message.audio.expires_at,
+            data: message.audio.data,
+            transcript: message.audio.transcript,
+            format: message.audio.format || 'wav',
+          },
+          tokenUsage: getTokenUsage(data, cached),
+          cached,
+          logProbs,
+          cost: calculateOpenAICost(
+            this.modelName,
+            config,
+            data.usage?.prompt_tokens,
+            data.usage?.completion_tokens,
+            data.usage?.audio_prompt_tokens,
+            data.usage?.audio_completion_tokens,
+          ),
+        };
       }
 
       return {
@@ -245,6 +290,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           config,
           data.usage?.prompt_tokens,
           data.usage?.completion_tokens,
+          data.usage?.audio_prompt_tokens,
+          data.usage?.audio_completion_tokens,
         ),
       };
     } catch (err) {

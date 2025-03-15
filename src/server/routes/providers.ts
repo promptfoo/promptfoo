@@ -4,8 +4,7 @@ import type { Request, Response } from 'express';
 import type { ZodError } from 'zod-validation-error';
 import { fromZodError } from 'zod-validation-error';
 import logger from '../../logger';
-import type { HttpProviderConfig } from '../../providers/http';
-import { HttpProvider, HttpProviderConfigSchema } from '../../providers/http';
+import { loadApiProvider } from '../../providers';
 import type { ProviderOptions, ProviderTestResponse } from '../../types/providers';
 import invariant from '../../util/invariant';
 import { ProviderOptionsSchema } from '../../validators/providers';
@@ -13,24 +12,16 @@ import { ProviderOptionsSchema } from '../../validators/providers';
 export const providersRouter = Router();
 
 providersRouter.post('/test', async (req: Request, res: Response): Promise<void> => {
-  const body = req.body;
   let providerOptions: ProviderOptions;
   try {
-    providerOptions = ProviderOptionsSchema.parse(body);
+    providerOptions = ProviderOptionsSchema.parse(req.body);
   } catch (e) {
     res.status(400).json({ error: fromZodError(e as ZodError).toString() });
     return;
   }
+  invariant(providerOptions.id, 'id is required');
 
-  let config: HttpProviderConfig;
-  try {
-    config = HttpProviderConfigSchema.parse(providerOptions.config);
-  } catch (e) {
-    res.status(400).json({ error: fromZodError(e as ZodError).toString() });
-    return;
-  }
-  invariant(config.url, 'url is required');
-  const loadedProvider = await HttpProvider.create(config.url, providerOptions);
+  const loadedProvider = await loadApiProvider(providerOptions.id, { options: providerOptions });
   // Call the provider with the test prompt
   let result;
   try {

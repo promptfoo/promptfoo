@@ -141,6 +141,7 @@ export const ADDITIONAL_PLUGINS = [
   'cyberseceval',
   'debug-access',
   'divergent-repetition',
+  'tool-discovery',
   'harmbench',
   'imitation',
   'indirect-prompt-injection',
@@ -559,6 +560,7 @@ export const AGENTIC_STRATEGIES = [
 export type AgenticStrategy = (typeof AGENTIC_STRATEGIES)[number];
 
 export const ADDITIONAL_STRATEGIES = [
+  'audio',
   'base64',
   'best-of-n',
   'citation',
@@ -566,6 +568,7 @@ export const ADDITIONAL_STRATEGIES = [
   'gcg',
   'goat',
   'hex',
+  'image',
   'jailbreak:likert',
   'jailbreak:tree',
   'leetspeak',
@@ -602,6 +605,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'divergent-repetition':
     'Tests for training data leaks through repetitive pattern exploitation that causes model divergence',
   'excessive-agency': 'Tests for unauthorized actions beyond defined system boundaries',
+  'tool-discovery': 'Tests for enumeration of available tools and function calls',
   foundation: 'Tests a collection of plugins designed to run against foundation models',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Dynamic multi-turn attack generation using adversarial techniques',
@@ -692,6 +696,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   default: 'Standard Security Suite',
   'divergent-repetition': 'Divergent Repetition',
   'excessive-agency': 'Excessive Agency',
+  'tool-discovery': 'Tool Discovery',
   foundation: 'Foundation Model Plugin Collection',
   gcg: 'Greedy Coordinate Gradient',
   goat: 'Generative Offensive Agent Tester',
@@ -791,6 +796,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   default: Severity.Low,
   'divergent-repetition': Severity.Medium,
   'excessive-agency': Severity.Medium,
+  'tool-discovery': Severity.Low,
   foundation: Severity.Medium,
   hallucination: Severity.Medium,
   harmbench: Severity.Medium,
@@ -852,6 +858,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'bfla',
     'bola',
     'debug-access',
+    'tool-discovery',
     'hijacking',
     'indirect-prompt-injection',
     'rbac',
@@ -956,6 +963,7 @@ export const categoryAliases: Record<Plugin, string> = {
   default: 'Default',
   'divergent-repetition': 'DivergentRepetition',
   'excessive-agency': 'ExcessiveAgency',
+  'tool-discovery': 'ToolDiscovery',
   foundation: 'Foundation',
   hallucination: 'Hallucination',
   harmbench: 'Harmbench',
@@ -1036,6 +1044,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'divergent-repetition':
     'Tests repetitive patterns that can cause the model to diverge from normal behavior and leak training data',
   'excessive-agency': 'Evaluates system boundary enforcement and unauthorized action prevention',
+  'tool-discovery':
+    'Tests system protection against enumeration of available tools, functions, and API calls',
   foundation: 'Tests a collection of plugins designed to run against foundation models',
   hallucination: 'Tests system resilience against false information generation and propagation',
   harmbench:
@@ -1094,6 +1104,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
+  audio: 'Tests detection and handling of audio-based malicious payloads',
   base64: 'Tests detection and handling of Base64-encoded malicious payloads',
   basic: 'Equivalent to no strategy. Always included. Can be disabled in configuration.',
   'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
@@ -1103,6 +1114,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Deploys dynamic attack generation using advanced adversarial techniques',
   hex: 'Tests detection and handling of hex-encoded malicious payloads',
+  image: 'Tests detection and handling of image-based malicious payloads',
   jailbreak: 'Optimizes single-turn attacks to bypass security controls',
   'jailbreak:composite': 'Chains multiple attack vectors for enhanced effectiveness',
   'jailbreak:likert': 'Uses Likert scale-based prompts to bypass content filters',
@@ -1118,6 +1130,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
 };
 
 export const strategyDisplayNames: Record<Strategy, string> = {
+  audio: 'Audio',
   base64: 'Base64 Encoding',
   basic: 'Basic',
   'best-of-n': 'Best-of-N',
@@ -1127,6 +1140,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   gcg: 'Greedy Coordinate Gradient',
   goat: 'Generative Offensive Agent Tester',
   hex: 'Hex Encoding',
+  image: 'Image',
   jailbreak: 'Single-shot Optimization',
   'jailbreak:composite': 'Composite Jailbreaks',
   'jailbreak:likert': 'Likert Scale Jailbreak',

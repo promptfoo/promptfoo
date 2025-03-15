@@ -128,7 +128,7 @@ const PromptsSection: React.FC = () => {
                       {`Prompt #${index + 1}: `}
                       {(prompt.length > 250 ? prompt.slice(0, 250) + ' ...' : prompt)
                         .split(/({{\w+}})/g)
-                        .map((part, i) =>
+                        .map((part: string, i: number) =>
                           /{{\s*(\w+)\s*}}/g.test(part) ? (
                             <span key={i} className="prompt-var-highlight">
                               {part}

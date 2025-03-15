@@ -13,7 +13,7 @@ import {
   readStandaloneTestsFile,
   readTest,
   readTests,
-  readVarsFiles,
+  readTestFiles,
 } from '../../src/util/testCaseReader';
 
 jest.mock('proxy-agent', () => ({
@@ -938,7 +938,7 @@ describe('readVarsFiles', () => {
     jest.mocked(fs.readFileSync).mockReturnValue(yamlContent);
     jest.mocked(globSync).mockReturnValue(['vars.yaml']);
 
-    const result = await readVarsFiles('vars.yaml');
+    const result = await readTestFiles('vars.yaml');
 
     expect(result).toEqual({ var1: 'value1', var2: 'value2' });
   });
@@ -952,7 +952,7 @@ describe('readVarsFiles', () => {
       .mockReturnValueOnce(yamlContent2);
     jest.mocked(globSync).mockReturnValue(['vars1.yaml', 'vars2.yaml']);
 
-    const result = await readVarsFiles(['vars1.yaml', 'vars2.yaml']);
+    const result = await readTestFiles(['vars1.yaml', 'vars2.yaml']);
 
     expect(result).toEqual({ var1: 'value1', var2: 'value2' });
   });
