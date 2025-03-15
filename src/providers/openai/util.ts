@@ -1,5 +1,4 @@
 import Ajv from 'ajv';
-import OpenAI from 'openai';
 import type { TokenUsage } from '../../types';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
 import { safeJsonStringify } from '../../util/json';
@@ -206,17 +205,17 @@ export function calculateOpenAICost(
   return totalCost || undefined;
 }
 
-export function failApiCall(err: any) {
-  if (err instanceof OpenAI.APIError) {
-    const errorType = err.error?.type || err.type || 'unknown';
-    const errorMessage = err.error?.message || err.message || 'Unknown error';
-    const statusCode = err.status ? ` ${err.status}` : '';
-    return {
-      error: `API error: ${errorType}${statusCode} ${errorMessage}`,
-    };
+export function failApiCall(err: any): { error: string } {
+  let errorMessage = '';
+  if (err.type && err.message) {
+    errorMessage = `${err.type}: ${err.message}`;
+  } else if (err.message) {
+    errorMessage = `${err.constructor.name || 'Error'}: ${err.message}`;
+  } else {
+    errorMessage = String(err);
   }
   return {
-    error: `API error: ${String(err)}`,
+    error: `API error: ${errorMessage}`,
   };
 }
 
