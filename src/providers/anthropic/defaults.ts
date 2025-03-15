@@ -6,7 +6,8 @@ import { AnthropicMessagesProvider } from './messages';
 export const DEFAULT_ANTHROPIC_MODEL = 'claude-3-7-sonnet-20250219';
 
 /**
- * Helper function to create a lazy-loaded provider
+ * Helper function to create a lazy-loaded provider. This allows the .env file to be
+ * loaded first before the provider is initialized.
  * @param factory Factory function that creates provider instance with optional env
  * @returns Object with getter that lazily initializes the provider with the latest env
  */
@@ -98,14 +99,6 @@ const gradingProviderFactory = createLazyProvider(
   (env?: EnvOverrides) => new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL, { env }),
 );
 
-const gradingJsonProviderFactory = createLazyProvider(
-  (env?: EnvOverrides) => new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL, { env }),
-);
-
-const suggestionsProviderFactory = createLazyProvider(
-  (env?: EnvOverrides) => new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL, { env }),
-);
-
 const llmRubricProviderFactory = createLazyProvider(
   (env?: EnvOverrides) => new AnthropicLlmRubricProvider(DEFAULT_ANTHROPIC_MODEL, env),
 );
@@ -128,16 +121,14 @@ export function getAnthropicProviders(
 > {
   // Get providers with the provided environment variables
   const gradingProvider = gradingProviderFactory.getInstance(env);
-  const gradingJsonProvider = gradingJsonProviderFactory.getInstance(env);
-  const suggestionsProvider = suggestionsProviderFactory.getInstance(env);
   const llmRubricProvider = llmRubricProviderFactory.getInstance(env);
 
   return {
     datasetGenerationProvider: gradingProvider,
-    gradingJsonProvider,
+    gradingJsonProvider: gradingProvider,
     gradingProvider,
     llmRubricProvider,
-    suggestionsProvider,
-    synthesizeProvider: gradingJsonProvider,
+    suggestionsProvider: gradingProvider,
+    synthesizeProvider: gradingProvider,
   };
 }
