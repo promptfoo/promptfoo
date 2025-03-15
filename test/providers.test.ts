@@ -16,7 +16,11 @@ import { getProviderFromCloud } from '../src/util/cloud';
 jest.mock('fs');
 jest.mock('js-yaml');
 jest.mock('../src/fetch');
-jest.mock('../src/providers/http');
+jest.mock('../src/providers/http', () => ({
+  HttpProvider: {
+    create: jest.fn()
+  }
+}));
 jest.mock('../src/providers/openai/chat');
 jest.mock('../src/providers/openai/embedding');
 jest.mock('../src/providers/pythonCompletion');
@@ -173,10 +177,11 @@ describe('loadApiProvider', () => {
       callApi: jest.fn().mockResolvedValue({ output: 'mocked response' })
     };
     
-    HttpProvider.create = jest.fn().mockResolvedValue(mockProvider);
+    jest.clearAllMocks();
+    jest.spyOn(HttpProvider, 'create').mockResolvedValue(mockProvider);
     
     const provider = await loadApiProvider('http://test.com');
-    expect(HttpProvider.create).toHaveBeenCalled();
+    expect(HttpProvider.create).toHaveBeenCalledWith('http://test.com', expect.any(Object));
     expect(provider).toBe(mockProvider);
   });
 
@@ -187,10 +192,11 @@ describe('loadApiProvider', () => {
       callApi: jest.fn().mockResolvedValue({ output: 'mocked response' })
     };
     
-    HttpProvider.create = jest.fn().mockResolvedValue(mockProvider);
+    jest.clearAllMocks();
+    jest.spyOn(HttpProvider, 'create').mockResolvedValue(mockProvider);
     
     const provider = await loadApiProvider('https://test.com');
-    expect(HttpProvider.create).toHaveBeenCalled();
+    expect(HttpProvider.create).toHaveBeenCalledWith('https://test.com', expect.any(Object));
     expect(provider).toBe(mockProvider);
   });
 

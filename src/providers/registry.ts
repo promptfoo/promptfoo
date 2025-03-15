@@ -824,16 +824,16 @@ export const providerMap: ProviderFactory[] = [
   },
   {
     test: (providerPath: string) =>
-      providerPath.startsWith('http:') ||
-      providerPath.startsWith('https:') ||
       providerPath === 'http' ||
-      providerPath === 'https',
+      providerPath.startsWith('http://') ||
+      providerPath === 'https' ||
+      providerPath.startsWith('https://'),
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      return new HttpProvider(providerPath, providerOptions);
+      return HttpProvider.create(providerPath, providerOptions);
     },
   },
   {
