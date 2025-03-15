@@ -281,7 +281,9 @@ export abstract class RedteamGraderBase {
       ...test.metadata,
       prompt,
       entities: test.metadata?.entities ?? [],
-      tools: maybeLoadFromExternalFile(provider?.config?.tools),
+      tools: provider?.config?.tools
+        ? await maybeLoadFromExternalFile(provider.config.tools)
+        : undefined,
       value: renderedValue,
     };
     // Grader examples are appended to all rubrics if present.

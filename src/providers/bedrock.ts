@@ -241,7 +241,7 @@ export interface BedrockDeepseekGenerationOptions extends BedrockOptions {
   stop?: string[];
 }
 interface IBedrockModel {
-  params: (config: BedrockOptions, prompt: string, stop: string[]) => any;
+  params: (config: BedrockOptions, prompt: string, stop?: string[]) => any | Promise<any>;
   output: (config: BedrockOptions, responseJson: any) => any;
 }
 
@@ -500,7 +500,7 @@ export const BEDROCK_MODEL = {
     output: (config: BedrockOptions, responseJson: any) => novaOutputFromMessage(responseJson),
   },
   CLAUDE_COMPLETION: {
-    params: (config: BedrockClaudeLegacyCompletionOptions, prompt: string, stop: string[]) => {
+    params: (config: BedrockClaudeLegacyCompletionOptions, prompt: string, stop?: string[]) => {
       const params: any = {
         prompt: `${Anthropic.HUMAN_PROMPT} ${prompt} ${Anthropic.AI_PROMPT}`,
         stop_sequences: stop,
@@ -524,7 +524,7 @@ export const BEDROCK_MODEL = {
     output: (responseJson: any) => responseJson?.completion,
   },
   CLAUDE_MESSAGES: {
-    params: (config: BedrockClaudeMessagesCompletionOptions, prompt: string) => {
+    params: async (config: BedrockClaudeMessagesCompletionOptions, prompt: string) => {
       let messages;
       let systemPrompt;
       try {
@@ -595,7 +595,7 @@ export const BEDROCK_MODEL = {
       addConfigParam(
         params,
         'tools',
-        maybeLoadFromExternalFile(config?.tools),
+        await maybeLoadFromExternalFile(config?.tools),
         undefined,
         undefined,
       );
@@ -612,7 +612,7 @@ export const BEDROCK_MODEL = {
     },
   },
   TITAN_TEXT: {
-    params: (config: BedrockTextGenerationOptions, prompt: string, stop: string[]) => {
+    params: (config: BedrockTextGenerationOptions, prompt: string, stop?: string[]) => {
       const textGenerationConfig: any = {};
       addConfigParam(
         textGenerationConfig,
@@ -652,7 +652,7 @@ export const BEDROCK_MODEL = {
   LLAMA3_2: getLlamaModelHandler(LlamaVersion.V3_2),
   LLAMA3_3: getLlamaModelHandler(LlamaVersion.V3_3),
   COHERE_COMMAND: {
-    params: (config: BedrockCohereCommandGenerationOptions, prompt: string, stop: string[]) => {
+    params: (config: BedrockCohereCommandGenerationOptions, prompt: string, stop?: string[]) => {
       const params: any = { prompt };
       addConfigParam(
         params,
@@ -681,7 +681,11 @@ export const BEDROCK_MODEL = {
     output: (responseJson: any) => responseJson?.generations[0]?.text,
   },
   COHERE_COMMAND_R: {
-    params: (config: BedrockCohereCommandRGenerationOptions, prompt: string, stop: string[]) => {
+    params: async (
+      config: BedrockCohereCommandRGenerationOptions,
+      prompt: string,
+      stop?: string[],
+    ) => {
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
       const lastMessage = messages[messages.length - 1].content;
       if (!messages.every((m) => typeof m.content === 'string')) {
@@ -706,7 +710,7 @@ export const BEDROCK_MODEL = {
       addConfigParam(params, 'presence_penalty', config?.presence_penalty);
       addConfigParam(params, 'seed', config?.seed);
       addConfigParam(params, 'return_prompt', config?.return_prompt);
-      addConfigParam(params, 'tools', maybeLoadFromExternalFile(config?.tools));
+      addConfigParam(params, 'tools', await maybeLoadFromExternalFile(config?.tools));
       addConfigParam(params, 'tool_results', config?.tool_results);
       addConfigParam(params, 'stop_sequences', stop);
       addConfigParam(params, 'raw_prompting', config?.raw_prompting);
@@ -715,7 +719,7 @@ export const BEDROCK_MODEL = {
     output: (responseJson: any) => responseJson?.text,
   },
   MISTRAL: {
-    params: (config: BedrockMistralGenerationOptions, prompt: string, stop: string[]) => {
+    params: (config: BedrockMistralGenerationOptions, prompt: string, stop?: string[]) => {
       const params: any = { prompt, stop };
       addConfigParam(
         params,
@@ -739,7 +743,8 @@ export const BEDROCK_MODEL = {
   },
   DEEPSEEK: {
     params: (config: BedrockDeepseekGenerationOptions, prompt: string) => {
-      const wrappedPrompt = `<｜begin▁of▁sentence｜><｜User｜>${prompt}<｜Assistant｜><think>\n`;
+      const wrappedPrompt = `</think>\n${prompt}
+      `;
       const params: any = {
         prompt: wrappedPrompt,
       };
@@ -1028,7 +1033,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       );
       model = BEDROCK_MODEL.CLAUDE_MESSAGES;
     }
-    const params = model.params(this.config, prompt, stop);
+    const params = await model.params(this.config, prompt, stop);
 
     logger.debug(`Calling Amazon Bedrock API: ${JSON.stringify(params)}`);
 

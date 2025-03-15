@@ -216,7 +216,7 @@ export class GoogleChatProvider extends GoogleGenericProvider {
         );
       }
 
-      const schema = maybeLoadFromExternalFile(
+      const schema = await maybeLoadFromExternalFile(
         renderVarsInObject(this.config.responseSchema, context?.vars),
       );
 
