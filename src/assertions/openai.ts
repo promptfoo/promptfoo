@@ -29,12 +29,15 @@ export const handleIsValidOpenAiFunctionCall = async ({
       assertion,
     };
   }
+
   try {
-    await validateFunctionCall(
-      functionOutput,
-      (provider as OpenAiChatCompletionProvider).config.functions,
-      test.vars,
-    );
+    // Load functions from external file if needed
+    let functions = (provider as OpenAiChatCompletionProvider).config.functions;
+    if (functions) {
+      functions = await maybeLoadFromExternalFile(renderVarsInObject(functions, test.vars));
+    }
+
+    await validateFunctionCall(functionOutput, functions, test.vars);
     return {
       pass: true,
       score: 1,
@@ -92,13 +95,13 @@ export const handleIsValidOpenAiToolsCall = async ({
   );
   try {
     await Promise.all(
-      toolsOutput.map((toolOutput) => 
+      toolsOutput.map((toolOutput) =>
         validateFunctionCall(
           toolOutput.function,
           tools.map((tool) => tool.function),
           test.vars,
-        )
-      )
+        ),
+      ),
     );
     return {
       pass: true,

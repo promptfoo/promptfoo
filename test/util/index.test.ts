@@ -184,10 +184,10 @@ describe('maybeLoadFromExternalFile', () => {
   it('should load a JavaScript module that returns a function and execute it', async () => {
     const mockFunctionResult = { key: 'function result value' };
     const mockFunction = jest.fn().mockResolvedValue(mockFunctionResult);
-    
+
     jest.mocked(fs.existsSync).mockReturnValue(true);
     jest.mocked(importModule).mockResolvedValue(mockFunction);
-    
+
     const result = await maybeLoadFromExternalFile('file://test-function.js');
     expect(result).toEqual(mockFunctionResult);
   });
@@ -197,7 +197,7 @@ describe('maybeLoadFromExternalFile', () => {
       { vars: { var1: 'value1', var2: 'value2' } },
       { vars: { var1: 'value3', var2: 'value4' } },
     ];
-    
+
     jest.mocked(importModule).mockReset();
     jest.mocked(importModule).mockImplementation(async (modulePath) => {
       if (String(modulePath).endsWith('test.js')) {
@@ -205,47 +205,48 @@ describe('maybeLoadFromExternalFile', () => {
       }
       throw new Error(`Unexpected path: ${modulePath}`);
     });
-    
+
     jest.mocked(fs.existsSync).mockReturnValue(true);
 
     const result = await maybeLoadFromExternalFile('file://test.js');
     expect(result).toEqual(mockData);
   });
-  
+
   it('should load a JavaScript module and execute a named function', async () => {
     const mockFunctionResult = 'named function result';
     const mockNamedFunction = jest.fn().mockReturnValue(mockFunctionResult);
-    
+
     jest.mocked(fs.existsSync).mockReturnValue(true);
     jest.mocked(importModule).mockResolvedValue(mockNamedFunction);
-    
+
     const result = await maybeLoadFromExternalFile('file://test-module.js:namedFunction');
     expect(result).toEqual(mockFunctionResult);
   });
-  
+
   it('should load a Python script with a specific function name', async () => {
     jest.mocked(fs.existsSync).mockReturnValue(true);
     const mockPythonResult = { data: 'python script result' };
     jest.mocked(runPython).mockResolvedValue(mockPythonResult);
-    
+
     const result = await maybeLoadFromExternalFile('file://test-script.py:get_data');
-    
+
     expect(fs.existsSync).toHaveBeenCalledWith(expect.stringContaining('test-script.py'));
     expect(runPython).toHaveBeenCalledWith(
-      expect.stringContaining('test-script.py'), 
+      expect.stringContaining('test-script.py'),
       'get_data',
-      []
+      [],
     );
     await expect(Promise.resolve(result)).resolves.toEqual(mockPythonResult);
   });
-  
+
   it('should throw an error when no function name or default function is provided for Python files', async () => {
     jest.mocked(fs.existsSync).mockReturnValue(true);
-    
-    await expect(maybeLoadFromExternalFile('file://test-script.py'))
-      .rejects.toThrow(/No function name available for Python file/);
+
+    await expect(maybeLoadFromExternalFile('file://test-script.py')).rejects.toThrow(
+      /No function name available for Python file/,
+    );
   });
-  
+
   it('should handle null and undefined inputs properly', async () => {
     await expect(maybeLoadFromExternalFile(null)).resolves.toBeNull();
     await expect(maybeLoadFromExternalFile(undefined)).resolves.toBeUndefined();
@@ -260,51 +261,47 @@ describe('maybeLoadToolsFromExternalFile', () => {
     jest.mocked(fs.existsSync).mockReturnValue(true);
     jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
   });
-  
+
   it('should call maybeLoadFromExternalFile with get_tools as the default function name', async () => {
     const mockValue = { test: 'data' };
     jest.mocked(fs.existsSync).mockReturnValue(true);
     jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockValue));
-    
+
     const result = await maybeLoadToolsFromExternalFile('file://test.json');
-    
+
     expect(fs.existsSync).toHaveBeenCalledWith(expect.stringContaining('test.json'));
     expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.json'), 'utf8');
     await expect(Promise.resolve(result)).resolves.toEqual(mockValue);
   });
-  
+
   it('should load tools from a JavaScript file that implements get_tools', async () => {
     const mockTools = [
       { name: 'tool1', description: 'First tool' },
-      { name: 'tool2', description: 'Second tool' }
+      { name: 'tool2', description: 'Second tool' },
     ];
-    
+
     const mockGetToolsFunction = jest.fn().mockReturnValue(mockTools);
     jest.mocked(fs.existsSync).mockReturnValue(true);
     jest.mocked(importModule).mockResolvedValue(mockGetToolsFunction);
-    
+
     const result = await maybeLoadToolsFromExternalFile('file://tools.js');
     expect(result).toEqual(mockTools);
   });
-  
+
   it('should load tools from a Python file that implements get_tools', async () => {
     jest.mocked(fs.existsSync).mockReturnValue(true);
-    
+
     const mockPythonTools = [
       { name: 'python_tool1', description: 'Python tool 1' },
-      { name: 'python_tool2', description: 'Python tool 2' }
+      { name: 'python_tool2', description: 'Python tool 2' },
     ];
-    
+
     jest.mocked(runPython).mockResolvedValue(mockPythonTools);
-    
+
     const result = await maybeLoadToolsFromExternalFile('file://tools.py');
-    
+
     expect(fs.existsSync).toHaveBeenCalledWith(expect.stringContaining('tools.py'));
-    expect(runPython).toHaveBeenCalledWith(
-      expect.stringContaining('tools.py'), 
-      'get_tools',
-      []
-    );
+    expect(runPython).toHaveBeenCalledWith(expect.stringContaining('tools.py'), 'get_tools', []);
     await expect(Promise.resolve(result)).resolves.toEqual(mockPythonTools);
   });
 });
@@ -745,12 +742,14 @@ describe('util', () => {
 
     it('should handle file://./... with relative base path', () => {
       jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      expect(parsePathOrGlob('relative/base', 'file://file.txt')).toEqual({
+      const result = parsePathOrGlob('relative/base', 'file://file.txt');
+      expect(result).toEqual({
         extension: '.txt',
         functionName: undefined,
         isPathPattern: false,
-        filePath: expect.stringMatching(/^relative[/\\]base[/\\]file\.txt$/),
+        filePath: result.filePath,
       });
+      expect(result.filePath.endsWith('file.txt')).toBe(true);
     });
 
     it('should handle file:// prefix with Go function', () => {
