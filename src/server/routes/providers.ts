@@ -12,9 +12,10 @@ import { ProviderOptionsSchema } from '../../validators/providers';
 export const providersRouter = Router();
 
 providersRouter.post('/test', async (req: Request, res: Response): Promise<void> => {
+  const body = req.body;
   let providerOptions: ProviderOptions;
   try {
-    providerOptions = ProviderOptionsSchema.parse(req.body);
+    providerOptions = ProviderOptionsSchema.parse(body);
   } catch (e) {
     res.status(400).json({ error: fromZodError(e as ZodError).toString() });
     return;
