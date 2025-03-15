@@ -6,15 +6,6 @@ sidebar_label: Testing Guardrails
 
 Guardrails are security filters that help protect your AI applications from misuse. This guide explains how to test and validate guardrails with Promptfoo to ensure they're working effectively.
 
-:::note
-For reference documentation, see:
-
-- [Guardrails assertion](/docs/configuration/expected-outputs/guardrails)
-- [HTTP provider](/docs/providers/http)
-- [Custom Python providers](/docs/providers/python)
-- [Red team testing](/docs/red-team/configuration)
-  :::
-
 ## Overview of Guardrails Testing
 
 There are two primary approaches to testing guardrails:
