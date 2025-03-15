@@ -75,7 +75,7 @@ You can also test standalone guardrail services directly using [custom providers
 - [NVIDIA NeMo Guardrails](https://github.com/NVIDIA/NeMo-Guardrails)
 - [OpenAI moderation](https://platform.openai.com/docs/guides/moderation)
 
-### Example: Testing Azure Content Filter
+### Testing Azure Content Filter
 
 Here's how to test Azure Content Filter using a [custom Python provider](/docs/providers/python):
 
@@ -380,8 +380,6 @@ redteam:
   numTests: 20
   purpose: 'Evaluate the effectiveness of content moderation guardrails'
 ```
-
-## Things to think about
 
 ## Things to think about
 
