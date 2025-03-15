@@ -278,7 +278,7 @@ describe('AzureOpenAiChatCompletionProvider', () => {
             properties: {
               name: { type: 'string' },
             },
-            additionalProperties: false
+            additionalProperties: false as const,
           },
         },
       };
@@ -322,7 +322,7 @@ describe('AzureOpenAiChatCompletionProvider', () => {
             properties: {
               name: { type: 'string' },
             },
-            additionalProperties: false
+            additionalProperties: false as const,
           },
         },
       };
@@ -346,7 +346,7 @@ describe('AzureOpenAiChatCompletionProvider', () => {
                 properties: {
                   name: { type: 'string' },
                 },
-                additionalProperties: false
+                additionalProperties: false as const,
               },
             },
           },
