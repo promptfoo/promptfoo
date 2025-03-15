@@ -3,10 +3,10 @@ import logger from '../logger';
 import type { ApiProvider } from '../types';
 import type { EnvOverrides } from '../types/env';
 import {
-  DefaultGradingJsonProvider as AnthropicGradingJsonProvider,
-  DefaultGradingProvider as AnthropicGradingProvider,
-  DefaultLlmRubricProvider as AnthropicLlmRubricProvider,
-  DefaultSuggestionsProvider as AnthropicSuggestionsProvider,
+  getDefaultGradingProvider as getAnthropicGradingProvider,
+  getDefaultGradingJsonProvider as getAnthropicGradingJsonProvider,
+  getDefaultLlmRubricProvider as getAnthropicLlmRubricProvider,
+  getDefaultSuggestionsProvider as getAnthropicSuggestionsProvider,
 } from './anthropic';
 import { AzureChatCompletionProvider, AzureEmbeddingProvider } from './azure';
 import { AzureModerationProvider } from './azure/moderation';
@@ -115,14 +115,14 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
   } else if (preferAnthropic) {
     logger.debug('Using Anthropic default providers');
     providers = {
-      datasetGenerationProvider: AnthropicGradingProvider,
+      datasetGenerationProvider: getAnthropicGradingProvider(),
       embeddingProvider: OpenAiEmbeddingProvider, // TODO(ian): Voyager instead?
-      gradingJsonProvider: AnthropicGradingJsonProvider,
-      gradingProvider: AnthropicGradingProvider,
-      llmRubricProvider: AnthropicLlmRubricProvider,
+      gradingJsonProvider: getAnthropicGradingJsonProvider(),
+      gradingProvider: getAnthropicGradingProvider(),
+      llmRubricProvider: getAnthropicLlmRubricProvider(),
       moderationProvider: OpenAiModerationProvider,
-      suggestionsProvider: AnthropicSuggestionsProvider,
-      synthesizeProvider: AnthropicGradingJsonProvider,
+      suggestionsProvider: getAnthropicSuggestionsProvider(),
+      synthesizeProvider: getAnthropicGradingJsonProvider(),
     };
   } else if (
     !getEnvString('OPENAI_API_KEY') &&

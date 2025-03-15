@@ -501,13 +501,49 @@ export class AnthropicCompletionProvider implements ApiProvider {
   }
 }
 
-export const DefaultGradingProvider = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219');
-export const DefaultGradingJsonProvider = new AnthropicMessagesProvider(
-  'claude-3-7-sonnet-20250219',
-);
-export const DefaultSuggestionsProvider = new AnthropicMessagesProvider(
-  'claude-3-7-sonnet-20250219',
-);
+export function getDefaultGradingProvider(): AnthropicMessagesProvider {
+  return new AnthropicMessagesProvider('claude-3-7-sonnet-20250219');
+}
+
+export function getDefaultGradingJsonProvider(): AnthropicMessagesProvider {
+  return new AnthropicMessagesProvider('claude-3-7-sonnet-20250219');
+}
+
+export function getDefaultSuggestionsProvider(): AnthropicMessagesProvider {
+  return new AnthropicMessagesProvider('claude-3-7-sonnet-20250219');
+}
+
+let _defaultGradingProvider: AnthropicMessagesProvider | undefined;
+let _defaultGradingJsonProvider: AnthropicMessagesProvider | undefined;
+let _defaultSuggestionsProvider: AnthropicMessagesProvider | undefined;
+let _defaultLlmRubricProvider: AnthropicLlmRubricProvider | undefined;
+
+export const DefaultGradingProvider = {
+  get instance() {
+    if (!_defaultGradingProvider) {
+      _defaultGradingProvider = getDefaultGradingProvider();
+    }
+    return _defaultGradingProvider;
+  },
+};
+
+export const DefaultGradingJsonProvider = {
+  get instance() {
+    if (!_defaultGradingJsonProvider) {
+      _defaultGradingJsonProvider = getDefaultGradingJsonProvider();
+    }
+    return _defaultGradingJsonProvider;
+  },
+};
+
+export const DefaultSuggestionsProvider = {
+  get instance() {
+    if (!_defaultSuggestionsProvider) {
+      _defaultSuggestionsProvider = getDefaultSuggestionsProvider();
+    }
+    return _defaultSuggestionsProvider;
+  },
+};
 
 export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
   constructor(modelName: string) {
@@ -570,6 +606,16 @@ export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
     }
   }
 }
-export const DefaultLlmRubricProvider = new AnthropicLlmRubricProvider(
-  'claude-3-7-sonnet-20250219',
-);
+
+export function getDefaultLlmRubricProvider(): AnthropicLlmRubricProvider {
+  return new AnthropicLlmRubricProvider('claude-3-7-sonnet-20250219');
+}
+
+export const DefaultLlmRubricProvider = {
+  get instance() {
+    if (!_defaultLlmRubricProvider) {
+      _defaultLlmRubricProvider = getDefaultLlmRubricProvider();
+    }
+    return _defaultLlmRubricProvider;
+  },
+};
