@@ -1,7 +1,26 @@
-import type { ApiProvider, ProviderResponse } from '../../types';
+import type { DefaultProviders, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import { AnthropicMessagesProvider } from './messages';
-import { DEFAULT_ANTHROPIC_MODEL, createLazyProvider } from './types';
+
+// Default model to use for all default providers
+export const DEFAULT_ANTHROPIC_MODEL = 'claude-3-7-sonnet-20250219';
+
+/**
+ * Helper function to create a lazy-loaded provider
+ * @param getter Factory function to create provider instance
+ * @param cache Reference to the cached instance
+ * @returns Object with getter that lazily initializes the provider
+ */
+function createLazyProvider<T>(getter: () => T, cache: { value?: T }): { instance: T } {
+  return {
+    get instance() {
+      if (!cache.value) {
+        cache.value = getter();
+      }
+      return cache.value;
+    },
+  };
+}
 
 // LLM Rubric Provider
 export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
@@ -66,20 +85,20 @@ export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
   }
 }
 
-// Factory functions for creating providers
-export function getDefaultGradingProvider(): AnthropicMessagesProvider {
+// Factory functions for creating providers - made private (internal only)
+function getDefaultGradingProvider(): AnthropicMessagesProvider {
   return new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL);
 }
 
-export function getDefaultGradingJsonProvider(): AnthropicMessagesProvider {
+function getDefaultGradingJsonProvider(): AnthropicMessagesProvider {
   return new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL);
 }
 
-export function getDefaultSuggestionsProvider(): AnthropicMessagesProvider {
+function getDefaultSuggestionsProvider(): AnthropicMessagesProvider {
   return new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL);
 }
 
-export function getDefaultLlmRubricProvider(): AnthropicLlmRubricProvider {
+function getDefaultLlmRubricProvider(): AnthropicLlmRubricProvider {
   return new AnthropicLlmRubricProvider(DEFAULT_ANTHROPIC_MODEL);
 }
 
@@ -115,14 +134,7 @@ export const DefaultLlmRubricProvider = createLazyProvider(
  * @param env - Optional environment overrides
  * @returns Anthropic provider implementations for various functions
  */
-export function getAnthropicProviders(env?: EnvOverrides): {
-  datasetGenerationProvider: ApiProvider;
-  gradingJsonProvider: ApiProvider;
-  gradingProvider: ApiProvider;
-  llmRubricProvider: ApiProvider;
-  suggestionsProvider: ApiProvider;
-  synthesizeProvider: ApiProvider;
-} {
+export function getAnthropicProviders(env?: EnvOverrides): Partial<DefaultProviders> {
   return {
     datasetGenerationProvider: getDefaultGradingProvider(),
     gradingJsonProvider: getDefaultGradingJsonProvider(),

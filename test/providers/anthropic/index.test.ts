@@ -21,16 +21,11 @@ describe('Anthropic exports', () => {
     expect(anthropic.AnthropicLlmRubricProvider).toBeDefined();
   });
 
-  it('should export default providers and factory functions', () => {
+  it('should export default providers and relevant functions', () => {
     expect(anthropic.DefaultGradingProvider).toBeDefined();
     expect(anthropic.DefaultGradingJsonProvider).toBeDefined();
     expect(anthropic.DefaultLlmRubricProvider).toBeDefined();
     expect(anthropic.DefaultSuggestionsProvider).toBeDefined();
-
-    expect(anthropic.getDefaultGradingProvider).toBeDefined();
-    expect(anthropic.getDefaultGradingJsonProvider).toBeDefined();
-    expect(anthropic.getDefaultLlmRubricProvider).toBeDefined();
-    expect(anthropic.getDefaultSuggestionsProvider).toBeDefined();
     expect(anthropic.getAnthropicProviders).toBeDefined();
   });
 });

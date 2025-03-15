@@ -6,11 +6,7 @@ import {
   DefaultLlmRubricProvider,
   DefaultSuggestionsProvider,
   getAnthropicProviders,
-  getDefaultGradingProvider,
-  getDefaultGradingJsonProvider,
-  getDefaultLlmRubricProvider,
-  getDefaultSuggestionsProvider,
-} from '../../../src/providers/anthropic';
+} from '../../../src/providers/anthropic/index';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
 
 jest.mock('proxy-agent', () => ({
@@ -21,20 +17,6 @@ describe('Anthropic Default Providers', () => {
   afterEach(async () => {
     jest.clearAllMocks();
     await clearCache();
-  });
-
-  describe('Factory functions', () => {
-    it('should create providers with the default model', () => {
-      const gradingProvider = getDefaultGradingProvider();
-      const gradingJsonProvider = getDefaultGradingJsonProvider();
-      const suggestionsProvider = getDefaultSuggestionsProvider();
-      const llmRubricProvider = getDefaultLlmRubricProvider();
-
-      expect(gradingProvider).toBeInstanceOf(AnthropicMessagesProvider);
-      expect(gradingJsonProvider).toBeInstanceOf(AnthropicMessagesProvider);
-      expect(suggestionsProvider).toBeInstanceOf(AnthropicMessagesProvider);
-      expect(llmRubricProvider).toBeInstanceOf(AnthropicLlmRubricProvider);
-    });
   });
 
   describe('Lazy providers', () => {

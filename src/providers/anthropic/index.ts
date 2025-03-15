@@ -1,5 +1,5 @@
 // Re-export types
-export { DEFAULT_ANTHROPIC_MODEL } from './types';
+export { DEFAULT_ANTHROPIC_MODEL } from './defaults';
 export type { AnthropicMessageOptions, AnthropicCompletionOptions } from './types';
 export type { AnthropicBaseOptions } from './generic';
 
@@ -24,9 +24,5 @@ export {
   DefaultGradingJsonProvider,
   DefaultLlmRubricProvider,
   DefaultSuggestionsProvider,
-  getDefaultGradingProvider,
-  getDefaultGradingJsonProvider,
-  getDefaultLlmRubricProvider,
-  getDefaultSuggestionsProvider,
   getAnthropicProviders,
 } from './defaults';
