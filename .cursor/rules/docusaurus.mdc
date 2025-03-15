@@ -314,7 +314,7 @@ Without empty lines, Prettier might reformat admonitions to invalid syntax, brea
 
   - [Related Topic 1](mdc:../path/to/related-topic-1.md)
   - [Related Topic 2](mdc:../path/to/related-topic-2.md)
-  - [External Resource](mdc:https:/example.com)
+  - [External Resource](mdc:https://example.com)
   ```
 
 ## Content Guidelines
