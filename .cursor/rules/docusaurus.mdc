@@ -1,5 +1,5 @@
 ---
-description: Guidelines for updating Docusaurus documentation following best practicesd
+description: Guidelines for updating Docusaurus documentation following best practices
 globs: 'site/docs/**/*.md,site/docs/**/*.mdx,site/blog/**/*.md,site/blog/**/*.mdx,site/src/pages/**/*.md,site/src/pages/**/*.mdx'
 alwaysApply: false
 ---
