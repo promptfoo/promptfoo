@@ -1,10 +1,8 @@
 import { disableCache, enableCache } from '../../../src/cache';
 import { OpenAiAssistantProvider } from '../../../src/providers/openai/assistant';
 
-// Mock fetch
 jest.spyOn(global, 'fetch').mockImplementation();
 
-// Helper functions to create properly typed mock responses
 function createSuccessResponse<T>(data: T): Response {
   const response = {
     ok: true,
@@ -55,7 +53,6 @@ describe('OpenAI Provider with Fetch', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     disableCache();
-    // Reset the fetch mock
     jest.mocked(global.fetch).mockReset();
   });
 
@@ -75,7 +72,6 @@ describe('OpenAI Provider with Fetch', () => {
     });
 
     it('should handle successful assistant completion', async () => {
-      // Mock responses for fetch calls
       const mockRun = {
         id: 'run_123',
         thread_id: 'thread_123',
@@ -108,19 +104,11 @@ describe('OpenAI Provider with Fetch', () => {
         ],
       };
 
-      // Setup fetch mock responses
       const mockFetch = jest.mocked(global.fetch);
 
-      // Mock thread run creation
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
-
-      // Mock run retrieval
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
-
-      // Mock steps list
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockSteps));
-
-      // Mock message retrieval
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockMessage));
 
       const result = await provider.callApi('Test prompt');
@@ -128,15 +116,20 @@ describe('OpenAI Provider with Fetch', () => {
       expect(result.output).toBe('[Assistant] Test response');
       expect(mockFetch).toHaveBeenCalledTimes(4);
 
-      // Verify the endpoints that were called
-      expect(mockFetch.mock.calls[0][0]).toContain('/beta/threads/runs');
+      expect(mockFetch.mock.calls[0][0]).toContain('/threads/runs');
       expect(mockFetch.mock.calls[1][0]).toContain(
-        `/beta/threads/${mockRun.thread_id}/runs/${mockRun.id}`,
+        `/threads/${mockRun.thread_id}/runs/${mockRun.id}`,
       );
       expect(mockFetch.mock.calls[2][0]).toContain(
-        `/beta/threads/${mockRun.thread_id}/runs/${mockRun.id}/steps`,
+        `/threads/${mockRun.thread_id}/runs/${mockRun.id}/steps`,
       );
-      expect(mockFetch.mock.calls[3][0]).toContain(`/beta/threads/${mockRun.thread_id}/messages/`);
+      expect(mockFetch.mock.calls[3][0]).toContain(`/threads/${mockRun.thread_id}/messages/`);
+
+      for (let i = 0; i < mockFetch.mock.calls.length; i++) {
+        const options = mockFetch.mock.calls[i][1] as RequestInit;
+        expect(options.headers).toBeDefined();
+        expect((options.headers as Record<string, string>)['OpenAI-Beta']).toBe('assistants=v2');
+      }
     });
 
     it('should handle function calling', async () => {
@@ -189,22 +182,12 @@ describe('OpenAI Provider with Fetch', () => {
         ],
       };
 
-      // Setup fetch mock responses
       const mockFetch = jest.mocked(global.fetch);
 
-      // Mock thread run creation
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
-
-      // Mock run retrieval (requires action)
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
-
-      // Mock submit tool outputs
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockCompletedRun));
-
-      // Mock run retrieval (completed)
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockCompletedRun));
-
-      // Mock steps list
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockSteps));
 
       const result = await provider.callApi('Test prompt');
@@ -213,6 +196,12 @@ describe('OpenAI Provider with Fetch', () => {
         '[Call function test_function with arguments {"arg": "value"}]\n\n[Function output: Function result]',
       );
       expect(mockFetch).toHaveBeenCalledTimes(5);
+
+      for (let i = 0; i < mockFetch.mock.calls.length; i++) {
+        const options = mockFetch.mock.calls[i][1] as RequestInit;
+        expect(options.headers).toBeDefined();
+        expect((options.headers as Record<string, string>)['OpenAI-Beta']).toBe('assistants=v2');
+      }
     });
 
     it('should handle run failures', async () => {
@@ -225,13 +214,9 @@ describe('OpenAI Provider with Fetch', () => {
         },
       };
 
-      // Setup fetch mock responses
       const mockFetch = jest.mocked(global.fetch);
 
-      // Mock thread run creation
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
-
-      // Mock run retrieval
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
 
       const result = await provider.callApi('Test prompt');
@@ -241,10 +226,8 @@ describe('OpenAI Provider with Fetch', () => {
     });
 
     it('should handle API errors', async () => {
-      // Setup fetch mock responses
       const mockFetch = jest.mocked(global.fetch);
 
-      // Mock thread run creation with error
       mockFetch.mockImplementationOnce(async () =>
         createErrorResponse(500, 'Internal Server Error', {
           type: 'API Error',
@@ -254,20 +237,19 @@ describe('OpenAI Provider with Fetch', () => {
 
       const result = await provider.callApi('Test prompt');
 
-      // The actual error format based on our implementation
       expect(result.error).toBe('API error: API Error: API Error');
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
     it('should handle missing API key', async () => {
       const providerNoKey = new OpenAiAssistantProvider('test-assistant-id');
+      const originalApiKey = process.env.OPENAI_API_KEY;
       process.env.OPENAI_API_KEY = '';
 
-      await expect(providerNoKey.callApi('Test prompt')).rejects.toThrow(
-        'OpenAI API key is not set',
-      );
+      const result = await providerNoKey.callApi('Test prompt');
+      expect(result.error).toContain('OpenAI API key is not set');
 
-      process.env.OPENAI_API_KEY = 'test-key';
+      process.env.OPENAI_API_KEY = originalApiKey;
     });
 
     it('should handle code interpreter tool calls', async () => {
@@ -302,16 +284,10 @@ describe('OpenAI Provider with Fetch', () => {
         ],
       };
 
-      // Setup fetch mock responses
       const mockFetch = jest.mocked(global.fetch);
 
-      // Mock thread run creation
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
-
-      // Mock run retrieval
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
-
-      // Mock steps list
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockSteps));
 
       const result = await provider.callApi('Test prompt');
@@ -345,16 +321,10 @@ describe('OpenAI Provider with Fetch', () => {
         ],
       };
 
-      // Setup fetch mock responses
       const mockFetch = jest.mocked(global.fetch);
 
-      // Mock thread run creation
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
-
-      // Mock run retrieval
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
-
-      // Mock steps list
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockSteps));
 
       const result = await provider.callApi('Test prompt');
@@ -386,16 +356,10 @@ describe('OpenAI Provider with Fetch', () => {
         ],
       };
 
-      // Setup fetch mock responses
       const mockFetch = jest.mocked(global.fetch);
 
-      // Mock thread run creation
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
-
-      // Mock run retrieval
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
-
-      // Mock steps list
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockSteps));
 
       const result = await provider.callApi('Test prompt');
@@ -422,16 +386,10 @@ describe('OpenAI Provider with Fetch', () => {
         ],
       };
 
-      // Setup fetch mock responses
       const mockFetch = jest.mocked(global.fetch);
 
-      // Mock thread run creation
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
-
-      // Mock run retrieval
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
-
-      // Mock steps list
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockSteps));
 
       const result = await provider.callApi('Test prompt');
@@ -447,16 +405,10 @@ describe('OpenAI Provider with Fetch', () => {
         status: 'completed',
       };
 
-      // Setup fetch mock responses
       const mockFetch = jest.mocked(global.fetch);
 
-      // Mock thread run creation
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
-
-      // Mock run retrieval
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
-
-      // Mock steps list with error
       mockFetch.mockImplementationOnce(async () =>
         createErrorResponse(500, 'Internal Server Error', { message: 'Run steps retrieval error' }),
       );
@@ -466,7 +418,6 @@ describe('OpenAI Provider with Fetch', () => {
       expect(result.error).toBeDefined();
       expect(mockFetch).toHaveBeenCalledTimes(3);
     });
-
     it('should handle message retrieval errors', async () => {
       const mockRun = {
         id: 'run_123',
@@ -488,19 +439,11 @@ describe('OpenAI Provider with Fetch', () => {
         ],
       };
 
-      // Setup fetch mock responses
       const mockFetch = jest.mocked(global.fetch);
 
-      // Mock thread run creation
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
-
-      // Mock run retrieval
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
-
-      // Mock steps list
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockSteps));
-
-      // Mock message retrieval with error
       mockFetch.mockImplementationOnce(async () =>
         createErrorResponse(500, 'Internal Server Error', { message: 'Message retrieval error' }),
       );
@@ -518,13 +461,9 @@ describe('OpenAI Provider with Fetch', () => {
         status: 'cancelled',
       };
 
-      // Setup fetch mock responses
       const mockFetch = jest.mocked(global.fetch);
 
-      // Mock thread run creation
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
-
-      // Mock run retrieval
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
 
       const result = await provider.callApi('Test prompt');
@@ -555,16 +494,10 @@ describe('OpenAI Provider with Fetch', () => {
         },
       };
 
-      // Setup fetch mock responses
       const mockFetch = jest.mocked(global.fetch);
 
-      // Mock thread run creation
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
-
-      // Mock run retrieval
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
-
-      // Mock submit tool outputs with error
       mockFetch.mockImplementationOnce(async () =>
         createErrorResponse(500, 'Internal Server Error', {
           message: 'Tool output submission error',
@@ -595,23 +528,16 @@ describe('OpenAI Provider with Fetch', () => {
         },
       };
 
-      // Setup fetch mock responses
       const mockFetch = jest.mocked(global.fetch);
 
-      // Mock thread run creation
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
-
-      // Mock first run retrieval (requires action)
       mockFetch.mockImplementationOnce(async () => createSuccessResponse(mockRun));
-
-      // Mock steps list
       mockFetch.mockImplementationOnce(async () =>
         createErrorResponse(404, 'Not Found', { message: 'Steps not found' }),
       );
 
       const result = await provider.callApi('Test prompt');
 
-      // Should have an error due to steps retrieval failing
       expect(result.error).toBeDefined();
       expect(mockFetch).toHaveBeenCalledTimes(3);
     });

@@ -221,7 +221,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
         let errorData;
         try {
           errorData = JSON.parse(errorText);
-        } catch (error: any) {
+        } catch {
           errorData = { error: { message: errorText, type: 'Parse Error' } };
         }
 
