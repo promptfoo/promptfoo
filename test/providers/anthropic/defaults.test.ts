@@ -1,12 +1,12 @@
 import { clearCache } from '../../../src/cache';
 import {
   AnthropicLlmRubricProvider,
+  getAnthropicProviders,
   DefaultGradingProvider,
   DefaultGradingJsonProvider,
   DefaultLlmRubricProvider,
   DefaultSuggestionsProvider,
-  getAnthropicProviders,
-} from '../../../src/providers/anthropic/index';
+} from '../../../src/providers/anthropic/defaults';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
 
 jest.mock('proxy-agent', () => ({
@@ -19,8 +19,8 @@ describe('Anthropic Default Providers', () => {
     await clearCache();
   });
 
-  describe('Lazy providers', () => {
-    it('should initialize providers only when accessed', () => {
+  describe('Default provider exports', () => {
+    it('should provide working instances when accessed', () => {
       // Accessing the property should initialize the provider
       expect(DefaultGradingProvider.instance).toBeDefined();
       expect(DefaultGradingJsonProvider.instance).toBeDefined();
@@ -43,6 +43,15 @@ describe('Anthropic Default Providers', () => {
       expect(providers.llmRubricProvider).toBeInstanceOf(AnthropicLlmRubricProvider);
       expect(providers.suggestionsProvider).toBeInstanceOf(AnthropicMessagesProvider);
       expect(providers.synthesizeProvider).toBeInstanceOf(AnthropicMessagesProvider);
+    });
+
+    it('should return the same instances on repeated calls', () => {
+      const providers1 = getAnthropicProviders();
+      const providers2 = getAnthropicProviders();
+
+      expect(providers1.gradingProvider).toBe(providers2.gradingProvider);
+      expect(providers1.gradingJsonProvider).toBe(providers2.gradingJsonProvider);
+      expect(providers1.llmRubricProvider).toBe(providers2.llmRubricProvider);
     });
   });
 

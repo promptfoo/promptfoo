@@ -2,7 +2,7 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import type { ApiProvider, DefaultProviders } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { getAnthropicProviders } from './anthropic/index';
+import { getAnthropicProviders } from './anthropic/defaults';
 import { AzureChatCompletionProvider, AzureEmbeddingProvider } from './azure';
 import { AzureModerationProvider } from './azure/moderation';
 import {

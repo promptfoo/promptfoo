@@ -7,17 +7,17 @@ export const DEFAULT_ANTHROPIC_MODEL = 'claude-3-7-sonnet-20250219';
 
 /**
  * Helper function to create a lazy-loaded provider
- * @param getter Factory function to create provider instance
- * @param cache Reference to the cached instance
+ * @param factory Factory function to create provider instance
  * @returns Object with getter that lazily initializes the provider
  */
-function createLazyProvider<T>(getter: () => T, cache: { value?: T }): { instance: T } {
+function createLazyProvider<T>(factory: () => T): { instance: T } {
+  let cachedInstance: T | undefined;
   return {
     get instance() {
-      if (!cache.value) {
-        cache.value = getter();
+      if (!cachedInstance) {
+        cachedInstance = factory();
       }
-      return cache.value;
+      return cachedInstance;
     },
   };
 }
@@ -85,48 +85,21 @@ export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
   }
 }
 
-// Factory functions for creating providers - made private (internal only)
-function getDefaultGradingProvider(): AnthropicMessagesProvider {
-  return new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL);
-}
-
-function getDefaultGradingJsonProvider(): AnthropicMessagesProvider {
-  return new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL);
-}
-
-function getDefaultSuggestionsProvider(): AnthropicMessagesProvider {
-  return new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL);
-}
-
-function getDefaultLlmRubricProvider(): AnthropicLlmRubricProvider {
-  return new AnthropicLlmRubricProvider(DEFAULT_ANTHROPIC_MODEL);
-}
-
-// Cache objects for each provider type
-const gradingProviderCache = { value: undefined as AnthropicMessagesProvider | undefined };
-const gradingJsonProviderCache = { value: undefined as AnthropicMessagesProvider | undefined };
-const suggestionsProviderCache = { value: undefined as AnthropicMessagesProvider | undefined };
-const llmRubricProviderCache = { value: undefined as AnthropicLlmRubricProvider | undefined };
-
-// Lazy-loaded providers
+// Direct exports with lazy loading
 export const DefaultGradingProvider = createLazyProvider(
-  getDefaultGradingProvider,
-  gradingProviderCache,
+  () => new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL),
 );
 
 export const DefaultGradingJsonProvider = createLazyProvider(
-  getDefaultGradingJsonProvider,
-  gradingJsonProviderCache,
+  () => new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL),
 );
 
 export const DefaultSuggestionsProvider = createLazyProvider(
-  getDefaultSuggestionsProvider,
-  suggestionsProviderCache,
+  () => new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL),
 );
 
 export const DefaultLlmRubricProvider = createLazyProvider(
-  getDefaultLlmRubricProvider,
-  llmRubricProviderCache,
+  () => new AnthropicLlmRubricProvider(DEFAULT_ANTHROPIC_MODEL),
 );
 
 /**
@@ -134,13 +107,23 @@ export const DefaultLlmRubricProvider = createLazyProvider(
  * @param env - Optional environment overrides
  * @returns Anthropic provider implementations for various functions
  */
-export function getAnthropicProviders(env?: EnvOverrides): Partial<DefaultProviders> {
+export function getAnthropicProviders(
+  env?: EnvOverrides,
+): Pick<
+  DefaultProviders,
+  | 'datasetGenerationProvider'
+  | 'gradingJsonProvider'
+  | 'gradingProvider'
+  | 'llmRubricProvider'
+  | 'suggestionsProvider'
+  | 'synthesizeProvider'
+> {
   return {
-    datasetGenerationProvider: getDefaultGradingProvider(),
-    gradingJsonProvider: getDefaultGradingJsonProvider(),
-    gradingProvider: getDefaultGradingProvider(),
-    llmRubricProvider: getDefaultLlmRubricProvider(),
-    suggestionsProvider: getDefaultSuggestionsProvider(),
-    synthesizeProvider: getDefaultGradingJsonProvider(),
+    datasetGenerationProvider: DefaultGradingProvider.instance,
+    gradingJsonProvider: DefaultGradingJsonProvider.instance,
+    gradingProvider: DefaultGradingProvider.instance,
+    llmRubricProvider: DefaultLlmRubricProvider.instance,
+    suggestionsProvider: DefaultSuggestionsProvider.instance,
+    synthesizeProvider: DefaultGradingJsonProvider.instance,
   };
 }

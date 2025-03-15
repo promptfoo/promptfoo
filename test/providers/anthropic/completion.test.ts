@@ -1,5 +1,5 @@
 import { clearCache, disableCache } from '../../../src/cache';
-import { AnthropicCompletionProvider } from '../../../src/providers/anthropic';
+import { AnthropicCompletionProvider } from '../../../src/providers/anthropic/completion';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),

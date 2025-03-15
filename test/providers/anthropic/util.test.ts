@@ -4,7 +4,7 @@ import {
   calculateAnthropicCost,
   outputFromMessage,
   parseMessages,
-} from '../../../src/providers/anthropic';
+} from '../../../src/providers/anthropic/util';
 
 describe('Anthropic utilities', () => {
   describe('calculateAnthropicCost', () => {

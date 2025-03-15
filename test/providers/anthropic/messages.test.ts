@@ -2,7 +2,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { APIError } from '@anthropic-ai/sdk';
 import dedent from 'dedent';
 import { clearCache, disableCache, enableCache, getCache } from '../../../src/cache';
-import { AnthropicMessagesProvider } from '../../../src/providers/anthropic';
+import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),

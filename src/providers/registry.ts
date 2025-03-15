@@ -14,7 +14,8 @@ import type { ApiProvider, ProviderOptions } from '../types/providers';
 import { isJavascriptFile } from '../util/file';
 import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
-import { AnthropicCompletionProvider, AnthropicMessagesProvider } from './anthropic/index';
+import { AnthropicCompletionProvider } from './anthropic/completion';
+import { AnthropicMessagesProvider } from './anthropic/messages';
 import { ANTHROPIC_MODELS } from './anthropic/util';
 import {
   AzureAssistantProvider,

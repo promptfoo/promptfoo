@@ -1,4 +1,4 @@
-import { AnthropicGenericProvider } from '../../../src/providers/anthropic';
+import { AnthropicGenericProvider } from '../../../src/providers/anthropic/generic';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
