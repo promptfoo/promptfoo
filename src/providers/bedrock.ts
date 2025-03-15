@@ -15,7 +15,7 @@ import type {
 } from '../types';
 import type { EnvOverrides } from '../types/env';
 import { maybeLoadFromExternalFile } from '../util';
-import { outputFromMessage, parseMessages } from './anthropic';
+import { outputFromMessage, parseMessages } from './anthropic/util';
 import { novaOutputFromMessage, novaParseMessages } from './bedrockUtil';
 import { parseChatPrompt } from './shared';
 
@@ -739,7 +739,9 @@ export const BEDROCK_MODEL = {
   },
   DEEPSEEK: {
     params: (config: BedrockDeepseekGenerationOptions, prompt: string) => {
-      const wrappedPrompt = `<｜begin▁of▁sentence｜><｜User｜>${prompt}<｜Assistant｜><think>\n`;
+      const wrappedPrompt = `
+${prompt}
+<think>\n`;
       const params: any = {
         prompt: wrappedPrompt,
       };
