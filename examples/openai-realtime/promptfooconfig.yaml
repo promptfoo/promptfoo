@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenAI Realtime API demonstration
+prompts:
+  - file://realtime-input.json
+
+providers:
+  - id: openai:realtime:gpt-4o-realtime-preview-2024-12-17
+    config:
+      modalities: ['text', 'audio']
+      voice: 'alloy'
+      instructions: 'You are a helpful assistant. Keep your responses concise and informative.'
+      temperature: 0.7
+      # Increase WebSocket timeout to handle potential slow connections
+      websocketTimeout: 60000 # 60 seconds
+      # The required beta header is automatically added to all requests
+      # Tools definition for function calling
+      # In a real implementation, you would implement a functionCallHandler in JavaScript
+      # to process these function calls and return results to the model
+      tools:
+        - type: function
+          name: get_weather
+          description: Get the current weather for a location
+          parameters:
+            type: object
+            properties:
+              location:
+                type: string
+                description: The city and state, e.g. San Francisco, CA
+            required: ['location']
+      tool_choice: 'auto'
+
+tests:
+  - vars:
+      question: 'Tell me about the benefits of real-time communication with AI models.'
+    assert:
+      - type: llm-rubric
+        value: Discusses the benefits of real-time communication with AI models
+
+  - vars:
+      question: 'What are some applications of voice-enabled AI assistants?'
+    assert:
+      - type: llm-rubric
+        value: Discusses applications of voice-enabled AI assistants
+
+  - vars:
+      question: 'How can real-time AI enhance customer service experiences?'
+    assert:
+      - type: llm-rubric
+        value: Explains how real-time AI can enhance customer service
+
+  - vars:
+      question: "What's the weather like in San Francisco?"
+    assert:
+      - type: llm-rubric
+        value: Uses or attempts to use the weather function

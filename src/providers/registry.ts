@@ -58,6 +58,7 @@ import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 import { OpenAiImageProvider } from './openai/image';
 import { OpenAiModerationProvider } from './openai/moderation';
+import { OpenAiRealtimeProvider } from './openai/realtime';
 import { parsePackageProvider } from './packageParser';
 import { PortkeyChatCompletionProvider } from './portkey';
 import { PythonProvider } from './pythonCompletion';
@@ -594,11 +595,20 @@ export const providerMap: ProviderFactory[] = [
       if (modelType === 'moderation') {
         return new OpenAiModerationProvider(modelName || 'omni-moderation-latest', providerOptions);
       }
+      if (modelType === 'realtime') {
+        return new OpenAiRealtimeProvider(
+          modelName || 'gpt-4o-realtime-preview-2024-12-17',
+          providerOptions,
+        );
+      }
       if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
         return new OpenAiChatCompletionProvider(modelType, providerOptions);
       }
       if (OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelType)) {
         return new OpenAiCompletionProvider(modelType, providerOptions);
+      }
+      if (OpenAiRealtimeProvider.OPENAI_REALTIME_MODEL_NAMES.includes(modelType)) {
+        return new OpenAiRealtimeProvider(modelType, providerOptions);
       }
       if (modelType === 'assistant') {
         return new OpenAiAssistantProvider(modelName, providerOptions);
@@ -608,7 +618,7 @@ export const providerMap: ProviderFactory[] = [
       }
       // Assume user did not provide model type, and it's a chat model
       logger.warn(
-        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>`,
+        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:realtime:<model name>`,
       );
       return new OpenAiChatCompletionProvider(modelType, providerOptions);
     },

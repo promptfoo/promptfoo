@@ -1,0 +1,11 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "input_text",
+        "text": "{{question}}"
+      }
+    ]
+  }
+]
