@@ -1,6 +1,7 @@
 // Re-export types
 export { DEFAULT_ANTHROPIC_MODEL } from './types';
 export type { AnthropicMessageOptions, AnthropicCompletionOptions } from './types';
+export type { AnthropicBaseOptions } from './generic';
 
 // Export utility functions
 export {
@@ -12,6 +13,7 @@ export {
 } from './util';
 
 // Export provider classes
+export { AnthropicGenericProvider } from './generic';
 export { AnthropicMessagesProvider } from './messages';
 export { AnthropicCompletionProvider } from './completion';
 

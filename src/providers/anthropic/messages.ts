@@ -1,47 +1,30 @@
-import Anthropic, { APIError } from '@anthropic-ai/sdk';
+import type Anthropic from '@anthropic-ai/sdk';
+import { APIError } from '@anthropic-ai/sdk';
 import { getCache, isCacheEnabled } from '../../cache';
-import { getEnvString, getEnvInt, getEnvFloat } from '../../envars';
+import { getEnvInt, getEnvFloat } from '../../envars';
 import logger from '../../logger';
-import type { ApiProvider, ProviderResponse } from '../../types';
+import type { ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import { maybeLoadFromExternalFile } from '../../util';
+import { AnthropicGenericProvider } from './generic';
 import type { AnthropicMessageOptions } from './types';
 import { outputFromMessage, parseMessages, calculateAnthropicCost, getTokenUsage } from './util';
 
-export class AnthropicMessagesProvider implements ApiProvider {
-  modelName: string;
-  config: AnthropicMessageOptions;
-  env?: EnvOverrides;
-  apiKey?: string;
-  anthropic: Anthropic;
+export class AnthropicMessagesProvider extends AnthropicGenericProvider {
+  declare config: AnthropicMessageOptions;
 
   constructor(
     modelName: string,
     options: { id?: string; config?: AnthropicMessageOptions; env?: EnvOverrides } = {},
   ) {
-    const { id, config, env } = options;
-    this.env = env;
-    this.modelName = modelName;
-    this.id = id ? () => id : this.id;
-    this.config = config || {};
-    this.apiKey = config?.apiKey || env?.ANTHROPIC_API_KEY || getEnvString('ANTHROPIC_API_KEY');
-    this.anthropic = new Anthropic({ apiKey: this.apiKey, baseURL: this.config.apiBaseUrl });
-  }
-
-  id(): string {
-    return `anthropic:messages:${this.modelName || 'claude-2.1'}`;
+    super(modelName, options);
+    this.id = options.id
+      ? () => options.id!
+      : () => `anthropic:messages:${this.modelName || 'claude-2.1'}`;
   }
 
   toString(): string {
     return `[Anthropic Messages Provider ${this.modelName || 'claude-2.1'}]`;
-  }
-
-  getApiKey(): string | undefined {
-    return this.apiKey;
-  }
-
-  getApiBaseUrl(): string | undefined {
-    return this.config.apiBaseUrl;
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {

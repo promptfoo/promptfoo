@@ -2,11 +2,12 @@ import Anthropic from '@anthropic-ai/sdk';
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvString, getEnvInt, getEnvFloat } from '../../envars';
 import logger from '../../logger';
-import type { ApiProvider, ProviderResponse } from '../../types';
+import type { ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
+import { AnthropicGenericProvider } from './generic';
 import type { AnthropicCompletionOptions } from './types';
 
-export class AnthropicCompletionProvider implements ApiProvider {
+export class AnthropicCompletionProvider extends AnthropicGenericProvider {
   static ANTHROPIC_COMPLETION_MODELS = [
     'claude-1',
     'claude-1-100k',
@@ -17,29 +18,13 @@ export class AnthropicCompletionProvider implements ApiProvider {
     'claude-2.1',
   ];
 
-  modelName: string;
-  apiKey?: string;
-  anthropic: Anthropic;
-  config: AnthropicCompletionOptions;
+  declare config: AnthropicCompletionOptions;
 
   constructor(
     modelName: string,
     options: { config?: AnthropicCompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
-    const { config, id, env } = options;
-    this.modelName = modelName;
-    this.apiKey = config?.apiKey || env?.ANTHROPIC_API_KEY || getEnvString('ANTHROPIC_API_KEY');
-    this.anthropic = new Anthropic({ apiKey: this.apiKey });
-    this.config = config || {};
-    this.id = id ? () => id : this.id;
-  }
-
-  id(): string {
-    return `anthropic:${this.modelName}`;
-  }
-
-  toString(): string {
-    return `[Anthropic Provider ${this.modelName}]`;
+    super(modelName, options);
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
