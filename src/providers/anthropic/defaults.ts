@@ -7,25 +7,33 @@ export const DEFAULT_ANTHROPIC_MODEL = 'claude-3-7-sonnet-20250219';
 
 /**
  * Helper function to create a lazy-loaded provider
- * @param factory Factory function to create provider instance
- * @returns Object with getter that lazily initializes the provider
+ * @param factory Factory function that creates provider instance with optional env
+ * @returns Object with getter that lazily initializes the provider with the latest env
  */
-function createLazyProvider<T>(factory: () => T): { instance: T } {
-  let cachedInstance: T | undefined;
+function createLazyProvider<T>(factory: (env?: EnvOverrides) => T): {
+  getInstance: (env?: EnvOverrides) => T;
+} {
+  const instances = new Map<string, T>();
+
   return {
-    get instance() {
-      if (!cachedInstance) {
-        cachedInstance = factory();
+    getInstance(env?: EnvOverrides) {
+      // Use a simple cache key strategy - empty string for undefined env
+      const cacheKey = env ? JSON.stringify(env) : '';
+
+      if (!instances.has(cacheKey)) {
+        instances.set(cacheKey, factory(env));
       }
-      return cachedInstance;
+
+      return instances.get(cacheKey)!;
     },
   };
 }
 
 // LLM Rubric Provider
 export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
-  constructor(modelName: string) {
+  constructor(modelName: string, env?: EnvOverrides) {
     super(modelName, {
+      env,
       config: {
         tool_choice: { type: 'tool', name: 'grade_output' },
         tools: [
@@ -85,25 +93,25 @@ export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
   }
 }
 
-// Direct exports with lazy loading
-export const DefaultGradingProvider = createLazyProvider(
-  () => new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL),
+// Private provider factories with lazy loading
+const gradingProviderFactory = createLazyProvider(
+  (env?: EnvOverrides) => new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL, { env }),
 );
 
-export const DefaultGradingJsonProvider = createLazyProvider(
-  () => new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL),
+const gradingJsonProviderFactory = createLazyProvider(
+  (env?: EnvOverrides) => new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL, { env }),
 );
 
-export const DefaultSuggestionsProvider = createLazyProvider(
-  () => new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL),
+const suggestionsProviderFactory = createLazyProvider(
+  (env?: EnvOverrides) => new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL, { env }),
 );
 
-export const DefaultLlmRubricProvider = createLazyProvider(
-  () => new AnthropicLlmRubricProvider(DEFAULT_ANTHROPIC_MODEL),
+const llmRubricProviderFactory = createLazyProvider(
+  (env?: EnvOverrides) => new AnthropicLlmRubricProvider(DEFAULT_ANTHROPIC_MODEL, env),
 );
 
 /**
- * Helper function to get all Anthropic providers
+ * Gets all default Anthropic providers with the given environment overrides
  * @param env - Optional environment overrides
  * @returns Anthropic provider implementations for various functions
  */
@@ -118,12 +126,18 @@ export function getAnthropicProviders(
   | 'suggestionsProvider'
   | 'synthesizeProvider'
 > {
+  // Get providers with the provided environment variables
+  const gradingProvider = gradingProviderFactory.getInstance(env);
+  const gradingJsonProvider = gradingJsonProviderFactory.getInstance(env);
+  const suggestionsProvider = suggestionsProviderFactory.getInstance(env);
+  const llmRubricProvider = llmRubricProviderFactory.getInstance(env);
+
   return {
-    datasetGenerationProvider: DefaultGradingProvider.instance,
-    gradingJsonProvider: DefaultGradingJsonProvider.instance,
-    gradingProvider: DefaultGradingProvider.instance,
-    llmRubricProvider: DefaultLlmRubricProvider.instance,
-    suggestionsProvider: DefaultSuggestionsProvider.instance,
-    synthesizeProvider: DefaultGradingJsonProvider.instance,
+    datasetGenerationProvider: gradingProvider,
+    gradingJsonProvider,
+    gradingProvider,
+    llmRubricProvider,
+    suggestionsProvider,
+    synthesizeProvider: gradingJsonProvider,
   };
 }

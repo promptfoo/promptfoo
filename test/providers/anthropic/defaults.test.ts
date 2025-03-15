@@ -2,10 +2,6 @@ import { clearCache } from '../../../src/cache';
 import {
   AnthropicLlmRubricProvider,
   getAnthropicProviders,
-  DefaultGradingProvider,
-  DefaultGradingJsonProvider,
-  DefaultLlmRubricProvider,
-  DefaultSuggestionsProvider,
 } from '../../../src/providers/anthropic/defaults';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
 
@@ -17,20 +13,6 @@ describe('Anthropic Default Providers', () => {
   afterEach(async () => {
     jest.clearAllMocks();
     await clearCache();
-  });
-
-  describe('Default provider exports', () => {
-    it('should provide working instances when accessed', () => {
-      // Accessing the property should initialize the provider
-      expect(DefaultGradingProvider.instance).toBeDefined();
-      expect(DefaultGradingJsonProvider.instance).toBeDefined();
-      expect(DefaultSuggestionsProvider.instance).toBeDefined();
-      expect(DefaultLlmRubricProvider.instance).toBeDefined();
-
-      // Accessing again should use the cached instance
-      const firstInstance = DefaultGradingProvider.instance;
-      expect(DefaultGradingProvider.instance).toBe(firstInstance);
-    });
   });
 
   describe('getAnthropicProviders', () => {
@@ -52,6 +34,17 @@ describe('Anthropic Default Providers', () => {
       expect(providers1.gradingProvider).toBe(providers2.gradingProvider);
       expect(providers1.gradingJsonProvider).toBe(providers2.gradingJsonProvider);
       expect(providers1.llmRubricProvider).toBe(providers2.llmRubricProvider);
+    });
+
+    it('should initialize providers lazily', () => {
+      const providers = getAnthropicProviders();
+      // Accessing one provider should not initialize others
+      const gradingProvider = providers.gradingProvider;
+      expect(gradingProvider).toBeInstanceOf(AnthropicMessagesProvider);
+
+      // Access multiple times should return the same instance
+      const sameGradingProvider = providers.gradingProvider;
+      expect(sameGradingProvider).toBe(gradingProvider);
     });
   });
 

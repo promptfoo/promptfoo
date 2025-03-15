@@ -2,10 +2,6 @@ import { AnthropicCompletionProvider } from '../../../src/providers/anthropic/co
 import {
   DEFAULT_ANTHROPIC_MODEL,
   AnthropicLlmRubricProvider,
-  DefaultGradingProvider,
-  DefaultGradingJsonProvider,
-  DefaultLlmRubricProvider,
-  DefaultSuggestionsProvider,
   getAnthropicProviders,
 } from '../../../src/providers/anthropic/defaults';
 import { AnthropicGenericProvider } from '../../../src/providers/anthropic/generic';
@@ -40,11 +36,15 @@ describe('Anthropic modules', () => {
     expect(AnthropicLlmRubricProvider).toBeDefined();
   });
 
-  it('should export default providers and relevant functions', () => {
-    expect(DefaultGradingProvider).toBeDefined();
-    expect(DefaultGradingJsonProvider).toBeDefined();
-    expect(DefaultLlmRubricProvider).toBeDefined();
-    expect(DefaultSuggestionsProvider).toBeDefined();
+  it('should export getAnthropicProviders function', () => {
     expect(getAnthropicProviders).toBeDefined();
+
+    const providers = getAnthropicProviders();
+    expect(providers.gradingProvider).toBeDefined();
+    expect(providers.gradingJsonProvider).toBeDefined();
+    expect(providers.llmRubricProvider).toBeDefined();
+    expect(providers.suggestionsProvider).toBeDefined();
+    expect(providers.datasetGenerationProvider).toBeDefined();
+    expect(providers.synthesizeProvider).toBeDefined();
   });
 });
