@@ -60,7 +60,7 @@ describe('HttpProvider', () => {
     jest.clearAllMocks();
   });
 
-  it('should call the API and return the response', async async () => {
+  it('should call the API and return the response', async () => {
     provider = await HttpProvider.create(mockUrl, {
       config: {
         method: 'POST',
@@ -93,7 +93,7 @@ describe('HttpProvider', () => {
     );
   });
 
-  it('should handle API call errors', async async () => {
+  it('should handle API call errors', async () => {
     provider = await HttpProvider.create(mockUrl, {
       config: {
         method: 'POST',
@@ -108,7 +108,7 @@ describe('HttpProvider', () => {
     await expect(provider.callApi('test prompt')).rejects.toThrow('Network error');
   });
 
-  it('should use custom method/headers/queryParams', async async () => {
+  it('should use custom method/headers/queryParams', async () => {
     provider = await HttpProvider.create(mockUrl, {
       config: {
         method: 'PATCH',
@@ -148,7 +148,7 @@ describe('HttpProvider', () => {
   ];
 
   testCases.forEach(({ parser, expected }) => {
-    it(`should handle response transform type: ${parser}`, async async () => {
+    it(`should handle response transform type: ${parser}`, async () => {
       provider = await HttpProvider.create(mockUrl, {
         config: {
           body: { key: '{{ prompt }}' },
@@ -168,7 +168,7 @@ describe('HttpProvider', () => {
     });
   });
 
-  it('should correctly render Nunjucks templates in config', async async () => {
+  it('should correctly render Nunjucks templates in config', async () => {
     provider = await HttpProvider.create(mockUrl, {
       config: {
         method: 'POST',
@@ -202,11 +202,9 @@ describe('HttpProvider', () => {
 
   it('should throw an error when creating HttpProvider with invalid config', async () => {
     const invalidConfig = 'this isnt json';
-    expect(() => {
-      await HttpProvider.create(mockUrl, {
-        config: invalidConfig as any,
-      });
-    }).toThrow(/Expected object, received string/);
+    await expect(HttpProvider.create(mockUrl, {
+      config: invalidConfig as any,
+    })).rejects.toThrow(/Expected object, received string/);
   });
 
   it('should return provider id and string representation', async () => {
@@ -217,7 +215,7 @@ describe('HttpProvider', () => {
     expect(provider.toString()).toBe(`[HTTP Provider ${mockUrl}]`);
   });
 
-  it('should handle GET requests with query parameters', async async () => {
+  it('should handle GET requests with query parameters', async () => {
     provider = await HttpProvider.create(mockUrl, {
       config: {
         method: 'GET',
@@ -250,7 +248,7 @@ describe('HttpProvider', () => {
   });
 
   describe('raw request', () => {
-    it('should handle a basic GET raw request', async async () => {
+    it('should handle a basic GET raw request', async () => {
       const rawRequest = dedent`
         GET /api/data HTTP/1.1
         Host: example.com
@@ -290,7 +288,7 @@ describe('HttpProvider', () => {
       expect(result.output).toEqual({ result: 'success' });
     });
 
-    it('should handle a POST raw request with body and variable substitution', async async () => {
+    it('should handle a POST raw request with body and variable substitution', async () => {
       const rawRequest = dedent`
         POST /api/submit HTTP/1.1
         Host: example.com
@@ -333,13 +331,13 @@ describe('HttpProvider', () => {
       expect(result.output).toEqual({ result: 'received' });
     });
 
-    it('should load raw request from file if file:// prefix is used', async async () => {
+    it('should load raw request from file if file:// prefix is used', async () => {
       const filePath = 'file://path/to/request.txt';
       const fileContent = dedent`
         GET /api/data HTTP/1.1
         Host: example.com
       `;
-      jest.mocked(maybeLoadFromExternalFile).mockReturnValueOnce(fileContent);
+      jest.mocked(maybeLoadFromExternalFile).mockResolvedValueOnce(fileContent);
 
       const provider = await HttpProvider.create('https', {
         config: {
@@ -375,7 +373,7 @@ describe('HttpProvider', () => {
       expect(result.output).toEqual({ result: 'success' });
     });
 
-    it('should throw an error for invalid raw requests', async async () => {
+    it('should throw an error for invalid raw requests', async () => {
       const provider = await HttpProvider.create('http', {
         config: {
           request: 'yo mama',
@@ -384,7 +382,7 @@ describe('HttpProvider', () => {
       await expect(provider.callApi('test prompt')).rejects.toThrow(/not valid/);
     });
 
-    it('should remove content-length header from raw request', async async () => {
+    it('should remove content-length header from raw request', async () => {
       const rawRequest = dedent`
         POST /api/submit HTTP/1.1
         Host: example.com
@@ -427,7 +425,7 @@ describe('HttpProvider', () => {
         undefined,
       );
     });
-    it('should use HTTPS when useHttps option is enabled', async async () => {
+    it('should use HTTPS when useHttps option is enabled', async () => {
       const rawRequest = dedent`
         GET /api/data HTTP/1.1
         Host: example.com
@@ -468,7 +466,7 @@ describe('HttpProvider', () => {
       expect(result.output).toEqual({ result: 'success' });
     });
 
-    it('should use HTTP when useHttps option is disabled', async async () => {
+    it('should use HTTP when useHttps option is disabled', async () => {
       const rawRequest = dedent`
         GET /api/data HTTP/1.1
         Host: example.com
@@ -509,7 +507,7 @@ describe('HttpProvider', () => {
       expect(result.output).toEqual({ result: 'success' });
     });
 
-    it('should handle a basic GET raw request with query params', async async () => {
+    it('should handle a basic GET raw request with query params', async () => {
       const rawRequest = dedent`
         GET /api/data?{{prompt}} HTTP/1.1
         Host: example.com
@@ -639,7 +637,7 @@ describe('HttpProvider', () => {
   });
 
   describe('createtransformResponse', () => {
-    it('should handle function parser', async async () => {
+    it('should handle function parser', async () => {
       const functionParser = (data: any) => data.result;
       const provider = await HttpProvider.create(mockUrl, {
         config: {
@@ -660,7 +658,7 @@ describe('HttpProvider', () => {
       expect(result.output).toBe('success');
     });
 
-    it('should handle file:// parser with JavaScript file', async async () => {
+    it('should handle file:// parser with JavaScript file', async () => {
       const mockParser = jest.fn((data, text) => text.toUpperCase());
       jest.mocked(importModule).mockResolvedValueOnce(mockParser);
 
@@ -673,13 +671,13 @@ describe('HttpProvider', () => {
       expect(result).toBe('PARSED');
     });
 
-    it('should throw error for unsupported parser type', async async () => {
+    it('should throw error for unsupported parser type', async () => {
       await expect(createTransformResponse(123 as any)).rejects.toThrow(
         "Unsupported response transform type: number. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.",
       );
     });
 
-    it('should handle string parser', async async () => {
+    it('should handle string parser', async () => {
       const provider = await HttpProvider.create(mockUrl, {
         config: {
           body: { key: 'value' },
@@ -699,7 +697,7 @@ describe('HttpProvider', () => {
       expect(result.output).toBe('parsed');
     });
 
-    it('should handle file:// parser with specific function name', async async () => {
+    it('should handle file:// parser with specific function name', async () => {
       const mockParser = jest.fn((data, text) => data.specificField);
       jest.mocked(importModule).mockResolvedValueOnce(mockParser);
 
@@ -712,7 +710,7 @@ describe('HttpProvider', () => {
       expect(result).toBe('parsed');
     });
 
-    it('should throw error for malformed file:// parser', async async () => {
+    it('should throw error for malformed file:// parser', async () => {
       jest.mocked(importModule).mockResolvedValueOnce({});
 
       await expect(createTransformResponse('file://invalid-parser.js')).rejects.toThrow(
@@ -720,13 +718,13 @@ describe('HttpProvider', () => {
       );
     });
 
-    it('should return default parser when no parser is provided', async async () => {
+    it('should return default parser when no parser is provided', async () => {
       const parser = await createTransformResponse(undefined);
       const result = parser({ key: 'value' }, 'raw text');
       expect(result.output).toEqual({ key: 'value' });
     });
 
-    it('should handle response transform file with default export', async async () => {
+    it('should handle response transform file with default export', async () => {
       const mockParser = jest.fn((data) => data.defaultField);
       jest.mocked(importModule).mockResolvedValueOnce(mockParser);
 
@@ -741,7 +739,7 @@ describe('HttpProvider', () => {
     });
   });
 
-  it('should use default parser when no parser is provided', async async () => {
+  it('should use default parser when no parser is provided', async () => {
     const provider = await HttpProvider.create(mockUrl, {
       config: {
         method: 'GET',
@@ -759,7 +757,7 @@ describe('HttpProvider', () => {
     expect(result.output).toEqual({ key: 'value' });
   });
 
-  it('should handle response transform returning an object', async async () => {
+  it('should handle response transform returning an object', async () => {
     const provider = await HttpProvider.create(mockUrl, {
       config: {
         body: { key: 'value' },
@@ -824,7 +822,7 @@ describe('HttpProvider', () => {
   });
 
   describe('getHeaders', () => {
-    it('should combine default headers with config headers', async async () => {
+    it('should combine default headers with config headers', async () => {
       const provider = await HttpProvider.create(mockUrl, {
         config: {
           headers: { 'X-Custom': '{{ prompt }}' },
@@ -841,7 +839,7 @@ describe('HttpProvider', () => {
       });
     });
 
-    it('should render template strings in headers', async async () => {
+    it('should render template strings in headers', async () => {
       const provider = await HttpProvider.create(mockUrl, {
         config: {
           headers: { 'X-Custom': '{{ prompt | upper }}' },
@@ -854,7 +852,7 @@ describe('HttpProvider', () => {
       });
     });
 
-    it('should render environment variables in headers', async async () => {
+    it('should render environment variables in headers', async () => {
       // Setup a provider with environment variables in headers
       const provider = await HttpProvider.create('http://example.com', {
         config: {
@@ -891,7 +889,7 @@ describe('HttpProvider', () => {
     });
   });
 
-  it('should default to application/json for content-type if body is an object', async async () => {
+  it('should default to application/json for content-type if body is an object', async () => {
     const provider = await HttpProvider.create(mockUrl, {
       config: {
         method: 'POST',
@@ -926,7 +924,7 @@ describe('HttpProvider', () => {
     );
   });
 
-  it('should default to application/x-www-form-urlencoded for content-type if body is not an object', async async () => {
+  it('should default to application/x-www-form-urlencoded for content-type if body is not an object', async () => {
     const provider = await HttpProvider.create(mockUrl, {
       config: {
         method: 'POST',
@@ -957,7 +955,7 @@ describe('HttpProvider', () => {
     );
   });
 
-  it('should throw an error if the body is an object and the content-type is not application/json', async async () => {
+  it('should throw an error if the body is an object and the content-type is not application/json', async () => {
     const provider = await HttpProvider.create(mockUrl, {
       config: {
         method: 'POST',
@@ -972,7 +970,7 @@ describe('HttpProvider', () => {
   });
 
   describe('Content-Type and body handling', () => {
-    it('should render string body when content-type is not set', async async () => {
+    it('should render string body when content-type is not set', async () => {
       const provider = await HttpProvider.create(mockUrl, {
         config: {
           method: 'POST',
@@ -1003,7 +1001,7 @@ describe('HttpProvider', () => {
       );
     });
 
-    it('should default to JSON when content-type is not set and body is an object', async async () => {
+    it('should default to JSON when content-type is not set and body is an object', async () => {
       const provider = await HttpProvider.create(mockUrl, {
         config: {
           method: 'POST',
@@ -1035,7 +1033,7 @@ describe('HttpProvider', () => {
       );
     });
 
-    it('should render object body when content-type is application/json', async async () => {
+    it('should render object body when content-type is application/json', async () => {
       const provider = await HttpProvider.create(mockUrl, {
         config: {
           method: 'POST',
@@ -1067,7 +1065,7 @@ describe('HttpProvider', () => {
       );
     });
 
-    it('should render a stringified object body when content-type is application/json', async async () => {
+    it('should render a stringified object body when content-type is application/json', async () => {
       const provider = await HttpProvider.create(mockUrl, {
         config: {
           method: 'POST',
@@ -1099,7 +1097,7 @@ describe('HttpProvider', () => {
       );
     });
 
-    it('should render nested object variables correctly when content-type is application/json', async async () => {
+    it('should render nested object variables correctly when content-type is application/json', async () => {
       const provider = await HttpProvider.create(mockUrl, {
         config: {
           method: 'POST',
@@ -1146,7 +1144,7 @@ describe('HttpProvider', () => {
       );
     });
 
-    it('should render nested array variables correctly when content-type is application/json', async async () => {
+    it('should render nested array variables correctly when content-type is application/json', async () => {
       const provider = await HttpProvider.create(mockUrl, {
         config: {
           method: 'POST',
@@ -1213,7 +1211,7 @@ describe('HttpProvider', () => {
   });
 
   describe('deprecated responseParser handling', () => {
-    it('should use responseParser when transformResponse is not set', async async () => {
+    it('should use responseParser when transformResponse is not set', async () => {
       const provider = await HttpProvider.create(mockUrl, {
         config: {
           method: 'POST',
@@ -1235,7 +1233,7 @@ describe('HttpProvider', () => {
       expect(result).toEqual({ output: { chat_history: 'success' } });
     });
 
-    it('should prefer transformResponse over responseParser when both are set', async async () => {
+    it('should prefer transformResponse over responseParser when both are set', async () => {
       const provider = await HttpProvider.create(mockUrl, {
         config: {
           method: 'POST',
@@ -1258,7 +1256,7 @@ describe('HttpProvider', () => {
       expect(result).toEqual({ output: { chat_history: 'from transformResponse' } });
     });
 
-    it('should handle string-based responseParser when transformResponse is not set', async async () => {
+    it('should handle string-based responseParser when transformResponse is not set', async () => {
       const provider = await HttpProvider.create(mockUrl, {
         config: {
           method: 'POST',
@@ -1281,7 +1279,7 @@ describe('HttpProvider', () => {
     });
   });
 
-  it('should respect maxRetries configuration', async async () => {
+  it('should respect maxRetries configuration', async () => {
     provider = await HttpProvider.create(mockUrl, {
       config: {
         method: 'POST',
@@ -1316,13 +1314,13 @@ describe('HttpProvider', () => {
 });
 
 describe('createTransformRequest', () => {
-  it('should return identity function when no transform specified', async async () => {
+  it('should return identity function when no transform specified', async () => {
     const transform = await createTransformRequest(undefined);
     const result = await transform('test prompt');
     expect(result).toBe('test prompt');
   });
 
-  it('should handle string templates', async async () => {
+  it('should handle string templates', async () => {
     const transform = await createTransformRequest('return {"text": prompt}');
     const result = await transform('hello');
     expect(result).toEqual({
@@ -1330,7 +1328,7 @@ describe('createTransformRequest', () => {
     });
   });
 
-  it('should handle errors in function-based transform', async async () => {
+  it('should handle errors in function-based transform', async () => {
     const errorFn = () => {
       throw new Error('Transform function error');
     };
@@ -1340,7 +1338,7 @@ describe('createTransformRequest', () => {
     }).rejects.toThrow('Error in request transform function: Transform function error');
   });
 
-  it('should handle errors in file-based transform', async async () => {
+  it('should handle errors in file-based transform', async () => {
     const mockErrorFn = jest.fn(() => {
       throw new Error('File transform error');
     });
@@ -1354,14 +1352,14 @@ describe('createTransformRequest', () => {
     );
   });
 
-  it('should handle errors in string template transform', async async () => {
+  it('should handle errors in string template transform', async () => {
     const transform = await createTransformRequest('return badVariable.nonexistent');
     await expect(async () => {
       await transform('test');
     }).rejects.toThrow('Error in request transform string template: badVariable is not defined');
   });
 
-  it('should handle function-based request transform', async async () => {
+  it('should handle function-based request transform', async () => {
     jest.clearAllMocks();
 
     const provider = await HttpProvider.create('http://test.com', {
@@ -1397,13 +1395,13 @@ describe('createTransformRequest', () => {
     );
   });
 
-  it('should throw error for unsupported transform type', async async () => {
+  it('should throw error for unsupported transform type', async () => {
     await expect(createTransformRequest(123 as any)).rejects.toThrow(
       'Unsupported request transform type: number',
     );
   });
 
-  it('should include filename in error for file-based transform errors', async async () => {
+  it('should include filename in error for file-based transform errors', async () => {
     const mockErrorFn = jest.fn(() => {
       throw new Error('File error');
     });
@@ -1415,7 +1413,7 @@ describe('createTransformRequest', () => {
     }).rejects.toThrow('Error in request transform function from specific-file.js: File error');
   });
 
-  it('should handle errors in string template rendering', async async () => {
+  it('should handle errors in string template rendering', async () => {
     const transform = await createTransformRequest('{{ nonexistent | invalid }}');
     await expect(async () => {
       await transform('test');
@@ -1503,29 +1501,25 @@ describe('determineRequestBody', () => {
 
 describe('constructor validation', () => {
   it('should validate config using Zod schema', async () => {
-    expect(() => {
-      await HttpProvider.create('http://test.com', {
-        config: {
-          headers: { 'Content-Type': 123 }, // Invalid header type
-        },
-      });
-    }).toThrow('Expected string, received number');
+    await expect(HttpProvider.create('http://test.com', {
+      config: {
+        headers: { 'Content-Type': 123 }, // Invalid header type
+      },
+    })).rejects.toThrow('Expected string, received number');
   });
 
   it('should require body or GET method', async () => {
-    expect(() => {
-      await HttpProvider.create('http://test.com', {
-        config: {
-          method: 'POST',
-          // Missing body
-        },
-      });
-    }).toThrow(/Expected HTTP provider http:\/\/test.com to have a config containing {body}/);
+    await expect(HttpProvider.create('http://test.com', {
+      config: {
+        method: 'POST',
+        // Missing body
+      },
+    })).rejects.toThrow(/Expected HTTP provider http:\/\/test.com to have a config containing {body}/);
   });
 });
 
 describe('content type handling', () => {
-  it('should handle JSON content type with object body', async async () => {
+  it('should handle JSON content type with object body', async () => {
     const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'POST',
@@ -1557,7 +1551,7 @@ describe('content type handling', () => {
     );
   });
 
-  it('should handle non-JSON content type with string body', async async () => {
+  it('should handle non-JSON content type with string body', async () => {
     const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'POST',
@@ -1589,7 +1583,7 @@ describe('content type handling', () => {
     );
   });
 
-  it('should throw error for object body with non-JSON content type', async async () => {
+  it('should throw error for object body with non-JSON content type', async () => {
     const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'POST',
@@ -1603,7 +1597,7 @@ describe('content type handling', () => {
 });
 
 describe('request transformation', () => {
-  it('should handle string-based request transform', async async () => {
+  it('should handle string-based request transform', async () => {
     jest.clearAllMocks();
 
     const provider = await HttpProvider.create('http://test.com', {
@@ -1639,7 +1633,7 @@ describe('request transformation', () => {
     );
   });
 
-  it('should handle function-based request transform', async async () => {
+  it('should handle function-based request transform', async () => {
     jest.clearAllMocks();
 
     const provider = await HttpProvider.create('http://test.com', {
@@ -1677,7 +1671,7 @@ describe('request transformation', () => {
 });
 
 describe('response handling', () => {
-  it('should handle successful JSON response', async async () => {
+  it('should handle successful JSON response', async () => {
     const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'POST',
@@ -1699,7 +1693,7 @@ describe('response handling', () => {
     expect(result.output).toEqual({ result: 'success' });
   });
 
-  it('should handle non-JSON response', async async () => {
+  it('should handle non-JSON response', async () => {
     const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'POST',
@@ -1721,7 +1715,7 @@ describe('response handling', () => {
     expect(result.output).toBe('success');
   });
 
-  it('should include debug information when requested', async async () => {
+  it('should include debug information when requested', async () => {
     const mockUrl = 'http://example.com/api';
     const mockHeaders = { 'content-type': 'application/json' };
     const mockData = { result: 'success' };
@@ -1753,7 +1747,7 @@ describe('response handling', () => {
     expect(result.raw).toEqual(mockData);
   });
 
-  it('should handle plain text non-JSON responses', async async () => {
+  it('should handle plain text non-JSON responses', async () => {
     const mockUrl = 'http://example.com/api';
     const mockData = 'Not a JSON response';
 
@@ -1776,7 +1770,7 @@ describe('response handling', () => {
     expect(result.output).toEqual(mockData);
   });
 
-  it('should handle non-JSON responses with debug mode', async async () => {
+  it('should handle non-JSON responses with debug mode', async () => {
     const mockUrl = 'http://example.com/api';
     const mockHeaders = { 'content-type': 'text/plain' };
     const mockData = 'text response';
@@ -1808,7 +1802,7 @@ describe('response handling', () => {
     expect(result.output).toEqual({ foo: 'bar' });
   });
 
-  it('should handle transformResponse returning a simple string value', async async () => {
+  it('should handle transformResponse returning a simple string value', async () => {
     const mockUrl = 'http://example.com/api';
     const mockData = { result: 'success' };
 
@@ -1837,7 +1831,7 @@ describe('response handling', () => {
     expect(result.output).toBe('transformed result');
   });
 
-  it('should handle non-JSON responses with debug mode and transform without output property', async async () => {
+  it('should handle non-JSON responses with debug mode and transform without output property', async () => {
     const mockUrl = 'http://example.com/api';
     const mockHeaders = { 'content-type': 'text/plain' };
     const mockData = 'text response';
@@ -1874,7 +1868,7 @@ describe('response handling', () => {
 });
 
 describe('session handling', () => {
-  it('should extract session ID from headers when configured', async async () => {
+  it('should extract session ID from headers when configured', async () => {
     const sessionParser = jest.fn().mockReturnValue('test-session');
     const provider = await HttpProvider.create('http://test.com', {
       config: {
@@ -1902,7 +1896,7 @@ describe('session handling', () => {
     });
   });
 
-  it('should include sessionId in response when returned by parser', async async () => {
+  it('should include sessionId in response when returned by parser', async () => {
     const mockUrl = 'http://example.com/api';
     const mockSessionId = 'test-session-123';
 
@@ -1933,7 +1927,7 @@ describe('session handling', () => {
 });
 
 describe('error handling', () => {
-  it('should throw error for responses that fail validateStatus check', async async () => {
+  it('should throw error for responses that fail validateStatus check', async () => {
     const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'POST',
@@ -1956,7 +1950,7 @@ describe('error handling', () => {
     );
   });
 
-  it('should throw session parsing errors', async async () => {
+  it('should throw session parsing errors', async () => {
     const sessionParser = jest.fn().mockImplementation(() => {
       throw new Error('Session parsing failed');
     });
@@ -1981,7 +1975,7 @@ describe('error handling', () => {
     await expect(provider.callApi('test')).rejects.toThrow('Session parsing failed');
   });
 
-  it('should throw error for raw request with non-200 response', async async () => {
+  it('should throw error for raw request with non-200 response', async () => {
     const provider = await HttpProvider.create('http://test.com', {
       config: {
         request: dedent`
@@ -2008,7 +2002,7 @@ describe('error handling', () => {
 
 describe('validateStatus', () => {
   describe('default behavior', () => {
-    it('should accept all status codes when validateStatus is not provided', async async () => {
+    it('should accept all status codes when validateStatus is not provided', async () => {
       const provider = await HttpProvider.create('http://test.com', {
         config: {
           method: 'POST',
@@ -2039,7 +2033,7 @@ describe('validateStatus', () => {
   });
 
   describe('string-based validators', () => {
-    it('should handle expression format', async async () => {
+    it('should handle expression format', async () => {
       const provider = await HttpProvider.create('http://test.com', {
         config: {
           method: 'POST',
@@ -2074,7 +2068,7 @@ describe('validateStatus', () => {
       );
     });
 
-    it('should handle arrow function format with parameter', async async () => {
+    it('should handle arrow function format with parameter', async () => {
       const provider = await HttpProvider.create('http://test.com', {
         config: {
           method: 'POST',
@@ -2109,7 +2103,7 @@ describe('validateStatus', () => {
       );
     });
 
-    it('should handle arrow function format without parameter', async async () => {
+    it('should handle arrow function format without parameter', async () => {
       const provider = await HttpProvider.create('http://test.com', {
         config: {
           method: 'POST',
@@ -2139,7 +2133,7 @@ describe('validateStatus', () => {
       }
     });
 
-    it('should handle regular function format', async async () => {
+    it('should handle regular function format', async () => {
       const provider = await HttpProvider.create('http://test.com', {
         config: {
           method: 'POST',
@@ -2176,7 +2170,7 @@ describe('validateStatus', () => {
   });
 
   describe('error handling', () => {
-    it('should handle malformed string expressions', async async () => {
+    it('should handle malformed string expressions', async () => {
       const provider = await HttpProvider.create('http://test.com', {
         config: {
           method: 'POST',
@@ -2196,7 +2190,7 @@ describe('validateStatus', () => {
       await expect(provider.callApi('test')).rejects.toThrow('Invalid status validator expression');
     });
 
-    it('should throw error for malformed file-based validator', async async () => {
+    it('should throw error for malformed file-based validator', async () => {
       jest.mocked(importModule).mockRejectedValueOnce(new Error('Module not found'));
 
       await expect(createValidateStatus('file://invalid-validator.js')).rejects.toThrow(
@@ -2204,7 +2198,7 @@ describe('validateStatus', () => {
       );
     });
 
-    it('should throw error for unsupported validator type', async async () => {
+    it('should throw error for unsupported validator type', async () => {
       await expect(createValidateStatus(123 as any)).rejects.toThrow(
         'Unsupported status validator type: number',
       );
@@ -2212,7 +2206,7 @@ describe('validateStatus', () => {
   });
 
   describe('file-based validators', () => {
-    it('should handle file-based validateStatus', async async () => {
+    it('should handle file-based validateStatus', async () => {
       const mockValidator = jest.fn((status) => status < 500);
       jest.mocked(importModule).mockResolvedValueOnce(mockValidator);
 
@@ -2241,7 +2235,7 @@ describe('validateStatus', () => {
       expect(mockValidator).toHaveBeenCalledWith(404);
     });
 
-    it('should handle file-based validateStatus with specific function', async async () => {
+    it('should handle file-based validateStatus with specific function', async () => {
       const mockValidator = jest.fn((status) => status < 500);
       jest.mocked(importModule).mockResolvedValueOnce(mockValidator);
 
@@ -2273,7 +2267,7 @@ describe('validateStatus', () => {
 });
 
 describe('session parser', () => {
-  it('should handle string-based session parser', async async () => {
+  it('should handle string-based session parser', async () => {
     const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'GET',
@@ -2294,7 +2288,7 @@ describe('session parser', () => {
     expect(result.sessionId).toBe('test-session');
   });
 
-  it('should throw error for unsupported session parser type', async async () => {
+  it('should throw error for unsupported session parser type', async () => {
     await expect(createSessionParser(123 as any)).rejects.toThrow(
       'Unsupported response transform type: number',
     );
@@ -2302,7 +2296,7 @@ describe('session parser', () => {
 });
 
 describe('transform response error handling', () => {
-  it('should handle errors in response transform function', async async () => {
+  it('should handle errors in response transform function', async () => {
     const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'GET',
@@ -2323,7 +2317,7 @@ describe('transform response error handling', () => {
     await expect(provider.callApi('test')).rejects.toThrow('Transform failed');
   });
 
-  it('should handle errors in string-based transform', async async () => {
+  it('should handle errors in string-based transform', async () => {
     const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'GET',
@@ -2344,7 +2338,7 @@ describe('transform response error handling', () => {
 });
 
 describe('arrow function parsing in transformResponse', () => {
-  it('should handle arrow function with explicit body', async async () => {
+  it('should handle arrow function with explicit body', async () => {
     const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'GET',
@@ -2364,7 +2358,7 @@ describe('arrow function parsing in transformResponse', () => {
     expect(result.output).toBe('test value');
   });
 
-  it('should handle regular function with explicit body', async async () => {
+  it('should handle regular function with explicit body', async () => {
     const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'GET',
@@ -2384,7 +2378,7 @@ describe('arrow function parsing in transformResponse', () => {
     expect(result.output).toBe('test value');
   });
 
-  it('should handle arrow function with implicit return', async async () => {
+  it('should handle arrow function with implicit return', async () => {
     const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'GET',
@@ -2404,7 +2398,7 @@ describe('arrow function parsing in transformResponse', () => {
     expect(result.output).toBe('test value');
   });
 
-  it('should handle arrow function with context parameter', async async () => {
+  it('should handle arrow function with context parameter', async () => {
     const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'GET',
@@ -2424,7 +2418,7 @@ describe('arrow function parsing in transformResponse', () => {
     expect(result.output).toBe(200);
   });
 
-  it('should handle simple expression without function', async async () => {
+  it('should handle simple expression without function', async () => {
     const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'GET',
@@ -2444,7 +2438,7 @@ describe('arrow function parsing in transformResponse', () => {
     expect(result.output).toBe('test value');
   });
 
-  it('should handle multiline arrow function', async async () => {
+  it('should handle multiline arrow function', async () => {
     const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'GET',
@@ -2469,7 +2463,7 @@ describe('arrow function parsing in transformResponse', () => {
 });
 
 describe('transform request error handling', () => {
-  it('should handle errors in string-based request transform', async async () => {
+  it('should handle errors in string-based request transform', async () => {
     const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'POST',
@@ -2481,7 +2475,7 @@ describe('transform request error handling', () => {
     await expect(provider.callApi('test')).rejects.toThrow('Unexpected token');
   });
 
-  it('should throw error for malformed file-based request transform', async async () => {
+  it('should throw error for malformed file-based request transform', async () => {
     jest.mocked(importModule).mockRejectedValueOnce(new Error('Module not found'));
 
     await expect(createTransformRequest('file://invalid-transform.js')).rejects.toThrow(
@@ -2491,7 +2485,7 @@ describe('transform request error handling', () => {
 });
 
 describe('status validator error handling', () => {
-  it('should throw error for invalid status validator expression', async async () => {
+  it('should throw error for invalid status validator expression', async () => {
     const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'GET',
@@ -2510,7 +2504,7 @@ describe('status validator error handling', () => {
     await expect(provider.callApi('test')).rejects.toThrow('Invalid status validator expression');
   });
 
-  it('should throw error for malformed file-based validator', async async () => {
+  it('should throw error for malformed file-based validator', async () => {
     jest.mocked(importModule).mockRejectedValueOnce(new Error('Module not found'));
 
     await expect(createValidateStatus('file://invalid-validator.js')).rejects.toThrow(
@@ -2518,7 +2512,7 @@ describe('status validator error handling', () => {
     );
   });
 
-  it('should throw error for unsupported validator type', async async () => {
+  it('should throw error for unsupported validator type', async () => {
     await expect(createValidateStatus(123 as any)).rejects.toThrow(
       'Unsupported status validator type: number',
     );
@@ -2526,7 +2520,7 @@ describe('status validator error handling', () => {
 });
 
 describe('string-based validators', () => {
-  it('should handle expression format', async async () => {
+  it('should handle expression format', async () => {
     const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'POST',
@@ -2561,7 +2555,7 @@ describe('string-based validators', () => {
     );
   });
 
-  it('should handle arrow function format with parameter', async async () => {
+  it('should handle arrow function format with parameter', async () => {
     const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'POST',
@@ -2596,7 +2590,7 @@ describe('string-based validators', () => {
     );
   });
 
-  it('should handle arrow function format without parameter', async async () => {
+  it('should handle arrow function format without parameter', async () => {
     const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'POST',
@@ -2626,7 +2620,7 @@ describe('string-based validators', () => {
     }
   });
 
-  it('should handle regular function format', async async () => {
+  it('should handle regular function format', async () => {
     const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'POST',
@@ -2661,7 +2655,7 @@ describe('string-based validators', () => {
     );
   });
 
-  it('should handle malformed string expressions', async async () => {
+  it('should handle malformed string expressions', async () => {
     const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'POST',
@@ -2710,7 +2704,7 @@ describe('RSA signature authentication', () => {
     jest.restoreAllMocks();
   });
 
-  it('should generate and include signature in vars', async async () => {
+  it('should generate and include signature in vars', async () => {
     const provider = await HttpProvider.create('http://example.com', {
       config: {
         method: 'POST',
@@ -2740,7 +2734,7 @@ describe('RSA signature authentication', () => {
     expect(mockSign).toHaveBeenCalledWith(mockPrivateKey);
   });
 
-  it('should reuse cached signature when within validity period', async async () => {
+  it('should reuse cached signature when within validity period', async () => {
     const provider = await HttpProvider.create('http://example.com', {
       config: {
         method: 'POST',
@@ -2770,7 +2764,7 @@ describe('RSA signature authentication', () => {
     expect(crypto.createSign).toHaveBeenCalledTimes(1); // Should not be called again
   });
 
-  it('should regenerate signature when expired', async async () => {
+  it('should regenerate signature when expired', async () => {
     const provider = await HttpProvider.create('http://example.com', {
       config: {
         method: 'POST',
@@ -2800,7 +2794,7 @@ describe('RSA signature authentication', () => {
     expect(crypto.createSign).toHaveBeenCalledTimes(2); // Should be called again
   });
 
-  it('should use custom signature data template', async async () => {
+  it('should use custom signature data template', async () => {
     const provider = await HttpProvider.create('http://example.com', {
       config: {
         method: 'POST',
@@ -2831,7 +2825,7 @@ describe('RSA signature authentication', () => {
     expect(mockSign).toHaveBeenCalledWith(mockPrivateKey);
   });
 
-  it('should support using privateKey directly instead of privateKeyPath', async async () => {
+  it('should support using privateKey directly instead of privateKeyPath', async () => {
     const provider = await HttpProvider.create('http://example.com', {
       config: {
         method: 'POST',
@@ -2859,7 +2853,7 @@ describe('RSA signature authentication', () => {
     expect(mockSign).toHaveBeenCalledWith(mockPrivateKey);
   });
 
-  it('should warn when vars already contain signatureTimestamp', async async () => {
+  it('should warn when vars already contain signatureTimestamp', async () => {
     // Direct test of the warning logic
     const mockWarn = jest.spyOn(logger, 'warn');
     const timestampWarning =
@@ -2877,13 +2871,13 @@ describe('RSA signature authentication', () => {
 });
 
 describe('createSessionParser', () => {
-  it('should return empty string when no parser is provided', async async () => {
+  it('should return empty string when no parser is provided', async () => {
     const parser = await createSessionParser(undefined);
     const result = parser({ headers: {}, body: {} });
     expect(result).toBe('');
   });
 
-  it('should handle function parser', async async () => {
+  it('should handle function parser', async () => {
     const functionParser = ({ headers }: { headers: Record<string, string> }) =>
       headers['session-id'];
     const parser = await createSessionParser(functionParser);
@@ -2891,7 +2885,7 @@ describe('createSessionParser', () => {
     expect(result).toBe('test-session');
   });
 
-  it('should handle header path expression', async async () => {
+  it('should handle header path expression', async () => {
     const parser = await createSessionParser('data.headers["x-session-id"]');
     const result = parser({
       headers: { 'x-session-id': 'test-session' },
@@ -2900,7 +2894,7 @@ describe('createSessionParser', () => {
     expect(result).toBe('test-session');
   });
 
-  it('should handle body path expression', async async () => {
+  it('should handle body path expression', async () => {
     const parser = await createSessionParser('data.body.session.id');
     const result = parser({
       headers: {},
@@ -2909,7 +2903,7 @@ describe('createSessionParser', () => {
     expect(result).toBe('test-session');
   });
 
-  it('should handle file:// parser', async async () => {
+  it('should handle file:// parser', async () => {
     const mockParser = jest.fn(({ headers }) => headers['session-id']);
     jest.mocked(importModule).mockResolvedValueOnce(mockParser);
 
@@ -2923,7 +2917,7 @@ describe('createSessionParser', () => {
     );
   });
 
-  it('should handle file:// parser with specific function', async async () => {
+  it('should handle file:// parser with specific function', async () => {
     const mockParser = jest.fn(({ body }) => body.sessionId);
     jest.mocked(importModule).mockResolvedValueOnce(mockParser);
 
@@ -2937,7 +2931,7 @@ describe('createSessionParser', () => {
     );
   });
 
-  it('should throw error for malformed file:// parser', async async () => {
+  it('should throw error for malformed file:// parser', async () => {
     jest.mocked(importModule).mockResolvedValueOnce({});
 
     await expect(createSessionParser('file://invalid-parser.js')).rejects.toThrow(
@@ -2945,7 +2939,7 @@ describe('createSessionParser', () => {
     );
   });
 
-  it('should handle complex body path expression', async async () => {
+  it('should handle complex body path expression', async () => {
     const parser = await createSessionParser('data.body.data.attributes.session.id');
     const result = parser({
       headers: {},
