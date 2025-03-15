@@ -8,24 +8,31 @@ import type { EnvOverrides } from '../../types/env';
 import { maybeLoadFromExternalFile } from '../../util';
 import { AnthropicGenericProvider } from './generic';
 import type { AnthropicMessageOptions } from './types';
-import { outputFromMessage, parseMessages, calculateAnthropicCost, getTokenUsage } from './util';
+import {
+  outputFromMessage,
+  parseMessages,
+  calculateAnthropicCost,
+  getTokenUsage,
+  ANTHROPIC_MODELS,
+} from './util';
 
 export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   declare config: AnthropicMessageOptions;
+
+  static ANTHROPIC_MODELS = ANTHROPIC_MODELS;
+
+  static ANTHROPIC_MODELS_NAMES = ANTHROPIC_MODELS.map((model) => model.id);
 
   constructor(
     modelName: string,
     options: { id?: string; config?: AnthropicMessageOptions; env?: EnvOverrides } = {},
   ) {
+    if (!AnthropicMessagesProvider.ANTHROPIC_MODELS_NAMES.includes(modelName)) {
+      logger.warn(`Using unknown Anthropic model: ${modelName}`);
+    }
     super(modelName, options);
-    this.id = options.id
-      ? () => options.id!
-      : () => {
-          if (!this.modelName) {
-            throw new Error('Anthropic model name is not set. Please provide a valid model name.');
-          }
-          return `anthropic:messages:${this.modelName}`;
-        };
+    const { id } = options;
+    this.id = id ? () => id : this.id;
   }
 
   toString(): string {

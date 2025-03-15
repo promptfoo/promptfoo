@@ -183,12 +183,12 @@ describe('Provider Registry', () => {
 
       // Test traditional format with messages
       const messagesProvider = await factory!.create(
-        'anthropic:messages:claude-3-opus-20240229',
+        'anthropic:messages:claude-3-7-sonnet-20250219',
         anthropicOptions,
         mockContext,
       );
       expect(messagesProvider).toBeDefined();
-      expect(messagesProvider.id()).toBe('anthropic:messages:claude-3-opus-20240229');
+      expect(messagesProvider.id()).toBe('anthropic:claude-3-7-sonnet-20250219');
 
       // Test traditional format with completion
       const completionProvider = await factory!.create(
@@ -199,23 +199,13 @@ describe('Provider Registry', () => {
       expect(completionProvider).toBeDefined();
       expect(completionProvider.id()).toBe('anthropic:claude-2');
 
-      // Test new shorthand format for Messages API
       const shorthandProvider = await factory!.create(
-        'anthropic:claude-3-haiku-20240307',
-        anthropicOptions,
-        mockContext,
-      );
-      expect(shorthandProvider).toBeDefined();
-      expect(shorthandProvider.id()).toBe('anthropic:messages:claude-3-haiku-20240307');
-
-      // Test another shorthand format with a different model
-      const anotherShorthandProvider = await factory!.create(
         'anthropic:claude-3-5-sonnet-20241022',
         anthropicOptions,
         mockContext,
       );
-      expect(anotherShorthandProvider).toBeDefined();
-      expect(anotherShorthandProvider.id()).toBe('anthropic:messages:claude-3-5-sonnet-20241022');
+      expect(shorthandProvider).toBeDefined();
+      expect(shorthandProvider.id()).toBe('anthropic:claude-3-5-sonnet-20241022');
 
       // Test error case with invalid model type
       await expect(
