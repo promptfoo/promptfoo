@@ -58,9 +58,7 @@ export class AnthropicGenericProvider implements ApiProvider {
 
   getApiBaseUrl(): string | undefined {
     return (
-      this.config?.apiBaseUrl ||
-      this.env?.ANTHROPIC_API_BASE_URL ||
-      getEnvString('ANTHROPIC_API_BASE_URL')
+      this.config?.apiBaseUrl || this.env?.ANTHROPIC_BASE_URL || getEnvString('ANTHROPIC_BASE_URL')
     );
   }
 

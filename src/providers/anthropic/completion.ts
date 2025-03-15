@@ -8,14 +8,16 @@ import { AnthropicGenericProvider } from './generic';
 import type { AnthropicCompletionOptions } from './types';
 
 export class AnthropicCompletionProvider extends AnthropicGenericProvider {
+  // NOTE: As of March 15, 2025, all legacy completion models are retired
+  // and should not be used for new applications.
+  // Recommended alternatives:
+  // - For claude-1.x and claude-instant-1.x: use claude-3-5-haiku-20241022
+  // - For claude-2.x: use claude-3-5-sonnet-20241022
   static ANTHROPIC_COMPLETION_MODELS = [
-    'claude-1',
-    'claude-1-100k',
-    'claude-instant-1',
-    'claude-instant-1.2',
-    'claude-instant-1-100k',
-    'claude-2',
-    'claude-2.1',
+    // All models below are deprecated and will be retired soon
+    // Only kept for reference - migrate to newer models in new code
+    'claude-2.0', // Deprecated, retiring July 21, 2025
+    'claude-2.1', // Deprecated, retiring July 21, 2025
   ];
 
   declare config: AnthropicCompletionOptions;
