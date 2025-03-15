@@ -61,7 +61,7 @@ describe('HttpProvider', () => {
   });
 
   it('should call the API and return the response', async () => {
-    provider = new HttpProvider(mockUrl, {
+    provider = await HttpProvider.create(mockUrl, {
       config: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -94,7 +94,7 @@ describe('HttpProvider', () => {
   });
 
   it('should handle API call errors', async () => {
-    provider = new HttpProvider(mockUrl, {
+    provider = await HttpProvider.create(mockUrl, {
       config: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -109,7 +109,7 @@ describe('HttpProvider', () => {
   });
 
   it('should use custom method/headers/queryParams', async () => {
-    provider = new HttpProvider(mockUrl, {
+    provider = await HttpProvider.create(mockUrl, {
       config: {
         method: 'PATCH',
         headers: { Authorization: 'Bearer token' },
@@ -149,7 +149,7 @@ describe('HttpProvider', () => {
 
   testCases.forEach(({ parser, expected }) => {
     it(`should handle response transform type: ${parser}`, async () => {
-      provider = new HttpProvider(mockUrl, {
+      provider = await HttpProvider.create(mockUrl, {
         config: {
           body: { key: '{{ prompt }}' },
           transformResponse: parser,
@@ -169,7 +169,7 @@ describe('HttpProvider', () => {
   });
 
   it('should correctly render Nunjucks templates in config', async () => {
-    provider = new HttpProvider(mockUrl, {
+    provider = await HttpProvider.create(mockUrl, {
       config: {
         method: 'POST',
         headers: { 'X-Custom-Header': '{{ prompt | upper }}' },
@@ -200,17 +200,17 @@ describe('HttpProvider', () => {
     );
   });
 
-  it('should throw an error when creating HttpProvider with invalid config', () => {
+  it('should throw an error when creating HttpProvider with invalid config', async () => {
     const invalidConfig = 'this isnt json';
-    expect(() => {
-      new HttpProvider(mockUrl, {
+    await expect(
+      HttpProvider.create(mockUrl, {
         config: invalidConfig as any,
-      });
-    }).toThrow(/Expected object, received string/);
+      }),
+    ).rejects.toThrow(/Expected object, received string/);
   });
 
-  it('should return provider id and string representation', () => {
-    provider = new HttpProvider(mockUrl, {
+  it('should return provider id and string representation', async () => {
+    provider = await HttpProvider.create(mockUrl, {
       config: { body: 'yo mama' },
     });
     expect(provider.id()).toBe(mockUrl);
@@ -218,7 +218,7 @@ describe('HttpProvider', () => {
   });
 
   it('should handle GET requests with query parameters', async () => {
-    provider = new HttpProvider(mockUrl, {
+    provider = await HttpProvider.create(mockUrl, {
       config: {
         method: 'GET',
         queryParams: {
@@ -256,7 +256,7 @@ describe('HttpProvider', () => {
         Host: example.com
         User-Agent: TestAgent/1.0
       `;
-      const provider = new HttpProvider('http', {
+      const provider = await HttpProvider.create('http', {
         config: {
           request: rawRequest,
           transformResponse: (data: any) => data,
@@ -298,7 +298,7 @@ describe('HttpProvider', () => {
 
         {"data": "{{prompt}}"}
       `;
-      const provider = new HttpProvider('https', {
+      const provider = await HttpProvider.create('https', {
         config: {
           request: rawRequest,
           transformResponse: (data: any) => data,
@@ -339,9 +339,9 @@ describe('HttpProvider', () => {
         GET /api/data HTTP/1.1
         Host: example.com
       `;
-      jest.mocked(maybeLoadFromExternalFile).mockReturnValueOnce(fileContent);
+      jest.mocked(maybeLoadFromExternalFile).mockResolvedValueOnce(fileContent);
 
-      const provider = new HttpProvider('https', {
+      const provider = await HttpProvider.create('https', {
         config: {
           request: filePath,
           transformResponse: (data: any) => data,
@@ -376,7 +376,7 @@ describe('HttpProvider', () => {
     });
 
     it('should throw an error for invalid raw requests', async () => {
-      const provider = new HttpProvider('http', {
+      const provider = await HttpProvider.create('http', {
         config: {
           request: 'yo mama',
         },
@@ -393,7 +393,7 @@ describe('HttpProvider', () => {
 
         {"data": "test"}
       `;
-      const provider = new HttpProvider('https', {
+      const provider = await HttpProvider.create('https', {
         config: {
           request: rawRequest,
           transformResponse: (data: any) => data,
@@ -433,7 +433,7 @@ describe('HttpProvider', () => {
         Host: example.com
         User-Agent: TestAgent/1.0
       `;
-      const provider = new HttpProvider('http', {
+      const provider = await HttpProvider.create('http', {
         config: {
           request: rawRequest,
           useHttps: true,
@@ -474,7 +474,7 @@ describe('HttpProvider', () => {
         Host: example.com
         User-Agent: TestAgent/1.0
       `;
-      const provider = new HttpProvider('http', {
+      const provider = await HttpProvider.create('http', {
         config: {
           request: rawRequest,
           useHttps: false,
@@ -515,7 +515,7 @@ describe('HttpProvider', () => {
         Host: example.com
         User-Agent: TestAgent/1.0
       `;
-      const provider = new HttpProvider('http', {
+      const provider = await HttpProvider.create('http', {
         config: {
           request: rawRequest,
           transformResponse: (data: any) => data,
@@ -551,14 +551,14 @@ describe('HttpProvider', () => {
   });
 
   describe('processJsonBody', () => {
-    it('should process simple key-value pairs', () => {
+    it('should process simple key-value pairs', async () => {
       const body = { key: 'value', prompt: '{{ prompt }}' };
       const vars = { prompt: 'test prompt' };
       const result = processJsonBody(body, vars);
       expect(result).toEqual({ key: 'value', prompt: 'test prompt' });
     });
 
-    it('should process nested objects', () => {
+    it('should process nested objects', async () => {
       const body = {
         outer: {
           inner: '{{ prompt }}',
@@ -575,7 +575,7 @@ describe('HttpProvider', () => {
       });
     });
 
-    it('should process arrays', () => {
+    it('should process arrays', async () => {
       const body = {
         list: ['{{ prompt }}', 'static', '{{ prompt }}'],
       };
@@ -586,7 +586,7 @@ describe('HttpProvider', () => {
       });
     });
 
-    it('should process deeply nested objects and arrays', () => {
+    it('should process deeply nested objects and arrays', async () => {
       const body = {
         key: '{{var1}}',
         nested: {
@@ -605,7 +605,7 @@ describe('HttpProvider', () => {
       });
     });
 
-    it('should parse JSON strings if possible', () => {
+    it('should parse JSON strings if possible', async () => {
       const body = {
         key: '{{var1}}',
         jsonString: '{"parsed":{{var2}}}',
@@ -620,19 +620,19 @@ describe('HttpProvider', () => {
   });
 
   describe('processTextBody', () => {
-    it('should render templates in text bodies', () => {
+    it('should render templates in text bodies', async () => {
       const body = 'Hello {{name}}!';
       const vars = { name: 'World' };
       expect(processTextBody(body, vars)).toBe('Hello World!');
     });
 
-    it('should handle rendering errors gracefully', () => {
+    it('should handle rendering errors gracefully', async () => {
       const body = 'Hello {{ unclosed tag';
       const vars = { name: 'World' };
       expect(processTextBody(body, vars)).toBe(body); // Should return original
     });
 
-    it('should handle null body gracefully', () => {
+    it('should handle null body gracefully', async () => {
       // @ts-ignore - Testing null input
       expect(processTextBody(null, {})).toBeNull();
     });
@@ -641,7 +641,7 @@ describe('HttpProvider', () => {
   describe('createtransformResponse', () => {
     it('should handle function parser', async () => {
       const functionParser = (data: any) => data.result;
-      const provider = new HttpProvider(mockUrl, {
+      const provider = await HttpProvider.create(mockUrl, {
         config: {
           body: { key: 'value' },
           transformResponse: functionParser,
@@ -680,7 +680,7 @@ describe('HttpProvider', () => {
     });
 
     it('should handle string parser', async () => {
-      const provider = new HttpProvider(mockUrl, {
+      const provider = await HttpProvider.create(mockUrl, {
         config: {
           body: { key: 'value' },
           transformResponse: 'json.result',
@@ -742,7 +742,7 @@ describe('HttpProvider', () => {
   });
 
   it('should use default parser when no parser is provided', async () => {
-    const provider = new HttpProvider(mockUrl, {
+    const provider = await HttpProvider.create(mockUrl, {
       config: {
         method: 'GET',
       },
@@ -760,7 +760,7 @@ describe('HttpProvider', () => {
   });
 
   it('should handle response transform returning an object', async () => {
-    const provider = new HttpProvider(mockUrl, {
+    const provider = await HttpProvider.create(mockUrl, {
       config: {
         body: { key: 'value' },
         transformResponse: (json: any, text: string) => ({ custom: json.result }),
@@ -780,30 +780,32 @@ describe('HttpProvider', () => {
   });
 
   describe('getDefaultHeaders', () => {
-    it('should return empty object for GET requests', () => {
-      const provider = new HttpProvider(mockUrl, { config: { method: 'GET' } });
+    it('should return empty object for GET requests', async () => {
+      const provider = await HttpProvider.create(mockUrl, { config: { method: 'GET' } });
       const result = provider['getDefaultHeaders'](null);
       expect(result).toEqual({});
     });
 
-    it('should return application/json for object body', () => {
-      const provider = new HttpProvider(mockUrl, {
+    it('should return application/json for object body', async () => {
+      const provider = await HttpProvider.create(mockUrl, {
         config: { method: 'POST', body: { key: 'value' } },
       });
       const result = provider['getDefaultHeaders']({ key: 'value' });
       expect(result).toEqual({ 'content-type': 'application/json' });
     });
 
-    it('should return application/x-www-form-urlencoded for string body', () => {
-      const provider = new HttpProvider(mockUrl, { config: { method: 'POST', body: 'test' } });
+    it('should return application/x-www-form-urlencoded for string body', async () => {
+      const provider = await HttpProvider.create(mockUrl, {
+        config: { method: 'POST', body: 'test' },
+      });
       const result = provider['getDefaultHeaders']('string body');
       expect(result).toEqual({ 'content-type': 'application/x-www-form-urlencoded' });
     });
   });
 
   describe('validateContentTypeAndBody', () => {
-    it('should not throw for valid content-type and body', () => {
-      const provider = new HttpProvider(mockUrl, { config: { body: 'test' } });
+    it('should not throw for valid content-type and body', async () => {
+      const provider = await HttpProvider.create(mockUrl, { config: { body: 'test' } });
       expect(() => {
         provider['validateContentTypeAndBody'](
           { 'content-type': 'application/json' },
@@ -812,8 +814,8 @@ describe('HttpProvider', () => {
       }).not.toThrow();
     });
 
-    it('should throw for non-json content-type with object body', () => {
-      const provider = new HttpProvider(mockUrl, { config: { body: 'test' } });
+    it('should throw for non-json content-type with object body', async () => {
+      const provider = await HttpProvider.create(mockUrl, { config: { body: 'test' } });
       expect(() => {
         provider['validateContentTypeAndBody'](
           { 'content-type': 'application/x-www-form-urlencoded' },
@@ -825,7 +827,7 @@ describe('HttpProvider', () => {
 
   describe('getHeaders', () => {
     it('should combine default headers with config headers', async () => {
-      const provider = new HttpProvider(mockUrl, {
+      const provider = await HttpProvider.create(mockUrl, {
         config: {
           headers: { 'X-Custom': '{{ prompt }}' },
           body: 'test',
@@ -842,7 +844,7 @@ describe('HttpProvider', () => {
     });
 
     it('should render template strings in headers', async () => {
-      const provider = new HttpProvider(mockUrl, {
+      const provider = await HttpProvider.create(mockUrl, {
         config: {
           headers: { 'X-Custom': '{{ prompt | upper }}' },
           body: 'test',
@@ -856,7 +858,7 @@ describe('HttpProvider', () => {
 
     it('should render environment variables in headers', async () => {
       // Setup a provider with environment variables in headers
-      const provider = new HttpProvider('http://example.com', {
+      const provider = await HttpProvider.create('http://example.com', {
         config: {
           method: 'GET', // GET method doesn't require body
           headers: {
@@ -892,7 +894,7 @@ describe('HttpProvider', () => {
   });
 
   it('should default to application/json for content-type if body is an object', async () => {
-    const provider = new HttpProvider(mockUrl, {
+    const provider = await HttpProvider.create(mockUrl, {
       config: {
         method: 'POST',
         headers: { 'X-Custom': '{{ prompt }}' },
@@ -927,7 +929,7 @@ describe('HttpProvider', () => {
   });
 
   it('should default to application/x-www-form-urlencoded for content-type if body is not an object', async () => {
-    const provider = new HttpProvider(mockUrl, {
+    const provider = await HttpProvider.create(mockUrl, {
       config: {
         method: 'POST',
         body: 'test',
@@ -958,7 +960,7 @@ describe('HttpProvider', () => {
   });
 
   it('should throw an error if the body is an object and the content-type is not application/json', async () => {
-    const provider = new HttpProvider(mockUrl, {
+    const provider = await HttpProvider.create(mockUrl, {
       config: {
         method: 'POST',
         headers: { 'content-type': 'text/plain' },
@@ -973,7 +975,7 @@ describe('HttpProvider', () => {
 
   describe('Content-Type and body handling', () => {
     it('should render string body when content-type is not set', async () => {
-      const provider = new HttpProvider(mockUrl, {
+      const provider = await HttpProvider.create(mockUrl, {
         config: {
           method: 'POST',
           body: 'Hello {{ prompt }}',
@@ -1004,7 +1006,7 @@ describe('HttpProvider', () => {
     });
 
     it('should default to JSON when content-type is not set and body is an object', async () => {
-      const provider = new HttpProvider(mockUrl, {
+      const provider = await HttpProvider.create(mockUrl, {
         config: {
           method: 'POST',
           body: { key: 'test' },
@@ -1036,7 +1038,7 @@ describe('HttpProvider', () => {
     });
 
     it('should render object body when content-type is application/json', async () => {
-      const provider = new HttpProvider(mockUrl, {
+      const provider = await HttpProvider.create(mockUrl, {
         config: {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1068,7 +1070,7 @@ describe('HttpProvider', () => {
     });
 
     it('should render a stringified object body when content-type is application/json', async () => {
-      const provider = new HttpProvider(mockUrl, {
+      const provider = await HttpProvider.create(mockUrl, {
         config: {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1100,7 +1102,7 @@ describe('HttpProvider', () => {
     });
 
     it('should render nested object variables correctly when content-type is application/json', async () => {
-      const provider = new HttpProvider(mockUrl, {
+      const provider = await HttpProvider.create(mockUrl, {
         config: {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1147,7 +1149,7 @@ describe('HttpProvider', () => {
     });
 
     it('should render nested array variables correctly when content-type is application/json', async () => {
-      const provider = new HttpProvider(mockUrl, {
+      const provider = await HttpProvider.create(mockUrl, {
         config: {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1214,7 +1216,7 @@ describe('HttpProvider', () => {
 
   describe('deprecated responseParser handling', () => {
     it('should use responseParser when transformResponse is not set', async () => {
-      const provider = new HttpProvider(mockUrl, {
+      const provider = await HttpProvider.create(mockUrl, {
         config: {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1236,7 +1238,7 @@ describe('HttpProvider', () => {
     });
 
     it('should prefer transformResponse over responseParser when both are set', async () => {
-      const provider = new HttpProvider(mockUrl, {
+      const provider = await HttpProvider.create(mockUrl, {
         config: {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1259,7 +1261,7 @@ describe('HttpProvider', () => {
     });
 
     it('should handle string-based responseParser when transformResponse is not set', async () => {
-      const provider = new HttpProvider(mockUrl, {
+      const provider = await HttpProvider.create(mockUrl, {
         config: {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1282,7 +1284,7 @@ describe('HttpProvider', () => {
   });
 
   it('should respect maxRetries configuration', async () => {
-    provider = new HttpProvider(mockUrl, {
+    provider = await HttpProvider.create(mockUrl, {
       config: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1364,7 +1366,7 @@ describe('createTransformRequest', () => {
   it('should handle function-based request transform', async () => {
     jest.clearAllMocks();
 
-    const provider = new HttpProvider('http://test.com', {
+    const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1426,7 +1428,7 @@ describe('createTransformRequest', () => {
 });
 
 describe('determineRequestBody', () => {
-  it('should merge parsed prompt object with config body when content type is JSON', () => {
+  it('should merge parsed prompt object with config body when content type is JSON', async () => {
     const result = determineRequestBody(
       true,
       { promptField: 'test value' },
@@ -1440,7 +1442,7 @@ describe('determineRequestBody', () => {
     });
   });
 
-  it('should process JSON body with variables when parsed prompt is not an object', () => {
+  it('should process JSON body with variables when parsed prompt is not an object', async () => {
     const result = determineRequestBody(
       true,
       'test prompt',
@@ -1453,7 +1455,7 @@ describe('determineRequestBody', () => {
     });
   });
 
-  it('should process text body when content type is not JSON', () => {
+  it('should process text body when content type is not JSON', async () => {
     const result = determineRequestBody(false, 'test prompt', 'Message: {{ prompt }}', {
       prompt: 'test prompt',
     });
@@ -1461,7 +1463,7 @@ describe('determineRequestBody', () => {
     expect(result).toBe('Message: test prompt');
   });
 
-  it('should handle nested JSON structures', () => {
+  it('should handle nested JSON structures', async () => {
     const result = determineRequestBody(
       true,
       'test prompt',
@@ -1484,7 +1486,7 @@ describe('determineRequestBody', () => {
     });
   });
 
-  it('should handle undefined config body with object prompt', () => {
+  it('should handle undefined config body with object prompt', async () => {
     const result = determineRequestBody(true, { message: 'test prompt' }, undefined, {});
 
     expect(result).toEqual({
@@ -1492,7 +1494,7 @@ describe('determineRequestBody', () => {
     });
   });
 
-  it('should handle array config body', () => {
+  it('should handle array config body', async () => {
     const result = determineRequestBody(true, 'test prompt', ['static', '{{ prompt }}'], {
       prompt: 'test prompt',
     });
@@ -1502,31 +1504,33 @@ describe('determineRequestBody', () => {
 });
 
 describe('constructor validation', () => {
-  it('should validate config using Zod schema', () => {
-    expect(() => {
-      new HttpProvider('http://test.com', {
+  it('should validate config using Zod schema', async () => {
+    await expect(
+      HttpProvider.create('http://test.com', {
         config: {
           headers: { 'Content-Type': 123 }, // Invalid header type
         },
-      });
-    }).toThrow('Expected string, received number');
+      }),
+    ).rejects.toThrow('Expected string, received number');
   });
 
-  it('should require body or GET method', () => {
-    expect(() => {
-      new HttpProvider('http://test.com', {
+  it('should require body or GET method', async () => {
+    await expect(
+      HttpProvider.create('http://test.com', {
         config: {
           method: 'POST',
           // Missing body
         },
-      });
-    }).toThrow(/Expected HTTP provider http:\/\/test.com to have a config containing {body}/);
+      }),
+    ).rejects.toThrow(
+      /Expected HTTP provider http:\/\/test.com to have a config containing {body}/,
+    );
   });
 });
 
 describe('content type handling', () => {
   it('should handle JSON content type with object body', async () => {
-    const provider = new HttpProvider('http://test.com', {
+    const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1558,7 +1562,7 @@ describe('content type handling', () => {
   });
 
   it('should handle non-JSON content type with string body', async () => {
-    const provider = new HttpProvider('http://test.com', {
+    const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
@@ -1590,7 +1594,7 @@ describe('content type handling', () => {
   });
 
   it('should throw error for object body with non-JSON content type', async () => {
-    const provider = new HttpProvider('http://test.com', {
+    const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
@@ -1606,7 +1610,7 @@ describe('request transformation', () => {
   it('should handle string-based request transform', async () => {
     jest.clearAllMocks();
 
-    const provider = new HttpProvider('http://test.com', {
+    const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1642,7 +1646,7 @@ describe('request transformation', () => {
   it('should handle function-based request transform', async () => {
     jest.clearAllMocks();
 
-    const provider = new HttpProvider('http://test.com', {
+    const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1678,7 +1682,7 @@ describe('request transformation', () => {
 
 describe('response handling', () => {
   it('should handle successful JSON response', async () => {
-    const provider = new HttpProvider('http://test.com', {
+    const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1700,7 +1704,7 @@ describe('response handling', () => {
   });
 
   it('should handle non-JSON response', async () => {
-    const provider = new HttpProvider('http://test.com', {
+    const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
@@ -1735,7 +1739,7 @@ describe('response handling', () => {
       cached: false,
     });
 
-    const provider = new HttpProvider(mockUrl, {
+    const provider = await HttpProvider.create(mockUrl, {
       config: {
         method: 'GET',
       },
@@ -1766,7 +1770,7 @@ describe('response handling', () => {
       cached: false,
     });
 
-    const provider = new HttpProvider(mockUrl, {
+    const provider = await HttpProvider.create(mockUrl, {
       config: {
         method: 'GET',
       },
@@ -1790,7 +1794,7 @@ describe('response handling', () => {
       cached: false,
     });
 
-    const provider = new HttpProvider(mockUrl, {
+    const provider = await HttpProvider.create(mockUrl, {
       config: {
         method: 'GET',
         transformResponse: () => ({ foo: 'bar' }),
@@ -1824,7 +1828,7 @@ describe('response handling', () => {
     // Create a transform that returns a simple string
     const transformResponse = () => 'transformed result';
 
-    const provider = new HttpProvider(mockUrl, {
+    const provider = await HttpProvider.create(mockUrl, {
       config: {
         method: 'GET',
         transformResponse,
@@ -1852,7 +1856,7 @@ describe('response handling', () => {
     });
 
     // Setup provider with transform that doesn't return an output property
-    const provider = new HttpProvider(mockUrl, {
+    const provider = await HttpProvider.create(mockUrl, {
       config: {
         method: 'GET',
         transformResponse: () => ({ transformed: true }),
@@ -1876,7 +1880,7 @@ describe('response handling', () => {
 describe('session handling', () => {
   it('should extract session ID from headers when configured', async () => {
     const sessionParser = jest.fn().mockReturnValue('test-session');
-    const provider = new HttpProvider('http://test.com', {
+    const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1918,7 +1922,7 @@ describe('session handling', () => {
     // Create a session parser that returns the session ID
     const sessionParser = () => mockSessionId;
 
-    const provider = new HttpProvider(mockUrl, {
+    const provider = await HttpProvider.create(mockUrl, {
       config: {
         method: 'GET',
         sessionParser,
@@ -1934,7 +1938,7 @@ describe('session handling', () => {
 
 describe('error handling', () => {
   it('should throw error for responses that fail validateStatus check', async () => {
-    const provider = new HttpProvider('http://test.com', {
+    const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1960,7 +1964,7 @@ describe('error handling', () => {
     const sessionParser = jest.fn().mockImplementation(() => {
       throw new Error('Session parsing failed');
     });
-    const provider = new HttpProvider('http://test.com', {
+    const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1982,7 +1986,7 @@ describe('error handling', () => {
   });
 
   it('should throw error for raw request with non-200 response', async () => {
-    const provider = new HttpProvider('http://test.com', {
+    const provider = await HttpProvider.create('http://test.com', {
       config: {
         request: dedent`
           GET /api/data HTTP/1.1
@@ -2009,7 +2013,7 @@ describe('error handling', () => {
 describe('validateStatus', () => {
   describe('default behavior', () => {
     it('should accept all status codes when validateStatus is not provided', async () => {
-      const provider = new HttpProvider('http://test.com', {
+      const provider = await HttpProvider.create('http://test.com', {
         config: {
           method: 'POST',
           body: { key: 'value' },
@@ -2040,7 +2044,7 @@ describe('validateStatus', () => {
 
   describe('string-based validators', () => {
     it('should handle expression format', async () => {
-      const provider = new HttpProvider('http://test.com', {
+      const provider = await HttpProvider.create('http://test.com', {
         config: {
           method: 'POST',
           body: { key: 'value' },
@@ -2075,7 +2079,7 @@ describe('validateStatus', () => {
     });
 
     it('should handle arrow function format with parameter', async () => {
-      const provider = new HttpProvider('http://test.com', {
+      const provider = await HttpProvider.create('http://test.com', {
         config: {
           method: 'POST',
           body: { key: 'value' },
@@ -2110,7 +2114,7 @@ describe('validateStatus', () => {
     });
 
     it('should handle arrow function format without parameter', async () => {
-      const provider = new HttpProvider('http://test.com', {
+      const provider = await HttpProvider.create('http://test.com', {
         config: {
           method: 'POST',
           body: { key: 'value' },
@@ -2140,7 +2144,7 @@ describe('validateStatus', () => {
     });
 
     it('should handle regular function format', async () => {
-      const provider = new HttpProvider('http://test.com', {
+      const provider = await HttpProvider.create('http://test.com', {
         config: {
           method: 'POST',
           body: { key: 'value' },
@@ -2177,7 +2181,7 @@ describe('validateStatus', () => {
 
   describe('error handling', () => {
     it('should handle malformed string expressions', async () => {
-      const provider = new HttpProvider('http://test.com', {
+      const provider = await HttpProvider.create('http://test.com', {
         config: {
           method: 'POST',
           body: { key: 'value' },
@@ -2216,7 +2220,7 @@ describe('validateStatus', () => {
       const mockValidator = jest.fn((status) => status < 500);
       jest.mocked(importModule).mockResolvedValueOnce(mockValidator);
 
-      const provider = new HttpProvider('http://test.com', {
+      const provider = await HttpProvider.create('http://test.com', {
         config: {
           method: 'POST',
           body: { key: 'value' },
@@ -2245,7 +2249,7 @@ describe('validateStatus', () => {
       const mockValidator = jest.fn((status) => status < 500);
       jest.mocked(importModule).mockResolvedValueOnce(mockValidator);
 
-      const provider = new HttpProvider('http://test.com', {
+      const provider = await HttpProvider.create('http://test.com', {
         config: {
           method: 'POST',
           body: { key: 'value' },
@@ -2274,7 +2278,7 @@ describe('validateStatus', () => {
 
 describe('session parser', () => {
   it('should handle string-based session parser', async () => {
-    const provider = new HttpProvider('http://test.com', {
+    const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'GET',
         sessionParser: 'data.headers["x-session-id"]',
@@ -2303,7 +2307,7 @@ describe('session parser', () => {
 
 describe('transform response error handling', () => {
   it('should handle errors in response transform function', async () => {
-    const provider = new HttpProvider('http://test.com', {
+    const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'GET',
         transformResponse: () => {
@@ -2324,7 +2328,7 @@ describe('transform response error handling', () => {
   });
 
   it('should handle errors in string-based transform', async () => {
-    const provider = new HttpProvider('http://test.com', {
+    const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'GET',
         transformResponse: 'invalid.syntax[',
@@ -2345,7 +2349,7 @@ describe('transform response error handling', () => {
 
 describe('arrow function parsing in transformResponse', () => {
   it('should handle arrow function with explicit body', async () => {
-    const provider = new HttpProvider('http://test.com', {
+    const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'GET',
         transformResponse: '(json, text) => { return json.data }',
@@ -2365,7 +2369,7 @@ describe('arrow function parsing in transformResponse', () => {
   });
 
   it('should handle regular function with explicit body', async () => {
-    const provider = new HttpProvider('http://test.com', {
+    const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'GET',
         transformResponse: 'function(json, text) { return json.data }',
@@ -2385,7 +2389,7 @@ describe('arrow function parsing in transformResponse', () => {
   });
 
   it('should handle arrow function with implicit return', async () => {
-    const provider = new HttpProvider('http://test.com', {
+    const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'GET',
         transformResponse: '(json) => json.data',
@@ -2405,7 +2409,7 @@ describe('arrow function parsing in transformResponse', () => {
   });
 
   it('should handle arrow function with context parameter', async () => {
-    const provider = new HttpProvider('http://test.com', {
+    const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'GET',
         transformResponse: '(json, text, context) => context.response.status',
@@ -2425,7 +2429,7 @@ describe('arrow function parsing in transformResponse', () => {
   });
 
   it('should handle simple expression without function', async () => {
-    const provider = new HttpProvider('http://test.com', {
+    const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'GET',
         transformResponse: 'json.data',
@@ -2445,7 +2449,7 @@ describe('arrow function parsing in transformResponse', () => {
   });
 
   it('should handle multiline arrow function', async () => {
-    const provider = new HttpProvider('http://test.com', {
+    const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'GET',
         transformResponse: `(json, text) => {
@@ -2470,7 +2474,7 @@ describe('arrow function parsing in transformResponse', () => {
 
 describe('transform request error handling', () => {
   it('should handle errors in string-based request transform', async () => {
-    const provider = new HttpProvider('http://test.com', {
+    const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'POST',
         body: { key: 'value' },
@@ -2492,7 +2496,7 @@ describe('transform request error handling', () => {
 
 describe('status validator error handling', () => {
   it('should throw error for invalid status validator expression', async () => {
-    const provider = new HttpProvider('http://test.com', {
+    const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'GET',
         validateStatus: 'invalid syntax[',
@@ -2527,7 +2531,7 @@ describe('status validator error handling', () => {
 
 describe('string-based validators', () => {
   it('should handle expression format', async () => {
-    const provider = new HttpProvider('http://test.com', {
+    const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'POST',
         body: { key: 'value' },
@@ -2562,7 +2566,7 @@ describe('string-based validators', () => {
   });
 
   it('should handle arrow function format with parameter', async () => {
-    const provider = new HttpProvider('http://test.com', {
+    const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'POST',
         body: { key: 'value' },
@@ -2597,7 +2601,7 @@ describe('string-based validators', () => {
   });
 
   it('should handle arrow function format without parameter', async () => {
-    const provider = new HttpProvider('http://test.com', {
+    const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'POST',
         body: { key: 'value' },
@@ -2627,7 +2631,7 @@ describe('string-based validators', () => {
   });
 
   it('should handle regular function format', async () => {
-    const provider = new HttpProvider('http://test.com', {
+    const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'POST',
         body: { key: 'value' },
@@ -2662,7 +2666,7 @@ describe('string-based validators', () => {
   });
 
   it('should handle malformed string expressions', async () => {
-    const provider = new HttpProvider('http://test.com', {
+    const provider = await HttpProvider.create('http://test.com', {
       config: {
         method: 'POST',
         body: { key: 'value' },
@@ -2711,7 +2715,7 @@ describe('RSA signature authentication', () => {
   });
 
   it('should generate and include signature in vars', async () => {
-    const provider = new HttpProvider('http://example.com', {
+    const provider = await HttpProvider.create('http://example.com', {
       config: {
         method: 'POST',
         body: { key: 'value' },
@@ -2741,7 +2745,7 @@ describe('RSA signature authentication', () => {
   });
 
   it('should reuse cached signature when within validity period', async () => {
-    const provider = new HttpProvider('http://example.com', {
+    const provider = await HttpProvider.create('http://example.com', {
       config: {
         method: 'POST',
         body: { key: 'value' },
@@ -2771,7 +2775,7 @@ describe('RSA signature authentication', () => {
   });
 
   it('should regenerate signature when expired', async () => {
-    const provider = new HttpProvider('http://example.com', {
+    const provider = await HttpProvider.create('http://example.com', {
       config: {
         method: 'POST',
         body: { key: 'value' },
@@ -2801,7 +2805,7 @@ describe('RSA signature authentication', () => {
   });
 
   it('should use custom signature data template', async () => {
-    const provider = new HttpProvider('http://example.com', {
+    const provider = await HttpProvider.create('http://example.com', {
       config: {
         method: 'POST',
         body: { key: 'value' },
@@ -2832,7 +2836,7 @@ describe('RSA signature authentication', () => {
   });
 
   it('should support using privateKey directly instead of privateKeyPath', async () => {
-    const provider = new HttpProvider('http://example.com', {
+    const provider = await HttpProvider.create('http://example.com', {
       config: {
         method: 'POST',
         body: { key: 'value' },
@@ -2964,36 +2968,36 @@ describe('createSessionParser', () => {
 });
 
 describe('urlEncodeRawRequestPath', () => {
-  it('should not modify request with no query parameters', () => {
+  it('should not modify request with no query parameters', async () => {
     const rawRequest = 'GET /api/data HTTP/1.1';
     const result = urlEncodeRawRequestPath(rawRequest);
     expect(result).toBe(rawRequest);
   });
 
-  it('should not modify request with simple query parameters', () => {
+  it('should not modify request with simple query parameters', async () => {
     const rawRequest = 'GET /api/data?key=value HTTP/1.1';
     const result = urlEncodeRawRequestPath(rawRequest);
     expect(result).toBe(rawRequest);
   });
 
-  it('should encode URL with spaces in query parameters', () => {
+  it('should encode URL with spaces in query parameters', async () => {
     const rawRequest = 'GET /api/data?query=hello world HTTP/1.1';
     const result = urlEncodeRawRequestPath(rawRequest);
     expect(result).toBe('GET /api/data?query=hello%20world HTTP/1.1');
   });
 
-  it('should encode URL with already percent-encoded characters', () => {
+  it('should encode URL with already percent-encoded characters', async () => {
     const rawRequest = 'GET /api/data?query=already%20encoded HTTP/1.1';
     const result = urlEncodeRawRequestPath(rawRequest);
     expect(result).toBe('GET /api/data?query=already%20encoded HTTP/1.1');
   });
 
-  it('should throw error when modifying malformed request with no URL', () => {
+  it('should throw error when modifying malformed request with no URL', async () => {
     const rawRequest = 'GET HTTP/1.1';
     expect(() => urlEncodeRawRequestPath(rawRequest)).toThrow(/not valid/);
   });
 
-  it('should handle complete raw request with headers', () => {
+  it('should handle complete raw request with headers', async () => {
     const rawRequest = dedent`
       GET /summarized?topic=hello world&start=01/01/2025&end=01/07/2025&auto_extract_keywords=false HTTP/2
       Host: foo.bar.com
@@ -3010,7 +3014,7 @@ describe('urlEncodeRawRequestPath', () => {
     expect(result).toBe(expected);
   });
 
-  it('should handle POST request with JSON body', () => {
+  it('should handle POST request with JSON body', async () => {
     const rawRequest = dedent`
       POST /api/submit?param=hello world HTTP/1.1
       Host: example.com
@@ -3029,29 +3033,29 @@ describe('urlEncodeRawRequestPath', () => {
     expect(result).toBe(expected);
   });
 
-  it('should handle URL with path containing spaces', () => {
+  it('should handle URL with path containing spaces', async () => {
     const rawRequest = 'GET /path with spaces/resource HTTP/1.1';
     const result = urlEncodeRawRequestPath(rawRequest);
     expect(result).toBe('GET /path%20with%20spaces/resource HTTP/1.1');
   });
 
-  it('should handle URL with special characters in path and query', () => {
+  it('should handle URL with special characters in path and query', async () => {
     const rawRequest = 'GET /path/with [brackets]?param=value&special=a+b+c HTTP/1.1';
     const result = urlEncodeRawRequestPath(rawRequest);
     expect(result).toBe('GET /path/with%20[brackets]?param=value&special=a+b+c HTTP/1.1');
   });
 
-  it('should handle completely misformed first line', () => {
+  it('should handle completely misformed first line', async () => {
     const rawRequest = 'This is not a valid HTTP request line';
     expect(() => urlEncodeRawRequestPath(rawRequest)).toThrow(/not valid/);
   });
 
-  it('should handle request with no HTTP protocol version', () => {
+  it('should handle request with no HTTP protocol version', async () => {
     const rawRequest = 'GET /api/data?query=test';
     expect(() => urlEncodeRawRequestPath(rawRequest)).toThrow(/not valid/);
   });
 
-  it('should handle request with different HTTP methods', () => {
+  it('should handle request with different HTTP methods', async () => {
     const methods = ['POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'];
 
     for (const method of methods) {

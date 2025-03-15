@@ -39,7 +39,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     return !this.isReasoningModel();
   }
 
-  getOpenAiBody(
+  async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
@@ -67,6 +67,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
       : undefined;
 
+    // Build the body with all properties, awaiting the async ones inline
     const body = {
       model: this.modelName,
       messages,
@@ -92,29 +93,31 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               Number.parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
           }
         : {}),
+      ...(config.function_call ? { function_call: config.function_call } : {}),
+      ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
+      ...(config.tool_resources ? { tool_resources: config.tool_resources } : {}),
+      ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
+      ...(config.stop ? { stop: config.stop } : {}),
+      ...(config.passthrough || {}),
       ...(config.functions
         ? {
-            functions: maybeLoadFromExternalFile(
+            functions: await maybeLoadFromExternalFile(
               renderVarsInObject(config.functions, context?.vars),
             ),
           }
         : {}),
-      ...(config.function_call ? { function_call: config.function_call } : {}),
       ...(config.tools
-        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)) }
+        ? {
+            tools: await maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)),
+          }
         : {}),
-      ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
-      ...(config.tool_resources ? { tool_resources: config.tool_resources } : {}),
       ...(config.response_format
         ? {
-            response_format: maybeLoadFromExternalFile(
+            response_format: await maybeLoadFromExternalFile(
               renderVarsInObject(config.response_format, context?.vars),
             ),
           }
         : {}),
-      ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
-      ...(config.stop ? { stop: config.stop } : {}),
-      ...(config.passthrough || {}),
       ...(this.modelName.includes('audio')
         ? {
             modalities: config.modalities || ['text', 'audio'],
@@ -137,7 +140,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       );
     }
 
-    const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
 
     let data, status, statusText;

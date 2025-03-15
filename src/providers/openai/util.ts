@@ -259,20 +259,32 @@ export interface OpenAiTool {
   function: OpenAiFunction;
 }
 
-export function validateFunctionCall(
-  functionCall: { arguments: string; name: string },
-  functions?: OpenAiFunction[],
-  vars?: Record<string, string | object>,
-) {
-  // Parse function call and validate it against schema
-  const interpolatedFunctions = maybeLoadFromExternalFile(
-    renderVarsInObject(functions, vars),
-  ) as OpenAiFunction[];
+export async function validateFunctionCall(
+  functionCall: { name: string; arguments: string },
+  functions: Array<{ name: string; parameters: any }> | null | undefined,
+  vars?: any,
+): Promise<void> {
+  // Ensure functions is an array
+  if (!functions || !Array.isArray(functions) || functions.length === 0) {
+    throw new Error(
+      `Called "${functionCall.name}", but there is no function with that name. Available functions: none`,
+    );
+  }
+
+  const interpolatedFunctions = (await Promise.all(
+    functions.map(async (func) => ({
+      ...func,
+      parameters: await maybeLoadFromExternalFile(renderVarsInObject(func.parameters, vars)),
+    })),
+  )) as OpenAiFunction[];
   const functionArgs = JSON.parse(functionCall.arguments);
   const functionName = functionCall.name;
   const functionSchema = interpolatedFunctions?.find((f) => f.name === functionName)?.parameters;
   if (!functionSchema) {
-    throw new Error(`Called "${functionName}", but there is no function with that name`);
+    const availableFunctions = interpolatedFunctions?.map((f) => f.name).join(', ') || 'none';
+    throw new Error(
+      `Called "${functionName}", but there is no function with that name. Available functions: ${availableFunctions}`,
+    );
   }
   const validate = ajv.compile(functionSchema);
   if (!validate(functionArgs)) {
