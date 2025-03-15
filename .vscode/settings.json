@@ -84,6 +84,7 @@
     "remediations",
     "RLHF",
     "roleplay",
+    "sandboxed",
     "ssrf",
     "TEMPLATING",
     "TESTCASE",
