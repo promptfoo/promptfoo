@@ -269,12 +269,12 @@ describe('AzureOpenAiChatCompletionProvider', () => {
 
     it('should handle json_schema response format', async () => {
       const responseFormat = {
-        type: 'json_schema',
+        type: 'json_schema' as const,
         json_schema: {
           name: 'test_schema',
           strict: true,
           schema: {
-            type: 'object',
+            type: 'object' as const,
             properties: {
               name: { type: 'string' },
             },
@@ -313,12 +313,12 @@ describe('AzureOpenAiChatCompletionProvider', () => {
       };
 
       const responseFormat = {
-        type: 'json_schema',
+        type: 'json_schema' as const,
         json_schema: {
           name: '{{ schema_name }}',
           strict: true,
           schema: {
-            type: 'object',
+            type: 'object' as const,
             properties: {
               name: { type: 'string' },
             },
@@ -337,12 +337,12 @@ describe('AzureOpenAiChatCompletionProvider', () => {
       jest.spyOn(provider as any, 'getOpenAiBody').mockResolvedValueOnce({
         body: {
           response_format: {
-            type: 'json_schema',
+            type: 'json_schema' as const,
             json_schema: {
               name: 'dynamic_schema',
               strict: true,
               schema: {
-                type: 'object',
+                type: 'object' as const,
                 properties: {
                   name: { type: 'string' },
                 },
