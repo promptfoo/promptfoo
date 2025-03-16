@@ -1,11 +1,7 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-
-# Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
-
 description: 'Function calling demonstration'
 
-prompts: |
-  {{query}}
+prompts: '{{query}}'
 
 providers:
   - id: 'google:live:gemini-2.0-flash-exp'

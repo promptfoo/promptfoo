@@ -23,7 +23,7 @@ export function addIterativeJailbreaks(
     })),
     metadata: {
       ...testCase.metadata,
-      strategyId: strategy,
+      strategyId: strategy === 'iterative' ? 'jailbreak' : 'jailbreak:tree',
     },
   }));
 }
