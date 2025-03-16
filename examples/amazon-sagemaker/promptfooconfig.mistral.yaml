@@ -1,24 +1,24 @@
-description: "Example configuration for Mistral 7B v3 models on AWS SageMaker (Hugging Face)"
+description: 'Example configuration for Mistral 7B v3 models on AWS SageMaker (Hugging Face)'
 
 prompts:
-  - "Generate a creative name for a coffee shop that specializes in {{flavor}} coffee."
-  - "What are some potential names for a coffee shop that specializes in {{flavor}} coffee?"
-  - "Write a short story about a robot that becomes self-aware."
+  - 'Generate a creative name for a coffee shop that specializes in {{flavor}} coffee.'
+  - 'What are some potential names for a coffee shop that specializes in {{flavor}} coffee?'
+  - 'Write a short story about a robot that becomes self-aware.'
 
 providers:
   - id: sagemaker:huggingface:your-mistral-endpoint
-    label: "Mistral 7B v3"
-    delay: 500  # Add 500ms delay between requests to prevent rate limiting
+    label: 'Mistral 7B v3'
+    delay: 500 # Add 500ms delay between requests to prevent rate limiting
     config:
       region: us-west-2
-      modelType: huggingface  # Use the Hugging Face format handler
+      modelType: huggingface # Use the Hugging Face format handler
       temperature: 0.7
       maxTokens: 256
       topP: 0.9
-      contentType: "application/json"
-      acceptType: "application/json"
+      contentType: 'application/json'
+      acceptType: 'application/json'
       responseFormat:
-        path: "$[0].generated_text"  # Note the array-based response format
+        path: '$[0].generated_text' # Note the array-based response format
 
 tests:
   - vars:

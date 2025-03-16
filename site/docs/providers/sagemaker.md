@@ -81,20 +81,25 @@ The provider will automatically use AWS SSO credentials when a profile is specif
 The SageMaker provider supports several syntax patterns:
 
 1. Basic endpoint specification:
+
    ```yaml
    sagemaker:my-endpoint-name
    ```
 
 2. Model type specification (for common model formats):
+
    ```yaml
    sagemaker:openai:my-endpoint-name
    ```
+
    This helps format requests properly for the specific model type deployed on your endpoint.
 
 3. Embedding endpoint specification:
+
    ```yaml
    sagemaker:embedding:my-embedding-endpoint
    ```
+
    For endpoints that generate embeddings rather than text completions.
 
 4. JumpStart model specification:
@@ -144,18 +149,18 @@ prompts:
 
 providers:
   - id: sagemaker:jumpstart:llama-3-2-1b-instruct
-    label: "Llama 3.2 (1B) on SageMaker"
-    delay: 500  # Add 500ms delay between requests to prevent rate limiting
+    label: 'Llama 3.2 (1B) on SageMaker'
+    delay: 500 # Add 500ms delay between requests to prevent rate limiting
     config:
       region: us-west-2
-      modelType: jumpstart  # Use the JumpStart format handler
+      modelType: jumpstart # Use the JumpStart format handler
       temperature: 0.7
       maxTokens: 256
       topP: 0.9
-      contentType: "application/json"
-      acceptType: "application/json"
+      contentType: 'application/json'
+      acceptType: 'application/json'
       responseFormat:
-        path: "$.generated_text"  # Extract this field from the response
+        path: '$.generated_text' # Extract this field from the response
 
 tests:
   - vars:
@@ -176,18 +181,18 @@ prompts:
 
 providers:
   - id: sagemaker:huggingface:mistral-7b-v3
-    label: "Mistral 7B v3 on SageMaker"
-    delay: 500  # Add 500ms delay between requests to prevent rate limiting
+    label: 'Mistral 7B v3 on SageMaker'
+    delay: 500 # Add 500ms delay between requests to prevent rate limiting
     config:
       region: us-west-2
-      modelType: huggingface  # Use the Hugging Face format handler
+      modelType: huggingface # Use the Hugging Face format handler
       temperature: 0.7
       maxTokens: 256
       topP: 0.9
-      contentType: "application/json"
-      acceptType: "application/json"
+      contentType: 'application/json'
+      acceptType: 'application/json'
       responseFormat:
-        path: "$[0].generated_text"  # Note the array-based response format
+        path: '$[0].generated_text' # Note the array-based response format
 
 tests:
   - vars:
@@ -203,43 +208,43 @@ tests:
 This example shows how to compare Llama and Mistral models side-by-side:
 
 ```yaml
-description: "Comparison between Mistral 7B and Llama 3 on SageMaker"
+description: 'Comparison between Mistral 7B and Llama 3 on SageMaker'
 
 prompts:
-  - "Generate a creative name for a coffee shop that specializes in {{flavor}} coffee."
-  - "Write a short story about {{topic}} in {{style}} style. Aim for {{length}} words."
-  - "Explain the concept of {{concept}} to {{audience}} in a way they can understand."
+  - 'Generate a creative name for a coffee shop that specializes in {{flavor}} coffee.'
+  - 'Write a short story about {{topic}} in {{style}} style. Aim for {{length}} words.'
+  - 'Explain the concept of {{concept}} to {{audience}} in a way they can understand.'
 
 providers:
   # Llama 3.2 provider
   - id: sagemaker:jumpstart:llama-3-2-1b-instruct
-    label: "Llama 3.2 (1B)"
-    delay: 500  # Add 500ms delay between requests
+    label: 'Llama 3.2 (1B)'
+    delay: 500 # Add 500ms delay between requests
     config:
       region: us-west-2
       modelType: jumpstart
       temperature: 0.7
       maxTokens: 256
       topP: 0.9
-      contentType: "application/json"
-      acceptType: "application/json"
+      contentType: 'application/json'
+      acceptType: 'application/json'
       responseFormat:
-        path: "$.generated_text"
+        path: '$.generated_text'
 
   # Mistral 7B provider
   - id: sagemaker:huggingface:mistral-7b-v3
-    label: "Mistral 7B v3"
-    delay: 500  # Add 500ms delay between requests
+    label: 'Mistral 7B v3'
+    delay: 500 # Add 500ms delay between requests
     config:
       region: us-west-2
       modelType: huggingface
       temperature: 0.7
       maxTokens: 256
       topP: 0.9
-      contentType: "application/json"
-      acceptType: "application/json"
+      contentType: 'application/json'
+      acceptType: 'application/json'
       responseFormat:
-        path: "$[0].generated_text"
+        path: '$[0].generated_text'
 
 tests:
   - vars:
@@ -287,26 +292,26 @@ Supported model types:
 
 Different model types return results in different response formats. You should configure the appropriate JSONPath for response extraction:
 
-- **JumpStart models** (Llama): Use `responseFormat.path: "$.generated_text"` 
+- **JumpStart models** (Llama): Use `responseFormat.path: "$.generated_text"`
 - **Hugging Face models** (Mistral): Use `responseFormat.path: "$[0].generated_text"`
 
 ## Configuration Options
 
 Common configuration options for SageMaker endpoints:
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `endpoint` | SageMaker endpoint name | (from provider ID) |
-| `region` | AWS region | `us-east-1` |
-| `modelType` | Model type for request/response formatting | `custom` |
-| `maxTokens` | Maximum number of tokens to generate | `1024` |
-| `temperature` | Controls randomness (0.0 to 1.0) | `0.7` |
-| `topP` | Nucleus sampling parameter | `1.0` |
-| `stopSequences` | Array of sequences where generation stops | `[]` |
-| `contentType` | Content type for SageMaker request | `application/json` |
-| `acceptType` | Accept type for SageMaker response | `application/json` |
-| `delay` | Delay between API calls in milliseconds | `0` |
-| `transform` | Function to transform prompts before sending | N/A |
+| Option          | Description                                  | Default            |
+| --------------- | -------------------------------------------- | ------------------ |
+| `endpoint`      | SageMaker endpoint name                      | (from provider ID) |
+| `region`        | AWS region                                   | `us-east-1`        |
+| `modelType`     | Model type for request/response formatting   | `custom`           |
+| `maxTokens`     | Maximum number of tokens to generate         | `1024`             |
+| `temperature`   | Controls randomness (0.0 to 1.0)             | `0.7`              |
+| `topP`          | Nucleus sampling parameter                   | `1.0`              |
+| `stopSequences` | Array of sequences where generation stops    | `[]`               |
+| `contentType`   | Content type for SageMaker request           | `application/json` |
+| `acceptType`    | Accept type for SageMaker response           | `application/json` |
+| `delay`         | Delay between API calls in milliseconds      | `0`                |
+| `transform`     | Function to transform prompts before sending | N/A                |
 
 ## Response Parsing with JSONPath
 
@@ -317,7 +322,7 @@ providers:
   - id: sagemaker:my-custom-endpoint
     config:
       responseFormat:
-        path: "$.custom.nested.responseField"
+        path: '$.custom.nested.responseField'
 ```
 
 This will extract the value at the specified path from the JSON response.
@@ -331,7 +336,7 @@ providers:
   - id: sagemaker:embedding:my-embedding-endpoint
     config:
       region: 'us-east-1'
-      modelType: 'openai'  # Optional, helps format the request
+      modelType: 'openai' # Optional, helps format the request
 ```
 
 For assertions that require embeddings (like similarity comparisons), you can specify a SageMaker embedding provider:
@@ -373,6 +378,7 @@ providers:
 ```
 
 When caching is enabled:
+
 - Responses for identical prompts are stored and reused
 - Token usage statistics are maintained with a `cached` flag
 - Debug mode will bypass the cache when needed
@@ -398,7 +404,7 @@ providers:
   - id: sagemaker:my-endpoint
     config:
       region: us-east-1
-      delay: 1000  # Add a 1000ms (1 second) delay between API calls
+      delay: 1000 # Add a 1000ms (1 second) delay between API calls
 ```
 
 You can also specify the delay directly at the provider level:
@@ -406,12 +412,13 @@ You can also specify the delay directly at the provider level:
 ```yaml
 providers:
   - id: sagemaker:my-endpoint
-    delay: 1000  # 1 second delay
+    delay: 1000 # 1 second delay
     config:
       region: us-east-1
 ```
 
 This helps:
+
 - Avoid rate limiting by SageMaker endpoints
 - Reduce costs by spacing out requests
 - Improve reliability for endpoints with concurrency limitations
@@ -454,15 +461,15 @@ Where `transform.js` might contain:
 
 ```javascript
 // Transform function for formatting Llama prompts
-module.exports = function(prompt, context) {
+module.exports = function (prompt, context) {
   return {
     inputs: prompt,
     parameters: {
       max_new_tokens: context.config?.maxTokens || 256,
       temperature: context.config?.temperature || 0.7,
       top_p: context.config?.topP || 0.9,
-      do_sample: true
-    }
+      do_sample: true,
+    },
   };
 };
 ```
@@ -509,6 +516,7 @@ Ensure your AWS credentials have permissions to invoke the SageMaker endpoint. T
 ### Error: "Endpoint not found"
 
 Verify that:
+
 1. The endpoint name is correct and matches exactly
 2. The endpoint is deployed and in service
 3. You're using the correct AWS region

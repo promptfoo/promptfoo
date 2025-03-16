@@ -16,8 +16,8 @@ function formatLlamaPayload(prompt, options = {}) {
       max_new_tokens: options.maxTokens || 256,
       temperature: options.temperature || 0.7,
       top_p: options.topP || 0.9,
-      do_sample: true
-    }
+      do_sample: true,
+    },
   };
 }
 
@@ -35,8 +35,8 @@ function formatMistralPayload(prompt, options = {}) {
       temperature: options.temperature || 0.7,
       top_p: options.topP || 0.9,
       do_sample: true,
-      return_full_text: false
-    }
+      return_full_text: false,
+    },
   };
 }
 
@@ -53,12 +53,12 @@ function formatGenericPayload(prompt, context) {
   const maxTokens = options.maxTokens || 256;
   const temperature = options.temperature || 0.7;
   const topP = options.topP || 0.9;
-  
+
   return {
     prompt,
     max_tokens: maxTokens,
     temperature,
-    top_p: topP
+    top_p: topP,
   };
 }
 
@@ -66,5 +66,5 @@ function formatGenericPayload(prompt, context) {
 module.exports = {
   formatLlamaPayload,
   formatMistralPayload,
-  formatGenericPayload
+  formatGenericPayload,
 };

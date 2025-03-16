@@ -36,9 +36,9 @@ export default defineConfig({
     rollupOptions: {
       external: [
         'vite-plugin-node-polyfills/shims/buffer',
-        'vite-plugin-node-polyfills/shims/process'
-      ]
-    }
+        'vite-plugin-node-polyfills/shims/process',
+      ],
+    },
   },
   define: {
     'import.meta.env.VITE_PROMPTFOO_VERSION': JSON.stringify(packageJson.version),
@@ -46,6 +46,6 @@ export default defineConfig({
       process.env.PROMPTFOO_DISABLE_TELEMETRY || 'false',
     ),
     'process.env': JSON.stringify({}),
-    'global': 'window',
+    global: 'window',
   },
 });

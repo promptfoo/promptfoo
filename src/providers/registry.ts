@@ -24,7 +24,6 @@ import { AzureModerationProvider } from './azure/moderation';
 import { BAMProvider } from './bam';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock';
 import { BrowserProvider } from './browser';
-import { SageMakerCompletionProvider, SageMakerEmbeddingProvider } from './sagemaker';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
 import * as CloudflareAiProviders from './cloudflare-ai';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere';
@@ -67,6 +66,7 @@ import {
   ReplicateModerationProvider,
   ReplicateProvider,
 } from './replicate';
+import { SageMakerCompletionProvider, SageMakerEmbeddingProvider } from './sagemaker';
 import { ScriptCompletionProvider } from './scriptCompletion';
 import { SequenceProvider } from './sequence';
 import { SimulatedUser } from './simulatedUser';
@@ -266,16 +266,16 @@ export const providerMap: ProviderFactory[] = [
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const endpointName = splits.slice(2).join(':');
-      
+
       if (modelType === 'embedding' || modelType === 'embeddings') {
         return new SageMakerEmbeddingProvider(endpointName || modelType, providerOptions);
       }
-      
+
       // Handle the 'sagemaker:<endpoint>' format (no model type specified)
       if (splits.length === 2) {
         return new SageMakerCompletionProvider(modelType, providerOptions);
       }
-      
+
       // Handle special case for JumpStart models
       if (endpointName.includes('jumpstart') || modelType === 'jumpstart') {
         return new SageMakerCompletionProvider(endpointName, {
@@ -286,7 +286,7 @@ export const providerMap: ProviderFactory[] = [
           },
         });
       }
-      
+
       // Handle 'sagemaker:<model-type>:<endpoint>' format for other model types
       return new SageMakerCompletionProvider(endpointName, {
         ...providerOptions,

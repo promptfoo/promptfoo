@@ -51,12 +51,12 @@ function parseArgs() {
 async function testProvider() {
   try {
     const options = parseArgs();
-    
+
     // Select the appropriate endpoint and configuration based on the model
     let endpointName;
     let modelType;
     let responsePath;
-    
+
     if (options.model === 'mistral') {
       endpointName = 'jumpstart-dft-hf-llm-mistral-7b-v3-20250312-151238';
       modelType = 'huggingface';
@@ -67,35 +67,32 @@ async function testProvider() {
       modelType = 'jumpstart';
       responsePath = '$.generated_text';
     }
-    
+
     console.log(`Testing SageMaker provider with ${options.model} model`);
     console.log(`Endpoint: ${endpointName}`);
     console.log(`Prompt: ${options.prompt}`);
-    
+
     // Create a provider instance
-    const provider = new SageMakerCompletionProvider(
-      endpointName,
-      {
-        config: {
-          region: 'us-west-2',
-          modelType,
-          contentType: 'application/json',
-          acceptType: 'application/json',
-          maxTokens: options.maxTokens,
-          temperature: options.temperature,
-          responseFormat: {
-            path: responsePath
-          }
-        }
-      }
-    );
-    
+    const provider = new SageMakerCompletionProvider(endpointName, {
+      config: {
+        region: 'us-west-2',
+        modelType,
+        contentType: 'application/json',
+        acceptType: 'application/json',
+        maxTokens: options.maxTokens,
+        temperature: options.temperature,
+        responseFormat: {
+          path: responsePath,
+        },
+      },
+    });
+
     console.log('Provider ID:', provider.id());
-    
+
     // Call the provider
     console.log('Calling provider...');
     const result = await provider.callApi(options.prompt);
-    
+
     // Display the result
     console.log('Output:', result.output);
     console.log('Full result:', JSON.stringify(result, null, 2));

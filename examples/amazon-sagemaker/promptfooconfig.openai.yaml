@@ -1,9 +1,9 @@
-description: "Amazon SageMaker OpenAI-compatible model evaluation"
+description: 'Amazon SageMaker OpenAI-compatible model evaluation'
 
 prompts:
-  - "Write a tweet about {{topic}}"
-  - "Write a short blog introduction about {{topic}}"
-  - "List 3 key benefits of {{topic}}"
+  - 'Write a tweet about {{topic}}'
+  - 'Write a short blog introduction about {{topic}}'
+  - 'List 3 key benefits of {{topic}}'
 
 providers:
   - id: sagemaker:openai:your-endpoint-name

@@ -1,9 +1,9 @@
-description: "Amazon SageMaker Anthropic Claude-compatible model evaluation"
+description: 'Amazon SageMaker Anthropic Claude-compatible model evaluation'
 
 prompts:
-  - "Write a tweet about {{topic}}"
-  - "Write a short blog introduction about {{topic}}"
-  - "List 3 key benefits of {{topic}}"
+  - 'Write a tweet about {{topic}}'
+  - 'Write a short blog introduction about {{topic}}'
+  - 'List 3 key benefits of {{topic}}'
 
 providers:
   - id: sagemaker:anthropic:your-claude-endpoint

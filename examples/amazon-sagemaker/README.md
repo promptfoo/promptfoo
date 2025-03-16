@@ -90,17 +90,17 @@ providers:
 The transform function receives the prompt and a context object containing the provider configuration:
 
 ```javascript
-module.exports = function(prompt, context) {
+module.exports = function (prompt, context) {
   // Access config values
   const maxTokens = context.config?.maxTokens || 256;
-  
+
   // Return transformed input
   return {
     inputs: prompt,
     parameters: {
       max_new_tokens: maxTokens,
-      temperature: 0.7
-    }
+      temperature: 0.7,
+    },
   };
 };
 ```
@@ -117,7 +117,7 @@ providers:
       modelType: jumpstart
       maxTokens: 256
       responseFormat:
-        path: "$.generated_text"
+        path: '$.generated_text'
 ```
 
 ## Rate Limiting with Delays
@@ -129,7 +129,7 @@ providers:
   - id: sagemaker:your-endpoint
     config:
       region: us-west-2
-      delay: 500  # Add a 500ms delay between API calls
+      delay: 500 # Add a 500ms delay between API calls
 ```
 
 ## Troubleshooting
