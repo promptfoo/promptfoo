@@ -1,0 +1,70 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenAI Realtime API multi-turn conversation demonstration
+prompts:
+  - file://realtime-conversation.js
+
+providers:
+  - id: openai:realtime:gpt-4o-realtime-preview-2024-12-17
+    config:
+      modalities: ['text']
+      instructions: 'You are a helpful assistant. Keep your responses concise and informative.'
+      temperature: 0.7
+      # Increase WebSocket timeout to handle potential slow connections
+      websocketTimeout: 60000 # 60 seconds
+
+# Set up the system message for all tests
+defaultTest:
+  vars:
+    system_message: You are a helpful, friendly AI assistant. Keep your responses conversational and engaging.
+
+# Test out conversations with multiple turns
+tests:
+  # First conversation about travel
+  - vars:
+      question: What are some popular tourist destinations in Japan?
+    metadata:
+      conversationId: japan_travel
+    assert:
+      - type: llm-rubric
+        value: Provides information about tourist destinations in Japan
+
+  - vars:
+      question: Which of those places is best to visit in autumn?
+    metadata:
+      conversationId: japan_travel
+    assert:
+      - type: llm-rubric
+        value: Recommends autumn destinations in Japan based on previous conversation
+
+  - vars:
+      question: What traditional foods should I try there?
+    metadata:
+      conversationId: japan_travel
+    assert:
+      - type: llm-rubric
+        value: Suggests traditional Japanese foods relevant to autumn destinations
+
+  # Second conversation about technology (runs independently)
+  - vars:
+      question: Can you explain how real-time AI systems work?
+    metadata:
+      conversationId: tech_thread
+    assert:
+      - type: llm-rubric
+        value: Explains real-time AI systems
+
+  - vars:
+      question: What are the advantages over traditional API calls?
+    metadata:
+      conversationId: tech_thread
+    assert:
+      - type: llm-rubric
+        value: Compares real-time APIs to traditional API calls
+
+  - vars:
+      question: How is WebSocket technology used in these systems?
+    metadata:
+      conversationId: tech_thread
+    assert:
+      - type: llm-rubric
+        value: Explains the role of WebSockets in real-time AI
