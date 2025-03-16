@@ -26,6 +26,180 @@ export OPENAI_API_KEY=your-api-key-here
 
 - `promptfooconfig.yaml`: Configuration file defining the providers and tests
 - `realtime-input.json`: JSON template for the realtime input prompt
+- `promptfooconfig-conversation.yaml`: Configuration for multi-turn conversation tests
+- `realtime-conversation.js`: JavaScript prompt function for multi-turn conversations
+- `realtime-conversation-input.json`: JSON template for multi-turn conversations (alternative approach)
+
+## Multi-Turn Conversations
+
+The Realtime API supports maintaining conversation history across multiple turns. This example includes a multi-turn conversation configuration that demonstrates how to:
+
+1. **Maintain Conversation Context**: Keep track of previous exchanges
+2. **Utilize Previous Responses**: Reference information from earlier in the conversation
+3. **Create Independent Conversation Threads**: Run multiple separate conversations in parallel
+
+To run the multi-turn conversation example:
+
+```bash
+npx promptfoo eval -c examples/openai-realtime/promptfooconfig-conversation.yaml
+```
+
+### How Multi-Turn Conversations Work
+
+The multi-turn conversation example demonstrates how the OpenAI Realtime API can maintain context across multiple exchanges. This is implemented using promptfoo's built-in support for conversation history through the `_conversation` variable and metadata.
+
+#### Key Components
+
+1. **Special Variable**: The `_conversation` variable contains all previous turns in the conversation
+2. **JavaScript Prompt Function**: The main approach uses a JavaScript function to properly format conversations
+3. **Conversation IDs**: Each test with the same `conversationId` metadata value is part of the same conversation thread
+
+When using `conversationId` in the metadata of tests, promptfoo automatically:
+- Groups tests with the same ID into a conversation thread
+- Makes previous exchanges available in each subsequent test
+- Builds a complete conversation history the model can use for context
+
+#### How Conversation State is Maintained
+
+For each conversation turn:
+
+1. The `_conversation` variable is automatically populated with all previous prompts and outputs
+2. Messages are properly formatted for the Realtime API WebSocket protocol
+3. The model responds with contextually relevant answers based on the conversation history
+
+### Example Conversation Flow
+
+```
+User: What are some popular tourist destinations in Japan?
+AI: Some popular tourist destinations in Japan include Tokyo, Kyoto, Osaka, Hiroshima, and Hokkaido...
+
+User: Which of those places is best to visit in autumn?
+AI: Kyoto is particularly beautiful in autumn with its colorful maple leaves... 
+
+User: What traditional foods should I try there?
+AI: In Kyoto during autumn, you should try momiji manju (maple leaf-shaped cakes), kyo-kaiseki (traditional multi-course meal)...
+```
+
+The API maintains context throughout this exchange, understanding that follow-up questions refer to Japan and then to the specific autumn locations.
+
+### JavaScript Prompt Function
+
+This example uses a JavaScript function (`realtime-conversation.js`) to properly format the conversation for the OpenAI Realtime API:
+
+```javascript
+module.exports = async function ({ vars, provider }) {
+  // Create the messages array starting with system message
+  const messages = [
+    {
+      role: "system",
+      content: [
+        {
+          type: "input_text",
+          text: vars.system_message || "You are a helpful AI assistant."
+        }
+      ]
+    }
+  ];
+
+  // Add previous conversation turns if they exist
+  if (vars._conversation && Array.isArray(vars._conversation)) {
+    for (const completion of vars._conversation) {
+      // Add user message
+      messages.push({
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: completion.input
+          }
+        ]
+      });
+
+      // Add assistant message
+      messages.push({
+        role: "assistant",
+        content: [
+          {
+            type: "text",
+            text: completion.output
+          }
+        ]
+      });
+    }
+  }
+
+  // Add the current question as the final user message
+  messages.push({
+    role: "user",
+    content: [
+      {
+        type: "input_text",
+        text: vars.question || ""
+      }
+    ]
+  });
+
+  return messages;
+};
+```
+
+This approach provides better flexibility and error handling than using JSON templates with Nunjucks.
+
+### Alternative: JSON Template with Nunjucks
+
+We also provide a JSON template approach for reference:
+
+```json
+[
+  {
+    "role": "system",
+    "content": [
+      {
+        "type": "input_text",
+        "text": "{{ system_message }}"
+      }
+    ]
+  }{% for completion in _conversation %},
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "input_text",
+        "text": "{{ completion.input }}"
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "{{ completion.output }}"
+      }
+    ]
+  }{% endfor %},
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "input_text",
+        "text": "{{ question }}"
+      }
+    ]
+  }
+]
+```
+
+> **Note**: JSON validators may show errors for this template because of the Nunjucks expressions, but promptfoo will correctly process this file at runtime. This approach uses the `_conversation` variable to maintain conversation history in a way that works with the Realtime API.
+
+### Conversation Threads
+
+The configuration includes two separate conversation threads:
+
+1. **Japan Travel Thread**: Questions about traveling in Japan, with follow-up questions
+2. **Technology Thread**: Questions about real-time AI technology
+
+Each thread maintains its own independent context while tests are evaluated.
 
 ## About the Realtime API Implementation
 
@@ -60,8 +234,7 @@ const ws = new WebSocket(wsUrl, {
 When sending messages to the OpenAI Realtime API, you must use the correct content type format:
 
 ```javascript
-// When sending user messages, use the 'text' content type
-// (NOT 'input_text' which might be suggested by some error messages)
+// When sending user or system messages, use the 'input_text' content type
 ws.send(
   JSON.stringify({
     type: 'conversation.item.create',
@@ -70,7 +243,7 @@ ws.send(
       role: 'user',
       content: [
         {
-          type: 'text', // Must be 'text', not 'input_text'
+          type: 'input_text', // Must be 'input_text' for user/system inputs
           text: 'Your message here',
         },
       ],
@@ -78,8 +251,7 @@ ws.send(
   }),
 );
 
-// When configuring modalities, use 'text' and 'audio'
-// (NOT 'input_text' or 'output_text')
+// When configuring modalities for response settings, use 'text' and 'audio'
 const config = {
   modalities: ['text', 'audio'],
 };

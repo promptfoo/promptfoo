@@ -3,7 +3,7 @@
     "role": "user",
     "content": [
       {
-        "type": "input_text",
+        "type": "text",
         "text": "{{question}}"
       }
     ]

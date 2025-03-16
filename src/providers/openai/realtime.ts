@@ -182,10 +182,21 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       ws.on('open', () => {
         logger.debug('WebSocket connection established successfully');
 
-        // With the client secret in the URL, we don't need to send auth separately
-        // Instead, send a ping to start the session
+        // Create a conversation item with the user's prompt - immediately after connection
+        // Don't send ping event as it's not supported
         sendEvent({
-          type: 'ping',
+          type: 'conversation.item.create',
+          previous_item_id: null,
+          item: {
+            type: 'message',
+            role: 'user',
+            content: [
+              {
+                type: 'input_text',
+                text: prompt,
+              },
+            ],
+          },
         });
       });
 
@@ -203,11 +214,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
           // Handle different event types
           switch (message.type) {
-            case 'ping':
-              // Just log the ping
-              logger.debug('Received ping from server');
-              break;
-
             case 'session.ready':
               logger.debug('Session ready on WebSocket');
 
@@ -270,11 +276,17 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             case 'response.text.delta':
               // Accumulate text deltas
               responseText += message.delta;
+              logger.debug(`Added text delta: "${message.delta}", current length: ${responseText.length}`);
               break;
 
             case 'response.text.done':
               // Final text content
-              responseText = message.text;
+              if (message.text && message.text.length > 0) {
+                logger.debug(`Setting final text content from response.text.done: "${message.text}" (length: ${message.text.length})`);
+                responseText = message.text;
+              } else {
+                logger.debug('Received empty text in response.text.done');
+              }
               break;
 
             // Handle content part events
@@ -296,14 +308,16 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             case 'response.audio_transcript.delta':
               // Accumulate audio transcript deltas - this is the text content
               responseText += message.delta;
-              logger.debug(`Added audio transcript delta: "${message.delta}"`);
+              logger.debug(`Added audio transcript delta: "${message.delta}", current length: ${responseText.length}`);
               break;
 
             case 'response.audio_transcript.done':
               // Final audio transcript content
-              if (message.text) {
+              if (message.text && message.text.length > 0) {
+                logger.debug(`Setting final audio transcript text: "${message.text}" (length: ${message.text.length})`);
                 responseText = message.text;
-                logger.debug(`Set final audio transcript text: "${responseText}"`);
+              } else {
+                logger.debug('Received empty text in response.audio_transcript.done');
               }
               break;
 
@@ -346,7 +360,9 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 // Handle text output item - also add to responseText
                 if (message.item.text) {
                   responseText += message.item.text;
-                  logger.debug(`Added text output item: "${message.item.text}"`);
+                  logger.debug(`Added text output item: "${message.item.text}", current length: ${responseText.length}`);
+                } else {
+                  logger.debug('Received text output item with empty text');
                 }
               } else {
                 // Log other output item types
@@ -417,6 +433,34 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
               // If no function calls or we've processed them all, close the connection
               clearTimeout(timeout);
+              
+              // Check if we have an empty response and try to diagnose the issue
+              if (responseText.length === 0) {
+                // Only log at debug level to prevent user-visible warnings
+                logger.debug('Empty response detected before resolving. Checking response message details');
+                logger.debug('Response message details: ' + JSON.stringify(message, null, 2));
+                
+                // Try to extract any text content from the message as a fallback
+                if (message.response && message.response.content && Array.isArray(message.response.content)) {
+                  const textContent = message.response.content.find((item: any) => 
+                    item.type === 'text' && item.text && item.text.length > 0
+                  );
+                  
+                  if (textContent) {
+                    logger.debug(`Found text in response content, using as fallback: "${textContent.text}"`);
+                    responseText = textContent.text;
+                  } else {
+                    logger.debug('No fallback text content found in response message');
+                  }
+                }
+                
+                // If still empty, add a placeholder message to indicate the issue
+                if (responseText.length === 0) {
+                  responseText = "[No response received from API]";
+                  logger.debug('Using placeholder message for empty response');
+                }
+              }
+              
               ws.close();
 
               // Prepare audio data if available
@@ -460,16 +504,16 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               responseError = `Error: ${message.error.message}`;
               logger.error(`WebSocket error: ${responseError} (${message.error.type})`);
 
-              // Don't close on non-fatal errors
-              if (message.error.type === 'fatal') {
-                clearTimeout(timeout);
-                ws.close();
-                reject(new Error(responseError));
-              }
+              // Always close on errors to prevent hanging connections
+              clearTimeout(timeout);
+              ws.close();
+              reject(new Error(responseError));
               break;
           }
         } catch (err) {
           logger.error(`Error parsing WebSocket message: ${err}`);
+          clearTimeout(timeout);
+          ws.close();
           reject(err);
         }
       });
@@ -532,28 +576,45 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     }
 
     try {
-      // Extract the actual prompt text from JSON if needed
+      // Extract the message content for WebSocket communications
+      // This approach is similar to parseChatPrompt but specialized for Realtime API
       let promptText = prompt;
+
       try {
         // Check if the prompt is a JSON string
         const parsedPrompt = JSON.parse(prompt);
 
-        // Handle array format from realtime-input.json
+        // Handle array format (OpenAI chat format)
         if (Array.isArray(parsedPrompt) && parsedPrompt.length > 0) {
-          // Find the first user message
-          const userMessage = parsedPrompt.find((item) => item.role === 'user');
-          if (userMessage && Array.isArray(userMessage.content)) {
-            // Find the first text content
-            const textContent = userMessage.content.find((content: any) => content.type === 'text');
-            if (textContent && textContent.text) {
-              promptText = textContent.text;
-              logger.debug(`Extracted text prompt from JSON structure: ${promptText}`);
+          // Find the last user message (following OpenAI's chat convention)
+          for (let i = parsedPrompt.length - 1; i >= 0; i--) {
+            const message = parsedPrompt[i];
+            if (message.role === 'user') {
+              // Handle both simple content string and array of content objects
+              if (typeof message.content === 'string') {
+                promptText = message.content;
+                break;
+              } else if (Array.isArray(message.content) && message.content.length > 0) {
+                // Find the first text content - check for both 'text' and 'input_text' for backward compatibility
+                const textContent = message.content.find(
+                  (content: any) =>
+                    (content.type === 'text' || content.type === 'input_text') &&
+                    typeof content.text === 'string',
+                );
+                if (textContent) {
+                  promptText = textContent.text;
+                  break;
+                }
+              }
             }
           }
+        } else if (parsedPrompt && typeof parsedPrompt === 'object' && parsedPrompt.prompt) {
+          // Handle {prompt: "..."} format that some templates might use
+          promptText = parsedPrompt.prompt;
         }
       } catch {
         // Not JSON or couldn't extract - use as is
-        logger.debug("Using prompt as is - not a JSON structure or couldn't extract text content");
+        logger.debug('Using prompt as is - not a JSON structure');
       }
 
       // Connect directly to the WebSocket API using API key
@@ -564,12 +625,16 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       let finalOutput = result.output;
 
       // Log the output we received for debugging
-      logger.debug(`Final output from API: "${finalOutput}"`);
+      logger.debug(`Final output from API: "${finalOutput}" (length: ${finalOutput.length})`);
 
       if (finalOutput.length === 0) {
-        logger.warn(
-          'Received empty response from Realtime API - possible issue with transcript accumulation',
+        // Log at debug level instead of warn to prevent user-visible warnings
+        logger.debug(
+          'Received empty response from Realtime API - possible issue with transcript accumulation. Check modalities configuration.',
         );
+        
+        // Set a fallback message to help users, but keep it shorter
+        finalOutput = "[No response received from API]";
       }
 
       if (
@@ -767,11 +832,17 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             case 'response.text.delta':
               // Accumulate text deltas
               responseText += message.delta;
+              logger.debug(`Added text delta: "${message.delta}", current length: ${responseText.length}`);
               break;
 
             case 'response.text.done':
               // Final text content
-              responseText = message.text;
+              if (message.text && message.text.length > 0) {
+                logger.debug(`Setting final text content from response.text.done: "${message.text}" (length: ${message.text.length})`);
+                responseText = message.text;
+              } else {
+                logger.debug('Received empty text in response.text.done');
+              }
               break;
 
             // Handle content part events
@@ -793,14 +864,16 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             case 'response.audio_transcript.delta':
               // Accumulate audio transcript deltas - this is the text content
               responseText += message.delta;
-              logger.debug(`Added audio transcript delta: "${message.delta}"`);
+              logger.debug(`Added audio transcript delta: "${message.delta}", current length: ${responseText.length}`);
               break;
 
             case 'response.audio_transcript.done':
               // Final audio transcript content
-              if (message.text) {
+              if (message.text && message.text.length > 0) {
+                logger.debug(`Setting final audio transcript text: "${message.text}" (length: ${message.text.length})`);
                 responseText = message.text;
-                logger.debug(`Set final audio transcript text: "${responseText}"`);
+              } else {
+                logger.debug('Received empty text in response.audio_transcript.done');
               }
               break;
 
@@ -843,7 +916,9 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 // Handle text output item - also add to responseText
                 if (message.item.text) {
                   responseText += message.item.text;
-                  logger.debug(`Added text output item: "${message.item.text}"`);
+                  logger.debug(`Added text output item: "${message.item.text}", current length: ${responseText.length}`);
+                } else {
+                  logger.debug('Received text output item with empty text');
                 }
               } else {
                 // Log other output item types
@@ -914,6 +989,34 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
               // If no function calls or we've processed them all, close the connection
               clearTimeout(timeout);
+              
+              // Check if we have an empty response and try to diagnose the issue
+              if (responseText.length === 0) {
+                // Only log at debug level to prevent user-visible warnings
+                logger.debug('Empty response detected before resolving. Checking response message details');
+                logger.debug('Response message details: ' + JSON.stringify(message, null, 2));
+                
+                // Try to extract any text content from the message as a fallback
+                if (message.response && message.response.content && Array.isArray(message.response.content)) {
+                  const textContent = message.response.content.find((item: any) => 
+                    item.type === 'text' && item.text && item.text.length > 0
+                  );
+                  
+                  if (textContent) {
+                    logger.debug(`Found text in response content, using as fallback: "${textContent.text}"`);
+                    responseText = textContent.text;
+                  } else {
+                    logger.debug('No fallback text content found in response message');
+                  }
+                }
+                
+                // If still empty, add a placeholder message to indicate the issue
+                if (responseText.length === 0) {
+                  responseText = "[No response received from API]";
+                  logger.debug('Using placeholder message for empty response');
+                }
+              }
+              
               ws.close();
 
               // Prepare audio data if available
@@ -957,16 +1060,16 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               responseError = `Error: ${message.error.message}`;
               logger.error(`WebSocket error: ${responseError} (${message.error.type})`);
 
-              // Don't close on non-fatal errors
-              if (message.error.type === 'fatal') {
-                clearTimeout(timeout);
-                ws.close();
-                reject(new Error(responseError));
-              }
+              // Always close on errors to prevent hanging connections
+              clearTimeout(timeout);
+              ws.close();
+              reject(new Error(responseError));
               break;
           }
         } catch (err) {
           logger.error(`Error parsing WebSocket message: ${err}`);
+          clearTimeout(timeout);
+          ws.close();
           reject(err);
         }
       });

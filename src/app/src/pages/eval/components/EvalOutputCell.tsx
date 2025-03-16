@@ -210,89 +210,47 @@ function EvalOutputCell({
         onClick={() => toggleLightbox(text)}
       />
     );
-  } else {
-    // Prepare separate nodes for audio and text content
-    const audioNode = output.audio ? (
+  } else if (output.audio) {
+    node = (
       <div className="audio-output">
         <audio controls style={{ width: '100%' }} data-testid="audio-player">
           <source
-            src={`data:audio/${output.audio.format || 'wav'};base64,${
-              // Ensure audio data is properly formatted as a string
-              typeof output.audio.data === 'string'
-                ? output.audio.data
-                : JSON.stringify(output.audio.data)
-            }`}
+            src={`data:audio/${output.audio.format || 'wav'};base64,${output.audio.data}`}
             type={`audio/${output.audio.format || 'wav'}`}
           />
           Your browser does not support the audio element.
         </audio>
+        {output.audio.transcript && (
+          <div className="transcript">
+            <strong>Transcript:</strong> {output.audio.transcript}
+          </div>
+        )}
       </div>
-    ) : null;
-
-    // Always render text content, unless it's exactly the same as the audio transcript
-    let textNode = null;
-
-    // Determine what text to display
-    let displayText = text;
-    if (output.audio?.transcript) {
-      // If transcript exists and is identical to text, just use one
-      if (output.audio.transcript === text) {
-        displayText = output.audio.transcript;
-      } else {
-        // If they're different, display both
-        displayText = output.audio.transcript + '\n\n' + text;
-      }
-    }
-
-    if (displayText) {
-      if (renderMarkdown && !showDiffs) {
-        textNode = (
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            components={{
-              img: ({ src, alt }) => (
-                <img
-                  loading="lazy"
-                  src={src}
-                  alt={alt}
-                  onClick={() => toggleLightbox(src)}
-                  style={{ cursor: 'pointer' }}
-                />
-              ),
-            }}
-          >
-            {displayText}
-          </ReactMarkdown>
-        );
-      } else if (prettifyJson) {
-        try {
-          textNode = <pre>{JSON.stringify(JSON.parse(displayText), null, 2)}</pre>;
-        } catch {
-          // Ignore because it's probably not JSON.
-          textNode = <div className="text-content">{displayText}</div>;
-        }
-      } else {
-        textNode = <div className="text-content">{displayText}</div>;
-      }
-    }
-
-    // Combine audio and text nodes
-    if (audioNode && textNode) {
-      node = (
-        <div
-          className="combined-output"
-          style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
-        >
-          <div className="audio-container" style={{ marginBottom: '8px' }}>
-            {audioNode}
-          </div>
-          <div className="text-output" style={{ paddingTop: '12px' }}>
-            {textNode}
-          </div>
-        </div>
-      );
-    } else {
-      node = audioNode || textNode;
+    );
+  } else if (renderMarkdown && !showDiffs) {
+    node = (
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          img: ({ src, alt }) => (
+            <img
+              loading="lazy"
+              src={src}
+              alt={alt}
+              onClick={() => toggleLightbox(src)}
+              style={{ cursor: 'pointer' }}
+            />
+          ),
+        }}
+      >
+        {text}
+      </ReactMarkdown>
+    );
+  } else if (prettifyJson) {
+    try {
+      node = <pre>{JSON.stringify(JSON.parse(text), null, 2)}</pre>;
+    } catch {
+      // Ignore because it's probably not JSON.
     }
   }
 
@@ -466,7 +424,6 @@ function EvalOutputCell({
             gradingResults={output.gradingResult?.componentResults}
             output={text}
             metadata={output.metadata}
-            audio={output.audio}
           />
         </>
       )}

@@ -160,12 +160,6 @@ interface EvalOutputPromptDialogProps {
   output?: string;
   gradingResults?: GradingResult[];
   metadata?: Record<string, any>;
-  audio?: {
-    data?: string | any;
-    format?: string;
-    id?: string;
-    expiresAt?: number;
-  };
 }
 
 export default function EvalOutputPromptDialog({
@@ -176,7 +170,6 @@ export default function EvalOutputPromptDialog({
   output,
   gradingResults,
   metadata,
-  audio,
 }: EvalOutputPromptDialogProps) {
   const [copied, setCopied] = useState(false);
   const [copiedFields, setCopiedFields] = useState<{ [key: string]: boolean }>({});
@@ -319,40 +312,6 @@ export default function EvalOutputPromptDialog({
                   {copiedFields['output'] ? <CheckIcon /> : <ContentCopyIcon />}
                 </IconButton>
               )}
-            </div>
-          </Box>
-        )}
-        {audio && (
-          <Box my={2}>
-            <Typography variant="subtitle1" style={{ marginBottom: '1rem', marginTop: '1rem' }}>
-              Audio
-            </Typography>
-            <div className="audio-output">
-              <audio controls style={{ width: '100%' }} data-testid="audio-player">
-                <source
-                  src={`data:audio/${audio.format || 'wav'};base64,${
-                    typeof audio.data === 'string' ? audio.data : JSON.stringify(audio.data)
-                  }`}
-                  type={`audio/${audio.format || 'wav'}`}
-                />
-                Your browser does not support the audio element.
-              </audio>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'flex-end',
-                  marginTop: '4px',
-                  fontSize: '0.8em',
-                  color: '#777',
-                }}
-              >
-                Format: {audio.format || 'wav'}
-                {typeof audio.data === 'string' && (
-                  <span style={{ marginLeft: '12px' }}>
-                    Size: {Math.round(audio.data.length / 1.37 / 1024)} KB
-                  </span>
-                )}
-              </div>
             </div>
           </Box>
         )}
