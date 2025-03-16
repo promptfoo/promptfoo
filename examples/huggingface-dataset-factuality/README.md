@@ -4,11 +4,12 @@ This example demonstrates how to evaluate model factuality using the TruthfulQA 
 
 ## Environment Variables
 
-This example requires the following environment variables:
+This example requires the following environment variables based on which providers you enable:
 
-- `OPENAI_API_KEY` - Your OpenAI API key (if using OpenAI models)
-- `ANTHROPIC_API_KEY` - Your Anthropic API key (if using Claude models)
-- `GOOGLE_API_KEY` - Your Google AI API key (if using Gemini models)
+- `ANTHROPIC_API_KEY` - Your Anthropic API key (for Claude models)
+- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` - Your AWS credentials (for Bedrock models)
+- `OPENAI_API_KEY` - Your OpenAI API key (for OpenAI models)
+- `GOOGLE_API_KEY` - Your Google AI API key (for Gemini models)
 
 You can set these in a `.env` file or directly in your environment.
 
@@ -27,8 +28,9 @@ npx promptfoo@latest init --example huggingface-dataset-factuality
 After initialization, you can customize the `promptfooconfig.yaml` file to adjust:
 
 - The prompt used to answer TruthfulQA questions
-- The models/providers you want to evaluate
-- The evaluation settings like grading model and factuality thresholds
+- The models/providers you want to evaluate (uncomment additional providers)
+- The grading model for factuality eval
+- The factuality scoring weights for different categories
 
 Then run:
 
@@ -49,9 +51,10 @@ This example uses:
 1. A TypeScript script (`dataset_loader.ts`) that fetches the TruthfulQA dataset directly from the HuggingFace Datasets API
 2. The native Node.js `fetch` API to retrieve the dataset without additional dependencies
 3. Built-in factuality assertions in each test case that compare model outputs to the correct answers
-4. Multiple LLM providers to compare their factual accuracy
+4. A local caching mechanism to avoid repeated API calls to HuggingFace
+5. Multiple LLM providers can be enabled for comparison (Claude is enabled by default)
 
-The TypeScript dataset approach gives you more flexibility to preprocess, filter, or transform the data before evaluation, plus it avoids the need for additional Python dependencies.
+The TypeScript dataset approach gives you more flexibility to preprocess, filter, or transform the data before eval, plus it avoids the need for additional Python dependencies.
 
 ### Dataset Structure
 
@@ -77,14 +80,6 @@ Example data:
   "label": 3 // Indicates that choices[3] is the correct answer
 }
 ```
-
-The `dataset_loader.ts` file:
-
-- Fetches data directly from the HuggingFace Datasets API endpoint
-- Extracts questions and identifies the correct answers
-- Creates test cases with built-in factuality assertions
-- Returns an array of test cases ready for evaluation
-- Limits the dataset to 100 questions by default (configurable)
 
 ### Generated Test Cases
 
@@ -121,12 +116,22 @@ https://datasets-server.huggingface.co/rows?dataset=EleutherAI%2Ftruthful_qa_mc&
 
 ## Expected Results
 
-After running the evaluation, you'll see a report showing:
+After running the eval, you'll see a report showing:
 
 - Overall factuality scores per model
 - Breakdowns of performance across different categories of questions
 - Instances where models gave incorrect information
 - Detailed analysis of factual alignment and errors
+
+The factuality eval categorizes responses into five categories:
+
+- (A) Output is a subset of the reference and is fully consistent
+- (B) Output is a superset of the reference and is fully consistent
+- (C) Output contains all the same details as the reference
+- (D) Output and reference disagree
+- (E) Output and reference differ, but differences don't matter for factuality
+
+You can customize the scoring weights for each category in the `promptfooconfig.yaml` file.
 
 ## See Also
 
