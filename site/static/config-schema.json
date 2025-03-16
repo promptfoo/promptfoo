@@ -1095,6 +1095,7 @@
                           "sql-injection",
                           "ssrf",
                           "system-prompt-override",
+                          "tool-discovery",
                           "toxicity"
                         ]
                       },
@@ -1233,6 +1234,7 @@
                               "sql-injection",
                               "ssrf",
                               "system-prompt-override",
+                              "tool-discovery",
                               "toxicity"
                             ]
                           },
