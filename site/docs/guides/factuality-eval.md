@@ -6,6 +6,47 @@ description: How to evaluate the factual accuracy of LLM outputs against referen
 
 # Evaluating factuality
 
+## What is factuality and why is it important?
+
+Factuality is the measure of how accurately an LLM's response aligns with established facts or reference information. As LLMs become increasingly integrated into critical applications, ensuring they provide factually accurate information is essential for:
+
+- **Building trust**: Users need confidence that AI responses are reliable and truthful
+- **Reducing misinformation**: Factually incorrect AI outputs can spread misinformation at scale
+- **Supporting critical use cases**: Applications in healthcare, finance, education, and legal domains require high factual accuracy
+- **Improving model selection**: Comparing factuality across models helps choose the right model for your application
+- **Identifying hallucinations**: Factuality evaluation helps detect when models "make up" information
+
+promptfoo's factuality evaluation enables you to systematically measure how well your model outputs align with reference facts, helping you identify and address issues before they reach users.
+
+## Quick Start: Try it today
+
+The fastest way to get started with factuality evaluation is to use our pre-built TruthfulQA example:
+
+```bash
+# Initialize the example
+npx promptfoo@latest init --example huggingface-dataset-factuality
+
+# Run the evaluation
+cd huggingface-dataset-factuality
+npx promptfoo eval
+npx promptfoo view
+```
+
+This example:
+
+- Fetches the TruthfulQA dataset (designed to test model truthfulness)
+- Creates test cases with built-in factuality assertions
+- Compares model outputs against reference answers
+- Provides detailed factuality scores and analysis
+
+You can easily customize it by:
+
+- Uncommenting additional providers in `promptfooconfig.yaml` to test more models
+- Adjusting the prompt template to change how questions are asked
+- Modifying the factuality scoring weights to match your requirements
+
+## How factuality evaluation works
+
 promptfoo implements a structured factuality evaluation methodology based on [OpenAI's evals](https://github.com/openai/evals/blob/main/evals/registry/modelgraded/fact.yaml), using the [`factuality`](/docs/configuration/expected-outputs#model-assisted-eval-metrics) assertion type.
 
 The model-graded factuality check takes the following three inputs:
@@ -14,140 +55,137 @@ The model-graded factuality check takes the following three inputs:
 - **Output**: text produced by the LLM
 - **Reference**: the ideal LLM output, provided by the author of the eval
 
-## Usage
+The evaluation classifies the relationship between the LLM output and the reference into one of five categories:
 
-In this example, we ensure that two prompts correctly output the capital of California. The `value` provided in the assertion is the ideal answer:
+- **A**: Output is a subset of the reference and is fully consistent with it
+- **B**: Output is a superset of the reference and is fully consistent with it
+- **C**: Output contains all the same details as the reference
+- **D**: Output and reference disagree
+- **E**: Output and reference differ, but differences don't affect factuality
+
+By default, categories A, B, C, and E are considered passing (with customizable scores), while category D (disagreement) is considered failing.
+
+## Creating a basic factuality evaluation
+
+To set up a simple factuality evaluation for your LLM outputs:
+
+1. **Create a configuration file** with a factuality assertion:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
   - openai:gpt-4o-mini
 prompts:
-  - file://prompts/name_capitals_concise.txt
-  - file://prompts/name_capitals_verbose.txt
+  - |
+    Please answer the following question accurately:
+    Question: What is the capital of {{location}}?
 tests:
   - vars:
       location: California
     assert:
-      # Ensure that the answer agrees with the provided facts
       - type: factuality
         value: The capital of California is Sacramento
 ```
 
-In this example, we compare the factuality abilities of multiple modern models, while keeping the prompt constant:
+2. **Run your evaluation**:
+
+```bash
+npx promptfoo eval
+npx promptfoo view
+```
+
+This will produce a report showing how factually accurate your model's responses are compared to the reference answers.
+
+## Comparing Multiple Models
+
+Factuality evaluation is especially useful for comparing how different models perform on the same facts:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
   - openai:gpt-4o-mini
   - openai:gpt-4o
   - anthropic:claude-3-7-sonnet-20250219
-  - ollama:llama3.1:70b
   - google:gemini-1.5-pro-latest
-  - meta-llama/meta-llama-3.1-70b
 prompts:
-  - file://prompts/name_capitals_concise.txt
+  - |
+    Question: What is the capital of {{location}}?
+    Please answer accurately.
 tests:
   - vars:
       location: California
     assert:
-      # Ensure that the answer agrees with the provided facts
       - type: factuality
         value: The capital of California is Sacramento
-```
-
-## Running factuality evaluation on external datasets
-
-You can run factuality evaluations over external datasets, which is useful for comprehensive benchmarking of model performance:
-
-```yaml title="promptfooconfig.yaml"
-providers:
-  - openai:gpt-4o
-  - anthropic:claude-3-7-sonnet-20250219
-prompts:
-  - file://prompts/answer_question.txt
-tests:
-  - file: test-dataset.jsonl # External dataset with questions and reference answers
+  - vars:
+      location: New York
     assert:
       - type: factuality
+        value: Albany is the capital of New York
 ```
 
-Each entry in your dataset should include the input variables for the prompt and a reference answer to compare against.
+## Evaluating On External Datasets
 
-## Scoring and failure cases
+For comprehensive evaluation, you can run factuality tests against external datasets like TruthfulQA, which we covered in the Quick Start section.
 
-Scoring can be customized in the grading configuration to match your preferred level of factual agreement.
+### Creating Your Own Dataset Integration
 
-The underlying evaluation classifies the LLM output into one of five categories:
+You can integrate any dataset by:
 
-- **A**: The submitted answer is a subset of the expert answer and is fully consistent with it.
-- **B**: The submitted answer is a superset of the expert answer and is fully consistent with it.
-- **C**: The submitted answer contains all the same details as the expert answer.
-- **D**: There is a disagreement between the submitted answer and the expert answer.
-- **E**: The answers differ, but these differences don't matter from the perspective of factuality.
+1. **Create a dataset loader**: Use JavaScript/TypeScript to fetch and format your dataset
+2. **Add factuality assertions**: Include a factuality assertion in each test case
+3. **Reference in your config**:
 
-The evaluation returns a score and a pass/fail status. The score is determined based on the category into which the LLM output falls. By default, categories A, B, C, and E result in a score of 1 (pass), and category D results in a score of 0 (fail).
+```yaml
+tests: file://your_dataset_loader.ts:generate_tests
+```
+
+## Customizing the Evaluation
+
+### Selecting the Grading Provider
+
+By default, promptfoo selects an appropriate model for grading. To specify a particular grading model:
+
+```yaml
+defaultTest:
+  options:
+    # Set the provider for grading factuality
+    provider: openai:gpt-4o
+```
+
+You can also override it per assertion:
 
 ```yaml
 assert:
-  # Ensure the answer agrees with the provided facts
   - type: factuality
     value: The capital of California is Sacramento
-    options:
-      factuality:
-        subset: 0.8 # Score for category A (default: 1)
-        superset: 0 # Score for category B (default: 1)
-        agree: 1 # Score for category C (default: 1)
-        disagree: 0 # Score for category D (default: 0)
-        differButFactual: 0 # Score for category E (default: 1)
+    provider: anthropic:claude-3-7-sonnet-20250219
 ```
 
-The above configuration marks the eval as failed if the LLM output is a superset of the ideal answer, or if it differs from the ideal answer even if it is still factual. It sets a preference for an exact agreement, but a partial answer still gets a score of 0.8.
+Or via the command line:
 
-## Response formats
+```bash
+promptfoo eval --grader openai:gpt-4o
+```
 
-The factuality checker supports two response formats:
+### Customizing Scoring Weights
 
-1. **JSON format** (primary and recommended):
+Tailor the factuality scoring to your specific requirements:
 
-   ```json
-   {
-     "category": "A",
-     "reason": "The submitted answer is a subset of the expert answer and is fully consistent with it."
-   }
-   ```
+```yaml
+defaultTest:
+  options:
+    factuality:
+      subset: 1.0 # Category A: Output is a subset of reference
+      superset: 0.8 # Category B: Output is a superset of reference
+      agree: 1.0 # Category C: Output contains all the same details
+      disagree: 0.0 # Category D: Output and reference disagree
+      differButFactual: 0.7 # Category E: Differences don't affect factuality
+```
 
-2. **Legacy format** (fallback):
-   ```
-   (A) The submitted answer is a subset of the expert answer and is fully consistent with it.
-   ```
+A score of 0 means fail, while any positive score is considered passing. The actual score value can be used for ranking or reporting.
 
-The system will attempt to parse JSON first, and fall back to pattern matching if JSON parsing fails. This ensures compatibility with both newer and older models.
+### Customizing the Evaluation Prompt
 
-## Model grading
-
-In general, grading should be done by a model that is proficient in reasoning. By default, promptfoo uses a capable model to run model-graded evals.
-
-However, you can use any model you want to grade the evals. Here are some options that work well for factuality evaluation:
-
-- OpenAI: GPT-4o, GPT-4o-mini
-- Anthropic: Claude 3.7 Sonnet, Claude 3.5 Sonnet
-- Google: Gemini 1.5 Pro, Gemini 2.0
-- Meta: Llama 3, Llama 3.1
-- Open-source: Mixtral, Llama 3 (via Ollama)
-
-To use a specific model for grading, see [overriding the LLM grader](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader).
-
-## Customizing the prompt
-
-You can customize the evaluation prompt using the `rubricPrompt` property. The following template variables are available:
-
-- `{{input}}`: The original prompt/question
-- `{{ideal}}`: The reference answer (from the `value` field)
-- `{{completion}}`: The LLM's actual response
-
-Your custom prompt should instruct the model to either:
-
-1. Return a single letter (A, B, C, D, or E) corresponding to the category, or
-2. Return a JSON object with `category` and `reason` fields
+For complete control over how factuality is evaluated, customize the prompt:
 
 ```yaml
 defaultTest:
@@ -170,8 +208,43 @@ defaultTest:
       Respond with JSON: {"category": "LETTER", "reason": "explanation"}
 ```
 
+Available template variables:
+
+- `{{input}}`: The original prompt/question
+- `{{ideal}}`: The reference answer (from the `value` field)
+- `{{completion}}`: The LLM's actual response
+
+## Response Formats
+
+The factuality checker supports two response formats:
+
+1. **JSON format** (primary and recommended):
+
+   ```json
+   {
+     "category": "A",
+     "reason": "The submitted answer is a subset of the expert answer and is fully consistent with it."
+   }
+   ```
+
+2. **Legacy format** (fallback):
+   ```
+   (A) The submitted answer is a subset of the expert answer and is fully consistent with it.
+   ```
+
+## Best Practices
+
+When setting up factuality evaluations:
+
+1. **Choose reference answers carefully**: They should be accurate, clear, and comprehensive
+2. **Consider multiple providers**: Different models may excel at different types of factual knowledge
+3. **Customize scoring weights**: Adjust based on your application's tolerance for different types of factual issues
+4. **Use a strong grader**: More capable models generally provide more reliable factuality assessments
+5. **Test with known examples**: Validate your setup with questions where you know the correct answers
+
 ## See Also
 
 - [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more evaluation options
 - [Factuality assertion reference](/docs/configuration/expected-outputs/model-graded/factuality)
 - [API reference](/docs/reference/api) for programmatic usage
+- [TruthfulQA example on GitHub](https://github.com/promptfoo/promptfoo/tree/main/examples/huggingface-dataset-factuality) - Complete code for the TruthfulQA factuality evaluation example
