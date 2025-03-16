@@ -801,6 +801,15 @@ For a complete working example that demonstrates the Realtime API capabilities, 
 npx promptfoo@latest init --example openai-realtime
 ```
 
+This example includes:
+
+- Basic single-turn interactions with the Realtime API
+- Multi-turn conversations with persistent context
+- Conversation threading with separate conversation IDs
+- JavaScript prompt function for properly formatting messages
+- Function calling with the Realtime API
+- Detailed documentation on handling content types correctly
+
 ### Input and Message Format
 
 When using the Realtime API with promptfoo, you can specify the prompt in JSON format:
@@ -820,6 +829,12 @@ When using the Realtime API with promptfoo, you can specify the prompt in JSON f
 ```
 
 The Realtime API supports the same multimedia formats as the Chat API, allowing you to include images and audio in your prompts.
+
+### Multi-Turn Conversations
+
+The Realtime API supports multi-turn conversations with persistent context. For implementation details and examples, see the [OpenAI Realtime example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-realtime), which demonstrates both single-turn interactions and conversation threading using the `conversationId` metadata property.
+
+> **Important**: When implementing multi-turn conversations, use `type: "input_text"` for user inputs and `type: "text"` for assistant responses.
 
 ## Troubleshooting
 
