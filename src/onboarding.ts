@@ -452,22 +452,19 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       },
       {
         name: '[AWS Bedrock] Claude, Llama, Titan, ...',
-        value: [
-          'bedrock:anthropic.claude-3-haiku-20240307-v1:0',
-          'bedrock:anthropic.claude-3-opus-20240307-v1:0',
-        ],
+        value: ['bedrock:us.anthropic.claude-3-7-sonnet-20250219-v1:0'],
       },
       {
         name: '[Cohere] Command R, Command R+, ...',
         value: ['cohere:command-r', 'cohere:command-r-plus'],
       },
-      { name: '[Google] Gemini 1.5 Pro, ...', value: ['vertex:gemini-1.5-pro'] },
+      { name: '[Google] Gemini, ...', value: ['vertex:gemini-2.0-flash-001'] },
       {
-        name: '[Ollama] Llama 3, Mixtral, ...',
-        value: ['ollama:chat:llama3', 'ollama:chat:mixtral:8x22b'],
+        name: '[Ollama] Llama, Qwen, Phi, ...',
+        value: ['ollama:chat:llama3.3', 'ollama:chat:phi4'],
       },
       {
-        name: '[WatsonX] Llama 3.2, IBM Granite, ...',
+        name: '[WatsonX] Llama, IBM Granite, ...',
         value: [
           'watsonx:meta-llama/llama-3-2-11b-vision-instruct',
           'watsonx:ibm/granite-13b-chat-v2',

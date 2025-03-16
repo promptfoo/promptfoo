@@ -74,7 +74,7 @@ prompts:
 providers:
   # Use the echo provider only to see rendered prompts without LLM calls
   # - echo
-  - id: anthropic:messages:claude-3-7-sonnet-20250219
+  - id: anthropic:claude-3-7-sonnet-20250219
     label: Claude 3.7 Sonnet
   - id: openai:gpt-4o-mini
     label: GPT-4o Mini

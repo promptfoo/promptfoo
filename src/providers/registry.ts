@@ -1,3 +1,4 @@
+import dedent from 'dedent';
 import path from 'path';
 import { importModule } from '../esm';
 import logger from '../logger';
@@ -13,7 +14,9 @@ import type { ApiProvider, ProviderOptions } from '../types/providers';
 import { isJavascriptFile } from '../util/file';
 import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
-import { AnthropicCompletionProvider, AnthropicMessagesProvider } from './anthropic';
+import { AnthropicCompletionProvider } from './anthropic/completion';
+import { AnthropicMessagesProvider } from './anthropic/messages';
+import { ANTHROPIC_MODELS } from './anthropic/util';
 import {
   AzureAssistantProvider,
   AzureChatCompletionProvider,
@@ -58,6 +61,7 @@ import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 import { OpenAiImageProvider } from './openai/image';
 import { OpenAiModerationProvider } from './openai/moderation';
+import { OpenAiRealtimeProvider } from './openai/realtime';
 import { parsePackageProvider } from './packageParser';
 import { PortkeyChatCompletionProvider } from './portkey';
 import { PythonProvider } from './pythonCompletion';
@@ -164,8 +168,19 @@ export const providerMap: ProviderFactory[] = [
       if (AnthropicCompletionProvider.ANTHROPIC_COMPLETION_MODELS.includes(modelType)) {
         return new AnthropicCompletionProvider(modelType, providerOptions);
       }
+
+      // Check if the second part is a valid Anthropic model name
+      // If it is, assume it's a messages model
+      const modelIds = ANTHROPIC_MODELS.map((model) => model.id);
+      if (modelIds.includes(modelType)) {
+        return new AnthropicMessagesProvider(modelType, providerOptions);
+      }
+
       throw new Error(
-        `Unknown Anthropic model type: ${modelType}. Use one of the following providers: anthropic:messages:<model name>, anthropic:completion:<model name>`,
+        dedent`Unknown Anthropic model type or model name: ${modelType}. Use one of the following formats: 
+        - anthropic:messages:<model name> - For Messages API
+        - anthropic:completion:<model name> - For Completion API
+        - anthropic:<model name> - Shorthand for Messages API with a known model name`,
       );
     },
   },
@@ -594,11 +609,20 @@ export const providerMap: ProviderFactory[] = [
       if (modelType === 'moderation') {
         return new OpenAiModerationProvider(modelName || 'omni-moderation-latest', providerOptions);
       }
+      if (modelType === 'realtime') {
+        return new OpenAiRealtimeProvider(
+          modelName || 'gpt-4o-realtime-preview-2024-12-17',
+          providerOptions,
+        );
+      }
       if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
         return new OpenAiChatCompletionProvider(modelType, providerOptions);
       }
       if (OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelType)) {
         return new OpenAiCompletionProvider(modelType, providerOptions);
+      }
+      if (OpenAiRealtimeProvider.OPENAI_REALTIME_MODEL_NAMES.includes(modelType)) {
+        return new OpenAiRealtimeProvider(modelType, providerOptions);
       }
       if (modelType === 'assistant') {
         return new OpenAiAssistantProvider(modelName, providerOptions);
@@ -608,7 +632,7 @@ export const providerMap: ProviderFactory[] = [
       }
       // Assume user did not provide model type, and it's a chat model
       logger.warn(
-        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>`,
+        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:realtime:<model name>`,
       );
       return new OpenAiChatCompletionProvider(modelType, providerOptions);
     },
