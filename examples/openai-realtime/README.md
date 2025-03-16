@@ -55,6 +55,7 @@ The multi-turn conversation example demonstrates how the OpenAI Realtime API can
 3. **Conversation IDs**: Each test with the same `conversationId` metadata value is part of the same conversation thread
 
 When using `conversationId` in the metadata of tests, promptfoo automatically:
+
 - Groups tests with the same ID into a conversation thread
 - Makes previous exchanges available in each subsequent test
 - Builds a complete conversation history the model can use for context
@@ -74,7 +75,7 @@ User: What are some popular tourist destinations in Japan?
 AI: Some popular tourist destinations in Japan include Tokyo, Kyoto, Osaka, Hiroshima, and Hokkaido...
 
 User: Which of those places is best to visit in autumn?
-AI: Kyoto is particularly beautiful in autumn with its colorful maple leaves... 
+AI: Kyoto is particularly beautiful in autumn with its colorful maple leaves...
 
 User: What traditional foods should I try there?
 AI: In Kyoto during autumn, you should try momiji manju (maple leaf-shaped cakes), kyo-kaiseki (traditional multi-course meal)...
@@ -91,14 +92,14 @@ module.exports = async function ({ vars, provider }) {
   // Create the messages array starting with system message
   const messages = [
     {
-      role: "system",
+      role: 'system',
       content: [
         {
-          type: "input_text",
-          text: vars.system_message || "You are a helpful AI assistant."
-        }
-      ]
-    }
+          type: 'input_text',
+          text: vars.system_message || 'You are a helpful AI assistant.',
+        },
+      ],
+    },
   ];
 
   // Add previous conversation turns if they exist
@@ -106,37 +107,37 @@ module.exports = async function ({ vars, provider }) {
     for (const completion of vars._conversation) {
       // Add user message
       messages.push({
-        role: "user",
+        role: 'user',
         content: [
           {
-            type: "input_text",
-            text: completion.input
-          }
-        ]
+            type: 'input_text',
+            text: completion.input,
+          },
+        ],
       });
 
       // Add assistant message
       messages.push({
-        role: "assistant",
+        role: 'assistant',
         content: [
           {
-            type: "text",
-            text: completion.output
-          }
-        ]
+            type: 'text',
+            text: completion.output,
+          },
+        ],
       });
     }
   }
 
   // Add the current question as the final user message
   messages.push({
-    role: "user",
+    role: 'user',
     content: [
       {
-        type: "input_text",
-        text: vars.question || ""
-      }
-    ]
+        type: 'input_text',
+        text: vars.question || '',
+      },
+    ],
   });
 
   return messages;

@@ -276,13 +276,17 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             case 'response.text.delta':
               // Accumulate text deltas
               responseText += message.delta;
-              logger.debug(`Added text delta: "${message.delta}", current length: ${responseText.length}`);
+              logger.debug(
+                `Added text delta: "${message.delta}", current length: ${responseText.length}`,
+              );
               break;
 
             case 'response.text.done':
               // Final text content
               if (message.text && message.text.length > 0) {
-                logger.debug(`Setting final text content from response.text.done: "${message.text}" (length: ${message.text.length})`);
+                logger.debug(
+                  `Setting final text content from response.text.done: "${message.text}" (length: ${message.text.length})`,
+                );
                 responseText = message.text;
               } else {
                 logger.debug('Received empty text in response.text.done');
@@ -308,13 +312,17 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             case 'response.audio_transcript.delta':
               // Accumulate audio transcript deltas - this is the text content
               responseText += message.delta;
-              logger.debug(`Added audio transcript delta: "${message.delta}", current length: ${responseText.length}`);
+              logger.debug(
+                `Added audio transcript delta: "${message.delta}", current length: ${responseText.length}`,
+              );
               break;
 
             case 'response.audio_transcript.done':
               // Final audio transcript content
               if (message.text && message.text.length > 0) {
-                logger.debug(`Setting final audio transcript text: "${message.text}" (length: ${message.text.length})`);
+                logger.debug(
+                  `Setting final audio transcript text: "${message.text}" (length: ${message.text.length})`,
+                );
                 responseText = message.text;
               } else {
                 logger.debug('Received empty text in response.audio_transcript.done');
@@ -360,7 +368,9 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 // Handle text output item - also add to responseText
                 if (message.item.text) {
                   responseText += message.item.text;
-                  logger.debug(`Added text output item: "${message.item.text}", current length: ${responseText.length}`);
+                  logger.debug(
+                    `Added text output item: "${message.item.text}", current length: ${responseText.length}`,
+                  );
                 } else {
                   logger.debug('Received text output item with empty text');
                 }
@@ -433,34 +443,42 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
               // If no function calls or we've processed them all, close the connection
               clearTimeout(timeout);
-              
+
               // Check if we have an empty response and try to diagnose the issue
               if (responseText.length === 0) {
                 // Only log at debug level to prevent user-visible warnings
-                logger.debug('Empty response detected before resolving. Checking response message details');
+                logger.debug(
+                  'Empty response detected before resolving. Checking response message details',
+                );
                 logger.debug('Response message details: ' + JSON.stringify(message, null, 2));
-                
+
                 // Try to extract any text content from the message as a fallback
-                if (message.response && message.response.content && Array.isArray(message.response.content)) {
-                  const textContent = message.response.content.find((item: any) => 
-                    item.type === 'text' && item.text && item.text.length > 0
+                if (
+                  message.response &&
+                  message.response.content &&
+                  Array.isArray(message.response.content)
+                ) {
+                  const textContent = message.response.content.find(
+                    (item: any) => item.type === 'text' && item.text && item.text.length > 0,
                   );
-                  
+
                   if (textContent) {
-                    logger.debug(`Found text in response content, using as fallback: "${textContent.text}"`);
+                    logger.debug(
+                      `Found text in response content, using as fallback: "${textContent.text}"`,
+                    );
                     responseText = textContent.text;
                   } else {
                     logger.debug('No fallback text content found in response message');
                   }
                 }
-                
+
                 // If still empty, add a placeholder message to indicate the issue
                 if (responseText.length === 0) {
-                  responseText = "[No response received from API]";
+                  responseText = '[No response received from API]';
                   logger.debug('Using placeholder message for empty response');
                 }
               }
-              
+
               ws.close();
 
               // Prepare audio data if available
@@ -632,9 +650,9 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         logger.debug(
           'Received empty response from Realtime API - possible issue with transcript accumulation. Check modalities configuration.',
         );
-        
+
         // Set a fallback message to help users, but keep it shorter
-        finalOutput = "[No response received from API]";
+        finalOutput = '[No response received from API]';
       }
 
       if (
@@ -832,13 +850,17 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             case 'response.text.delta':
               // Accumulate text deltas
               responseText += message.delta;
-              logger.debug(`Added text delta: "${message.delta}", current length: ${responseText.length}`);
+              logger.debug(
+                `Added text delta: "${message.delta}", current length: ${responseText.length}`,
+              );
               break;
 
             case 'response.text.done':
               // Final text content
               if (message.text && message.text.length > 0) {
-                logger.debug(`Setting final text content from response.text.done: "${message.text}" (length: ${message.text.length})`);
+                logger.debug(
+                  `Setting final text content from response.text.done: "${message.text}" (length: ${message.text.length})`,
+                );
                 responseText = message.text;
               } else {
                 logger.debug('Received empty text in response.text.done');
@@ -864,13 +886,17 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             case 'response.audio_transcript.delta':
               // Accumulate audio transcript deltas - this is the text content
               responseText += message.delta;
-              logger.debug(`Added audio transcript delta: "${message.delta}", current length: ${responseText.length}`);
+              logger.debug(
+                `Added audio transcript delta: "${message.delta}", current length: ${responseText.length}`,
+              );
               break;
 
             case 'response.audio_transcript.done':
               // Final audio transcript content
               if (message.text && message.text.length > 0) {
-                logger.debug(`Setting final audio transcript text: "${message.text}" (length: ${message.text.length})`);
+                logger.debug(
+                  `Setting final audio transcript text: "${message.text}" (length: ${message.text.length})`,
+                );
                 responseText = message.text;
               } else {
                 logger.debug('Received empty text in response.audio_transcript.done');
@@ -916,7 +942,9 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 // Handle text output item - also add to responseText
                 if (message.item.text) {
                   responseText += message.item.text;
-                  logger.debug(`Added text output item: "${message.item.text}", current length: ${responseText.length}`);
+                  logger.debug(
+                    `Added text output item: "${message.item.text}", current length: ${responseText.length}`,
+                  );
                 } else {
                   logger.debug('Received text output item with empty text');
                 }
@@ -989,34 +1017,42 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
               // If no function calls or we've processed them all, close the connection
               clearTimeout(timeout);
-              
+
               // Check if we have an empty response and try to diagnose the issue
               if (responseText.length === 0) {
                 // Only log at debug level to prevent user-visible warnings
-                logger.debug('Empty response detected before resolving. Checking response message details');
+                logger.debug(
+                  'Empty response detected before resolving. Checking response message details',
+                );
                 logger.debug('Response message details: ' + JSON.stringify(message, null, 2));
-                
+
                 // Try to extract any text content from the message as a fallback
-                if (message.response && message.response.content && Array.isArray(message.response.content)) {
-                  const textContent = message.response.content.find((item: any) => 
-                    item.type === 'text' && item.text && item.text.length > 0
+                if (
+                  message.response &&
+                  message.response.content &&
+                  Array.isArray(message.response.content)
+                ) {
+                  const textContent = message.response.content.find(
+                    (item: any) => item.type === 'text' && item.text && item.text.length > 0,
                   );
-                  
+
                   if (textContent) {
-                    logger.debug(`Found text in response content, using as fallback: "${textContent.text}"`);
+                    logger.debug(
+                      `Found text in response content, using as fallback: "${textContent.text}"`,
+                    );
                     responseText = textContent.text;
                   } else {
                     logger.debug('No fallback text content found in response message');
                   }
                 }
-                
+
                 // If still empty, add a placeholder message to indicate the issue
                 if (responseText.length === 0) {
-                  responseText = "[No response received from API]";
+                  responseText = '[No response received from API]';
                   logger.debug('Using placeholder message for empty response');
                 }
               }
-              
+
               ws.close();
 
               // Prepare audio data if available
