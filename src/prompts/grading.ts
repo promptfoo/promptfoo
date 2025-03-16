@@ -49,8 +49,9 @@ Rubric: Does not speak like a pirate
   },
 ]);
 
-// https://github.com/openai/evals/blob/main/evals/registry/modelgraded/fact.yaml
-export const OPENAI_FACTUALITY_PROMPT = JSON.stringify([
+// Based on https://github.com/openai/evals/blob/main/evals/registry/modelgraded/fact.yaml
+// but modified for models capable of JSON output
+export const PROMPTFOO_FACTUALITY_PROMPT = JSON.stringify([
   {
     role: 'system',
     content: dedent`

@@ -15,7 +15,7 @@ import {
   CONTEXT_RELEVANCE_BAD,
   DEFAULT_GRADING_PROMPT,
   OPENAI_CLOSED_QA_PROMPT,
-  OPENAI_FACTUALITY_PROMPT,
+  PROMPTFOO_FACTUALITY_PROMPT,
 } from './prompts';
 import { loadApiProvider } from './providers';
 import { getDefaultProviders } from './providers/defaults';
@@ -512,7 +512,7 @@ export async function matchesFactuality(
     );
   }
 
-  const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, OPENAI_FACTUALITY_PROMPT);
+  const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, PROMPTFOO_FACTUALITY_PROMPT);
 
   // Create template variables
   const templateVars = {
