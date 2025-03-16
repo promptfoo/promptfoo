@@ -10,24 +10,21 @@ prompts:
     Answer:
 
 providers:
-  # - openai:gpt-4o-mini
-  # - openai:gpt-4o
-  # - anthropic:messages:claude-3-7-sonnet-20250219
-  - bedrock:us.meta.llama3-2-1b-instruct-v1:0
+  - anthropic:messages:claude-3-7-sonnet-20250219
   # Uncomment to add more providers
-  # - google:gemini-1.5-pro-latest
-  # - meta-llama/meta-llama-3.1-70b
-  # - ollama:llama3.1:70b
+  # - bedrock:us.meta.llama3-2-1b-instruct-v1:0
+  # - openai:gpt-4o-mini
+  # - google:gemini-2.0-flash
 
 defaultTest:
   options:
-    # Use GPT-4o as grader for factuality evaluation
-    # provider: google:gemini-2.0-flash
-    provider: bedrock:us.meta.llama3-2-3b-instruct-v1:0
-    # provider: openai:gpt-4o
+    # Uncomment one to change the grading provider.
     # provider: anthropic:messages:claude-3-7-sonnet-20250219
-    # provider: meta-llama/meta-llama-3.1-70b
-    # provider: ollama:llama3.1:70b
+    # provider: bedrock:us.meta.llama3-2-1b-instruct-v1:0
+    # provider: openai:gpt-4o-mini
+    # provider: google:gemini-2.0-flash
+
+    # Optional: Custom scoring weights for different factuality categories
     factuality:
       # Scoring weights for different factuality categories
       subset: 1.0 # Score for category A (subset of correct answer)
@@ -36,6 +33,5 @@ defaultTest:
       disagree: 0.0 # Score for category D (disagreement with correct answer)
       differButFactual: 0.7 # Score for category E (differences don't affect factuality)
 
-# Use the TypeScript dataset loader instead of Python/direct HuggingFace dataset reference
-# This includes factuality assertions in each test case
+# Grabs TruthfulQA dataset from HuggingFace and formats it for promptfoo
 tests: file://dataset_loader.ts:generate_tests
