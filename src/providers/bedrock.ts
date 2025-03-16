@@ -391,9 +391,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
       );
       return params;
     },
-    output: (config: BedrockOptions, responseJson: any) => {
-      return responseJson?.generation;
-    },
+    output: (responseJson: any) => responseJson?.generation,
   };
 };
 
