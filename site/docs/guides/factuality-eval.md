@@ -8,13 +8,27 @@ description: How to evaluate the factual accuracy of LLM outputs against referen
 
 ## What is factuality and why is it important?
 
-Factuality is the measure of how accurately an LLM's response aligns with established facts or reference information. As LLMs become increasingly integrated into critical applications, ensuring they provide factually accurate information is essential for:
+Factuality is the measure of how accurately an LLM's response aligns with established facts or reference information. Simply put, it answers the question: "Is what the AI saying actually true?"
 
-- **Building trust**: Users need confidence that AI responses are reliable and truthful
-- **Reducing misinformation**: Factually incorrect AI outputs can spread misinformation at scale
-- **Supporting critical use cases**: Applications in healthcare, finance, education, and legal domains require high factual accuracy
-- **Improving model selection**: Comparing factuality across models helps choose the right model for your application
-- **Identifying hallucinations**: Factuality evaluation helps detect when models "make up" information
+**A concrete example:**
+
+> **Question:** "What is the capital of France?"  
+> **AI response:** "The capital of France is Paris, which has been the country's capital since 987 CE."  
+> **Reference fact:** "Paris is the capital of France."
+>
+> In this case, the AI response is factually accurate (it includes the correct capital) but adds additional information about when Paris became the capital.
+
+As LLMs become increasingly integrated into critical applications, ensuring they provide factually accurate information is essential for:
+
+- **Building trust**: Users need confidence that AI responses are reliable and truthful. _For example, a financial advisor chatbot that gives incorrect information about tax laws could cause users to make costly mistakes and lose trust in your service._
+
+- **Reducing misinformation**: Factually incorrect AI outputs can spread misinformation at scale. _For instance, a healthcare bot incorrectly stating that a common vaccine is dangerous could influence thousands of patients to avoid important preventative care._
+
+- **Supporting critical use cases**: Applications in healthcare, finance, education, and legal domains require high factual accuracy. _A legal assistant that misrepresents case law precedents could lead to flawed legal strategies with serious consequences._
+
+- **Improving model selection**: Comparing factuality across models helps choose the right model for your application. _A company might discover that while one model is more creative, another has 30% better factual accuracy for technical documentation._
+
+- **Identifying hallucinations**: Factuality evaluation helps detect when models "make up" information. _For example, discovering that your product support chatbot fabricates non-existent troubleshooting steps 15% of the time would be a critical finding._
 
 promptfoo's factuality evaluation enables you to systematically measure how well your model outputs align with reference facts, helping you identify and address issues before they reach users.
 
@@ -23,14 +37,25 @@ promptfoo's factuality evaluation enables you to systematically measure how well
 The fastest way to get started with factuality evaluation is to use our pre-built TruthfulQA example:
 
 ```bash
-# Initialize the example
+# Initialize the example - this command creates a new directory with all necessary files
 npx promptfoo@latest init --example huggingface-dataset-factuality
 
-# Run the evaluation
+# Change into the newly created directory
 cd huggingface-dataset-factuality
+
+# Run the evaluation - this executes the factuality tests using the models specified in the config
 npx promptfoo eval
+
+# View the results in an interactive web interface
 npx promptfoo view
 ```
+
+What these commands do:
+
+1. The first command initializes a new project using our huggingface-dataset-factuality example template
+2. The second command navigates into the project directory
+3. The third command runs the factuality evaluation against the TruthfulQA dataset
+4. The final command opens the results in your browser for analysis
 
 This example:
 
@@ -55,13 +80,28 @@ The model-graded factuality check takes the following three inputs:
 - **Output**: text produced by the LLM
 - **Reference**: the ideal LLM output, provided by the author of the eval
 
+### Key terminology explained
+
 The evaluation classifies the relationship between the LLM output and the reference into one of five categories:
 
 - **A**: Output is a subset of the reference and is fully consistent with it
+
+  - _Example: If the reference is "Paris is the capital of France and has a population of 2.1 million," a subset would be "Paris is the capital of France" — it contains less information but is fully consistent_
+
 - **B**: Output is a superset of the reference and is fully consistent with it
+
+  - _Example: If the reference is "Paris is the capital of France," a superset would be "Paris is the capital of France and home to the Eiffel Tower" — it adds accurate information while maintaining consistency_
+
 - **C**: Output contains all the same details as the reference
+
+  - _Example: If the reference is "The Earth orbits the Sun," and the output is "The Sun is orbited by the Earth" — same information, different wording_
+
 - **D**: Output and reference disagree
+
+  - _Example: If the reference is "Paris is the capital of France," but the output claims "Lyon is the capital of France" — this is a factual disagreement_
+
 - **E**: Output and reference differ, but differences don't affect factuality
+  - _Example: If the reference is "The distance from Earth to the Moon is 384,400 km," and the output says "The Moon is about 384,000 km from Earth" — the small difference doesn't materially affect factuality_
 
 By default, categories A, B, C, and E are considered passing (with customizable scores), while category D (disagreement) is considered failing.
 
@@ -104,7 +144,7 @@ providers:
   - openai:gpt-4o-mini
   - openai:gpt-4o
   - anthropic:claude-3-7-sonnet-20250219
-  - google:gemini-1.5-pro-latest
+  - google:gemini-2.0-flash
 prompts:
   - |
     Question: What is the capital of {{location}}?
@@ -137,6 +177,38 @@ You can integrate any dataset by:
 ```yaml
 tests: file://your_dataset_loader.ts:generate_tests
 ```
+
+## Crafting Effective Reference Answers
+
+The quality of your reference answers is crucial for accurate factuality evaluation. Here are specific guidelines:
+
+### What makes a good reference answer?
+
+1. **Clarity**: State the fact directly and unambiguously
+
+   - _Good: "The capital of France is Paris."_
+   - _Avoid: "As everyone knows, the beautiful city of Paris serves as the capital of the magnificent country of France."_
+
+2. **Precision**: Include necessary details without extraneous information
+
+   - _Good: "Water freezes at 0 degrees Celsius at standard atmospheric pressure."_
+   - _Avoid: "Water, H2O, freezes at 0 degrees Celsius, which is also 32 degrees Fahrenheit, creating ice that floats."_
+
+3. **Verifiability**: Ensure your reference is backed by authoritative sources
+
+   - _Good: "According to the World Health Organization, the COVID-19 pandemic was declared on March 11, 2020."_
+   - _Avoid: "The COVID pandemic started sometime in early 2020."_
+
+4. **Completeness**: Include all essential parts of the answer
+   - _Good: "The three branches of the U.S. federal government are executive, legislative, and judicial."_
+   - _Avoid: "The U.S. government has three branches."_
+
+### Common pitfalls to avoid
+
+1. **Subjective statements**: Avoid opinions or judgments in reference answers
+2. **Temporally dependent facts**: Be careful with time-sensitive information
+3. **Ambiguous wording**: Ensure there's only one way to interpret the statement
+4. **Unnecessary complexity**: Keep references simple enough for clear evaluation
 
 ## Customizing the Evaluation
 
@@ -181,7 +253,20 @@ defaultTest:
       differButFactual: 0.7 # Category E: Differences don't affect factuality
 ```
 
-A score of 0 means fail, while any positive score is considered passing. The actual score value can be used for ranking or reporting.
+#### Understanding the default scoring weights
+
+By default, promptfoo uses a simple binary scoring system:
+
+- Categories A, B, C, and E are assigned a score of 1.0 (pass)
+- Category D (disagree) is assigned a score of 0.0 (fail)
+
+**When to use custom weights:**
+
+- Decrease `superset` if you're concerned about models adding potentially incorrect information
+- Reduce `differButFactual` if precision in wording is important for your application
+- Adjust `subset` downward if comprehensive answers are required
+
+A score of 0 means fail, while any positive score is considered passing. The score values can be used for ranking and comparing model outputs.
 
 ### Customizing the Evaluation Prompt
 
@@ -208,7 +293,7 @@ defaultTest:
       Respond with JSON: {"category": "LETTER", "reason": "explanation"}
 ```
 
-Available template variables:
+You must implement the following template variables:
 
 - `{{input}}`: The original prompt/question
 - `{{ideal}}`: The reference answer (from the `value` field)
@@ -227,7 +312,8 @@ The factuality checker supports two response formats:
    }
    ```
 
-2. **Legacy format** (fallback):
+2. **Single Letter** (legacy format):
+
    ```
    (A) The submitted answer is a subset of the expert answer and is fully consistent with it.
    ```
