@@ -1,3 +1,4 @@
+import dedent from 'dedent';
 import path from 'path';
 import { importModule } from '../esm';
 import logger from '../logger';
@@ -13,7 +14,9 @@ import type { ApiProvider, ProviderOptions } from '../types/providers';
 import { isJavascriptFile } from '../util/file';
 import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
-import { AnthropicCompletionProvider, AnthropicMessagesProvider } from './anthropic';
+import { AnthropicCompletionProvider } from './anthropic/completion';
+import { AnthropicMessagesProvider } from './anthropic/messages';
+import { ANTHROPIC_MODELS } from './anthropic/util';
 import {
   AzureAssistantProvider,
   AzureChatCompletionProvider,
@@ -165,8 +168,19 @@ export const providerMap: ProviderFactory[] = [
       if (AnthropicCompletionProvider.ANTHROPIC_COMPLETION_MODELS.includes(modelType)) {
         return new AnthropicCompletionProvider(modelType, providerOptions);
       }
+
+      // Check if the second part is a valid Anthropic model name
+      // If it is, assume it's a messages model
+      const modelIds = ANTHROPIC_MODELS.map((model) => model.id);
+      if (modelIds.includes(modelType)) {
+        return new AnthropicMessagesProvider(modelType, providerOptions);
+      }
+
       throw new Error(
-        `Unknown Anthropic model type: ${modelType}. Use one of the following providers: anthropic:messages:<model name>, anthropic:completion:<model name>`,
+        dedent`Unknown Anthropic model type or model name: ${modelType}. Use one of the following formats: 
+        - anthropic:messages:<model name> - For Messages API
+        - anthropic:completion:<model name> - For Completion API
+        - anthropic:<model name> - Shorthand for Messages API with a known model name`,
       );
     },
   },
