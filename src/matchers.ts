@@ -514,15 +514,12 @@ export async function matchesFactuality(
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, PROMPTFOO_FACTUALITY_PROMPT);
 
-  // Create template variables
-  const templateVars = {
+  const prompt = nunjucks.renderString(rubricPrompt, {
     input: JSON.stringify(input).slice(1, -1),
     ideal: JSON.stringify(expected).slice(1, -1),
     completion: JSON.stringify(output).slice(1, -1),
     ...fromVars(vars),
-  };
-
-  const prompt = nunjucks.renderString(rubricPrompt, templateVars);
+  });
 
   // Get the appropriate provider
   const finalProvider = await getAndCheckProvider(
@@ -539,7 +536,7 @@ export async function matchesFactuality(
 
   invariant(typeof resp.output === 'string', 'factuality produced malformed response');
 
-  // Standard category descriptions for consistency
+  // Copied from standard factuality grading prompt
   const categoryDescriptions: Record<string, string> = {
     A: 'The submitted answer is a subset of the expert answer and is fully consistent with it.',
     B: 'The submitted answer is a superset of the expert answer and is fully consistent with it.',
@@ -584,7 +581,6 @@ export async function matchesFactuality(
     const modelReason = jsonData.reason?.trim();
     const reason = modelReason || `Category ${option}: ${categoryDescriptions[option]}`;
 
-    // Calculate score
     const score = scoreLookup[option] ?? (pass ? 1 : 0);
 
     return {
@@ -619,8 +615,7 @@ export async function matchesFactuality(
 
   const option = answerMatch[1].toUpperCase();
 
-  // Try to extract reasoning from the response text
-  let modelReason = '';
+  let modelReason = responseText;
   const reasonMatch = responseText.match(/\)\s*(.*)/s);
   if (reasonMatch && reasonMatch[1]) {
     modelReason = reasonMatch[1].trim();
@@ -634,21 +629,15 @@ export async function matchesFactuality(
     E: grading.factuality?.differButFactual ?? 1,
   };
 
-  // Define passing and failing
   const passing = Object.keys(scoreLookup).filter((key) => scoreLookup[key] > 0);
   const failing = Object.keys(scoreLookup).filter((key) => scoreLookup[key] === 0);
   const pass = passing.includes(option) && !failing.includes(option);
-
-  // Use extracted reason or fallback to category description
-  const reason = modelReason || `Category ${option}: ${categoryDescriptions[option]}`;
-
-  // Calculate score
   const score = scoreLookup[option] ?? (pass ? 1 : 0);
 
   return {
     pass,
     score,
-    reason,
+    reason: modelReason,
     tokensUsed: {
       total: resp.tokenUsage?.total || 0,
       prompt: resp.tokenUsage?.prompt || 0,
