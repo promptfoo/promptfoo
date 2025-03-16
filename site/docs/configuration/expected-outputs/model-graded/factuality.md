@@ -133,4 +133,3 @@ The factuality checker will parse either format:
 
 - [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options
 - [Guide on LLM factuality](/docs/guides/factuality-eval)
-- [API reference](/docs/reference/api) for programmatic usage

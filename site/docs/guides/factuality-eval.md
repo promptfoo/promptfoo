@@ -332,5 +332,4 @@ When setting up factuality evaluations:
 
 - [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more evaluation options
 - [Factuality assertion reference](/docs/configuration/expected-outputs/model-graded/factuality)
-- [API reference](/docs/reference/api) for programmatic usage
 - [TruthfulQA example on GitHub](https://github.com/promptfoo/promptfoo/tree/main/examples/huggingface-dataset-factuality) - Complete code for the TruthfulQA factuality evaluation example
