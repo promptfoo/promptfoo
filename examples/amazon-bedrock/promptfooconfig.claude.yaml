@@ -3,24 +3,22 @@ description: 'Bedrock Claude Eval'
 prompts:
   - 'Write a tweet about {{topic}}'
 providers:
-  - id: bedrock:us.anthropic.claude-3-5-haiku-20241022-v1:0
-    label: Claude 3.5 Haiku v1
+  - id: bedrock:us.anthropic.claude-3-7-sonnet-20250219-v1:0
+    label: Claude 3.7 Sonnet
     config:
-      temperature: 0.7
-      max_tokens: 256
-      region: us-east-2
-  - id: bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0
-    label: Claude 3.5 Sonnet v1
+      temperature: 1
+      max_tokens: 2048
+      region: us-east-1
+  - id: bedrock:us.anthropic.claude-3-7-sonnet-20250219-v1:0
+    label: Claude 3.7 Sonnet with Thinking
     config:
-      temperature: 0.7
-      max_tokens: 256
-      region: us-west-2
-  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
-    label: Claude 3.5 Sonnet v2
-    config:
-      temperature: 0.7
-      max_tokens: 256
-      region: us-west-2
+      temperature: 1
+      max_tokens: 2048
+      region: us-east-1
+      showThinking: true
+      thinking:
+        type: enabled
+        budget_tokens: 1024
 tests:
   - vars:
       topic: Our eco-friendly packaging
