@@ -486,10 +486,6 @@ def call_api(prompt, options, context):
 
         return {
             "output": response,
-            "metadata": {
-                "test_context": test_context,
-                "prompt": prompt
-            }
         }
     except Exception as e:
         return {"error": str(e)}
