@@ -733,7 +733,16 @@ npx promptfoo@latest init --example openai-audio
 
 ## Realtime API Models
 
-The Realtime API allows for real-time communication with GPT-4o class models using WebSockets, supporting both text and audio inputs/outputs with streaming responses.
+The Realtime API allows for bidirectional, real-time communication with OpenAI models using WebSockets. This enables streaming responses, multi-turn conversations, and audio capabilities with lower latency than traditional REST API calls.
+
+:::important Content Type Requirements
+When using the Realtime API, you must use:
+
+- `type: "input_text"` for user and system messages
+- `type: "text"` for assistant responses
+
+Using incorrect types will result in empty responses or API errors.
+:::
 
 ### Supported Realtime Models
 
@@ -755,25 +764,33 @@ providers:
       websocketTimeout: 60000 # 60 seconds
 ```
 
-### Realtime-specific Configuration Options
+### Message Format
 
-The Realtime API configuration supports these parameters in addition to standard OpenAI parameters:
+When using the Realtime API with promptfoo, specify prompts in JSON format:
 
-| Parameter                    | Description                                         | Default                | Options                                 |
-| ---------------------------- | --------------------------------------------------- | ---------------------- | --------------------------------------- |
-| `modalities`                 | Types of content the model can process and generate | ['text', 'audio']      | 'text', 'audio'                         |
-| `voice`                      | Voice for audio generation                          | 'alloy'                | alloy, echo, fable, onyx, nova, shimmer |
-| `instructions`               | System instructions for the model                   | 'You are a helpful...' | Any text string                         |
-| `input_audio_format`         | Format of audio input                               | 'pcm16'                | 'pcm16', 'g711_ulaw', 'g711_alaw'       |
-| `output_audio_format`        | Format of audio output                              | 'pcm16'                | 'pcm16', 'g711_ulaw', 'g711_alaw'       |
-| `websocketTimeout`           | Timeout for WebSocket connection (milliseconds)     | 30000                  | Any number                              |
-| `max_response_output_tokens` | Maximum tokens in model response                    | 'inf'                  | Number or 'inf'                         |
-| `tools`                      | Array of tool definitions for function calling      | []                     | Array of tool objects                   |
-| `tool_choice`                | Controls how tools are selected                     | 'auto'                 | 'none', 'auto', 'required', or object   |
+```json title="realtime-input.json"
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "input_text",
+        "text": "{{question}}"
+      }
+    ]
+  }
+]
+```
+
+The Realtime API supports the same multimedia formats as the Chat API, including images and audio.
+
+### Multi-Turn Conversations
+
+The Realtime API supports multi-turn conversations with persistent context. For implementation details, see the [OpenAI Realtime example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-realtime), which demonstrates conversation threading using the `conversationId` metadata property.
 
 ### Function Calling with Realtime API
 
-The Realtime API supports function calling via tools, similar to the Chat API. Here's an example configuration:
+The Realtime API supports function calling via tools, similar to the Chat API:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -793,48 +810,55 @@ providers:
       tool_choice: 'auto'
 ```
 
+### Realtime-specific Configuration Options
+
+| Parameter                    | Description                                         | Default                | Options                                 |
+| ---------------------------- | --------------------------------------------------- | ---------------------- | --------------------------------------- |
+| `modalities`                 | Types of content the model can process and generate | ['text', 'audio']      | 'text', 'audio'                         |
+| `voice`                      | Voice for audio generation                          | 'alloy'                | alloy, echo, fable, onyx, nova, shimmer |
+| `instructions`               | System instructions for the model                   | 'You are a helpful...' | Any text string                         |
+| `input_audio_format`         | Format of audio input                               | 'pcm16'                | 'pcm16', 'g711_ulaw', 'g711_alaw'       |
+| `output_audio_format`        | Format of audio output                              | 'pcm16'                | 'pcm16', 'g711_ulaw', 'g711_alaw'       |
+| `websocketTimeout`           | Timeout for WebSocket connection (milliseconds)     | 30000                  | Any number                              |
+| `max_response_output_tokens` | Maximum tokens in model response                    | 'inf'                  | Number or 'inf'                         |
+| `tools`                      | Array of tool definitions for function calling      | []                     | Array of tool objects                   |
+| `tool_choice`                | Controls how tools are selected                     | 'auto'                 | 'none', 'auto', 'required', or object   |
+
+### Realtime API Troubleshooting
+
+In addition to standard OpenAI API issues, the Realtime API may encounter WebSocket-specific problems:
+
+#### Connection Issues
+
+If you see "WebSocket error: Unexpected server response: 403":
+
+1. **Network/Firewall Restrictions**: Try a different network connection as firewalls often block WebSocket connections
+2. **API Access**: Verify your API key has access to the Realtime API beta
+3. **Connection Timeout**: Increase the `websocketTimeout` value in your config
+
+#### Empty Responses
+
+If you receive empty responses:
+
+1. **Check Content Types**: Verify you're using `type: "input_text"` for user inputs
+2. **Verify Modalities**: Ensure 'text' is included in the `modalities` configuration
+3. **Check Instructions**: If your instructions are too restrictive, the model might not generate responses
+
 ### Complete Example
 
-For a complete working example that demonstrates the Realtime API capabilities, see the [OpenAI Realtime API example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-realtime) or initialize it with:
+For a working example demonstrating all Realtime API capabilities, run:
 
 ```bash
 npx promptfoo@latest init --example openai-realtime
 ```
 
-This example includes:
+This example includes multi-turn conversations, conversation threading, and function calling.
 
-- Basic single-turn interactions with the Realtime API
-- Multi-turn conversations with persistent context
-- Conversation threading with separate conversation IDs
-- JavaScript prompt function for properly formatting messages
-- Function calling with the Realtime API
-- Detailed documentation on handling content types correctly
+### See Also
 
-### Input and Message Format
-
-When using the Realtime API with promptfoo, you can specify the prompt in JSON format:
-
-```json title="realtime-input.json"
-[
-  {
-    "role": "user",
-    "content": [
-      {
-        "type": "text",
-        "text": "{{question}}"
-      }
-    ]
-  }
-]
-```
-
-The Realtime API supports the same multimedia formats as the Chat API, allowing you to include images and audio in your prompts.
-
-### Multi-Turn Conversations
-
-The Realtime API supports multi-turn conversations with persistent context. For implementation details and examples, see the [OpenAI Realtime example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-realtime), which demonstrates both single-turn interactions and conversation threading using the `conversationId` metadata property.
-
-> **Important**: When implementing multi-turn conversations, use `type: "input_text"` for user inputs and `type: "text"` for assistant responses.
+- [OpenAI Chat API](../providers/openai.md#formatting-chat-messages)
+- [Multi-Turn Conversations](../configuration/chat.md)
+- [WebSocket Protocol Documentation](https://platform.openai.com/docs/api-reference/realtime)
 
 ## Troubleshooting
 
