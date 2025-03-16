@@ -1,11 +1,12 @@
 ---
 sidebar_label: Amazon SageMaker
-sidebar_position: 3
+title: Amazon SageMaker Provider
+description: Evaluate models deployed on Amazon SageMaker endpoints with promptfoo
 ---
 
 # Amazon SageMaker
 
-The `sagemaker` provider allows you to use Amazon SageMaker endpoints in your evals. This enables testing and evaluation of any model deployed on SageMaker, including models from Hugging Face, custom-trained models, foundation models from Amazon SageMaker JumpStart, and more.
+The `sagemaker` provider allows you to use Amazon SageMaker endpoints in your evals. This enables testing and evaluation of any model deployed on SageMaker, including models from Hugging Face, custom-trained models, foundation models from Amazon SageMaker JumpStart, and more. For AWS-managed foundation models without custom endpoints, you might also consider the [AWS Bedrock provider](./aws-bedrock.md).
 
 ## Setup
 
@@ -13,7 +14,7 @@ The `sagemaker` provider allows you to use Amazon SageMaker endpoints in your ev
 
 2. Install required dependencies:
 
-   ```sh
+   ```bash
    npm install -g @aws-sdk/client-sagemaker-runtime jsonpath
    ```
 
@@ -23,7 +24,11 @@ The `sagemaker` provider allows you to use Amazon SageMaker endpoints in your ev
    - `~/.aws/credentials`
    - `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` environment variables
 
+   :::info
+
    See [setting node.js credentials (AWS)](https://docs.aws.amazon.com/sdk-for-javascript/v2/developer-guide/setting-credentials-node.html) for more details.
+
+   :::
 
 4. Edit your configuration file to point to the SageMaker provider. Here's an example:
 
@@ -149,7 +154,7 @@ prompts:
 
 providers:
   - id: sagemaker:jumpstart:llama-3-2-1b-instruct
-    label: 'Llama 3.2 (1B) on SageMaker'
+    label: 'Llama 3.2 (8B) on SageMaker'
     delay: 500 # Add 500ms delay between requests to prevent rate limiting
     config:
       region: us-west-2
@@ -218,7 +223,7 @@ prompts:
 providers:
   # Llama 3.2 provider
   - id: sagemaker:jumpstart:llama-3-2-1b-instruct
-    label: 'Llama 3.2 (1B)'
+    label: 'Llama 3.2 (8B)'
     delay: 500 # Add 500ms delay between requests
     config:
       region: us-west-2
@@ -281,19 +286,23 @@ providers:
 
 Supported model types:
 
-- `openai`: For OpenAI-compatible models
-- `anthropic`: For Anthropic Claude-compatible models
-- `llama`: For LLama-compatible models
-- `huggingface`: For Hugging Face models (like Mistral)
-- `jumpstart`: For AWS JumpStart foundation models (handles specific input/output format)
-- `custom`: For custom model formats (default if not specified)
+| Model Type    | Description                                     | JSONPath for Results  |
+| ------------- | ----------------------------------------------- | --------------------- |
+| `openai`      | OpenAI-compatible models                        | Standard format       |
+| `anthropic`   | Anthropic Claude-compatible models              | Standard format       |
+| `llama`       | LLama-compatible models                         | Standard format       |
+| `huggingface` | Hugging Face models (like Mistral)              | `$[0].generated_text` |
+| `jumpstart`   | AWS JumpStart foundation models                 | `$.generated_text`    |
+| `custom`      | Custom model formats (default if not specified) | Depends on model      |
 
-### Models with Specific Response Formats
+:::warning
 
 Different model types return results in different response formats. You should configure the appropriate JSONPath for response extraction:
 
 - **JumpStart models** (Llama): Use `responseFormat.path: "$.generated_text"`
 - **Hugging Face models** (Mistral): Use `responseFormat.path: "$[0].generated_text"`
+
+:::
 
 ## Configuration Options
 
@@ -488,17 +497,21 @@ Transformed prompts maintain proper caching and include metadata about the trans
 
 ## Troubleshooting
 
-### Error: "Could not load the SageMaker Runtime client"
+### Installation Issues
 
-If you see this error, make sure you've installed the required AWS SDK package:
+If you see this error:
 
-```sh
+> "Could not load the SageMaker Runtime client"
+
+Make sure you've installed the required AWS SDK package:
+
+```bash
 npm install -g @aws-sdk/client-sagemaker-runtime
 ```
 
-### Error: "Access denied" or similar authentication errors
+### Authentication Errors
 
-Ensure your AWS credentials have permissions to invoke the SageMaker endpoint. The IAM policy should include:
+If you get "Access denied" or similar authentication errors, ensure your AWS credentials have permissions to invoke the SageMaker endpoint. The IAM policy should include:
 
 ```json
 {
@@ -513,9 +526,9 @@ Ensure your AWS credentials have permissions to invoke the SageMaker endpoint. T
 }
 ```
 
-### Error: "Endpoint not found"
+### Endpoint Issues
 
-Verify that:
+If your endpoint isn't found, verify that:
 
 1. The endpoint name is correct and matches exactly
 2. The endpoint is deployed and in service
@@ -523,11 +536,11 @@ Verify that:
 
 You can check the status of your endpoints in the SageMaker console or using the AWS CLI:
 
-```sh
+```bash
 aws sagemaker list-endpoints --region us-east-1
 ```
 
-### Unexpected response format
+### Response Format Issues
 
 If you're getting unusual responses from your endpoint, try:
 
@@ -540,7 +553,7 @@ If you're getting unusual responses from your endpoint, try:
 
 For debug purposes, you can run with detailed logging:
 
-```sh
+```bash
 DEBUG=* promptfoo eval
 ```
 
@@ -554,3 +567,11 @@ If you encounter "Batch inference failed" errors:
    - For Mistral models: Use `modelType: huggingface`
 3. Ensure you've specified the correct `contentType` and `acceptType` as "application/json"
 4. Check that your endpoint is active and functioning in the SageMaker console
+
+## See Also
+
+- [Configuration Reference](../reference/configuration.md)
+- [Command Line Interface](../reference/cli.md)
+- [Provider Options](../reference/providers.md)
+- [Amazon SageMaker Examples](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-sagemaker)
+- [AWS Bedrock Provider](./aws-bedrock.md) - For using AWS-managed foundation models without deploying custom endpoints

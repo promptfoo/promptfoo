@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'Example configuration for Mistral 7B v3 models on AWS SageMaker (Hugging Face)'
 
 prompts:

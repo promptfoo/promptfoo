@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'Example configuration for Llama 3.2 models on AWS SageMaker JumpStart'
 
 prompts:
@@ -7,7 +8,7 @@ prompts:
 
 providers:
   - id: sagemaker:jumpstart:your-llama-endpoint
-    label: 'Llama 3.2 (1B)'
+    label: 'Llama 3.2 (8B)'
     delay: 500 # Add 500ms delay between requests to prevent rate limiting
     config:
       region: us-west-2

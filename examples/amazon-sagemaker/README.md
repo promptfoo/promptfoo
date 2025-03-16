@@ -1,46 +1,70 @@
-# Amazon SageMaker Provider Examples
+# amazon-sagemaker (Amazon SageMaker Provider)
 
-This directory contains examples for using the Amazon SageMaker provider with promptfoo, which allows you to evaluate models deployed on SageMaker endpoints.
+This example demonstrates how to evaluate models deployed on Amazon SageMaker endpoints using promptfoo.
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example amazon-sagemaker
+```
+
+## Purpose
+
+This example shows how to:
+
+- Connect to and evaluate models deployed on Amazon SageMaker endpoints
+- Configure various model types (OpenAI, Anthropic, Llama, Mistral) running on SageMaker
+- Compare performance between different SageMaker-hosted models
+- Use transform functions to format prompts for specific model requirements
+- Work with embeddings models on SageMaker
 
 ## Prerequisites
 
 1. AWS account with SageMaker access
 2. Deployed SageMaker endpoints with your models
-3. AWS credentials configured
+3. AWS credentials configured locally
 4. Required npm packages:
    ```bash
    npm install -g @aws-sdk/client-sagemaker-runtime jsonpath
    ```
 
+## Environment Variables
+
+This example requires the following environment variables:
+
+- `AWS_ACCESS_KEY_ID` - Your AWS access key
+- `AWS_SECRET_ACCESS_KEY` - Your AWS secret key
+- `AWS_REGION` - Optional, can also be specified in the configuration
+
+You can set these in a `.env` file or directly in your environment.
+
 ## Example Configurations
 
-- **promptfooconfig.openai.yaml**: Configuration for OpenAI-compatible models on SageMaker
-- **promptfooconfig.anthropic.yaml**: Configuration for Anthropic Claude models on SageMaker
-- **promptfooconfig.jumpstart.yaml**: Configuration for AWS JumpStart foundation models
-- **promptfooconfig.llama.yaml**: Configuration for Llama 3.2 models on SageMaker JumpStart
-- **promptfooconfig.mistral.yaml**: Configuration for Mistral 7B v3 models on SageMaker (Hugging Face)
-- **promptfooconfig.llama-vs-mistral.yaml**: Configuration comparing Llama and Mistral models
-- **promptfooconfig.embedding.yaml**: Configuration for embedding models on SageMaker
-- **promptfooconfig.multimodel.yaml**: Configuration comparing multiple model types on SageMaker
-- **promptfooconfig.transform.yaml**: Configuration demonstrating transform functions for SageMaker endpoints
+This example includes multiple configuration files demonstrating different SageMaker integration patterns:
+
+- **promptfooconfig.openai.yaml**: OpenAI-compatible models on SageMaker
+- **promptfooconfig.anthropic.yaml**: Anthropic Claude models on SageMaker
+- **promptfooconfig.jumpstart.yaml**: AWS JumpStart foundation models
+- **promptfooconfig.llama.yaml**: Llama 3.2 models on SageMaker JumpStart
+- **promptfooconfig.mistral.yaml**: Mistral 7B v3 models on SageMaker (Hugging Face)
+- **promptfooconfig.llama-vs-mistral.yaml**: Comparison between Llama and Mistral models
+- **promptfooconfig.embedding.yaml**: Embedding models on SageMaker
+- **promptfooconfig.multimodel.yaml**: Multiple model types on SageMaker
+- **promptfooconfig.transform.yaml**: Transform functions for SageMaker endpoints
 
 ## Running the Examples
 
-Replace the endpoint names in the example configs with your actual SageMaker endpoints:
+1. Replace the endpoint names in the configuration files with your actual SageMaker endpoints
+2. Run the evaluation using promptfoo:
 
 ```bash
+# Run a specific configuration
 promptfoo eval -c promptfooconfig.jumpstart.yaml
 ```
 
-To enable caching for faster evaluation and reduced costs when running multiple tests:
+## Testing Your Setup
 
-```bash
-promptfoo eval -c promptfooconfig.jumpstart.yaml --cache
-```
-
-## Testing with the Test Script
-
-This directory includes a test script to validate your SageMaker endpoint configuration:
+This directory includes a test script to validate your SageMaker endpoint configuration before running a full evaluation:
 
 ```bash
 # Basic test for an OpenAI-compatible endpoint
@@ -58,7 +82,7 @@ node test-sagemaker-provider.js --endpoint=my-endpoint --transform=true --transf
 
 ## Transform Functions
 
-The SageMaker provider supports transforming prompts before they're sent to the endpoint. This is especially useful for formatting prompts according to specific model requirements.
+The SageMaker provider supports transforming prompts before they're sent to the endpoint, which is particularly useful for formatting prompts according to specific model requirements.
 
 ### Inline Transform
 
@@ -75,7 +99,7 @@ providers:
 
 ### File-Based Transform
 
-This directory includes a sample transform file (`transform.js`) that shows how to create reusable transformations:
+This example includes a sample transform file (`transform.js`) that shows how to create reusable transformations:
 
 ```yaml
 providers:
@@ -131,6 +155,14 @@ providers:
       region: us-west-2
       delay: 500 # Add a 500ms delay between API calls
 ```
+
+## Expected Results
+
+After running the evaluation, you should expect to see:
+
+1. A comparison of responses from your SageMaker endpoints across different prompts
+2. Performance metrics for each endpoint and prompt combination
+3. Any errors or issues with specific endpoints or configurations
 
 ## Troubleshooting
 
