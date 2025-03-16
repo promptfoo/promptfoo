@@ -39,7 +39,7 @@ providers:
       temperature: 0.7
       maxTokens: 256
       responseFormat:
-        path: '$.generated_text'
+        path: 'json.generated_text'
 
 tests:
   - vars:

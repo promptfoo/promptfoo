@@ -14,12 +14,11 @@ jest.mock('@aws-sdk/client-sagemaker-runtime', () => {
     // For embedding endpoints
     if (command.EndpointName.includes('embedding')) {
       return {
-        Body: {
-          transformToString: () =>
-            JSON.stringify({
-              embedding: [0.1, 0.2, 0.3, 0.4, 0.5],
-            }),
-        },
+        Body: new TextEncoder().encode(
+          JSON.stringify({
+            embedding: [0.1, 0.2, 0.3, 0.4, 0.5],
+          }),
+        ),
       };
     }
 
@@ -54,6 +53,12 @@ jest.mock('@aws-sdk/client-sagemaker-runtime', () => {
           generated_text: 'This is a response from HuggingFace-compatible endpoint',
         },
       ];
+    } else if (command.EndpointName.includes('js-extract')) {
+      responseBody = {
+        custom: {
+          result: 'Extracted value',
+        },
+      };
     } else {
       // Custom format
       responseBody = {
@@ -62,9 +67,7 @@ jest.mock('@aws-sdk/client-sagemaker-runtime', () => {
     }
 
     return {
-      Body: {
-        transformToString: () => JSON.stringify(responseBody),
-      },
+      Body: new TextEncoder().encode(JSON.stringify(responseBody)),
     };
   });
 
@@ -218,41 +221,22 @@ describe('SageMakerCompletionProvider', () => {
     expect(provider.getAcceptType()).toBe('application/text');
   });
 
-  it('should use JSONPath extraction when configured', async () => {
-    // Mock the jsonpath module
-    jest.mock('jsonpath', () => ({
-      query: jest.fn().mockImplementation((obj, path) => {
-        if (path === '$.custom.result') {
-          return ['Extracted value'];
-        }
-        return [];
-      }),
-    }));
-
-    const provider = new SageMakerCompletionProvider('custom-endpoint', {
+  it('should use JavaScript expression for response extraction when configured', async () => {
+    const provider = new SageMakerCompletionProvider('js-extract-endpoint', {
       config: {
         responseFormat: {
-          path: '$.custom.result',
+          path: 'json.custom.result',
         },
       },
     });
 
-    // Force reimport of jsonpath in the parseResponse method
-    // This is needed because we're mocking the module after it might have been imported
-    jest.isolateModules(() => {
-      const result = provider.parseResponse(
-        JSON.stringify({ custom: { result: 'Extracted value' } }),
-      );
-      expect(result).toBe('Extracted value');
-    });
+    const result = await provider.callApi('test prompt');
+
+    expect(result.output).toBe('Extracted value');
   });
 });
 
 describe('SageMakerEmbeddingProvider', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
   it('should initialize with correct endpoint name', () => {
     const provider = new SageMakerEmbeddingProvider('embedding-endpoint', {});
     expect(provider.endpointName).toBe('embedding-endpoint');

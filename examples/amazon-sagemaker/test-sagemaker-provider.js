@@ -38,6 +38,7 @@ function parseArgs() {
     help: 'Model type',
     choices: ['openai', 'anthropic', 'llama', 'huggingface', 'jumpstart', 'custom'],
     default: 'custom',
+    dest: 'modelType',
   });
   parser.add_argument('--embedding', {
     help: 'Test embedding endpoint',
@@ -50,10 +51,12 @@ function parseArgs() {
   parser.add_argument('--transform-file', {
     help: 'Path to transform file',
     default: 'transform.js',
+    dest: 'transformFile',
   });
   parser.add_argument('--response-path', {
     help: 'Response path expression',
     default: 'json.generated_text',
+    dest: 'responsePath',
   });
 
   const args = parser.parse_args();
@@ -66,7 +69,7 @@ async function testSageMaker() {
 
   console.log(`Testing SageMaker provider with endpoint: ${args.endpoint}`);
   console.log(`Region: ${args.region}`);
-  console.log(`Model type: ${args.model_type}`);
+  console.log(`Model type: ${args.modelType}`);
 
   // Test prompt
   const prompt = 'Generate a creative name for a coffee shop that specializes in caramel coffee.';
@@ -78,15 +81,15 @@ async function testSageMaker() {
       const provider = new SageMakerEmbeddingProvider(args.endpoint, {
         config: {
           region: args.region,
-          modelType: args.model_type,
+          modelType: args.modelType,
           responseFormat: {
-            path: args.response_path,
+            path: args.responsePath,
           },
         },
         transform: args.transform
-          ? args.transform_file.startsWith('file://')
-            ? args.transform_file
-            : `file://${args.transform_file}`
+          ? args.transformFile.startsWith('file://')
+            ? args.transformFile
+            : `file://${args.transformFile}`
           : undefined,
       });
 
@@ -105,15 +108,15 @@ async function testSageMaker() {
       const provider = new SageMakerCompletionProvider(args.endpoint, {
         config: {
           region: args.region,
-          modelType: args.model_type,
+          modelType: args.modelType,
           responseFormat: {
-            path: args.response_path,
+            path: args.responsePath,
           },
         },
         transform: args.transform
-          ? args.transform_file.startsWith('file://')
-            ? args.transform_file
-            : `file://${args.transform_file}`
+          ? args.transformFile.startsWith('file://')
+            ? args.transformFile
+            : `file://${args.transformFile}`
           : undefined,
       });
 
