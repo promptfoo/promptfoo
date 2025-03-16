@@ -165,7 +165,7 @@ providers:
       contentType: 'application/json'
       acceptType: 'application/json'
       responseFormat:
-        path: 'json.generated_text' # Use JavaScript expression to extract the field
+        path: 'json.generated_text' # Extract this field from the response
 
 tests:
   - vars:
@@ -283,7 +283,7 @@ providers:
       contentType: 'application/json'
       acceptType: 'application/json'
       responseFormat:
-        path: '$.generated_text'
+        path: 'json.generated_text'
 
   # Mistral 7B provider
   - id: sagemaker:huggingface:mistral-7b-v3
@@ -567,110 +567,15 @@ You can use JavaScript expressions to access nested properties in the response:
 
 ```yaml
 providers:
-  - id: sagemaker:jumpstart:my-llama-endpoint
+  - id: sagemaker:jumpstart:your-jumpstart-endpoint
+    label: 'JumpStart model'
     config:
-      region: us-west-2
+      region: us-east-1
       modelType: jumpstart
+      temperature: 0.7
+      maxTokens: 256
       responseFormat:
         path: 'json.generated_text'
-```
-
-Common examples:
-
-- `json.generated_text` - Access a top-level property
-- `json.choices[0].message.content` - Access a nested property with array indexing
-- `json.data[0].embedding` - Extract the first embedding from a data array
-
-### File-based Transforms
-
-For more complex transformations, you can use a file-based transform:
-
-```yaml
-providers:
-  - id: sagemaker:my-endpoint
-    config:
-      region: us-west-2
-      responseFormat:
-        path: 'file://transforms/extract-content.js'
-```
-
-The transform file should export a function that takes the JSON response and returns the extracted content:
-
-```javascript
-// transforms/extract-content.js
-module.exports = function (json) {
-  // Perform custom extraction logic
-  if (json.choices && json.choices.length > 0) {
-    return json.choices[0].message.content;
-  }
-
-  // Fallback to other common formats
-  return json.generated_text || json.completion || json.text || json;
-};
-```
-
-You can also reference a specific exported function:
-
-```yaml
-responseFormat:
-  path: 'file://transforms/helpers.js:extractContent'
-```
-
-### Backward Compatibility
-
-For backward compatibility, JSONPath-like syntax is automatically converted to JavaScript expressions:
-
-| JSONPath Syntax | JavaScript Expression |
-| --------------- | --------------------- |
-| `$.property`    | `json.property`       |
-| `$['property']` | `json.property`       |
-| `$[0]`          | `json[0]`             |
-
-This ensures existing configurations continue to work while providing a more flexible approach for extracting data from responses.
-
-## Troubleshooting
-
-### Installation Issues
-
-If you see this error:
-
-> "Could not load the SageMaker Runtime client"
-
-Make sure you've installed the required AWS SDK package:
-
-```bash
-npm install -g @aws-sdk/client-sagemaker-runtime
-```
-
-### Authentication Errors
-
-If you get "Access denied" or similar authentication errors, ensure your AWS credentials have permissions to invoke the SageMaker endpoint. The IAM policy should include:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": "sagemaker:InvokeEndpoint",
-      "Resource": "arn:aws:sagemaker:*:*:endpoint/*"
-    }
-  ]
-}
-```
-
-### Endpoint Issues
-
-If your endpoint isn't found, verify that:
-
-1. The endpoint name is correct and matches exactly
-2. The endpoint is deployed and in service
-3. You're using the correct AWS region
-
-You can check the status of your endpoints in the SageMaker console or using the AWS CLI:
-
-```bash
-aws sagemaker list-endpoints --region us-east-1
 ```
 
 ### Response Format Issues
@@ -679,32 +584,7 @@ If you're getting unusual responses from your endpoint, try:
 
 1. Setting `modelType` to match your model (or `custom` if unique)
 2. Using the `responseFormat.path` option to extract the correct field:
-   - For Llama models (JumpStart): Use `path: "$.generated_text"`
-   - For Mistral models (Hugging Face): Use `path: "$[0].generated_text"`
+   - For Llama models (JumpStart): Use `responseFormat.path: "json.generated_text"`
+   - For Mistral models (Hugging Face): Use `responseFormat.path: "json[0].generated_text"`
 3. Checking that your endpoint is correctly processing the input format
 4. Adding a delay parameter (e.g., `delay: 500`) to prevent rate limiting
-
-For debug purposes, you can run with detailed logging:
-
-```bash
-DEBUG=* promptfoo eval
-```
-
-### "Batch inference failed" Errors
-
-If you encounter "Batch inference failed" errors:
-
-1. Add a `delay` parameter (at least 500ms recommended)
-2. Verify you're using the correct `modelType` for your endpoint:
-   - For Llama models: Use `modelType: jumpstart`
-   - For Mistral models: Use `modelType: huggingface`
-3. Ensure you've specified the correct `contentType` and `acceptType` as "application/json"
-4. Check that your endpoint is active and functioning in the SageMaker console
-
-## See Also
-
-- [Configuration Reference](../reference/configuration.md)
-- [Command Line Interface](../reference/cli.md)
-- [Provider Options](../reference/providers.md)
-- [Amazon SageMaker Examples](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-sagemaker)
-- [AWS Bedrock Provider](./aws-bedrock.md) - For using AWS-managed foundation models without deploying custom endpoints

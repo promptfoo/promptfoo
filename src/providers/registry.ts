@@ -62,11 +62,10 @@ import { parsePackageProvider } from './packageParser';
 import { PortkeyChatCompletionProvider } from './portkey';
 import { PythonProvider } from './pythonCompletion';
 import {
-  ReplicateImageProvider,
   ReplicateModerationProvider,
   ReplicateProvider,
+  ReplicateImageProvider,
 } from './replicate';
-import { SageMakerCompletionProvider, SageMakerEmbeddingProvider } from './sagemaker';
 import { ScriptCompletionProvider } from './scriptCompletion';
 import { SequenceProvider } from './sequence';
 import { SimulatedUser } from './simulatedUser';
@@ -266,6 +265,11 @@ export const providerMap: ProviderFactory[] = [
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const endpointName = splits.slice(2).join(':');
+
+      // Dynamically import SageMaker provider
+      const { SageMakerCompletionProvider, SageMakerEmbeddingProvider } = await import(
+        './sagemaker'
+      );
 
       if (modelType === 'embedding' || modelType === 'embeddings') {
         return new SageMakerEmbeddingProvider(endpointName || modelType, providerOptions);

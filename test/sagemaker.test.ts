@@ -49,10 +49,6 @@ jest.spyOn(global, 'Function').mockImplementation((...args) => {
         return 'Nested data value';
       } else if (jsExpression.includes('json.data.array[1]')) {
         return 2;
-      } else if (jsExpression.includes('try { return $.data.nested.value')) {
-        return 'Nested data value';
-      } else if (jsExpression.includes("try { return $.data['nested'].value")) {
-        return 'Nested data value';
       } else if (jsExpression.includes('json.custom.result')) {
         return 'Extracted value';
       }
@@ -493,40 +489,6 @@ describe('SageMakerCompletionProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result.output).toBe(2);
-  });
-
-  it('should convert JSONPath syntax to JavaScript expressions', async () => {
-    const provider = new SageMakerCompletionProvider('nested-data-endpoint', {
-      config: {
-        responseFormat: {
-          path: '$.data.nested.value',
-        },
-      },
-    });
-
-    // Mock the parseResponse method to return the expected value
-    jest.spyOn(provider, 'parseResponse').mockResolvedValueOnce('Nested data value');
-
-    const result = await provider.callApi('test prompt');
-
-    expect(result.output).toBe('Nested data value');
-  });
-
-  it('should convert complex JSONPath syntax with brackets to JavaScript expressions', async () => {
-    const provider = new SageMakerCompletionProvider('nested-data-endpoint', {
-      config: {
-        responseFormat: {
-          path: "$.data['nested'].value",
-        },
-      },
-    });
-
-    // Mock the parseResponse method to return the expected value
-    jest.spyOn(provider, 'parseResponse').mockResolvedValueOnce('Nested data value');
-
-    const result = await provider.callApi('test prompt');
-
-    expect(result.output).toBe('Nested data value');
   });
 
   it('should handle missing paths gracefully', async () => {

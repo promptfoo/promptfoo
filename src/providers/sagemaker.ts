@@ -338,31 +338,13 @@ export abstract class SageMakerGenericProvider {
     }
 
     try {
-      // First, check if this might be a JSONPath expression that needs conversion
-      let jsPath = pathExpression;
-      if (
-        pathExpression.startsWith('$.') ||
-        pathExpression.includes('[') ||
-        pathExpression.includes(']')
-      ) {
-        // Convert old JSONPath syntax to JavaScript property access syntax
-        jsPath = pathExpression
-          .replace(/^\$\./, 'json.') // Replace root $ with 'json'
-          .replace(/\['([^']+)'\]/g, '.$1') // Replace ['prop'] with .prop
-          .replace(/\[(\d+)\]/g, '[$1]'); // Keep numeric indices as-is
-
-        logger.debug(
-          `Converting JSONPath "${pathExpression}" to JavaScript expression "${jsPath}"`,
-        );
-      }
-
       // For file-based transforms, use them directly
-      if (jsPath.startsWith('file://')) {
+      if (pathExpression.startsWith('file://')) {
         try {
           // Use the transform utility for file-based transforms
           const { TransformInputType } = await import('../util/transform');
           const transformedResult = await transform(
-            jsPath,
+            pathExpression,
             responseJson,
             { prompt: {} }, // Minimal context since we're just transforming the response
             false, // Don't validate return to allow undefined/null
@@ -384,7 +366,7 @@ export abstract class SageMakerGenericProvider {
         // Create a function that evaluates the expression with 'json' as the input
         const result = new Function(
           'json',
-          `try { return ${jsPath}; } catch(e) { return undefined; }`,
+          `try { return ${pathExpression}; } catch(e) { return undefined; }`,
         )(responseJson);
 
         if (result === undefined) {
@@ -397,7 +379,7 @@ export abstract class SageMakerGenericProvider {
 
         return result;
       } catch (error) {
-        logger.warn(`Failed to evaluate expression "${jsPath}": ${error}`);
+        logger.warn(`Failed to evaluate expression "${pathExpression}": ${error}`);
         return responseJson;
       }
     } catch (error) {
