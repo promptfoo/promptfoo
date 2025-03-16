@@ -39,7 +39,7 @@ import type {
 import { maybeLoadFromExternalFile } from './util';
 import { isJavascriptFile } from './util/file';
 import invariant from './util/invariant';
-import { extractJsonObjects } from './util/json';
+import { extractJsonObjects, extractFirstJsonObject } from './util/json';
 import { getNunjucksEngine } from './util/templates';
 
 const nunjucks = getNunjucksEngine(undefined, false, true);
@@ -358,7 +358,10 @@ async function loadRubricPrompt(
   rubricPrompt: string | object | undefined,
   defaultPrompt: string,
 ): Promise<string> {
-  if (!rubricPrompt) {
+  if (
+    !rubricPrompt ||
+    (typeof rubricPrompt === 'object' && Object.keys(rubricPrompt ?? {}).length === 0)
+  ) {
     return defaultPrompt;
   }
 
@@ -378,7 +381,6 @@ async function loadRubricPrompt(
     rubricPrompt = maybeLoadFromExternalFile(rubricPrompt);
   }
 
-  // Stringify if it's an object
   if (typeof rubricPrompt === 'object') {
     rubricPrompt = JSON.stringify(rubricPrompt);
   }
@@ -511,38 +513,53 @@ export async function matchesFactuality(
   }
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, OPENAI_FACTUALITY_PROMPT);
-  const prompt = nunjucks.renderString(rubricPrompt, {
+
+  // Create template variables
+  const templateVars = {
     input: JSON.stringify(input).slice(1, -1),
     ideal: JSON.stringify(expected).slice(1, -1),
     completion: JSON.stringify(output).slice(1, -1),
     ...fromVars(vars),
-  });
+  };
 
+  const prompt = nunjucks.renderString(rubricPrompt, templateVars);
+
+  // Get the appropriate provider
   const finalProvider = await getAndCheckProvider(
     'text',
     grading.provider,
     (await getDefaultProviders()).gradingProvider,
     'factuality check',
   );
+
   const resp = await finalProvider.callApi(prompt);
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', resp.tokenUsage);
   }
 
   invariant(typeof resp.output === 'string', 'factuality produced malformed response');
-  try {
-    const output = resp.output;
-    // The preferred output starts like "(A)...", but we also support leading whitespace, lowercase letters, and omitting the first parenthesis.
-    const answerMatch = output.match(/\s*\(?([a-eA-E])\)/);
-    if (!answerMatch) {
-      return fail(
-        `Factuality checker output did not match expected format: ${output}`,
-        resp.tokenUsage,
-      );
-    }
-    const option = answerMatch[1].toUpperCase();
 
-    let reason = '';
+  // Standard category descriptions for consistency
+  const categoryDescriptions: Record<string, string> = {
+    A: 'The submitted answer is a subset of the expert answer and is fully consistent with it.',
+    B: 'The submitted answer is a superset of the expert answer and is fully consistent with it.',
+    C: 'The submitted answer contains all the same details as the expert answer.',
+    D: 'There is a disagreement between the submitted answer and the expert answer.',
+    E: "The answers differ, but these differences don't matter from the perspective of factuality.",
+  };
+
+  try {
+    const jsonData = extractFirstJsonObject<{ category?: string; reason?: string }>(resp.output);
+
+    if (!jsonData.category || typeof jsonData.category !== 'string') {
+      return fail('Invalid response format: missing category field', resp.tokenUsage);
+    }
+
+    const option = jsonData.category.trim().toUpperCase();
+
+    if (!/^[A-E]$/.test(option)) {
+      return fail(`Invalid category value: ${option}`, resp.tokenUsage);
+    }
 
     const scoreLookup: Record<string, number> = {
       A: grading.factuality?.subset ?? 1,
@@ -552,29 +569,17 @@ export async function matchesFactuality(
       E: grading.factuality?.differButFactual ?? 1,
     };
 
-    // Passing is defined as scores with value >0, and failing as scores with value 0.
+    // Determine if this option passes or fails
     const passing = Object.keys(scoreLookup).filter((key) => scoreLookup[key] > 0);
     const failing = Object.keys(scoreLookup).filter((key) => scoreLookup[key] === 0);
+    const pass = passing.includes(option) && !failing.includes(option);
 
-    let pass = passing.includes(option) && !failing.includes(option);
-    const optionReasons: Record<string, string> = {
-      A: `The submitted answer is a subset of the expert answer and is fully consistent with it.`,
-      B: `The submitted answer is a superset of the expert answer and is fully consistent with it.`,
-      C: `The submitted answer contains all the same details as the expert answer.`,
-      D: `There is a disagreement between the submitted answer and the expert answer.`,
-      E: `The answers differ, but these differences don't matter from the perspective of factuality.`,
-    };
-    if (optionReasons[option]) {
-      reason = optionReasons[option];
-    } else {
-      pass = false;
-      reason = `Invalid option: ${option}. Full response from factuality checker: ${resp.output}`;
-    }
+    // Use the model's reason if available, otherwise fall back to the category description
+    const modelReason = jsonData.reason?.trim();
+    const reason = modelReason || `Category ${option}: ${categoryDescriptions[option]}`;
 
-    let score = pass ? 1 : 0;
-    if (typeof scoreLookup[option] !== 'undefined') {
-      score = scoreLookup[option];
-    }
+    // Calculate score
+    const score = scoreLookup[option] ?? (pass ? 1 : 0);
 
     return {
       pass,
@@ -593,7 +598,7 @@ export async function matchesFactuality(
       },
     };
   } catch (err) {
-    return fail(`Error parsing output: ${(err as Error).message}`, resp.tokenUsage);
+    return fail(`Error parsing factuality response: ${(err as Error).message}`, resp.tokenUsage);
   }
 }
 

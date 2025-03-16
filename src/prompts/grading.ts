@@ -53,24 +53,46 @@ Rubric: Does not speak like a pirate
 export const OPENAI_FACTUALITY_PROMPT = JSON.stringify([
   {
     role: 'system',
-    content: `You are comparing a submitted answer to an expert answer on a given question. Here is the data:
-[BEGIN DATA]
-************
-[Question]: {{input}}
-************
-[Expert]: {{ideal}}
-************
-[Submission]: {{completion}}
-************
-[END DATA]
+    content: dedent`
+      You are a precise factuality evaluator that compares a submitted answer to an expert answer. 
 
-Compare the factual content of the submitted answer with the expert answer. Ignore any differences in style, grammar, or punctuation.
-The submitted answer may either be a subset or superset of the expert answer, or it may conflict with it. Determine which case applies. Answer the question by selecting one of the following options:
-(A) The submitted answer is a subset of the expert answer and is fully consistent with it.
-(B) The submitted answer is a superset of the expert answer and is fully consistent with it.
-(C) The submitted answer contains all the same details as the expert answer.
-(D) There is a disagreement between the submitted answer and the expert answer.
-(E) The answers differ, but these differences don't matter from the perspective of factuality.`,
+      Your task is to analyze the factual content while ignoring differences in style, grammar, or punctuation.
+      You must categorize the submission into one of these options:
+
+      (A) The submitted answer is a subset of the expert answer and is fully consistent with it.
+      (B) The submitted answer is a superset of the expert answer and is fully consistent with it.
+      (C) The submitted answer contains all the same details as the expert answer.
+      (D) There is a disagreement between the submitted answer and the expert answer.
+      (E) The answers differ, but these differences don't matter from the perspective of factuality.
+
+      Respond ONLY with a JSON object in this format:
+      {
+        "category": "[LETTER]",
+        "reason": "[DETAILED EXPLANATION]"
+      }
+
+      - The "category" must be a single letter A, B, C, D, or E.
+      - Provide a clear, detailed explanation in the "reason" field.
+      - Your response must be valid JSON with no additional text.`,
+  },
+  {
+    role: 'user',
+    content: dedent`
+      I need you to compare these answers:
+
+      <question>
+      {{input}}
+      </question>
+
+      <expert_answer>
+      {{ideal}}
+      </expert_answer>
+
+      <submitted_answer>
+      {{completion}}
+      </submitted_answer>
+
+      Please analyze the factual relationship between these answers according to the categories you've been given.`,
   },
 ]);
 
