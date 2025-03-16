@@ -34,7 +34,7 @@ prompts:
   - 'What is the capital of {{state}}?'
 providers:
   - openai:gpt-4o
-  - anthropic:claude-3.7-sonnet-20250219
+  - anthropic:claude-3-7-sonnet-20250219
 tests:
   - vars:
       state: California
@@ -78,7 +78,7 @@ Like other model-graded assertions, you can override the default grader:
    ```yaml
    defaultTest:
      options:
-       provider: anthropic:claude-3.7-sonnet-20250219
+       provider: anthropic:claude-3-7-sonnet-20250219
    ```
 
 3. Using assertion-level override:
