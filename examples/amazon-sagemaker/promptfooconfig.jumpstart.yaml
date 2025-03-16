@@ -18,7 +18,7 @@ providers:
       contentType: 'application/json'
       acceptType: 'application/json'
       responseFormat:
-        path: '$.generated_text' # Extract this field from the response
+        path: 'json.generated_text' # Extract this field from the response
 
 tests:
   - vars:

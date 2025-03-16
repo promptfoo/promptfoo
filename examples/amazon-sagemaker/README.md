@@ -25,7 +25,7 @@ This example shows how to:
 3. AWS credentials configured locally
 4. Required npm packages:
    ```bash
-   npm install -g @aws-sdk/client-sagemaker-runtime jsonpath
+   npm install -g @aws-sdk/client-sagemaker-runtime
    ```
 
 ## Environment Variables
@@ -141,7 +141,7 @@ providers:
       modelType: jumpstart
       maxTokens: 256
       responseFormat:
-        path: '$.generated_text'
+        path: 'json.generated_text'
 ```
 
 ## Rate Limiting with Delays
@@ -181,9 +181,9 @@ If you encounter "Batch inference failed" errors:
 
 If you're getting unusual responses or missing output:
 
-1. Make sure you're using the correct JSONPath for your model type:
-   - For Llama models (JumpStart): Use `responseFormat.path: "$.generated_text"`
-   - For Mistral models (Hugging Face): Use `responseFormat.path: "$[0].generated_text"`
+1. Make sure you're using the correct JavaScript expression for your model type:
+   - For Llama models (JumpStart): Use `responseFormat.path: "json.generated_text"`
+   - For Mistral models (Hugging Face): Use `responseFormat.path: "json[0].generated_text"`
 
 ### Transform Issues
 

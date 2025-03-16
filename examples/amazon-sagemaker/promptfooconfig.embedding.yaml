@@ -2,26 +2,37 @@
 description: 'Testing SageMaker embedding endpoints with similarity assertions'
 
 prompts:
-  - 'Describe {{concept}} in detail.'
+  - 'The weather today is {{condition}}.'
+  - 'It is {{condition}} outside.'
+  - "Today's forecast is {{condition}} in the morning, improving in the afternoon."
 
 providers:
-  - id: sagemaker:your-text-generation-endpoint
+  - id: openai:gpt-3.5-turbo
     config:
-      region: us-east-1
-      temperature: 0
-      maxTokens: 256
+      temperature: 0.7
+      max_tokens: 150
+
+# Set default test parameters
+defaultTest:
+  assert:
+    - type: similar
+      value: '{{prompt}}'
+      threshold: 0.7
+  options:
+    provider:
+      embedding:
+        id: sagemaker:embedding:your-embedding-endpoint
+        config:
+          region: us-west-2
+          contentType: 'application/json'
+          acceptType: 'application/json'
+          responseFormat:
+            path: 'json.embedding' # Extract embedding from response
 
 tests:
   - vars:
-      concept: artificial intelligence
-    options:
-      provider:
-        embedding:
-          id: sagemaker:embedding:your-embedding-endpoint
-          config:
-            region: us-east-1
-            modelType: openai
-    assert:
-      - type: similar
-        value: 'AI is a field of computer science focused on creating machines that can perform tasks that typically require human intelligence.'
-        threshold: 0.85
+      condition: sunny
+  - vars:
+      condition: rainy
+  - vars:
+      condition: snowy

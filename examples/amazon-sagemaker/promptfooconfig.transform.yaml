@@ -29,7 +29,7 @@ providers:
       temperature: 0.7
       transform: file://transform.js
       responseFormat:
-        path: '$.generated_text' # Extract this field from the response
+        path: 'json.generated_text' # Extract this field from the response
 
   # Example 3: Transform applied to an embedding model
   - id: sagemaker:embedding:your-embedding-endpoint

@@ -15,7 +15,7 @@ The `sagemaker` provider allows you to use Amazon SageMaker endpoints in your ev
 2. Install required dependencies:
 
    ```bash
-   npm install -g @aws-sdk/client-sagemaker-runtime jsonpath
+   npm install -g @aws-sdk/client-sagemaker-runtime
    ```
 
 3. The AWS SDK will automatically pull credentials from the following locations:
@@ -165,7 +165,7 @@ providers:
       contentType: 'application/json'
       acceptType: 'application/json'
       responseFormat:
-        path: '$.generated_text' # Extract this field from the response
+        path: 'json.generated_text' # Use JavaScript expression to extract the field
 
 tests:
   - vars:
@@ -175,6 +175,55 @@ tests:
   - vars:
       flavor: lavender
 ```
+
+### Advanced Response Processing Example
+
+This example demonstrates advanced response processing with a file-based transform:
+
+```yaml
+prompts:
+  - 'Who won the World Series in {{year}}?'
+
+providers:
+  - id: sagemaker:jumpstart:my-custom-endpoint
+    label: 'Custom Model with Response Processing'
+    config:
+      region: us-west-2
+      modelType: jumpstart
+      # Use a custom transform file to extract and process the response
+      responseFormat:
+        path: 'file://transforms/extract-baseball-info.js'
+
+tests:
+  - vars:
+      year: 2023
+  - vars:
+      year: 2000
+```
+
+With a custom transform file that extracts and enhances the response:
+
+```javascript
+// transforms/extract-baseball-info.js
+module.exports = function (json) {
+  // Get the raw generated text
+  const rawText = json.generated_text || '';
+
+  // Extract the team name using regex
+  const teamMatch = rawText.match(/the\s+([A-Za-z\s]+)\s+won/i);
+  const team = teamMatch ? teamMatch[1].trim() : 'Unknown team';
+
+  // Format the response nicely
+  return {
+    rawResponse: rawText,
+    extractedTeam: team,
+    year: rawText.match(/(\d{4})/)?.[1] || 'unknown year',
+    confidence: rawText.includes('I am certain') ? 'high' : 'medium',
+  };
+};
+```
+
+This transform not only extracts the content but also parses it to identify specific information and formats the response with added context.
 
 ### Mistral Model Example (Hugging Face)
 
@@ -197,7 +246,7 @@ providers:
       contentType: 'application/json'
       acceptType: 'application/json'
       responseFormat:
-        path: '$[0].generated_text' # Note the array-based response format
+        path: 'json[0].generated_text' # JavaScript expression to access array element
 
 tests:
   - vars:
@@ -286,22 +335,23 @@ providers:
 
 Supported model types:
 
-| Model Type    | Description                                     | JSONPath for Results  |
-| ------------- | ----------------------------------------------- | --------------------- |
-| `openai`      | OpenAI-compatible models                        | Standard format       |
-| `anthropic`   | Anthropic Claude-compatible models              | Standard format       |
-| `llama`       | LLama-compatible models                         | Standard format       |
-| `huggingface` | Hugging Face models (like Mistral)              | `$[0].generated_text` |
-| `jumpstart`   | AWS JumpStart foundation models                 | `$.generated_text`    |
-| `custom`      | Custom model formats (default if not specified) | Depends on model      |
+| Model Type    | Description                                     | JavaScript Expression for Results |
+| ------------- | ----------------------------------------------- | --------------------------------- |
+| `openai`      | OpenAI-compatible models                        | Standard format                   |
+| `anthropic`   | Anthropic Claude-compatible models              | Standard format                   |
+| `llama`       | LLama-compatible models                         | Standard format                   |
+| `huggingface` | Hugging Face models (like Mistral)              | `json[0].generated_text`          |
+| `jumpstart`   | AWS JumpStart foundation models                 | `json.generated_text`             |
+| `custom`      | Custom model formats (default if not specified) | Depends on model                  |
 
 :::warning
 
-Different model types return results in different response formats. You should configure the appropriate JSONPath for response extraction:
+Different model types return results in different response formats. You should configure the appropriate JavaScript expression for response extraction:
 
-- **JumpStart models** (Llama): Use `responseFormat.path: "$.generated_text"`
-- **Hugging Face models** (Mistral): Use `responseFormat.path: "$[0].generated_text"`
+- **JumpStart models** (Llama): Use `responseFormat.path: "json.generated_text"`
+- **Hugging Face models** (Mistral): Use `responseFormat.path: "json[0].generated_text"`
 
+For more complex extraction logic, you can use file-based transforms as described in the [Response Path Expressions](#response-path-expressions) section.
 :::
 
 ## Configuration Options
@@ -322,19 +372,31 @@ Common configuration options for SageMaker endpoints:
 | `delay`         | Delay between API calls in milliseconds      | `0`                |
 | `transform`     | Function to transform prompts before sending | N/A                |
 
-## Response Parsing with JSONPath
+## Response Parsing with JavaScript Expressions
 
-For endpoints with unique response formats, you can use JSONPath to extract the specific field containing the generated text:
+For endpoints with unique response formats, you can use JavaScript expressions to extract specific fields from the response:
 
 ```yaml
 providers:
   - id: sagemaker:my-custom-endpoint
     config:
       responseFormat:
-        path: '$.custom.nested.responseField'
+        path: 'json.custom.nested.responseField'
 ```
 
-This will extract the value at the specified path from the JSON response.
+This will extract the value at the specified path from the JSON response using JavaScript property access. The JSON response is available as the `json` variable in your expression.
+
+For more complex parsing needs, you can use a file-based transformer:
+
+```yaml
+providers:
+  - id: sagemaker:my-custom-endpoint
+    config:
+      responseFormat:
+        path: 'file://transformers/custom-parser.js'
+```
+
+See the [Response Path Expressions](#response-path-expressions) section for more details on using JavaScript expressions and file-based transformers.
 
 ## Embeddings
 
@@ -494,6 +556,77 @@ providers:
 ```
 
 Transformed prompts maintain proper caching and include metadata about the transformation in the response.
+
+## Response Path Expressions
+
+The `responseFormat.path` configuration option allows you to extract specific fields from the SageMaker endpoint response using JavaScript expressions or custom transformer functions from files.
+
+### JavaScript Expressions
+
+You can use JavaScript expressions to access nested properties in the response:
+
+```yaml
+providers:
+  - id: sagemaker:jumpstart:my-llama-endpoint
+    config:
+      region: us-west-2
+      modelType: jumpstart
+      responseFormat:
+        path: 'json.generated_text'
+```
+
+Common examples:
+
+- `json.generated_text` - Access a top-level property
+- `json.choices[0].message.content` - Access a nested property with array indexing
+- `json.data[0].embedding` - Extract the first embedding from a data array
+
+### File-based Transforms
+
+For more complex transformations, you can use a file-based transform:
+
+```yaml
+providers:
+  - id: sagemaker:my-endpoint
+    config:
+      region: us-west-2
+      responseFormat:
+        path: 'file://transforms/extract-content.js'
+```
+
+The transform file should export a function that takes the JSON response and returns the extracted content:
+
+```javascript
+// transforms/extract-content.js
+module.exports = function (json) {
+  // Perform custom extraction logic
+  if (json.choices && json.choices.length > 0) {
+    return json.choices[0].message.content;
+  }
+
+  // Fallback to other common formats
+  return json.generated_text || json.completion || json.text || json;
+};
+```
+
+You can also reference a specific exported function:
+
+```yaml
+responseFormat:
+  path: 'file://transforms/helpers.js:extractContent'
+```
+
+### Backward Compatibility
+
+For backward compatibility, JSONPath-like syntax is automatically converted to JavaScript expressions:
+
+| JSONPath Syntax | JavaScript Expression |
+| --------------- | --------------------- |
+| `$.property`    | `json.property`       |
+| `$['property']` | `json.property`       |
+| `$[0]`          | `json[0]`             |
+
+This ensures existing configurations continue to work while providing a more flexible approach for extracting data from responses.
 
 ## Troubleshooting
 

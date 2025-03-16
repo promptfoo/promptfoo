@@ -14,34 +14,12 @@ import { transform } from '../util/transform';
 import type { TransformContext } from '../util/transform';
 import { parseChatPrompt } from './shared';
 
-// Make sure jsonpath is available
-let jsonpathAvailable = false;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  require('jsonpath');
-  jsonpathAvailable = true;
-} catch (e) {
-  // jsonpath not available, we'll handle this gracefully
-}
-
 /**
  * Sleep utility function for implementing delays
  * @param ms Milliseconds to sleep
  * @returns Promise that resolves after the specified delay
  */
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
-
-/**
- * Simple synchronous JSONPath validation
- * Only checks basic syntax requirements
- */
-function validateJsonPathSync(path: string): { valid: boolean; error?: string } {
-  if (!path.startsWith('$')) {
-    return { valid: false, error: 'JSONPath must start with $ root selector' };
-  }
-  // Basic validation passed
-  return { valid: true };
-}
 
 /**
  * Options for configuring SageMaker provider
@@ -75,7 +53,7 @@ interface SageMakerOptions {
   // Response format options
   responseFormat?: {
     type?: string;
-    path?: string; // JSONPath to extract content
+    path?: string; // JavaScript expression to extract content (formerly JSONPath)
   };
 }
 
@@ -111,14 +89,6 @@ export abstract class SageMakerGenericProvider {
     this.transform = transform || this.config.transform;
     this.providerId = id; // Store custom ID if provided
 
-    // Perform simple synchronous validation in constructor
-    if (this.config?.responseFormat?.path) {
-      const validation = validateJsonPathSync(this.config.responseFormat.path);
-      if (!validation.valid) {
-        logger.warn(`Invalid responseFormat.path: ${validation.error}`);
-      }
-    }
-
     // Record telemetry for SageMaker usage
     telemetry.recordAndSendOnce('feature_used', {
       feature: 'sagemaker',
@@ -151,9 +121,9 @@ export abstract class SageMakerGenericProvider {
       try {
         const { fromSSO } = await import('@aws-sdk/credential-provider-sso');
         return fromSSO({ profile: this.config.profile });
-      } catch (_error) {
+      } catch {
         throw new Error(
-          `Failed to load AWS SSO profile. Please install @aws-sdk/credential-provider-sso: ${_error}`,
+          `Failed to load AWS SSO profile. Please install @aws-sdk/credential-provider-sso`,
         );
       }
     }
@@ -180,7 +150,7 @@ export abstract class SageMakerGenericProvider {
         });
 
         logger.debug(`SageMaker client initialized for region ${this.getRegion()}`);
-      } catch (_error) {
+      } catch {
         throw new Error(
           'The @aws-sdk/client-sagemaker-runtime package is required. Please install it with: npm install @aws-sdk/client-sagemaker-runtime',
         );
@@ -349,9 +319,91 @@ export abstract class SageMakerGenericProvider {
       // Fall back to the original prompt if the transform result is not usable
       logger.warn(`Transform did not produce a valid result, using original prompt`);
       return prompt;
-    } catch (_error) {
-      logger.error(`Error applying transform to prompt: ${_error}`);
+    } catch (_) {
+      logger.error(`Error applying transform to prompt: ${_}`);
       return prompt; // Return original prompt on error
+    }
+  }
+
+  /**
+   * Extracts data from a response using a path expression
+   * Supports JavaScript expressions and file-based transforms
+   */
+  protected async extractFromPath(
+    responseJson: any,
+    pathExpression: string | undefined,
+  ): Promise<any> {
+    if (!pathExpression) {
+      return responseJson;
+    }
+
+    try {
+      // First, check if this might be a JSONPath expression that needs conversion
+      let jsPath = pathExpression;
+      if (
+        pathExpression.startsWith('$.') ||
+        pathExpression.includes('[') ||
+        pathExpression.includes(']')
+      ) {
+        // Convert old JSONPath syntax to JavaScript property access syntax
+        jsPath = pathExpression
+          .replace(/^\$\./, 'json.') // Replace root $ with 'json'
+          .replace(/\['([^']+)'\]/g, '.$1') // Replace ['prop'] with .prop
+          .replace(/\[(\d+)\]/g, '[$1]'); // Keep numeric indices as-is
+
+        logger.debug(
+          `Converting JSONPath "${pathExpression}" to JavaScript expression "${jsPath}"`,
+        );
+      }
+
+      // For file-based transforms, use them directly
+      if (jsPath.startsWith('file://')) {
+        try {
+          // Use the transform utility for file-based transforms
+          const { TransformInputType } = await import('../util/transform');
+          const transformedResult = await transform(
+            jsPath,
+            responseJson,
+            { prompt: {} }, // Minimal context since we're just transforming the response
+            false, // Don't validate return to allow undefined/null
+            TransformInputType.OUTPUT,
+          );
+
+          // Return the transformed result, or original JSON if undefined/null
+          return transformedResult !== undefined && transformedResult !== null
+            ? transformedResult
+            : responseJson;
+        } catch (error) {
+          logger.warn(`Failed to transform response using file: ${error}`);
+          return responseJson;
+        }
+      }
+
+      // For JavaScript expressions, create a simple function
+      try {
+        // Create a function that evaluates the expression with 'json' as the input
+        const result = new Function(
+          'json',
+          `try { return ${jsPath}; } catch(e) { return undefined; }`,
+        )(responseJson);
+
+        if (result === undefined) {
+          logger.warn(`Path expression "${pathExpression}" did not match any data in the response`);
+          logger.debug(
+            `Response JSON structure: ${JSON.stringify(responseJson).substring(0, 200)}...`,
+          );
+          return responseJson;
+        }
+
+        return result;
+      } catch (error) {
+        logger.warn(`Failed to evaluate expression "${jsPath}": ${error}`);
+        return responseJson;
+      }
+    } catch (error) {
+      logger.warn(`Failed to extract data using path expression "${pathExpression}": ${error}`);
+      logger.debug(`Response JSON structure: ${JSON.stringify(responseJson).substring(0, 200)}...`);
+      return responseJson;
     }
   }
 }
@@ -399,7 +451,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
           } else {
             throw new Error('Not valid messages format');
           }
-        } catch (_error) {
+        } catch {
           // Fall back to text completion format
           payload = {
             prompt,
@@ -425,7 +477,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
           } else {
             throw new Error('Not valid messages format');
           }
-        } catch (_error) {
+        } catch {
           // Extract system and user messages using the same logic as Anthropic provider
           const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
@@ -461,7 +513,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
           } else {
             throw new Error('Not valid messages format');
           }
-        } catch (_error) {
+        } catch {
           // Simple text completion for Llama
           payload = {
             prompt,
@@ -506,7 +558,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
           // Try to parse as JSON
           const parsedPrompt = JSON.parse(prompt);
           payload = parsedPrompt;
-        } catch (_error) {
+        } catch {
           // If not valid JSON, wrap in a simple object
           payload = { prompt };
         }
@@ -519,7 +571,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
   /**
    * Parse the response from SageMaker endpoint
    */
-  parseResponse(responseBody: string): any {
+  async parseResponse(responseBody: string): Promise<any> {
     const modelType = this.config.modelType || 'custom';
     let responseJson;
 
@@ -527,50 +579,20 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
 
     try {
       responseJson = JSON.parse(responseBody);
-    } catch (_error) {
+    } catch {
       logger.debug('Response is not JSON, returning as-is');
       return responseBody; // Return as is if not JSON
     }
 
-    // If response format specifies a path, extract it using JSONPath
+    // If response format specifies a path, extract it using expression evaluation
     if (this.config.responseFormat?.path) {
       try {
-        // Make sure jsonpath is available - if not, we'll skip this section
-        if (!jsonpathAvailable) {
-          logger.warn('JSONPath extraction skipped: jsonpath module not available');
-          return responseJson;
-        }
-
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const jsonpathModule = require('jsonpath');
-
-        // Validate JSONPath - synchronous version
-        const validation = validateJsonPathSync(this.config.responseFormat.path);
-        if (!validation.valid) {
-          logger.warn(`Skipping extraction with invalid JSONPath: ${validation.error}`);
-          return responseJson;
-        }
-
-        const extracted = jsonpathModule.query(responseJson, this.config.responseFormat.path);
-        logger.debug(`Extracted value using JSONPath: ${this.config.responseFormat.path}`);
-
-        if (extracted.length === 0) {
-          logger.warn(`JSONPath matched no data: ${this.config.responseFormat.path}`);
-          logger.debug(
-            `Response JSON structure: ${JSON.stringify(responseJson).substring(0, 200)}...`,
-          );
-          return responseJson;
-        }
-
-        // Log the type of extracted data for debugging
-        logger.debug(
-          `Extracted data type: ${typeof extracted[0]}, isArray: ${Array.isArray(extracted[0])}`,
-        );
-
-        return extracted[0] ?? responseJson;
-      } catch (_error) {
+        const pathExpression = this.config.responseFormat.path;
+        const extracted = await this.extractFromPath(responseJson, pathExpression);
+        return extracted;
+      } catch (error) {
         logger.warn(
-          `Failed to extract from JSON path: ${this.config.responseFormat.path}, Error: ${_error}`,
+          `Failed to extract from path: ${this.config.responseFormat.path}, Error: ${error}`,
         );
         logger.debug(
           `Response JSON structure: ${JSON.stringify(responseJson).substring(0, 200)}...`,
@@ -666,9 +688,9 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
         .substring(0, 8);
 
       return `sagemaker:v1:${this.getEndpointName()}:${promptHash}:${configHash}`;
-    } catch (_error) {
+    } catch (_) {
       // Fall back to the unoptimized version if crypto is not available
-      logger.debug(`Unable to create hash for cache key: ${_error}`);
+      logger.debug(`Unable to create hash for cache key: ${_}`);
       return `sagemaker:v1:${this.getEndpointName()}:${prompt.substring(0, 50)}:${configStr.substring(0, 50)}`;
     }
   }
@@ -728,8 +750,8 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
           }
 
           return parsedResult;
-        } catch (_error) {
-          logger.warn(`Failed to parse cached SageMaker response: ${_error}`);
+        } catch (_) {
+          logger.warn(`Failed to parse cached SageMaker response: ${_}`);
           // Continue with API call if parsing fails
         }
       }
@@ -779,7 +801,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
         `SageMaker response (truncated): ${responseBody.length > 1000 ? responseBody.substring(0, 1000) + '...' : responseBody}`,
       );
 
-      const output = this.parseResponse(responseBody);
+      const output = await this.parseResponse(responseBody);
 
       // Calculate token usage estimation (very rough estimate)
       // Note: 4 characters per token is a simplified approximation
@@ -816,8 +838,8 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
           logger.debug(
             `Stored SageMaker response in cache with key: ${cacheKey.substring(0, 100)}...`,
           );
-        } catch (_error) {
-          logger.warn(`Failed to store SageMaker response in cache: ${_error}`);
+        } catch (_) {
+          logger.warn(`Failed to store SageMaker response in cache: ${_}`);
         }
       }
 
@@ -878,9 +900,9 @@ export class SageMakerEmbeddingProvider
         .substring(0, 8);
 
       return `sagemaker:embedding:v1:${this.getEndpointName()}:${textHash}:${configHash}`;
-    } catch (_error) {
+    } catch (_) {
       // Fall back to the unoptimized version if crypto is not available
-      logger.debug(`Unable to create hash for embedding cache key: ${_error}`);
+      logger.debug(`Unable to create hash for embedding cache key: ${_}`);
       return `sagemaker:embedding:v1:${this.getEndpointName()}:${text.substring(0, 50)}:${configStr.substring(0, 50)}`;
     }
   }
@@ -933,8 +955,8 @@ export class SageMakerEmbeddingProvider
           }
 
           return parsedResult;
-        } catch (_error) {
-          logger.warn(`Failed to parse cached SageMaker embedding response: ${_error}`);
+        } catch (_) {
+          logger.warn(`Failed to parse cached SageMaker embedding response: ${_}`);
           // Continue with API call if parsing fails
         }
       }
@@ -1012,9 +1034,9 @@ export class SageMakerEmbeddingProvider
       let responseJson;
       try {
         responseJson = JSON.parse(responseBody);
-      } catch (_error) {
+      } catch (_) {
         return {
-          error: `Failed to parse embedding response as JSON: ${_error}`,
+          error: `Failed to parse embedding response as JSON: ${_}`,
         };
       }
 
@@ -1025,74 +1047,46 @@ export class SageMakerEmbeddingProvider
         responseJson.data?.[0]?.embedding ||
         (Array.isArray(responseJson) ? responseJson[0] : responseJson);
 
-      // If response format specifies a path, extract it using JSONPath
+      // If response format specifies a path, extract it using JavaScript expression evaluation
       if (this.config.responseFormat?.path) {
         try {
-          // Make sure jsonpath is available - if not, we'll skip this section
-          if (!jsonpathAvailable) {
-            logger.warn('JSONPath extraction skipped: jsonpath module not available');
-            return embedding; // Use the standard embedding extraction instead
-          }
+          const pathExpression = this.config.responseFormat.path;
 
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
-          const jsonpathModule = require('jsonpath');
+          // Extract data using the expression
+          const extracted = await this.extractFromPath(responseJson, pathExpression);
 
-          // Validate JSONPath - synchronous version
-          const validation = validateJsonPathSync(this.config.responseFormat.path);
-          if (validation.valid) {
-            const extracted = jsonpathModule.query(responseJson, this.config.responseFormat.path);
+          // Validate that the extracted data is an array of numbers (embedding)
+          if (Array.isArray(extracted) && extracted.every((val) => typeof val === 'number')) {
+            const result = {
+              embedding: extracted,
+              tokenUsage: {
+                prompt: Math.ceil(text.length / 4), // Approximate token count
+                cached: 0,
+              },
+              metadata: {
+                transformed: isTransformed,
+                originalText: isTransformed ? text : undefined,
+              },
+            };
 
-            if (extracted.length === 0) {
-              logger.warn(`JSONPath matched no data: ${this.config.responseFormat.path}`);
-              logger.debug(
-                `Response JSON structure: ${JSON.stringify(responseJson).substring(0, 200)}...`,
-              );
-              // Continue to try other extraction methods
-            } else {
-              // Log the type of extracted data for debugging
-              logger.debug(
-                `Extracted embedding data type: ${typeof extracted[0]}, isArray: ${Array.isArray(extracted[0])}`,
-              );
+            // Cache the result if caching is enabled
+            await this.cacheEmbeddingResult(
+              result,
+              transformedText,
+              context,
+              isTransformed,
+              isTransformed ? text : undefined,
+            );
 
-              if (
-                Array.isArray(extracted[0]) &&
-                extracted[0].every((val: any) => typeof val === 'number')
-              ) {
-                const result = {
-                  embedding: extracted[0],
-                  tokenUsage: {
-                    prompt: Math.ceil(text.length / 4), // Approximate token count
-                    cached: 0,
-                  },
-                  metadata: {
-                    transformed: isTransformed,
-                    originalText: isTransformed ? text : undefined,
-                  },
-                };
-
-                // Cache the result if caching is enabled
-                await this.cacheEmbeddingResult(
-                  result,
-                  transformedText,
-                  context,
-                  isTransformed,
-                  isTransformed ? text : undefined,
-                );
-
-                return result;
-              } else {
-                logger.warn(
-                  'Extracted data is not a valid embedding array, trying other extraction methods',
-                );
-              }
-            }
+            return result;
           } else {
-            logger.warn(`Skipping extraction with invalid JSONPath: ${validation.error}`);
-            // Continue to try other extraction methods
+            logger.warn(
+              'Extracted data is not a valid embedding array, trying other extraction methods',
+            );
           }
-        } catch (_error) {
+        } catch (error) {
           logger.warn(
-            `Failed to extract embedding from JSON path: ${this.config.responseFormat.path}, Error: ${_error}`,
+            `Failed to extract embedding from path expression: ${this.config.responseFormat.path}, Error: ${error}`,
           );
           logger.debug(
             `Response JSON structure: ${JSON.stringify(responseJson).substring(0, 200)}...`,
@@ -1175,8 +1169,8 @@ export class SageMakerEmbeddingProvider
         logger.debug(
           `Stored SageMaker embedding response in cache with key: ${cacheKey.substring(0, 100)}...`,
         );
-      } catch (_error) {
-        logger.warn(`Failed to store SageMaker embedding response in cache: ${_error}`);
+      } catch (_) {
+        logger.warn(`Failed to store SageMaker embedding response in cache: ${_}`);
       }
     }
   }
