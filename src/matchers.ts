@@ -548,13 +548,19 @@ export async function matchesFactuality(
     E: "The answers differ, but these differences don't matter from the perspective of factuality.",
   };
 
+  // Try to parse as JSON first
+  let jsonData: { category?: string; reason?: string } | null = null;
+  let jsonError: Error | null = null;
+
   try {
-    const jsonData = extractFirstJsonObject<{ category?: string; reason?: string }>(resp.output);
+    jsonData = extractFirstJsonObject<{ category?: string; reason?: string }>(resp.output);
+  } catch (err) {
+    jsonError = err as Error;
+    logger.debug(`JSON parsing failed: ${jsonError.message}`);
+  }
 
-    if (!jsonData.category || typeof jsonData.category !== 'string') {
-      return fail('Invalid response format: missing category field', resp.tokenUsage);
-    }
-
+  // If JSON parsing succeeded and provided a valid category
+  if (jsonData && jsonData.category && typeof jsonData.category === 'string') {
     const option = jsonData.category.trim().toUpperCase();
 
     if (!/^[A-E]$/.test(option)) {
@@ -585,21 +591,76 @@ export async function matchesFactuality(
       pass,
       score,
       reason,
-      tokensUsed: {
-        total: resp.tokenUsage?.total || 0,
-        prompt: resp.tokenUsage?.prompt || 0,
-        completion: resp.tokenUsage?.completion || 0,
-        cached: resp.tokenUsage?.cached || 0,
-        completionDetails: resp.tokenUsage?.completionDetails || {
+      tokensUsed: resp.tokenUsage || {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+        completionDetails: {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
         },
       },
     };
-  } catch (err) {
-    return fail(`Error parsing factuality response: ${(err as Error).message}`, resp.tokenUsage);
   }
+
+  // Fallback to old pattern matching format
+  logger.info('Falling back to legacy pattern matching for factuality check');
+  const responseText = resp.output;
+  // The preferred output starts like "(A)...", but we also support leading whitespace, lowercase letters, and omitting the first parenthesis.
+  const answerMatch = responseText.match(/\s*\(?([a-eA-E])\)/);
+  if (!answerMatch) {
+    return fail(
+      `Factuality checker output did not match expected format: ${responseText}`,
+      resp.tokenUsage,
+    );
+  }
+
+  const option = answerMatch[1].toUpperCase();
+
+  // Try to extract reasoning from the response text
+  let modelReason = '';
+  const reasonMatch = responseText.match(/\)\s*(.*)/s);
+  if (reasonMatch && reasonMatch[1]) {
+    modelReason = reasonMatch[1].trim();
+  }
+
+  const scoreLookup: Record<string, number> = {
+    A: grading.factuality?.subset ?? 1,
+    B: grading.factuality?.superset ?? 1,
+    C: grading.factuality?.agree ?? 1,
+    D: grading.factuality?.disagree ?? 0,
+    E: grading.factuality?.differButFactual ?? 1,
+  };
+
+  // Define passing and failing
+  const passing = Object.keys(scoreLookup).filter((key) => scoreLookup[key] > 0);
+  const failing = Object.keys(scoreLookup).filter((key) => scoreLookup[key] === 0);
+  const pass = passing.includes(option) && !failing.includes(option);
+
+  // Use extracted reason or fallback to category description
+  const reason = modelReason || `Category ${option}: ${categoryDescriptions[option]}`;
+
+  // Calculate score
+  const score = scoreLookup[option] ?? (pass ? 1 : 0);
+
+  return {
+    pass,
+    score,
+    reason,
+    tokensUsed: {
+      total: resp.tokenUsage?.total || 0,
+      prompt: resp.tokenUsage?.prompt || 0,
+      completion: resp.tokenUsage?.completion || 0,
+      cached: resp.tokenUsage?.cached || 0,
+      completionDetails: resp.tokenUsage?.completionDetails || {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
+    },
+  };
 }
 
 export async function matchesClosedQa(
