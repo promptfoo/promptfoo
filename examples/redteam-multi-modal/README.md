@@ -2,8 +2,6 @@
 
 This example demonstrates how to use promptfoo's red teaming capabilities with multi-modal models, showing two different approaches to testing model safety and robustness against adversarial inputs involving images.
 
-## Quick Start
-
 You can run this example with:
 
 ```bash
