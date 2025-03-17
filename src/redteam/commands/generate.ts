@@ -16,6 +16,7 @@ import telemetry from '../../telemetry';
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
 import { printBorder, setupEnv } from '../../util';
 import { isRunningUnderNpx } from '../../util';
+import { checkRequiredEndpoints } from '../../util/apiHealth';
 import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/manage';
 import invariant from '../../util/invariant';
@@ -27,13 +28,53 @@ import {
   DEFAULT_STRATEGIES,
   ADDITIONAL_STRATEGIES,
 } from '../constants';
-import { shouldGenerateRemote } from '../remoteGeneration';
-import type { RedteamStrategyObject, SynthesizeOptions } from '../types';
-import type { RedteamFileConfig, RedteamCliGenerateOptions } from '../types';
+import {
+  shouldGenerateRemote,
+  getRemoteHealthUrl,
+  getRemoteHealthUrlForUnaligned,
+} from '../remoteGeneration';
+import type {
+  RedteamStrategyObject,
+  SynthesizeOptions,
+  RedteamFileConfig,
+  RedteamCliGenerateOptions,
+} from '../types';
 
 function getConfigHash(configPath: string): string {
   const content = fs.readFileSync(configPath, 'utf8');
   return createHash('md5').update(`${VERSION}:${content}`).digest('hex');
+}
+
+// Helper function to check if any plugins are harmful plugins
+function checkForHarmfulPlugins(optionsPlugins?: any[], configPlugins?: any[]): boolean {
+  // Function to check if a string starts with "harmful:"
+  const isHarmfulId = (id: any): boolean => {
+    return typeof id === 'string' && id.substring(0, 8) === 'harmful:';
+  };
+
+  // Check options.plugins
+  if (optionsPlugins && Array.isArray(optionsPlugins)) {
+    for (const plugin of optionsPlugins) {
+      if (typeof plugin === 'string' && isHarmfulId(plugin)) {
+        return true;
+      } else if (plugin && typeof plugin === 'object' && 'id' in plugin && isHarmfulId(plugin.id)) {
+        return true;
+      }
+    }
+  }
+
+  // Check redteamConfig.plugins
+  if (configPlugins && Array.isArray(configPlugins)) {
+    for (const plugin of configPlugins) {
+      if (typeof plugin === 'string' && isHarmfulId(plugin)) {
+        return true;
+      } else if (plugin && typeof plugin === 'object' && 'id' in plugin && isHarmfulId(plugin.id)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 export async function doGenerateRedteam(
@@ -45,34 +86,13 @@ export async function doGenerateRedteam(
     disableCache();
   }
 
+  // Get configuration first to determine what plugins are being used
   let testSuite: TestSuite;
   let redteamConfig: RedteamFileConfig | undefined;
   const configPath = options.config || options.defaultConfigPath;
   const outputPath = options.output || 'redteam.yaml';
 
-  // Check for updates to the config file and decide whether to generate
-  let shouldGenerate = options.force;
-  if (!options.force && fs.existsSync(outputPath) && configPath && fs.existsSync(configPath)) {
-    // Skip hash check for .burp files since they're not YAML
-    if (!outputPath.endsWith('.burp')) {
-      const redteamContent = yaml.load(
-        fs.readFileSync(outputPath, 'utf8'),
-      ) as Partial<UnifiedConfig>;
-      const storedHash = redteamContent.metadata?.configHash;
-      const currentHash = getConfigHash(configPath);
-
-      shouldGenerate = storedHash !== currentHash;
-      if (!shouldGenerate) {
-        logger.warn(
-          'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
-        );
-        return redteamContent;
-      }
-    }
-  } else {
-    shouldGenerate = true;
-  }
-
+  // Initialize testSuite and redteamConfig
   if (configPath) {
     const resolved = await resolveConfigs(
       {
@@ -98,6 +118,54 @@ export async function doGenerateRedteam(
       ),
     );
     return null;
+  }
+
+  // Check if harmful plugins are being used
+  const hasHarmfulPlugin = checkForHarmfulPlugins(options.plugins, redteamConfig?.plugins);
+
+  // Build a list of endpoints to check
+  const endpointsToCheck = [];
+
+  // Add the standard remote endpoint if remote generation is enabled
+  if (shouldGenerateRemote()) {
+    endpointsToCheck.push({
+      url: getRemoteHealthUrl(),
+      type: 'Remote',
+    });
+  }
+
+  // Add the harmful content endpoint if needed
+  if (hasHarmfulPlugin) {
+    endpointsToCheck.push({
+      url: getRemoteHealthUrlForUnaligned(),
+      type: 'Harmful content',
+    });
+  }
+
+  // Check all required endpoints at once
+  await checkRequiredEndpoints(endpointsToCheck);
+
+  // Check for updates to the config file and decide whether to generate
+  let shouldGenerate = options.force;
+  if (!options.force && fs.existsSync(outputPath) && configPath && fs.existsSync(configPath)) {
+    // Skip hash check for .burp files since they're not YAML
+    if (!outputPath.endsWith('.burp')) {
+      const redteamContent = yaml.load(
+        fs.readFileSync(outputPath, 'utf8'),
+      ) as Partial<UnifiedConfig>;
+      const storedHash = redteamContent.metadata?.configHash;
+      const currentHash = getConfigHash(configPath);
+
+      shouldGenerate = storedHash !== currentHash;
+      if (!shouldGenerate) {
+        logger.warn(
+          'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
+        );
+        return redteamContent;
+      }
+    }
+  } else {
+    shouldGenerate = true;
   }
 
   const startTime = Date.now();

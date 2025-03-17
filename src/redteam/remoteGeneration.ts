@@ -68,3 +68,33 @@ export function getRemoteGenerationUrlForUnaligned(): string {
   // otherwise use the default
   return 'https://api.promptfoo.app/task/harmful';
 }
+
+/**
+ * Gets the URL for checking unaligned API health based on configuration.
+ * @returns The health check URL for unaligned content generation.
+ */
+export function getRemoteHealthUrlForUnaligned(): string | null {
+  if (neverGenerateRemote()) {
+    return null;
+  }
+
+  const envUrl = getEnvString('PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT');
+  if (envUrl) {
+    try {
+      // Parse the URL and modify the path to /health
+      const url = new URL(envUrl);
+      // Remove any path segments after the domain
+      url.pathname = '/health';
+      return url.toString();
+    } catch {
+      return 'https://api.promptfoo.app/health';
+    }
+  }
+
+  const cloudConfig = new CloudConfig();
+  if (cloudConfig.isEnabled()) {
+    return `${cloudConfig.getApiHost()}/health`;
+  }
+
+  return 'https://api.promptfoo.app/health';
+}

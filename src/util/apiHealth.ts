@@ -121,3 +121,50 @@ export async function checkRemoteHealth(url: string): Promise<HealthResponse> {
     };
   }
 }
+
+// Cache of already checked healthy endpoints
+const healthyEndpoints = new Map<string, boolean>();
+
+/**
+ * Checks the health of all required endpoints for generation.
+ * Maintains a cache to avoid redundant checks of the same endpoint.
+ * Throws an error if any required endpoint is unhealthy.
+ *
+ * @param endpoints - Array of objects containing URL and endpoint type
+ */
+export async function checkRequiredEndpoints(
+  endpoints: Array<{ url: string | null; type: string }>,
+): Promise<void> {
+  // Filter out null URLs and deduplicate
+  const urlsToCheck = endpoints
+    .filter(({ url }) => url !== null)
+    .filter(({ url }, index, self) => index === self.findIndex((e) => e.url === url));
+
+  for (const { url, type } of urlsToCheck) {
+    if (!url) continue; // Skip null/undefined URLs
+
+    // Skip if already verified as healthy
+    if (healthyEndpoints.has(url)) {
+      logger.debug(`Already verified health of ${type} endpoint at ${url}, skipping check`);
+      continue;
+    }
+
+    try {
+      logger.debug(`Checking health of ${type} endpoint at ${url}`);
+      const healthResult = await checkRemoteHealth(url);
+
+      if (healthResult.status === 'OK') {
+        logger.debug(`${type} API health check passed: ${healthResult.message}`);
+        // Cache successful health check
+        healthyEndpoints.set(url, true);
+      } else {
+        throw new Error(`${type} API health check failed: ${healthResult.message}`);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `${type} API is not available: ${errorMessage}\n${type} generation cannot proceed. Consider using --verbose for more details.`,
+      );
+    }
+  }
+}
