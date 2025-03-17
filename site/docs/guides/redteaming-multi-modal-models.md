@@ -389,7 +389,7 @@ defaultTest:
 
 ## See Also
 
-- [Red Team Strategies](../red-team/strategies.md)
-- [Image Inputs Strategy](../red-team/strategies/image.md)
-- [LLM Red Teaming Guide](./llm-redteaming.md)
-- [Testing Guardrails](./testing-guardrails.md)
+- [Red Team Strategies](/docs/red-team/strategies/)
+- [Image Inputs Strategy](/docs/red-team/strategies/image/)
+- [LLM Red Teaming Guide](/docs/red-team/)
+- [Testing Guardrails](/docs/guides/testing-guardrails)
