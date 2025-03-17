@@ -441,7 +441,9 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
 
             const content = message.content
               .map((content) =>
-                content.type === 'text' && content.text ? content.text.value : `<${content.type} output>`,
+                content.type === 'text' && content.text
+                  ? content.text.value
+                  : `<${content.type} output>`,
               )
               .join('\n');
             outputBlocks.push(`[${toTitleCase(message.role)}] ${content}`);
