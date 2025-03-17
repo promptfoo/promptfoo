@@ -175,23 +175,47 @@ describe('Provider Registry', () => {
       const factory = providerMap.find((f) => f.test('anthropic:messages:claude-3'));
       expect(factory).toBeDefined();
 
+      // Create a version of options without ID for Anthropic tests
+      const anthropicOptions = {
+        ...mockProviderOptions,
+        id: undefined,
+      };
+
+      // Test traditional format with messages
       const messagesProvider = await factory!.create(
-        'anthropic:messages:claude-3',
-        mockProviderOptions,
+        'anthropic:messages:claude-3-7-sonnet-20250219',
+        anthropicOptions,
         mockContext,
       );
       expect(messagesProvider).toBeDefined();
+      expect(messagesProvider.id()).toBe('anthropic:claude-3-7-sonnet-20250219');
 
+      // Test traditional format with completion
       const completionProvider = await factory!.create(
         'anthropic:completion:claude-2',
-        mockProviderOptions,
+        anthropicOptions,
         mockContext,
       );
       expect(completionProvider).toBeDefined();
+      expect(completionProvider.id()).toBe('anthropic:claude-2');
 
+      const shorthandProvider = await factory!.create(
+        'anthropic:claude-3-5-sonnet-20241022',
+        anthropicOptions,
+        mockContext,
+      );
+      expect(shorthandProvider).toBeDefined();
+      expect(shorthandProvider.id()).toBe('anthropic:claude-3-5-sonnet-20241022');
+
+      // Test error case with invalid model type
       await expect(
         factory!.create('anthropic:invalid:model', mockProviderOptions, mockContext),
-      ).rejects.toThrow('Unknown Anthropic model type');
+      ).rejects.toThrow('Unknown Anthropic model type or model name');
+
+      // Test error case with invalid model name
+      await expect(
+        factory!.create('anthropic:non-existent-model', mockProviderOptions, mockContext),
+      ).rejects.toThrow('Unknown Anthropic model type or model name');
     });
 
     it('should handle azure providers correctly', async () => {

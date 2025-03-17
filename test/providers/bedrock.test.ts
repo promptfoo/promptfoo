@@ -388,12 +388,12 @@ describe('AwsBedrockGenericProvider', () => {
       const mockResponse = {
         choices: [{ message: { content: 'This is a test response.' } }],
       };
-      expect(modelHandler.output(mockResponse)).toBe('This is a test response.');
+      expect(modelHandler.output({}, mockResponse)).toBe('This is a test response.');
     });
 
     it('should throw an error for API errors', () => {
       const mockErrorResponse = { error: 'API Error' };
-      expect(() => modelHandler.output(mockErrorResponse)).toThrow('AI21 API error: API Error');
+      expect(() => modelHandler.output({}, mockErrorResponse)).toThrow('AI21 API error: API Error');
     });
   });
 
@@ -774,8 +774,8 @@ describe('llama', () => {
 
     it('should handle output correctly', () => {
       const handler = getLlamaModelHandler(LlamaVersion.V2);
-      expect(handler.output({ generation: 'Test response' })).toBe('Test response');
-      expect(handler.output({})).toBeUndefined();
+      expect(handler.output({}, { generation: 'Test response' })).toBe('Test response');
+      expect(handler.output({}, {})).toBeUndefined();
     });
   });
 
