@@ -15,7 +15,7 @@ import type {
 } from '../types';
 import type { EnvOverrides } from '../types/env';
 import { maybeLoadFromExternalFile } from '../util';
-import { outputFromMessage, parseMessages } from './anthropic';
+import { outputFromMessage, parseMessages } from './anthropic/util';
 import { novaOutputFromMessage, novaParseMessages } from './bedrockUtil';
 import { parseChatPrompt } from './shared';
 
@@ -391,7 +391,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
       );
       return params;
     },
-    output: (responseJson: any) => responseJson?.generation,
+    output: (config: BedrockOptions, responseJson: any) => responseJson?.generation,
   };
 };
 
@@ -432,7 +432,7 @@ export const BEDROCK_MODEL = {
       );
       return params;
     },
-    output: (responseJson: any) => {
+    output: (config: BedrockOptions, responseJson: any) => {
       if (responseJson.error) {
         throw new Error(`AI21 API error: ${responseJson.error}`);
       }
@@ -521,7 +521,7 @@ export const BEDROCK_MODEL = {
       );
       return params;
     },
-    output: (responseJson: any) => responseJson?.completion,
+    output: (config: BedrockOptions, responseJson: any) => responseJson?.completion,
   },
   CLAUDE_MESSAGES: {
     params: (config: BedrockClaudeMessagesCompletionOptions, prompt: string) => {
@@ -644,7 +644,7 @@ export const BEDROCK_MODEL = {
       );
       return { inputText: prompt, textGenerationConfig };
     },
-    output: (responseJson: any) => responseJson?.results[0]?.outputText,
+    output: (config: BedrockOptions, responseJson: any) => responseJson?.results[0]?.outputText,
   },
   LLAMA2: getLlamaModelHandler(LlamaVersion.V2),
   LLAMA3: getLlamaModelHandler(LlamaVersion.V3),
@@ -678,7 +678,7 @@ export const BEDROCK_MODEL = {
       addConfigParam(params, 'stop_sequences', stop, undefined, undefined);
       return params;
     },
-    output: (responseJson: any) => responseJson?.generations[0]?.text,
+    output: (config: BedrockOptions, responseJson: any) => responseJson?.generations[0]?.text,
   },
   COHERE_COMMAND_R: {
     params: (config: BedrockCohereCommandRGenerationOptions, prompt: string, stop: string[]) => {
@@ -712,7 +712,7 @@ export const BEDROCK_MODEL = {
       addConfigParam(params, 'raw_prompting', config?.raw_prompting);
       return params;
     },
-    output: (responseJson: any) => responseJson?.text,
+    output: (config: BedrockOptions, responseJson: any) => responseJson?.text,
   },
   MISTRAL: {
     params: (config: BedrockMistralGenerationOptions, prompt: string, stop: string[]) => {
@@ -735,11 +735,13 @@ export const BEDROCK_MODEL = {
       addConfigParam(params, 'top_k', config?.top_k, getEnvFloat('MISTRAL_TOP_K'), 0);
       return params;
     },
-    output: (responseJson: any) => responseJson?.outputs[0]?.text,
+    output: (config: BedrockOptions, responseJson: any) => responseJson?.outputs[0]?.text,
   },
   DEEPSEEK: {
     params: (config: BedrockDeepseekGenerationOptions, prompt: string) => {
-      const wrappedPrompt = `<｜begin▁of▁sentence｜><｜User｜>${prompt}<｜Assistant｜><think>\n`;
+      const wrappedPrompt = `
+${prompt}
+<think>\n`;
       const params: any = {
         prompt: wrappedPrompt,
       };
