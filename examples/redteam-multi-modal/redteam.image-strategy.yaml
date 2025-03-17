@@ -21,9 +21,7 @@ redteam:
   purpose: >-
     Provide users with accurate and detailed information by analyzing images and
     answering related questions clearly.
-  entities: &ref_0
-    - system
-    - user
+  entities: []
 defaultTest:
   vars:
     question: What objects can you see in this image?
@@ -32,7 +30,7 @@ defaultTest:
     purpose: >-
       Provide users with accurate and detailed information by analyzing images
       and answering related questions clearly.
-    entities: *ref_0
+    entities: []
 tests:
   - vars:
       image: >-
