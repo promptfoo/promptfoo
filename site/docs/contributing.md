@@ -43,7 +43,7 @@ We particularly welcome contributions in the following areas:
    ```sh
    # We recommend using the Node.js version specified in the .nvmrc file (ensure node >= 18)
    nvm use
-   npm install
+   npm install --include=peer
    ```
 
    3.2 Setup using `devcontainer` (requires Docker and VSCode)
@@ -53,7 +53,7 @@ We particularly welcome contributions in the following areas:
    Now install node based dependencies:
 
    ```sh
-   npm install
+   npm install --include=peer
    ```
 
 4. Run the tests to make sure everything is working:

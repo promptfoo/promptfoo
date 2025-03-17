@@ -5,7 +5,7 @@
   "version": "0.107.1",
   "license": "MIT",
   "type": "commonjs",
-  "devNote": "To run tests, you may need to install optional peer dependencies: npm install --save-dev @adaline/anthropic @adaline/azure @adaline/gateway @adaline/google @adaline/groq @adaline/open-router @adaline/openai @adaline/together-ai @adaline/vertex node-sql-parser sharp",
+  "devNote": "To run tests, you may need to install optional peer dependencies: npm install --include=peer",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/promptfoo/promptfoo.git"

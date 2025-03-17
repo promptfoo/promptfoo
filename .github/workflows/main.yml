@@ -42,14 +42,7 @@ jobs:
           python-version: 3.13
 
       - name: Install Dependencies
-        if: matrix.node != '18.x'
-        run: |
-          npm ci
-
-      - name: Install Dependencies (Node 18)
-        if: matrix.node == '18.x'
-        run: |
-          npm ci --include=optional
+        run: npm ci --include=peer
 
       - name: Test
         run: npm run test -- --ci --coverage --maxWorkers=2
