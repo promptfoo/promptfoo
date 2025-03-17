@@ -64,13 +64,9 @@ promptfoo supports two primary approaches for red teaming multi-modal models:
 
 This approach uses a fixed image while generating various potentially problematic text prompts. It tests how the model handles harmful or adversarial requests in the context of a specific image.
 
-![Static Image Approach](https://promptfoo.dev/img/docs/redteam/static-image-approach.png)
-
 ### 2. Text-to-Image Conversion (Image Strategy)
 
 This approach converts potentially harmful text into images and then sends those images to the model. It tests whether harmful content embedded in images can bypass safety filters that would catch the same content in plain text.
-
-![Image Strategy Approach](https://promptfoo.dev/img/docs/redteam/image-strategy-approach.png)
 
 ## Setting Up Your First Multi-Modal Red Team Test
 
