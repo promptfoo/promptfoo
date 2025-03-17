@@ -8,7 +8,7 @@ import { clearCache, disableCache, enableCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
 import { loadApiProvider, loadApiProviders } from '../../src/providers';
-import { AnthropicCompletionProvider } from '../../src/providers/anthropic';
+import { AnthropicCompletionProvider } from '../../src/providers/anthropic/completion';
 import { AzureChatCompletionProvider, AzureCompletionProvider } from '../../src/providers/azure';
 import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock';
 import {

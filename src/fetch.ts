@@ -107,7 +107,7 @@ export async function fetchWithProxy(
   const proxyUrl = getProxyUrl();
 
   const tlsOptions: ConnectionOptions = {
-    rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', false),
+    rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
   };
 
   // Support custom CA certificates

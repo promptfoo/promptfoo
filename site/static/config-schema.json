@@ -69,6 +69,9 @@
                             "ANTHROPIC_API_KEY": {
                               "type": "string"
                             },
+                            "ANTHROPIC_BASE_URL": {
+                              "type": "string"
+                            },
                             "AWS_BEDROCK_REGION": {
                               "type": "string"
                             },
@@ -1095,6 +1098,7 @@
                           "sql-injection",
                           "ssrf",
                           "system-prompt-override",
+                          "tool-discovery",
                           "toxicity"
                         ]
                       },
@@ -1233,6 +1237,7 @@
                               "sql-injection",
                               "ssrf",
                               "system-prompt-override",
+                              "tool-discovery",
                               "toxicity"
                             ]
                           },

@@ -3,7 +3,7 @@ import logger from '../logger';
 import type { ApiProvider } from '../types';
 import type { EnvOverrides } from '../types/env';
 import type { DefaultProviders, ProviderConfiguration } from '../types/providerConfig';
-import { AnthropicProviderConfig } from './anthropic';
+import { AnthropicProviderConfig } from './anthropic/defaults';
 import { AzureProviderConfig } from './azure/defaults';
 import { BedrockProviderConfig } from './bedrock/defaults';
 import { OpenAiProviderConfig } from './openai/defaults';
