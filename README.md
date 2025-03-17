@@ -49,6 +49,32 @@ It also can generate [security vulnerability reports](https://www.promptfoo.dev/
 - 📊 **Data-driven**: Make decisions based on metrics, not gut feel
 - 🤝 **Open source**: MIT licensed, with an active community
 
+## Development
+
+If you'd like to contribute to promptfoo or modify it locally, follow these steps to set up your development environment:
+
+```sh
+# Clone the repository
+git clone https://github.com/promptfoo/promptfoo.git
+cd promptfoo
+
+# Install dependencies
+npm install
+
+# Optional: install peer dependencies for testing
+npm install --save-dev @adaline/anthropic @adaline/azure @adaline/gateway @adaline/google @adaline/groq @adaline/open-router @adaline/openai @adaline/together-ai @adaline/vertex node-sql-parser sharp
+
+# Build the project
+npm run build
+
+# Run tests
+npm test
+```
+
+Some tests may fail if certain optional peer dependencies are missing. The above command installs the dependencies needed for all tests to pass. This is important for development, but end users of the package don't need to install these dependencies unless they specifically use those providers.
+
+For more detailed instructions, see the [Contributing Guide](https://www.promptfoo.dev/docs/contributing/).
+
 ## Learn More
 
 - 📚 [Full Documentation](https://www.promptfoo.dev/docs/intro/)
