@@ -130,6 +130,52 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo((1000 * 0.5 + 500 * 1.5) / 1000000, 6);
   });
 
+  it('should calculate cost correctly for gpt-4o-realtime-preview-2024-12-17', () => {
+    const cost = calculateOpenAICost(
+      'gpt-4o-realtime-preview-2024-12-17',
+      { cost: undefined },
+      1000,
+      500,
+    );
+    expect(cost).toBeCloseTo((1000 * 2.5 + 500 * 10) / 1000000, 6);
+  });
+
+  it('should calculate cost correctly for gpt-4o-mini-realtime-preview-2024-12-17', () => {
+    const cost = calculateOpenAICost(
+      'gpt-4o-mini-realtime-preview-2024-12-17',
+      { cost: undefined },
+      1000,
+      500,
+    );
+    expect(cost).toBeCloseTo((1000 * 0.15 + 500 * 0.6) / 1000000, 6);
+  });
+
+  it('should calculate audio token costs for gpt-4o-realtime-preview-2024-12-17', () => {
+    const cost = calculateOpenAICost(
+      'gpt-4o-realtime-preview-2024-12-17',
+      { cost: undefined },
+      1000,
+      500,
+      200,
+      100,
+    );
+    const expectedCost = (1000 * 2.5 + 500 * 10 + 200 * 40 + 100 * 80) / 1000000;
+    expect(cost).toBeCloseTo(expectedCost, 6);
+  });
+
+  it('should calculate audio token costs for gpt-4o-mini-realtime-preview-2024-12-17', () => {
+    const cost = calculateOpenAICost(
+      'gpt-4o-mini-realtime-preview-2024-12-17',
+      { cost: undefined },
+      1000,
+      500,
+      200,
+      100,
+    );
+    const expectedCost = (1000 * 0.15 + 500 * 0.6 + 200 * 10 + 100 * 20) / 1000000;
+    expect(cost).toBeCloseTo(expectedCost, 6);
+  });
+
   it('should handle undefined token counts', () => {
     const cost = calculateOpenAICost('gpt-4', { cost: undefined }, undefined, undefined);
     expect(cost).toBeUndefined();

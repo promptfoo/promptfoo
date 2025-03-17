@@ -179,3 +179,17 @@ export interface ProviderTestResponse {
   unalignedProviderResult?: ProviderResponse;
   redteamProviderResult?: ProviderResponse;
 }
+
+/**
+ * Interface defining the default providers used by the application
+ */
+export interface DefaultProviders {
+  datasetGenerationProvider: ApiProvider;
+  embeddingProvider: ApiProvider;
+  gradingJsonProvider: ApiProvider;
+  gradingProvider: ApiProvider;
+  llmRubricProvider?: ApiProvider;
+  moderationProvider: ApiProvider;
+  suggestionsProvider: ApiProvider;
+  synthesizeProvider: ApiProvider;
+}
