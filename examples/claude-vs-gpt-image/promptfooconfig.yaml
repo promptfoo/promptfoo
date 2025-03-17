@@ -7,7 +7,7 @@ prompts:
 
 providers:
   - id: bedrock:anthropic.claude-3-sonnet-20240229-v1:0
-  - id: anthropic:messages:claude-3-5-sonnet-20241022
+  - id: anthropic:claude-3-5-sonnet-20241022
   - id: openai:gpt-4o
     label: custom label for gpt-4o
 

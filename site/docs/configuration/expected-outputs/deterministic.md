@@ -1,5 +1,8 @@
 ---
 sidebar_position: 6
+title: Deterministic Metrics for LLM Output Validation
+description: Learn about logical tests that validate LLM outputs with exact matching, pattern recognition, and structural validation
+keywords: [metrics, assertions, testing, validation, contains, regex, json, levenshtein]
 ---
 
 # Deterministic metrics
@@ -392,7 +395,7 @@ assert:
 
 To use this assertion, you need to install the `node-sql-parser` package. You can install it using npm:
 
-```
+```bash
 npm install node-sql-parser
 ```
 
@@ -527,7 +530,7 @@ Perplexity requires the LLM API to output `logprobs`. Currently only more recent
 
 #### Comparing different outputs from the same LLM
 
-You can compare perplexity scores across different outputs from the same model to get a sense of which output the model finds more likely (or less surprising). This is a good way to tune your prompts and hyperparameters (like temperature) to be more accurate.
+You can compare perplexity scores across different outputs from the same model to get a sense of which output the model finds more likely (or less surprising). This is a good way to tune your prompts and hyperparameters (like temperature).
 
 #### Comparing outputs from different LLMs
 
@@ -721,7 +724,7 @@ derivedMetrics:
     value: 2 * true_positives / (2 * true_positives + false_positives + false_negatives)
 ```
 
-The F-score will be calculated automatically after the evaluation completes. A score closer to 1 indicates better performance.
+The F-score will be calculated automatically after the eval completes. A score closer to 1 indicates better performance.
 
 This is particularly useful for evaluating classification tasks like sentiment analysis, where you want to measure both the precision (accuracy of positive predictions) and recall (ability to find all positive cases).
 
@@ -761,3 +764,11 @@ tests:
     assert:
       - type: not-is-refusal # Ensure model helps with safe requests
 ```
+
+## See Also
+
+- [JavaScript Assertions](/docs/configuration/expected-outputs/javascript.md) - Using custom JavaScript functions for validation
+- [Python Assertions](/docs/configuration/expected-outputs/python.md) - Using custom Python functions for validation
+- [Model-Graded Metrics](/docs/configuration/expected-outputs/model-graded/index.md) - Using LLMs to evaluate other LLMs
+- [Configuration Reference](/docs/configuration/reference.md) - Complete configuration options
+- [Guardrails](/docs/configuration/expected-outputs/guardrails.md) - Setting up safety guardrails for LLM outputs

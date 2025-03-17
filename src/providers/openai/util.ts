@@ -154,6 +154,32 @@ export const OPENAI_COMPLETION_MODELS = [
   },
 ];
 
+// Realtime models for WebSocket API
+export const OPENAI_REALTIME_MODELS = [
+  // gpt-4o realtime model
+  {
+    id: 'gpt-4o-realtime-preview-2024-12-17',
+    type: 'chat',
+    cost: {
+      input: 2.5 / 1e6,
+      output: 10 / 1e6,
+      audioInput: 40 / 1e6,
+      audioOutput: 80 / 1e6,
+    },
+  },
+  // gpt-4o-mini realtime model
+  {
+    id: 'gpt-4o-mini-realtime-preview-2024-12-17',
+    type: 'chat',
+    cost: {
+      input: 0.15 / 1e6,
+      output: 0.6 / 1e6,
+      audioInput: 10 / 1e6,
+      audioOutput: 20 / 1e6,
+    },
+  },
+];
+
 export function calculateOpenAICost(
   modelName: string,
   config: ProviderConfig,
@@ -166,6 +192,7 @@ export function calculateOpenAICost(
     return calculateCost(modelName, config, promptTokens, completionTokens, [
       ...OPENAI_CHAT_MODELS,
       ...OPENAI_COMPLETION_MODELS,
+      ...OPENAI_REALTIME_MODELS,
     ]);
   }
 
@@ -183,9 +210,11 @@ export function calculateOpenAICost(
     return undefined;
   }
 
-  const model = [...OPENAI_CHAT_MODELS, ...OPENAI_COMPLETION_MODELS].find(
-    (m) => m.id === modelName,
-  );
+  const model = [
+    ...OPENAI_CHAT_MODELS,
+    ...OPENAI_COMPLETION_MODELS,
+    ...OPENAI_REALTIME_MODELS,
+  ].find((m) => m.id === modelName);
   if (!model || !model.cost) {
     return undefined;
   }

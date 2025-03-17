@@ -24,6 +24,8 @@ export async function extractEntities(provider: ApiProvider, prompts: string[]):
 
     ${formatPrompts(prompts)}
 
+    DO NOT include prompt template roles such as "system", "developer", "user", "assistant", or other conversation roles as entities.
+    
     Each line in your response must begin with the string "Entity:".
   `;
   try {
