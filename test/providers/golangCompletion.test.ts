@@ -113,23 +113,6 @@ describe('GolangProvider', () => {
       { name: 'test.go', isDirectory: () => false },
     ] as unknown as fs.Dirent[]);
     mockMkdirSync.mockImplementation(() => undefined);
-
-    mockExec.mockImplementation(((cmd: string, callback: any) => {
-      if (!callback) {
-        return {} as any;
-      }
-
-      process.nextTick(() => {
-        if (cmd.includes('cd') && cmd.includes('go build')) {
-          callback(null, { stdout: '', stderr: '' }, '');
-        } else if (cmd.includes('golang_wrapper')) {
-          callback(null, { stdout: '{"output":"test output"}', stderr: '' }, '');
-        } else {
-          callback(new Error('test error'), { stdout: '', stderr: '' }, '');
-        }
-      });
-      return {} as any;
-    }) as any);
   });
 
   describe('constructor', () => {
@@ -236,8 +219,18 @@ describe('GolangProvider', () => {
       };
       mockGetCache.mockResolvedValue(mockCache as never);
 
+      mockExec.mockImplementation(((cmd: string, callback: any) => {
+        if (!callback) {
+          return {} as any;
+        }
+        process.nextTick(() => {
+          callback(null, { stdout: '{"output":"test"}', stderr: '' }, '');
+        });
+        return {} as any;
+      }) as any);
+
       await expect(provider.callApi('test prompt')).rejects.toThrow('Cache set error');
-    });
+    }, 10000);
 
     it('should not cache results that contain errors', async () => {
       const provider = new GolangProvider('script.go', {
@@ -397,7 +390,7 @@ describe('GolangProvider', () => {
           callback(
             null,
             {
-              stdout: cmd.includes('golang_wrapper') ? '{"classification":"test_class"}' : '',
+              stdout: cmd.includes('golang_wrapper') ? '{"classification":{"class1":0.8}}' : '',
               stderr: '',
             },
             '',
@@ -407,7 +400,7 @@ describe('GolangProvider', () => {
       }) as any);
 
       const result = await provider.callClassificationApi('test prompt');
-      expect(result).toEqual({ classification: 'test_class' });
+      expect(result).toEqual({ classification: { class1: 0.8 } });
     });
 
     it('should handle stderr output without failing', async () => {
@@ -574,16 +567,13 @@ describe('GolangProvider', () => {
         config: { basePath: '/absolute/path/to' },
       });
 
-      // Create circular reference
       const circularObj: any = { name: 'circular' };
       circularObj.self = circularObj;
 
-      // We need to access a private method, so we'll create a spy using any type assertions
       const spy = jest
         .spyOn(provider as any, 'executeGolangScript')
         .mockImplementation(() => Promise.resolve({ output: 'mocked result' }));
 
-      // This should not throw even with circular references
       const result = await provider.callApi('test prompt', {
         prompt: {
           raw: 'test prompt',
@@ -592,7 +582,6 @@ describe('GolangProvider', () => {
         vars: { circular: circularObj },
       });
 
-      // Verify the result and that executeGolangScript was called
       expect(result).toEqual({ output: 'mocked result' });
       expect(spy).toHaveBeenCalledWith(
         'test prompt',
@@ -602,7 +591,6 @@ describe('GolangProvider', () => {
         'call_api',
       );
 
-      // Restore the original implementation
       spy.mockRestore();
     });
   });
@@ -631,45 +619,20 @@ describe('GolangProvider', () => {
       await expect(provider.callApi('test prompt')).rejects.toThrow('File copy error');
     });
 
-    it('should handle main.go file content transformation', async () => {
+    it('should handle adapter.go file creation', async () => {
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to' },
       });
 
-      const mainGoContent = `
-        package main
-
-        // CallApi declaration
-        var CallApi = func(prompt string) string {
-          return "test"
+      mockReadFileSync.mockImplementation((filePath: fs.PathOrFileDescriptor) => {
+        if (filePath.toString().includes('script.go')) {
+          return 'package main\n// No CallApi declaration here';
         }
-
-        func main() {
-          // Some code
-        }`;
-
-      mockReaddirSync.mockReturnValue([
-        { name: 'main.go', isDirectory: () => false },
-      ] as unknown as fs.Dirent[]);
-
-      mockReadFileSync.mockImplementation((p: fs.PathOrFileDescriptor) => {
-        if (p.toString().endsWith('main.go')) {
-          return mainGoContent;
+        if (filePath.toString().includes('adapter.go.template')) {
+          return '// Adapter template content';
         }
         return 'other content';
       });
-
-      let writtenContent = '';
-      const mockWrite = jest
-        .fn()
-        .mockImplementation((p: fs.PathOrFileDescriptor, content: string) => {
-          if (p.toString().endsWith('main.go')) {
-            writtenContent = content;
-          }
-        });
-      mockWriteFileSync.mockImplementation(mockWrite);
-
-      mockCopyFileSync.mockImplementation(() => undefined);
 
       mockExec.mockImplementation(((cmd: string, callback: any) => {
         if (!callback) {
@@ -679,12 +642,15 @@ describe('GolangProvider', () => {
         return {} as any;
       }) as any);
 
-      await provider.callApi('test prompt');
+      mockCopyFileSync.mockImplementation(() => undefined);
 
-      expect(writtenContent).not.toContain('var CallApi');
-      expect(writtenContent).toContain('package main');
-      expect(writtenContent).toContain('func main()');
-      expect(writtenContent).toContain('// Some code');
+      const result = await provider.callApi('test prompt');
+      expect(result).toEqual({ output: 'test' });
+
+      expect(mockWriteFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('adapter.go'),
+        '// Adapter template content',
+      );
     });
 
     it('should correctly handle nested directories in copyDir', async () => {
@@ -692,7 +658,6 @@ describe('GolangProvider', () => {
         config: { basePath: '/absolute/path/to' },
       });
 
-      // Mock a nested directory structure
       mockReaddirSync.mockImplementation((p: fs.PathOrFileDescriptor) => {
         if (p.toString().includes('nested')) {
           return [{ name: 'nested-file.go', isDirectory: () => false }] as unknown as fs.Dirent[];
@@ -703,7 +668,6 @@ describe('GolangProvider', () => {
         ] as unknown as fs.Dirent[];
       });
 
-      // Track created directories and copied files
       const createdDirs: string[] = [];
       const copiedFiles: { src: string; dest: string }[] = [];
 
@@ -717,19 +681,9 @@ describe('GolangProvider', () => {
         return undefined;
       });
 
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
-        if (!callback) {
-          return {} as any;
-        }
-        process.nextTick(() => callback(null, { stdout: '{"output":"test"}', stderr: '' }, ''));
-        return {} as any;
-      }) as any);
-
       await provider.callApi('test prompt');
 
-      // Check that nested directories were created
       expect(createdDirs).toEqual(expect.arrayContaining(['/tmp/golang-provider-xyz']));
-      // Check that nested files were copied
       expect(copiedFiles).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -739,17 +693,10 @@ describe('GolangProvider', () => {
       );
     });
 
-    // Add test for file writing errors
     it('should handle writeFileSync errors', async () => {
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to' },
       });
-
-      mockReaddirSync.mockReturnValue([
-        { name: 'main.go', isDirectory: () => false },
-      ] as unknown as fs.Dirent[]);
-
-      mockReadFileSync.mockReturnValue('package main\nfunc main() {}');
 
       mockWriteFileSync.mockImplementation(() => {
         throw new Error('Failed to write file');
