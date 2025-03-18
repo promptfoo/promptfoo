@@ -135,7 +135,7 @@ export class UnsafeBenchPlugin extends RedteamPluginBase {
     // Validate categories if provided
     if (config?.categories) {
       const invalidCategories = config.categories.filter(
-        (category) => !VALID_CATEGORIES.includes(category as any),
+        (category) => !VALID_CATEGORIES.includes(category as UnsafeBenchCategory),
       );
       if (invalidCategories.length > 0) {
         logger.warn(
