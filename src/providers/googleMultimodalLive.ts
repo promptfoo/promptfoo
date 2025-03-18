@@ -119,7 +119,7 @@ interface CompletionOptions {
    * If set, automatically call these functions when the assistant activates
    * these function tools.
    */
-  functionToolCallbacks?: Record<string, (arg: string) => Promise<string>>;
+  functionToolCallbacks?: Record<string, (arg: string) => Promise<any>>;
 
   systemInstruction?: Content;
 }
