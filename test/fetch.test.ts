@@ -447,10 +447,10 @@ describe('fetchWithProxy', () => {
       expect(ProxyAgent).toHaveBeenCalledWith({
         uri: testCase.expected.url,
         proxyTls: {
-          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', false),
+          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
         },
         requestTls: {
-          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', false),
+          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
         },
       });
       expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(ProxyAgent));

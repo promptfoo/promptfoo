@@ -1,4 +1,10 @@
-# Amazon Bedrock Examples
+# amazon-bedrock (Amazon Bedrock Examples)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example amazon-bedrock
+```
 
 ## Prerequisites
 
@@ -9,18 +15,22 @@
    export AWS_SECRET_ACCESS_KEY="your_secret_key"
    ```
 
-   See [authentication docs](https://www.promptfoo.dev/docs/providers/aws-bedrock/#authentication) for other auth methods.
+   See [authentication docs](https://www.promptfoo.dev/docs/providers/aws-bedrock/#authentication) for other auth methods, including SSO profiles.
 
 2. Request model access in your AWS region:
    - Visit the [AWS Bedrock Model Access page](https://us-west-2.console.aws.amazon.com/bedrock/home?region=us-west-2#/modelaccess)
    - Switch to your desired region. We recommend us-west-2 and us-east-1 which tend to have the most models available.
    - Enable the models you want to use.
+3. Install required dependency:
+   ```bash
+   npm install @aws-sdk/client-bedrock-runtime
+   ```
 
 ## Available Examples
 
 This directory contains several example configurations for different Bedrock models:
 
-- [`promptfooconfig.claude.yaml`](promptfooconfig.claude.yaml) - Claude 3.5
+- [`promptfooconfig.claude.yaml`](promptfooconfig.claude.yaml) - Claude 3.7 Sonnet
 - [`promptfooconfig.llama.yaml`](promptfooconfig.llama.yaml) - Llama3
 - [`promptfooconfig.mistral.yaml`](promptfooconfig.mistral.yaml) - Mistral
 - [`promptfooconfig.nova.yaml`](promptfooconfig.nova.yaml) - Amazon's Nova models

@@ -1,4 +1,4 @@
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 import React from 'react';
 import type { AssertionType, GradingResult } from '@promptfoo/types';
 import userEvent from '@testing-library/user-event';
@@ -96,9 +96,37 @@ describe('EvalOutputPromptDialog', () => {
     Object.assign(navigator, { clipboard: mockClipboard });
 
     render(<EvalOutputPromptDialog {...defaultProps} />);
-    await userEvent.click(screen.getByTestId('ContentCopyIcon').parentElement!);
+
+    // Trigger the hover event to make the copy button visible
+    fireEvent.mouseEnter(screen.getByText('Prompt').parentElement!);
+
+    // Get the button by its aria-label
+    const copyButton = screen.getByLabelText('Copy prompt');
+    await userEvent.click(copyButton);
 
     expect(mockClipboard.writeText).toHaveBeenCalledWith('Test prompt');
+    expect(screen.getByTestId('CheckIcon')).toBeInTheDocument();
+  });
+
+  it('copies assertion value to clipboard when copy button is clicked', async () => {
+    const mockClipboard = {
+      writeText: vi.fn().mockResolvedValue(undefined),
+    };
+    Object.assign(navigator, { clipboard: mockClipboard });
+
+    render(<EvalOutputPromptDialog {...defaultProps} />);
+
+    // Trigger the hover event on the value cell to make the copy button visible
+    const valueCell = screen.getByText('expected value').closest('td');
+    if (valueCell) {
+      fireEvent.mouseEnter(valueCell);
+    }
+
+    // Get the button by its aria-label
+    const copyButton = screen.getByLabelText('Copy assertion value 0');
+    await userEvent.click(copyButton);
+
+    expect(mockClipboard.writeText).toHaveBeenCalledWith('expected value');
     expect(screen.getByTestId('CheckIcon')).toBeInTheDocument();
   });
 

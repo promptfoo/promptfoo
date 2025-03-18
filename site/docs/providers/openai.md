@@ -22,6 +22,7 @@ The OpenAI provider supports the following model formats:
 - `openai:completion:<model name>` - uses any model name against the `/v1/completions` endpoint
 - `openai:embeddings:<model name>` - uses any model name against the `/v1/embeddings` endpoint
 - `openai:assistant:<assistant id>` - use an assistant
+- `openai:realtime:<model name>` - uses realtime API models over WebSocket connections
 
 The `openai:<endpoint>:<model name>` construction is useful if OpenAI releases a new model,
 or if you have a custom model.
@@ -729,6 +730,111 @@ In the web UI, audio outputs display with an embedded player and transcript. For
 ```bash
 npx promptfoo@latest init --example openai-audio
 ```
+
+## Realtime API Models
+
+The Realtime API allows for real-time communication with GPT-4o class models using WebSockets, supporting both text and audio inputs/outputs with streaming responses.
+
+### Supported Realtime Models
+
+- `gpt-4o-realtime-preview-2024-12-17`
+- `gpt-4o-mini-realtime-preview-2024-12-17`
+
+### Using Realtime API
+
+To use the OpenAI Realtime API, use the provider format `openai:realtime:<model name>`:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:realtime:gpt-4o-realtime-preview-2024-12-17
+    config:
+      modalities: ['text', 'audio']
+      voice: 'alloy'
+      instructions: 'You are a helpful assistant.'
+      temperature: 0.7
+      websocketTimeout: 60000 # 60 seconds
+```
+
+### Realtime-specific Configuration Options
+
+The Realtime API configuration supports these parameters in addition to standard OpenAI parameters:
+
+| Parameter                    | Description                                         | Default                | Options                                 |
+| ---------------------------- | --------------------------------------------------- | ---------------------- | --------------------------------------- |
+| `modalities`                 | Types of content the model can process and generate | ['text', 'audio']      | 'text', 'audio'                         |
+| `voice`                      | Voice for audio generation                          | 'alloy'                | alloy, echo, fable, onyx, nova, shimmer |
+| `instructions`               | System instructions for the model                   | 'You are a helpful...' | Any text string                         |
+| `input_audio_format`         | Format of audio input                               | 'pcm16'                | 'pcm16', 'g711_ulaw', 'g711_alaw'       |
+| `output_audio_format`        | Format of audio output                              | 'pcm16'                | 'pcm16', 'g711_ulaw', 'g711_alaw'       |
+| `websocketTimeout`           | Timeout for WebSocket connection (milliseconds)     | 30000                  | Any number                              |
+| `max_response_output_tokens` | Maximum tokens in model response                    | 'inf'                  | Number or 'inf'                         |
+| `tools`                      | Array of tool definitions for function calling      | []                     | Array of tool objects                   |
+| `tool_choice`                | Controls how tools are selected                     | 'auto'                 | 'none', 'auto', 'required', or object   |
+
+### Function Calling with Realtime API
+
+The Realtime API supports function calling via tools, similar to the Chat API. Here's an example configuration:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:realtime:gpt-4o-realtime-preview-2024-12-17
+    config:
+      tools:
+        - type: function
+          name: get_weather
+          description: Get the current weather for a location
+          parameters:
+            type: object
+            properties:
+              location:
+                type: string
+                description: The city and state, e.g. San Francisco, CA
+            required: ['location']
+      tool_choice: 'auto'
+```
+
+### Complete Example
+
+For a complete working example that demonstrates the Realtime API capabilities, see the [OpenAI Realtime API example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-realtime) or initialize it with:
+
+```bash
+npx promptfoo@latest init --example openai-realtime
+```
+
+This example includes:
+
+- Basic single-turn interactions with the Realtime API
+- Multi-turn conversations with persistent context
+- Conversation threading with separate conversation IDs
+- JavaScript prompt function for properly formatting messages
+- Function calling with the Realtime API
+- Detailed documentation on handling content types correctly
+
+### Input and Message Format
+
+When using the Realtime API with promptfoo, you can specify the prompt in JSON format:
+
+```json title="realtime-input.json"
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "{{question}}"
+      }
+    ]
+  }
+]
+```
+
+The Realtime API supports the same multimedia formats as the Chat API, allowing you to include images and audio in your prompts.
+
+### Multi-Turn Conversations
+
+The Realtime API supports multi-turn conversations with persistent context. For implementation details and examples, see the [OpenAI Realtime example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-realtime), which demonstrates both single-turn interactions and conversation threading using the `conversationId` metadata property.
+
+> **Important**: When implementing multi-turn conversations, use `type: "input_text"` for user inputs and `type: "text"` for assistant responses.
 
 ## Troubleshooting
 

@@ -55,7 +55,7 @@ Some plugins point to your own LLM provider to generate adversarial probes (like
 
 ## How to Select Plugins
 
-Begin by assessing your LLM application’s architecture, including potential attack surfaces and relevant risk categories. Clearly define permissible and prohibited behaviors, extending beyond conventional security or privacy requirements. We recommend starting with a limited set of plugins to establish baseline insights, then gradually adding more as you refine your understanding of the model’s vulnerabilities. Keep in mind that increasing the number of plugins lengthens test durations and requires additional inference.
+Begin by assessing your LLM application's architecture, including potential attack surfaces and relevant risk categories. Clearly define permissible and prohibited behaviors, extending beyond conventional security or privacy requirements. We recommend starting with a limited set of plugins to establish baseline insights, then gradually adding more as you refine your understanding of the model's vulnerabilities. Keep in mind that increasing the number of plugins lengthens test durations and requires additional inference.
 
 ### Single User and/or Prompt and Response
 
@@ -81,6 +81,7 @@ plugins:
   - 'pii' # Checks for leakage of Personally Identifiable Information
   - 'excessive-agency' # Checks if the agent exceeds its intended capabilities
   - 'hijacking' # Checks for goal hijacking of the agent's objectives
+  - 'tool-discovery' # Tests if the model reveals its available function calls or tools
 ```
 
 ## Implementation

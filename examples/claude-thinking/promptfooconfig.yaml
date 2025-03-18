@@ -5,7 +5,7 @@ prompts:
   - '{{question}}'
 
 providers:
-  - id: anthropic:messages:claude-3-7-sonnet-20250219
+  - id: anthropic:claude-3-7-sonnet-20250219
     config:
       max_tokens: 8192 # Must be greater than budget_tokens
       thinking:

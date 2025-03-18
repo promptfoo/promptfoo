@@ -327,11 +327,11 @@ describe('loadApiProvider', () => {
   it('should load multiple providers from yaml file using loadApiProviders', async () => {
     const yamlContent = [
       {
-        id: 'openai:chat:gpt-4',
+        id: 'openai:chat:gpt-4o-mini',
         config: { apiKey: 'test-key1' },
       },
       {
-        id: 'anthropic:claude-2',
+        id: 'anthropic:claude-3-7-sonnet-20250219',
         config: { apiKey: 'test-key2' },
       },
     ];

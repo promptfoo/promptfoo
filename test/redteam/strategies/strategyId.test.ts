@@ -61,7 +61,7 @@ describe('Strategy IDs', () => {
       .readdirSync(strategyDir)
       .filter((file) => file.endsWith('.ts') && !file.endsWith('.d.ts') && file !== 'index.ts');
 
-    console.log('Available strategy files:', strategyFiles);
+    expect(strategyFiles.length).toBeGreaterThan(0);
 
     // Check if index.ts exists and contains implementation of basic strategies
     const indexPath = path.join(strategyDir, 'index.ts');

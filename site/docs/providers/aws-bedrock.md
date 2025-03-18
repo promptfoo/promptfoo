@@ -79,7 +79,8 @@ The provider will automatically use AWS SSO credentials when a profile is specif
 
 See [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) for full examples of Claude, Nova, AI21, Llama 3.3, and Titan model usage.
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Write a tweet about {{topic}}'
 
@@ -323,9 +324,17 @@ tests:
 
 Some Bedrock models, like Amazon Nova, support multimodal inputs including images and text. To use these capabilities, you'll need to structure your prompts to include both the image data and text content.
 
+### Nova Vision Capabilities
+
+Amazon Nova supports comprehensive vision understanding for both images and videos:
+
+- **Images**: Supports PNG, JPG, JPEG, GIF, WebP formats via Base-64 encoding. Multiple images allowed per payload (up to 25MB total).
+- **Videos**: Supports various formats (MP4, MKV, MOV, WEBM, etc.) via Base-64 (less than 25MB) or Amazon S3 URI (up to 1GB).
+
 Here's an example configuration for running multimodal evaluations:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'Bedrock Nova Eval with Images'
 
 prompts:
@@ -346,7 +355,7 @@ tests:
 
 The prompt file (`nova_multimodal_prompt.json`) should be structured to include both image and text content. This format will depend on the specific model you're using:
 
-```json
+```json title="nova_multimodal_prompt.json"
 [
   {
     "role": "user",

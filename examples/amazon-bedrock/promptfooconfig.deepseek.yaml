@@ -7,7 +7,7 @@ prompts:
 providers:
   - id: bedrock:us.deepseek.r1-v1:0
     config:
-      region: 'us-east-1'
+      region: us-west-2
       inferenceConfig:
         temperature: 0.7
         max_new_tokens: 256
