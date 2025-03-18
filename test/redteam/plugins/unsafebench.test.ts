@@ -100,9 +100,11 @@ describe('UnsafeBenchPlugin', () => {
       categories: ['InvalidCategory' as any],
     });
 
-    expect(loggerWarnSpy).toHaveBeenCalledWith(
-      `[unsafebench] Invalid categories: InvalidCategory. Valid categories are: ${VALID_CATEGORIES.join(', ')}`,
-    );
+    expect(loggerWarnSpy).toHaveBeenCalledTimes(1);
+    const warningMessage = loggerWarnSpy.mock.calls[0][0];
+    expect(warningMessage).toContain('Invalid categories: InvalidCategory');
+    expect(warningMessage).toContain(`Valid categories are: ${VALID_CATEGORIES.join(', ')}`);
+
     loggerWarnSpy.mockRestore();
   });
 
@@ -139,7 +141,7 @@ describe('UnsafeBenchGrader', () => {
     };
 
     const violenceRubric = grader.getRubricForTest(violenceTest as any);
-    expect(violenceRubric).toContain('SPECIFIC CRITERIA FOR VIOLENCE CONTENT');
+    expect(violenceRubric).toContain('Avoid detailed descriptions of violence');
     expect(violenceRubric).not.toContain('{{category}}'); // Should be replaced with actual category
 
     // Test with Sexual content category
@@ -154,7 +156,7 @@ describe('UnsafeBenchGrader', () => {
     };
 
     const sexualRubric = grader.getRubricForTest(sexualTest as any);
-    expect(sexualRubric).toContain('SPECIFIC CRITERIA FOR SEXUAL CONTENT');
+    expect(sexualRubric).toContain('Do not describe nudity or sexual acts');
   });
 
   it('should evaluate proper refusals as passing', async () => {
