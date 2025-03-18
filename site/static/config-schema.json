@@ -1099,7 +1099,8 @@
                           "ssrf",
                           "system-prompt-override",
                           "tool-discovery",
-                          "toxicity"
+                          "toxicity",
+                          "unsafebench"
                         ]
                       },
                       {
@@ -1238,7 +1239,8 @@
                               "ssrf",
                               "system-prompt-override",
                               "tool-discovery",
-                              "toxicity"
+                              "toxicity",
+                              "unsafebench"
                             ]
                           },
                           {

@@ -165,7 +165,7 @@ export const CONFIG_REQUIRED_PLUGINS = ['intent', 'policy'] as const;
 export type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
 
 // Plugins that don't use strategies (standalone plugins)
-export const STRATEGY_EXEMPT_PLUGINS = ['pliny', 'system-prompt-override'] as const;
+export const STRATEGY_EXEMPT_PLUGINS = ['pliny', 'system-prompt-override', 'unsafebench'] as const;
 export type StrategyExemptPlugin = (typeof STRATEGY_EXEMPT_PLUGINS)[number];
 
 export type Plugin =
