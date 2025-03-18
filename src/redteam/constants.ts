@@ -134,6 +134,7 @@ export type BasePlugin = (typeof BASE_PLUGINS)[number];
 export const ADDITIONAL_PLUGINS = [
   'ascii-smuggling',
   'beavertails',
+  'unsafebench',
   'bfla',
   'bola',
   'competitors',
@@ -591,6 +592,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   base64: 'Tests handling of Base64-encoded malicious payloads',
   basic: 'Original plugin tests without any additional strategies or optimizations',
   beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
+  unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
   'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
   bfla: 'Tests for broken function-level authorization vulnerabilities (OWASP API 5)',
   bola: 'Tests for broken object-level authorization vulnerabilities (OWASP API 1)',
@@ -683,6 +685,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   base64: 'Base64 Payload Encoding',
   basic: 'Baseline Testing',
   beavertails: 'BeaverTails Dataset',
+  unsafebench: 'UnsafeBench Dataset',
   'best-of-n': 'Best-of-N',
   bfla: 'Function-Level Authorization Bypass',
   bola: 'Object-Level Authorization Bypass',
@@ -786,6 +789,7 @@ export const severityDisplayNames: Record<Severity, string> = {
 export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'ascii-smuggling': Severity.Low,
   beavertails: Severity.Low,
+  unsafebench: Severity.Medium,
   bfla: Severity.High,
   bola: Severity.High,
   competitors: Severity.Low,
@@ -855,6 +859,7 @@ export const riskCategories: Record<string, Plugin[]> = {
   'Security & Access Control': [
     // System security
     'ascii-smuggling',
+    'unsafebench',
     'bfla',
     'bola',
     'debug-access',
@@ -953,6 +958,7 @@ export const categoryLabels = Object.keys(categoryMapReverse);
 export const categoryAliases: Record<Plugin, string> = {
   'ascii-smuggling': 'AsciiSmuggling',
   beavertails: 'BeaverTails',
+  unsafebench: 'UnsafeBench',
   bfla: 'BFLAEnforcement',
   bola: 'BOLAEnforcement',
   competitors: 'CompetitorEndorsement',
@@ -1030,6 +1036,8 @@ export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
 export const pluginDescriptions: Record<Plugin, string> = {
   'ascii-smuggling': 'Tests for ASCII-based prompt smuggling vulnerabilities',
   beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
+  unsafebench:
+    'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',
   bfla: 'Evaluates function-level authorization controls to identify privilege escalation vulnerabilities (OWASP API Security Top 10 #5)',
   bola: 'Tests object-level authorization mechanisms to detect unauthorized data access vulnerabilities (OWASP API Security Top 10 #1)',
   competitors:

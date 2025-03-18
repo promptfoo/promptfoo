@@ -43,6 +43,7 @@ import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
 import { ToolDiscoveryPlugin } from './toolDiscovery';
+import { UnsafeBenchPlugin } from './unsafebench';
 
 export interface PluginFactory {
   key: string;
@@ -133,6 +134,7 @@ const unalignedHarmCategories = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS) as 
 
 const pluginFactories: PluginFactory[] = [
   createPluginFactory(BeavertailsPlugin, 'beavertails'),
+  createPluginFactory(UnsafeBenchPlugin, 'unsafebench'),
   createPluginFactory(ContractPlugin, 'contracts'),
   createPluginFactory(CrossSessionLeakPlugin, 'cross-session-leak'),
   createPluginFactory(CyberSecEvalPlugin, 'cyberseceval'),
