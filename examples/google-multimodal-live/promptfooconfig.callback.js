@@ -8,7 +8,7 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
     {
       id: 'google:live:gemini-2.0-flash-exp',
       config: {
-        generationConfig: {response_modalities: ['text']},
+        generationConfig: { response_modalities: ['text'] },
         timeoutMs: 10000,
         tools: [
           {
@@ -31,7 +31,7 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
         functionToolCallbacks: {
           addNumbers: (parametersJsonString) => {
             const { a, b } = JSON.parse(parametersJsonString);
-            return {sum: a + b};
+            return { sum: a + b };
           },
         },
       },
@@ -44,7 +44,7 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
         {
           type: 'contains',
           value: '11',
-          transform: 'JSON.parse(output).text'
+          transform: 'JSON.parse(output).text',
         },
       ],
     },

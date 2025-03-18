@@ -120,7 +120,7 @@ interface CompletionOptions {
    * these function tools.
    */
   functionToolCallbacks?: Record<string, (arg: string) => Promise<string>>;
-    
+
   systemInstruction?: Content;
 }
 
@@ -240,13 +240,15 @@ export class GoogleMMLiveProvider implements ApiProvider {
             for (const functionCall of response.toolCall.functionCalls) {
               function_calls_total.push(functionCall);
               if (functionCall && functionCall.id && functionCall.name) {
-                logger.debug(`Websocket pre-callback`)
+                let callbackResponse = {};
+
                 // Handle function tool callbacks
-                let callbackResponse;
                 const functionName = functionCall.name;
-                if (this.config.functionToolCallbacks && this.config.functionToolCallbacks[functionName]) {
+                if (
+                  this.config.functionToolCallbacks &&
+                  this.config.functionToolCallbacks[functionName]
+                ) {
                   try {
-                    logger.debug(`Websocket in-callback`)
                     callbackResponse = await this.config.functionToolCallbacks[functionName](
                       JSON.stringify(
                         typeof functionCall.args === 'string'
