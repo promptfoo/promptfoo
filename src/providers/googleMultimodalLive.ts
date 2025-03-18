@@ -257,6 +257,9 @@ export class GoogleMMLiveProvider implements ApiProvider {
                       ),
                     );
                   } catch (error) {
+                    callbackResponse = {
+                      error: `Error executing function ${functionName}: ${error}`,
+                    };
                     logger.error(`Error executing function ${functionName}: ${error}`);
                   }
                 }
