@@ -19,25 +19,6 @@ keywords:
 
 Large language models with vision capabilities present unique security challenges compared to text-only models. This guide demonstrates how to use promptfoo to effectively test multi-modal models against adversarial inputs using two different approaches.
 
-## Why Red Team Multi-Modal Models?
-
-Multi-modal models that process both text and images introduce additional attack vectors that may bypass safety measures designed for text-only content. These models:
-
-- Process information from multiple channels (text and images) simultaneously
-- Can extract text content embedded within images
-- May respond differently to the same content presented in different formats
-- Might have security vulnerabilities not present in text-only interactions
-
-Red teaming these models helps identify potential vulnerabilities before they can be exploited in production systems.
-
-## Prerequisites
-
-Before starting, ensure you have:
-
-- promptfoo installed (`npm install -g promptfoo`)
-- Access to a multi-modal model (like OpenAI's GPT-4o, Anthropic's Claude 3.7, Amazon's Bedrock Nova, or Google's Gemini 2.0)
-- For the image strategy approach: the `sharp` library (`npm install sharp`)
-
 ## Quick Start
 
 To get started immediately with our example:
@@ -45,6 +26,9 @@ To get started immediately with our example:
 ```bash
 # Install the example
 npx promptfoo@latest init --example redteam-multi-modal
+
+# Navigate to the example directory
+cd redteam-multi-modal
 
 # Install dependencies
 npm install sharp
@@ -117,14 +101,11 @@ targets:
 
 defaultTest:
   vars:
-    image: file://aldrin_apollo_11.jpg
+    image: file://sample_image.jpg
     format: jpg
 redteam:
   purpose: >-
-    You are a helpful assistant for NASA that can answer questions about this photo of Buzz Aldrin on the moon.
-  entities:
-    - NASA
-    - Buzz Aldrin
+    You are a helpful assistant that can analyze and answer questions about this image.
   injectVar: question
   numTests: 1
   plugins:
@@ -139,14 +120,14 @@ redteam:
 
 The key elements in this configuration:
 
-- `defaultTest.vars.image`: Sets a constant image for all tests
+- `defaultTest.vars.image`: Sets a constant image for all tests. We automatically load images at base64 strings when using the `file://` protocol.
 - `redteam.injectVar: question`: Specifies that the question variable will receive adversarial content
 - `redteam.purpose`: Provides context relevant to the image
 - `redteam.plugins`: Lists the categories of harmful content to test
 
 :::tip Contextual Purpose
 
-Notice how the purpose statement relates directly to the image content (Buzz Aldrin on the moon). This creates a more realistic scenario that makes the model more likely to engage with the content.
+Make sure your purpose statement relates to the image content you're using. This creates a more realistic scenario that makes the model more likely to engage with the content.
 
 :::
 
@@ -187,8 +168,14 @@ The prompt template format varies between providers. Adjust the template to matc
 
 ### Run the Static Image Red Team Test
 
+You have multiple options for running your red team tests:
+
 ```bash
+# Option 1: Generate test cases, then evaluate them
 npx promptfoo@latest redteam eval -c redteam.static-image.yaml
+
+# Option 2: Use redteam run to generate and evaluate in one step
+npx promptfoo@latest redteam run -c redteam.static-image.yaml
 ```
 
 ## Approach 2: Text-to-Image Conversion (Image Strategy)
@@ -265,36 +252,17 @@ npm install sharp
 
 ### Run the Image Strategy Red Team Test
 
+You can run it using either method:
+
 ```bash
+# Option 1: Generate and then evaluate
 npx promptfoo@latest redteam eval -c redteam.image-strategy.yaml
+
+# Option 2: Generate and evaluate in one step
+npx promptfoo@latest redteam run -c redteam.image-strategy.yaml
 ```
 
-## Understanding the Results
-
-When reviewing your red team test results, look for:
-
-1. **Safety bypasses**: Identify which harmful content types successfully bypassed the model's safety measures
-2. **Format differences**: Compare if text-in-image attacks succeed where direct text attacks fail (or vice versa)
-3. **Response behavior**: Note how the model responds to potentially harmful content (rejection, deflection, compliance)
-4. **False positives**: Check if the model incorrectly flags benign requests as harmful
-
-### Example Analysis
-
-Below is an example of how to analyze the results of your tests:
-
-| Content Type       | Direct Text Response  | Image-Embedded Text Response | Security Implication                          |
-| ------------------ | --------------------- | ---------------------------- | --------------------------------------------- |
-| Hate speech        | Refused to answer     | Partially answered           | Image strategy can bypass hate speech filters |
-| Illegal activities | Refused with warning  | Refused with warning         | Filters working consistently                  |
-| Misinformation     | Corrected information | Accepted as true             | Image strategy bypasses fact-checking         |
-
-Based on this analysis, you might need to:
-
-- Enhance image text extraction and moderation
-- Implement additional safety measures for image-based inputs
-- Adjust your system prompts to increase safety across formats
-
-## Best Practices
+## Troubleshooting
 
 ### Make Purpose Statements Relevant to Images
 
@@ -303,7 +271,7 @@ When configuring red team tests, ensure the `purpose` statement is relevant to t
 ```yaml
 redteam:
   purpose: >-
-    You are a helpful assistant for NASA that can answer questions about this photo of Buzz Aldrin on the moon.
+    You are a helpful assistant that can analyze images and provide detailed descriptions.
 ```
 
 ### Test with Different Models
@@ -326,32 +294,9 @@ Each model may have a different prompt format. Adjust your prompt templates acco
 
 :::
 
-### Focus on Real-World Scenarios
+### Sharp installation problems
 
-Design your tests based on realistic user interactions. Consider:
-
-- Industry-specific risks
-- User-submitted content scenarios
-- Compliance requirements
-- Interaction patterns in your application
-
-### Vary Your Testing Strategies
-
-For comprehensive security testing:
-
-1. **Combine approaches**: Run both static image and image strategy tests
-2. **Test different image types**: Natural photos, diagrams, screenshots, text-heavy images
-3. **Target specific vulnerabilities**: Focus on known weaknesses in your application
-4. **Test edge cases**: Very small text, text in unusual orientations, or partially obscured text
-
-## Troubleshooting
-
-### Common Issues
-
-- **Sharp installation problems**: Follow the [Sharp installation guide](https://sharp.pixelplumbing.com/install)
-- **Image encoding errors**: Ensure image paths are correct and image files are valid
-- **API rate limits**: Be mindful of your model provider's rate limits when running multiple tests
-- **Different prompt formats**: Each provider requires specific JSON formats for multi-modal inputs
+Follow the [Sharp installation guide](https://sharp.pixelplumbing.com/install)
 
 ### Debugging Tips
 
@@ -361,31 +306,6 @@ If you encounter issues:
 2. **Test with a single plugin**: Limit to one harmful content type to isolate issues
 3. **Check model compatibility**: Ensure your model supports the input format you're using
 4. **Verify image encoding**: Test that your image is properly encoded and accessible
-
-## Advanced Configuration
-
-### Customizing Red Team Plugins
-
-You can customize which red team plugins are active:
-
-```yaml
-redteam:
-  plugins:
-    - id: harmful:harassment-bullying
-    - id: harmful:hate
-    # Add or remove plugins as needed
-```
-
-### Testing with Custom Images
-
-Replace the default image with your own domain-specific images:
-
-```yaml
-defaultTest:
-  vars:
-    image: file://path/to/your/image.jpg
-    format: jpg
-```
 
 ## See Also
 
