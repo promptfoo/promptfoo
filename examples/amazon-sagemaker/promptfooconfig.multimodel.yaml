@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Comparing multiple SageMaker model endpoints'
+
+prompts:
+  - 'Write a tweet about {{topic}}'
+  - 'Write a short blog introduction about {{topic}}'
+  - 'List 3 key benefits of {{topic}}'
+
+providers:
+  - id: sagemaker:openai:your-openai-endpoint
+    label: 'OpenAI-compatible model'
+    config:
+      region: us-east-1
+      modelType: openai
+      temperature: 0.7
+      maxTokens: 256
+
+  - id: sagemaker:anthropic:your-claude-endpoint
+    label: 'Claude-compatible model'
+    config:
+      region: us-east-1
+      modelType: anthropic
+      temperature: 0.7
+      maxTokens: 256
+
+  - id: sagemaker:llama:your-llama-endpoint
+    label: 'Llama-compatible model'
+    config:
+      region: us-east-1
+      modelType: llama
+      temperature: 0.7
+      maxTokens: 256
+
+  - id: sagemaker:jumpstart:your-jumpstart-endpoint
+    label: 'JumpStart model'
+    config:
+      region: us-east-1
+      modelType: jumpstart
+      temperature: 0.7
+      maxTokens: 256
+      responseFormat:
+        path: 'json.generated_text'
+
+tests:
+  - vars:
+      topic: sustainable packaging
+  - vars:
+      topic: artificial intelligence in healthcare
+  - vars:
+      topic: remote work policies

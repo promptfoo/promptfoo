@@ -126,6 +126,11 @@ export interface ProviderEmbeddingResponse {
   error?: string;
   embedding?: number[];
   tokenUsage?: Partial<TokenUsage>;
+  metadata?: {
+    transformed?: boolean;
+    originalText?: string;
+    [key: string]: any;
+  };
 }
 
 export interface ProviderSimilarityResponse {

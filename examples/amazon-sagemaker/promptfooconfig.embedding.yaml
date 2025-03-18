@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Testing SageMaker embedding endpoints with similarity assertions'
+
+prompts:
+  - 'The weather today is {{condition}}.'
+  - 'It is {{condition}} outside.'
+  - "Today's forecast is {{condition}} in the morning, improving in the afternoon."
+
+providers:
+  - id: openai:gpt-3.5-turbo
+    config:
+      temperature: 0.7
+      max_tokens: 150
+
+# Set default test parameters
+defaultTest:
+  assert:
+    - type: similar
+      value: '{{prompt}}'
+      threshold: 0.7
+  options:
+    provider:
+      embedding:
+        id: sagemaker:embedding:your-embedding-endpoint
+        config:
+          region: us-west-2
+          contentType: 'application/json'
+          acceptType: 'application/json'
+          responseFormat:
+            path: 'json.embedding' # Extract embedding from response
+
+tests:
+  - vars:
+      condition: sunny
+  - vars:
+      condition: rainy
+  - vars:
+      condition: snowy

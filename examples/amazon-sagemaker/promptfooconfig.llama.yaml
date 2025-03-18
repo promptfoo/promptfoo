@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Example configuration for Llama 3.2 models on AWS SageMaker JumpStart'
+
+prompts:
+  - 'Generate a creative name for a coffee shop that specializes in {{flavor}} coffee.'
+  - 'What are some potential names for a coffee shop that specializes in {{flavor}} coffee?'
+  - 'Write a short story about a robot that becomes self-aware.'
+
+providers:
+  - id: sagemaker:jumpstart:your-llama-endpoint
+    label: 'Llama 3.2 (8B)'
+    delay: 500 # Add 500ms delay between requests to prevent rate limiting
+    config:
+      region: us-west-2
+      modelType: jumpstart # Use the JumpStart format handler
+      temperature: 0.7
+      maxTokens: 256
+      topP: 0.9
+      contentType: 'application/json'
+      acceptType: 'application/json'
+      responseFormat:
+        path: 'json.generated_text' # Use JavaScript expression to extract the field
+
+tests:
+  - vars:
+      flavor: caramel
+  - vars:
+      flavor: pumpkin spice
+  - vars:
+      flavor: lavender
