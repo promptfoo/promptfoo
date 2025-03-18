@@ -180,3 +180,5 @@ export class GolangProvider implements ApiProvider {
     return this.executeGolangScript(prompt, undefined, 'call_classification_api');
   }
 }
+
+export { execAsync };
