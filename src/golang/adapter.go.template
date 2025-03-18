@@ -1,9 +1,0 @@
-package main
-
-// This file is auto-generated to adapt the wrapper to different Go code structures.
-// It provides a declaration for CallApi if one doesn't already exist in the user's code.
-
-// CallApi is the provider's implementation 
-// IMPORTANT: This declaration is conditional and will be removed if the user's code already
-// declares CallApi to avoid redeclaration errors.
-var CallApi func(string, map[string]interface{}, map[string]interface{}) (map[string]interface{}, error) 

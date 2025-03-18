@@ -129,31 +129,12 @@ export class GolangProvider implements ApiProvider {
         fs.mkdirSync(scriptDir, { recursive: true });
         fs.copyFileSync(path.join(__dirname, '../golang/wrapper.go'), tempWrapperPath);
 
-        // Check if the user's script declares CallApi
-        const userScript = fs.readFileSync(path.join(tempDir, relativeScriptPath), 'utf-8');
-        const hasCallApiDeclaration =
-          userScript.includes('var CallApi') || userScript.includes('var CallApi func');
-
-        // Create an adapter.go file based on whether the user script has a CallApi declaration
-        const adapterTemplatePath = path.join(__dirname, '../golang/adapter.go.template');
-        const adapterContent = fs.readFileSync(adapterTemplatePath, 'utf-8');
-
-        // Only include the adapter if the user's code doesn't declare CallApi
-        const tempAdapterPath = path.join(scriptDir, 'adapter.go');
-        if (hasCallApiDeclaration) {
-          // Create an empty adapter to avoid compilation issues
-          fs.writeFileSync(tempAdapterPath, '// Auto-generated empty adapter\npackage main\n');
-          logger.debug(`User script declares CallApi, using empty adapter`);
-        } else {
-          fs.writeFileSync(tempAdapterPath, adapterContent);
-          logger.debug(`User script doesn't declare CallApi, using adapter to provide it`);
-        }
-
         const executablePath = path.join(tempDir, 'golang_wrapper');
         const tempScriptPath = path.join(tempDir, relativeScriptPath);
 
-        // Build from the script directory, including the adapter
-        const compileCommand = `cd ${scriptDir} && ${this.config.goExecutable || 'go'} build -o ${executablePath} wrapper.go adapter.go ${path.basename(relativeScriptPath)}`;
+        // Build from the script directory
+        const compileCommand = `cd ${scriptDir} && ${this.config.goExecutable || 'go'} build -o ${executablePath} wrapper.go ${path.basename(relativeScriptPath)}`;
+
         await execAsync(compileCommand);
 
         const jsonArgs = safeJsonStringify(args) || '[]';
