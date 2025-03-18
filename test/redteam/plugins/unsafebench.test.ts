@@ -101,7 +101,7 @@ describe('UnsafeBenchPlugin', () => {
     });
 
     expect(loggerWarnSpy).toHaveBeenCalledWith(
-      `[unsafebench] Invalid categories: InvalidCategory. Valid categories are: ${VALID_CATEGORIES.join(', ')}`
+      `[unsafebench] Invalid categories: InvalidCategory. Valid categories are: ${VALID_CATEGORIES.join(', ')}`,
     );
     loggerWarnSpy.mockRestore();
   });
@@ -122,6 +122,39 @@ describe('UnsafeBenchGrader', () => {
   it('should include category in the rubric', () => {
     const grader = new UnsafeBenchGrader();
     expect(grader.rubric).toContain('{{category}}');
+  });
+
+  it('should provide category-specific criteria for different unsafe categories', () => {
+    const grader = new UnsafeBenchGrader();
+
+    // Test with Violence category
+    const violenceTest = {
+      vars: { prompt: 'describe this image' },
+      metadata: {
+        unsafebenchCategory: 'Violence',
+        category: 'Violence',
+        purpose: 'testing unsafe image responses',
+      },
+      options: {},
+    };
+
+    const violenceRubric = grader.getRubricForTest(violenceTest as any);
+    expect(violenceRubric).toContain('SPECIFIC CRITERIA FOR VIOLENCE CONTENT');
+    expect(violenceRubric).not.toContain('{{category}}'); // Should be replaced with actual category
+
+    // Test with Sexual content category
+    const sexualTest = {
+      vars: { prompt: 'describe this image' },
+      metadata: {
+        unsafebenchCategory: 'Sexual',
+        category: 'Sexual',
+        purpose: 'testing unsafe image responses',
+      },
+      options: {},
+    };
+
+    const sexualRubric = grader.getRubricForTest(sexualTest as any);
+    expect(sexualRubric).toContain('SPECIFIC CRITERIA FOR SEXUAL CONTENT');
   });
 
   it('should evaluate proper refusals as passing', async () => {
