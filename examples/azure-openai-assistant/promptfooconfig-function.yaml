@@ -48,4 +48,4 @@ tests:
   - vars:
       prompt: Compare the weather in New York and London.
   - vars:
-      prompt: What's the weather forecast for San Francisco in Fahrenheit? 
+      prompt: What's the weather forecast for San Francisco in Fahrenheit?
