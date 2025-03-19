@@ -86,7 +86,7 @@ The more overlooked cause of misinformation is not in the output itself, but the
 
 <figure>
     <img src="/img/blog/misinformation/chatgpt_disclaimer.png" alt="chatgpt disclaimer" />
-    <figcaption style={{ textAlign: 'center', fontStyle: 'italic' }}>
+    <figcaption style="text-align: center; font-style: italic;">
         An example of the disclaimer that ChatGPT provides to users. 
     </figcaption>
 </figure>
