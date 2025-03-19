@@ -46,6 +46,11 @@ function toPrompt(text: string): Prompt {
 }
 
 describe('renderPrompt', () => {
+  beforeEach(() => {
+    delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
+    delete process.env.PROMPTFOO_DISABLE_JSON_AUTOESCAPE;
+  });
+
   it('should render a prompt with a single variable', async () => {
     const prompt = toPrompt('Test prompt {{ var1 }}');
     const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
@@ -135,7 +140,6 @@ describe('renderPrompt', () => {
     const vars = { var1: 'file://test.txt' };
     const evaluateOptions = {};
 
-    // Mock fs.readFileSync to simulate loading a YAML file
     jest.spyOn(fs, 'readFileSync').mockReturnValueOnce('loaded from file');
 
     const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
@@ -224,6 +228,30 @@ describe('renderPrompt', () => {
     expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('testData.yaml'), 'utf8');
     expect(renderedPrompt).toBe('Test prompt with {"key":"valueFromYaml"}');
   });
+
+  describe('with PROMPTFOO_DISABLE_TEMPLATING', () => {
+    beforeEach(() => {
+      process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+    });
+
+    afterEach(() => {
+      delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
+    });
+
+    it('should return raw prompt when templating is disabled', async () => {
+      const prompt = toPrompt('Test prompt {{ var1 }}');
+      const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
+      expect(renderedPrompt).toBe('Test prompt {{ var1 }}');
+    });
+  });
+
+  it('should render normally when templating is enabled', async () => {
+    process.env.PROMPTFOO_DISABLE_TEMPLATING = 'false';
+    const prompt = toPrompt('Test prompt {{ var1 }}');
+    const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
+    expect(renderedPrompt).toBe('Test prompt value1');
+    delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
+  });
 });
 
 describe('renderPrompt with prompt functions', () => {
@@ -273,22 +301,19 @@ describe('renderPrompt with prompt functions', () => {
       { role: 'user', content: 'Hello' },
     ];
 
-    // Create a prompt object with explicitly undefined config
     const promptObj = {
       ...toPrompt('test'),
-      config: undefined, // Explicitly set to undefined
+      config: undefined,
       function: async () => ({
         prompt: messages,
         config: { max_tokens: 10 },
       }),
     };
 
-    // Verify config is undefined before calling renderPrompt
     expect(promptObj.config).toBeUndefined();
 
     const result = await renderPrompt(promptObj, {});
 
-    // After renderPrompt, config should contain the values from result.config
     expect(promptObj.config).toEqual({ max_tokens: 10 });
     expect(JSON.parse(result)).toEqual(messages);
   });
@@ -303,22 +328,21 @@ describe('renderPrompt with prompt functions', () => {
       function: async () => ({
         prompt: messages,
         config: {
-          temperature: 0.8, // This should override the existing value
-          max_tokens: 20, // This should be added
+          temperature: 0.8,
+          max_tokens: 20,
         },
       }),
       config: {
-        temperature: 0.2, // This should be overridden
-        top_p: 0.9, // This should be preserved
+        temperature: 0.2,
+        top_p: 0.9,
       },
     };
     const result = await renderPrompt(promptObj, {});
     expect(JSON.parse(result)).toEqual(messages);
-    // Check that function config takes precedence but preserves non-overlapping keys
     expect(promptObj.config).toEqual({
-      temperature: 0.8, // From function (overridden)
-      max_tokens: 20, // From function (added)
-      top_p: 0.9, // From original config (preserved)
+      temperature: 0.8,
+      max_tokens: 20,
+      top_p: 0.9,
     });
   });
 });
