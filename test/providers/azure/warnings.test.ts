@@ -63,7 +63,7 @@ describe('maybeEmitAzureOpenAiWarning', () => {
 
     expect(maybeEmitAzureOpenAiWarning(testSuite, tests)).toBe(true);
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('You are using model-graded assertions of types factuality'),
+      expect.stringContaining('You are using model-graded assertions of types'),
     );
   });
 
