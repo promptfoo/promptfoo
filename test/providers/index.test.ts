@@ -9,7 +9,8 @@ import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
 import { loadApiProvider, loadApiProviders } from '../../src/providers';
 import { AnthropicCompletionProvider } from '../../src/providers/anthropic/completion';
-import { AzureChatCompletionProvider, AzureCompletionProvider } from '../../src/providers/azure';
+import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
+import { AzureCompletionProvider } from '../../src/providers/azure/completion';
 import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock';
 import {
   CloudflareAiChatCompletionProvider,

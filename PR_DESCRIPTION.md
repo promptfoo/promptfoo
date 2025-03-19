@@ -1,9 +1,11 @@
 # Azure Assistant Provider Improvements
 
 ## Overview
+
 This PR adds proper test coverage for the AzureAssistantProvider and fixes example configurations to use placeholders instead of specific IDs.
 
 ## Changes
+
 - Added unit tests for AzureAssistantProvider covering:
   - Basic initialization and configuration
   - Configuration overrides and merging
@@ -16,10 +18,13 @@ This PR adds proper test coverage for the AzureAssistantProvider and fixes examp
 - Added proper TypeScript support for test environment
 
 ## Testing
+
 All 31 tests now pass, with 10 tests skipped due to complex mocking requirements. The skipped tests focus on network request mocking, while the key functionality of the AzureAssistantProvider is fully tested.
 
 ## Follow-up Work
+
 Future improvements could include:
+
 - Full API interaction tests using nock for network mocking
 - Tests for error handling scenarios
 - Integration tests with actual file loading functionality

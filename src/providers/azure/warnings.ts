@@ -1,21 +1,23 @@
 import chalk from 'chalk';
-import { MODEL_GRADED_ASSERTION_TYPES } from '../assertions';
-import logger from '../logger';
-import type { TestCase, TestSuite } from '../types';
-import { AzureChatCompletionProvider, AzureCompletionProvider } from './azure';
-import { OpenAiAssistantProvider } from './openai/assistant';
-import { OpenAiChatCompletionProvider } from './openai/chat';
-import { OpenAiCompletionProvider } from './openai/completion';
+import { MODEL_GRADED_ASSERTION_TYPES } from '../../assertions';
+import logger from '../../logger';
+import type { TestCase, TestSuite } from '../../types';
 
+/**
+ * Emits a warning if Azure providers are used with model-graded assertions without
+ * explicitly setting a provider for the assertions.
+ */
 export function maybeEmitAzureOpenAiWarning(testSuite: TestSuite, tests: TestCase[]) {
   const hasAzure = testSuite.providers.some(
-    (p) => p instanceof AzureChatCompletionProvider || p instanceof AzureCompletionProvider,
+    (p) =>
+      p.constructor.name === 'AzureChatCompletionProvider' ||
+      p.constructor.name === 'AzureCompletionProvider',
   );
   const hasOpenAi = testSuite.providers.some(
     (p) =>
-      p instanceof OpenAiChatCompletionProvider ||
-      p instanceof OpenAiCompletionProvider ||
-      p instanceof OpenAiAssistantProvider,
+      p.constructor.name === 'OpenAiChatCompletionProvider' ||
+      p.constructor.name === 'OpenAiCompletionProvider' ||
+      p.constructor.name === 'OpenAiAssistantProvider',
   );
 
   if (hasAzure && !hasOpenAi && !testSuite.defaultTest?.options?.provider) {
