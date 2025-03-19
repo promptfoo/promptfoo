@@ -9,15 +9,15 @@ import type { TestCase, TestSuite } from '../../types';
  */
 export function maybeEmitAzureOpenAiWarning(testSuite: TestSuite, tests: TestCase[]) {
   const hasAzure = testSuite.providers.some(
-    (p) => 
-      p.constructor.name === 'AzureChatCompletionProvider' || 
-      p.constructor.name === 'AzureCompletionProvider'
+    (p) =>
+      p.constructor.name === 'AzureChatCompletionProvider' ||
+      p.constructor.name === 'AzureCompletionProvider',
   );
   const hasOpenAi = testSuite.providers.some(
     (p) =>
       p.constructor.name === 'OpenAiChatCompletionProvider' ||
       p.constructor.name === 'OpenAiCompletionProvider' ||
-      p.constructor.name === 'OpenAiAssistantProvider'
+      p.constructor.name === 'OpenAiAssistantProvider',
   );
 
   if (hasAzure && !hasOpenAi && !testSuite.defaultTest?.options?.provider) {
@@ -45,4 +45,4 @@ export function maybeEmitAzureOpenAiWarning(testSuite: TestSuite, tests: TestCas
     }
   }
   return false;
-} 
+}
