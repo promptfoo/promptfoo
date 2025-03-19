@@ -1,0 +1,66 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Azure OpenAI Assistant with Function Tool
+
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - id: azure:assistant:asst_example
+    label: azure-assistant-function-tool
+    config:
+      apiHost: promptfoo.openai.azure.com
+      # Define a simple weather function
+      tools:
+        - type: "function"
+          function:
+            name: "get_weather"
+            description: "Get current weather information for a location"
+            parameters:
+              type: "object"
+              properties:
+                location:
+                  type: "string"
+                  description: "The city and state e.g. Seattle, WA"
+                unit:
+                  type: "string"
+                  enum: ["c", "f"]
+                  description: "Temperature unit (c for Celsius, f for Fahrenheit)"
+              required: ["location"]
+      # Simple inline function callback for weather
+      functionToolCallbacks:
+        get_weather: |
+          async function(args) {
+            try {
+              const parsedArgs = JSON.parse(args);
+              const location = parsedArgs.location;
+              const unit = parsedArgs.unit || 'c';
+              console.log(`Weather request for ${location} in ${unit}`);
+              
+              // Simple weather response
+              return JSON.stringify({
+                location,
+                temperature: unit === 'c' ? 22 : 72,
+                unit,
+                condition: 'sunny',
+                forecast: 'Clear skies for the next few days.'
+              });
+            } catch (error) {
+              console.error('Error in get_weather function:', error);
+              return JSON.stringify({ error: String(error) });
+            }
+          }
+      # Standard parameters
+      temperature: 0.7
+      apiVersion: "2024-05-01-preview"
+      debug: true
+
+tests:
+  # Weather function tests
+  - vars:
+      prompt: What's the weather like in Seattle?
+  - vars:
+      prompt: Tell me about the weather in Tokyo in Celsius.
+  - vars:
+      prompt: I'm planning a trip to London. What's the weather forecast?
+  - vars:
+      prompt: What is the current temperature in New York? 
