@@ -17,12 +17,10 @@ import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './aliba
 import { AnthropicCompletionProvider } from './anthropic/completion';
 import { AnthropicMessagesProvider } from './anthropic/messages';
 import { ANTHROPIC_MODELS } from './anthropic/util';
-import {
-  AzureAssistantProvider,
-  AzureChatCompletionProvider,
-  AzureCompletionProvider,
-  AzureEmbeddingProvider,
-} from './azure';
+import { AzureAssistantProvider } from './azure/assistant';
+import { AzureChatCompletionProvider } from './azure/chat';
+import { AzureCompletionProvider } from './azure/completion';
+import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureModerationProvider } from './azure/moderation';
 import { BAMProvider } from './bam';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock';

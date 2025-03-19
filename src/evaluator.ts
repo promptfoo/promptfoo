@@ -15,7 +15,7 @@ import { renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
-import { maybeEmitAzureOpenAiWarning } from './providers/azureUtil';
+import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import type RedteamPandamoniumProvider from './redteam/providers/pandamonium';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';

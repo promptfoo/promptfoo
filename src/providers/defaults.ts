@@ -3,7 +3,8 @@ import logger from '../logger';
 import type { ApiProvider, DefaultProviders } from '../types';
 import type { EnvOverrides } from '../types/env';
 import { getAnthropicProviders } from './anthropic/defaults';
-import { AzureChatCompletionProvider, AzureEmbeddingProvider } from './azure';
+import { AzureChatCompletionProvider } from './azure/chat';
+import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureModerationProvider } from './azure/moderation';
 import {
   DefaultEmbeddingProvider as OpenAiEmbeddingProvider,
