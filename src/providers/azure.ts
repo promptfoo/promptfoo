@@ -3,8 +3,6 @@ import type {
   AssistantCreationOptions,
   AssistantsClient,
   FunctionDefinition,
-  RunStepMessageCreationDetails,
-  RunStepToolCallDetails,
 } from '@azure/openai-assistants';
 import dedent from 'dedent';
 import { fetchWithCache } from '../cache';
@@ -841,6 +839,18 @@ type AzureAssistantOptions = AzureCompletionOptions &
      * these function tools.
      */
     functionToolCallbacks?: Record<FunctionDefinition['name'], (arg: string) => Promise<string>>;
+    /**
+     * Model to use for the assistant.
+     */
+    modelName?: string;
+    /**
+     * Tool resources configuration, including vector store IDs.
+     */
+    tool_resources?: {
+      file_search?: {
+        vector_store_ids?: string[];
+      };
+    };
   };
 
 // See https://learn.microsoft.com/en-us/javascript/api/overview/azure/openai-assistants-readme?view=azure-node-preview
@@ -898,9 +908,73 @@ export class AzureAssistantProvider extends AzureGenericProvider {
     const assistantThread = await this.assistantsClient.createThread();
     await this.assistantsClient.createMessage(assistantThread.id, 'user', prompt);
 
-    let run = await this.assistantsClient.createRun(assistantThread.id, {
+    // Prepare the run options
+    const runOptions: any = {
       assistantId,
-    });
+    };
+
+    // Add standard parameters directly supported by the SDK
+    if (this.assistantConfig.temperature !== undefined) {
+      runOptions.temperature = this.assistantConfig.temperature;
+    }
+    if (this.assistantConfig.top_p !== undefined) {
+      runOptions.top_p = this.assistantConfig.top_p;
+    }
+
+    // Use direct inclusion of api-version in query parameters
+    const apiVersion = this.assistantConfig.apiVersion || DEFAULT_AZURE_API_VERSION;
+
+    // Use raw HTTP call for createRun to ensure all parameters are included
+    const headers = await this.getAuthHeaders();
+    const body = {
+      assistant_id: assistantId,
+      ...(this.assistantConfig.temperature === undefined
+        ? {}
+        : { temperature: this.assistantConfig.temperature }),
+      ...(this.assistantConfig.top_p === undefined ? {} : { top_p: this.assistantConfig.top_p }),
+      ...(this.assistantConfig.tool_resources
+        ? { tool_resources: this.assistantConfig.tool_resources }
+        : {}),
+      ...(this.assistantConfig.tool_choice
+        ? { tool_choice: this.assistantConfig.tool_choice }
+        : {}),
+      ...(this.assistantConfig.modelName ? { model: this.assistantConfig.modelName } : {}),
+      ...(this.assistantConfig.instructions
+        ? { instructions: this.assistantConfig.instructions }
+        : {}),
+    };
+
+    logger.debug(`Creating run with direct API call, body: ${JSON.stringify(body)}`);
+
+    let run;
+    try {
+      const apiBaseUrl = this.getApiBaseUrl();
+      const response: Response = await fetch(
+        `${apiBaseUrl}/openai/threads/${assistantThread.id}/runs?api-version=${apiVersion}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...headers,
+          },
+          body: JSON.stringify(body),
+        },
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `API call failed: ${response.status} ${response.statusText} - ${errorText}`,
+        );
+      }
+
+      run = await response.json();
+    } catch (err) {
+      logger.error(`Error creating run: ${err}`);
+      return {
+        error: `Error creating run: ${String(err)}`,
+      };
+    }
 
     logger.debug(`\tAzure thread run API response: ${JSON.stringify(run)}`);
 
@@ -916,7 +990,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
           break;
         }
         const functionCallsWithCallbacks = requiredAction.submitToolOutputs?.toolCalls.filter(
-          (toolCall) => {
+          (toolCall: any) => {
             return (
               toolCall.type === 'function' &&
               toolCall.function.name in (this.assistantConfig.functionToolCallbacks ?? {})
@@ -928,11 +1002,11 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         }
         logger.debug(
           `Calling functionToolCallbacks for functions: ${functionCallsWithCallbacks.map(
-            ({ function: { name } }) => name,
+            ({ function: { name } }: any) => name,
           )}`,
         );
         const toolOutputs = await Promise.all(
-          functionCallsWithCallbacks.map(async (toolCall) => {
+          functionCallsWithCallbacks.map(async (toolCall: any) => {
             logger.debug(
               `Calling functionToolCallbacks[${toolCall.function.name}]('${toolCall.function.arguments}')`,
             );
@@ -945,25 +1019,80 @@ export class AzureAssistantProvider extends AzureGenericProvider {
             };
           }),
         );
+
         logger.debug(
-          `Calling Azure API, submitting tool outputs for ${run.threadId}: ${JSON.stringify(
+          `Calling Azure API, submitting tool outputs for ${run.thread_id}: ${JSON.stringify(
             toolOutputs,
           )}`,
         );
-        run = await this.assistantsClient.submitToolOutputsToRun(run.threadId, run.id, toolOutputs);
+
+        // Use direct API call for submitting tool outputs
+        try {
+          const apiBaseUrl = this.getApiBaseUrl();
+          const response: Response = await fetch(
+            `${apiBaseUrl}/openai/threads/${run.thread_id}/runs/${run.id}/submit-tool-outputs?api-version=${apiVersion}`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...headers,
+              },
+              body: JSON.stringify({ tool_outputs: toolOutputs }),
+            },
+          );
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(
+              `API call failed: ${response.status} ${response.statusText} - ${errorText}`,
+            );
+          }
+
+          run = await response.json();
+          continue;
+        } catch (err) {
+          logger.error(`Error submitting tool outputs: ${err}`);
+          return {
+            error: `Error submitting tool outputs: ${String(err)}`,
+          };
+        }
       }
 
       await sleep(1000);
 
-      logger.debug(`Calling Azure API, getting thread run ${run.id} status`);
-      run = await this.assistantsClient.getRun(run.threadId, run.id);
+      // Use direct API call for getting run status
+      try {
+        const apiBaseUrl = this.getApiBaseUrl();
+        const response: Response = await fetch(
+          `${apiBaseUrl}/openai/threads/${run.thread_id}/runs/${run.id}?api-version=${apiVersion}`,
+          {
+            method: 'GET',
+            headers,
+          },
+        );
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(
+            `API call failed: ${response.status} ${response.statusText} - ${errorText}`,
+          );
+        }
+
+        run = await response.json();
+      } catch (err) {
+        logger.error(`Error retrieving run status: ${err}`);
+        return {
+          error: `Error retrieving run status: ${String(err)}`,
+        };
+      }
+
       logger.debug(`\tAzure thread run API response: ${JSON.stringify(run)}`);
     }
 
     if (run.status !== 'completed' && run.status !== 'requires_action') {
-      if (run.lastError) {
+      if (run.last_error) {
         return {
-          error: `Thread run failed: ${run.lastError.message}`,
+          error: `Thread run failed: ${run.last_error.message}`,
         };
       }
       return {
@@ -971,47 +1100,128 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       };
     }
 
-    logger.debug(`Calling Azure API, getting thread run steps for ${run.threadId}`);
-    const steps = await this.assistantsClient.listRunSteps(run.threadId, run.id, { order: 'asc' });
+    // Use direct API call for getting run steps
+    let steps;
+    try {
+      const apiBaseUrl = this.getApiBaseUrl();
+      const response: Response = await fetch(
+        `${apiBaseUrl}/openai/threads/${run.thread_id}/runs/${run.id}/steps?api-version=${apiVersion}&order=asc`,
+        {
+          method: 'GET',
+          headers,
+        },
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `API call failed: ${response.status} ${response.statusText} - ${errorText}`,
+        );
+      }
+
+      steps = await response.json();
+    } catch (err) {
+      logger.error(`Error retrieving run steps: ${err}`);
+      return {
+        error: `Error retrieving run steps: ${String(err)}`,
+      };
+    }
+
     logger.debug(`\tAzure thread run steps API response: ${JSON.stringify(steps)}`);
 
     const outputBlocks = [];
     for (const step of steps.data) {
       if (step.type === 'message_creation') {
         logger.debug(`Calling Azure API, getting message ${step.id}`);
-        const stepDetails = step.stepDetails as RunStepMessageCreationDetails;
-        // Bug in the API: the field is currently `message_id` even though it's documented as `messageId`
-        const messageId =
-          (stepDetails.messageCreation as any).message_id || stepDetails.messageCreation.messageId;
-        const message = await this.assistantsClient.getMessage(run.threadId, messageId);
+
+        // Use direct API call for getting message
+        let message;
+        try {
+          const stepDetails = step.step_details;
+          // Bug in the API: the field is currently `message_id` even though it's documented as `messageId`
+          const messageId =
+            (stepDetails.message_creation as any)?.message_id ||
+            stepDetails.message_creation?.messageId;
+
+          if (!messageId) {
+            outputBlocks.push(`[Could not find message ID in step details]`);
+            continue;
+          }
+
+          const apiBaseUrl = this.getApiBaseUrl();
+          const response: Response = await fetch(
+            `${apiBaseUrl}/openai/threads/${run.thread_id}/messages/${messageId}?api-version=${apiVersion}`,
+            {
+              method: 'GET',
+              headers,
+            },
+          );
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(
+              `API call failed: ${response.status} ${response.statusText} - ${errorText}`,
+            );
+          }
+
+          message = await response.json();
+        } catch (err) {
+          logger.error(`Error retrieving message: ${err}`);
+          outputBlocks.push(`[Error retrieving message: ${String(err)}]`);
+          continue;
+        }
+
         logger.debug(`\tAzure thread run step message API response: ${JSON.stringify(message)}`);
 
         const content = message.content
-          .map((content) =>
+          .map((content: any) =>
             content.type === 'text' ? content.text.value : `<${content.type} output>`,
           )
           .join('\n');
         outputBlocks.push(`[${toTitleCase(message.role)}] ${content}`);
       } else if (step.type === 'tool_calls') {
-        for (const toolCall of (step.stepDetails as RunStepToolCallDetails).toolCalls) {
-          if (toolCall.type === 'function') {
-            outputBlocks.push(
-              `[Call function ${toolCall.function.name} with arguments ${toolCall.function.arguments}]`,
-            );
-            outputBlocks.push(`[Function output: ${toolCall.function.output}]`);
-          } else if (toolCall.type === 'retrieval') {
-            outputBlocks.push(`[Ran retrieval]`);
-          } else if (toolCall.type === 'code_interpreter') {
-            const output = toolCall.codeInterpreter.outputs
-              .map((output) => (output.type === 'logs' ? output.logs : `<${output.type} output>`))
-              .join('\n');
-            outputBlocks.push(`[Code interpreter input]`);
-            outputBlocks.push(toolCall.codeInterpreter.input);
-            outputBlocks.push(`[Code interpreter output]`);
-            outputBlocks.push(output);
-          } else {
-            outputBlocks.push(`[Unknown tool call type: ${(toolCall as any).type}]`);
+        // Log the actual structure for debugging
+        logger.debug(`Tool calls structure: ${JSON.stringify(step.step_details)}`);
+
+        // The Azure API might use either toolCalls (camelCase) or tool_calls (snake_case)
+        // Check for both possibilities
+        const stepDetails = step.step_details as any;
+        const toolCalls = stepDetails?.toolCalls || stepDetails?.tool_calls || [];
+
+        if (Array.isArray(toolCalls) && toolCalls.length > 0) {
+          for (const toolCall of toolCalls) {
+            if (toolCall.type === 'function') {
+              outputBlocks.push(
+                `[Call function ${toolCall.function.name} with arguments ${toolCall.function.arguments}]`,
+              );
+              outputBlocks.push(`[Function output: ${toolCall.function.output}]`);
+            } else if (toolCall.type === 'retrieval') {
+              outputBlocks.push(`[Ran retrieval]`);
+            } else if (toolCall.type === 'code_interpreter') {
+              const output =
+                toolCall.codeInterpreter?.outputs
+                  ?.map((output: any) =>
+                    output.type === 'logs' ? output.logs : `<${output.type} output>`,
+                  )
+                  ?.join('\n') || '[No output]';
+              outputBlocks.push(`[Code interpreter input]`);
+              outputBlocks.push(toolCall.codeInterpreter?.input || '[No input]');
+              outputBlocks.push(`[Code interpreter output]`);
+              outputBlocks.push(output);
+            } else if (toolCall.type === 'file_search') {
+              outputBlocks.push(`[Ran file search]`);
+              if (toolCall.file_search) {
+                outputBlocks.push(`[File search details: ${JSON.stringify(toolCall.file_search)}]`);
+              }
+            } else {
+              outputBlocks.push(`[Unknown tool call type: ${toolCall.type}]`);
+            }
           }
+        } else {
+          // Handle the case where we can't find tool calls in expected format
+          outputBlocks.push(
+            `[Could not find tool calls in expected format. Raw step details: ${JSON.stringify(step.step_details)}]`,
+          );
         }
       } else {
         outputBlocks.push(`[Unknown step type: ${step.type}]`);
@@ -1020,13 +1230,6 @@ export class AzureAssistantProvider extends AzureGenericProvider {
 
     return {
       output: outputBlocks.join('\n\n').trim(),
-      /*
-      tokenUsage: {
-        total: data.usage.total_tokens,
-        prompt: data.usage.prompt_tokens,
-        completion: data.usage.completion_tokens,
-      },
-      */
     };
   }
 }

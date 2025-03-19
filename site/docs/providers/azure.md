@@ -394,6 +394,37 @@ providers:
 
 Be sure to replace the assistant ID and the name of your deployment.
 
+### Using Vector Stores with Assistants
+
+Azure OpenAI Assistants support vector stores for enhanced file search capabilities. To use a vector store with your assistant, first create a vector store in the Azure Portal or via the API, then configure your assistant to use it:
+
+```yaml
+providers:
+  - id: azure:assistant:asst_V3UgNCNUSAtHQdit8YimCKlJ
+    config:
+      apiHost: promptfoo.openai.azure.com
+      # Add tools for file search
+      tools:
+        - type: file_search
+      # Configure vector store IDs
+      tool_resources:
+        file_search:
+          vector_store_ids:
+            - 'vs_Ioe3uJLnZd2Rrw4hEXUhF2Y1'
+      # Optional parameters
+      temperature: 1
+      top_p: 1
+      apiVersion: '2024-05-01-preview'
+```
+
+Make sure to:
+
+1. Set up a tool with `type: file_search`
+2. Configure the `tool_resources.file_search.vector_store_ids` array with your vector store IDs
+3. Set the appropriate `apiVersion` (recommended: `2024-05-01-preview` or later)
+
+### Simple Example
+
 Here's an example of a simple full assistant eval:
 
 ```yaml
