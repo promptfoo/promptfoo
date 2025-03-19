@@ -938,6 +938,13 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       ...(this.assistantConfig.tool_choice
         ? { tool_choice: this.assistantConfig.tool_choice }
         : {}),
+      ...(this.assistantConfig.tools
+        ? {
+            tools: maybeLoadFromExternalFile(
+              renderVarsInObject(this.assistantConfig.tools, context?.vars),
+            ),
+          }
+        : {}),
       ...(this.assistantConfig.modelName ? { model: this.assistantConfig.modelName } : {}),
       ...(this.assistantConfig.instructions
         ? { instructions: this.assistantConfig.instructions }
@@ -969,6 +976,10 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       }
 
       run = await response.json();
+      // Store the thread ID in the run object for later use if it's not already present
+      if (!run.thread_id) {
+        run.thread_id = assistantThread.id;
+      }
     } catch (err) {
       logger.error(`Error creating run: ${err}`);
       return {
@@ -984,76 +995,176 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       run.status === 'requires_action'
     ) {
       if (run.status === 'requires_action') {
-        const requiredAction = run.requiredAction;
-        invariant(requiredAction, 'Run requires action but no action is provided');
-        if (requiredAction === null || requiredAction.type !== 'submit_tool_outputs') {
+        // Support both camelCase and snake_case property names
+        const requiredAction: any = run.requiredAction || run.required_action;
+        logger.debug(`Required action: ${JSON.stringify(requiredAction)}`);
+
+        // Check if requiredAction exists before asserting
+        if (!requiredAction) {
+          logger.error(
+            `Run requires action but no action is provided. Run: ${JSON.stringify(run)}`,
+          );
+          return {
+            error: `Run requires action but no required_action or requiredAction field was provided by the API`,
+          };
+        }
+
+        // Support both camelCase and snake_case for action type and submit tool outputs
+        const actionType = requiredAction.type;
+        if (actionType !== 'submit_tool_outputs') {
+          logger.debug(`Unknown action type: ${actionType}`);
           break;
         }
-        const functionCallsWithCallbacks = requiredAction.submitToolOutputs?.toolCalls.filter(
-          (toolCall: any) => {
-            return (
-              toolCall.type === 'function' &&
-              toolCall.function.name in (this.assistantConfig.functionToolCallbacks ?? {})
-            );
-          },
-        );
+
+        // Support both camelCase and snake_case for submit tool outputs
+        const submitToolOutputs: any =
+          requiredAction.submitToolOutputs || requiredAction.submit_tool_outputs;
+        if (!submitToolOutputs) {
+          logger.error(`No submitToolOutputs or submit_tool_outputs field in required action`);
+          break;
+        }
+
+        // Support both camelCase and snake_case for tool calls
+        const toolCalls: any[] = submitToolOutputs.toolCalls || submitToolOutputs.tool_calls || [];
+        if (!toolCalls || !Array.isArray(toolCalls) || toolCalls.length === 0) {
+          logger.error(`No tool calls found in required action`);
+          break;
+        }
+
+        const functionCallsWithCallbacks: any[] = toolCalls.filter((toolCall: any) => {
+          return (
+            toolCall.type === 'function' &&
+            toolCall.function &&
+            toolCall.function.name in (this.assistantConfig.functionToolCallbacks ?? {})
+          );
+        });
+
         if (!functionCallsWithCallbacks || functionCallsWithCallbacks.length === 0) {
+          logger.error(
+            `No function calls with callbacks found. Available functions: ${Object.keys(
+              this.assistantConfig.functionToolCallbacks || {},
+            ).join(', ')}. Tool calls: ${JSON.stringify(toolCalls)}`,
+          );
           break;
         }
+
         logger.debug(
           `Calling functionToolCallbacks for functions: ${functionCallsWithCallbacks.map(
             ({ function: { name } }: any) => name,
           )}`,
         );
-        const toolOutputs = await Promise.all(
+        const toolOutputs: any[] = await Promise.all(
           functionCallsWithCallbacks.map(async (toolCall: any) => {
-            logger.debug(
-              `Calling functionToolCallbacks[${toolCall.function.name}]('${toolCall.function.arguments}')`,
-            );
-            const result = await this.assistantConfig.functionToolCallbacks![
-              toolCall.function.name
-            ](toolCall.function.arguments);
-            return {
-              tool_call_id: toolCall.id,
-              output: result,
-            };
+            const functionName = toolCall.function.name;
+            const functionArgs = toolCall.function.arguments;
+            const callback = this.assistantConfig.functionToolCallbacks?.[functionName];
+            if (!callback) {
+              logger.error(`No callback found for function ${functionName}`);
+              return null;
+            }
+            try {
+              logger.debug(`Calling function ${functionName} with args: ${functionArgs}`);
+
+              let result;
+              // Handle callback as string (from YAML) or function
+              if (typeof callback === 'string') {
+                logger.debug(`Callback is a string, evaluating as function: ${callback}`);
+                // Create an async function from the string and execute it
+                const asyncFunction = new Function('return ' + callback)();
+                result = await asyncFunction(functionArgs);
+              } else {
+                // Regular function callback
+                result = await callback(functionArgs);
+              }
+
+              logger.debug(`Function ${functionName} result: ${result}`);
+              return {
+                tool_call_id: toolCall.id,
+                output: result,
+              };
+            } catch (error) {
+              logger.error(`Error calling function ${functionName}: ${error}`);
+              return {
+                tool_call_id: toolCall.id,
+                output: JSON.stringify({ error: String(error) }),
+              };
+            }
           }),
         );
 
-        logger.debug(
-          `Calling Azure API, submitting tool outputs for ${run.thread_id}: ${JSON.stringify(
-            toolOutputs,
-          )}`,
-        );
+        // Filter out null values
+        const validToolOutputs: any[] = toolOutputs.filter((output: any) => output !== null);
 
-        // Use direct API call for submitting tool outputs
+        if (validToolOutputs.length === 0) {
+          logger.error('No valid tool outputs to submit');
+          break;
+        }
+
+        // Submit tool outputs to API
         try {
           const apiBaseUrl = this.getApiBaseUrl();
-          const response: Response = await fetch(
-            `${apiBaseUrl}/openai/threads/${run.thread_id}/runs/${run.id}/submit-tool-outputs?api-version=${apiVersion}`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                ...headers,
-              },
-              body: JSON.stringify({ tool_outputs: toolOutputs }),
-            },
-          );
+          const threadId = run.thread_id;
+          const runId = run.id;
 
-          if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(
-              `API call failed: ${response.status} ${response.statusText} - ${errorText}`,
-            );
+          logger.debug(`Submitting tool outputs to thread ${threadId}, run ${runId}`);
+
+          // Try both possible tool output submission endpoints
+          const endpoints = [
+            `/openai/threads/${threadId}/runs/${runId}/submit-tool-outputs`,
+            `/openai/threads/${threadId}/runs/${runId}/submit_tool_outputs`,
+          ];
+
+          let successful = false;
+          let lastError = '';
+
+          for (const endpoint of endpoints) {
+            try {
+              const url = `${apiBaseUrl}${endpoint}?api-version=${apiVersion}`;
+              logger.debug(`Trying to submit tool outputs to: ${url}`);
+
+              const response: Response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...headers,
+                },
+                body: JSON.stringify({
+                  tool_outputs: validToolOutputs,
+                }),
+              });
+
+              if (response.ok) {
+                run = await response.json();
+                // Ensure thread_id is preserved
+                if (!run.thread_id) {
+                  run.thread_id = threadId;
+                }
+                successful = true;
+                logger.debug(`Successfully submitted tool outputs to ${endpoint}`);
+                break;
+              } else {
+                const text = await response.text();
+                lastError = `Error with ${endpoint}: ${response.status} ${response.statusText} - ${text}`;
+                logger.debug(lastError);
+              }
+            } catch (err) {
+              lastError = `Exception with ${endpoint}: ${err}`;
+              logger.debug(lastError);
+            }
           }
 
-          run = await response.json();
+          if (!successful) {
+            return {
+              error: `Failed to submit tool outputs: ${lastError}`,
+            };
+          }
+
+          logger.debug(`Updated run after submitting tool outputs: ${JSON.stringify(run)}`);
           continue;
-        } catch (err) {
-          logger.error(`Error submitting tool outputs: ${err}`);
+        } catch (error) {
+          logger.error(`Error in tool output submission: ${error}`);
           return {
-            error: `Error submitting tool outputs: ${String(err)}`,
+            error: `Error in tool output submission: ${String(error)}`,
           };
         }
       }
@@ -1194,24 +1305,38 @@ export class AzureAssistantProvider extends AzureGenericProvider {
               outputBlocks.push(
                 `[Call function ${toolCall.function.name} with arguments ${toolCall.function.arguments}]`,
               );
-              outputBlocks.push(`[Function output: ${toolCall.function.output}]`);
+              // Support both camelCase and snake_case for the output property
+              const functionOutput = toolCall.function.output || (toolCall.function as any).output;
+              outputBlocks.push(`[Function output: ${functionOutput}]`);
             } else if (toolCall.type === 'retrieval') {
               outputBlocks.push(`[Ran retrieval]`);
             } else if (toolCall.type === 'code_interpreter') {
+              // Support both camelCase and snake_case for code interpreter properties
+              const codeInterpreter = toolCall.codeInterpreter || toolCall.code_interpreter;
+              if (!codeInterpreter) {
+                outputBlocks.push(`[Code interpreter data format not recognized]`);
+                continue;
+              }
+
+              const outputs = codeInterpreter.outputs || (codeInterpreter as any).outputs || [];
+              const input = codeInterpreter.input || (codeInterpreter as any).input;
+
               const output =
-                toolCall.codeInterpreter?.outputs
+                outputs
                   ?.map((output: any) =>
                     output.type === 'logs' ? output.logs : `<${output.type} output>`,
                   )
                   ?.join('\n') || '[No output]';
               outputBlocks.push(`[Code interpreter input]`);
-              outputBlocks.push(toolCall.codeInterpreter?.input || '[No input]');
+              outputBlocks.push(input || '[No input]');
               outputBlocks.push(`[Code interpreter output]`);
               outputBlocks.push(output);
             } else if (toolCall.type === 'file_search') {
               outputBlocks.push(`[Ran file search]`);
-              if (toolCall.file_search) {
-                outputBlocks.push(`[File search details: ${JSON.stringify(toolCall.file_search)}]`);
+              // Support both camelCase and snake_case for file search properties
+              const fileSearch = toolCall.fileSearch || toolCall.file_search;
+              if (fileSearch) {
+                outputBlocks.push(`[File search details: ${JSON.stringify(fileSearch)}]`);
               }
             } else {
               outputBlocks.push(`[Unknown tool call type: ${toolCall.type}]`);
