@@ -1,5 +1,5 @@
 import { fetchWithCache } from '../../../src/cache';
-import { AzureCompletionProvider } from '../../../src/providers/azure';
+import { AzureCompletionProvider } from '../../../src/providers/azure/completion';
 
 jest.mock('../../../src/cache', () => ({
   fetchWithCache: jest.fn(),
