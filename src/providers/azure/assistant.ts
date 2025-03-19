@@ -1,4 +1,4 @@
-import { fetchWithRetries } from '../../fetch';
+import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
@@ -206,15 +206,10 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         if (completedRun.last_error) {
           return {
             error: `Thread run failed: ${completedRun.last_error.code || ''} - ${completedRun.last_error.message}`,
-            retryable: this.isRetryableError(
-              completedRun.last_error.code,
-              completedRun.last_error.message,
-            ),
           };
         }
         return {
           error: `Thread run failed with status: ${completedRun.status}`,
-          retryable: completedRun.status === 'expired' || completedRun.status === 'cancelled',
         };
       }
 
@@ -238,7 +233,6 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       ) {
         return {
           error: `Error in Azure Assistant API call: ${errorMessage}`,
-          retryable: false, // Explicitly mark as not retryable
         };
       }
 
@@ -246,7 +240,6 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       if (this.isRateLimitError(errorMessage)) {
         return {
           error: `Rate limit exceeded: ${errorMessage}`,
-          retryable: true,
         };
       }
 
@@ -254,56 +247,44 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       if (this.isServiceError(errorMessage)) {
         return {
           error: `Service error: ${errorMessage}`,
-          retryable: true,
         };
       }
 
       return {
         error: `Error in Azure Assistant API call: ${errorMessage}`,
-        retryable: this.isServerError(errorMessage),
       };
     }
   }
 
   /**
-   * Helper method to make HTTP requests using fetchWithRetries
+   * Helper method to make HTTP requests using fetchWithCache
    */
   private async makeRequest<T>(url: string, options: RequestInit): Promise<T> {
     const timeoutMs = this.assistantConfig.timeoutMs || REQUEST_TIMEOUT_MS;
     const retries = this.assistantConfig.retryOptions?.maxRetries || 4;
-
-    const response = await fetchWithRetries(url, options, timeoutMs, retries);
-
-    if (response.status < 200 || response.status >= 300) {
-      // Try to extract a more detailed error message from the response
-      let errorDetails = '';
-      try {
-        const errorBody = await response.text();
-        if (errorBody) {
-          try {
-            const parsedError = JSON.parse(errorBody);
-            if (parsedError.error && parsedError.error.message) {
-              errorDetails = `: ${parsedError.error.message}`;
-            } else {
-              errorDetails = `: ${errorBody}`;
-            }
-          } catch {
-            // If we can't parse the error body as JSON, just use it as a string
-            errorDetails = `: ${errorBody}`;
-          }
-        }
-      } catch (error) {
-        logger.debug(`Failed to read error body: ${error}`);
-      }
-
-      throw new Error(`API error: ${response.status} ${response.statusText}${errorDetails}`);
-    }
+    const bustCache = this.assistantConfig.disableCache === true;
 
     try {
-      return (await response.json()) as T;
-    } catch (error) {
-      logger.error(`Failed to parse response as JSON: ${error}`);
-      throw new Error(`Failed to parse response as JSON: ${error}`);
+      const result = await fetchWithCache<T>(url, options, timeoutMs, 'json', bustCache, retries);
+
+      if (result.status < 200 || result.status >= 300) {
+        // Handle error response that was cached or returned
+        throw new Error(
+          `API error: ${result.status} ${result.statusText}${
+            result.data && typeof result.data === 'object' && 'error' in result.data
+              ? `: ${(result.data as any).error?.message || JSON.stringify(result.data)}`
+              : typeof result.data === 'string'
+                ? `: ${result.data}`
+                : ''
+          }`,
+        );
+      }
+
+      // Result data is already parsed as JSON by fetchWithCache
+      return result.data;
+    } catch (error: any) {
+      logger.error(`Request failed: ${error.message}`);
+      throw error;
     }
   }
 
@@ -437,7 +418,6 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       if (Date.now() - startTime > maxPollTime) {
         return {
           error: `Run polling timed out after ${maxPollTime}ms. The operation may still be in progress.`,
-          retryable: true, // Timeouts are generally retryable
         };
       }
 
@@ -538,7 +518,6 @@ export class AzureAssistantProvider extends AzureGenericProvider {
               logger.error(`Error submitting tool outputs: ${error.message}`);
               return {
                 error: `Error submitting tool outputs: ${error.message}`,
-                retryable: this.isRetryableError('', error.message || ''),
               };
             }
           } else {
@@ -552,13 +531,11 @@ export class AzureAssistantProvider extends AzureGenericProvider {
             if (run.last_error) {
               return {
                 error: `Thread run failed: ${run.last_error.code || ''} - ${run.last_error.message}`,
-                retryable: this.isRetryableError(run.last_error.code, run.last_error.message),
               };
             }
 
             return {
               error: `Thread run failed with status: ${run.status}`,
-              retryable: run.status === 'expired' || run.status === 'cancelled',
             };
           }
 
@@ -582,7 +559,6 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         if (this.isRetryableError('', errorMessage)) {
           return {
             error: `Error polling run status: ${errorMessage}`,
-            retryable: true,
           };
         }
 
@@ -715,7 +691,6 @@ export class AzureAssistantProvider extends AzureGenericProvider {
 
       return {
         error: `Error processing run results: ${errorMessage}`,
-        retryable: this.isRetryableError('', errorMessage),
       };
     }
   }

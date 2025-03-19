@@ -13,28 +13,7 @@ providers:
       tools: file://tools/weather-function.json
       # Inline function callback definition
       functionToolCallbacks:
-        get_weather: |
-          async function(args) {
-            try {
-              const parsedArgs = JSON.parse(args);
-              const location = parsedArgs.location;
-              const unit = parsedArgs.unit || 'celsius';
-              console.log(`Weather request for ${location} in ${unit}`);
-              
-              // Simple weather response
-              const temp = unit === 'celsius' ? 22 : 72;
-              return JSON.stringify({
-                location,
-                temperature: temp,
-                unit,
-                condition: 'sunny',
-                forecast: 'Clear skies for the next few days.'
-              });
-            } catch (error) {
-              console.error('Error in weather function:', error);
-              return JSON.stringify({ error: String(error) });
-            }
-          }
+        get_weather: file://callbacks/weather.js:getWeather
       temperature: 0.7
       apiVersion: '2024-05-01-preview'
       debug: true

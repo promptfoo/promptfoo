@@ -119,10 +119,6 @@ export interface ProviderResponse {
     transcript?: string;
     format?: string;
   };
-  /**
-   * Indicates if an error is temporary and the request can be retried
-   */
-  retryable?: boolean;
 }
 
 export interface ProviderEmbeddingResponse {

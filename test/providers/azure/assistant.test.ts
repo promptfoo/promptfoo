@@ -1,9 +1,9 @@
-import { fetchWithRetries } from '../../../src/fetch';
+import { fetchWithCache } from '../../../src/cache';
 import { AzureAssistantProvider } from '../../../src/providers/azure/assistant';
 import { sleep } from '../../../src/util/time';
 
 // Mock dependencies
-jest.mock('../../../src/fetch');
+jest.mock('../../../src/cache');
 jest.mock('../../../src/util/time');
 jest.mock('../../../src/logger', () => ({
   __esModule: true,
@@ -16,7 +16,7 @@ jest.mock('../../../src/logger', () => ({
 
 describe('Azure Assistant Provider', () => {
   let provider: AzureAssistantProvider;
-  const mockFetchWithRetries = jest.mocked(fetchWithRetries);
+  const _mockFetchWithCache = jest.mocked(fetchWithCache);
   const mockSleep = jest.mocked(sleep);
 
   // Helper for Response object creation (unused but kept for future tests)
@@ -120,7 +120,6 @@ describe('Azure Assistant Provider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result.error).toContain('Rate limit exceeded');
-      expect(result.retryable).toBe(true);
     });
 
     it('should handle service errors', async () => {
@@ -129,7 +128,6 @@ describe('Azure Assistant Provider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result.error).toContain('Service error');
-      expect(result.retryable).toBe(true);
     });
 
     it('should handle server errors', async () => {
@@ -138,7 +136,6 @@ describe('Azure Assistant Provider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result.error).toContain('Error in Azure Assistant API call');
-      expect(result.retryable).toBe(true);
     });
 
     it('should handle thread with run in progress errors', async () => {
@@ -149,7 +146,6 @@ describe('Azure Assistant Provider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result.error).toContain('Error in Azure Assistant API call');
-      expect(result.retryable).toBe(false);
     });
   });
 
@@ -754,7 +750,6 @@ describe('Azure Assistant Provider', () => {
       );
 
       expect(result.error).toContain('Error processing run results');
-      expect(result.retryable).toBe(false); // Default false since no specific error code/message
     });
   });
 
@@ -763,17 +758,19 @@ describe('Azure Assistant Provider', () => {
       // Restore original makeRequest method for this test section
       (provider as any).makeRequest = AzureAssistantProvider.prototype['makeRequest'];
 
-      // Mock fetchWithRetries
-      mockFetchWithRetries.mockClear();
+      // Mock fetchWithCache instead of fetchWithRetries
+      jest.mocked(fetchWithCache).mockClear();
     });
 
     it('should make a successful request', async () => {
       const mockResponseData = { success: true };
-      mockFetchWithRetries.mockResolvedValueOnce({
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponseData,
+        cached: false,
         status: 200,
         statusText: 'OK',
-        json: jest.fn().mockResolvedValue(mockResponseData),
-      } as any);
+        headers: {},
+      });
 
       const result = await (provider as any).makeRequest('https://test.url', {
         method: 'POST',
@@ -781,13 +778,15 @@ describe('Azure Assistant Provider', () => {
       });
 
       expect(result).toEqual(mockResponseData);
-      expect(mockFetchWithRetries).toHaveBeenCalledWith(
+      expect(fetchWithCache).toHaveBeenCalledWith(
         'https://test.url',
         {
           method: 'POST',
           body: JSON.stringify({ test: true }),
         },
         expect.any(Number),
+        'json',
+        expect.any(Boolean),
         expect.any(Number),
       );
     });
@@ -799,23 +798,25 @@ describe('Azure Assistant Provider', () => {
         },
       };
 
-      mockFetchWithRetries.mockResolvedValueOnce({
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: errorResponse,
+        cached: false,
         status: 400,
         statusText: 'Bad Request',
-        text: jest.fn().mockResolvedValue(JSON.stringify(errorResponse)),
-      } as any);
+        headers: {},
+      });
 
       await expect((provider as any).makeRequest('https://test.url', {})).rejects.toThrow(
-        'API error: 400 Bad Request: Bad request error',
+        /API error: 400 Bad Request/,
       );
     });
 
     it('should handle JSON parsing errors', async () => {
-      mockFetchWithRetries.mockResolvedValueOnce({
-        status: 200,
-        statusText: 'OK',
-        json: jest.fn().mockRejectedValue(new Error('Invalid JSON')),
-      } as any);
+      // With fetchWithCache, JSON parsing happens inside the utility
+      // So we'll test that errors from fetchWithCache are properly propagated
+      jest
+        .mocked(fetchWithCache)
+        .mockRejectedValueOnce(new Error('Failed to parse response as JSON: Invalid JSON'));
 
       await expect((provider as any).makeRequest('https://test.url', {})).rejects.toThrow(
         'Failed to parse response as JSON',

@@ -8,13 +8,13 @@ export interface RetryOptions {
   /** Maximum number of retry attempts */
   maxRetries: number;
   /** Initial delay in milliseconds before the first retry */
-  initialDelayMs: number;
+  initialDelayMs?: number;
   /** Maximum delay in milliseconds between retries */
-  maxDelayMs: number;
+  maxDelayMs?: number;
   /** HTTP status codes that should trigger a retry */
-  retryableStatusCodes: number[];
+  retryableStatusCodes?: number[];
   /** Error message patterns that should trigger a retry */
-  retryableErrorMessages: string[];
+  retryableErrorMessages?: string[];
 }
 
 export interface AzureCompletionOptions {
@@ -113,10 +113,6 @@ export type AzureAssistantOptions = AzureCompletionOptions &
       };
     };
     /**
-     * Configuration for network request retry behavior
-     */
-    retryOptions?: RetryOptions;
-    /**
      * Maximum timeout in milliseconds for API client requests
      */
     timeoutMs?: number;
@@ -124,6 +120,14 @@ export type AzureAssistantOptions = AzureCompletionOptions &
      * Maximum time in milliseconds to poll for a run to complete before timing out
      */
     maxPollTimeMs?: number;
+    /**
+     * Disable caching for API responses
+     */
+    disableCache?: boolean;
+    /**
+     * Configuration for network request retry behavior
+     */
+    retryOptions?: RetryOptions;
   };
 
 export interface AzureProviderOptions {
