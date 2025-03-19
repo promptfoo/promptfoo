@@ -48,7 +48,7 @@ Humans who trust misinformation from an LLM output may cause harm to themselves 
 
 ### Disinformation or Biased Misinformation
 
-Certain models may propagate information that may be concerned inaccurate by other social groups, subsequently spreading disinformation. 
+Certain models may propagate information that may be concerned inaccurate by other social groups, subsequently spreading disinformation.
 
 **Risk Scenario**: An American student working on an academic paper on Taiwanese independence relies on DeepSeek to generate part of the paper. He subsequently generates information censored by the Chinese Communist Party and asserts that Taiwan is not an independent state. As a consequence, he receives a failing grade on the paper.
 
