@@ -1,7 +1,12 @@
 import type { TokenCredential } from '@azure/identity';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import type { ApiProvider, CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import type { AzureCompletionOptions, AzureProviderOptions } from './types';
 import { throwConfigurationError } from './util';
@@ -18,10 +23,7 @@ export class AzureGenericProvider implements ApiProvider {
 
   protected initializationPromise: Promise<void> | null = null;
 
-  constructor(
-    deploymentName: string,
-    options: AzureProviderOptions = {},
-  ) {
+  constructor(deploymentName: string, options: AzureProviderOptions = {}) {
     const { config, id, env } = options;
     this.env = env;
 
@@ -171,4 +173,4 @@ Please choose one of the following options:
   ): Promise<ProviderResponse> {
     throw new Error('Not implemented');
   }
-} 
+}

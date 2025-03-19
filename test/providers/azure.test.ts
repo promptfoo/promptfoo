@@ -4,7 +4,7 @@ import {
   AzureCompletionProvider,
   AzureGenericProvider,
 } from '../../src/providers/azure';
-import { maybeEmitAzureOpenAiWarning } from '../../src/providers/azureUtil';
+import { maybeEmitAzureOpenAiWarning } from '../../src/providers/azure/warnings';
 import { HuggingfaceTextGenerationProvider } from '../../src/providers/huggingface';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 import type { TestCase, TestSuite } from '../../src/types';

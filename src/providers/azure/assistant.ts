@@ -15,10 +15,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
   assistantConfig: AzureAssistantOptions;
   assistantsClient: AssistantsClient | undefined;
 
-  constructor(
-    deploymentName: string,
-    options: AzureAssistantProviderOptions = {},
-  ) {
+  constructor(deploymentName: string, options: AzureAssistantProviderOptions = {}) {
     super(deploymentName, options);
     this.assistantConfig = options.config || {};
 
@@ -196,4 +193,4 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       */
     };
   }
-} 
+}

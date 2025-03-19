@@ -7,8 +7,8 @@ import type {
   ProviderModerationResponse,
 } from '../../types';
 import type { EnvOverrides } from '../../types/env';
-import { AzureGenericProvider } from './generic';
 import { REQUEST_TIMEOUT_MS } from '../shared';
+import { AzureGenericProvider } from './generic';
 
 export const AZURE_MODERATION_MODELS = [
   { id: 'text-content-safety', maxTokens: 10000, capabilities: ['text'] },

@@ -15,7 +15,7 @@ import { renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
-import { maybeEmitAzureOpenAiWarning } from './providers/azureUtil';
+import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import type RedteamPandamoniumProvider from './redteam/providers/pandamonium';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
@@ -888,7 +888,7 @@ class Evaluator {
         const progressbar = multiProgressBars[threadIndex];
         progressbar.increment({
           provider: evalStep.provider.label || evalStep.provider.id(),
-          prompt: evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' '),
+          prompt: evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ''),
           vars: Object.entries(evalStep.test.vars || {})
             .map(([k, v]) => `${k}=${v}`)
             .join(' ')

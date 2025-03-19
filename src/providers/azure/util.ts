@@ -1,7 +1,7 @@
 import dedent from 'dedent';
+import { calculateCost } from '../shared';
 import { AZURE_MODELS } from './defaults';
 import type { AzureCompletionOptions } from './types';
-import { calculateCost } from '../shared';
 
 /**
  * Throws a configuration error with standard formatting and documentation link
@@ -30,4 +30,4 @@ export function calculateAzureCost(
     completionTokens,
     AZURE_MODELS,
   );
-} 
+}

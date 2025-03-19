@@ -46,4 +46,4 @@ describe('AzureGenericProvider', () => {
       expect(provider.getApiBaseUrl()).toBeUndefined();
     });
   });
-}); 
+});

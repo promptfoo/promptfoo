@@ -112,4 +112,4 @@ export class AzureCompletionProvider extends AzureGenericProvider {
       };
     }
   }
-} 
+}

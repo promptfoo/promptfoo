@@ -606,4 +606,4 @@ describe('AzureChatCompletionProvider', () => {
       expect(body).toHaveProperty('reasoning_effort', 'high');
     });
   });
-}); 
+});

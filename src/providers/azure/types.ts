@@ -1,7 +1,4 @@
-import type {
-  AssistantCreationOptions,
-  FunctionDefinition,
-} from '@azure/openai-assistants';
+import type { AssistantCreationOptions, FunctionDefinition } from '@azure/openai-assistants';
 import type { EnvOverrides } from '../../types/env';
 
 export interface AzureCompletionOptions {
@@ -99,4 +96,4 @@ export interface AzureAssistantProviderOptions {
   config?: AzureAssistantOptions;
   id?: string;
   env?: EnvOverrides;
-} 
+}

@@ -268,4 +268,4 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       };
     }
   }
-} 
+}

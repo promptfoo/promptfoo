@@ -36,4 +36,4 @@ describe('AzureCompletionProvider', () => {
     expect(result1.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
     expect(result2.tokenUsage).toEqual({ cached: 10, total: 10 });
   });
-}); 
+});

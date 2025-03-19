@@ -2,9 +2,9 @@ import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import type { ProviderEmbeddingResponse } from '../../types';
 import invariant from '../../util/invariant';
+import { REQUEST_TIMEOUT_MS } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
-import { REQUEST_TIMEOUT_MS } from '../shared';
 
 export class AzureEmbeddingProvider extends AzureGenericProvider {
   async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
@@ -79,4 +79,4 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
       };
     }
   }
-} 
+}
