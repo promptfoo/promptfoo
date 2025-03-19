@@ -242,6 +242,9 @@ export async function renderPrompt(
   }
   // Render prompt
   try {
+    if (getEnvBool('PROMPTFOO_DISABLE_NUNJUCKS')) {
+      return basePrompt;
+    }
     if (getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {
       return nunjucks.renderString(basePrompt, vars);
     }
