@@ -888,7 +888,7 @@ class Evaluator {
         const progressbar = multiProgressBars[threadIndex];
         progressbar.increment({
           provider: evalStep.provider.label || evalStep.provider.id(),
-          prompt: evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ''),
+          prompt: evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' '),
           vars: Object.entries(evalStep.test.vars || {})
             .map(([k, v]) => `${k}=${v}`)
             .join(' ')
