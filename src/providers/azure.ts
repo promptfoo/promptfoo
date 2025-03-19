@@ -4,4 +4,4 @@
  */
 
 // Re-export everything from the azure folder
-export * from './azure/index'; 
+export * from './azure/index';
