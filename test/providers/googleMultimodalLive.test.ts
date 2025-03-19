@@ -434,6 +434,7 @@ describe('GoogleMMLiveProvider', () => {
     });
     provider = new GoogleMMLiveProvider('gemini-2.0-flash-exp', {
       config: {
+        apiKey: 'test-api-key',
         tools: [
           {
             functionDeclarations: [
