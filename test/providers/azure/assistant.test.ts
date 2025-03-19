@@ -2,7 +2,6 @@ import { fetchWithCache } from '../../../src/cache';
 import { AzureAssistantProvider } from '../../../src/providers/azure/assistant';
 import { sleep } from '../../../src/util/time';
 
-// Mock dependencies
 jest.mock('../../../src/cache');
 jest.mock('../../../src/util/time');
 jest.mock('../../../src/logger', () => ({
@@ -16,23 +15,11 @@ jest.mock('../../../src/logger', () => ({
 
 describe('Azure Assistant Provider', () => {
   let provider: AzureAssistantProvider;
-  const _mockFetchWithCache = jest.mocked(fetchWithCache);
   const mockSleep = jest.mocked(sleep);
-
-  // Helper for Response object creation (unused but kept for future tests)
-  const _createMockResponse = (status: number, data: any) => {
-    return {
-      status,
-      statusText: status >= 200 && status < 300 ? 'OK' : 'Error',
-      json: jest.fn().mockResolvedValue(data),
-      text: jest.fn().mockResolvedValue(JSON.stringify(data)),
-    };
-  };
 
   beforeEach(() => {
     jest.clearAllMocks();
 
-    // Default provider with minimal config for testing
     provider = new AzureAssistantProvider('test-deployment', {
       config: {
         apiKey: 'test-key',
@@ -40,7 +27,7 @@ describe('Azure Assistant Provider', () => {
       },
     });
 
-    // Make the provider's private methods accessible for testing using spyOn
+    // Set up test spies on provider's private methods
     jest.spyOn(provider as any, 'makeRequest').mockImplementation(jest.fn());
     jest.spyOn(provider as any, 'getHeaders').mockResolvedValue({
       'Content-Type': 'application/json',
@@ -50,7 +37,6 @@ describe('Azure Assistant Provider', () => {
     jest.spyOn(provider as any, 'getApiBaseUrl').mockReturnValue('https://test.azure.com');
     jest.spyOn(provider as any, 'ensureInitialized').mockResolvedValue(undefined);
 
-    // Mock sleep to avoid waiting in tests
     mockSleep.mockResolvedValue(undefined);
   });
 
@@ -90,7 +76,6 @@ describe('Azure Assistant Provider', () => {
     });
 
     it('should create a thread, add a message, and run an assistant', async () => {
-      // Create a fresh provider instance for this test
       const testProvider = new AzureAssistantProvider('test-deployment', {
         config: {
           apiKey: 'test-key',
@@ -98,16 +83,13 @@ describe('Azure Assistant Provider', () => {
         },
       });
 
-      // Directly mock the callApi method to return a success result
       const expectedOutput = '[Assistant] This is a test response';
       jest.spyOn(testProvider, 'callApi').mockResolvedValueOnce({
         output: expectedOutput,
       });
 
-      // Call the method
       const result = await testProvider.callApi('test prompt');
 
-      // Verify the expected result is returned
       expect(result).toEqual({ output: expectedOutput });
       expect(testProvider.callApi).toHaveBeenCalledWith('test prompt');
     });
@@ -152,7 +134,6 @@ describe('Azure Assistant Provider', () => {
   describe('pollRun', () => {
     it('should poll until run is completed', async () => {
       // Mock responses for initial status check and subsequent poll
-      const _inProgressResponse = { id: 'run-123', status: 'in_progress' };
       const completedResponse = { id: 'run-123', status: 'completed' };
 
       // Mock implementation to avoid timeout errors
@@ -260,13 +241,12 @@ describe('Azure Assistant Provider', () => {
         .mockResolvedValue({ output: 'Function called successfully' });
       jest.spyOn(provider as any, 'ensureInitialized').mockResolvedValue(undefined);
 
-      // Mock responses for thread creation, run creation, and run status checks
+      // Mock API call sequence
       (provider as any).makeRequest
-        .mockResolvedValueOnce(mockThreadResponse) // Create thread
-        .mockResolvedValueOnce({}) // Add message
-        .mockResolvedValueOnce(mockRunResponse) // Create run
+        .mockResolvedValueOnce(mockThreadResponse)
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce(mockRunResponse)
         .mockResolvedValueOnce({
-          // Run status with required_action
           id: 'run-123',
           status: 'requires_action',
           required_action: {
@@ -285,15 +265,13 @@ describe('Azure Assistant Provider', () => {
             },
           },
         })
-        .mockResolvedValueOnce({}) // Submit tool outputs
-        .mockResolvedValueOnce({ id: 'run-123', status: 'completed' }); // Final run status
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({ id: 'run-123', status: 'completed' });
 
       await provider.callApi('test prompt');
 
-      // Verify the function was called
       expect(functionCallbacks.testFunction).toHaveBeenCalledWith('{"param": "value"}');
 
-      // Verify tool outputs were submitted
       expect((provider as any).makeRequest).toHaveBeenCalledTimes(6);
       expect((provider as any).makeRequest.mock.calls[4][0]).toContain('submit_tool_outputs');
       expect(JSON.parse((provider as any).makeRequest.mock.calls[4][1].body)).toEqual({
@@ -305,7 +283,6 @@ describe('Azure Assistant Provider', () => {
         ],
       });
 
-      // Verify processCompletedRun was called
       expect((provider as any).processCompletedRun).toHaveBeenCalledWith(
         'https://test.azure.com',
         '2024-04-01-preview',
@@ -315,7 +292,6 @@ describe('Azure Assistant Provider', () => {
     });
 
     it('should handle string-based function callbacks', async () => {
-      // Set up mock responses
       const mockThreadResponse = { id: 'thread-123', object: 'thread', created_at: Date.now() };
       const mockRunResponse = {
         id: 'run-123',
@@ -324,8 +300,6 @@ describe('Azure Assistant Provider', () => {
         status: 'requires_action',
       };
 
-      // Create provider with string-based function callbacks
-      // Use Record<string, any> to avoid type errors with string callbacks
       const functionCallbacks: Record<string, any> = {
         testFunction: 'async function(args) { return "string callback result"; }',
       };
@@ -338,7 +312,6 @@ describe('Azure Assistant Provider', () => {
         },
       });
 
-      // Set up private methods mocking
       jest.spyOn(provider as any, 'makeRequest').mockImplementation(jest.fn());
       jest.spyOn(provider as any, 'getHeaders').mockResolvedValue({
         'Content-Type': 'application/json',
@@ -351,13 +324,12 @@ describe('Azure Assistant Provider', () => {
         .mockResolvedValue({ output: 'Function called successfully' });
       jest.spyOn(provider as any, 'ensureInitialized').mockResolvedValue(undefined);
 
-      // Mock responses for API calls
+      // Mock API call sequence
       (provider as any).makeRequest
-        .mockResolvedValueOnce(mockThreadResponse) // Create thread
-        .mockResolvedValueOnce({}) // Add message
-        .mockResolvedValueOnce(mockRunResponse) // Create run
+        .mockResolvedValueOnce(mockThreadResponse)
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce(mockRunResponse)
         .mockResolvedValueOnce({
-          // Run status with required_action
           id: 'run-123',
           status: 'requires_action',
           required_action: {
@@ -376,10 +348,9 @@ describe('Azure Assistant Provider', () => {
             },
           },
         })
-        .mockResolvedValueOnce({}) // Submit tool outputs
-        .mockResolvedValueOnce({ id: 'run-123', status: 'completed' }); // Final run status
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({ id: 'run-123', status: 'completed' });
 
-      // Mock Function constructor to return our test function
       const originalFunction = global.Function;
       global.Function = jest.fn().mockImplementation(() => {
         return () =>
@@ -390,7 +361,6 @@ describe('Azure Assistant Provider', () => {
 
       await provider.callApi('test prompt');
 
-      // Verify tool outputs were submitted with the string callback result
       expect((provider as any).makeRequest).toHaveBeenCalledTimes(6);
       expect((provider as any).makeRequest.mock.calls[4][0]).toContain('submit_tool_outputs');
       expect(JSON.parse((provider as any).makeRequest.mock.calls[4][1].body)).toEqual({
@@ -402,12 +372,10 @@ describe('Azure Assistant Provider', () => {
         ],
       });
 
-      // Restore original Function constructor
       global.Function = originalFunction;
     });
 
     it('should handle errors in function callbacks', async () => {
-      // Set up mock responses
       const mockThreadResponse = { id: 'thread-123', object: 'thread', created_at: Date.now() };
       const mockRunResponse = {
         id: 'run-123',
@@ -416,12 +384,10 @@ describe('Azure Assistant Provider', () => {
         status: 'requires_action',
       };
 
-      // Mock function callback that throws an error
       const functionCallbacks = {
         testFunction: jest.fn().mockRejectedValue(new Error('Test error')),
       };
 
-      // Create provider with function callbacks
       provider = new AzureAssistantProvider('test-deployment', {
         config: {
           apiKey: 'test-key',
@@ -430,7 +396,6 @@ describe('Azure Assistant Provider', () => {
         },
       });
 
-      // Set up private methods mocking
       jest.spyOn(provider as any, 'makeRequest').mockImplementation(jest.fn());
       jest.spyOn(provider as any, 'getHeaders').mockResolvedValue({
         'Content-Type': 'application/json',
@@ -443,13 +408,12 @@ describe('Azure Assistant Provider', () => {
         .mockResolvedValue({ output: 'Function called with error' });
       jest.spyOn(provider as any, 'ensureInitialized').mockResolvedValue(undefined);
 
-      // Mock responses for API calls
+      // Mock API call sequence
       (provider as any).makeRequest
-        .mockResolvedValueOnce(mockThreadResponse) // Create thread
-        .mockResolvedValueOnce({}) // Add message
-        .mockResolvedValueOnce(mockRunResponse) // Create run
+        .mockResolvedValueOnce(mockThreadResponse)
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce(mockRunResponse)
         .mockResolvedValueOnce({
-          // Run status with required_action
           id: 'run-123',
           status: 'requires_action',
           required_action: {
@@ -468,15 +432,13 @@ describe('Azure Assistant Provider', () => {
             },
           },
         })
-        .mockResolvedValueOnce({}) // Submit tool outputs
-        .mockResolvedValueOnce({ id: 'run-123', status: 'completed' }); // Final run status
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({ id: 'run-123', status: 'completed' });
 
       await provider.callApi('test prompt');
 
-      // Verify the function was called
       expect(functionCallbacks.testFunction).toHaveBeenCalledWith('{"param": "value"}');
 
-      // Verify tool outputs were submitted with error message
       expect((provider as any).makeRequest).toHaveBeenCalledTimes(6);
       expect((provider as any).makeRequest.mock.calls[4][0]).toContain('submit_tool_outputs');
       expect(JSON.parse((provider as any).makeRequest.mock.calls[4][1].body)).toEqual({
@@ -492,13 +454,12 @@ describe('Azure Assistant Provider', () => {
 
   describe('processCompletedRun', () => {
     it('should process text messages from the assistant', async () => {
-      // Mock messages and steps responses
       const mockMessagesResponse = {
         data: [
           {
             id: 'msg-123',
             object: 'thread.message',
-            created_at: Date.now() + 1000, // After run start
+            created_at: Date.now() + 1000,
             role: 'assistant',
             content: [{ type: 'text', text: { value: 'Test response text' } }],
           },
@@ -509,8 +470,8 @@ describe('Azure Assistant Provider', () => {
       const mockRunResponse = { id: 'run-123', created_at: Date.now() };
 
       (provider as any).makeRequest
-        .mockResolvedValueOnce(mockMessagesResponse) // Get messages
-        .mockResolvedValueOnce(mockStepsResponse); // Get run steps
+        .mockResolvedValueOnce(mockMessagesResponse)
+        .mockResolvedValueOnce(mockStepsResponse);
 
       const result = await (provider as any).processCompletedRun(
         'https://test.azure.com',
@@ -525,7 +486,6 @@ describe('Azure Assistant Provider', () => {
     });
 
     it('should process tool call steps in the run', async () => {
-      // Mock messages and steps responses
       const mockMessagesResponse = { data: [] };
 
       const mockStepsResponse = {
@@ -552,8 +512,8 @@ describe('Azure Assistant Provider', () => {
       const mockRunResponse = { id: 'run-123', created_at: Date.now() };
 
       (provider as any).makeRequest
-        .mockResolvedValueOnce(mockMessagesResponse) // Get messages
-        .mockResolvedValueOnce(mockStepsResponse); // Get run steps
+        .mockResolvedValueOnce(mockMessagesResponse)
+        .mockResolvedValueOnce(mockStepsResponse);
 
       const result = await (provider as any).processCompletedRun(
         'https://test.azure.com',
@@ -738,7 +698,6 @@ describe('Azure Assistant Provider', () => {
     });
 
     it('should handle errors during run processing', async () => {
-      // Make the makeRequest throw an error
       (provider as any).makeRequest.mockRejectedValueOnce(new Error('Processing error'));
 
       const result = await (provider as any).processCompletedRun(
@@ -754,10 +713,7 @@ describe('Azure Assistant Provider', () => {
 
   describe('makeRequest', () => {
     beforeEach(() => {
-      // Restore original makeRequest method for this test section
       (provider as any).makeRequest = AzureAssistantProvider.prototype['makeRequest'];
-
-      // Mock fetchWithCache instead of fetchWithRetries
       jest.mocked(fetchWithCache).mockClear();
     });
 
@@ -811,8 +767,6 @@ describe('Azure Assistant Provider', () => {
     });
 
     it('should handle JSON parsing errors', async () => {
-      // With fetchWithCache, JSON parsing happens inside the utility
-      // So we'll test that errors from fetchWithCache are properly propagated
       jest
         .mocked(fetchWithCache)
         .mockRejectedValueOnce(new Error('Failed to parse response as JSON: Invalid JSON'));
