@@ -1,49 +1,100 @@
-import type {
-  AssistantsClient,
-  RunStepMessageCreationDetails,
-  RunStepToolCallDetails,
-} from '@azure/openai-assistants';
+import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
-import invariant from '../../util/invariant';
+import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
 import { sleep } from '../../util/time';
-import { toTitleCase } from '../shared';
+import { REQUEST_TIMEOUT_MS, toTitleCase } from '../shared';
 import { AzureGenericProvider } from './generic';
 import type { AzureAssistantOptions, AzureAssistantProviderOptions } from './types';
 
+/**
+ * Interface for thread creation response
+ */
+interface ThreadResponse {
+  id: string;
+  object: string;
+  created_at: number;
+}
+
+/**
+ * Interface for run creation and status
+ */
+interface RunResponse {
+  id: string;
+  object: string;
+  created_at: number;
+  status: string;
+  required_action?: {
+    type: string;
+    submit_tool_outputs?: {
+      tool_calls: Array<{
+        id: string;
+        type: string;
+        function?: {
+          name: string;
+          arguments: string;
+        };
+      }>;
+    };
+  };
+  last_error?: {
+    code: string;
+    message: string;
+  };
+}
+
+/**
+ * Interface for message list response
+ */
+interface MessageListResponse {
+  data: Array<{
+    id: string;
+    object: string;
+    created_at: number;
+    role: string;
+    content: Array<{
+      type: string;
+      text?: {
+        value: string;
+      };
+    }>;
+  }>;
+}
+
+/**
+ * Interface for run steps list response
+ */
+interface RunStepsResponse {
+  data: Array<{
+    id: string;
+    type: string;
+    step_details?: {
+      tool_calls?: Array<{
+        type: string;
+        function?: {
+          name: string;
+          arguments: string;
+          output?: string;
+        };
+        code_interpreter?: {
+          input: string;
+          outputs: Array<{
+            type: string;
+            logs?: string;
+          }>;
+        };
+        file_search?: Record<string, any>;
+      }>;
+    };
+  }>;
+}
+
 export class AzureAssistantProvider extends AzureGenericProvider {
   assistantConfig: AzureAssistantOptions;
-  assistantsClient: AssistantsClient | undefined;
 
   constructor(deploymentName: string, options: AzureAssistantProviderOptions = {}) {
     super(deploymentName, options);
     this.assistantConfig = options.config || {};
-
-    this.initializationPromise = this.initialize();
-  }
-
-  async initialize() {
-    await super.initialize();
-
-    const apiKey = this.getApiKey();
-    if (!apiKey) {
-      throw new Error('Azure API key must be set.');
-    }
-
-    const { AssistantsClient, AzureKeyCredential } = await import('@azure/openai-assistants');
-
-    const apiBaseUrl = this.getApiBaseUrl();
-    if (!apiBaseUrl) {
-      throw new Error('Azure API host must be set.');
-    }
-    this.assistantsClient = new AssistantsClient(apiBaseUrl, new AzureKeyCredential(apiKey));
-    this.initializationPromise = null;
-  }
-
-  async ensureInitialized() {
-    if (this.initializationPromise) {
-      await this.initializationPromise;
-    }
   }
 
   async callApi(
@@ -51,146 +102,596 @@ export class AzureAssistantProvider extends AzureGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    await this.ensureInitialized();
-    invariant(this.assistantsClient, 'Assistants client not initialized');
-    if (!this.getApiBaseUrl()) {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('Azure API key must be set.');
+    }
+
+    const apiBaseUrl = this.getApiBaseUrl();
+    if (!apiBaseUrl) {
       throw new Error('Azure API host must be set.');
     }
 
-    const assistantId = this.deploymentName;
+    const apiVersion = this.assistantConfig.apiVersion || '2024-04-01-preview';
 
-    const assistantThread = await this.assistantsClient.createThread();
-    await this.assistantsClient.createMessage(assistantThread.id, 'user', prompt);
+    try {
+      // 1. Create a thread
+      const threadResponse = await this.makeRequest<ThreadResponse>(
+        `${apiBaseUrl}/openai/threads?api-version=${apiVersion}`,
+        {
+          method: 'POST',
+          headers: await this.getHeaders(),
+          body: JSON.stringify({}),
+        },
+      );
 
-    let run = await this.assistantsClient.createRun(assistantThread.id, {
-      assistantId,
-    });
-
-    logger.debug(`\tAzure thread run API response: ${JSON.stringify(run)}`);
-
-    while (
-      run.status === 'in_progress' ||
-      run.status === 'queued' ||
-      run.status === 'requires_action'
-    ) {
-      if (run.status === 'requires_action') {
-        const requiredAction = run.requiredAction;
-        invariant(requiredAction, 'Run requires action but no action is provided');
-        if (requiredAction === null || requiredAction.type !== 'submit_tool_outputs') {
-          break;
-        }
-        const functionCallsWithCallbacks = requiredAction.submitToolOutputs?.toolCalls.filter(
-          (toolCall) => {
-            return (
-              toolCall.type === 'function' &&
-              toolCall.function.name in (this.assistantConfig.functionToolCallbacks ?? {})
-            );
-          },
-        );
-        if (!functionCallsWithCallbacks || functionCallsWithCallbacks.length === 0) {
-          break;
-        }
-        logger.debug(
-          `Calling functionToolCallbacks for functions: ${functionCallsWithCallbacks.map(
-            ({ function: { name } }) => name,
-          )}`,
-        );
-        const toolOutputs = await Promise.all(
-          functionCallsWithCallbacks.map(async (toolCall) => {
-            logger.debug(
-              `Calling functionToolCallbacks[${toolCall.function.name}]('${toolCall.function.arguments}')`,
-            );
-            const result = await this.assistantConfig.functionToolCallbacks![
-              toolCall.function.name
-            ](toolCall.function.arguments);
-            return {
-              tool_call_id: toolCall.id,
-              output: result,
-            };
+      // 2. Create a message
+      await this.makeRequest(
+        `${apiBaseUrl}/openai/threads/${threadResponse.id}/messages?api-version=${apiVersion}`,
+        {
+          method: 'POST',
+          headers: await this.getHeaders(),
+          body: JSON.stringify({
+            role: 'user',
+            content: prompt,
           }),
+        },
+      );
+
+      // 3. Prepare the run options
+      const runOptions: Record<string, any> = {
+        assistant_id: this.deploymentName,
+      };
+
+      // Add configuration parameters
+      if (this.assistantConfig.temperature !== undefined) {
+        runOptions.temperature = this.assistantConfig.temperature;
+      }
+      if (this.assistantConfig.top_p !== undefined) {
+        runOptions.top_p = this.assistantConfig.top_p;
+      }
+      if (this.assistantConfig.tool_resources) {
+        runOptions.tool_resources = this.assistantConfig.tool_resources;
+      }
+      if (this.assistantConfig.tool_choice) {
+        runOptions.tool_choice = this.assistantConfig.tool_choice;
+      }
+      if (this.assistantConfig.tools) {
+        runOptions.tools = maybeLoadFromExternalFile(
+          renderVarsInObject(this.assistantConfig.tools, context?.vars),
         );
-        logger.debug(
-          `Calling Azure API, submitting tool outputs for ${run.threadId}: ${JSON.stringify(
-            toolOutputs,
-          )}`,
-        );
-        run = await this.assistantsClient.submitToolOutputsToRun(run.threadId, run.id, toolOutputs);
+      }
+      if (this.assistantConfig.modelName) {
+        runOptions.model = this.assistantConfig.modelName;
+      }
+      if (this.assistantConfig.instructions) {
+        runOptions.instructions = this.assistantConfig.instructions;
       }
 
-      await sleep(1000);
+      logger.debug(`Creating run with options: ${JSON.stringify(runOptions)}`);
 
-      logger.debug(`Calling Azure API, getting thread run ${run.id} status`);
-      run = await this.assistantsClient.getRun(run.threadId, run.id);
-      logger.debug(`\tAzure thread run API response: ${JSON.stringify(run)}`);
-    }
+      // 4. Create a run
+      const runResponse = await this.makeRequest<RunResponse>(
+        `${apiBaseUrl}/openai/threads/${threadResponse.id}/runs?api-version=${apiVersion}`,
+        {
+          method: 'POST',
+          headers: await this.getHeaders(),
+          body: JSON.stringify(runOptions),
+        },
+      );
 
-    if (run.status !== 'completed' && run.status !== 'requires_action') {
-      if (run.lastError) {
+      // 5. Handle function calls if needed
+      if (
+        this.assistantConfig.functionToolCallbacks &&
+        Object.keys(this.assistantConfig.functionToolCallbacks).length > 0
+      ) {
+        return await this.pollRunWithToolCallHandling(
+          apiBaseUrl,
+          apiVersion,
+          threadResponse.id,
+          runResponse.id,
+        );
+      }
+
+      // 6. Poll for completion
+      const completedRun = await this.pollRun(
+        apiBaseUrl,
+        apiVersion,
+        threadResponse.id,
+        runResponse.id,
+      );
+
+      // 7. Process the completed run
+      if (completedRun.status !== 'completed') {
+        if (completedRun.last_error) {
+          return {
+            error: `Thread run failed: ${completedRun.last_error.code || ''} - ${completedRun.last_error.message}`,
+          };
+        }
         return {
-          error: `Thread run failed: ${run.lastError.message}`,
+          error: `Thread run failed with status: ${completedRun.status}`,
         };
       }
+
+      // 8. Process messages and steps
+      return await this.processCompletedRun(
+        apiBaseUrl,
+        apiVersion,
+        threadResponse.id,
+        completedRun,
+      );
+    } catch (err: any) {
+      logger.error(`Error in Azure Assistant API call: ${err}`);
+
+      // Check for specific error cases
+      const errorMessage = err.message || String(err);
+
+      // Handle thread with run in progress errors - these aren't retryable as we need a new thread
+      if (
+        errorMessage.includes("Can't add messages to thread") &&
+        errorMessage.includes('while a run')
+      ) {
+        return {
+          error: `Error in Azure Assistant API call: ${errorMessage}`,
+        };
+      }
+
+      // Check for rate limit errors
+      if (this.isRateLimitError(errorMessage)) {
+        return {
+          error: `Rate limit exceeded: ${errorMessage}`,
+        };
+      }
+
+      // Check for service errors
+      if (this.isServiceError(errorMessage)) {
+        return {
+          error: `Service error: ${errorMessage}`,
+        };
+      }
+
       return {
-        error: `Thread run failed: ${run.status}`,
+        error: `Error in Azure Assistant API call: ${errorMessage}`,
       };
     }
+  }
 
-    logger.debug(`Calling Azure API, getting thread run steps for ${run.threadId}`);
-    const steps = await this.assistantsClient.listRunSteps(run.threadId, run.id, { order: 'asc' });
-    logger.debug(`\tAzure thread run steps API response: ${JSON.stringify(steps)}`);
+  /**
+   * Helper method to make HTTP requests using fetchWithCache
+   */
+  private async makeRequest<T>(url: string, options: RequestInit): Promise<T> {
+    const timeoutMs = this.assistantConfig.timeoutMs || REQUEST_TIMEOUT_MS;
+    const retries = this.assistantConfig.retryOptions?.maxRetries || 4;
+    const bustCache = this.assistantConfig.disableCache === true;
 
-    const outputBlocks = [];
-    for (const step of steps.data) {
-      if (step.type === 'message_creation') {
-        logger.debug(`Calling Azure API, getting message ${step.id}`);
-        const stepDetails = step.stepDetails as RunStepMessageCreationDetails;
-        // Bug in the API: the field is currently `message_id` even though it's documented as `messageId`
-        const messageId =
-          (stepDetails.messageCreation as any).message_id || stepDetails.messageCreation.messageId;
-        const message = await this.assistantsClient.getMessage(run.threadId, messageId);
-        logger.debug(`\tAzure thread run step message API response: ${JSON.stringify(message)}`);
+    try {
+      const result = await fetchWithCache<T>(url, options, timeoutMs, 'json', bustCache, retries);
 
-        const content = message.content
-          .map((content) =>
-            content.type === 'text' ? content.text.value : `<${content.type} output>`,
-          )
-          .join('\n');
-        outputBlocks.push(`[${toTitleCase(message.role)}] ${content}`);
-      } else if (step.type === 'tool_calls') {
-        for (const toolCall of (step.stepDetails as RunStepToolCallDetails).toolCalls) {
-          if (toolCall.type === 'function') {
-            outputBlocks.push(
-              `[Call function ${toolCall.function.name} with arguments ${toolCall.function.arguments}]`,
-            );
-            outputBlocks.push(`[Function output: ${toolCall.function.output}]`);
-          } else if (toolCall.type === 'retrieval') {
-            outputBlocks.push(`[Ran retrieval]`);
-          } else if (toolCall.type === 'code_interpreter') {
-            const output = toolCall.codeInterpreter.outputs
-              .map((output) => (output.type === 'logs' ? output.logs : `<${output.type} output>`))
-              .join('\n');
-            outputBlocks.push(`[Code interpreter input]`);
-            outputBlocks.push(toolCall.codeInterpreter.input);
-            outputBlocks.push(`[Code interpreter output]`);
-            outputBlocks.push(output);
-          } else {
-            outputBlocks.push(`[Unknown tool call type: ${(toolCall as any).type}]`);
-          }
-        }
-      } else {
-        outputBlocks.push(`[Unknown step type: ${step.type}]`);
+      if (result.status < 200 || result.status >= 300) {
+        // Handle error response that was cached or returned
+        throw new Error(
+          `API error: ${result.status} ${result.statusText}${
+            result.data && typeof result.data === 'object' && 'error' in result.data
+              ? `: ${(result.data as any).error?.message || JSON.stringify(result.data)}`
+              : typeof result.data === 'string'
+                ? `: ${result.data}`
+                : ''
+          }`,
+        );
+      }
+
+      // Result data is already parsed as JSON by fetchWithCache
+      return result.data;
+    } catch (error: any) {
+      logger.error(`Request failed: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Get headers for API requests
+   */
+  private async getHeaders(): Promise<Record<string, string>> {
+    // Make sure we're initialized to have the auth headers ready
+    await this.ensureInitialized();
+
+    // Use the authHeaders from parent class that already handles all auth methods
+    return {
+      'Content-Type': 'application/json',
+      ...(this.authHeaders || {}),
+    };
+  }
+
+  /**
+   * Helper methods to check for specific error types
+   */
+  private isRateLimitError(errorMessage: string): boolean {
+    return (
+      errorMessage.includes('rate limit') ||
+      errorMessage.includes('Rate limit') ||
+      errorMessage.includes('429')
+    );
+  }
+
+  private isServiceError(errorMessage: string): boolean {
+    return (
+      errorMessage.includes('Service unavailable') ||
+      errorMessage.includes('Bad gateway') ||
+      errorMessage.includes('Gateway timeout') ||
+      errorMessage.includes('Server is busy') ||
+      errorMessage.includes('Sorry, something went wrong')
+    );
+  }
+
+  private isServerError(errorMessage: string): boolean {
+    return (
+      errorMessage.includes('500') ||
+      errorMessage.includes('502') ||
+      errorMessage.includes('503') ||
+      errorMessage.includes('504')
+    );
+  }
+
+  private isRetryableError(code?: string, message?: string): boolean {
+    if (code === 'rate_limit_exceeded') {
+      return true;
+    }
+    if (!message) {
+      return false;
+    }
+
+    return (
+      this.isRateLimitError(message) || this.isServiceError(message) || this.isServerError(message)
+    );
+  }
+
+  /**
+   * Poll a run until it completes or fails
+   */
+  private async pollRun(
+    apiBaseUrl: string,
+    apiVersion: string,
+    threadId: string,
+    runId: string,
+    pollIntervalMs = 1000,
+  ): Promise<RunResponse> {
+    // Get initial run status
+    let runStatus = await this.makeRequest<RunResponse>(
+      `${apiBaseUrl}/openai/threads/${threadId}/runs/${runId}?api-version=${apiVersion}`,
+      {
+        method: 'GET',
+        headers: await this.getHeaders(),
+      },
+    );
+
+    // Maximum polling time (5 minutes)
+    const maxPollTime = this.assistantConfig.maxPollTimeMs || 300000;
+    const startTime = Date.now();
+
+    // Poll until terminal state
+    while (['queued', 'in_progress'].includes(runStatus.status)) {
+      // Check timeout
+      if (Date.now() - startTime > maxPollTime) {
+        throw new Error(
+          `Run polling timed out after ${maxPollTime}ms. Last status: ${runStatus.status}`,
+        );
+      }
+
+      await sleep(pollIntervalMs);
+
+      // Get latest status
+      runStatus = await this.makeRequest<RunResponse>(
+        `${apiBaseUrl}/openai/threads/${threadId}/runs/${runId}?api-version=${apiVersion}`,
+        {
+          method: 'GET',
+          headers: await this.getHeaders(),
+        },
+      );
+
+      // Increase polling interval gradually for longer-running operations
+      if (Date.now() - startTime > 30000) {
+        // After 30 seconds
+        pollIntervalMs = Math.min(pollIntervalMs * 1.5, 5000);
       }
     }
 
-    return {
-      output: outputBlocks.join('\n\n').trim(),
-      /*
-      tokenUsage: {
-        total: data.usage.total_tokens,
-        prompt: data.usage.prompt_tokens,
-        completion: data.usage.completion_tokens,
-      },
-      */
-    };
+    return runStatus;
+  }
+
+  /**
+   * Handle tool calls during run polling
+   */
+  private async pollRunWithToolCallHandling(
+    apiBaseUrl: string,
+    apiVersion: string,
+    threadId: string,
+    runId: string,
+  ): Promise<ProviderResponse> {
+    // Maximum polling time (5 minutes)
+    const maxPollTime = this.assistantConfig.maxPollTimeMs || 300000;
+    const startTime = Date.now();
+    let pollIntervalMs = 1000;
+
+    // Poll until terminal state
+    while (true) {
+      // Check timeout
+      if (Date.now() - startTime > maxPollTime) {
+        return {
+          error: `Run polling timed out after ${maxPollTime}ms. The operation may still be in progress.`,
+        };
+      }
+
+      try {
+        // Get latest status
+        const run = await this.makeRequest<RunResponse>(
+          `${apiBaseUrl}/openai/threads/${threadId}/runs/${runId}?api-version=${apiVersion}`,
+          {
+            method: 'GET',
+            headers: await this.getHeaders(),
+          },
+        );
+
+        logger.debug(`Run status: ${run.status}`);
+
+        // Check for required action
+        if (run.status === 'requires_action') {
+          if (
+            run.required_action?.type === 'submit_tool_outputs' &&
+            run.required_action.submit_tool_outputs?.tool_calls
+          ) {
+            const toolCalls = run.required_action.submit_tool_outputs.tool_calls;
+
+            // Filter for function calls that have callbacks
+            const functionCallsWithCallbacks = toolCalls.filter((toolCall) => {
+              return (
+                toolCall.type === 'function' &&
+                toolCall.function &&
+                toolCall.function.name in (this.assistantConfig.functionToolCallbacks ?? {})
+              );
+            });
+
+            if (functionCallsWithCallbacks.length === 0) {
+              logger.error(
+                `No function calls with callbacks found. Available functions: ${Object.keys(
+                  this.assistantConfig.functionToolCallbacks || {},
+                ).join(', ')}. Tool calls: ${JSON.stringify(toolCalls)}`,
+              );
+              break;
+            }
+
+            // Process tool calls
+            const toolOutputs = await Promise.all(
+              functionCallsWithCallbacks.map(async (toolCall) => {
+                const functionName = toolCall.function!.name;
+                const functionArgs = toolCall.function!.arguments;
+                const callback = this.assistantConfig.functionToolCallbacks?.[functionName];
+
+                try {
+                  logger.debug(`Calling function ${functionName} with args: ${functionArgs}`);
+
+                  let result;
+                  if (typeof callback === 'string') {
+                    logger.debug(`Callback is a string, evaluating as function: ${callback}`);
+                    const asyncFunction = new Function('return ' + callback)();
+                    result = await asyncFunction(functionArgs);
+                  } else {
+                    result = await callback!(functionArgs);
+                  }
+
+                  logger.debug(`Function ${functionName} result: ${result}`);
+                  return {
+                    tool_call_id: toolCall.id,
+                    output: result,
+                  };
+                } catch (error) {
+                  logger.error(`Error calling function ${functionName}: ${error}`);
+                  return {
+                    tool_call_id: toolCall.id,
+                    output: JSON.stringify({ error: String(error) }),
+                  };
+                }
+              }),
+            );
+
+            // Submit tool outputs
+            const validToolOutputs = toolOutputs.filter((output) => output !== null);
+            if (validToolOutputs.length === 0) {
+              logger.error('No valid tool outputs to submit');
+              break;
+            }
+
+            logger.debug(`Submitting tool outputs: ${JSON.stringify(validToolOutputs)}`);
+
+            // Submit tool outputs
+            try {
+              await this.makeRequest(
+                `${apiBaseUrl}/openai/threads/${threadId}/runs/${runId}/submit_tool_outputs?api-version=${apiVersion}`,
+                {
+                  method: 'POST',
+                  headers: await this.getHeaders(),
+                  body: JSON.stringify({
+                    tool_outputs: validToolOutputs,
+                  }),
+                },
+              );
+            } catch (error: any) {
+              logger.error(`Error submitting tool outputs: ${error.message}`);
+              return {
+                error: `Error submitting tool outputs: ${error.message}`,
+              };
+            }
+          } else {
+            logger.error(`Unknown required action type: ${run.required_action?.type}`);
+            break;
+          }
+        } else if (['completed', 'failed', 'cancelled', 'expired'].includes(run.status)) {
+          // Run is in a terminal state
+          if (run.status !== 'completed') {
+            // Return error for failed runs
+            if (run.last_error) {
+              return {
+                error: `Thread run failed: ${run.last_error.code || ''} - ${run.last_error.message}`,
+              };
+            }
+
+            return {
+              error: `Thread run failed with status: ${run.status}`,
+            };
+          }
+
+          break; // Exit the loop if completed successfully
+        }
+
+        // Wait before polling again
+        await sleep(pollIntervalMs);
+
+        // Increase polling interval gradually for longer-running operations
+        if (Date.now() - startTime > 30000) {
+          // After 30 seconds
+          pollIntervalMs = Math.min(pollIntervalMs * 1.5, 5000);
+        }
+      } catch (error: any) {
+        // Handle error during polling
+        logger.error(`Error polling run status: ${error}`);
+        const errorMessage = error.message || String(error);
+
+        // For transient errors, return a retryable error response
+        if (this.isRetryableError('', errorMessage)) {
+          return {
+            error: `Error polling run status: ${errorMessage}`,
+          };
+        }
+
+        // For other errors, just return the error without marking as retryable
+        return {
+          error: `Error polling run status: ${errorMessage}`,
+        };
+      }
+    }
+
+    // Process the completed run
+    return await this.processCompletedRun(apiBaseUrl, apiVersion, threadId, runId);
+  }
+
+  /**
+   * Process a completed run to extract messages and tool calls
+   */
+  private async processCompletedRun(
+    apiBaseUrl: string,
+    apiVersion: string,
+    threadId: string,
+    runIdOrResponse: string | RunResponse,
+  ): Promise<ProviderResponse> {
+    try {
+      const runId = typeof runIdOrResponse === 'string' ? runIdOrResponse : runIdOrResponse.id;
+
+      // Get all messages in the thread
+      const messagesResponse = await this.makeRequest<MessageListResponse>(
+        `${apiBaseUrl}/openai/threads/${threadId}/messages?api-version=${apiVersion}`,
+        {
+          method: 'GET',
+          headers: await this.getHeaders(),
+        },
+      );
+
+      // Get run steps to process tool calls
+      const stepsResponse = await this.makeRequest<RunStepsResponse>(
+        `${apiBaseUrl}/openai/threads/${threadId}/runs/${runId}/steps?api-version=${apiVersion}`,
+        {
+          method: 'GET',
+          headers: await this.getHeaders(),
+        },
+      );
+
+      const outputBlocks: string[] = [];
+      const runResponseObj =
+        typeof runIdOrResponse === 'string'
+          ? await this.makeRequest<RunResponse>(
+              `${apiBaseUrl}/openai/threads/${threadId}/runs/${runId}?api-version=${apiVersion}`,
+              {
+                method: 'GET',
+                headers: await this.getHeaders(),
+              },
+            )
+          : runIdOrResponse;
+
+      // Process messages
+      const messages = messagesResponse.data || [];
+      for (const message of messages) {
+        // Only include messages created after the run started
+        if (new Date(message.created_at) >= new Date(runResponseObj.created_at)) {
+          const contentBlocks = message.content
+            .map((content) =>
+              content.type === 'text' ? content.text!.value : `<${content.type} output>`,
+            )
+            .join('\n');
+
+          outputBlocks.push(`[${toTitleCase(message.role)}] ${contentBlocks}`);
+        }
+      }
+
+      // Process run steps to capture tool call details
+      const steps = stepsResponse.data || [];
+      for (const step of steps) {
+        // Check if step is a tool call step with tool_calls array
+        if (
+          step.type === 'tool_calls' &&
+          step.step_details &&
+          typeof step.step_details === 'object' &&
+          'tool_calls' in step.step_details &&
+          Array.isArray(step.step_details.tool_calls)
+        ) {
+          const toolCalls = step.step_details.tool_calls;
+
+          for (const toolCall of toolCalls) {
+            if (toolCall.type === 'function' && toolCall.function) {
+              outputBlocks.push(
+                `[Call function ${toolCall.function.name} with arguments ${toolCall.function.arguments}]`,
+              );
+              if (toolCall.function.output) {
+                outputBlocks.push(`[Function output: ${toolCall.function.output}]`);
+              }
+            } else if (
+              toolCall.type &&
+              toolCall.type === 'code_interpreter' &&
+              toolCall.code_interpreter
+            ) {
+              const outputs = toolCall.code_interpreter.outputs || [];
+              const input = toolCall.code_interpreter.input || '';
+
+              const outputText =
+                outputs
+                  .map((output) =>
+                    output.type === 'logs' ? output.logs : `<${output.type} output>`,
+                  )
+                  .join('\n') || '[No output]';
+
+              outputBlocks.push(`[Code interpreter input]`);
+              outputBlocks.push(input || '[No input]');
+              outputBlocks.push(`[Code interpreter output]`);
+              outputBlocks.push(outputText);
+            } else if (toolCall.type && toolCall.type === 'file_search' && toolCall.file_search) {
+              outputBlocks.push(`[Ran file search]`);
+              outputBlocks.push(`[File search details: ${JSON.stringify(toolCall.file_search)}]`);
+            } else if (toolCall.type && String(toolCall.type) === 'retrieval') {
+              outputBlocks.push(`[Ran retrieval]`);
+            } else {
+              outputBlocks.push(`[Unknown tool call type: ${String(toolCall.type)}]`);
+            }
+          }
+        }
+      }
+
+      return {
+        output: outputBlocks.join('\n\n').trim(),
+      };
+    } catch (err: any) {
+      logger.error(`Error processing run results: ${err}`);
+      const errorMessage = err.message || String(err);
+
+      return {
+        error: `Error processing run results: ${errorMessage}`,
+      };
+    }
   }
 }
