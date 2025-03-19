@@ -176,7 +176,6 @@ describe('Azure Assistant Provider', () => {
 
     it('should throw error when polling times out', async () => {
       // Replace the implementation for this test only
-      const _originalPollRun = provider.constructor.prototype.pollRun;
 
       // Create a minimal implementation that just throws the expected error
       jest.spyOn(provider as any, 'pollRun').mockImplementation(async () => {
