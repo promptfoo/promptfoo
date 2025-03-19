@@ -7,7 +7,7 @@ import type {
   ProviderModerationResponse,
 } from '../../types';
 import type { EnvOverrides } from '../../types/env';
-import { AzureGenericProvider } from '../azure';
+import { AzureGenericProvider } from './generic';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 
 export const AZURE_MODERATION_MODELS = [
