@@ -5,7 +5,7 @@ prompts:
   - '{{prompt}}'
 
 providers:
-  - id: azure:assistant:asst_V3UgNCNUSAtHQdit8YimCKlJ
+  - id: azure:assistant:asst_example
     label: azure-assistant-multi-tool
     config:
       apiHost: promptfoo.openai.azure.com
