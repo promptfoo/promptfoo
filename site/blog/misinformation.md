@@ -17,7 +17,7 @@ To prevent these issues, this guide explores the types and causes of misinformat
 
 ## Types of Misinformation in LLMs
 
-Misinformation can be caused by a number of factors, ranging from prompting, model configurations, knowledge cutoffs, or lack of external sources. They can broadly be categorized into four different risks:
+Misinformation can be caused by a number of factors, ranging from prompting, model configurations, knowledge cutoffs, or lack of external sources. They can broadly be categorized into five different risks:
 
 1. **Hallucination**: The model's output directly contradicts established facts while asserting it is the truth.  
    For example, the model might assert that the Battle of Waterloo occurred in 1715, not 1815.
@@ -48,7 +48,7 @@ Humans who trust misinformation from an LLM output may cause harm to themselves 
 
 ### Disinformation or Biased Misinformation
 
-Certain models may propagate information that may be concerned inaccurate by other social groups, subsequently spreading disinformation.
+Certain models may propagate information that may be concerned inaccurate by other social groups, subsequently spreading disinformation. 
 
 **Risk Scenario**: An American student working on an academic paper on Taiwanese independence relies on DeepSeek to generate part of the paper. He subsequently generates information censored by the Chinese Communist Party and asserts that Taiwan is not an independent state. As a consequence, he receives a failing grade on the paper.
 
@@ -86,7 +86,7 @@ The more overlooked cause of misinformation is not in the output itself, but the
 
 <figure>
     <img src="/img/blog/misinformation/chatgpt_disclaimer.png" alt="chatgpt disclaimer" />
-    <figcaption style={{ textAlign: 'center', fontStyle: 'italic' }}>
+    <figcaption style="text-align: center; font-style: italic;">
         An example of the disclaimer that ChatGPT provides to users. 
     </figcaption>
 </figure>
