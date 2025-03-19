@@ -47,7 +47,7 @@ function toPrompt(text: string): Prompt {
 
 describe('renderPrompt', () => {
   beforeEach(() => {
-    delete process.env.PROMPTFOO_DISABLE_NUNJUCKS;
+    delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
     delete process.env.PROMPTFOO_DISABLE_JSON_AUTOESCAPE;
   });
 
@@ -229,18 +229,28 @@ describe('renderPrompt', () => {
     expect(renderedPrompt).toBe('Test prompt with {"key":"valueFromYaml"}');
   });
 
-  it('should return raw prompt when PROMPTFOO_DISABLE_NUNJUCKS is enabled', async () => {
-    process.env.PROMPTFOO_DISABLE_NUNJUCKS = 'true';
-    const prompt = toPrompt('Test prompt {{ var1 }}');
-    const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
-    expect(renderedPrompt).toBe('Test prompt {{ var1 }}');
+  describe('with PROMPTFOO_DISABLE_TEMPLATING', () => {
+    beforeEach(() => {
+      process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+    });
+
+    afterEach(() => {
+      delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
+    });
+
+    it('should return raw prompt when templating is disabled', async () => {
+      const prompt = toPrompt('Test prompt {{ var1 }}');
+      const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
+      expect(renderedPrompt).toBe('Test prompt {{ var1 }}');
+    });
   });
 
-  it('should render normally when PROMPTFOO_DISABLE_NUNJUCKS is disabled', async () => {
-    process.env.PROMPTFOO_DISABLE_NUNJUCKS = 'false';
+  it('should render normally when templating is enabled', async () => {
+    process.env.PROMPTFOO_DISABLE_TEMPLATING = 'false';
     const prompt = toPrompt('Test prompt {{ var1 }}');
     const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
     expect(renderedPrompt).toBe('Test prompt value1');
+    delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
   });
 });
 
