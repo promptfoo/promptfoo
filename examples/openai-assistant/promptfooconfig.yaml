@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Test OpenAI Assistants API capabilities
+
+prompts:
+  - file://prompt.txt
+
+providers:
+  - id: openai:assistant:asst_CCDJc0V4MoAZ5WGEmtozI3bt
+    config:
+      temperature: 0
+      tools: file://tools.yaml
+      functionToolCallbacks:
+        get_weather: |
+          (args) => {
+            const parsedArgs = JSON.parse(args);
+            const location = parsedArgs.location;
+            const unit = parsedArgs.unit || 'fahrenheit';
+            return Promise.resolve(
+              JSON.stringify({
+                location,
+                temperature: 72,
+                unit,
+                forecast: ["sunny", "windy"],
+                humidity: 0.44
+              })
+            );
+          }
+
+tests:
+  - vars:
+      query: What's the weather like in San Francisco?
+    assert:
+      - type: contains
+        value: 'San Francisco'
+      - type: contains
+        value: 'temperature'
+
+  - vars:
+      query: Please tell me the temperature in New York in celsius.
+    assert:
+      - type: contains
+        value: 'New York'
+      - type: contains
+        value: 'celsius'
+
+  - vars:
+      query: Tell me about the current weather conditions in Seattle.
+    assert:
+      - type: contains
+        value: 'Seattle'
+      - type: contains
+        value: 'weather'

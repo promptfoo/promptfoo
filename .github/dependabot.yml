@@ -10,8 +10,6 @@ updates:
       - dependency-name: '@azure/identity'
       - dependency-name: '@azure/openai-assistants'
       - dependency-name: 'cloudflare'
-      - dependency-name: 'groq-sdk'
-      - dependency-name: 'openai'
       - dependency-name: 'replicate'
   - package-ecosystem: github-actions
     directory: /
