@@ -52,6 +52,8 @@ ENV PROMPTFOO_SELF_HOSTED=1
 RUN chown -R promptfoo:promptfoo /app
 USER promptfoo
 
+RUN mkdir -p /home/promptfoo/.promptfoo
+
 EXPOSE 3000
 
 # Set up healthcheck
