@@ -31,6 +31,13 @@ export const OPENAI_CHAT_MODELS = [
       output: 60 / 1e6,
     },
   })),
+  ...['o1-pro', 'o1-pro-2025-03-19'].map((model) => ({
+    id: model,
+    cost: {
+      input: 150 / 1e6,
+      output: 600 / 1e6,
+    },
+  })),
   ...['o1-mini', 'o1-mini-2024-09-12'].map((model) => ({
     id: model,
     cost: {
