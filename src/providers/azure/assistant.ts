@@ -115,11 +115,6 @@ export class AzureAssistantProvider extends AzureGenericProvider {
 
     const apiVersion = this.assistantConfig.apiVersion || '2024-04-01-preview';
 
-    // Process tools if present
-    const tools = this.assistantConfig.tools
-      ? maybeLoadFromExternalFile(renderVarsInObject(this.assistantConfig.tools, context?.vars))
-      : undefined;
-
     // Create a simple cache key based on the input and configuration
     const cacheKey = `azure_assistant:${this.deploymentName}:${JSON.stringify({
       prompt,
@@ -127,7 +122,9 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       top_p: this.assistantConfig.top_p,
       model: this.assistantConfig.modelName,
       instructions: this.assistantConfig.instructions,
-      tools: JSON.stringify(tools).slice(0, 100), // Truncate to keep key reasonable
+      tools: JSON.stringify(
+        maybeLoadFromExternalFile(renderVarsInObject(this.assistantConfig.tools, context?.vars)),
+      ),
       tool_choice: this.assistantConfig.tool_choice,
     })}`;
 
@@ -545,8 +542,8 @@ export class AzureAssistantProvider extends AzureGenericProvider {
                     logger.debug(`Callback is a string, evaluating as function: ${callback}`);
                     const asyncFunction = new Function('return ' + callback)();
                     result = await asyncFunction(functionArgs);
-                  } else {
-                    result = await callback!(functionArgs);
+                  } else if (callback && typeof callback === 'function') {
+                    result = await callback(functionArgs);
                   }
 
                   logger.debug(`Function ${functionName} result: ${result}`);

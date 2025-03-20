@@ -457,6 +457,13 @@ describe('Azure Assistant Provider', () => {
       const mockMessagesResponse = {
         data: [
           {
+            id: 'msg-user',
+            object: 'thread.message',
+            created_at: Date.now(),
+            role: 'user',
+            content: [{ type: 'text', text: { value: 'User question' } }],
+          },
+          {
             id: 'msg-123',
             object: 'thread.message',
             created_at: Date.now() + 1000,
@@ -470,23 +477,41 @@ describe('Azure Assistant Provider', () => {
       const mockRunResponse = { id: 'run-123', created_at: Date.now() };
 
       (provider as any).makeRequest
-        .mockResolvedValueOnce(mockMessagesResponse)
-        .mockResolvedValueOnce(mockStepsResponse);
+        .mockResolvedValueOnce(mockRunResponse) // Get run information
+        .mockResolvedValueOnce(mockMessagesResponse) // Get messages
+        .mockResolvedValueOnce(mockStepsResponse); // Get run steps
 
       const result = await (provider as any).processCompletedRun(
         'https://test.azure.com',
         '2024-04-01-preview',
         'thread-123',
-        mockRunResponse,
+        'run-123',
       );
 
       expect(result).toEqual({
-        output: '[Assistant] Test response text',
+        output: '[User] User question\n\n[Assistant] Test response text',
       });
     });
 
     it('should process tool call steps in the run', async () => {
-      const mockMessagesResponse = { data: [] };
+      const mockMessagesResponse = {
+        data: [
+          {
+            id: 'msg-user',
+            object: 'thread.message',
+            created_at: Date.now(),
+            role: 'user',
+            content: [{ type: 'text', text: { value: 'User question' } }],
+          },
+          {
+            id: 'msg-123',
+            object: 'thread.message',
+            created_at: Date.now() + 2000,
+            role: 'assistant',
+            content: [{ type: 'text', text: { value: 'Assistant response' } }],
+          },
+        ],
+      };
 
       const mockStepsResponse = {
         data: [
@@ -512,25 +537,43 @@ describe('Azure Assistant Provider', () => {
       const mockRunResponse = { id: 'run-123', created_at: Date.now() };
 
       (provider as any).makeRequest
-        .mockResolvedValueOnce(mockMessagesResponse)
-        .mockResolvedValueOnce(mockStepsResponse);
+        .mockResolvedValueOnce(mockRunResponse) // Get run information
+        .mockResolvedValueOnce(mockMessagesResponse) // Get messages
+        .mockResolvedValueOnce(mockStepsResponse); // Get run steps
 
       const result = await (provider as any).processCompletedRun(
         'https://test.azure.com',
         '2024-04-01-preview',
         'thread-123',
-        mockRunResponse,
+        'run-123',
       );
 
       expect(result).toEqual({
         output:
-          '[Call function testFunction with arguments {"param": "value"}]\n\n[Function output: Function output]',
+          '[User] User question\n\n[Call function testFunction with arguments {"param": "value"}]\n\n[Function output: Function output]\n\n[Assistant] Assistant response',
       });
     });
 
     it('should process code interpreter steps', async () => {
       // Mock messages and steps responses
-      const mockMessagesResponse = { data: [] };
+      const mockMessagesResponse = {
+        data: [
+          {
+            id: 'msg-user',
+            object: 'thread.message',
+            created_at: Date.now(),
+            role: 'user',
+            content: [{ type: 'text', text: { value: 'User question' } }],
+          },
+          {
+            id: 'msg-123',
+            object: 'thread.message',
+            created_at: Date.now() + 2000,
+            role: 'assistant',
+            content: [{ type: 'text', text: { value: 'Assistant response' } }],
+          },
+        ],
+      };
 
       const mockStepsResponse = {
         data: [
@@ -560,6 +603,7 @@ describe('Azure Assistant Provider', () => {
       const mockRunResponse = { id: 'run-123', created_at: Date.now() };
 
       (provider as any).makeRequest
+        .mockResolvedValueOnce(mockRunResponse) // Get run information
         .mockResolvedValueOnce(mockMessagesResponse) // Get messages
         .mockResolvedValueOnce(mockStepsResponse); // Get run steps
 
@@ -567,17 +611,229 @@ describe('Azure Assistant Provider', () => {
         'https://test.azure.com',
         '2024-04-01-preview',
         'thread-123',
-        mockRunResponse,
+        'run-123',
       );
 
       expect(result).toEqual({
         output:
-          '[Code interpreter input]\n\nprint("Hello, world!")\n\n[Code interpreter output]\n\nHello, world!',
+          '[User] User question\n\n[Code interpreter input]\n\nprint("Hello, world!")\n\n[Code interpreter output]\n\nHello, world!\n\n[Assistant] Assistant response',
       });
     });
 
     it('should handle file search steps', async () => {
       // Mock messages and steps responses
+      const mockMessagesResponse = {
+        data: [
+          {
+            id: 'msg-user',
+            object: 'thread.message',
+            created_at: Date.now(),
+            role: 'user',
+            content: [{ type: 'text', text: { value: 'User question' } }],
+          },
+          {
+            id: 'msg-123',
+            object: 'thread.message',
+            created_at: Date.now() + 2000,
+            role: 'assistant',
+            content: [{ type: 'text', text: { value: 'Assistant response' } }],
+          },
+        ],
+      };
+
+      const mockStepsResponse = {
+        data: [
+          {
+            id: 'step-123',
+            type: 'tool_calls',
+            step_details: {
+              tool_calls: [
+                {
+                  type: 'file_search',
+                  file_search: {
+                    query: 'search term',
+                    results: ['file1.txt', 'file2.txt'],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      };
+
+      const mockRunResponse = { id: 'run-123', created_at: Date.now() };
+
+      (provider as any).makeRequest
+        .mockResolvedValueOnce(mockRunResponse) // Get run information
+        .mockResolvedValueOnce(mockMessagesResponse) // Get messages
+        .mockResolvedValueOnce(mockStepsResponse); // Get run steps
+
+      const result = await (provider as any).processCompletedRun(
+        'https://test.azure.com',
+        '2024-04-01-preview',
+        'thread-123',
+        'run-123',
+      );
+
+      expect(result).toEqual({
+        output: `[User] User question\n\n[Ran file search]\n\n[File search details: ${JSON.stringify(
+          {
+            query: 'search term',
+            results: ['file1.txt', 'file2.txt'],
+          },
+        )}]\n\n[Assistant] Assistant response`,
+      });
+    });
+
+    it('should handle retrieval steps', async () => {
+      // Mock messages and steps responses
+      const mockMessagesResponse = {
+        data: [
+          {
+            id: 'msg-user',
+            object: 'thread.message',
+            created_at: Date.now(),
+            role: 'user',
+            content: [{ type: 'text', text: { value: 'User question' } }],
+          },
+          {
+            id: 'msg-123',
+            object: 'thread.message',
+            created_at: Date.now() + 2000,
+            role: 'assistant',
+            content: [{ type: 'text', text: { value: 'Assistant response' } }],
+          },
+        ],
+      };
+
+      const mockStepsResponse = {
+        data: [
+          {
+            id: 'step-123',
+            type: 'tool_calls',
+            step_details: {
+              tool_calls: [
+                {
+                  type: 'retrieval',
+                },
+              ],
+            },
+          },
+        ],
+      };
+
+      const mockRunResponse = { id: 'run-123', created_at: Date.now() };
+
+      (provider as any).makeRequest
+        .mockResolvedValueOnce(mockRunResponse) // Get run information
+        .mockResolvedValueOnce(mockMessagesResponse) // Get messages
+        .mockResolvedValueOnce(mockStepsResponse); // Get run steps
+
+      const result = await (provider as any).processCompletedRun(
+        'https://test.azure.com',
+        '2024-04-01-preview',
+        'thread-123',
+        'run-123',
+      );
+
+      expect(result).toEqual({
+        output: '[User] User question\n\n[Ran retrieval]\n\n[Assistant] Assistant response',
+      });
+    });
+
+    it('should handle unknown tool call types', async () => {
+      // Mock messages and steps responses
+      const mockMessagesResponse = {
+        data: [
+          {
+            id: 'msg-user',
+            object: 'thread.message',
+            created_at: Date.now(),
+            role: 'user',
+            content: [{ type: 'text', text: { value: 'User question' } }],
+          },
+          {
+            id: 'msg-123',
+            object: 'thread.message',
+            created_at: Date.now() + 2000,
+            role: 'assistant',
+            content: [{ type: 'text', text: { value: 'Assistant response' } }],
+          },
+        ],
+      };
+
+      const mockStepsResponse = {
+        data: [
+          {
+            id: 'step-123',
+            type: 'tool_calls',
+            step_details: {
+              tool_calls: [
+                {
+                  type: 'unknown_tool_type',
+                },
+              ],
+            },
+          },
+        ],
+      };
+
+      const mockRunResponse = { id: 'run-123', created_at: Date.now() };
+
+      (provider as any).makeRequest
+        .mockResolvedValueOnce(mockRunResponse) // Get run information
+        .mockResolvedValueOnce(mockMessagesResponse) // Get messages
+        .mockResolvedValueOnce(mockStepsResponse); // Get run steps
+
+      const result = await (provider as any).processCompletedRun(
+        'https://test.azure.com',
+        '2024-04-01-preview',
+        'thread-123',
+        'run-123',
+      );
+
+      expect(result).toEqual({
+        output:
+          '[User] User question\n\n[Unknown tool call type: unknown_tool_type]\n\n[Assistant] Assistant response',
+      });
+    });
+
+    it('should handle case where there is no user message', async () => {
+      // This edge case tests what happens if there's no user message
+      const mockMessagesResponse = {
+        data: [
+          {
+            id: 'msg-123',
+            object: 'thread.message',
+            created_at: Date.now() + 1000,
+            role: 'assistant',
+            content: [{ type: 'text', text: { value: 'Assistant response without user message' } }],
+          },
+        ],
+      };
+
+      const mockStepsResponse = { data: [] };
+      const mockRunResponse = { id: 'run-123', created_at: Date.now() };
+
+      (provider as any).makeRequest
+        .mockResolvedValueOnce(mockRunResponse) // Get run information
+        .mockResolvedValueOnce(mockMessagesResponse) // Get messages
+        .mockResolvedValueOnce(mockStepsResponse); // Get run steps
+
+      const result = await (provider as any).processCompletedRun(
+        'https://test.azure.com',
+        '2024-04-01-preview',
+        'thread-123',
+        'run-123',
+      );
+
+      expect(result).toEqual({
+        output: '[Assistant] Assistant response without user message',
+      });
+    });
+
+    it('should handle case with only tool calls and no messages', async () => {
+      // Edge case with no messages, only tool calls
       const mockMessagesResponse = { data: [] };
 
       const mockStepsResponse = {
@@ -603,6 +859,7 @@ describe('Azure Assistant Provider', () => {
       const mockRunResponse = { id: 'run-123', created_at: Date.now() };
 
       (provider as any).makeRequest
+        .mockResolvedValueOnce(mockRunResponse) // Get run information
         .mockResolvedValueOnce(mockMessagesResponse) // Get messages
         .mockResolvedValueOnce(mockStepsResponse); // Get run steps
 
@@ -610,7 +867,7 @@ describe('Azure Assistant Provider', () => {
         'https://test.azure.com',
         '2024-04-01-preview',
         'thread-123',
-        mockRunResponse,
+        'run-123',
       );
 
       expect(result).toEqual({
@@ -618,82 +875,6 @@ describe('Azure Assistant Provider', () => {
           query: 'search term',
           results: ['file1.txt', 'file2.txt'],
         })}]`,
-      });
-    });
-
-    it('should handle retrieval steps', async () => {
-      // Mock messages and steps responses
-      const mockMessagesResponse = { data: [] };
-
-      const mockStepsResponse = {
-        data: [
-          {
-            id: 'step-123',
-            type: 'tool_calls',
-            step_details: {
-              tool_calls: [
-                {
-                  type: 'retrieval',
-                },
-              ],
-            },
-          },
-        ],
-      };
-
-      const mockRunResponse = { id: 'run-123', created_at: Date.now() };
-
-      (provider as any).makeRequest
-        .mockResolvedValueOnce(mockMessagesResponse) // Get messages
-        .mockResolvedValueOnce(mockStepsResponse); // Get run steps
-
-      const result = await (provider as any).processCompletedRun(
-        'https://test.azure.com',
-        '2024-04-01-preview',
-        'thread-123',
-        mockRunResponse,
-      );
-
-      expect(result).toEqual({
-        output: '[Ran retrieval]',
-      });
-    });
-
-    it('should handle unknown tool call types', async () => {
-      // Mock messages and steps responses
-      const mockMessagesResponse = { data: [] };
-
-      const mockStepsResponse = {
-        data: [
-          {
-            id: 'step-123',
-            type: 'tool_calls',
-            step_details: {
-              tool_calls: [
-                {
-                  type: 'unknown_tool_type',
-                },
-              ],
-            },
-          },
-        ],
-      };
-
-      const mockRunResponse = { id: 'run-123', created_at: Date.now() };
-
-      (provider as any).makeRequest
-        .mockResolvedValueOnce(mockMessagesResponse) // Get messages
-        .mockResolvedValueOnce(mockStepsResponse); // Get run steps
-
-      const result = await (provider as any).processCompletedRun(
-        'https://test.azure.com',
-        '2024-04-01-preview',
-        'thread-123',
-        mockRunResponse,
-      );
-
-      expect(result).toEqual({
-        output: '[Unknown tool call type: unknown_tool_type]',
       });
     });
 

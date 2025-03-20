@@ -2,10 +2,10 @@
 description: Azure OpenAI Assistant with Function Tool Capability
 
 prompts:
-  - '{{prompt}}'
+  - 'Answer the following question: {{prompt}}'
 
 providers:
-  - id: azure:assistant:asst_example
+  - id: azure:assistant:asst_V3UgNCNUSAtHQdit8YimCKlJ
     label: azure-assistant-function
     config:
       apiHost: promptfoo.openai.azure.com
