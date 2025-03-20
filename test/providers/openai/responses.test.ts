@@ -1,9 +1,18 @@
-import * as cache from '../../../src/cache';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
+import * as cache from '../../../src/cache';
+import logger from '../../../src/logger';
 
 // Mock the fetchWithCache function
 jest.mock('../../../src/cache', () => ({
   fetchWithCache: jest.fn(),
+}));
+
+// Mock the logger to suppress warnings during tests
+jest.mock('../../../src/logger', () => ({
+  debug: jest.fn(),
+  info: jest.fn(),
+  warn: jest.fn(),
+  error: jest.fn(),
 }));
 
 describe('OpenAiResponsesProvider', () => {
@@ -768,5 +777,435 @@ describe('OpenAiResponsesProvider', () => {
     // Check that format properties are correct
     expect(body.text.format.name).toBe('json_schema');
     expect(body.text.format.type).toBe('json_schema');
+  });
+
+  // Test for Line 66-67: Testing when input is a JSON object (not array or string)
+  it('should handle JSON object prompt correctly', async () => {
+    // Setup mock for fetchWithCache
+    const mockApiResponse = {
+      id: 'resp_abc123',
+      status: 'completed',
+      model: 'gpt-4o',
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [
+            {
+              type: 'output_text',
+              text: 'Response to object input',
+            },
+          ],
+        },
+      ],
+      usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
+    };
+
+    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    // Initialize the provider
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+      },
+    });
+
+    // Create an object input (not an array)
+    const objectInput = JSON.stringify({ query: 'What is the weather?', context: 'San Francisco' });
+    
+    await provider.callApi(objectInput);
+
+    // Verify the request handles the object as text
+    const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+    const reqOptions = mockCall[1] as { body: string };
+    const body = JSON.parse(reqOptions.body);
+    
+    // The implementation should convert the object to a string
+    expect(body.input).toEqual(objectInput);
+  });
+
+  // Test for missing API key lines 135-138
+  it('should throw error when API key is not set', async () => {
+    // Initialize the provider without an API key
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {} // No apiKey
+    });
+
+    // Override getApiKey to explicitly return undefined/null
+    jest.spyOn(provider, 'getApiKey').mockReturnValue(undefined);
+
+    // Expect the call to throw an error
+    await expect(provider.callApi('Test prompt')).rejects.toThrow('OpenAI API key is not set');
+  });
+
+  // Test for error in API response, lines 178-182
+  it('should handle error in API response data correctly', async () => {
+    // Mock API response with error field
+    const mockApiResponse = {
+      error: {
+        message: 'Content policy violation',
+        type: 'content_policy_violation',
+        code: 'content_filter',
+      }
+    };
+
+    // Setup mock for fetchWithCache
+    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 400,
+      statusText: 'Bad Request',
+    });
+
+    // Initialize the provider
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+      },
+    });
+
+    // Call the API
+    const result = await provider.callApi('Test prompt');
+
+    // Verify error is returned properly
+    expect(result.error).toContain('content_policy_violation');
+  });
+  
+  // Test for missing output array, lines 188-191
+  it('should handle missing output array correctly', async () => {
+    // Mock API response with missing output
+    const mockApiResponse = {
+      id: 'resp_abc123',
+      status: 'completed',
+      model: 'gpt-4o',
+      // No output array
+      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+    };
+
+    // Setup mock for fetchWithCache
+    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    // Initialize the provider
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+      },
+    });
+
+    // Call the API
+    const result = await provider.callApi('Test prompt');
+
+    // Verify error about missing output array
+    expect(result.error).toContain('Invalid response format: Missing output array');
+  });
+
+  // Test for lines 233-237, error in processing results
+  it('should handle processing errors correctly', async () => {
+    // Mock logger.debug to throw error when called with JSON.stringify
+    jest.spyOn(logger, 'debug').mockImplementation((msg) => {
+      if (msg.includes('OpenAI Responses API response')) {
+        throw new Error('Mocked JSON stringify error');
+      }
+    });
+
+    // Mock API response
+    const mockApiResponse = {
+      id: 'resp_abc123',
+      status: 'completed',
+      model: 'gpt-4o',
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [
+            {
+              type: 'output_text',
+              text: 'Test response',
+            }
+          ]
+        }
+      ],
+      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+    };
+
+    // Setup mock for fetchWithCache
+    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    // Initialize the provider
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+      },
+    });
+
+    // Mock the error log to verify it's called
+    jest.spyOn(logger, 'error').mockImplementation(() => {});
+
+    // Call the API
+    const result = await provider.callApi('Test prompt');
+
+    // Verify error during processing is handled correctly
+    expect(result.error).toBeTruthy();
+    expect(result.error).toContain('API error:');
+    
+    // Verify logger.error was called
+    expect(logger.error).toHaveBeenCalled();
+  });
+
+  // Test for function calls at the top level (lines 197-198)
+  it('should handle top-level function calls correctly', async () => {
+    // Mock API response with a top-level function call
+    const mockApiResponse = {
+      id: 'resp_abc123',
+      status: 'completed',
+      model: 'gpt-4o',
+      output: [
+        {
+          type: 'function_call',
+          name: 'get_weather',
+          id: 'call_123',
+          input: { location: 'San Francisco' },
+        }
+      ],
+      usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
+    };
+
+    // Setup mock for fetchWithCache
+    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    // Initialize the provider
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+      },
+    });
+
+    // Call the API
+    const result = await provider.callApi('Test prompt');
+
+    // Verify the top-level function call is returned as a stringified JSON
+    expect(result.output).toContain('get_weather');
+    expect(result.output).toContain('San Francisco');
+    // It should be a stringified object
+    expect(() => JSON.parse(result.output)).not.toThrow();
+    const parsed = JSON.parse(result.output);
+    expect(parsed.type).toBe('function_call');
+  });
+
+  // Test for tool calls in assistant messages (lines 205-207)
+  it('should handle tool calls in assistant messages correctly', async () => {
+    // Mock API response with a tool_use in assistant message
+    const mockApiResponse = {
+      id: 'resp_abc123',
+      status: 'completed',
+      model: 'gpt-4o',
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool_use',
+              name: 'get_weather',
+              id: 'call_123',
+              input: { location: 'New York' },
+            }
+          ],
+        }
+      ],
+      usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
+    };
+
+    // Setup mock for fetchWithCache
+    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    // Initialize the provider
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+      },
+    });
+
+    // Call the API
+    const result = await provider.callApi('Test prompt');
+
+    // Verify the tool call is returned as a stringified JSON
+    expect(result.output).toContain('tool_use');
+    expect(result.output).toContain('New York');
+    // It should be a stringified object
+    expect(() => JSON.parse(result.output)).not.toThrow();
+    const parsed = JSON.parse(result.output);
+    expect(parsed.type).toBe('tool_use');
+  });
+
+  // Test for tool results (lines 210-212)
+  it('should handle tool results correctly', async () => {
+    // Mock API response with a tool result
+    const mockApiResponse = {
+      id: 'resp_abc123',
+      status: 'completed',
+      model: 'gpt-4o',
+      output: [
+        {
+          type: 'tool_result',
+          id: 'result_123',
+          tool_call_id: 'call_123',
+          output: { temperature: 72, conditions: 'Sunny' },
+        }
+      ],
+      usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
+    };
+
+    // Setup mock for fetchWithCache
+    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    // Initialize the provider
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+      },
+    });
+
+    // Call the API
+    const result = await provider.callApi('Test prompt');
+
+    // Verify the tool result is returned as a stringified JSON
+    expect(result.output).toContain('tool_result');
+    expect(result.output).toContain('Sunny');
+    // It should be a stringified object
+    expect(() => JSON.parse(result.output)).not.toThrow();
+    const parsed = JSON.parse(result.output);
+    expect(parsed.type).toBe('tool_result');
+  });
+
+  // Test for lines 233-237, error in processing results
+  it('should handle processing errors correctly', async () => {
+    // Mock API response with content that will cause error during processing
+    const mockApiResponse = {
+      id: 'resp_abc123',
+      status: 'completed',
+      model: 'gpt-4o',
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: null // Will cause TypeError when trying to iterate
+        }
+      ],
+      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+    };
+
+    // Setup mock for fetchWithCache
+    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    // Initialize the provider
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+      },
+    });
+
+    // Call the API
+    const result = await provider.callApi('Test prompt');
+
+    // Verify error during processing is handled correctly
+    expect(result.error).toBeTruthy();
+    expect(result.error).toContain('API error:');
+    
+    // Verify logger was used to log the error
+    expect(logger.error).toHaveBeenCalled();
+  });
+
+  // Test for lines 169-174: Testing when fetch throws an error (not just returns error status)
+  it('should handle network errors correctly', async () => {
+    // Setup mock to throw an error
+    jest.mocked(cache.fetchWithCache).mockRejectedValue(new Error('Network error'));
+
+    // Initialize the provider
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+      },
+    });
+
+    // Call the API
+    const result = await provider.callApi('Test prompt');
+
+    // Verify error is handled correctly
+    expect(result.error).toContain('API call error:');
+    expect(result.error).toContain('Network error');
+    
+    // Expect logger to be called with the error
+    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Network error'));
+  });
+
+  // For lines 233-237, let's try a different approach
+  it('should handle error processing results with non-array output', async () => {
+    // Setup mock for fetchWithCache to return data that will trigger a processing error
+    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4o',
+        output: 'not-an-array', // This will cause an error when trying to process as an array
+        usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    // Initialize the provider
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+      },
+    });
+    
+    // Re-mock logger.error for this test
+    jest.spyOn(logger, 'error').mockImplementation(() => {});
+
+    // Call the API
+    const result = await provider.callApi('Test prompt');
+
+    // Verify error is present and logger was called
+    expect(result.error).toBeTruthy();
+    expect(result.error).toContain('API error:');
+    expect(logger.error).toHaveBeenCalled();
   });
 });
