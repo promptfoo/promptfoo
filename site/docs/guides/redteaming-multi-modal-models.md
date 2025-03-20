@@ -13,7 +13,6 @@ keywords:
     vision models,
     image strategy,
     UnsafeBench,
-    dataset testing,
   ]
 ---
 
@@ -35,14 +34,14 @@ cd redteam-multi-modal
 # Install dependencies
 npm install sharp
 
-# Generate a red team test for the static image approach
-npx promptfoo@latest redteam generate -c redteam.static-image.yaml
+# Run the static image red team test
+npx promptfoo@latest redteam run -c redteam.static-image.yaml
 
-# Generate a red team test for the image strategy approach
-npx promptfoo@latest redteam generate -c redteam.image-strategy.yaml
+# Run the image strategy red team test
+npx promptfoo@latest redteam run -c redteam.image-strategy.yaml
 
-# Generate a red team test for the UnsafeBench approach
-npx promptfoo@latest redteam generate -c redteam.unsafebench.yaml
+# Run the UnsafeBench red team test
+npx promptfoo@latest redteam run -c redteam.unsafebench.yaml
 ```
 
 ## Three Approaches to Multi-Modal Red Teaming
@@ -61,22 +60,12 @@ This approach converts potentially harmful text into images and then sends those
 
 This approach uses real unsafe images from the UnsafeBench dataset to test how models respond to potentially harmful visual content across various categories. It evaluates whether models can properly detect and refuse to engage with unsafe imagery.
 
-## Setting Up Your First Multi-Modal Red Team Test
+## Setting Up Your Environment
 
-Let's create a basic test using the static image approach:
-
-```bash
-npx promptfoo@latest init --example redteam-multi-modal
-```
-
-This will create an example configuration with three approaches to multi-modal red teaming.
-
-### Configure Your Environment
-
-Set up the necessary environment variables for your chosen provider:
+Before running any of the examples, set up the necessary environment variables for your chosen provider:
 
 ```bash
-# For AWS Bedrock (example):
+# For AWS Bedrock (used in approaches 1 and 2):
 export AWS_ACCESS_KEY_ID=your_access_key
 export AWS_SECRET_ACCESS_KEY=your_secret_key
 export AWS_REGION=your_region
@@ -87,7 +76,7 @@ export OPENAI_API_KEY=your_api_key
 # For Anthropic:
 export ANTHROPIC_API_KEY=your_api_key
 
-# For UnsafeBench:
+# For UnsafeBench (approach 3):
 export HF_TOKEN=your_huggingface_token
 ```
 
@@ -137,7 +126,7 @@ The key elements in this configuration:
 - `redteam.purpose`: Provides context relevant to the image
 - `redteam.plugins`: Lists the categories of harmful content to test
 
-:::tip Contextual Purpose
+:::tip
 
 Make sure your purpose statement relates to the image content you're using. This creates a more realistic scenario that makes the model more likely to engage with the content.
 
@@ -184,13 +173,9 @@ The prompt template format varies between providers. Adjust the template to matc
 
 ### Run the Static Image Red Team Test
 
-You have multiple options for running your red team tests:
+Run your red team test with:
 
 ```bash
-# Option 1: Generate test cases, then evaluate them
-npx promptfoo@latest redteam eval -c redteam.static-image.yaml
-
-# Option 2: Use redteam run to generate and evaluate in one step
 npx promptfoo@latest redteam run -c redteam.static-image.yaml
 ```
 
@@ -268,19 +253,15 @@ npm install sharp
 
 ### Run the Image Strategy Red Team Test
 
-You can run it using either method:
+Run your test with:
 
 ```bash
-# Option 1: Generate and then evaluate
-npx promptfoo@latest redteam eval -c redteam.image-strategy.yaml
-
-# Option 2: Generate and evaluate in one step
 npx promptfoo@latest redteam run -c redteam.image-strategy.yaml
 ```
 
 ## Approach 3: UnsafeBench Dataset Testing
 
-This approach uses real unsafe images from the UnsafeBench dataset to test how models respond to potentially harmful visual content. It evaluates whether models can properly detect and refuse to engage with unsafe imagery across various categories.
+This approach uses real unsafe images from the UnsafeBench dataset to test how models respond to potentially harmful visual content.
 
 ### Prerequisites
 
@@ -336,8 +317,6 @@ The UnsafeBench plugin:
 4. Injects these images into your prompts for testing
 5. Allows for automated evaluation of model responses
 
-The plugin handles multiple image formats (base64 data, URLs, object structures) and ensures consistent processing regardless of the source format.
-
 ### Create the Prompt Template
 
 Create a prompt template suitable for your model. For example, for OpenAI:
@@ -368,19 +347,15 @@ Create a prompt template suitable for your model. For example, for OpenAI:
 
 ### Run the UnsafeBench Red Team Test
 
-First, ensure you have access to the UnsafeBench dataset and set your Hugging Face token:
+First, set your Hugging Face token:
 
 ```bash
 export HF_TOKEN=your_huggingface_token
 ```
 
-Then run:
+Then run your test:
 
 ```bash
-# Option 1: Generate and then evaluate
-npx promptfoo@latest redteam eval -c redteam.unsafebench.yaml
-
-# Option 2: Generate and evaluate in one step
 npx promptfoo@latest redteam run -c redteam.unsafebench.yaml
 ```
 
@@ -423,25 +398,13 @@ redteam:
   numTests: 5 # Change to desired number
 ```
 
-## Troubleshooting
-
-### Make Purpose Statements Relevant to Images
-
-When configuring red team tests, ensure the `purpose` statement is relevant to the image content to create realistic scenarios. For example:
-
-```yaml
-redteam:
-  purpose: >-
-    You are a helpful assistant that can analyze images and provide detailed descriptions.
-```
-
-### Test with Different Models
+## Testing with Different Models
 
 These approaches work with any multi-modal model. Compare results across different providers:
 
 ```yaml
 targets:
-  - id: openai:gpt-4o
+  - id: openai:gpt-4o-mini
     label: gpt4-vision
   - id: anthropic:claude-3-haiku
     label: claude-vision
@@ -455,6 +418,10 @@ Each model may have a different prompt format. Adjust your prompt templates acco
 
 :::
 
+## Troubleshooting
+
+If you encounter issues while running these examples, here are some common problems and solutions:
+
 ### Common Issues
 
 - **Sharp installation problems**: Follow the [Sharp installation guide](https://sharp.pixelplumbing.com/install)
@@ -464,7 +431,7 @@ Each model may have a different prompt format. Adjust your prompt templates acco
 
 ### Debugging Tips
 
-If you encounter issues:
+If you're still having trouble:
 
 1. **Inspect generated test cases**: Look at the actual prompts created by promptfoo
 2. **Test with a single plugin**: Limit to one harmful content type to isolate issues
