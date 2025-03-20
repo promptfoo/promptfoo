@@ -42,13 +42,13 @@ An LLM that interfaces in regulated industries, such as legal services, healthca
 
 Humans who trust misinformation from an LLM output may cause harm to themselves or others, or may develop distorted beliefs about the world around them.
 
-**Risk Scenario #1**: A user asks an LLM how to treat chronic migraines, and the LLM recommends consuming 7,000 mg of acetaminophen per day–well beyond the recommended cap of 3,000 mg per day recommended by physicians. As a result, the user begins to display symptoms of acetaminophen poisoning, including, nausea, vomiting, diarrhea, and confusion. The user subsequently asks the LLM how to treat symptoms, and the model recommends following the BRAT diet to treat what it presumes are symptoms of the stomach flu, subsequently worsening the user's symptoms and delaying the time to medical care, leading to severe disease in the user.
+**Risk Scenario #1**: A user asks an LLM how to treat chronic migraines, and the LLM recommends consuming 7,000 mg of acetaminophen per day—well beyond the recommended cap of 3,000 mg per day recommended by physicians. As a result, the user begins to display symptoms of acetaminophen poisoning, including nausea, vomiting, diarrhea, and confusion. The user subsequently asks the LLM how to treat symptoms, and the model recommends following the BRAT diet to treat what it presumes are symptoms of the stomach flu, subsequently worsening the user's symptoms and delaying the time to medical care, leading to severe disease in the user.
 
 **Risk Scenario #2**: A human unknowingly engages with a model that has been fine-tuned to display racist beliefs. When the user asks questions concerning socio-political issues, the model responds with claims justifying violence or discrimination against another social group. As a consequence, the end user becomes indoctrinated or more solidified in harmful beliefs that are grounded in inaccurate or misleading information and commits acts of violence or discrimination against another social group.
 
 ### Disinformation or Biased Misinformation
 
-Certain models may propagate information that may be concerned inaccurate by other social groups, subsequently spreading disinformation.
+Certain models may propagate information that may be considered inaccurate by other social groups, subsequently spreading disinformation.
 
 **Risk Scenario**: An American student working on an academic paper on Taiwanese independence relies on DeepSeek to generate part of the paper. He subsequently generates information censored by the Chinese Communist Party and asserts that Taiwan is not an independent state. As a consequence, he receives a failing grade on the paper.
 
@@ -91,7 +91,7 @@ The more overlooked cause of misinformation is not in the output itself, but the
     </figcaption>
 </figure>
 
-In the example of the lawyer who cited bogus cases in his court proceedings, humans can use questionable judgement when provided information they deem comes from credible sources. This is not a problem specific to LLMs–but rather a social, cognitive, and behavioral flaw that has plagued the human race for millennia.
+In the example of the lawyer who cited bogus cases in his court proceedings, humans can use questionable judgment when provided information they deem comes from credible sources. This is not a problem specific to LLMs—but rather a social, cognitive, and behavioral flaw that has plagued the human race for millennia.
 
 Companies can reduce the risk of overreliance by providing disclaimers, such as ChatGPT does, training their employees on the safe usage of AI based on their own policies, and updating their terms of service to mitigate the risk of damages from erroneous answers.
 
@@ -141,7 +141,7 @@ At the orchestration level, enabling an LLM to retrieve external, relevant infor
 
 ### Optimize the Model's Parameters
 
-Lower temperature settings to reduce randomness (e.g., temperature=0.1) for tasks requiring precision. Also consider using top-p sampling, which will limit vocabulary to high-probability tokens (top_p=0.9) to balance creativity and accuracy
+Lower temperature settings to reduce randomness (e.g., temperature=0.1) for tasks requiring precision. Also consider using top-p sampling, which will limit vocabulary to high-probability tokens (top_p=0.9) to balance creativity and accuracy.
 
 ### Modify the Prompts
 
@@ -165,7 +165,7 @@ Use Chain-of-Thought (CoT) reasoning to break tasks into explicit steps (e.g., "
 
 #### Use Disambiguation Prompts
 
-Disambiguation prompts in LLMs are designed to resolve ambiguity in user queries by transforming vague or multi-meaning questions into clear, standalone questions. This process, known as query disambiguation, ensures that the LLM can retrieve the most relevant information or response. For example, If someone asks in a chat context, "Did he catch him?" an LLM can rewrite it as "Did Sherlock Holmes catch the criminal?" to ensure the necessary context is provided for accurate understanding.
+Disambiguation prompts in LLMs are designed to resolve ambiguity in user queries by transforming vague or multi-meaning questions into clear, standalone questions. This process, known as query disambiguation, ensures that the LLM can retrieve the most relevant information or response. For example, if someone asks in a chat context, "Did he catch him?" an LLM can rewrite it as "Did Sherlock Holmes catch the criminal?" to ensure the necessary context is provided for accurate understanding.
 
 ### Enforce Guardrails
 
