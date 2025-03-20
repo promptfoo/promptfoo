@@ -102,12 +102,16 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(config.response_format
         ? {
             text: {
-              format: maybeLoadFromExternalFile(
-                renderVarsInObject(config.response_format, context?.vars),
-              ),
+              format: {
+                name: config.response_format.type,
+                type: config.response_format.type,
+                schema: maybeLoadFromExternalFile(
+                  renderVarsInObject(config.response_format.schema, context?.vars),
+                ),
+              },
             },
           }
-        : { text: { format: { type: 'text' } } }),
+        : { text: { format: { name: 'text', type: 'text' } } }),
       ...(config.truncation ? { truncation: config.truncation } : {}),
       ...(config.metadata ? { metadata: config.metadata } : {}),
       ...('parallel_tool_calls' in config
