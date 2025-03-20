@@ -66,9 +66,9 @@ All LLMs are at risk for misinformation or hallucination, though more advanced o
 
 There are several reasons why foundation models may generate misinformation:
 
-1. Lack (or insufficient) training data for niche domains creates gaps in performance
-2. Poor quality training data (such as unchecked Internet-facing articles) generates unreliable information
-3. Outdated information (such as from knowledge cutoffs) causes the model to produce inaccurate information
+1. Lack (or insufficient) training data for niche domains creates gaps in performance.
+2. Poor quality training data (such as unchecked Internet-facing articles) generates unreliable information.
+3. Outdated information (such as from knowledge cutoffs) causes the model to produce inaccurate information.
 
 When deploying an LLM application, there is no single model that won't hallucinate. Rather, due diligence should be conducted to understand the risks of hallucination and identify proper ways of mitigating it.
 
@@ -133,7 +133,7 @@ You can also use Promptfoo to run red teams against an LLM application to assess
 
 ### Deploy Fine-Tuned Models
 
-If a use case requires more advanced or sophisticated knowledge based on niche information that a foundation lab wouldn't have access to or use, such as specific medical textbooks, then consider fine-tuning the model. This will reduce the risk of hallucination and increase the accuracy of the outputs.
+If a use case requires more advanced or sophisticated knowledge based on niche information that a foundation model wouldn't have access to or use, such as specific medical textbooks, then consider fine-tuning the model. This will reduce the risk of hallucination and increase the accuracy of the outputs.
 
 ### Use Retrieval Augmented Generation
 
@@ -149,7 +149,7 @@ The fastest way to reduce the risk of misinformation is through prompt engineeri
 
 #### Use Source-Grounded Prompts
 
-Force the model to produce outputs using "according to …" prompting, where you explicitly tie responses to verified sources (e.g., "According to Wikipedia...") to reduce fabrication.
+Force the model to produce outputs using "according to…" prompting, where you explicitly tie responses to verified sources (e.g., "According to Wikipedia...") to reduce fabrication.
 
 Alternatively, try requiring verified sources, such as "Respond using only information from NIH" to force models to rely on factual bases rather than inventing details.
 
@@ -157,7 +157,7 @@ Alternatively, try requiring verified sources, such as "Respond using only infor
 
 Reducing the perplexity of prompts will increase the coherence of outputs. Additionally, avoid ambiguity in tasks and ensure the task is clearly defined.
 
-A weak prompt would be "What, is cancer … !?" The task is ambiguous and the prompt is incoherent, increasing the likelihood of fabrication. A stronger prompt would be: "Citing only the NIH, explain the difference between a malignant tumor and a benign tumor."
+A weak prompt would be "What, is cancer…!?" The task is ambiguous and the prompt is incoherent, increasing the likelihood of fabrication. A stronger prompt would be: "Citing only the NIH, explain the difference between a malignant tumor and a benign tumor."
 
 #### Encourage Structured Reasoning
 
@@ -171,7 +171,7 @@ Disambiguation prompts in LLMs are designed to resolve ambiguity in user queries
 
 Use guardrails to filter inputs and outputs that may contain suspicious or irrelevant queries.
 
-## Secure Your LLM the Right Way​
+## Secure Your LLM the Right Way
 
 Preventing sensitive information disclosure in LLMs is vital, yet it represents just one facet of a holistic approach to LLM and AI security. Promptfoo's comprehensive testing suite is specifically designed to ensure your AI systems maintain both security and compliance.
 
