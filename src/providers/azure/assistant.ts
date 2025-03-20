@@ -696,7 +696,9 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       if (userMessage) {
         const userContent = userMessage.content
           .map((content: { type: string; text?: { value: string } }) =>
-            content.type === 'text' && content.text ? content.text.value : `<${content.type} output>`,
+            content.type === 'text' && content.text
+              ? content.text.value
+              : `<${content.type} output>`,
           )
           .join('\n');
 
