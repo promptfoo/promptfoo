@@ -115,34 +115,34 @@ export class AzureAssistantProvider extends AzureGenericProvider {
 
     const apiVersion = this.assistantConfig.apiVersion || '2024-04-01-preview';
 
-    // Create a simple cache key based on the input and configuration
+    // Process tools if present
+    const tools = this.assistantConfig.tools
+      ? maybeLoadFromExternalFile(renderVarsInObject(this.assistantConfig.tools, context?.vars))
+      : undefined;
+
+    // Create cache key with all relevant parameters
     const cacheKey = `azure_assistant:${this.deploymentName}:${JSON.stringify({
       prompt,
       temperature: this.assistantConfig.temperature,
       top_p: this.assistantConfig.top_p,
       model: this.assistantConfig.modelName,
       instructions: this.assistantConfig.instructions,
-      tools: this.assistantConfig.tools ? JSON.stringify(this.assistantConfig.tools) : undefined,
+      tools, // Include full tools directly
       tool_choice: this.assistantConfig.tool_choice,
     })}`;
 
-    const bustCache = this.assistantConfig.disableCache === true;
+    try {
+      const cache = await getCache();
+      const cachedResult = await cache.get<ProviderResponse>(cacheKey);
 
-    // Only check cache if we're not busting it
-    if (!bustCache) {
-      try {
-        const cache = await getCache();
-        const cachedResult = await cache.get<ProviderResponse>(cacheKey);
-
-        if (cachedResult) {
-          logger.debug(`Cache hit for assistant prompt: ${prompt.substring(0, 50)}...`);
-          return { ...cachedResult, cached: true };
-        }
-        logger.debug(`Cache miss for assistant prompt: ${prompt.substring(0, 50)}...`);
-      } catch (err) {
-        logger.warn(`Error checking cache: ${err}`);
-        // Continue if cache check fails
+      if (cachedResult) {
+        logger.debug(`Cache hit for assistant prompt: ${prompt.substring(0, 50)}...`);
+        return { ...cachedResult, cached: true };
       }
+      logger.debug(`Cache miss for assistant prompt: ${prompt.substring(0, 50)}...`);
+    } catch (err) {
+      logger.warn(`Error checking cache: ${err}`);
+      // Continue if cache check fails
     }
 
     // Execute the conversation flow
@@ -256,10 +256,11 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       }
 
       // Cache the successful result
-      if (!bustCache && !result.error) {
+      if (!result.error) {
         try {
           const cache = await getCache();
-          await cache.set(cacheKey, result, { ttl: 60 * 60 * 24 * 14 }); // 14 days
+          // Use the default TTL provided by the cache system
+          await cache.set(cacheKey, result);
           logger.debug(`Cached assistant response for prompt: ${prompt.substring(0, 50)}...`);
         } catch (err) {
           logger.warn(`Error caching result: ${err}`);
@@ -270,24 +271,31 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       return result;
     } catch (err: any) {
       logger.error(`Error in Azure Assistant API call: ${err}`);
-      const errorMessage = err.message || String(err);
+      return this.formatError(err);
+    }
+  }
 
-      // Format specific error types
-      if (
-        errorMessage.includes("Can't add messages to thread") &&
-        errorMessage.includes('while a run')
-      ) {
-        return { error: `Error in Azure Assistant API call: ${errorMessage}` };
-      }
-      if (this.isRateLimitError(errorMessage)) {
-        return { error: `Rate limit exceeded: ${errorMessage}` };
-      }
-      if (this.isServiceError(errorMessage)) {
-        return { error: `Service error: ${errorMessage}` };
-      }
+  /**
+   * Format error responses consistently
+   */
+  private formatError(err: any): ProviderResponse {
+    const errorMessage = err.message || String(err);
 
+    // Format specific error types
+    if (
+      errorMessage.includes("Can't add messages to thread") &&
+      errorMessage.includes('while a run')
+    ) {
       return { error: `Error in Azure Assistant API call: ${errorMessage}` };
     }
+    if (this.isRateLimitError(errorMessage)) {
+      return { error: `Rate limit exceeded: ${errorMessage}` };
+    }
+    if (this.isServiceError(errorMessage)) {
+      return { error: `Service error: ${errorMessage}` };
+    }
+
+    return { error: `Error in Azure Assistant API call: ${errorMessage}` };
   }
 
   /**
@@ -296,14 +304,10 @@ export class AzureAssistantProvider extends AzureGenericProvider {
   private async makeRequest<T>(url: string, options: RequestInit): Promise<T> {
     const timeoutMs = this.assistantConfig.timeoutMs || REQUEST_TIMEOUT_MS;
     const retries = this.assistantConfig.retryOptions?.maxRetries || 4;
-    const bustCache = this.assistantConfig.disableCache === true;
 
-    // Never cache polling operations or status checks
-    const shouldNeverCache =
-      (url.includes('/runs/') &&
-        url.includes('?api-version=') &&
-        !url.includes('submit_tool_outputs')) ||
-      options.method === 'GET';
+    // Determine if this is a polling request that should never be cached
+    const isPollingRequest =
+      url.includes('/runs/') && url.includes('?api-version=') && options.method === 'GET';
 
     try {
       const result = await fetchWithCache<T>(
@@ -311,7 +315,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         options,
         timeoutMs,
         'json',
-        bustCache || shouldNeverCache,
+        isPollingRequest, // Only bust cache for polling requests
         retries,
       );
 

@@ -121,10 +121,6 @@ export type AzureAssistantOptions = AzureCompletionOptions &
      */
     maxPollTimeMs?: number;
     /**
-     * Disable caching for API responses
-     */
-    disableCache?: boolean;
-    /**
      * Configuration for network request retry behavior
      */
     retryOptions?: RetryOptions;
