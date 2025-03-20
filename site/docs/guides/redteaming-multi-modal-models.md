@@ -131,6 +131,10 @@ Make sure your purpose statement relates to the image content you're using. This
 
 :::
 
+### Creating Effective Purpose Statements
+
+For effective multi-modal red teaming, your `purpose` statement must specifically describe the image content (e.g., "You analyze this image of Barack Obama speaking at a podium during a press conference"), as promptfoo otherwise generates tests unrelated to what's actually in the image. Concrete, detailed descriptions enable targeted adversarial prompts that truly test how the model handles problematic requests about sensitive visual content.
+
 ### Create the Prompt Template
 
 Create the prompt template for the Amazon Bedrock Nova model:
