@@ -56,6 +56,17 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
     voice?: string;
   };
 
+  // Responses API specific options
+  instructions?: string;
+  max_output_tokens?: number;
+  metadata?: Record<string, string>;
+  parallel_tool_calls?: boolean;
+  previous_response_id?: string;
+  store?: boolean;
+  stream?: boolean;
+  truncation?: 'auto' | 'disabled';
+  user?: string;
+
   /**
    * If set, automatically call these functions when the assistant activates
    * these function tools.

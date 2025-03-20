@@ -60,6 +60,7 @@ import { OpenAiEmbeddingProvider } from './openai/embedding';
 import { OpenAiImageProvider } from './openai/image';
 import { OpenAiModerationProvider } from './openai/moderation';
 import { OpenAiRealtimeProvider } from './openai/realtime';
+import { OpenAiResponsesProvider } from './openai/responses';
 import { parsePackageProvider } from './packageParser';
 import { PortkeyChatCompletionProvider } from './portkey';
 import { PythonProvider } from './pythonCompletion';
@@ -613,6 +614,9 @@ export const providerMap: ProviderFactory[] = [
           providerOptions,
         );
       }
+      if (modelType === 'responses') {
+        return new OpenAiResponsesProvider(modelName || 'gpt-4o', providerOptions);
+      }
       if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
         return new OpenAiChatCompletionProvider(modelType, providerOptions);
       }
@@ -621,6 +625,9 @@ export const providerMap: ProviderFactory[] = [
       }
       if (OpenAiRealtimeProvider.OPENAI_REALTIME_MODEL_NAMES.includes(modelType)) {
         return new OpenAiRealtimeProvider(modelType, providerOptions);
+      }
+      if (OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES.includes(modelType)) {
+        return new OpenAiResponsesProvider(modelType, providerOptions);
       }
       if (modelType === 'assistant') {
         return new OpenAiAssistantProvider(modelName, providerOptions);
