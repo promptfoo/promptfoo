@@ -2,6 +2,12 @@
 
 Evaluate Azure OpenAI Assistants with file search, function tools, and multi-tool interactions.
 
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example azure-openai-assistant
+```
+
 ## Features
 
 - File search via vector stores
@@ -14,19 +20,11 @@ Evaluate Azure OpenAI Assistants with file search, function tools, and multi-too
 This example requires the following environment variables:
 
 - `AZURE_API_KEY` - Your Azure OpenAI API key
-- `AZURE_OPENAI_API_HOST` - (Optional) Your Azure OpenAI API host, defaults to 'promptfoo.openai.azure.com'
+- `AZURE_OPENAI_API_HOST` - Your Azure OpenAI API host (e.g., "your-resource-name.openai.azure.com")
 
 You can set these in a `.env` file or directly in your environment.
 
-## Getting Started
-
-You can run this example with:
-
-```bash
-npx promptfoo@latest init --example azure-openai-assistant
-```
-
-### Prerequisites
+## Prerequisites
 
 1. An Azure OpenAI account with access to the Assistants API
 2. An assistant created in your Azure OpenAI account
@@ -76,7 +74,7 @@ The function tool configuration shows how to define and use custom functions.
 Key components:
 
 - Function tool definition loaded from external file (`tools/weather-function.json`)
-- Inline function callback implementation
+- External function callback implementation in `callbacks/weather.js`
 - Test cases demonstrating tool invocation
 
 ### Multi-Tool Usage
@@ -93,43 +91,35 @@ Key components:
 
 To use this example with your own Azure OpenAI Assistant:
 
-1. Update the assistant ID in each configuration file (currently using `asst_example`)
-2. Replace the vector store ID with your own
-3. Modify the API host to match your Azure OpenAI endpoint
+1. Update the assistant ID in each configuration file (replace `your_assistant_id` with your actual ID)
+2. Replace `your_vector_store_id` with your own vector store ID
+3. Set the `apiHost` to match your Azure OpenAI endpoint (e.g., "your-resource-name.openai.azure.com")
 4. Customize the tools and function callbacks as needed
 
 ## Function Implementation Approaches
 
 This example demonstrates two approaches to implementing functions:
 
-### 1. External Tool Definition with Inline Callback
+### 1. External Tool Definition with External Callback
 
 ```yaml
 # Load tools from external file
 tools: file://tools/weather-function.json
 
-# Inline function callback definition
+# External file-based callback
 functionToolCallbacks:
-  get_weather: |
-    async function(args) {
-      try {
-        const parsedArgs = JSON.parse(args);
-        // Function implementation...
-      } catch (error) {
-        return JSON.stringify({ error: String(error) });
-      }
-    }
+  get_weather: file://callbacks/weather.js:getWeather
 ```
 
-### 2. Multiple Tools with Multiple Callbacks
+### 2. Multiple Tools with Inline Callbacks
 
-For more complex scenarios, you can combine multiple tools and function callbacks:
+For more complex scenarios, you can combine multiple tools and inline function callbacks:
 
 ```yaml
 # Multiple tools defined
-tools: file://tools/multi-tools.json
+tools: file://tools/multiple-tools.json
 
-# Multiple function callbacks
+# Multiple inline function callbacks
 functionToolCallbacks:
   get_weather: |
     async function(args) {
@@ -151,4 +141,4 @@ For more information about using Azure OpenAI with promptfoo, including authenti
 - Both tool definitions and function callbacks can be implemented inline or loaded from external files
 - For production use, consider more robust error handling
 - **File search tool format**: The file search tool must be defined only with `type: "file_search"` without a description field. Adding a description will cause API errors
-- The examples use a placeholder assistant ID `asst_example` - replace this with your actual assistant ID
+- The examples use placeholder values that must be replaced with your actual IDs and endpoints

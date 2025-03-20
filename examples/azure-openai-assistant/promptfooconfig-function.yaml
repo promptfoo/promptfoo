@@ -5,10 +5,10 @@ prompts:
   - 'Answer the following question: {{prompt}}'
 
 providers:
-  - id: azure:assistant:asst_V3UgNCNUSAtHQdit8YimCKlJ
+  - id: azure:assistant:your_assistant_id
     label: azure-assistant-function
     config:
-      apiHost: promptfoo.openai.azure.com
+      apiHost: your-resource-name.openai.azure.com
       # Load tools from external file
       tools: file://tools/weather-function.json
       # Use the external file-based callback
