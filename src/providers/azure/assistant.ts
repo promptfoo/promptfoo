@@ -267,15 +267,19 @@ export class AzureAssistantProvider extends AzureGenericProvider {
 
     // Create a simple cache key based on the input and configuration
     const cacheKey = `azure_assistant:${this.deploymentName}:${JSON.stringify({
-      prompt,
-      temperature: this.assistantConfig.temperature,
-      top_p: this.assistantConfig.top_p,
-      model: this.assistantConfig.modelName,
+      apiVersion,
       instructions: this.assistantConfig.instructions,
+      max_tokens: this.assistantConfig.max_tokens,
+      model: this.assistantConfig.modelName,
+      prompt,
+      response_format: this.assistantConfig.response_format,
+      temperature: this.assistantConfig.temperature,
+      tool_choice: this.assistantConfig.tool_choice,
+      tool_resources: this.assistantConfig.tool_resources,
       tools: JSON.stringify(
         maybeLoadFromExternalFile(renderVarsInObject(this.assistantConfig.tools, context?.vars)),
       ),
-      tool_choice: this.assistantConfig.tool_choice,
+      top_p: this.assistantConfig.top_p,
     })}`;
 
     // Check the cache if enabled
