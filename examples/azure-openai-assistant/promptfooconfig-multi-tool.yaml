@@ -5,10 +5,10 @@ prompts:
   - '{{prompt}}'
 
 providers:
-  - id: azure:assistant:asst_V3UgNCNUSAtHQdit8YimCKlJ
+  - id: azure:assistant:your_assistant_id
     label: azure-assistant-multi-tool
     config:
-      apiHost: promptfoo.openai.azure.com
+      apiHost: your-resource-name.openai.azure.com
       # Load tools from external file
       tools: file://tools/multiple-tools.json
       # Function callbacks for each tool
@@ -58,7 +58,7 @@ providers:
       tool_resources:
         file_search:
           vector_store_ids:
-            - 'vs_Ioe3uJLnZd2Rrw4hEXUhF2Y1'
+            - 'your_vector_store_id'
       # Standard parameters
       temperature: 0.7
       apiVersion: '2024-05-01-preview'

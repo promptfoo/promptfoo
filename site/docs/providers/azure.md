@@ -400,13 +400,16 @@ Azure OpenAI Assistants support custom function tools. You can define functions 
 
 ```yaml
 providers:
-  - id: azure:assistant:asst_example
+  - id: azure:assistant:your_assistant_id
     config:
-      apiHost: promptfoo.openai.azure.com
+      apiHost: your-resource-name.openai.azure.com
       # Load function tool definition
       tools: file://tools/weather-function.json
       # Define function callback inline
       functionToolCallbacks:
+        # Use an external file
+        get_weather: file://callbacks/weather.js:getWeather
+        # Or use an inline function
         get_weather: |
           async function(args) {
             try {
@@ -432,9 +435,9 @@ Azure OpenAI Assistants support vector stores for enhanced file search capabilit
 
 ```yaml
 providers:
-  - id: azure:assistant:asst_V3UgNCNUSAtHQdit8YimCKlJ
+  - id: azure:assistant:your_assistant_id
     config:
-      apiHost: promptfoo.openai.azure.com
+      apiHost: your-resource-name.openai.azure.com
       # Add tools for file search
       tools:
         - type: file_search
@@ -442,7 +445,7 @@ providers:
       tool_resources:
         file_search:
           vector_store_ids:
-            - 'vs_Ioe3uJLnZd2Rrw4hEXUhF2Y1'
+            - 'your_vector_store_id'
       # Optional parameters
       temperature: 1
       top_p: 1
@@ -464,9 +467,9 @@ prompts:
   - 'Write a tweet about {{topic}}'
 
 providers:
-  - id: azure:assistant:asst_E4GyOBYKlnAzMi19SZF2Sn8I
+  - id: azure:assistant:your_assistant_id
     config:
-      apiHost: yourdeploymentname.openai.azure.com
+      apiHost: your-resource-name.openai.azure.com
 
 tests:
   - vars:

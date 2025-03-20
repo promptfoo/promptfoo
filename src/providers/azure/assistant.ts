@@ -1,7 +1,12 @@
+import path from 'path';
 import { fetchWithCache } from '../../cache';
+import { getCache, isCacheEnabled } from '../../cache';
+import cliState from '../../cliState';
+import { importModule } from '../../esm';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
+import { isJavascriptFile } from '../../util/file';
 import { sleep } from '../../util/time';
 import { REQUEST_TIMEOUT_MS, toTitleCase } from '../shared';
 import { AzureGenericProvider } from './generic';
@@ -91,10 +96,156 @@ interface RunStepsResponse {
 
 export class AzureAssistantProvider extends AzureGenericProvider {
   assistantConfig: AzureAssistantOptions;
+  private loadedFunctionCallbacks: Record<string, Function> = {};
 
   constructor(deploymentName: string, options: AzureAssistantProviderOptions = {}) {
     super(deploymentName, options);
     this.assistantConfig = options.config || {};
+
+    // Preload function callbacks if available
+    if (this.assistantConfig.functionToolCallbacks) {
+      this.preloadFunctionCallbacks();
+    }
+  }
+
+  /**
+   * Preloads all function callbacks to ensure they're ready when needed
+   */
+  private async preloadFunctionCallbacks() {
+    if (!this.assistantConfig.functionToolCallbacks) {
+      return;
+    }
+
+    const callbacks = this.assistantConfig.functionToolCallbacks;
+    for (const [name, callback] of Object.entries(callbacks)) {
+      try {
+        if (typeof callback === 'string') {
+          // Check if it's a file reference
+          const callbackStr: string = callback;
+          if (callbackStr.startsWith('file://')) {
+            const fn = await this.loadExternalFunction(callbackStr);
+            this.loadedFunctionCallbacks[name] = fn;
+            logger.debug(`Successfully preloaded function callback '${name}' from file`);
+          } else {
+            // It's an inline function string
+            this.loadedFunctionCallbacks[name] = new Function('return ' + callbackStr)();
+            logger.debug(`Successfully preloaded inline function callback '${name}'`);
+          }
+        } else if (typeof callback === 'function') {
+          this.loadedFunctionCallbacks[name] = callback;
+          logger.debug(`Successfully stored function callback '${name}'`);
+        }
+      } catch (error) {
+        logger.error(`Failed to preload function callback '${name}': ${error}`);
+      }
+    }
+  }
+
+  /**
+   * Loads a function from an external file
+   * @param fileRef The file reference in the format 'file://path/to/file:functionName'
+   * @returns The loaded function
+   */
+  private async loadExternalFunction(fileRef: string): Promise<Function> {
+    let filePath = fileRef.slice('file://'.length);
+    let functionName: string | undefined;
+
+    if (filePath.includes(':')) {
+      const splits = filePath.split(':');
+      if (splits[0] && isJavascriptFile(splits[0])) {
+        [filePath, functionName] = splits;
+      }
+    }
+
+    try {
+      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
+      logger.debug(
+        `Loading function from ${resolvedPath}${functionName ? `:${functionName}` : ''}`,
+      );
+
+      const requiredModule = await importModule(resolvedPath, functionName);
+
+      if (typeof requiredModule === 'function') {
+        return requiredModule;
+      } else if (
+        requiredModule &&
+        typeof requiredModule === 'object' &&
+        functionName &&
+        functionName in requiredModule
+      ) {
+        const fn = requiredModule[functionName];
+        if (typeof fn === 'function') {
+          return fn;
+        }
+      }
+
+      throw new Error(
+        `Function callback malformed: ${filePath} must export ${
+          functionName
+            ? `a named function '${functionName}'`
+            : 'a function or have a default export as a function'
+        }`,
+      );
+    } catch (error: any) {
+      throw new Error(`Error loading function from ${filePath}: ${error.message || String(error)}`);
+    }
+  }
+
+  /**
+   * Executes a function callback with proper error handling
+   */
+  private async executeFunctionCallback(functionName: string, args: string): Promise<string> {
+    try {
+      // Check if we've already loaded this function
+      let callback = this.loadedFunctionCallbacks[functionName];
+
+      // If not loaded yet, try to load it now
+      if (!callback) {
+        const callbackRef = this.assistantConfig.functionToolCallbacks?.[functionName];
+
+        if (callbackRef && typeof callbackRef === 'string') {
+          const callbackStr: string = callbackRef;
+          if (callbackStr.startsWith('file://')) {
+            callback = await this.loadExternalFunction(callbackStr);
+          } else {
+            callback = new Function('return ' + callbackStr)();
+          }
+
+          // Cache for future use
+          this.loadedFunctionCallbacks[functionName] = callback;
+        } else if (typeof callbackRef === 'function') {
+          callback = callbackRef;
+          this.loadedFunctionCallbacks[functionName] = callback;
+        }
+      }
+
+      if (!callback) {
+        throw new Error(`No callback found for function '${functionName}'`);
+      }
+
+      // Execute the callback
+      logger.debug(`Executing function '${functionName}' with args: ${args}`);
+      const result = await callback(args);
+
+      // Format the result
+      if (result === undefined || result === null) {
+        return '';
+      } else if (typeof result === 'object') {
+        try {
+          return JSON.stringify(result);
+        } catch (error) {
+          logger.warn(`Error stringifying result from function '${functionName}': ${error}`);
+          return String(result);
+        }
+      } else {
+        return String(result);
+      }
+    } catch (error: any) {
+      logger.error(`Error executing function '${functionName}': ${error.message || String(error)}`);
+      return JSON.stringify({
+        error: `Error in ${functionName}: ${error.message || String(error)}`,
+      });
+    }
   }
 
   async callApi(
@@ -114,8 +265,42 @@ export class AzureAssistantProvider extends AzureGenericProvider {
 
     const apiVersion = this.assistantConfig.apiVersion || '2024-04-01-preview';
 
+    // Create a simple cache key based on the input and configuration
+    const cacheKey = `azure_assistant:${this.deploymentName}:${JSON.stringify({
+      apiVersion,
+      instructions: this.assistantConfig.instructions,
+      max_tokens: this.assistantConfig.max_tokens,
+      model: this.assistantConfig.modelName,
+      prompt,
+      response_format: this.assistantConfig.response_format,
+      temperature: this.assistantConfig.temperature,
+      tool_choice: this.assistantConfig.tool_choice,
+      tool_resources: this.assistantConfig.tool_resources,
+      tools: JSON.stringify(
+        maybeLoadFromExternalFile(renderVarsInObject(this.assistantConfig.tools, context?.vars)),
+      ),
+      top_p: this.assistantConfig.top_p,
+    })}`;
+
+    // Check the cache if enabled
+    if (isCacheEnabled()) {
+      try {
+        const cache = await getCache();
+        const cachedResult = await cache.get<ProviderResponse>(cacheKey);
+
+        if (cachedResult) {
+          logger.debug(`Cache hit for assistant prompt: ${prompt.substring(0, 50)}...`);
+          return { ...cachedResult, cached: true };
+        }
+      } catch (err) {
+        logger.warn(`Error checking cache: ${err}`);
+        // Continue if cache check fails
+      }
+    }
+
+    // Execute the conversation flow
     try {
-      // 1. Create a thread
+      // Create a thread
       const threadResponse = await this.makeRequest<ThreadResponse>(
         `${apiBaseUrl}/openai/threads?api-version=${apiVersion}`,
         {
@@ -125,7 +310,9 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         },
       );
 
-      // 2. Create a message
+      logger.debug(`Created thread ${threadResponse.id} for prompt: ${prompt.substring(0, 30)}...`);
+
+      // Create a message
       await this.makeRequest(
         `${apiBaseUrl}/openai/threads/${threadResponse.id}/messages?api-version=${apiVersion}`,
         {
@@ -138,7 +325,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         },
       );
 
-      // 3. Prepare the run options
+      // Prepare the run options
       const runOptions: Record<string, any> = {
         assistant_id: this.deploymentName,
       };
@@ -168,9 +355,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         runOptions.instructions = this.assistantConfig.instructions;
       }
 
-      logger.debug(`Creating run with options: ${JSON.stringify(runOptions)}`);
-
-      // 4. Create a run
+      // Create a run
       const runResponse = await this.makeRequest<RunResponse>(
         `${apiBaseUrl}/openai/threads/${threadResponse.id}/runs?api-version=${apiVersion}`,
         {
@@ -180,80 +365,88 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         },
       );
 
-      // 5. Handle function calls if needed
+      // Handle function calls if needed or poll for completion
+      let result: ProviderResponse;
       if (
         this.assistantConfig.functionToolCallbacks &&
         Object.keys(this.assistantConfig.functionToolCallbacks).length > 0
       ) {
-        return await this.pollRunWithToolCallHandling(
+        result = await this.pollRunWithToolCallHandling(
           apiBaseUrl,
           apiVersion,
           threadResponse.id,
           runResponse.id,
         );
-      }
+      } else {
+        // Poll for completion
+        const completedRun = await this.pollRun(
+          apiBaseUrl,
+          apiVersion,
+          threadResponse.id,
+          runResponse.id,
+        );
 
-      // 6. Poll for completion
-      const completedRun = await this.pollRun(
-        apiBaseUrl,
-        apiVersion,
-        threadResponse.id,
-        runResponse.id,
-      );
-
-      // 7. Process the completed run
-      if (completedRun.status !== 'completed') {
-        if (completedRun.last_error) {
-          return {
-            error: `Thread run failed: ${completedRun.last_error.code || ''} - ${completedRun.last_error.message}`,
-          };
+        // Process the completed run
+        if (completedRun.status === 'completed') {
+          result = await this.processCompletedRun(
+            apiBaseUrl,
+            apiVersion,
+            threadResponse.id,
+            completedRun,
+          );
+        } else {
+          if (completedRun.last_error) {
+            result = {
+              error: `Thread run failed: ${completedRun.last_error.code || ''} - ${completedRun.last_error.message}`,
+            };
+          } else {
+            result = {
+              error: `Thread run failed with status: ${completedRun.status}`,
+            };
+          }
         }
-        return {
-          error: `Thread run failed with status: ${completedRun.status}`,
-        };
       }
 
-      // 8. Process messages and steps
-      return await this.processCompletedRun(
-        apiBaseUrl,
-        apiVersion,
-        threadResponse.id,
-        completedRun,
-      );
+      // Cache successful results if caching is enabled
+      if (isCacheEnabled() && !result.error) {
+        try {
+          const cache = await getCache();
+          await cache.set(cacheKey, result);
+          logger.debug(`Cached assistant response for prompt: ${prompt.substring(0, 50)}...`);
+        } catch (err) {
+          logger.warn(`Error caching result: ${err}`);
+          // Continue even if caching fails
+        }
+      }
+
+      return result;
     } catch (err: any) {
       logger.error(`Error in Azure Assistant API call: ${err}`);
-
-      // Check for specific error cases
-      const errorMessage = err.message || String(err);
-
-      // Handle thread with run in progress errors - these aren't retryable as we need a new thread
-      if (
-        errorMessage.includes("Can't add messages to thread") &&
-        errorMessage.includes('while a run')
-      ) {
-        return {
-          error: `Error in Azure Assistant API call: ${errorMessage}`,
-        };
-      }
-
-      // Check for rate limit errors
-      if (this.isRateLimitError(errorMessage)) {
-        return {
-          error: `Rate limit exceeded: ${errorMessage}`,
-        };
-      }
-
-      // Check for service errors
-      if (this.isServiceError(errorMessage)) {
-        return {
-          error: `Service error: ${errorMessage}`,
-        };
-      }
-
-      return {
-        error: `Error in Azure Assistant API call: ${errorMessage}`,
-      };
+      return this.formatError(err);
     }
+  }
+
+  /**
+   * Format error responses consistently
+   */
+  private formatError(err: any): ProviderResponse {
+    const errorMessage = err.message || String(err);
+
+    // Format specific error types
+    if (
+      errorMessage.includes("Can't add messages to thread") &&
+      errorMessage.includes('while a run')
+    ) {
+      return { error: `Error in Azure Assistant API call: ${errorMessage}` };
+    }
+    if (this.isRateLimitError(errorMessage)) {
+      return { error: `Rate limit exceeded: ${errorMessage}` };
+    }
+    if (this.isServiceError(errorMessage)) {
+      return { error: `Service error: ${errorMessage}` };
+    }
+
+    return { error: `Error in Azure Assistant API call: ${errorMessage}` };
   }
 
   /**
@@ -262,13 +455,37 @@ export class AzureAssistantProvider extends AzureGenericProvider {
   private async makeRequest<T>(url: string, options: RequestInit): Promise<T> {
     const timeoutMs = this.assistantConfig.timeoutMs || REQUEST_TIMEOUT_MS;
     const retries = this.assistantConfig.retryOptions?.maxRetries || 4;
-    const bustCache = this.assistantConfig.disableCache === true;
+
+    // These operations should never be cached
+    const shouldBustCache =
+      // Polling operations for run status
+      (url.includes('/runs/') && options.method === 'GET') ||
+      // Thread creation - always create a fresh thread
+      (url.includes('/threads') &&
+        options.method === 'POST' &&
+        !url.includes('/messages') &&
+        !url.includes('submit_tool_outputs'));
 
     try {
-      const result = await fetchWithCache<T>(url, options, timeoutMs, 'json', bustCache, retries);
+      const result = await fetchWithCache<T>(
+        url,
+        options,
+        timeoutMs,
+        'json',
+        shouldBustCache,
+        retries,
+      );
+
+      // Ensure we have a result
+      if (!result) {
+        throw new Error(`Empty response received from API endpoint: ${url}`);
+      }
 
       if (result.status < 200 || result.status >= 300) {
-        // Handle error response that was cached or returned
+        // For error responses, delete from cache to avoid reusing
+        await result.deleteFromCache?.();
+
+        // Handle error response
         throw new Error(
           `API error: ${result.status} ${result.statusText}${
             result.data && typeof result.data === 'object' && 'error' in result.data
@@ -278,6 +495,11 @@ export class AzureAssistantProvider extends AzureGenericProvider {
                 : ''
           }`,
         );
+      }
+
+      // Ensure result.data exists before returning it
+      if (result.data === undefined || result.data === null) {
+        throw new Error(`Received null or undefined data from API endpoint: ${url}`);
       }
 
       // Result data is already parsed as JSON by fetchWithCache
@@ -451,37 +673,64 @@ export class AzureAssistantProvider extends AzureGenericProvider {
             });
 
             if (functionCallsWithCallbacks.length === 0) {
-              logger.error(
-                `No function calls with callbacks found. Available functions: ${Object.keys(
+              // No matching callbacks found, but we should still handle the required action
+              // Let's log this situation but continue without breaking
+              logger.debug(
+                `No matching callbacks found for tool calls. Available functions: ${Object.keys(
                   this.assistantConfig.functionToolCallbacks || {},
                 ).join(', ')}. Tool calls: ${JSON.stringify(toolCalls)}`,
               );
-              break;
+
+              // Submit empty outputs for all tool calls
+              const emptyOutputs = toolCalls.map((toolCall) => ({
+                tool_call_id: toolCall.id,
+                output: JSON.stringify({
+                  message: `No callback registered for function ${toolCall.type === 'function' ? toolCall.function?.name : toolCall.type}`,
+                }),
+              }));
+
+              // Submit the empty outputs to continue the run
+              try {
+                await this.makeRequest(
+                  `${apiBaseUrl}/openai/threads/${threadId}/runs/${runId}/submit_tool_outputs?api-version=${apiVersion}`,
+                  {
+                    method: 'POST',
+                    headers: await this.getHeaders(),
+                    body: JSON.stringify({
+                      tool_outputs: emptyOutputs,
+                    }),
+                  },
+                );
+                // Continue polling after submission
+                await sleep(pollIntervalMs);
+                continue;
+              } catch (error: any) {
+                logger.error(`Error submitting empty tool outputs: ${error.message}`);
+                return {
+                  error: `Error submitting empty tool outputs: ${error.message}`,
+                };
+              }
             }
 
-            // Process tool calls
+            // Process tool calls that have matching callbacks
             const toolOutputs = await Promise.all(
               functionCallsWithCallbacks.map(async (toolCall) => {
                 const functionName = toolCall.function!.name;
                 const functionArgs = toolCall.function!.arguments;
-                const callback = this.assistantConfig.functionToolCallbacks?.[functionName];
 
                 try {
                   logger.debug(`Calling function ${functionName} with args: ${functionArgs}`);
 
-                  let result;
-                  if (typeof callback === 'string') {
-                    logger.debug(`Callback is a string, evaluating as function: ${callback}`);
-                    const asyncFunction = new Function('return ' + callback)();
-                    result = await asyncFunction(functionArgs);
-                  } else {
-                    result = await callback!(functionArgs);
-                  }
+                  // Use our new executeFunctionCallback method
+                  const outputResult = await this.executeFunctionCallback(
+                    functionName,
+                    functionArgs,
+                  );
 
-                  logger.debug(`Function ${functionName} result: ${result}`);
+                  logger.debug(`Function ${functionName} result: ${outputResult}`);
                   return {
                     tool_call_id: toolCall.id,
-                    output: result,
+                    output: outputResult,
                   };
                 } catch (error) {
                   logger.error(`Error calling function ${functionName}: ${error}`);
@@ -585,6 +834,17 @@ export class AzureAssistantProvider extends AzureGenericProvider {
     try {
       const runId = typeof runIdOrResponse === 'string' ? runIdOrResponse : runIdOrResponse.id;
 
+      // Get run information if we only have the ID
+      if (typeof runIdOrResponse === 'string') {
+        await this.makeRequest<RunResponse>(
+          `${apiBaseUrl}/openai/threads/${threadId}/runs/${runId}?api-version=${apiVersion}`,
+          {
+            method: 'GET',
+            headers: await this.getHeaders(),
+          },
+        );
+      }
+
       // Get all messages in the thread
       const messagesResponse = await this.makeRequest<MessageListResponse>(
         `${apiBaseUrl}/openai/threads/${threadId}/messages?api-version=${apiVersion}`,
@@ -603,36 +863,36 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         },
       );
 
+      // Process user messages first, then assistant messages and tool calls
       const outputBlocks: string[] = [];
-      const runResponseObj =
-        typeof runIdOrResponse === 'string'
-          ? await this.makeRequest<RunResponse>(
-              `${apiBaseUrl}/openai/threads/${threadId}/runs/${runId}?api-version=${apiVersion}`,
-              {
-                method: 'GET',
-                headers: await this.getHeaders(),
-              },
-            )
-          : runIdOrResponse;
 
-      // Process messages
-      const messages = messagesResponse.data || [];
-      for (const message of messages) {
-        // Only include messages created after the run started
-        if (new Date(message.created_at) >= new Date(runResponseObj.created_at)) {
-          const contentBlocks = message.content
-            .map((content) =>
-              content.type === 'text' ? content.text!.value : `<${content.type} output>`,
-            )
-            .join('\n');
+      // Get all messages - sort by creation time
+      const allMessages = messagesResponse.data.sort((a, b) => a.created_at - b.created_at); // Sort chronologically
 
-          outputBlocks.push(`[${toTitleCase(message.role)}] ${contentBlocks}`);
-        }
+      // We need to extract the user message that triggered this run
+      // Since we create a new thread for each evaluation, the only user message is the one we created
+      const userMessage = allMessages.find((message) => message.role === 'user');
+
+      // Always start with the user's message if we found one
+      if (userMessage) {
+        const userContent = userMessage.content
+          .map((content: { type: string; text?: { value: string } }) =>
+            content.type === 'text' && content.text
+              ? content.text.value
+              : `<${content.type} output>`,
+          )
+          .join('\n');
+
+        outputBlocks.push(`[User] ${userContent}`);
       }
 
-      // Process run steps to capture tool call details
-      const steps = stepsResponse.data || [];
-      for (const step of steps) {
+      // Generate the sequence of file searches, function calls, and assistant responses
+      // Since all tools steps are part of the assistant's thinking process, we'll place them
+      // before the assistant's response to maintain a logical flow: user → tool operations → assistant response
+
+      // First, extract all the tool calls and organize them
+      const toolCallBlocks: string[] = [];
+      for (const step of stepsResponse.data || []) {
         // Check if step is a tool call step with tool_calls array
         if (
           step.type === 'tool_calls' &&
@@ -645,41 +905,71 @@ export class AzureAssistantProvider extends AzureGenericProvider {
 
           for (const toolCall of toolCalls) {
             if (toolCall.type === 'function' && toolCall.function) {
-              outputBlocks.push(
+              toolCallBlocks.push(
                 `[Call function ${toolCall.function.name} with arguments ${toolCall.function.arguments}]`,
               );
               if (toolCall.function.output) {
-                outputBlocks.push(`[Function output: ${toolCall.function.output}]`);
+                toolCallBlocks.push(`[Function output: ${toolCall.function.output}]`);
               }
-            } else if (
-              toolCall.type &&
-              toolCall.type === 'code_interpreter' &&
-              toolCall.code_interpreter
-            ) {
+            } else if (toolCall.type === 'code_interpreter' && toolCall.code_interpreter) {
               const outputs = toolCall.code_interpreter.outputs || [];
               const input = toolCall.code_interpreter.input || '';
 
               const outputText =
                 outputs
-                  .map((output) =>
+                  .map((output: { type: string; logs?: string }) =>
                     output.type === 'logs' ? output.logs : `<${output.type} output>`,
                   )
                   .join('\n') || '[No output]';
 
-              outputBlocks.push(`[Code interpreter input]`);
-              outputBlocks.push(input || '[No input]');
-              outputBlocks.push(`[Code interpreter output]`);
-              outputBlocks.push(outputText);
-            } else if (toolCall.type && toolCall.type === 'file_search' && toolCall.file_search) {
-              outputBlocks.push(`[Ran file search]`);
-              outputBlocks.push(`[File search details: ${JSON.stringify(toolCall.file_search)}]`);
+              toolCallBlocks.push(`[Code interpreter input]`);
+              toolCallBlocks.push(input || '[No input]');
+              toolCallBlocks.push(`[Code interpreter output]`);
+              toolCallBlocks.push(outputText);
+            } else if (toolCall.type === 'file_search' && toolCall.file_search) {
+              toolCallBlocks.push(`[Ran file search]`);
+              toolCallBlocks.push(`[File search details: ${JSON.stringify(toolCall.file_search)}]`);
             } else if (toolCall.type && String(toolCall.type) === 'retrieval') {
-              outputBlocks.push(`[Ran retrieval]`);
+              toolCallBlocks.push(`[Ran retrieval]`);
             } else {
-              outputBlocks.push(`[Unknown tool call type: ${String(toolCall.type)}]`);
+              toolCallBlocks.push(`[Unknown tool call type: ${String(toolCall.type)}]`);
             }
           }
         }
+      }
+
+      // Next, extract the assistant's response -
+      // Filter assistant messages to only those created for this run
+      const assistantMessages = allMessages.filter((message) => message.role === 'assistant');
+
+      // For each assistant message, add it to the output blocks
+      for (const message of assistantMessages) {
+        const contentBlocks = message.content
+          .map((content: { type: string; text?: { value: string } }) =>
+            content.type === 'text' ? content.text!.value : `<${content.type} output>`,
+          )
+          .join('\n');
+
+        outputBlocks.push(`[${toTitleCase(message.role)}] ${contentBlocks}`);
+      }
+
+      // Now, combine everything in the correct order:
+      // 1. User message (already added)
+      // 2. Tool call blocks (file search, etc.)
+      // 3. Assistant messages (already added)
+
+      // Add tool call blocks after user message but before assistant response
+      // Find the index of the first assistant message block
+      const assistantBlockIndex = outputBlocks.findIndex((block) =>
+        block.startsWith('[Assistant]'),
+      );
+
+      if (assistantBlockIndex > 0) {
+        // Insert the tool calls before the first assistant message
+        outputBlocks.splice(assistantBlockIndex, 0, ...toolCallBlocks);
+      } else {
+        // If there are no assistant messages, just append the tool calls
+        outputBlocks.push(...toolCallBlocks);
       }
 
       return {
