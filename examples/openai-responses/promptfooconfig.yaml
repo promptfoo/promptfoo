@@ -1,0 +1,63 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Structured JSON Output with OpenAI Responses API
+prompts:
+  - 'Create a short story about {{topic}} with a beginning, middle, and end. Include a title, setting, main characters, and plot.'
+
+providers:
+  - id: openai:responses:gpt-4o
+    config:
+      temperature: 0.7
+      max_output_tokens: 500
+      instructions: 'You are a helpful, creative AI assistant. Return a well-structured story.'
+      response_format:
+        type: 'json_schema'
+        schema:
+          type: 'object'
+          properties:
+            title:
+              type: 'string'
+              description: 'The title of the story'
+            setting:
+              type: 'object'
+              properties:
+                location:
+                  type: 'string'
+                  description: 'Where the story takes place'
+                time_period:
+                  type: 'string'
+                  description: 'When the story takes place'
+              # Required for Responses API
+              required: ['location', 'time_period']
+              additionalProperties: false
+            characters:
+              type: 'array'
+              items:
+                type: 'object'
+                properties:
+                  name:
+                    type: 'string'
+                  description:
+                    type: 'string'
+                # Required for Responses API
+                required: ['name', 'description']
+                additionalProperties: false
+            plot:
+              type: 'object'
+              properties:
+                beginning:
+                  type: 'string'
+                middle:
+                  type: 'string'
+                end:
+                  type: 'string'
+              # Required for Responses API
+              required: ['beginning', 'middle', 'end']
+              additionalProperties: false
+          required: ['title', 'setting', 'characters', 'plot']
+          additionalProperties: false
+
+tests:
+  - vars:
+      topic: a magical forest
+  - vars:
+      topic: space exploration

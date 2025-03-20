@@ -1,0 +1,76 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Azure OpenAI Assistant with Multiple Tools
+
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - id: azure:assistant:your_assistant_id
+    label: azure-assistant-multi-tool
+    config:
+      apiHost: your-resource-name.openai.azure.com
+      # Load tools from external file
+      tools: file://tools/multiple-tools.json
+      # Function callbacks for each tool
+      functionToolCallbacks:
+        get_weather: |
+          async function(args) {
+            try {
+              const parsedArgs = JSON.parse(args);
+              const location = parsedArgs.location;
+              const unit = parsedArgs.unit || 'c';
+              console.log(`Weather request for ${location} in ${unit}`);
+              
+              // Simple weather response
+              return JSON.stringify({
+                location,
+                temperature: unit === 'c' ? 22 : 72,
+                unit,
+                condition: 'sunny',
+                forecast: 'Clear skies for the next few days.'
+              });
+            } catch (error) {
+              console.error('Error in get_weather function:', error);
+              return JSON.stringify({ error: String(error) });
+            }
+          }
+        suggest_recipe: |
+          async function(args) {
+            try {
+              const parsedArgs = JSON.parse(args);
+              const ingredients = parsedArgs.ingredients || [];
+              console.log(`Recipe requested with ingredients: ${ingredients.join(', ')}`);
+              
+              // Simple recipe suggestion
+              return JSON.stringify({
+                recipe: {
+                  name: "Simple Pasta",
+                  ingredients: ["pasta", "olive oil", "garlic", "salt"],
+                  instructions: "1. Boil pasta\n2. Heat oil and garlic\n3. Toss pasta in oil\n4. Season to taste"
+                }
+              });
+            } catch (error) {
+              console.error('Error in suggest_recipe function:', error);
+              return JSON.stringify({ error: String(error) });
+            }
+          }
+      # Vector store configuration for file search
+      tool_resources:
+        file_search:
+          vector_store_ids:
+            - 'your_vector_store_id'
+      # Standard parameters
+      temperature: 0.7
+      apiVersion: '2024-05-01-preview'
+      debug: true
+
+tests:
+  # Multi-tool usage tests
+  - vars:
+      prompt: I'm planning to run some LLM evaluations tomorrow. Can you tell me about promptfoo's command line options and also check the weather in San Francisco?
+  - vars:
+      prompt: I need information about vector stores in promptfoo, the weather in Tokyo, and a simple pasta recipe for dinner.
+  - vars:
+      prompt: How do I set up a promptfoo evaluation? By the way, what's the weather like in Seattle today?
+  - vars:
+      prompt: I have pasta and garlic. Can you suggest a recipe and also help me understand how to use custom assertions in promptfoo?

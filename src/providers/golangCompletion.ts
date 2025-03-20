@@ -113,15 +113,7 @@ export class GolangProvider implements ApiProvider {
             if (entry.isDirectory()) {
               copyDir(srcPath, destPath);
             } else {
-              // Special handling for main.go to remove var CallApi declaration
-              if (entry.name === 'main.go') {
-                let content = fs.readFileSync(srcPath, 'utf-8');
-                // Remove the var CallApi declaration while preserving the file
-                content = content.replace(/\/\/\s*CallApi[\s\S]*?var\s+CallApi[\s\S]*?\n/s, '');
-                fs.writeFileSync(destPath, content);
-              } else {
-                fs.copyFileSync(srcPath, destPath);
-              }
+              fs.copyFileSync(srcPath, destPath);
             }
           }
         };
@@ -142,6 +134,7 @@ export class GolangProvider implements ApiProvider {
 
         // Build from the script directory
         const compileCommand = `cd ${scriptDir} && ${this.config.goExecutable || 'go'} build -o ${executablePath} wrapper.go ${path.basename(relativeScriptPath)}`;
+
         await execAsync(compileCommand);
 
         const jsonArgs = safeJsonStringify(args) || '[]';

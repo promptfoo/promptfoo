@@ -24,11 +24,25 @@ export const OPENAI_CHAT_MODELS = [
       output: 150 / 1e6,
     },
   })),
+  ...['o1-pro'].map((model) => ({
+    id: model,
+    cost: {
+      input: 150 / 1e6,
+      output: 600 / 1e6,
+    },
+  })),
   ...['o1', 'o1-2024-12-17', 'o1-preview', 'o1-preview-2024-09-12'].map((model) => ({
     id: model,
     cost: {
       input: 15 / 1e6,
       output: 60 / 1e6,
+    },
+  })),
+  ...['o1-pro', 'o1-pro-2025-03-19'].map((model) => ({
+    id: model,
+    cost: {
+      input: 150 / 1e6,
+      output: 600 / 1e6,
     },
   })),
   ...['o1-mini', 'o1-mini-2024-09-12'].map((model) => ({

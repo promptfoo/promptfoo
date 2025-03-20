@@ -32,7 +32,6 @@ describe('GolangProvider', () => {
   const mockExistsSync = jest.mocked(fs.existsSync);
   const mockRmSync = jest.mocked(fs.rmSync);
   const mockReaddirSync = jest.mocked(fs.readdirSync);
-  const mockWriteFileSync = jest.mocked(fs.writeFileSync);
   const mockCopyFileSync = jest.mocked(fs.copyFileSync);
   const mockMkdirSync = jest.mocked(fs.mkdirSync);
 
@@ -631,7 +630,7 @@ describe('GolangProvider', () => {
       await expect(provider.callApi('test prompt')).rejects.toThrow('File copy error');
     });
 
-    it('should handle main.go file content transformation', async () => {
+    it('should copy main.go files without transformation', async () => {
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to' },
       });
@@ -659,17 +658,11 @@ describe('GolangProvider', () => {
         return 'other content';
       });
 
-      let writtenContent = '';
-      const mockWrite = jest
-        .fn()
-        .mockImplementation((p: fs.PathOrFileDescriptor, content: string) => {
-          if (p.toString().endsWith('main.go')) {
-            writtenContent = content;
-          }
-        });
-      mockWriteFileSync.mockImplementation(mockWrite);
-
-      mockCopyFileSync.mockImplementation(() => undefined);
+      const copiedFiles: { src: string; dest: string }[] = [];
+      mockCopyFileSync.mockImplementation((src: fs.PathLike, dest: fs.PathLike) => {
+        copiedFiles.push({ src: src.toString(), dest: dest.toString() });
+        return undefined;
+      });
 
       mockExec.mockImplementation(((cmd: string, callback: any) => {
         if (!callback) {
@@ -681,10 +674,15 @@ describe('GolangProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(writtenContent).not.toContain('var CallApi');
-      expect(writtenContent).toContain('package main');
-      expect(writtenContent).toContain('func main()');
-      expect(writtenContent).toContain('// Some code');
+      // Verify that main.go was copied, not transformed
+      expect(copiedFiles).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            src: expect.stringContaining('main.go'),
+            dest: expect.stringContaining('main.go'),
+          }),
+        ]),
+      );
     });
 
     it('should correctly handle nested directories in copyDir', async () => {
@@ -739,8 +737,7 @@ describe('GolangProvider', () => {
       );
     });
 
-    // Add test for file writing errors
-    it('should handle writeFileSync errors', async () => {
+    it('should handle copyFileSync errors', async () => {
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to' },
       });
@@ -749,13 +746,11 @@ describe('GolangProvider', () => {
         { name: 'main.go', isDirectory: () => false },
       ] as unknown as fs.Dirent[]);
 
-      mockReadFileSync.mockReturnValue('package main\nfunc main() {}');
-
-      mockWriteFileSync.mockImplementation(() => {
-        throw new Error('Failed to write file');
+      mockCopyFileSync.mockImplementation(() => {
+        throw new Error('Failed to copy file');
       });
 
-      await expect(provider.callApi('test prompt')).rejects.toThrow('Failed to write file');
+      await expect(provider.callApi('test prompt')).rejects.toThrow('Failed to copy file');
     });
   });
 });

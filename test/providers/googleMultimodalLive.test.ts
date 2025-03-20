@@ -331,4 +331,146 @@ describe('GoogleMMLiveProvider', () => {
       process.env.GOOGLE_API_KEY = originalApiKey;
     }
   });
+
+  it('should handle function tool callbacks correctly', async () => {
+    jest.mocked(WebSocket).mockImplementation(() => {
+      setTimeout(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulatePartsMessage(mockWs, [
+          {
+            executableCode: {
+              language: 'PYTHON',
+              code: 'print(default_api.addNumbers(a=5, b=6))\n',
+            },
+          },
+        ]);
+        simulateFunctionCallMessage(mockWs, [
+          { name: 'addNumbers', args: { a: 5, b: 6 }, id: 'function-call-13767088400406609799' },
+        ]);
+        simulatePartsMessage(mockWs, [
+          { codeExecutionResult: { outcome: 'OUTCOME_OK', output: '{"sum": 11}\n' } },
+        ]);
+        simulateTextMessage(mockWs, 'The sum of 5 and 6 is 11.\n');
+        simulateCompletionMessage(mockWs);
+      }, 60);
+      return mockWs;
+    });
+
+    const mockAddNumbers = jest.fn().mockResolvedValue({ sum: 5 + 6 });
+
+    provider = new GoogleMMLiveProvider('gemini-2.0-flash-exp', {
+      config: {
+        generationConfig: {
+          response_modalities: ['text'],
+        },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: 'addNumbers',
+                description: 'Add two numbers together',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    a: { type: 'number' },
+                    b: { type: 'number' },
+                  },
+                  required: ['a', 'b'],
+                },
+              },
+            ],
+          },
+        ],
+        functionToolCallbacks: {
+          addNumbers: mockAddNumbers,
+        },
+      },
+    });
+
+    const response = await provider.callApi('What is the sum of 5 and 6?');
+    expect(response).toEqual({
+      output: JSON.stringify({
+        text: 'The sum of 5 and 6 is 11.\n',
+        toolCall: {
+          functionCalls: [
+            { name: 'addNumbers', args: { a: 5, b: 6 }, id: 'function-call-13767088400406609799' },
+          ],
+        },
+      }),
+    });
+    expect(mockAddNumbers).toHaveBeenCalledTimes(1);
+    expect(mockAddNumbers).toHaveBeenCalledWith('{"a":5,"b":6}');
+  });
+
+  it('should handle errors in function tool callbacks', async () => {
+    jest.mocked(WebSocket).mockImplementation(() => {
+      setTimeout(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulatePartsMessage(mockWs, [
+          { executableCode: { language: 'PYTHON', code: 'print(default_api.errorFunction())\n' } },
+        ]);
+        simulateFunctionCallMessage(mockWs, [
+          { name: 'errorFunction', args: {}, id: 'function-call-7580472343952164416' },
+        ]);
+        simulatePartsMessage(mockWs, [
+          {
+            codeExecutionResult: {
+              outcome: 'OUTCOME_OK',
+              output: "{'error': 'Error executing function errorFunction: Error: Test error'}\n",
+            },
+          },
+        ]);
+        simulateTextMessage(
+          mockWs,
+          'The function `errorFunction` has been called and it returned an error as expected.',
+        );
+        simulateCompletionMessage(mockWs);
+      }, 60);
+      return mockWs;
+    });
+    provider = new GoogleMMLiveProvider('gemini-2.0-flash-exp', {
+      config: {
+        generationConfig: {
+          response_modalities: ['text'],
+        },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: 'errorFunction',
+                description: 'A function that always throws an error',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {},
+                },
+              },
+            ],
+          },
+        ],
+        functionToolCallbacks: {
+          errorFunction: () => {
+            throw new Error('Test error');
+          },
+        },
+      },
+    });
+
+    const response = await provider.callApi('Call the error function');
+    expect(response).toEqual({
+      output: JSON.stringify({
+        text: 'The function `errorFunction` has been called and it returned an error as expected.',
+        toolCall: {
+          functionCalls: [
+            { name: 'errorFunction', args: {}, id: 'function-call-7580472343952164416' },
+          ],
+        },
+      }),
+    });
+  });
 });

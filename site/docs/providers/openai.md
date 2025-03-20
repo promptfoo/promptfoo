@@ -836,6 +836,118 @@ The Realtime API supports multi-turn conversations with persistent context. For 
 
 > **Important**: When implementing multi-turn conversations, use `type: "input_text"` for user inputs and `type: "text"` for assistant responses.
 
+## Responses API
+
+OpenAI's Responses API is the most advanced interface for generating model responses, supporting text and image inputs, function calling, and conversation state. It provides access to OpenAI's full suite of features including reasoning models like o1 and o3 series.
+
+### Supported Responses Models
+
+The Responses API supports a wide range of models, including:
+
+- `gpt-4o` - OpenAI's most capable vision model
+- `o1` - Powerful reasoning model
+- `o1-mini` - Smaller, more affordable reasoning model
+- `o1-pro` - Enhanced reasoning model with more compute
+- `o3-mini` - Latest reasoning model with improved performance
+
+### Using the Responses API
+
+To use the OpenAI Responses API, use the provider format `openai:responses:<model name>`:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-4o
+    config:
+      temperature: 0.7
+      max_output_tokens: 500
+      instructions: 'You are a helpful, creative AI assistant.'
+```
+
+### Responses-specific Configuration Options
+
+The Responses API configuration supports these parameters in addition to standard OpenAI parameters:
+
+| Parameter              | Description                                       | Default    | Options                             |
+| ---------------------- | ------------------------------------------------- | ---------- | ----------------------------------- |
+| `instructions`         | System instructions for the model                 | None       | Any text string                     |
+| `max_output_tokens`    | Maximum tokens to generate in the response        | 1024       | Any number                          |
+| `metadata`             | Key-value pairs attached to the model response    | None       | Map of string keys to string values |
+| `parallel_tool_calls`  | Allow model to run tool calls in parallel         | true       | Boolean                             |
+| `previous_response_id` | ID of a previous response for multi-turn context  | None       | String                              |
+| `store`                | Whether to store the response for later retrieval | true       | Boolean                             |
+| `truncation`           | Strategy to handle context window overflow        | 'disabled' | 'auto', 'disabled'                  |
+| `reasoning`            | Configuration for reasoning models                | None       | Object with `effort` field          |
+
+### Sending Images in Prompts
+
+The Responses API supports structured prompts with text and image inputs. Example:
+
+```json title="prompt.json"
+[
+  {
+    "type": "message",
+    "role": "user",
+    "content": [
+      {
+        "type": "input_text",
+        "text": "Describe what you see in this image about {{topic}}."
+      },
+      {
+        "type": "image_url",
+        "image_url": {
+          "url": "{{image_url}}"
+        }
+      }
+    ]
+  }
+]
+```
+
+### Function Calling
+
+The Responses API supports tool and function calling, similar to the Chat API:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-4o
+    config:
+      tools:
+        - type: function
+          function:
+            name: get_weather
+            description: Get the current weather for a location
+            parameters:
+              type: object
+              properties:
+                location:
+                  type: string
+                  description: The city and state, e.g. San Francisco, CA
+              required: ['location']
+      tool_choice: 'auto'
+```
+
+### Reasoning Models
+
+When using reasoning models like `o1`, `o1-pro`, or `o3-mini`, you can control the reasoning effort:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:o1
+    config:
+      reasoning_effort: 'medium' # Can be "low", "medium", or "high"
+      max_output_tokens: 1000
+```
+
+Reasoning models "think before they answer," generating internal reasoning that isn't visible in the output but counts toward token usage and billing.
+
+### Complete Example
+
+For a complete working example, see the [OpenAI Responses API example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-responses) or initialize it with:
+
+```bash
+npx promptfoo@latest init --example openai-responses
+```
+
 ## Troubleshooting
 
 ### OpenAI rate limits

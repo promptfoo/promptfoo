@@ -115,6 +115,12 @@ interface CompletionOptions {
 
   tools?: Tool[];
 
+  /**
+   * If set, automatically call these functions when the assistant activates
+   * these function tools.
+   */
+  functionToolCallbacks?: Record<string, (arg: string) => Promise<any>>;
+
   systemInstruction?: Content;
 }
 
@@ -231,24 +237,46 @@ export class GoogleMMLiveProvider implements ApiProvider {
             response_text_total =
               response_text_total + response.serverContent.modelTurn.parts[0].text;
           } else if (response.toolCall?.functionCalls) {
-            const functionResponses: any[] = [];
             for (const functionCall of response.toolCall.functionCalls) {
               function_calls_total.push(functionCall);
               if (functionCall && functionCall.id && functionCall.name) {
-                functionResponses.push({
-                  id: functionCall.id,
-                  name: functionCall.name,
-                  // TODO: add mocking of function response here
-                  response: {},
-                });
+                let callbackResponse = {};
+
+                // Handle function tool callbacks
+                const functionName = functionCall.name;
+                if (
+                  this.config.functionToolCallbacks &&
+                  this.config.functionToolCallbacks[functionName]
+                ) {
+                  try {
+                    callbackResponse = await this.config.functionToolCallbacks[functionName](
+                      JSON.stringify(
+                        typeof functionCall.args === 'string'
+                          ? JSON.parse(functionCall.args)
+                          : functionCall.args,
+                      ),
+                    );
+                  } catch (error) {
+                    callbackResponse = {
+                      error: `Error executing function ${functionName}: ${error}`,
+                    };
+                    logger.error(`Error executing function ${functionName}: ${error}`);
+                  }
+                }
+
+                const toolMessage = {
+                  tool_response: {
+                    function_responses: {
+                      id: functionCall.id,
+                      name: functionName,
+                      response: callbackResponse,
+                    },
+                  },
+                };
+                logger.debug(`WebSocket sent: ${JSON.stringify(toolMessage)}`);
+                ws.send(JSON.stringify(toolMessage));
               }
             }
-            const toolMessage = {
-              tool_response: {
-                function_responses: functionResponses,
-              },
-            };
-            ws.send(JSON.stringify(toolMessage));
           } else if (response.serverContent?.turnComplete) {
             if (contentIndex < contents.length) {
               const contentMessage = formatContentMessage(contents, contentIndex);

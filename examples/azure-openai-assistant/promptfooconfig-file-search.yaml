@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Azure OpenAI Assistant with File Search Tool
+
+prompts:
+  - |
+    Answer the following question:
+
+    {{prompt}}
+
+providers:
+  - id: azure:assistant:your_assistant_id
+    label: azure-assistant
+    config:
+      # Remove any http or https prefix and trailing slashes from apiHost
+      apiHost: your-resource-name.openai.azure.com
+      # Simple file search tool definition
+      tools:
+        - type: 'file_search'
+      # Vector store configuration - replace with your actual vector store ID
+      tool_resources:
+        file_search:
+          vector_store_ids:
+            - 'your_vector_store_id' # Vector store containing promptfoo documentation
+      # Standard parameters
+      temperature: 0.7
+      apiVersion: '2024-05-01-preview'
+
+tests:
+  - vars:
+      prompt: What is promptfoo and how does it help with evaluating LLMs?
+  - vars:
+      prompt: Can you search the documentation for information about vector stores?
+  - vars:
+      prompt: Find any references to file search in the promptfoo documentation.
+  - vars:
+      prompt: How do I set up a basic evaluation in promptfoo?
+  - vars:
+      prompt: How do I run a Wi-Fi protected setup?
