@@ -1,8 +1,12 @@
+import path from 'path';
 import { fetchWithCache } from '../../cache';
 import { getCache, isCacheEnabled } from '../../cache';
+import cliState from '../../cliState';
+import { importModule } from '../../esm';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
+import { isJavascriptFile } from '../../util/file';
 import { sleep } from '../../util/time';
 import { REQUEST_TIMEOUT_MS, toTitleCase } from '../shared';
 import { AzureGenericProvider } from './generic';
@@ -92,10 +96,156 @@ interface RunStepsResponse {
 
 export class AzureAssistantProvider extends AzureGenericProvider {
   assistantConfig: AzureAssistantOptions;
+  private loadedFunctionCallbacks: Record<string, Function> = {};
 
   constructor(deploymentName: string, options: AzureAssistantProviderOptions = {}) {
     super(deploymentName, options);
     this.assistantConfig = options.config || {};
+
+    // Preload function callbacks if available
+    if (this.assistantConfig.functionToolCallbacks) {
+      this.preloadFunctionCallbacks();
+    }
+  }
+
+  /**
+   * Preloads all function callbacks to ensure they're ready when needed
+   */
+  private async preloadFunctionCallbacks() {
+    if (!this.assistantConfig.functionToolCallbacks) {
+      return;
+    }
+
+    const callbacks = this.assistantConfig.functionToolCallbacks;
+    for (const [name, callback] of Object.entries(callbacks)) {
+      try {
+        if (typeof callback === 'string') {
+          // Check if it's a file reference
+          const callbackStr: string = callback;
+          if (callbackStr.startsWith('file://')) {
+            const fn = await this.loadExternalFunction(callbackStr);
+            this.loadedFunctionCallbacks[name] = fn;
+            logger.debug(`Successfully preloaded function callback '${name}' from file`);
+          } else {
+            // It's an inline function string
+            this.loadedFunctionCallbacks[name] = new Function('return ' + callbackStr)();
+            logger.debug(`Successfully preloaded inline function callback '${name}'`);
+          }
+        } else if (typeof callback === 'function') {
+          this.loadedFunctionCallbacks[name] = callback;
+          logger.debug(`Successfully stored function callback '${name}'`);
+        }
+      } catch (error) {
+        logger.error(`Failed to preload function callback '${name}': ${error}`);
+      }
+    }
+  }
+
+  /**
+   * Loads a function from an external file
+   * @param fileRef The file reference in the format 'file://path/to/file:functionName'
+   * @returns The loaded function
+   */
+  private async loadExternalFunction(fileRef: string): Promise<Function> {
+    let filePath = fileRef.slice('file://'.length);
+    let functionName: string | undefined;
+
+    if (filePath.includes(':')) {
+      const splits = filePath.split(':');
+      if (splits[0] && isJavascriptFile(splits[0])) {
+        [filePath, functionName] = splits;
+      }
+    }
+
+    try {
+      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
+      logger.debug(
+        `Loading function from ${resolvedPath}${functionName ? `:${functionName}` : ''}`,
+      );
+
+      const requiredModule = await importModule(resolvedPath, functionName);
+
+      if (typeof requiredModule === 'function') {
+        return requiredModule;
+      } else if (
+        requiredModule &&
+        typeof requiredModule === 'object' &&
+        functionName &&
+        functionName in requiredModule
+      ) {
+        const fn = requiredModule[functionName];
+        if (typeof fn === 'function') {
+          return fn;
+        }
+      }
+
+      throw new Error(
+        `Function callback malformed: ${filePath} must export ${
+          functionName
+            ? `a named function '${functionName}'`
+            : 'a function or have a default export as a function'
+        }`,
+      );
+    } catch (error: any) {
+      throw new Error(`Error loading function from ${filePath}: ${error.message || String(error)}`);
+    }
+  }
+
+  /**
+   * Executes a function callback with proper error handling
+   */
+  private async executeFunctionCallback(functionName: string, args: string): Promise<string> {
+    try {
+      // Check if we've already loaded this function
+      let callback = this.loadedFunctionCallbacks[functionName];
+
+      // If not loaded yet, try to load it now
+      if (!callback) {
+        const callbackRef = this.assistantConfig.functionToolCallbacks?.[functionName];
+
+        if (callbackRef && typeof callbackRef === 'string') {
+          const callbackStr: string = callbackRef;
+          if (callbackStr.startsWith('file://')) {
+            callback = await this.loadExternalFunction(callbackStr);
+          } else {
+            callback = new Function('return ' + callbackStr)();
+          }
+
+          // Cache for future use
+          this.loadedFunctionCallbacks[functionName] = callback;
+        } else if (typeof callbackRef === 'function') {
+          callback = callbackRef;
+          this.loadedFunctionCallbacks[functionName] = callback;
+        }
+      }
+
+      if (!callback) {
+        throw new Error(`No callback found for function '${functionName}'`);
+      }
+
+      // Execute the callback
+      logger.debug(`Executing function '${functionName}' with args: ${args}`);
+      const result = await callback(args);
+
+      // Format the result
+      if (result === undefined || result === null) {
+        return '';
+      } else if (typeof result === 'object') {
+        try {
+          return JSON.stringify(result);
+        } catch (error) {
+          logger.warn(`Error stringifying result from function '${functionName}': ${error}`);
+          return String(result);
+        }
+      } else {
+        return String(result);
+      }
+    } catch (error: any) {
+      logger.error(`Error executing function '${functionName}': ${error.message || String(error)}`);
+      return JSON.stringify({
+        error: `Error in ${functionName}: ${error.message || String(error)}`,
+      });
+    }
   }
 
   async callApi(
@@ -519,37 +669,64 @@ export class AzureAssistantProvider extends AzureGenericProvider {
             });
 
             if (functionCallsWithCallbacks.length === 0) {
-              logger.error(
-                `No function calls with callbacks found. Available functions: ${Object.keys(
+              // No matching callbacks found, but we should still handle the required action
+              // Let's log this situation but continue without breaking
+              logger.debug(
+                `No matching callbacks found for tool calls. Available functions: ${Object.keys(
                   this.assistantConfig.functionToolCallbacks || {},
                 ).join(', ')}. Tool calls: ${JSON.stringify(toolCalls)}`,
               );
-              break;
+
+              // Submit empty outputs for all tool calls
+              const emptyOutputs = toolCalls.map((toolCall) => ({
+                tool_call_id: toolCall.id,
+                output: JSON.stringify({
+                  message: `No callback registered for function ${toolCall.type === 'function' ? toolCall.function?.name : toolCall.type}`,
+                }),
+              }));
+
+              // Submit the empty outputs to continue the run
+              try {
+                await this.makeRequest(
+                  `${apiBaseUrl}/openai/threads/${threadId}/runs/${runId}/submit_tool_outputs?api-version=${apiVersion}`,
+                  {
+                    method: 'POST',
+                    headers: await this.getHeaders(),
+                    body: JSON.stringify({
+                      tool_outputs: emptyOutputs,
+                    }),
+                  },
+                );
+                // Continue polling after submission
+                await sleep(pollIntervalMs);
+                continue;
+              } catch (error: any) {
+                logger.error(`Error submitting empty tool outputs: ${error.message}`);
+                return {
+                  error: `Error submitting empty tool outputs: ${error.message}`,
+                };
+              }
             }
 
-            // Process tool calls
+            // Process tool calls that have matching callbacks
             const toolOutputs = await Promise.all(
               functionCallsWithCallbacks.map(async (toolCall) => {
                 const functionName = toolCall.function!.name;
                 const functionArgs = toolCall.function!.arguments;
-                const callback = this.assistantConfig.functionToolCallbacks?.[functionName];
 
                 try {
                   logger.debug(`Calling function ${functionName} with args: ${functionArgs}`);
 
-                  let result;
-                  if (typeof callback === 'string') {
-                    logger.debug(`Callback is a string, evaluating as function: ${callback}`);
-                    const asyncFunction = new Function('return ' + callback)();
-                    result = await asyncFunction(functionArgs);
-                  } else if (callback && typeof callback === 'function') {
-                    result = await callback(functionArgs);
-                  }
+                  // Use our new executeFunctionCallback method
+                  const outputResult = await this.executeFunctionCallback(
+                    functionName,
+                    functionArgs,
+                  );
 
-                  logger.debug(`Function ${functionName} result: ${result}`);
+                  logger.debug(`Function ${functionName} result: ${outputResult}`);
                   return {
                     tool_call_id: toolCall.id,
-                    output: result,
+                    output: outputResult,
                   };
                 } catch (error) {
                   logger.error(`Error calling function ${functionName}: ${error}`);

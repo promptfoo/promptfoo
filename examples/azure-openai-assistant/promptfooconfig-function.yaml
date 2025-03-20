@@ -11,7 +11,7 @@ providers:
       apiHost: promptfoo.openai.azure.com
       # Load tools from external file
       tools: file://tools/weather-function.json
-      # Inline function callback definition
+      # Use the external file-based callback
       functionToolCallbacks:
         get_weather: file://callbacks/weather.js:getWeather
       temperature: 0.7
