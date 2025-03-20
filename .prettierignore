@@ -7,7 +7,6 @@ examples/adaline-gateway/adaline-chat-history/prompt.json
 examples/adaline-gateway/adaline-embedding-similarity/prompt.json
 examples/multiple-turn-conversation/prompt.json
 examples/openai-chat-history/prompt.json
-examples/openai-responses/prompt.json
 examples/redteam-foundation-model/redteam.yaml
 examples/simple-test/output.html
 helm/chart/promptfoo/templates/**/*.yaml

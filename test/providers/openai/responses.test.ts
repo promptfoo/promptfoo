@@ -2,12 +2,10 @@ import * as cache from '../../../src/cache';
 import logger from '../../../src/logger';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
 
-// Mock the fetchWithCache function
 jest.mock('../../../src/cache', () => ({
   fetchWithCache: jest.fn(),
 }));
 
-// Mock the logger to suppress warnings during tests
 jest.mock('../../../src/logger', () => ({
   debug: jest.fn(),
   info: jest.fn(),
@@ -31,7 +29,6 @@ describe('OpenAiResponsesProvider', () => {
   });
 
   it('should format and call the responses API correctly', async () => {
-    // Mock API response
     const mockApiResponse = {
       id: 'resp_abc123',
       object: 'response',
@@ -59,7 +56,6 @@ describe('OpenAiResponsesProvider', () => {
       },
     };
 
-    // Setup mock for fetchWithCache
     jest.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
@@ -67,17 +63,14 @@ describe('OpenAiResponsesProvider', () => {
       statusText: 'OK',
     });
 
-    // Initialize the provider
     const provider = new OpenAiResponsesProvider('gpt-4o', {
       config: {
         apiKey: 'test-key',
       },
     });
 
-    // Call the API
     const result = await provider.callApi('Test prompt');
 
-    // Verify fetchWithCache was called with correct parameters
     expect(cache.fetchWithCache).toHaveBeenCalledWith(
       expect.stringContaining('/responses'),
       expect.objectContaining({
@@ -90,15 +83,12 @@ describe('OpenAiResponsesProvider', () => {
       expect.any(Number),
     );
 
-    // Assertions on the result
     expect(result.error).toBeUndefined();
     expect(result.output).toBe('This is a test response');
-    // Only test the total tokens since the provider implementation might handle prompt/completion differently
     expect(result.tokenUsage?.total).toBe(30);
   });
 
   it('should handle system prompts correctly', async () => {
-    // Mock API response
     const mockApiResponse = {
       id: 'resp_abc123',
       status: 'completed',
@@ -118,7 +108,6 @@ describe('OpenAiResponsesProvider', () => {
       usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
     };
 
-    // Setup mock for fetchWithCache
     jest.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
@@ -126,7 +115,6 @@ describe('OpenAiResponsesProvider', () => {
       statusText: 'OK',
     });
 
-    // Initialize the provider with a system prompt
     const provider = new OpenAiResponsesProvider('gpt-4o', {
       config: {
         apiKey: 'test-key',
@@ -134,10 +122,8 @@ describe('OpenAiResponsesProvider', () => {
       },
     });
 
-    // Call the API
     await provider.callApi('Test prompt');
 
-    // Verify the request includes the system prompt
     expect(cache.fetchWithCache).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
@@ -148,7 +134,6 @@ describe('OpenAiResponsesProvider', () => {
   });
 
   it('should handle tool calling correctly', async () => {
-    // Mock API response with tool calls
     const mockApiResponse = {
       id: 'resp_abc123',
       status: 'completed',
@@ -170,7 +155,6 @@ describe('OpenAiResponsesProvider', () => {
       usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
     };
 
-    // Setup mock for fetchWithCache
     jest.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
@@ -178,7 +162,6 @@ describe('OpenAiResponsesProvider', () => {
       statusText: 'OK',
     });
 
-    // Define tools configuration according to the correct type
     const tools = [
       {
         type: 'function' as const,
@@ -196,7 +179,6 @@ describe('OpenAiResponsesProvider', () => {
       },
     ];
 
-    // Initialize the provider with tools
     const provider = new OpenAiResponsesProvider('gpt-4o', {
       config: {
         apiKey: 'test-key',
@@ -204,10 +186,8 @@ describe('OpenAiResponsesProvider', () => {
       },
     });
 
-    // Call the API
     const result = await provider.callApi("What's the weather in San Francisco?");
 
-    // Verify the request includes tools configuration
     expect(cache.fetchWithCache).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
@@ -216,15 +196,12 @@ describe('OpenAiResponsesProvider', () => {
       expect.any(Number),
     );
 
-    // The implementation might format tool calls in the raw response but not in the output
-    // So we check the raw response instead
     expect(result.raw).toHaveProperty('output');
     expect(JSON.stringify(result.raw)).toContain('get_weather');
     expect(JSON.stringify(result.raw)).toContain('San Francisco');
   });
 
   it('should handle parallel tool calls correctly', async () => {
-    // Mock API response
     const mockApiResponse = {
       id: 'resp_abc123',
       status: 'completed',
@@ -247,7 +224,6 @@ describe('OpenAiResponsesProvider', () => {
       usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
     };
 
-    // Setup mock for fetchWithCache
     jest.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
@@ -255,7 +231,6 @@ describe('OpenAiResponsesProvider', () => {
       statusText: 'OK',
     });
 
-    // Initialize the provider with parallel tool calls enabled
     const provider = new OpenAiResponsesProvider('gpt-4o', {
       config: {
         apiKey: 'test-key',
@@ -278,10 +253,8 @@ describe('OpenAiResponsesProvider', () => {
       },
     });
 
-    // Call the API
     await provider.callApi('Weather?');
 
-    // Verify the request includes parallel_tool_calls
     expect(cache.fetchWithCache).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
@@ -292,7 +265,6 @@ describe('OpenAiResponsesProvider', () => {
   });
 
   it('should handle temperature and other parameters correctly', async () => {
-    // Mock API response
     const mockApiResponse = {
       id: 'resp_abc123',
       status: 'completed',
@@ -312,7 +284,6 @@ describe('OpenAiResponsesProvider', () => {
       usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
     };
 
-    // Setup mock for fetchWithCache
     jest.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
@@ -320,7 +291,6 @@ describe('OpenAiResponsesProvider', () => {
       statusText: 'OK',
     });
 
-    // Initialize the provider with various parameters
     const provider = new OpenAiResponsesProvider('gpt-4o', {
       config: {
         apiKey: 'test-key',
@@ -330,26 +300,18 @@ describe('OpenAiResponsesProvider', () => {
       },
     });
 
-    // Call the API
     await provider.callApi('Test prompt');
 
-    // Get the actual request body for debugging
     const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
     const reqOptions = mockCall[1] as { body: string };
     const body = JSON.parse(reqOptions.body);
 
-    // Verify temperature was passed correctly
     expect(body.temperature).toBe(0.7);
-
-    // Verify top_p was passed correctly
     expect(body.top_p).toBe(0.9);
-
-    // For output tokens, accept either a default value or our specified value
     expect(body.max_output_tokens).toBeDefined();
   });
 
   it('should handle store parameter correctly', async () => {
-    // Mock API response
     const mockApiResponse = {
       id: 'resp_abc123',
       status: 'completed',
@@ -369,7 +331,6 @@ describe('OpenAiResponsesProvider', () => {
       usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
     };
 
-    // Setup mock for fetchWithCache
     jest.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
@@ -377,7 +338,6 @@ describe('OpenAiResponsesProvider', () => {
       statusText: 'OK',
     });
 
-    // Initialize the provider with store parameter
     const provider = new OpenAiResponsesProvider('gpt-4o', {
       config: {
         apiKey: 'test-key',
@@ -385,10 +345,8 @@ describe('OpenAiResponsesProvider', () => {
       },
     });
 
-    // Call the API
     await provider.callApi('Test prompt');
 
-    // Verify the request includes store parameter
     expect(cache.fetchWithCache).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
@@ -399,7 +357,6 @@ describe('OpenAiResponsesProvider', () => {
   });
 
   it('should handle truncation information correctly', async () => {
-    // Mock API response with truncation
     const mockApiResponse = {
       id: 'resp_abc123',
       status: 'completed',
@@ -424,7 +381,6 @@ describe('OpenAiResponsesProvider', () => {
       usage: { input_tokens: 3896, output_tokens: 100, total_tokens: 3996 },
     };
 
-    // Setup mock for fetchWithCache
     jest.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
@@ -432,23 +388,19 @@ describe('OpenAiResponsesProvider', () => {
       statusText: 'OK',
     });
 
-    // Initialize the provider
     const provider = new OpenAiResponsesProvider('gpt-4o', {
       config: {
         apiKey: 'test-key',
       },
     });
 
-    // Call the API
     const result = await provider.callApi('Very long prompt that would be truncated');
 
-    // Verify the raw data contains truncation information
     expect(result.raw).toHaveProperty('truncation');
     expect(result.raw.truncation.tokens_truncated).toBe(100);
   });
 
   it('should handle various structured inputs correctly', async () => {
-    // Mock API response
     const mockApiResponse = {
       id: 'resp_abc123',
       status: 'completed',
@@ -468,7 +420,6 @@ describe('OpenAiResponsesProvider', () => {
       usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
     };
 
-    // Setup mock for fetchWithCache
     jest.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
@@ -476,14 +427,12 @@ describe('OpenAiResponsesProvider', () => {
       statusText: 'OK',
     });
 
-    // Initialize the provider
     const provider = new OpenAiResponsesProvider('gpt-4o', {
       config: {
         apiKey: 'test-key',
       },
     });
 
-    // Create a structured input that matches what the provider expects
     const structuredInput = JSON.stringify([
       { role: 'system', content: 'You are a helpful assistant' },
       { role: 'user', content: 'Hello' },
@@ -491,22 +440,18 @@ describe('OpenAiResponsesProvider', () => {
 
     await provider.callApi(structuredInput);
 
-    // Verify the request has structured input properly formatted
     const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
     const reqOptions = mockCall[1] as { body: string };
     const body = JSON.parse(reqOptions.body);
 
-    // Check that the input is defined - could be a string or an array
     expect(body.input).toBeDefined();
 
-    // Verify the input contains the expected content in some form
     const inputStr = JSON.stringify(body.input);
     expect(inputStr).toContain('You are a helpful assistant');
     expect(inputStr).toContain('Hello');
   });
 
   it('should handle streaming responses correctly', async () => {
-    // Mock API response
     const mockApiResponse = {
       id: 'resp_abc123',
       status: 'completed',
@@ -526,7 +471,6 @@ describe('OpenAiResponsesProvider', () => {
       usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
     };
 
-    // Setup mock for fetchWithCache
     jest.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
@@ -534,7 +478,6 @@ describe('OpenAiResponsesProvider', () => {
       statusText: 'OK',
     });
 
-    // Initialize the provider with streaming enabled
     const provider = new OpenAiResponsesProvider('gpt-4o', {
       config: {
         apiKey: 'test-key',
@@ -542,10 +485,8 @@ describe('OpenAiResponsesProvider', () => {
       },
     });
 
-    // Call the API
     await provider.callApi('Test prompt');
 
-    // Verify the request includes stream parameter
     expect(cache.fetchWithCache).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
@@ -556,7 +497,6 @@ describe('OpenAiResponsesProvider', () => {
   });
 
   it('should handle JSON schema validation errors correctly', async () => {
-    // Mock API response with validation error
     const mockApiResponse = {
       error: {
         message: 'The response format is invalid. Cannot parse as JSON schema.',
@@ -568,7 +508,6 @@ describe('OpenAiResponsesProvider', () => {
       statusText: 'Bad Request',
     };
 
-    // Setup mock for fetchWithCache
     jest.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
@@ -576,7 +515,6 @@ describe('OpenAiResponsesProvider', () => {
       statusText: 'Bad Request',
     });
 
-    // Initialize the provider with a valid JSON schema but one that will trigger an error
     const provider = new OpenAiResponsesProvider('gpt-4o', {
       config: {
         apiKey: 'test-key',
