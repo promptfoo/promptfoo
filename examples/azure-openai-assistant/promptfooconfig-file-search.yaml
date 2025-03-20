@@ -2,7 +2,9 @@
 description: Azure OpenAI Assistant with File Search Tool
 
 prompts:
-  - '{{prompt}}'
+  - |
+    Please answer the following question:
+    {{prompt}}
 
 providers:
   - id: azure:assistant:asst_V3UgNCNUSAtHQdit8YimCKlJ

@@ -1,5 +1,5 @@
 import { fetchWithCache } from '../../cache';
-import { getCache } from '../../cache';
+import { getCache, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
@@ -120,29 +120,31 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       ? maybeLoadFromExternalFile(renderVarsInObject(this.assistantConfig.tools, context?.vars))
       : undefined;
 
-    // Create cache key with all relevant parameters
+    // Create a simple cache key based on the input and configuration
     const cacheKey = `azure_assistant:${this.deploymentName}:${JSON.stringify({
       prompt,
       temperature: this.assistantConfig.temperature,
       top_p: this.assistantConfig.top_p,
       model: this.assistantConfig.modelName,
       instructions: this.assistantConfig.instructions,
-      tools, // Include full tools directly
+      tools: JSON.stringify(tools).slice(0, 100), // Truncate to keep key reasonable
       tool_choice: this.assistantConfig.tool_choice,
     })}`;
 
-    try {
-      const cache = await getCache();
-      const cachedResult = await cache.get<ProviderResponse>(cacheKey);
+    // Check the cache if enabled
+    if (isCacheEnabled()) {
+      try {
+        const cache = await getCache();
+        const cachedResult = await cache.get<ProviderResponse>(cacheKey);
 
-      if (cachedResult) {
-        logger.debug(`Cache hit for assistant prompt: ${prompt.substring(0, 50)}...`);
-        return { ...cachedResult, cached: true };
+        if (cachedResult) {
+          logger.debug(`Cache hit for assistant prompt: ${prompt.substring(0, 50)}...`);
+          return { ...cachedResult, cached: true };
+        }
+      } catch (err) {
+        logger.warn(`Error checking cache: ${err}`);
+        // Continue if cache check fails
       }
-      logger.debug(`Cache miss for assistant prompt: ${prompt.substring(0, 50)}...`);
-    } catch (err) {
-      logger.warn(`Error checking cache: ${err}`);
-      // Continue if cache check fails
     }
 
     // Execute the conversation flow
@@ -156,6 +158,8 @@ export class AzureAssistantProvider extends AzureGenericProvider {
           body: JSON.stringify({}),
         },
       );
+
+      logger.debug(`Created thread ${threadResponse.id} for prompt: ${prompt.substring(0, 30)}...`);
 
       // Create a message
       await this.makeRequest(
@@ -200,8 +204,6 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         runOptions.instructions = this.assistantConfig.instructions;
       }
 
-      logger.debug(`Creating run with options: ${JSON.stringify(runOptions)}`);
-
       // Create a run
       const runResponse = await this.makeRequest<RunResponse>(
         `${apiBaseUrl}/openai/threads/${threadResponse.id}/runs?api-version=${apiVersion}`,
@@ -235,7 +237,6 @@ export class AzureAssistantProvider extends AzureGenericProvider {
 
         // Process the completed run
         if (completedRun.status === 'completed') {
-          // Process messages and steps
           result = await this.processCompletedRun(
             apiBaseUrl,
             apiVersion,
@@ -255,11 +256,10 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         }
       }
 
-      // Cache the successful result
-      if (!result.error) {
+      // Cache successful results if caching is enabled
+      if (isCacheEnabled() && !result.error) {
         try {
           const cache = await getCache();
-          // Use the default TTL provided by the cache system
           await cache.set(cacheKey, result);
           logger.debug(`Cached assistant response for prompt: ${prompt.substring(0, 50)}...`);
         } catch (err) {
@@ -305,9 +305,15 @@ export class AzureAssistantProvider extends AzureGenericProvider {
     const timeoutMs = this.assistantConfig.timeoutMs || REQUEST_TIMEOUT_MS;
     const retries = this.assistantConfig.retryOptions?.maxRetries || 4;
 
-    // Determine if this is a polling request that should never be cached
-    const isPollingRequest =
-      url.includes('/runs/') && url.includes('?api-version=') && options.method === 'GET';
+    // These operations should never be cached
+    const shouldBustCache =
+      // Polling operations for run status
+      (url.includes('/runs/') && options.method === 'GET') ||
+      // Thread creation - always create a fresh thread
+      (url.includes('/threads') &&
+        options.method === 'POST' &&
+        !url.includes('/messages') &&
+        !url.includes('submit_tool_outputs'));
 
     try {
       const result = await fetchWithCache<T>(
@@ -315,7 +321,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         options,
         timeoutMs,
         'json',
-        isPollingRequest, // Only bust cache for polling requests
+        shouldBustCache,
         retries,
       );
 
