@@ -1,4 +1,5 @@
 import { fetchWithCache } from '../../cache';
+import { getCache } from '../../cache';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
@@ -114,8 +115,39 @@ export class AzureAssistantProvider extends AzureGenericProvider {
 
     const apiVersion = this.assistantConfig.apiVersion || '2024-04-01-preview';
 
+    // Create a simple cache key based on the input and configuration
+    const cacheKey = `azure_assistant:${this.deploymentName}:${JSON.stringify({
+      prompt,
+      temperature: this.assistantConfig.temperature,
+      top_p: this.assistantConfig.top_p,
+      model: this.assistantConfig.modelName,
+      instructions: this.assistantConfig.instructions,
+      tools: this.assistantConfig.tools ? JSON.stringify(this.assistantConfig.tools) : undefined,
+      tool_choice: this.assistantConfig.tool_choice,
+    })}`;
+
+    const bustCache = this.assistantConfig.disableCache === true;
+
+    // Only check cache if we're not busting it
+    if (!bustCache) {
+      try {
+        const cache = await getCache();
+        const cachedResult = await cache.get<ProviderResponse>(cacheKey);
+
+        if (cachedResult) {
+          logger.debug(`Cache hit for assistant prompt: ${prompt.substring(0, 50)}...`);
+          return { ...cachedResult, cached: true };
+        }
+        logger.debug(`Cache miss for assistant prompt: ${prompt.substring(0, 50)}...`);
+      } catch (err) {
+        logger.warn(`Error checking cache: ${err}`);
+        // Continue if cache check fails
+      }
+    }
+
+    // Execute the conversation flow
     try {
-      // 1. Create a thread
+      // Create a thread
       const threadResponse = await this.makeRequest<ThreadResponse>(
         `${apiBaseUrl}/openai/threads?api-version=${apiVersion}`,
         {
@@ -125,7 +157,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         },
       );
 
-      // 2. Create a message
+      // Create a message
       await this.makeRequest(
         `${apiBaseUrl}/openai/threads/${threadResponse.id}/messages?api-version=${apiVersion}`,
         {
@@ -138,7 +170,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         },
       );
 
-      // 3. Prepare the run options
+      // Prepare the run options
       const runOptions: Record<string, any> = {
         assistant_id: this.deploymentName,
       };
@@ -170,7 +202,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
 
       logger.debug(`Creating run with options: ${JSON.stringify(runOptions)}`);
 
-      // 4. Create a run
+      // Create a run
       const runResponse = await this.makeRequest<RunResponse>(
         `${apiBaseUrl}/openai/threads/${threadResponse.id}/runs?api-version=${apiVersion}`,
         {
@@ -180,79 +212,81 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         },
       );
 
-      // 5. Handle function calls if needed
+      // Handle function calls if needed or poll for completion
+      let result: ProviderResponse;
       if (
         this.assistantConfig.functionToolCallbacks &&
         Object.keys(this.assistantConfig.functionToolCallbacks).length > 0
       ) {
-        return await this.pollRunWithToolCallHandling(
+        result = await this.pollRunWithToolCallHandling(
           apiBaseUrl,
           apiVersion,
           threadResponse.id,
           runResponse.id,
         );
-      }
+      } else {
+        // Poll for completion
+        const completedRun = await this.pollRun(
+          apiBaseUrl,
+          apiVersion,
+          threadResponse.id,
+          runResponse.id,
+        );
 
-      // 6. Poll for completion
-      const completedRun = await this.pollRun(
-        apiBaseUrl,
-        apiVersion,
-        threadResponse.id,
-        runResponse.id,
-      );
-
-      // 7. Process the completed run
-      if (completedRun.status !== 'completed') {
-        if (completedRun.last_error) {
-          return {
-            error: `Thread run failed: ${completedRun.last_error.code || ''} - ${completedRun.last_error.message}`,
-          };
+        // Process the completed run
+        if (completedRun.status === 'completed') {
+          // Process messages and steps
+          result = await this.processCompletedRun(
+            apiBaseUrl,
+            apiVersion,
+            threadResponse.id,
+            completedRun,
+          );
+        } else {
+          if (completedRun.last_error) {
+            result = {
+              error: `Thread run failed: ${completedRun.last_error.code || ''} - ${completedRun.last_error.message}`,
+            };
+          } else {
+            result = {
+              error: `Thread run failed with status: ${completedRun.status}`,
+            };
+          }
         }
-        return {
-          error: `Thread run failed with status: ${completedRun.status}`,
-        };
       }
 
-      // 8. Process messages and steps
-      return await this.processCompletedRun(
-        apiBaseUrl,
-        apiVersion,
-        threadResponse.id,
-        completedRun,
-      );
+      // Cache the successful result
+      if (!bustCache && !result.error) {
+        try {
+          const cache = await getCache();
+          await cache.set(cacheKey, result, { ttl: 60 * 60 * 24 * 14 }); // 14 days
+          logger.debug(`Cached assistant response for prompt: ${prompt.substring(0, 50)}...`);
+        } catch (err) {
+          logger.warn(`Error caching result: ${err}`);
+          // Continue even if caching fails
+        }
+      }
+
+      return result;
     } catch (err: any) {
       logger.error(`Error in Azure Assistant API call: ${err}`);
-
-      // Check for specific error cases
       const errorMessage = err.message || String(err);
 
-      // Handle thread with run in progress errors - these aren't retryable as we need a new thread
+      // Format specific error types
       if (
         errorMessage.includes("Can't add messages to thread") &&
         errorMessage.includes('while a run')
       ) {
-        return {
-          error: `Error in Azure Assistant API call: ${errorMessage}`,
-        };
+        return { error: `Error in Azure Assistant API call: ${errorMessage}` };
       }
-
-      // Check for rate limit errors
       if (this.isRateLimitError(errorMessage)) {
-        return {
-          error: `Rate limit exceeded: ${errorMessage}`,
-        };
+        return { error: `Rate limit exceeded: ${errorMessage}` };
       }
-
-      // Check for service errors
       if (this.isServiceError(errorMessage)) {
-        return {
-          error: `Service error: ${errorMessage}`,
-        };
+        return { error: `Service error: ${errorMessage}` };
       }
 
-      return {
-        error: `Error in Azure Assistant API call: ${errorMessage}`,
-      };
+      return { error: `Error in Azure Assistant API call: ${errorMessage}` };
     }
   }
 
@@ -264,11 +298,33 @@ export class AzureAssistantProvider extends AzureGenericProvider {
     const retries = this.assistantConfig.retryOptions?.maxRetries || 4;
     const bustCache = this.assistantConfig.disableCache === true;
 
+    // Never cache polling operations or status checks
+    const shouldNeverCache =
+      (url.includes('/runs/') &&
+        url.includes('?api-version=') &&
+        !url.includes('submit_tool_outputs')) ||
+      options.method === 'GET';
+
     try {
-      const result = await fetchWithCache<T>(url, options, timeoutMs, 'json', bustCache, retries);
+      const result = await fetchWithCache<T>(
+        url,
+        options,
+        timeoutMs,
+        'json',
+        bustCache || shouldNeverCache,
+        retries,
+      );
+
+      // Ensure we have a result
+      if (!result) {
+        throw new Error(`Empty response received from API endpoint: ${url}`);
+      }
 
       if (result.status < 200 || result.status >= 300) {
-        // Handle error response that was cached or returned
+        // For error responses, delete from cache to avoid reusing
+        await result.deleteFromCache?.();
+
+        // Handle error response
         throw new Error(
           `API error: ${result.status} ${result.statusText}${
             result.data && typeof result.data === 'object' && 'error' in result.data
@@ -278,6 +334,11 @@ export class AzureAssistantProvider extends AzureGenericProvider {
                 : ''
           }`,
         );
+      }
+
+      // Ensure result.data exists before returning it
+      if (result.data === undefined || result.data === null) {
+        throw new Error(`Received null or undefined data from API endpoint: ${url}`);
       }
 
       // Result data is already parsed as JSON by fetchWithCache

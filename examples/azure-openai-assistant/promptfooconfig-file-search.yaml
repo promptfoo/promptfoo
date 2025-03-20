@@ -5,7 +5,7 @@ prompts:
   - '{{prompt}}'
 
 providers:
-  - id: azure:assistant:asst_example
+  - id: azure:assistant:asst_V3UgNCNUSAtHQdit8YimCKlJ
     label: azure-assistant
     config:
       # Remove any http or https prefix and trailing slashes from apiHost
@@ -17,11 +17,10 @@ providers:
       tool_resources:
         file_search:
           vector_store_ids:
-            - 'vs_promptfoo_docs_main' # Vector store containing promptfoo documentation
+            - 'vs_Ioe3uJLnZd2Rrw4hEXUhF2Y1' # Vector store containing promptfoo documentation
       # Standard parameters
       temperature: 0.7
       apiVersion: '2024-05-01-preview'
-      debug: true
 
 tests:
   - vars:
@@ -32,3 +31,5 @@ tests:
       prompt: Find any references to file search in the promptfoo documentation.
   - vars:
       prompt: How do I set up a basic evaluation in promptfoo?
+  - vars:
+      prompt: How do I run a Wi-Fi protected setup?
