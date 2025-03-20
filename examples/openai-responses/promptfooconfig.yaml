@@ -1,14 +1,13 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Using OpenAI's advanced Responses API
+description: Basic Text Input with OpenAI Responses API
 prompts:
   - 'Tell me a short story about {{topic}}'
-  - file://prompt.json
 
 providers:
   - id: openai:responses:gpt-4o
     config:
       temperature: 0.7
-      max_output_tokens: 500
+      max_output_tokens: 300
       instructions: 'You are a helpful, creative AI assistant. Answer questions concisely.'
 
 tests:
@@ -16,4 +15,3 @@ tests:
       topic: a magical forest
   - vars:
       topic: space exploration
-      image_url: https://images.unsplash.com/photo-1451187580459-43490279c0fa

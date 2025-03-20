@@ -1,12 +1,14 @@
-# OpenAI Responses API Example
+# openai-responses (OpenAI Responses API Examples)
 
-This example demonstrates how to use the OpenAI Responses API with promptfoo. The Responses API is OpenAI's most advanced interface for generating model responses, supporting text and image inputs, and text outputs.
+This example demonstrates how to use OpenAI's Responses API to generate model outputs with advanced capabilities including image understanding, web search, function calling, and reasoning.
 
 ## Features Demonstrated
 
-- Basic text prompt using the Responses API
-- Structured prompt with image input
-- Setting API-specific parameters like `instructions` and `max_output_tokens`
+- Text generation with the OpenAI Responses API
+- Image input processing
+- Web search integration
+- Function/tool calling
+- Mathematical reasoning with o-series models
 
 ## Environment Variables
 
@@ -14,94 +16,45 @@ This example requires the following environment variables:
 
 - `OPENAI_API_KEY` - Your OpenAI API key
 
-## Configuration
+You can set this in a `.env` file or directly in your environment.
 
-The example uses the following configuration in `promptfooconfig.yaml`:
-
-```yaml
-prompts:
-  - 'Tell me a short story about {{topic}}'
-  - file://prompt.json # Structured prompt with image
-
-providers:
-  - id: openai:responses:gpt-4o
-    config:
-      temperature: 0.7
-      max_output_tokens: 500
-      instructions: 'You are a helpful, creative AI assistant. Answer questions concisely.'
-
-tests:
-  - vars:
-      topic: a magical forest
-  - vars:
-      topic: space exploration
-      image_url: https://images.unsplash.com/photo-1451187580459-43490279c0fa
-```
-
-## Structured Prompt
-
-The `prompt.json` file demonstrates how to create a structured prompt with both text and image inputs:
-
-```json
-[
-  {
-    "type": "message",
-    "role": "user",
-    "content": [
-      {
-        "type": "input_text",
-        "text": "Describe what you see in this image and tell me a short story inspired by it about {{topic}}."
-      },
-      {
-        "type": "input_image",
-        "image_url": "{{image_url}}"
-      }
-    ]
-  }
-]
-```
-
-## Supported Models
-
-The Responses API supports a variety of models including:
-
-- `gpt-4o` - OpenAI's most capable vision model
-- `o1` - Powerful reasoning model
-- `o1-mini` - Smaller, more affordable reasoning model
-- `o1-pro` - Enhanced reasoning model with more compute (higher pricing)
-- `o3-mini` - Latest reasoning model with improved performance
-
-The `o1-pro` model uses more compute to produce better quality answers, with pricing at $150/1M tokens for input and $600/1M tokens for output.
-
-## Usage
+## Running the Example
 
 You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example openai-responses
+# and then
+cd openai-responses
+
+# Run specific configs
+npx promptfoo eval -c promptfooconfig.yaml
+npx promptfoo eval -c promptfooconfig.image.yaml
+npx promptfoo eval -c promptfooconfig.web-search.yaml
+npx promptfoo eval -c promptfooconfig.function-call.yaml
+npx promptfoo eval -c promptfooconfig.reasoning.yaml
 ```
 
-Or manually:
+## Configuration Files
 
-1. Set your OpenAI API key:
+This example includes several configuration files, each demonstrating a different capability:
 
-   ```
-   export OPENAI_API_KEY=your-api-key
-   ```
+1. **Basic Text** (`promptfooconfig.yaml`): Simple text prompt with `openai:responses:gpt-4o`
+2. **Image Input** (`promptfooconfig.image.yaml`): Processes images with structured JSON input
+3. **Web Search** (`promptfooconfig.web-search.yaml`): Retrieves recent information from the web using `gpt-4o`
+4. **Function Calling** (`promptfooconfig.function-call.yaml`): Calls a weather function with parameters using `o1-pro`
+5. **Mathematical Reasoning** (`promptfooconfig.reasoning.yaml`): Solves math problems step-by-step using `o3-mini`
 
-2. Navigate to this directory and run promptfoo:
-   ```
-   npx promptfoo@latest evaluate
-   ```
+## Key Differences from Chat Completions API
 
-## Additional Features
+- Can accept simple strings or structured message arrays as input
+- Returns an array of output items with explicit types
+- Function calls appear directly in the output array
+- Built-in tools like web search are natively supported
+- Supports o-series models with configurable reasoning effort
 
-The OpenAI Responses API supports many advanced features not demonstrated in this basic example:
+## Supported Models
 
-- Function calling with custom tools
-- Conversation state with `previous_response_id`
-- Structured outputs (JSON)
-- Parallel tool calls
-- Reasoning models (o1, o3-mini)
-
-Consult the [OpenAI Responses API documentation](https://platform.openai.com/docs/api-reference/responses) for more details.
+- `openai:responses:gpt-4o` - Vision-capable model
+- `openai:responses:o1-mini`, `openai:responses:o1`, `openai:responses:o1-pro` - Reasoning models
+- `openai:responses:o3-mini`, `openai:responses:o3` - Latest reasoning models

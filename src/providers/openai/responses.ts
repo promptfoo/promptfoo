@@ -189,7 +189,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       let result = '';
       // Process all output items
       for (const item of output) {
-        if (item.type === 'message' && item.role === 'assistant' && item.content) {
+        if (item.type === 'function_call') {
+          // Handle direct function calls at the top level
+          result = JSON.stringify(item);
+        } else if (item.type === 'message' && item.role === 'assistant' && item.content) {
           // Extract text content from the message
           for (const contentItem of item.content) {
             if (contentItem.type === 'output_text') {
