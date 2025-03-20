@@ -150,6 +150,11 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo((1000 * 0.15 + 500 * 0.6) / 1000000, 6);
   });
 
+  it('should calculate cost correctly for o1-pro', () => {
+    const cost = calculateOpenAICost('o1-pro', { cost: undefined }, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 150 + 500 * 600) / 1000000, 6);
+  });
+
   it('should calculate audio token costs for gpt-4o-realtime-preview-2024-12-17', () => {
     const cost = calculateOpenAICost(
       'gpt-4o-realtime-preview-2024-12-17',
