@@ -656,6 +656,17 @@ export class AzureAssistantProvider extends AzureGenericProvider {
     try {
       const runId = typeof runIdOrResponse === 'string' ? runIdOrResponse : runIdOrResponse.id;
 
+      // Get run information if we only have the ID
+      if (typeof runIdOrResponse === 'string') {
+        await this.makeRequest<RunResponse>(
+          `${apiBaseUrl}/openai/threads/${threadId}/runs/${runId}?api-version=${apiVersion}`,
+          {
+            method: 'GET',
+            headers: await this.getHeaders(),
+          },
+        );
+      }
+
       // Get all messages in the thread
       const messagesResponse = await this.makeRequest<MessageListResponse>(
         `${apiBaseUrl}/openai/threads/${threadId}/messages?api-version=${apiVersion}`,
@@ -674,36 +685,34 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         },
       );
 
+      // Process user messages first, then assistant messages and tool calls
       const outputBlocks: string[] = [];
-      const runResponseObj =
-        typeof runIdOrResponse === 'string'
-          ? await this.makeRequest<RunResponse>(
-              `${apiBaseUrl}/openai/threads/${threadId}/runs/${runId}?api-version=${apiVersion}`,
-              {
-                method: 'GET',
-                headers: await this.getHeaders(),
-              },
-            )
-          : runIdOrResponse;
 
-      // Process messages
-      const messages = messagesResponse.data || [];
-      for (const message of messages) {
-        // Only include messages created after the run started
-        if (new Date(message.created_at) >= new Date(runResponseObj.created_at)) {
-          const contentBlocks = message.content
-            .map((content) =>
-              content.type === 'text' ? content.text!.value : `<${content.type} output>`,
-            )
-            .join('\n');
+      // Get all messages - sort by creation time
+      const allMessages = messagesResponse.data.sort((a, b) => a.created_at - b.created_at); // Sort chronologically
 
-          outputBlocks.push(`[${toTitleCase(message.role)}] ${contentBlocks}`);
-        }
+      // We need to extract the user message that triggered this run
+      // Since we create a new thread for each evaluation, the only user message is the one we created
+      const userMessage = allMessages.find((message) => message.role === 'user');
+
+      // Always start with the user's message if we found one
+      if (userMessage) {
+        const userContent = userMessage.content
+          .map((content: { type: string; text?: { value: string } }) =>
+            content.type === 'text' ? content.text!.value : `<${content.type} output>`,
+          )
+          .join('\n');
+
+        outputBlocks.push(`[User] ${userContent}`);
       }
 
-      // Process run steps to capture tool call details
-      const steps = stepsResponse.data || [];
-      for (const step of steps) {
+      // Generate the sequence of file searches, function calls, and assistant responses
+      // Since all tools steps are part of the assistant's thinking process, we'll place them
+      // before the assistant's response to maintain a logical flow: user → tool operations → assistant response
+
+      // First, extract all the tool calls and organize them
+      const toolCallBlocks: string[] = [];
+      for (const step of stepsResponse.data || []) {
         // Check if step is a tool call step with tool_calls array
         if (
           step.type === 'tool_calls' &&
@@ -716,41 +725,71 @@ export class AzureAssistantProvider extends AzureGenericProvider {
 
           for (const toolCall of toolCalls) {
             if (toolCall.type === 'function' && toolCall.function) {
-              outputBlocks.push(
+              toolCallBlocks.push(
                 `[Call function ${toolCall.function.name} with arguments ${toolCall.function.arguments}]`,
               );
               if (toolCall.function.output) {
-                outputBlocks.push(`[Function output: ${toolCall.function.output}]`);
+                toolCallBlocks.push(`[Function output: ${toolCall.function.output}]`);
               }
-            } else if (
-              toolCall.type &&
-              toolCall.type === 'code_interpreter' &&
-              toolCall.code_interpreter
-            ) {
+            } else if (toolCall.type === 'code_interpreter' && toolCall.code_interpreter) {
               const outputs = toolCall.code_interpreter.outputs || [];
               const input = toolCall.code_interpreter.input || '';
 
               const outputText =
                 outputs
-                  .map((output) =>
+                  .map((output: { type: string; logs?: string }) =>
                     output.type === 'logs' ? output.logs : `<${output.type} output>`,
                   )
                   .join('\n') || '[No output]';
 
-              outputBlocks.push(`[Code interpreter input]`);
-              outputBlocks.push(input || '[No input]');
-              outputBlocks.push(`[Code interpreter output]`);
-              outputBlocks.push(outputText);
-            } else if (toolCall.type && toolCall.type === 'file_search' && toolCall.file_search) {
-              outputBlocks.push(`[Ran file search]`);
-              outputBlocks.push(`[File search details: ${JSON.stringify(toolCall.file_search)}]`);
+              toolCallBlocks.push(`[Code interpreter input]`);
+              toolCallBlocks.push(input || '[No input]');
+              toolCallBlocks.push(`[Code interpreter output]`);
+              toolCallBlocks.push(outputText);
+            } else if (toolCall.type === 'file_search' && toolCall.file_search) {
+              toolCallBlocks.push(`[Ran file search]`);
+              toolCallBlocks.push(`[File search details: ${JSON.stringify(toolCall.file_search)}]`);
             } else if (toolCall.type && String(toolCall.type) === 'retrieval') {
-              outputBlocks.push(`[Ran retrieval]`);
+              toolCallBlocks.push(`[Ran retrieval]`);
             } else {
-              outputBlocks.push(`[Unknown tool call type: ${String(toolCall.type)}]`);
+              toolCallBlocks.push(`[Unknown tool call type: ${String(toolCall.type)}]`);
             }
           }
         }
+      }
+
+      // Next, extract the assistant's response -
+      // Filter assistant messages to only those created for this run
+      const assistantMessages = allMessages.filter((message) => message.role === 'assistant');
+
+      // For each assistant message, add it to the output blocks
+      for (const message of assistantMessages) {
+        const contentBlocks = message.content
+          .map((content: { type: string; text?: { value: string } }) =>
+            content.type === 'text' ? content.text!.value : `<${content.type} output>`,
+          )
+          .join('\n');
+
+        outputBlocks.push(`[${toTitleCase(message.role)}] ${contentBlocks}`);
+      }
+
+      // Now, combine everything in the correct order:
+      // 1. User message (already added)
+      // 2. Tool call blocks (file search, etc.)
+      // 3. Assistant messages (already added)
+
+      // Add tool call blocks after user message but before assistant response
+      // Find the index of the first assistant message block
+      const assistantBlockIndex = outputBlocks.findIndex((block) =>
+        block.startsWith('[Assistant]'),
+      );
+
+      if (assistantBlockIndex > 0) {
+        // Insert the tool calls before the first assistant message
+        outputBlocks.splice(assistantBlockIndex, 0, ...toolCallBlocks);
+      } else {
+        // If there are no assistant messages, just append the tool calls
+        outputBlocks.push(...toolCallBlocks);
       }
 
       return {
