@@ -22,6 +22,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'o3',
     'o3-preview',
     'o3-mini',
+    'gpt-4.5-preview',
+    'gpt-4.5-preview-2025-02-27',
   ];
 
   config: OpenAiCompletionOptions;
@@ -84,6 +86,47 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     const instructions = config.instructions;
 
+    // Handle response_format for type text, json_object or json_schema
+    let textFormat;
+    if (config.response_format) {
+      if (config.response_format.type === 'json_object') {
+        textFormat = {
+          format: {
+            type: 'json_object',
+          },
+        };
+
+        // Note: The word 'json' must appear in the input when using json_object format
+        // This should be handled in the prompt, not automatically added here
+      } else if (config.response_format.type === 'json_schema') {
+        // For json_schema, we need to include the schema
+        const schema = maybeLoadFromExternalFile(
+          renderVarsInObject(
+            config.response_format.schema || config.response_format.json_schema?.schema,
+            context?.vars,
+          ),
+        );
+
+        // Generate a name if not provided
+        const schemaName = config.response_format.name || 'response_schema';
+
+        textFormat = {
+          format: {
+            type: 'json_schema',
+            name: schemaName,
+            schema,
+            strict: true,
+          },
+        };
+      } else {
+        // Default to text
+        textFormat = { format: { type: 'text' } };
+      }
+    } else {
+      // Default to text format if no response_format is specified
+      textFormat = { format: { type: 'text' } };
+    }
+
     const body = {
       model: this.modelName,
       input,
@@ -99,19 +142,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.previous_response_id ? { previous_response_id: config.previous_response_id } : {}),
-      ...(config.response_format
-        ? {
-            text: {
-              format: {
-                name: config.response_format.type,
-                type: config.response_format.type,
-                schema: maybeLoadFromExternalFile(
-                  renderVarsInObject(config.response_format.schema, context?.vars),
-                ),
-              },
-            },
-          }
-        : { text: { format: { name: 'text', type: 'text' } } }),
+      text: textFormat,
       ...(config.truncation ? { truncation: config.truncation } : {}),
       ...(config.metadata ? { metadata: config.metadata } : {}),
       ...('parallel_tool_calls' in config
@@ -191,24 +222,65 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       }
 
       let result = '';
+      let refusal = '';
+      let isRefusal = false;
+
       // Process all output items
       for (const item of output) {
         if (item.type === 'function_call') {
           // Handle direct function calls at the top level
           result = JSON.stringify(item);
-        } else if (item.type === 'message' && item.role === 'assistant' && item.content) {
-          // Extract text content from the message
-          for (const contentItem of item.content) {
-            if (contentItem.type === 'output_text') {
-              result += contentItem.text;
-            } else if (contentItem.type === 'tool_use' || contentItem.type === 'function_call') {
-              // Handle tool calls or function calls
-              result = JSON.stringify(contentItem);
+        } else if (item.type === 'message' && item.role === 'assistant') {
+          if (item.content) {
+            // Extract text content from the message
+            for (const contentItem of item.content) {
+              if (contentItem.type === 'output_text') {
+                result += contentItem.text;
+              } else if (contentItem.type === 'tool_use' || contentItem.type === 'function_call') {
+                // Handle tool calls or function calls
+                result = JSON.stringify(contentItem);
+              } else if (contentItem.type === 'refusal') {
+                // Handle explicit refusal content
+                refusal = contentItem.refusal;
+                isRefusal = true;
+              }
             }
+          } else if (item.refusal) {
+            // Handle direct refusal in message
+            refusal = item.refusal;
+            isRefusal = true;
           }
         } else if (item.type === 'tool_result') {
           // Handle tool results
           result = JSON.stringify(item);
+        }
+      }
+
+      // If we found a refusal, return it
+      if (isRefusal) {
+        return {
+          output: refusal,
+          tokenUsage: getTokenUsage(data, cached),
+          isRefusal: true,
+          cached,
+          cost: calculateOpenAICost(
+            this.modelName,
+            config,
+            data.usage?.input_tokens,
+            data.usage?.output_tokens,
+            0,
+            0,
+          ),
+          raw: data,
+        };
+      }
+
+      // If using json_schema, try to parse the result as JSON
+      if (config.response_format?.type === 'json_schema' && typeof result === 'string') {
+        try {
+          result = JSON.parse(result);
+        } catch (error) {
+          logger.error(`Failed to parse JSON output: ${error}`);
         }
       }
 
