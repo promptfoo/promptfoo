@@ -22,6 +22,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'o3',
     'o3-preview',
     'o3-mini',
+    'gpt-4.5-preview',
+    'gpt-4.5-preview-2025-02-27',
   ];
 
   config: OpenAiCompletionOptions;
@@ -49,24 +51,20 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ) {
-    // Merge configs from the provider and the prompt
     const config = {
       ...this.config,
       ...context?.prompt?.config,
     };
 
-    // For Responses API, we need to parse the input differently
     let input;
     try {
-      // Check if the prompt is already structured as a message array
       const parsedJson = JSON.parse(prompt);
       if (Array.isArray(parsedJson)) {
         input = parsedJson;
       } else {
-        input = prompt; // Plain text input
+        input = prompt;
       }
     } catch {
-      // If not valid JSON, treat as plain text
       input = prompt;
     }
 
@@ -84,6 +82,44 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     const instructions = config.instructions;
 
+    let textFormat;
+    if (config.response_format) {
+      if (config.response_format.type === 'json_object') {
+        textFormat = {
+          format: {
+            type: 'json_object',
+          },
+        };
+
+        // IMPORTANT: json_object format requires the word 'json' in the input prompt
+      } else if (config.response_format.type === 'json_schema') {
+        const schema = maybeLoadFromExternalFile(
+          renderVarsInObject(
+            config.response_format.schema || config.response_format.json_schema?.schema,
+            context?.vars,
+          ),
+        );
+
+        const schemaName =
+          config.response_format.json_schema?.name ||
+          config.response_format.name ||
+          'response_schema';
+
+        textFormat = {
+          format: {
+            type: 'json_schema',
+            name: schemaName,
+            schema,
+            strict: true,
+          },
+        };
+      } else {
+        textFormat = { format: { type: 'text' } };
+      }
+    } else {
+      textFormat = { format: { type: 'text' } };
+    }
+
     const body = {
       model: this.modelName,
       input,
@@ -99,19 +135,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.previous_response_id ? { previous_response_id: config.previous_response_id } : {}),
-      ...(config.response_format
-        ? {
-            text: {
-              format: {
-                name: config.response_format.type,
-                type: config.response_format.type,
-                schema: maybeLoadFromExternalFile(
-                  renderVarsInObject(config.response_format.schema, context?.vars),
-                ),
-              },
-            },
-          }
-        : { text: { format: { name: 'text', type: 'text' } } }),
+      text: textFormat,
       ...(config.truncation ? { truncation: config.truncation } : {}),
       ...(config.metadata ? { metadata: config.metadata } : {}),
       ...('parallel_tool_calls' in config
@@ -191,28 +215,60 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       }
 
       let result = '';
+      let refusal = '';
+      let isRefusal = false;
+
       // Process all output items
       for (const item of output) {
         if (item.type === 'function_call') {
-          // Handle direct function calls at the top level
           result = JSON.stringify(item);
-        } else if (item.type === 'message' && item.role === 'assistant' && item.content) {
-          // Extract text content from the message
-          for (const contentItem of item.content) {
-            if (contentItem.type === 'output_text') {
-              result += contentItem.text;
-            } else if (contentItem.type === 'tool_use' || contentItem.type === 'function_call') {
-              // Handle tool calls or function calls
-              result = JSON.stringify(contentItem);
+        } else if (item.type === 'message' && item.role === 'assistant') {
+          if (item.content) {
+            for (const contentItem of item.content) {
+              if (contentItem.type === 'output_text') {
+                result += contentItem.text;
+              } else if (contentItem.type === 'tool_use' || contentItem.type === 'function_call') {
+                result = JSON.stringify(contentItem);
+              } else if (contentItem.type === 'refusal') {
+                refusal = contentItem.refusal;
+                isRefusal = true;
+              }
             }
+          } else if (item.refusal) {
+            refusal = item.refusal;
+            isRefusal = true;
           }
         } else if (item.type === 'tool_result') {
-          // Handle tool results
           result = JSON.stringify(item);
         }
       }
 
-      // Get token usage information
+      if (isRefusal) {
+        return {
+          output: refusal,
+          tokenUsage: getTokenUsage(data, cached),
+          isRefusal: true,
+          cached,
+          cost: calculateOpenAICost(
+            this.modelName,
+            config,
+            data.usage?.input_tokens,
+            data.usage?.output_tokens,
+            0,
+            0,
+          ),
+          raw: data,
+        };
+      }
+
+      if (config.response_format?.type === 'json_schema' && typeof result === 'string') {
+        try {
+          result = JSON.parse(result);
+        } catch (error) {
+          logger.error(`Failed to parse JSON output: ${error}`);
+        }
+      }
+
       const tokenUsage = getTokenUsage(data, cached);
 
       return {
