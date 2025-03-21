@@ -987,6 +987,13 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   }
 
   async getClientSecret(sessionType = 'chat'): Promise<string> {
+    // Check if API key is set
+    if (!this.getApiKey()) {
+      throw new Error(
+        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
+      );
+    }
+
     const url =
       sessionType === 'transcription'
         ? 'https://api.openai.com/v1/realtime/transcription/client_secrets'

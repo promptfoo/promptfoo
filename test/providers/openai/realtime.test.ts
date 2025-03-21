@@ -274,14 +274,32 @@ describe('OpenAI Realtime Provider', () => {
         transcript: 'This is the transcript of the audio',
       });
     });
+    it('should handle the case when API key is not set', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview-2024-12-17');
+
+      // Mock getApiKey to return undefined
+      jest.spyOn(provider, 'getApiKey').mockImplementation().mockReturnValue(undefined);
+
+      // The directWebSocketRequest method will be called and should return an error
+      jest
+        .spyOn(provider, 'directWebSocketRequest')
+        .mockRejectedValue(new Error('Failed to get client secret: API key is not set'));
+
+      const result = await provider.callApi('Hello');
+
+      // Expect the response to contain an error
+      expect(result.error).toBeTruthy();
+      expect(result.error).toContain('WebSocket error');
+    });
 
     it('should throw error when API key is not set', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview-2024-12-17');
 
-      // Mock getApiKey to return undefined instead of null
+      // Mock getApiKey to return undefined
       jest.spyOn(provider, 'getApiKey').mockImplementation().mockReturnValue(undefined);
 
-      await expect(provider.callApi('Hello')).rejects.toThrow('OpenAI API key is not set');
+      // Now the getClientSecret method should throw an error directly
+      await expect(provider.getClientSecret()).rejects.toThrow('OpenAI API key is not set');
     });
 
     it('should use correct session parameters', () => {

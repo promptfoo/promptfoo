@@ -51,24 +51,20 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ) {
-    // Merge configs from the provider and the prompt
     const config = {
       ...this.config,
       ...context?.prompt?.config,
     };
 
-    // For Responses API, we need to parse the input differently
     let input;
     try {
-      // Check if the prompt is already structured as a message array
       const parsedJson = JSON.parse(prompt);
       if (Array.isArray(parsedJson)) {
         input = parsedJson;
       } else {
-        input = prompt; // Plain text input
+        input = prompt;
       }
     } catch {
-      // If not valid JSON, treat as plain text
       input = prompt;
     }
 
@@ -86,28 +82,42 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     const instructions = config.instructions;
 
-    // Handle response_format for type text, json_object or json_schema
-    let textObj;
+    let textFormat;
     if (config.response_format) {
       if (config.response_format.type === 'json_object') {
-        textObj = { type: 'json_object' };
+        textFormat = {
+          format: {
+            type: 'json_object',
+          },
+        };
+
+        // IMPORTANT: json_object format requires the word 'json' in the input prompt
       } else if (config.response_format.type === 'json_schema') {
-        // For json_schema, we need to include the schema
         const schema = maybeLoadFromExternalFile(
-          renderVarsInObject(config.response_format.json_schema?.schema, context?.vars),
+          renderVarsInObject(
+            config.response_format.schema || config.response_format.json_schema?.schema,
+            context?.vars,
+          ),
         );
 
-        textObj = {
-          type: 'json_schema',
-          schema,
+        const schemaName =
+          config.response_format.json_schema?.name ||
+          config.response_format.name ||
+          'response_schema';
+
+        textFormat = {
+          format: {
+            type: 'json_schema',
+            name: schemaName,
+            schema,
+            strict: true,
+          },
         };
       } else {
-        // Default to text
-        textObj = { type: 'text' };
+        textFormat = { format: { type: 'text' } };
       }
     } else {
-      // Default to text format if no response_format is specified
-      textObj = { type: 'text' };
+      textFormat = { format: { type: 'text' } };
     }
 
     const body = {
@@ -125,7 +135,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.previous_response_id ? { previous_response_id: config.previous_response_id } : {}),
-      text: textObj,
+      text: textFormat,
       ...(config.truncation ? { truncation: config.truncation } : {}),
       ...(config.metadata ? { metadata: config.metadata } : {}),
       ...('parallel_tool_calls' in config
@@ -211,30 +221,24 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       // Process all output items
       for (const item of output) {
         if (item.type === 'function_call') {
-          // Handle direct function calls at the top level
           result = JSON.stringify(item);
         } else if (item.type === 'message' && item.role === 'assistant') {
           if (item.content) {
-            // Extract text content from the message
             for (const contentItem of item.content) {
               if (contentItem.type === 'output_text') {
                 result += contentItem.text;
               } else if (contentItem.type === 'tool_use' || contentItem.type === 'function_call') {
-                // Handle tool calls or function calls
                 result = JSON.stringify(contentItem);
               } else if (contentItem.type === 'refusal') {
-                // Handle explicit refusal content
                 refusal = contentItem.refusal;
                 isRefusal = true;
               }
             }
           } else if (item.refusal) {
-            // Handle direct refusal in message
             refusal = item.refusal;
             isRefusal = true;
           }
         } else if (item.type === 'tool_result') {
-          // Handle tool results
           result = JSON.stringify(item);
         }
       }
