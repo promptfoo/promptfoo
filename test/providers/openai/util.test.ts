@@ -5,6 +5,7 @@ import {
   getTokenUsage,
   validateFunctionCall,
   formatOpenAiError,
+  OPENAI_CHAT_MODELS,
 } from '../../../src/providers/openai/util';
 
 jest.mock('../../../src/cache');
@@ -214,6 +215,108 @@ describe('calculateOpenAICost', () => {
 
   it('should handle a model with no cost property', () => {
     const cost = calculateOpenAICost('text-davinci-002', {}, 1000, 500);
+    expect(cost).toBeUndefined();
+  });
+
+  it('should calculate cost correctly for o1-pro', () => {
+    const cost = calculateOpenAICost('o1-pro', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 150 + 500 * 600) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for o1-pro-2025-03-19', () => {
+    const cost = calculateOpenAICost('o1-pro-2025-03-19', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 150 + 500 * 600) / 1e6, 6);
+  });
+
+  it('should calculate audio token costs for gpt-4o-realtime-preview-2024-12-17', () => {
+    const cost = calculateOpenAICost('gpt-4o-realtime-preview-2024-12-17', {}, 1000, 500, 200, 100);
+    const expectedCost = (1000 * 5 + 500 * 20 + 200 * 40 + 100 * 80) / 1e6;
+    expect(cost).toBeCloseTo(expectedCost, 6);
+  });
+
+  it('should calculate audio token costs for gpt-4o-mini-realtime-preview-2024-12-17', () => {
+    const cost = calculateOpenAICost(
+      'gpt-4o-mini-realtime-preview-2024-12-17',
+      {},
+      1000,
+      500,
+      200,
+      100,
+    );
+    const expectedCost = (1000 * 0.6 + 500 * 2.4 + 200 * 10 + 100 * 20) / 1e6;
+    expect(cost).toBeCloseTo(expectedCost, 6);
+  });
+
+  it('should return undefined for zero tokens', () => {
+    const cost = calculateOpenAICost('gpt-4.5-preview', {}, 0, 0);
+    expect(cost).toBeUndefined();
+  });
+
+  it('should handle only prompt tokens', () => {
+    const cost = calculateOpenAICost('gpt-4.5-preview', {}, 1000, 0);
+    expect(cost).toBeCloseTo((1000 * 75) / 1e6, 6);
+  });
+
+  it('should handle only completion tokens', () => {
+    const cost = calculateOpenAICost('gpt-4.5-preview', {}, 0, 1000);
+    expect(cost).toBeCloseTo((1000 * 150) / 1e6, 6);
+  });
+
+  it('should handle large token counts', () => {
+    const cost = calculateOpenAICost('gpt-4.5-preview', {}, 1000000, 1000000);
+    expect(cost).toBeCloseTo((1000000 * 75 + 1000000 * 150) / 1e6, 6);
+  });
+
+  it('should handle mixed undefined audio tokens', () => {
+    const cost = calculateOpenAICost('gpt-4o-audio-preview', {}, 1000, 500, undefined, 100);
+    expect(cost).toBeUndefined();
+  });
+
+  it('should use custom audioCost from config when provided', () => {
+    const audioCost = 0.05; // per 1M tokens
+
+    const promiseTokens = 1000;
+    const completionTokens = 500;
+    const audioPromptTokens = 200;
+    const audioCompletionTokens = 100;
+
+    const model = OPENAI_CHAT_MODELS.find(
+      (m) =>
+        m.id === 'gpt-4o-audio-preview' &&
+        m.cost &&
+        'audioInput' in m.cost &&
+        'audioOutput' in m.cost,
+    );
+
+    if (!model || !model.cost) {
+      return;
+    }
+
+    const baseInputCost = model.cost.input * promiseTokens;
+    const baseOutputCost = model.cost.output * completionTokens;
+
+    const audioInputCostCustom = audioCost * audioPromptTokens;
+    const audioOutputCostCustom = audioCost * audioCompletionTokens;
+
+    const expectedTotalCost =
+      (baseInputCost + baseOutputCost + audioInputCostCustom + audioOutputCostCustom) / 1;
+
+    const cost = calculateOpenAICost(
+      'gpt-4o-audio-preview',
+      { audioCost },
+      promiseTokens,
+      completionTokens,
+      audioPromptTokens,
+      audioCompletionTokens,
+    );
+
+    expect(cost).toBeCloseTo(expectedTotalCost, 2);
+  });
+
+  it('should handle a non-existent model with no cost property', () => {
+    const fakeModelName = 'non-existent-model-with-no-cost';
+
+    const cost = calculateOpenAICost(fakeModelName, {}, 1000, 500);
     expect(cost).toBeUndefined();
   });
 });
