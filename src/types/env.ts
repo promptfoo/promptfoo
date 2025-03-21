@@ -37,6 +37,7 @@ export const ProviderEnvOverridesSchema = z.object({
   HELICONE_API_KEY: z.string().optional(),
   HF_API_TOKEN: z.string().optional(),
   HF_TOKEN: z.string().optional(),
+  HUGGING_FACE_HUB_TOKEN: z.string().optional(),
   LANGFUSE_HOST: z.string().optional(),
   LANGFUSE_PUBLIC_KEY: z.string().optional(),
   LANGFUSE_SECRET_KEY: z.string().optional(),
