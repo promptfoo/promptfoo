@@ -1,7 +1,7 @@
 ---
 title: Contributing to promptfoo
 sidebar_label: Contributing
-description: Learn how to contribute code, documentation, and providers to the promptfoo project
+description: Learn how to contribute code, documentation, and providers to the promptfoo
 ---
 
 We welcome contributions from the community to help make promptfoo better. This guide will help you get started. If you have any questions, please reach out to us on [Discord](https://discord.gg/promptfoo) or through a [GitHub issue](https://github.com/promptfoo/promptfoo/issues/new).
