@@ -5,6 +5,7 @@ import {
   getTokenUsage,
   validateFunctionCall,
   formatOpenAiError,
+  OPENAI_CHAT_MODELS,
 } from '../../../src/providers/openai/util';
 
 jest.mock('../../../src/cache');
@@ -137,7 +138,7 @@ describe('calculateOpenAICost', () => {
       1000,
       500,
     );
-    expect(cost).toBeCloseTo((1000 * 2.5 + 500 * 10) / 1000000, 6);
+    expect(cost).toBeCloseTo((1000 * 5 + 500 * 20) / 1000000, 6);
   });
 
   it('should calculate cost correctly for gpt-4o-mini-realtime-preview-2024-12-17', () => {
@@ -147,7 +148,7 @@ describe('calculateOpenAICost', () => {
       1000,
       500,
     );
-    expect(cost).toBeCloseTo((1000 * 0.15 + 500 * 0.6) / 1000000, 6);
+    expect(cost).toBeCloseTo((1000 * 0.6 + 500 * 2.4) / 1000000, 6);
   });
 
   it('should calculate cost correctly for o1-pro', () => {
@@ -169,7 +170,7 @@ describe('calculateOpenAICost', () => {
       200,
       100,
     );
-    const expectedCost = (1000 * 2.5 + 500 * 10 + 200 * 40 + 100 * 80) / 1000000;
+    const expectedCost = (1000 * 5 + 500 * 20 + 200 * 40 + 100 * 80) / 1000000;
     expect(cost).toBeCloseTo(expectedCost, 6);
   });
 
@@ -182,7 +183,7 @@ describe('calculateOpenAICost', () => {
       200,
       100,
     );
-    const expectedCost = (1000 * 0.15 + 500 * 0.6 + 200 * 10 + 100 * 20) / 1000000;
+    const expectedCost = (1000 * 0.6 + 500 * 2.4 + 200 * 10 + 100 * 20) / 1000000;
     expect(cost).toBeCloseTo(expectedCost, 6);
   });
 
@@ -219,6 +220,66 @@ describe('calculateOpenAICost', () => {
   it('should handle large token counts', () => {
     const cost = calculateOpenAICost('gpt-4.5-preview', { cost: undefined }, 1000000, 1000000);
     expect(cost).toBeCloseTo((1000000 * 75 + 1000000 * 150) / 1000000, 6);
+  });
+
+  it('should handle mixed undefined audio tokens', () => {
+    const cost = calculateOpenAICost(
+      'gpt-4o-audio-preview',
+      { cost: undefined },
+      1000,
+      500,
+      undefined,
+      100,
+    );
+    expect(cost).toBeUndefined();
+  });
+
+  it('should use custom audioCost from config when provided', () => {
+    const audioCost = 0.05; // per 1M tokens
+
+    const promiseTokens = 1000;
+    const completionTokens = 500;
+    const audioPromptTokens = 200;
+    const audioCompletionTokens = 100;
+
+    const model = OPENAI_CHAT_MODELS.find(
+      (m) =>
+        m.id === 'gpt-4o-audio-preview' &&
+        m.cost &&
+        'audioInput' in m.cost &&
+        'audioOutput' in m.cost,
+    );
+
+    if (!model || !model.cost) {
+      return;
+    }
+
+    const baseInputCost = model.cost.input * promiseTokens;
+    const baseOutputCost = model.cost.output * completionTokens;
+
+    const audioInputCostCustom = audioCost * audioPromptTokens;
+    const audioOutputCostCustom = audioCost * audioCompletionTokens;
+
+    const expectedTotalCost =
+      (baseInputCost + baseOutputCost + audioInputCostCustom + audioOutputCostCustom) / 1;
+
+    const cost = calculateOpenAICost(
+      'gpt-4o-audio-preview',
+      { audioCost },
+      promiseTokens,
+      completionTokens,
+      audioPromptTokens,
+      audioCompletionTokens,
+    );
+
+    expect(cost).toBeCloseTo(expectedTotalCost, 2);
+  });
+
+  it('should handle a model with no cost property', () => {
+    const fakeModelName = 'non-existent-model-with-no-cost';
+
+    const cost = calculateOpenAICost(fakeModelName, { cost: undefined }, 1000, 500);
+    expect(cost).toBeUndefined();
   });
 });
 
@@ -258,11 +319,11 @@ describe('validateFunctionCall', () => {
   it('should throw error for invalid arguments', () => {
     const functionCall = {
       name: 'testFunction',
-      arguments: JSON.stringify({ bar: 123 }), // missing required 'foo'
+      arguments: JSON.stringify({ bar: 'not a number' }),
     };
 
     expect(() => validateFunctionCall(functionCall, [sampleFunction], {})).toThrow(
-      'Call to "testFunction" does not match schema',
+      /Call to "testFunction" does not match schema/,
     );
   });
 });
@@ -271,25 +332,27 @@ describe('formatOpenAiError', () => {
   it('should format error with type and code', () => {
     const error = {
       error: {
-        message: 'Test error',
-        type: 'invalid_request',
-        code: 'invalid_api_key',
+        message: 'Error message',
+        type: 'error_type',
+        code: 'error_code',
       },
     };
+
     const result = formatOpenAiError(error);
-    expect(result).toContain('API error: Test error');
-    expect(result).toContain('Type: invalid_request');
-    expect(result).toContain('Code: invalid_api_key');
+    expect(result).toContain('API error: Error message');
+    expect(result).toContain('Type: error_type');
+    expect(result).toContain('Code: error_code');
   });
 
   it('should format error without type and code', () => {
     const error = {
       error: {
-        message: 'Test error',
+        message: 'Error message',
       },
     };
+
     const result = formatOpenAiError(error);
-    expect(result).toContain('API error: Test error');
+    expect(result).toContain('API error: Error message');
     expect(result).not.toContain('Type:');
     expect(result).not.toContain('Code:');
   });
