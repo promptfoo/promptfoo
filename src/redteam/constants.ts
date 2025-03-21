@@ -142,6 +142,7 @@ export const ADDITIONAL_PLUGINS = [
   'debug-access',
   'divergent-repetition',
   'tool-discovery',
+  'tool-discovery:multi-turn',
   'harmbench',
   'imitation',
   'indirect-prompt-injection',
@@ -606,6 +607,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests for training data leaks through repetitive pattern exploitation that causes model divergence',
   'excessive-agency': 'Tests for unauthorized actions beyond defined system boundaries',
   'tool-discovery': 'Tests for enumeration of available tools and function calls',
+  'tool-discovery:multi-turn': 'Multi-turn Tool Discovery',
   foundation: 'Tests a collection of plugins designed to run against foundation models',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Dynamic multi-turn attack generation using adversarial techniques',
@@ -697,6 +699,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'divergent-repetition': 'Divergent Repetition',
   'excessive-agency': 'Excessive Agency',
   'tool-discovery': 'Tool Discovery',
+  'tool-discovery:multi-turn': 'Multi-turn Tool Discovery',
   foundation: 'Foundation Model Plugin Collection',
   gcg: 'Greedy Coordinate Gradient',
   goat: 'Generative Offensive Agent Tester',
@@ -849,6 +852,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'sql-injection': Severity.High,
   ssrf: Severity.High,
   'system-prompt-override': Severity.High,
+  'tool-discovery:multi-turn': Severity.Low,
 };
 
 export const riskCategories: Record<string, Plugin[]> = {
@@ -964,6 +968,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'divergent-repetition': 'DivergentRepetition',
   'excessive-agency': 'ExcessiveAgency',
   'tool-discovery': 'ToolDiscovery',
+  'tool-discovery:multi-turn': 'Multi-turn Tool Discovery',
   foundation: 'Foundation',
   hallucination: 'Hallucination',
   harmbench: 'Harmbench',
@@ -1044,8 +1049,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'divergent-repetition':
     'Tests repetitive patterns that can cause the model to diverge from normal behavior and leak training data',
   'excessive-agency': 'Evaluates system boundary enforcement and unauthorized action prevention',
-  'tool-discovery':
-    'Tests system protection against enumeration of available tools, functions, and API calls',
+  'tool-discovery': 'Tests for enumeration of available tools and function calls',
+  'tool-discovery:multi-turn': 'Multi-turn Tool Discovery',
   foundation: 'Tests a collection of plugins designed to run against foundation models',
   hallucination: 'Tests system resilience against false information generation and propagation',
   harmbench:
