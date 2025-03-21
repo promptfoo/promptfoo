@@ -519,3 +519,5 @@ export default class RedteamToolDiscoveryMultiProvider extends RedteamProviderBa
     };
   }
 }
+
+export { MAX_ROUNDS };
