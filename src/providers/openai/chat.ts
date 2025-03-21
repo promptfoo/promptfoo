@@ -30,11 +30,15 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   }
 
   protected isReasoningModel(): boolean {
-    return this.modelName.startsWith('o1') || this.modelName.startsWith('o3');
+    return (
+      this.modelName.startsWith('o1') ||
+      this.modelName.startsWith('o3') ||
+      this.modelName.includes('computer-use')
+    );
   }
 
   protected supportsTemperature(): boolean {
-    // OpenAI's o1 and o3 models don't support temperature but some 3rd
+    // OpenAI's o1, o3, and computer-use models don't support temperature but some 3rd
     // party reasoning models do.
     return !this.isReasoningModel();
   }
@@ -115,10 +119,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(config.stop ? { stop: config.stop } : {}),
       ...(config.passthrough || {}),
-      ...(this.modelName.includes('audio')
+      ...(this.modelName.includes('audio') || this.modelName.includes('tts')
         ? {
             modalities: config.modalities || ['text', 'audio'],
-            audio: config.audio || { voice: 'alloy', format: 'wav' },
+            audio: {
+              ...(config.audio || { voice: 'alloy', format: 'wav' }),
+              ...(config.instructions ? { instructions: config.instructions } : {}),
+            },
           }
         : {}),
     };
