@@ -26,6 +26,10 @@ describe('OpenAiResponsesProvider', () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o1-pro');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4o');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-mini');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4.5-preview');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
+      'gpt-4.5-preview-2025-02-27',
+    );
   });
 
   it('should format and call the responses API correctly', async () => {
@@ -667,54 +671,47 @@ describe('OpenAiResponsesProvider', () => {
       statusText: 'OK',
     });
 
-    // Initialize the provider with JSON schema
-    const provider = new OpenAiResponsesProvider('gpt-4o', {
-      config: {
-        apiKey: 'test-key',
-        response_format: {
-          type: 'json_schema',
-          json_schema: {
-            name: 'TestSchema',
-            strict: true,
-            schema: {
-              type: 'object',
-              properties: {
-                result: { type: 'string' },
-              },
-              required: ['result'],
-              additionalProperties: false,
+    // Use a config with type assertion for test purposes
+    const config = {
+      apiKey: 'test-key',
+      response_format: {
+        type: 'json_schema' as const,
+        json_schema: {
+          name: 'TestSchema',
+          strict: true,
+          schema: {
+            type: 'object' as const,
+            properties: {
+              result: { type: 'string' },
             },
+            required: ['result'],
+            additionalProperties: false,
           },
         },
       },
-    });
+    } as any; // Type assertion for test purposes
+
+    // Initialize the provider with JSON schema
+    const provider = new OpenAiResponsesProvider('gpt-4o', { config });
 
     // Call the API
     await provider.callApi('Test prompt');
 
-    // Verify the request includes proper JSON schema format
-    expect(cache.fetchWithCache).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        body: expect.stringMatching(/text.+format.+name.+json_schema.+type.+json_schema/s),
-      }),
-      expect.any(Number),
-    );
-
     // Verify the mock was called at least once
     expect(jest.mocked(cache.fetchWithCache).mock.calls.length).toBeGreaterThan(0);
 
-    // Access the request body from the first call - we need to type assert since TypeScript can't guarantee this exists
+    // Access the request body from the first call
     const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
     expect(mockCall).toBeDefined();
 
-    // Type assertion to tell TypeScript we know this exists
     const reqOptions = mockCall[1] as { body: string };
     const body = JSON.parse(reqOptions.body);
 
     // Check that format properties are correct
-    expect(body.text.format.name).toBe('json_schema');
     expect(body.text.format.type).toBe('json_schema');
+    expect(body.text.format.name).toBe('TestSchema');
+    expect(body.text.format.schema).toBeDefined();
+    expect(body.text.format.strict).toBe(true);
   });
 
   // Test for Line 66-67: Testing when input is a JSON object (not array or string)
@@ -1146,5 +1143,420 @@ describe('OpenAiResponsesProvider', () => {
     expect(() => JSON.parse(result.output)).not.toThrow();
     const parsed = JSON.parse(result.output);
     expect(parsed.type).toBe('tool_result');
+  });
+
+  describe('response format handling', () => {
+    it('should handle json_object format correctly', async () => {
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: '{"result": "success"}',
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+          response_format: {
+            type: 'json_object',
+          },
+        },
+      });
+
+      await provider.callApi('Test prompt with JSON');
+
+      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const reqOptions = mockCall[1] as { body: string };
+      const body = JSON.parse(reqOptions.body);
+
+      // Check that the text format is correctly formatted
+      expect(body.text).toEqual({
+        format: {
+          type: 'json_object',
+        },
+      });
+    });
+
+    it('should handle json_schema format correctly with name parameter', async () => {
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: '{"result": "success"}',
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      // Use a config with type assertion for test purposes
+      const config = {
+        apiKey: 'test-key',
+        response_format: {
+          type: 'json_schema' as const,
+          json_schema: {
+            name: 'test_schema',
+            strict: true,
+            schema: {
+              type: 'object' as const,
+              properties: {
+                result: { type: 'string' },
+              },
+              required: ['result'],
+              additionalProperties: false,
+            },
+          },
+        },
+      } as any; // Type assertion for test purposes
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', { config });
+
+      await provider.callApi('Test prompt');
+
+      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const reqOptions = mockCall[1] as { body: string };
+      const body = JSON.parse(reqOptions.body);
+
+      // Check that the text format is correctly formatted with name parameter
+      expect(body.text.format.type).toBe('json_schema');
+      expect(body.text.format.name).toBe('test_schema');
+      expect(body.text.format.schema).toBeDefined();
+      expect(body.text.format.strict).toBe(true);
+    });
+
+    it('should handle json_schema format with default name when not provided', async () => {
+      // Setup mock
+      const mockApiResponse = {
+        id: 'resp_def456',
+        status: 'completed',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: '{"result": "default name test"}',
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      // Use a config with type assertion for test purposes - missing name field
+      const config = {
+        apiKey: 'test-key',
+        response_format: {
+          type: 'json_schema' as const,
+          json_schema: {
+            strict: true,
+            schema: {
+              type: 'object' as const,
+              properties: {
+                result: { type: 'string' },
+              },
+              required: ['result'],
+              additionalProperties: false,
+            },
+          },
+        },
+      } as any; // Type assertion for test purposes
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', { config });
+
+      await provider.callApi('Test prompt');
+
+      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const reqOptions = mockCall[1] as { body: string };
+      const body = JSON.parse(reqOptions.body);
+
+      // Check that a default name is provided
+      expect(body.text.format.type).toBe('json_schema');
+      expect(body.text.format.name).toBeTruthy(); // Should have a default name
+      expect(body.text.format.schema).toBeDefined();
+      expect(body.text.format.strict).toBe(true);
+    });
+
+    it('should handle json_schema format with nested json_schema.schema', async () => {
+      // Setup mock
+      const mockApiResponse = {
+        id: 'resp_ghi789',
+        status: 'completed',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: '{"result": "nested schema test"}',
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      // Use a config with proper structure for TypeScript - with nested json_schema.schema structure
+      const config = {
+        apiKey: 'test-key',
+        response_format: {
+          type: 'json_schema' as const,
+          json_schema: {
+            name: 'nested_test',
+            strict: true,
+            schema: {
+              type: 'object' as const,
+              properties: {
+                result: { type: 'string' },
+              },
+              required: ['result'],
+              additionalProperties: false,
+            },
+          },
+        } as any, // Use type assertion to avoid TypeScript errors
+      };
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', { config });
+
+      await provider.callApi('Test prompt');
+
+      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const reqOptions = mockCall[1] as { body: string };
+      const body = JSON.parse(reqOptions.body);
+
+      // Check that format properties are correct
+      expect(body.text.format.type).toBe('json_schema');
+      expect(body.text.format.name).toBe('nested_test');
+      expect(body.text.format.schema).toBeDefined();
+      expect(body.text.format.strict).toBe(true);
+    });
+
+    it('should handle text format correctly', async () => {
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: 'Simple text response',
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+          // No response_format specified
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const reqOptions = mockCall[1] as { body: string };
+      const body = JSON.parse(reqOptions.body);
+
+      // Check default text format is used
+      expect(body.text).toEqual({
+        format: {
+          type: 'text',
+        },
+      });
+    });
+
+    it('should handle explicit text format correctly', async () => {
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: 'Explicit text format response',
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 15, total_tokens: 25 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+          response_format: {
+            type: 'text' as any, // Type assertion to avoid TypeScript errors
+          },
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const reqOptions = mockCall[1] as { body: string };
+      const body = JSON.parse(reqOptions.body);
+
+      // Check explicit text format is used
+      expect(body.text).toEqual({
+        format: {
+          type: 'text',
+        },
+      });
+    });
+  });
+
+  describe('refusal handling', () => {
+    it('should handle explicit refusal content in message', async () => {
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'refusal',
+                refusal: 'I cannot fulfill this request due to content policy violation.',
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      const result = await provider.callApi('Test prompt with refusal');
+
+      // Check that the refusal was properly extracted
+      expect(result.isRefusal).toBe(true);
+      expect(result.output).toBe('I cannot fulfill this request due to content policy violation.');
+    });
+
+    it('should handle direct refusal in message object', async () => {
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            refusal: 'I cannot provide that information.',
+            // No content array
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      const result = await provider.callApi('Test prompt with direct refusal');
+
+      // Check that the direct refusal was properly extracted
+      expect(result.isRefusal).toBe(true);
+      expect(result.output).toBe('I cannot provide that information.');
+    });
   });
 });

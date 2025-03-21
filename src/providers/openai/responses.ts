@@ -97,7 +97,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         };
 
         // Note: The word 'json' must appear in the input when using json_object format
-        // This should be handled in the prompt, not automatically added here
+        // This should be handled in the prompt.
       } else if (config.response_format.type === 'json_schema') {
         // For json_schema, we need to include the schema
         const schema = maybeLoadFromExternalFile(
@@ -108,7 +108,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         );
 
         // Generate a name if not provided
-        const schemaName = config.response_format.name || 'response_schema';
+        const schemaName =
+          config.response_format.json_schema?.name ||
+          config.response_format.name ||
+          'response_schema';
 
         textFormat = {
           format: {
