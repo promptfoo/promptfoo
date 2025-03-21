@@ -39,6 +39,28 @@ describe('testCaseFromCsvRow', () => {
     expect(result).toEqual(expectedTestCase);
   });
 
+  it('should properly trim whitespace and newlines from assertion values', () => {
+    const row: CsvRow = {
+      __expected1: 'equals:Expected output\n',
+      __expected2: ' contains:part of output  ',
+      var1: 'value1',
+    };
+
+    const expectedTestCase: TestCase = {
+      vars: {
+        var1: 'value1',
+      },
+      assert: [
+        { type: 'equals', value: 'Expected output' },
+        { type: 'contains', value: 'part of output' },
+      ],
+      options: {},
+    };
+
+    const result = testCaseFromCsvRow(row);
+    expect(result).toEqual(expectedTestCase);
+  });
+
   it('should handle CSV row with only variables', () => {
     const row: CsvRow = {
       var1: 'value1',
