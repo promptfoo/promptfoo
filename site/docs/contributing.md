@@ -1,6 +1,7 @@
 ---
 title: Contributing to promptfoo
 sidebar_label: Contributing
+description: Learn how to contribute code, documentation, and providers to the promptfoo project
 ---
 
 We welcome contributions from the community to help make promptfoo better. This guide will help you get started. If you have any questions, please reach out to us on [Discord](https://discord.gg/promptfoo) or through a [GitHub issue](https://github.com/promptfoo/promptfoo/issues/new).
@@ -31,7 +32,7 @@ We particularly welcome contributions in the following areas:
 1. Fork the repository on GitHub by clicking the "Fork" button at the top right of the [promptfoo repository](https://github.com/promptfoo/promptfoo).
 2. Clone your fork locally:
 
-   ```sh
+   ```bash
    git clone https://github.com/[your-username]/promptfoo.git
    cd promptfoo
    ```
@@ -40,7 +41,7 @@ We particularly welcome contributions in the following areas:
 
    3.1. Setup locally
 
-   ```sh
+   ```bash
    # We recommend using the Node.js version specified in the .nvmrc file (ensure node >= 18)
    nvm use
    npm install
@@ -52,32 +53,36 @@ We particularly welcome contributions in the following areas:
 
    Now install node based dependencies:
 
-   ```sh
+   ```bash
    npm install
    ```
 
 4. Run the tests to make sure everything is working:
 
-   ```sh
+   ```bash
    npm test
    ```
 
 5. Build the project:
 
-   ```sh
+   ```bash
    npm run build
    ```
 
 6. Run the project:
 
-   ```sh
+   ```bash
    npm run dev
    ```
 
    This will run the express server on port 15500 and the web UI on port 3000.
    Both the API and UI will be automatically reloaded when you make changes.
 
-   Note: The development experience is a little bit different than how it runs in production. In development, the web UI is served using a Vite server. In all other environments, the front end is built and served as a static site via the Express server.
+   :::info
+
+   The development experience is a little bit different than how it runs in production. In development, the web UI is served using a Vite server. In all other environments, the front end is built and served as a static site via the Express server.
+
+   :::
 
 If you're not sure where to start, check out our [good first issues](https://github.com/promptfoo/promptfoo/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) or join our [Discord community](https://discord.gg/promptfoo) for guidance.
 
@@ -85,15 +90,21 @@ If you're not sure where to start, check out our [good first issues](https://git
 
 1. Create a new branch for your feature or bug fix:
 
-   ```sh
+   ```bash
    git checkout -b feature/your-feature-name
    ```
 
 2. Make your changes and commit them. We follow the [Conventional Commits](https://www.conventionalcommits.org/) specification for PR titles when merging into `main`. Individual commits can use any format, since we squash merge all PRs with a conventional commit message.
 
+   :::note
+
+   All pull requests are squash-merged with a conventional commit message.
+
+   :::
+
 3. Push your branch to your fork:
 
-   ```sh
+   ```bash
    git push origin your-branch-name
    ```
 
@@ -107,6 +118,12 @@ When opening a pull request:
 - Be responsive to feedback and be prepared to make changes if requested.
 - Ensure your tests are passing and your code is properly linted and formatted. You can do this by running `npm run lint -- --fix` and `npm run format` respectively.
 
+:::tip
+
+If you're unsure about how to implement something, feel free to open a draft PR to get early feedback.
+
+:::
+
 Don't hesitate to ask for help. We're here to support you. If you're worried about whether your PR will be accepted, please talk to us first (see [Getting Help](#getting-help)).
 
 ## Tests
@@ -115,19 +132,19 @@ Don't hesitate to ask for help. We're here to support you. If you're worried abo
 
 We use Jest for testing. To run the test suite:
 
-```sh
+```bash
 npm test
 ```
 
 To run tests in watch mode:
 
-```sh
+```bash
 npm run test:watch
 ```
 
 You can also run specific tests with (see [jest documentation](https://jestjs.io/docs/cli#jest-regexfortestfiles)):
 
-```sh
+```bash
 npx jest [pattern]
 
 # Example:
@@ -147,7 +164,7 @@ When writing tests, please:
 
 We use ESLint and Prettier for code linting and formatting. Before submitting a pull request, please run:
 
-```sh
+```bash
 npm run format
 npm run lint
 ```
@@ -158,13 +175,13 @@ It's a good idea to run the lint command as `npm run lint -- --fix` to automatic
 
 To build the project:
 
-```sh
+```bash
 npm run build
 ```
 
 For continuous building of the api during development:
 
-```sh
+```bash
 npm run build:watch
 ```
 
@@ -174,7 +191,7 @@ npm run build:watch
 
 We recommend using `npm link` to link your local `promptfoo` package to the global `promptfoo` package:
 
-```sh
+```bash
 npm link
 promptfoo --help
 ```
@@ -183,7 +200,7 @@ We recommend running `npm run build:watch` in a separate terminal while you are 
 
 Alternatively, you can run the CLI directly:
 
-```sh
+```bash
 npm run local -- eval --config examples/cloudflare-ai/chat_config.yaml
 ```
 
@@ -191,7 +208,8 @@ When working on a new feature, we recommend setting up a local `promptfooconfig.
 
 Here's a simple example:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: openai:chat:gpt-4o
 prompts:
@@ -212,7 +230,7 @@ Providers are defined in TypeScript. We also provide language bindings for Pytho
 
 2. Implement the provider in `src/providers/yourProviderName.ts` following our [Custom API Provider Docs](/docs/providers/custom-api/). Please use our cache `src/cache.ts` to store responses. If your provider requires a new dependency, please add it as a peer dependency with `npm install --save-peer`.
 
-3. Write unit tests in `test/providers.yourProviderName.test.ts` and create an example in the `examples/` directory.
+3. Write unit tests in `test/providers/yourProviderName.test.ts` and create an example in the `examples/` directory.
 
 4. Document your provider in `site/docs/providers/yourProviderName.md`, including a description, setup instructions, configuration options, and usage examples. You can also add examples to the `examples/` directory. Consider writing a guide comparing your provider to others or highlighting unique features or benefits.
 
@@ -226,24 +244,28 @@ The web UI is written as a React app. It is exported as a static site and hosted
 
 To run the web UI in dev mode:
 
-```sh
+```bash
 npm run dev
 ```
 
 This will host the web UI at http://localhost:3000. This allows you to hack on the React app quickly (with fast refresh). If you want to run the web UI without the express server, you can run:
 
-```sh
+```bash
 npm run dev:web
 ```
 
 To test the entire thing end-to-end, we recommend building the entire project and linking it to promptfoo:
 
-```sh
+```bash
 npm run build
 promptfoo view
 ```
 
-Note that this will not update the web UI if you make further changes to the code. You have to run `npm run build` again.
+:::note
+
+This will not update the web UI if you make further changes to the code. You have to run `npm run build` again.
+
+:::
 
 ## Python Contributions
 
@@ -260,11 +282,13 @@ While promptfoo is primarily written in TypeScript, we support custom Python pro
 
 If you're adding new features or changing existing ones, please update the relevant documentation. We use [Docusaurus](https://docusaurus.io/) for our documentation. We strongly encourage examples and guides as well.
 
-## Database
+## Advanced Topics
 
-promptfoo uses SQLite as its default database, managed through the Drizzle ORM. By default, the database is stored in `/.promptfoo/`. You can override this location by setting `PROMPTFOO_CONFIG_DIR`. The database schema is defined in `src/database.ts` and migrations are stored in `drizzle`. Note that the migrations are all generated and you should not access these files directly.
+### Database
 
-### Main Tables
+Promptfoo uses SQLite as its default database, managed through the Drizzle ORM. By default, the database is stored in `/.promptfoo/`. You can override this location by setting `PROMPTFOO_CONFIG_DIR`. The database schema is defined in `src/database.ts` and migrations are stored in `drizzle`. Note that the migrations are all generated and you should not access these files directly.
+
+#### Main Tables
 
 - `evals`: Stores evaluation details including results and configuration.
 - `prompts`: Stores information about different prompts.
@@ -274,12 +298,12 @@ promptfoo uses SQLite as its default database, managed through the Drizzle ORM. 
 
 You can view the contents of each of these tables by running `npx drizzle-kit studio`, which will start a web server.
 
-### Adding a Migration
+#### Adding a Migration
 
 1. **Modify Schema**: Make changes to your schema in `src/database.ts`.
 2. **Generate Migration**: Run the command to create a new migration:
 
-   ```sh
+   ```bash
    npm run db:generate
    ```
 
@@ -288,11 +312,11 @@ You can view the contents of each of these tables by running `npx drizzle-kit st
 3. **Review Migration**: Inspect the generated migration file to ensure it captures your intended changes.
 4. **Apply Migration**: Apply the migration with:
 
-   ```sh
+   ```bash
    npm run db:migrate
    ```
 
-## Release Steps
+### Release Steps
 
 Note: releases are only issued by maintainers. If you need to to release a new version quickly please send a message on [Discord](https://discord.gg/promptfoo).
 
