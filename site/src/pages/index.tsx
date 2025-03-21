@@ -94,7 +94,7 @@ function HomepageWalkthrough() {
             <li>Harmful content</li>
             <li>Specialized medical and legal advice</li>
             <li>
-              and <Link to="/docs/red-team/llm-vulnerability-types/">much more</Link>
+              and <Link to="/docs/red-team/llm-vulnerability-types/">much more</Link>.
             </li>
           </ul>
           <p>
@@ -274,7 +274,7 @@ export default function Home(): JSX.Element {
           <h2>Make your LLM app reliable & secure</h2>
           <div className={styles.buttons}>
             <Link className="button button--primary button--lg" to={getStartedUrl}>
-              Read Start Guide
+              Getting Started
             </Link>
             <Link
               className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
