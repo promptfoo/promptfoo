@@ -63,6 +63,8 @@ It also can generate [security vulnerability reports](https://www.promptfoo.dev/
 
 ## Star the Project ⭐
 
+If you find promptfoo useful, please star it on GitHub! Stars help the project grow and ensure you stay updated on new releases and features.
+
 <p align="center">
   <img src="site/static/img/github/star-animation.gif" alt="Star us on GitHub!" width="800" />
 </p>
