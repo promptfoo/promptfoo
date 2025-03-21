@@ -51,24 +51,20 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ) {
-    // Merge configs from the provider and the prompt
     const config = {
       ...this.config,
       ...context?.prompt?.config,
     };
 
-    // For Responses API, we need to parse the input differently
     let input;
     try {
-      // Check if the prompt is already structured as a message array
       const parsedJson = JSON.parse(prompt);
       if (Array.isArray(parsedJson)) {
         input = parsedJson;
       } else {
-        input = prompt; // Plain text input
+        input = prompt;
       }
     } catch {
-      // If not valid JSON, treat as plain text
       input = prompt;
     }
 
@@ -86,7 +82,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     const instructions = config.instructions;
 
-    // Handle response_format for type text, json_object or json_schema
     let textFormat;
     if (config.response_format) {
       if (config.response_format.type === 'json_object') {
@@ -96,10 +91,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           },
         };
 
-        // Note: The word 'json' must appear in the input when using json_object format
-        // This should be handled in the prompt.
+        // IMPORTANT: json_object format requires the word 'json' in the input prompt
       } else if (config.response_format.type === 'json_schema') {
-        // For json_schema, we need to include the schema
         const schema = maybeLoadFromExternalFile(
           renderVarsInObject(
             config.response_format.schema || config.response_format.json_schema?.schema,
@@ -107,7 +100,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           ),
         );
 
-        // Generate a name if not provided
         const schemaName =
           config.response_format.json_schema?.name ||
           config.response_format.name ||
@@ -122,11 +114,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           },
         };
       } else {
-        // Default to text
         textFormat = { format: { type: 'text' } };
       }
     } else {
-      // Default to text format if no response_format is specified
       textFormat = { format: { type: 'text' } };
     }
 
@@ -231,35 +221,28 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       // Process all output items
       for (const item of output) {
         if (item.type === 'function_call') {
-          // Handle direct function calls at the top level
           result = JSON.stringify(item);
         } else if (item.type === 'message' && item.role === 'assistant') {
           if (item.content) {
-            // Extract text content from the message
             for (const contentItem of item.content) {
               if (contentItem.type === 'output_text') {
                 result += contentItem.text;
               } else if (contentItem.type === 'tool_use' || contentItem.type === 'function_call') {
-                // Handle tool calls or function calls
                 result = JSON.stringify(contentItem);
               } else if (contentItem.type === 'refusal') {
-                // Handle explicit refusal content
                 refusal = contentItem.refusal;
                 isRefusal = true;
               }
             }
           } else if (item.refusal) {
-            // Handle direct refusal in message
             refusal = item.refusal;
             isRefusal = true;
           }
         } else if (item.type === 'tool_result') {
-          // Handle tool results
           result = JSON.stringify(item);
         }
       }
 
-      // If we found a refusal, return it
       if (isRefusal) {
         return {
           output: refusal,
@@ -278,7 +261,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         };
       }
 
-      // If using json_schema, try to parse the result as JSON
       if (config.response_format?.type === 'json_schema' && typeof result === 'string') {
         try {
           result = JSON.parse(result);
@@ -287,7 +269,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         }
       }
 
-      // Get token usage information
       const tokenUsage = getTokenUsage(data, cached);
 
       return {

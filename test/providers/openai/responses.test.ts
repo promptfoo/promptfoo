@@ -648,7 +648,6 @@ describe('OpenAiResponsesProvider', () => {
   });
 
   it('should format JSON schema correctly in request body', async () => {
-    // Setup mock for fetchWithCache
     jest.mocked(cache.fetchWithCache).mockResolvedValue({
       data: {
         id: 'resp_abc123',
@@ -671,7 +670,6 @@ describe('OpenAiResponsesProvider', () => {
       statusText: 'OK',
     });
 
-    // Use a config with type assertion for test purposes
     const config = {
       apiKey: 'test-key',
       response_format: {
@@ -689,34 +687,26 @@ describe('OpenAiResponsesProvider', () => {
           },
         },
       },
-    } as any; // Type assertion for test purposes
+    } as any;
 
-    // Initialize the provider with JSON schema
     const provider = new OpenAiResponsesProvider('gpt-4o', { config });
-
-    // Call the API
     await provider.callApi('Test prompt');
 
-    // Verify the mock was called at least once
     expect(jest.mocked(cache.fetchWithCache).mock.calls.length).toBeGreaterThan(0);
 
-    // Access the request body from the first call
     const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
     expect(mockCall).toBeDefined();
 
     const reqOptions = mockCall[1] as { body: string };
     const body = JSON.parse(reqOptions.body);
 
-    // Check that format properties are correct
     expect(body.text.format.type).toBe('json_schema');
     expect(body.text.format.name).toBe('TestSchema');
     expect(body.text.format.schema).toBeDefined();
     expect(body.text.format.strict).toBe(true);
   });
 
-  // Test for Line 66-67: Testing when input is a JSON object (not array or string)
   it('should handle JSON object prompt correctly', async () => {
-    // Setup mock for fetchWithCache
     const mockApiResponse = {
       id: 'resp_abc123',
       status: 'completed',
@@ -743,44 +733,33 @@ describe('OpenAiResponsesProvider', () => {
       statusText: 'OK',
     });
 
-    // Initialize the provider
     const provider = new OpenAiResponsesProvider('gpt-4o', {
       config: {
         apiKey: 'test-key',
       },
     });
 
-    // Create an object input (not an array)
     const objectInput = JSON.stringify({ query: 'What is the weather?', context: 'San Francisco' });
-
     await provider.callApi(objectInput);
 
-    // Verify the request handles the object as text
     const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
     const reqOptions = mockCall[1] as { body: string };
     const body = JSON.parse(reqOptions.body);
 
-    // The implementation should convert the object to a string
     expect(body.input).toEqual(objectInput);
   });
 
-  // Test for missing API key lines 135-138
   it('should throw error when API key is not set', async () => {
-    // Initialize the provider without an API key
     const provider = new OpenAiResponsesProvider('gpt-4o', {
-      config: {}, // No apiKey
+      config: {},
     });
 
-    // Override getApiKey to explicitly return undefined/null
     jest.spyOn(provider, 'getApiKey').mockReturnValue(undefined);
 
-    // Expect the call to throw an error
     await expect(provider.callApi('Test prompt')).rejects.toThrow('OpenAI API key is not set');
   });
 
-  // Test for error in API response, lines 178-182
   it('should handle error in API response data correctly', async () => {
-    // Mock API response with error field
     const mockApiResponse = {
       error: {
         message: 'Content policy violation',
@@ -789,7 +768,6 @@ describe('OpenAiResponsesProvider', () => {
       },
     };
 
-    // Setup mock for fetchWithCache
     jest.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
@@ -797,23 +775,18 @@ describe('OpenAiResponsesProvider', () => {
       statusText: 'Bad Request',
     });
 
-    // Initialize the provider
     const provider = new OpenAiResponsesProvider('gpt-4o', {
       config: {
         apiKey: 'test-key',
       },
     });
 
-    // Call the API
     const result = await provider.callApi('Test prompt');
 
-    // Verify error is returned properly
     expect(result.error).toContain('content_policy_violation');
   });
 
-  // Test for missing output array, lines 188-191
   it('should handle missing output array correctly', async () => {
-    // Mock API response with missing output
     const mockApiResponse = {
       id: 'resp_abc123',
       status: 'completed',
@@ -1188,7 +1161,6 @@ describe('OpenAiResponsesProvider', () => {
       const reqOptions = mockCall[1] as { body: string };
       const body = JSON.parse(reqOptions.body);
 
-      // Check that the text format is correctly formatted
       expect(body.text).toEqual({
         format: {
           type: 'json_object',
@@ -1223,7 +1195,6 @@ describe('OpenAiResponsesProvider', () => {
         statusText: 'OK',
       });
 
-      // Use a config with type assertion for test purposes
       const config = {
         apiKey: 'test-key',
         response_format: {
@@ -1241,7 +1212,7 @@ describe('OpenAiResponsesProvider', () => {
             },
           },
         },
-      } as any; // Type assertion for test purposes
+      } as any;
 
       const provider = new OpenAiResponsesProvider('gpt-4o', { config });
 
@@ -1251,7 +1222,6 @@ describe('OpenAiResponsesProvider', () => {
       const reqOptions = mockCall[1] as { body: string };
       const body = JSON.parse(reqOptions.body);
 
-      // Check that the text format is correctly formatted with name parameter
       expect(body.text.format.type).toBe('json_schema');
       expect(body.text.format.name).toBe('test_schema');
       expect(body.text.format.schema).toBeDefined();
@@ -1259,7 +1229,6 @@ describe('OpenAiResponsesProvider', () => {
     });
 
     it('should handle json_schema format with default name when not provided', async () => {
-      // Setup mock
       const mockApiResponse = {
         id: 'resp_def456',
         status: 'completed',
@@ -1286,7 +1255,6 @@ describe('OpenAiResponsesProvider', () => {
         statusText: 'OK',
       });
 
-      // Use a config with type assertion for test purposes - missing name field
       const config = {
         apiKey: 'test-key',
         response_format: {
@@ -1303,7 +1271,7 @@ describe('OpenAiResponsesProvider', () => {
             },
           },
         },
-      } as any; // Type assertion for test purposes
+      } as any;
 
       const provider = new OpenAiResponsesProvider('gpt-4o', { config });
 
@@ -1313,15 +1281,13 @@ describe('OpenAiResponsesProvider', () => {
       const reqOptions = mockCall[1] as { body: string };
       const body = JSON.parse(reqOptions.body);
 
-      // Check that a default name is provided
       expect(body.text.format.type).toBe('json_schema');
-      expect(body.text.format.name).toBeTruthy(); // Should have a default name
+      expect(body.text.format.name).toBeTruthy();
       expect(body.text.format.schema).toBeDefined();
       expect(body.text.format.strict).toBe(true);
     });
 
     it('should handle json_schema format with nested json_schema.schema', async () => {
-      // Setup mock
       const mockApiResponse = {
         id: 'resp_ghi789',
         status: 'completed',
@@ -1348,7 +1314,6 @@ describe('OpenAiResponsesProvider', () => {
         statusText: 'OK',
       });
 
-      // Use a config with proper structure for TypeScript - with nested json_schema.schema structure
       const config = {
         apiKey: 'test-key',
         response_format: {
@@ -1365,7 +1330,7 @@ describe('OpenAiResponsesProvider', () => {
               additionalProperties: false,
             },
           },
-        } as any, // Use type assertion to avoid TypeScript errors
+        } as any,
       };
 
       const provider = new OpenAiResponsesProvider('gpt-4o', { config });
@@ -1376,7 +1341,6 @@ describe('OpenAiResponsesProvider', () => {
       const reqOptions = mockCall[1] as { body: string };
       const body = JSON.parse(reqOptions.body);
 
-      // Check that format properties are correct
       expect(body.text.format.type).toBe('json_schema');
       expect(body.text.format.name).toBe('nested_test');
       expect(body.text.format.schema).toBeDefined();
@@ -1413,7 +1377,6 @@ describe('OpenAiResponsesProvider', () => {
       const provider = new OpenAiResponsesProvider('gpt-4o', {
         config: {
           apiKey: 'test-key',
-          // No response_format specified
         },
       });
 
@@ -1423,7 +1386,6 @@ describe('OpenAiResponsesProvider', () => {
       const reqOptions = mockCall[1] as { body: string };
       const body = JSON.parse(reqOptions.body);
 
-      // Check default text format is used
       expect(body.text).toEqual({
         format: {
           type: 'text',
@@ -1462,7 +1424,7 @@ describe('OpenAiResponsesProvider', () => {
         config: {
           apiKey: 'test-key',
           response_format: {
-            type: 'text' as any, // Type assertion to avoid TypeScript errors
+            type: 'text' as any,
           },
         },
       });
@@ -1473,7 +1435,6 @@ describe('OpenAiResponsesProvider', () => {
       const reqOptions = mockCall[1] as { body: string };
       const body = JSON.parse(reqOptions.body);
 
-      // Check explicit text format is used
       expect(body.text).toEqual({
         format: {
           type: 'text',
@@ -1518,7 +1479,6 @@ describe('OpenAiResponsesProvider', () => {
 
       const result = await provider.callApi('Test prompt with refusal');
 
-      // Check that the refusal was properly extracted
       expect(result.isRefusal).toBe(true);
       expect(result.output).toBe('I cannot fulfill this request due to content policy violation.');
     });
@@ -1533,7 +1493,6 @@ describe('OpenAiResponsesProvider', () => {
             type: 'message',
             role: 'assistant',
             refusal: 'I cannot provide that information.',
-            // No content array
           },
         ],
         usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
@@ -1554,7 +1513,6 @@ describe('OpenAiResponsesProvider', () => {
 
       const result = await provider.callApi('Test prompt with direct refusal');
 
-      // Check that the direct refusal was properly extracted
       expect(result.isRefusal).toBe(true);
       expect(result.output).toBe('I cannot provide that information.');
     });
