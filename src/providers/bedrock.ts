@@ -436,7 +436,7 @@ export const BEDROCK_MODEL = {
       if (responseJson.error) {
         throw new Error(`AI21 API error: ${responseJson.error}`);
       }
-      return responseJson.choices[0].message.content;
+      return responseJson.choices?.[0]?.message?.content;
     },
   },
   AMAZON_NOVA: {
