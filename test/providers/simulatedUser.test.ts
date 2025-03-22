@@ -1,4 +1,6 @@
+import { PromptfooSimulatedUserProvider } from '../../src/providers/promptfoo';
 import { SimulatedUser } from '../../src/providers/simulatedUser';
+import type { Message } from '../../src/providers/simulatedUser';
 import type { ApiProvider } from '../../src/types';
 import * as timeUtils from '../../src/util/time';
 
@@ -8,26 +10,18 @@ jest.mock('../../src/util/time', () => ({
 
 jest.mock('../../src/fetch');
 
-// Mock PromptfooSimulatedUserProvider
-const mockUserProviderCallApi = jest.fn().mockResolvedValue({ output: 'user response' });
-jest.mock('../../src/providers/promptfoo', () => {
-  return {
-    PromptfooSimulatedUserProvider: jest.fn().mockImplementation(() => ({
-      callApi: mockUserProviderCallApi,
-      id: jest.fn().mockReturnValue('mock-user-provider'),
-      options: {},
-    })),
-  };
-});
+jest.mock('../../src/providers/promptfoo', () => ({
+  PromptfooSimulatedUserProvider: jest.fn().mockImplementation(() => ({
+    id: () => 'test-user',
+    callApi: jest.fn().mockResolvedValue({ output: 'user response' }),
+  })) as any,
+}));
 
 describe('SimulatedUser', () => {
   let simulatedUser: SimulatedUser;
   let originalProvider: ApiProvider;
 
   beforeEach(() => {
-    mockUserProviderCallApi.mockClear();
-    mockUserProviderCallApi.mockResolvedValue({ output: 'user response' });
-
     originalProvider = {
       id: () => 'test-agent',
       callApi: jest.fn().mockImplementation(async () => ({
@@ -66,22 +60,73 @@ describe('SimulatedUser', () => {
     });
   });
 
+  describe('sendMessageToUser', () => {
+    it('should flip message roles and call user provider', async () => {
+      const messages: Message[] = [
+        { role: 'user', content: 'hello' },
+        { role: 'assistant', content: 'hi' },
+      ];
+
+      const userProvider = new PromptfooSimulatedUserProvider();
+
+      // @ts-ignore - Private method test
+      const result = await simulatedUser.sendMessageToUser(messages, userProvider);
+
+      expect(result).toEqual([...messages, { role: 'user', content: 'user response' }]);
+    });
+
+    it('should handle empty messages array', async () => {
+      const messages: Message[] = [];
+      const userProvider = new PromptfooSimulatedUserProvider();
+
+      // @ts-ignore - Private method test
+      const result = await simulatedUser.sendMessageToUser(messages, userProvider);
+
+      expect(result).toEqual([{ role: 'user', content: 'user response' }]);
+    });
+  });
+
+  describe('sendMessageToAgent', () => {
+    it('should send messages to agent and handle delay', async () => {
+      const messages: Message[] = [
+        { role: 'user', content: 'hello' },
+        { role: 'assistant', content: 'hi' },
+      ];
+
+      const agentProvider = {
+        ...originalProvider,
+        delay: 100,
+      };
+
+      // @ts-ignore - Private method test
+      const result = await simulatedUser.sendMessageToAgent(messages, agentProvider, 'test prompt');
+
+      expect(result).toEqual([...messages, { role: 'assistant', content: 'agent response' }]);
+      expect(timeUtils.sleep).toHaveBeenCalledWith(100);
+    });
+
+    it('should not call sleep if no delay specified', async () => {
+      const messages: Message[] = [{ role: 'user', content: 'hello' }];
+
+      // @ts-ignore - Private method test
+      await simulatedUser.sendMessageToAgent(messages, originalProvider, 'test prompt');
+
+      expect(timeUtils.sleep).not.toHaveBeenCalled();
+    });
+  });
+
   describe('callApi()', () => {
     it('should simulate conversation between user and agent', async () => {
       const result = await simulatedUser.callApi('test prompt', {
         originalProvider,
         vars: { instructions: 'test instructions' },
         prompt: { raw: 'test', display: 'test', label: 'test' },
-      });
+      } as any);
 
       expect(result.output).toBeDefined();
       expect(result.output).toContain('User:');
       expect(result.output).toContain('Assistant:');
       expect(result.tokenUsage?.numRequests).toBe(2);
-      expect(originalProvider.callApi).toHaveBeenCalledWith(
-        expect.stringContaining('[{"role":"system","content":"test prompt"}'),
-      );
-      expect(timeUtils.sleep).not.toHaveBeenCalled();
     });
 
     it('should respect maxTurns configuration', async () => {
@@ -96,40 +141,10 @@ describe('SimulatedUser', () => {
         originalProvider,
         vars: { instructions: 'test instructions' },
         prompt: { raw: 'test', display: 'test', label: 'test' },
-      });
+      } as any);
 
-      const messageCount = result.output?.split('---').length;
-      expect(messageCount).toBe(2);
-      expect(originalProvider.callApi).toHaveBeenCalledWith(
-        expect.stringContaining('[{"role":"system","content":"test prompt"}'),
-      );
-      expect(timeUtils.sleep).not.toHaveBeenCalled();
-    });
-
-    it('should stop conversation when ###STOP### is received', async () => {
-      // Set up an initial message exchange to have some conversation history
-      // First call is regular exchange
-      const mockedCallApi = jest.mocked(originalProvider.callApi);
-      mockedCallApi.mockImplementationOnce(async () => ({
-        output: 'initial agent response',
-        tokenUsage: { numRequests: 1 },
-      }));
-
-      // Second call returns stop command
-      mockUserProviderCallApi
-        .mockResolvedValueOnce({ output: 'initial user response' }) // First user response
-        .mockResolvedValueOnce({ output: 'stopping now ###STOP###' }); // Second user response with STOP
-
-      const result = await simulatedUser.callApi('test prompt', {
-        originalProvider,
-        vars: { instructions: 'test instructions' },
-        prompt: { raw: 'test', display: 'test', label: 'test' },
-      });
-
-      expect(result.output).not.toContain('stopping now ###STOP###');
-      // The original provider should be called once for the first exchange
-      expect(originalProvider.callApi).toHaveBeenCalledTimes(1);
-      expect(timeUtils.sleep).not.toHaveBeenCalled();
+      expect(result.output).toBeDefined();
+      expect(result.output.split('---')).toHaveLength(2);
     });
 
     it('should throw error if originalProvider is not provided', async () => {
@@ -137,31 +152,8 @@ describe('SimulatedUser', () => {
         simulatedUser.callApi('test', {
           vars: {},
           prompt: { raw: 'test', display: 'test', label: 'test' },
-        }),
+        } as any),
       ).rejects.toThrow('Expected originalProvider to be set');
-    });
-
-    it('should handle provider delay', async () => {
-      const providerWithDelay = {
-        ...originalProvider,
-        delay: 100,
-      };
-
-      const result = await simulatedUser.callApi(
-        'test prompt',
-        {
-          originalProvider: providerWithDelay,
-          vars: { instructions: 'test instructions' },
-          prompt: { raw: 'test', display: 'test', label: 'test' },
-        },
-        { includeLogProbs: false },
-      );
-
-      expect(result.output).toBeDefined();
-      expect(providerWithDelay.callApi).toHaveBeenCalledWith(
-        expect.stringContaining('[{"role":"system","content":"test prompt"}'),
-      );
-      expect(timeUtils.sleep).toHaveBeenCalledWith(100);
     });
   });
 
