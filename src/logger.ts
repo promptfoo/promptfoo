@@ -19,6 +19,56 @@ export const LOG_LEVELS = {
 
 type LogLevel = keyof typeof LOG_LEVELS;
 
+// Lazy source map support - only loaded when debug is enabled
+let sourceMapSupportInitialized = false;
+
+async function initializeSourceMapSupport(): Promise<void> {
+  if (!sourceMapSupportInitialized) {
+    try {
+      const sourceMapSupport = await import('source-map-support');
+      sourceMapSupport.install();
+      sourceMapSupportInitialized = true;
+    } catch {
+      // Ignore errors. This happens in the production build, because source-map-support is a dev dependency.
+    }
+  }
+}
+
+/**
+ * Gets the caller location (filename and line number)
+ * @returns String with file location information
+ */
+function getCallerLocation(): string {
+  try {
+    const error = new Error();
+    const stack = error.stack?.split('\n') || [];
+
+    // Skip first 3 lines (Error, getCallerLocation, and the logger method)
+    const callerLine = stack[3];
+
+    if (callerLine) {
+      // Handle different stack trace formats
+      const matchParens = callerLine.match(/at (?:.*) \((.+):(\d+):(\d+)\)/);
+      const matchNormal = callerLine.match(/at (.+):(\d+):(\d+)/);
+
+      const match = matchParens || matchNormal;
+      if (match) {
+        // matchParens has filePath at index 1, matchNormal has it at index 1 too
+        const filePath = match[1];
+        const line = match[2];
+
+        // Get just the filename from the path
+        const fileName = path.basename(filePath);
+        return `[${fileName}:${line}]`;
+      }
+    }
+  } catch {
+    // Silently handle any errors in stack trace parsing
+  }
+
+  return '';
+}
+
 type StrictLogMethod = (message: string) => winston.Logger;
 type StrictLogger = Omit<winston.Logger, keyof typeof LOG_LEVELS> & {
   [K in keyof typeof LOG_LEVELS]: StrictLogMethod;
@@ -33,14 +83,16 @@ export const consoleFormatter = winston.format.printf(
       globalLogCallback(message);
     }
 
+    const location = info.location ? `${info.location} ` : '';
+
     if (info.level === 'error') {
-      return chalk.red(message);
+      return chalk.red(`${location}${message}`);
     } else if (info.level === 'warn') {
-      return chalk.yellow(message);
+      return chalk.yellow(`${location}${message}`);
     } else if (info.level === 'info') {
-      return message;
+      return `${location}${message}`;
     } else if (info.level === 'debug') {
-      return chalk.cyan(message);
+      return `${chalk.cyan(location)}${message}`;
     }
     throw new Error(`Invalid log level: ${info.level}`);
   },
@@ -91,17 +143,38 @@ export function getLogLevel(): LogLevel {
 export function setLogLevel(level: LogLevel) {
   if (level in LOG_LEVELS) {
     winstonLogger.transports[0].level = level;
+
+    if (level === 'debug') {
+      initializeSourceMapSupport();
+    }
   } else {
     throw new Error(`Invalid log level: ${level}`);
   }
 }
 
+export function isDebugEnabled(): boolean {
+  return getLogLevel() === 'debug';
+}
+
 // Wrapper enforces strict single-string argument logging
 export const logger: StrictLogger = Object.assign({}, winstonLogger, {
-  error: (message: string) => winstonLogger.error(message),
-  warn: (message: string) => winstonLogger.warn(message),
-  info: (message: string) => winstonLogger.info(message),
-  debug: (message: string) => winstonLogger.debug(message),
+  error: (message: string) => {
+    const location = isDebugEnabled() ? getCallerLocation() : '';
+    return winstonLogger.error({ message, location });
+  },
+  warn: (message: string) => {
+    const location = isDebugEnabled() ? getCallerLocation() : '';
+    return winstonLogger.warn({ message, location });
+  },
+  info: (message: string) => {
+    const location = isDebugEnabled() ? getCallerLocation() : '';
+    return winstonLogger.info({ message, location });
+  },
+  debug: (message: string) => {
+    initializeSourceMapSupport();
+    const location = getCallerLocation();
+    return winstonLogger.debug({ message, location });
+  },
   add: winstonLogger.add.bind(winstonLogger),
   remove: winstonLogger.remove.bind(winstonLogger),
   transports: winstonLogger.transports,
@@ -110,5 +183,10 @@ export const logger: StrictLogger = Object.assign({}, winstonLogger, {
   remove: typeof winstonLogger.remove;
   transports: typeof winstonLogger.transports;
 };
+
+// Initialize source maps if debug is enabled at startup
+if (getEnvString('LOG_LEVEL', 'info') === 'debug') {
+  initializeSourceMapSupport();
+}
 
 export default logger;
