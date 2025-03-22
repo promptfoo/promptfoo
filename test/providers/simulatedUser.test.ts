@@ -1,5 +1,5 @@
 import { SimulatedUser } from '../../src/providers/simulatedUser';
-import type { ApiProvider, ProviderResponse } from '../../src/types';
+import type { ApiProvider } from '../../src/types';
 import * as timeUtils from '../../src/util/time';
 
 jest.mock('../../src/util/time', () => ({
@@ -8,11 +8,26 @@ jest.mock('../../src/util/time', () => ({
 
 jest.mock('../../src/fetch');
 
+// Mock PromptfooSimulatedUserProvider
+const mockUserProviderCallApi = jest.fn().mockResolvedValue({ output: 'user response' });
+jest.mock('../../src/providers/promptfoo', () => {
+  return {
+    PromptfooSimulatedUserProvider: jest.fn().mockImplementation(() => ({
+      callApi: mockUserProviderCallApi,
+      id: jest.fn().mockReturnValue('mock-user-provider'),
+      options: {},
+    })),
+  };
+});
+
 describe('SimulatedUser', () => {
   let simulatedUser: SimulatedUser;
   let originalProvider: ApiProvider;
 
   beforeEach(() => {
+    mockUserProviderCallApi.mockClear();
+    mockUserProviderCallApi.mockResolvedValue({ output: 'user response' });
+
     originalProvider = {
       id: () => 'test-agent',
       callApi: jest.fn().mockImplementation(async () => ({
@@ -63,7 +78,9 @@ describe('SimulatedUser', () => {
       expect(result.output).toContain('User:');
       expect(result.output).toContain('Assistant:');
       expect(result.tokenUsage?.numRequests).toBe(2);
-      expect(originalProvider.callApi).toHaveBeenCalledWith(expect.any(String));
+      expect(originalProvider.callApi).toHaveBeenCalledWith(
+        expect.stringContaining('[{"role":"system","content":"test prompt"}'),
+      );
       expect(timeUtils.sleep).not.toHaveBeenCalled();
     });
 
@@ -83,29 +100,35 @@ describe('SimulatedUser', () => {
 
       const messageCount = result.output?.split('---').length;
       expect(messageCount).toBe(2);
-      expect(originalProvider.callApi).toHaveBeenCalledWith(expect.any(String));
+      expect(originalProvider.callApi).toHaveBeenCalledWith(
+        expect.stringContaining('[{"role":"system","content":"test prompt"}'),
+      );
       expect(timeUtils.sleep).not.toHaveBeenCalled();
     });
 
     it('should stop conversation when ###STOP### is received', async () => {
-      const providerWithStop: ApiProvider = {
-        id: () => 'test-agent',
-        callApi: jest.fn().mockImplementation(
-          async (): Promise<ProviderResponse> => ({
-            output: 'stopping now ###STOP###',
-            tokenUsage: { numRequests: 1 },
-          }),
-        ),
-      };
+      // Set up an initial message exchange to have some conversation history
+      // First call is regular exchange
+      const mockedCallApi = jest.mocked(originalProvider.callApi);
+      mockedCallApi.mockImplementationOnce(async () => ({
+        output: 'initial agent response',
+        tokenUsage: { numRequests: 1 },
+      }));
+
+      // Second call returns stop command
+      mockUserProviderCallApi
+        .mockResolvedValueOnce({ output: 'initial user response' }) // First user response
+        .mockResolvedValueOnce({ output: 'stopping now ###STOP###' }); // Second user response with STOP
 
       const result = await simulatedUser.callApi('test prompt', {
-        originalProvider: providerWithStop,
+        originalProvider,
         vars: { instructions: 'test instructions' },
         prompt: { raw: 'test', display: 'test', label: 'test' },
       });
 
-      expect(result.output).toContain('###STOP###');
-      expect(providerWithStop.callApi).toHaveBeenCalledWith(expect.any(String));
+      expect(result.output).not.toContain('stopping now ###STOP###');
+      // The original provider should be called once for the first exchange
+      expect(originalProvider.callApi).toHaveBeenCalledTimes(1);
       expect(timeUtils.sleep).not.toHaveBeenCalled();
     });
 
@@ -135,7 +158,9 @@ describe('SimulatedUser', () => {
       );
 
       expect(result.output).toBeDefined();
-      expect(providerWithDelay.callApi).toHaveBeenCalledWith(expect.any(String));
+      expect(providerWithDelay.callApi).toHaveBeenCalledWith(
+        expect.stringContaining('[{"role":"system","content":"test prompt"}'),
+      );
       expect(timeUtils.sleep).toHaveBeenCalledWith(100);
     });
   });
