@@ -190,3 +190,5 @@ if (getEnvString('LOG_LEVEL', 'info') === 'debug') {
 }
 
 export default logger;
+
+export { sourceMapSupportInitialized, initializeSourceMapSupport, getCallerLocation };
