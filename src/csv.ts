@@ -130,6 +130,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
   const vars: Record<string, string> = {};
   const asserts: Assertion[] = [];
   const options: TestCase['options'] = {};
+  const metadata: Record<string, any> = {};
   let providerOutput: string | object | undefined;
   let description: string | undefined;
   let metric: string | undefined;
@@ -143,6 +144,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     'providerOutput',
     'metric',
     'threshold',
+    'metadata',
   ].map((k) => `_${k}`);
 
   for (const [key, value] of Object.entries(row)) {
@@ -172,6 +174,25 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
       metric = value;
     } else if (key === '__threshold') {
       threshold = Number.parseFloat(value);
+    } else if (key.startsWith('__metadata:')) {
+      const metadataKey = key.slice('__metadata:'.length);
+      if (metadataKey.endsWith('[]')) {
+        // Handle array metadata with comma splitting and escape support
+        const arrayKey = metadataKey.slice(0, -2);
+        if (value.trim() !== '') {
+          // Split by commas, but respect escaped commas (\,)
+          const values = value
+            .split(/(?<!\\),/)
+            .map((v) => v.trim())
+            .map((v) => v.replace('\\,', ','));
+          metadata[arrayKey] = values;
+        }
+      } else {
+        // Handle single value metadata
+        if (value.trim() !== '') {
+          metadata[metadataKey] = value;
+        }
+      }
     } else {
       vars[key] = value;
     }
@@ -188,5 +209,6 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     ...(description ? { description } : {}),
     ...(providerOutput ? { providerOutput } : {}),
     ...(threshold ? { threshold } : {}),
+    ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
   };
 }
