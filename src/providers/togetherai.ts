@@ -13,12 +13,25 @@ export function createTogetherAiProvider(
   } = {},
 ): ApiProvider {
   const splits = providerPath.split(':');
+
+  // Build the passthrough object with max_tokens if available
+  const existingPassthrough = (options.config as any)?.passthrough || {};
+  const maxTokens = (options.config as any)?.max_tokens;
+
+  // Only add max_tokens to passthrough if it exists
+  const passthrough = { ...existingPassthrough };
+  if (maxTokens !== undefined) {
+    passthrough.max_tokens = maxTokens;
+  }
+
+  // Create configuration with the prepared passthrough
   const togetherAiConfig = {
     ...options,
     config: {
       ...options.config,
       apiBaseUrl: 'https://api.together.xyz/v1',
       apiKeyEnvar: 'TOGETHER_API_KEY',
+      passthrough,
     },
   };
 
