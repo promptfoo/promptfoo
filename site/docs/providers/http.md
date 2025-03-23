@@ -92,9 +92,9 @@ providers:
 In this example:
 
 1. The `request` property contains a raw HTTP request, including the method, path, headers, and body.
-2. The `useHttps` property is set to `true`, so the request will be sent over HTTPS.
-3. You can use template variables like `{{api_key}}` and `{{prompt}}` within the raw request. These will be replaced with actual values when the request is sent.
-4. The `transformResponse` property is used to extract the desired information from the JSON response.
+2. You can use template variables like `{{api_key}}` and `{{prompt}}` within the raw request. These will be replaced with actual values when the request is sent.
+3. The `transformResponse` property is used to extract the desired information from the JSON response.
+4. The `useHttps` property determines whether to use HTTP or HTTPS protocol. Like other configuration values, it supports templated strings (e.g., `useHttps: {{targetUseHttps}}`).
 
 You can also load the raw request from an external file using the `file://` prefix:
 
@@ -651,7 +651,12 @@ Supported config options:
 | transformResponse | string \| Function      | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field. |
 | maxRetries        | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                |
 | validateStatus    | Function                | A function that takes a status code and returns a boolean indicating if the response should be treated as successful. By default, accepts all status codes.                         |
+| useHttps          | boolean \| string       | Use HTTPS for the request (only with the raw request option). Can be a boolean or a templated string.                                                                               |
 | signatureAuth     | object                  | Configuration for digital signature authentication. See Signature Auth Options below.                                                                                               |
+
+:::note
+All configuration values support templated strings using Nunjucks, allowing you to use variables from your test context with the `{{variable}}` syntax or environment variables with `{{env.VARIABLE_NAME}}`.
+:::
 
 ### Signature Auth Options
 

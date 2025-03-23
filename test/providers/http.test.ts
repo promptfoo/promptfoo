@@ -548,6 +548,69 @@ describe('HttpProvider', () => {
       );
       expect(result.output).toEqual({ result: 'success' });
     });
+
+    it('should handle useHttps as a template variable', async () => {
+      const rawRequest = dedent`
+        GET /api/data HTTP/1.1
+        Host: example.com
+        User-Agent: TestAgent/1.0
+      `;
+      const provider = new HttpProvider('http', {
+        config: {
+          request: rawRequest,
+          useHttps: '{{useHttpsFlag}}',
+          transformResponse: (data: any) => data,
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      // Test with useHttpsFlag = true
+      const result = await provider.callApi('test prompt', {
+        vars: { useHttpsFlag: 'true' },
+        prompt: { raw: 'test prompt', label: 'test' },
+      });
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://example.com/api/data',
+        expect.objectContaining({
+          method: 'GET',
+          headers: expect.objectContaining({
+            host: 'example.com',
+            'user-agent': 'TestAgent/1.0',
+          }),
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+      expect(result.output).toEqual({ result: 'success' });
+
+      // Reset mock and test with useHttpsFlag = false
+      jest.mocked(fetchWithCache).mockClear();
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      await provider.callApi('test prompt', {
+        vars: { useHttpsFlag: 'false' },
+        prompt: { raw: 'test prompt', label: 'test' },
+      });
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'http://example.com/api/data',
+        expect.any(Object),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+    });
   });
 
   describe('processJsonBody', () => {

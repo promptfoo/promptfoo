@@ -119,7 +119,7 @@ export const HttpProviderConfigSchema = z.object({
   queryParams: z.record(z.string()).optional(),
   request: z.string().optional(),
   useHttps: z
-    .boolean()
+    .union([z.boolean(), z.string()])
     .optional()
     .describe('Use HTTPS for the request. This only works with the raw request option'),
   sessionParser: z.union([z.string(), z.function()]).optional(),
@@ -571,8 +571,11 @@ export class HttpProvider implements ApiProvider {
   private lastSignature?: string;
 
   constructor(url: string, options: ProviderOptions) {
+    // We'll validate the config schema first, but for templateable fields like useHttps,
+    // we'll wait to render them until the callApi method where we have access to context.vars
     this.config = HttpProviderConfigSchema.parse(options.config);
     this.url = this.config.url || url;
+
     this.transformResponse = createTransformResponse(
       this.config.transformResponse || this.config.responseParser,
     );
@@ -694,8 +697,57 @@ export class HttpProvider implements ApiProvider {
       prompt,
     } as Record<string, any>;
 
+    // Process all template variables in the config before using it
+    // This allows for any field in the config to use templated values
+    const renderedConfig: HttpProviderConfig = { ...this.config };
+    try {
+      // Recursively render all string values in the config that contain templates
+      const renderTemplateStrings = (obj: any): any => {
+        if (typeof obj === 'string' && obj.includes('{{')) {
+          // Render template string
+          return getNunjucksEngine().renderString(obj, vars);
+        } else if (Array.isArray(obj)) {
+          // Process arrays
+          return obj.map(renderTemplateStrings);
+        } else if (typeof obj === 'object' && obj !== null) {
+          // Process objects
+          const result: Record<string, any> = {};
+          for (const [key, value] of Object.entries(obj)) {
+            result[key] = renderTemplateStrings(value);
+          }
+          return result;
+        }
+        return obj;
+      };
+
+      // Apply template rendering to all fields in the config
+      (Object.keys(renderedConfig) as Array<keyof HttpProviderConfig>).forEach((key) => {
+        if (key !== 'request') {
+          // Skip request as it's handled separately
+          renderedConfig[key] = renderTemplateStrings(renderedConfig[key]);
+        }
+      });
+
+      // Handle the useHttps field explicitly - convert string values to boolean
+      if (typeof renderedConfig.useHttps === 'string') {
+        // Check if the string is a template that needs to be rendered
+        const useHttpsValue = renderedConfig.useHttps as string;
+        // Convert "true" (case-insensitive) to boolean true, everything else to boolean false
+        renderedConfig.useHttps = useHttpsValue.toLowerCase() === 'true';
+        logger.debug(
+          `[HTTP Provider]: Processed useHttps template to boolean: ${renderedConfig.useHttps}`,
+        );
+      }
+
+      logger.debug(
+        `[HTTP Provider]: Rendered config variables: ${safeJsonStringify(renderedConfig)}`,
+      );
+    } catch (err) {
+      logger.warn(`[HTTP Provider]: Error rendering config variables: ${String(err)}`);
+    }
+
     // Add signature values to vars if signature auth is enabled
-    if (this.config.signatureAuth) {
+    if (renderedConfig.signatureAuth) {
       await this.refreshSignatureIfNeeded();
       invariant(this.lastSignature, 'Signature should be defined at this point');
       invariant(this.lastSignatureTimestamp, 'Timestamp should be defined at this point');
@@ -715,13 +767,14 @@ export class HttpProvider implements ApiProvider {
       vars.signatureTimestamp = this.lastSignatureTimestamp;
     }
 
-    if (this.config.request) {
-      return this.callApiWithRawRequest(vars, context);
+    if (renderedConfig.request) {
+      return this.callApiWithRawRequest(vars, context, renderedConfig);
     }
 
-    const defaultHeaders = this.getDefaultHeaders(this.config.body);
+    // Continue with the rest of the existing callApi implementation...
+    const defaultHeaders = this.getDefaultHeaders(renderedConfig.body);
     const headers = await this.getHeaders(defaultHeaders, vars);
-    this.validateContentTypeAndBody(headers, this.config.body);
+    this.validateContentTypeAndBody(headers, renderedConfig.body);
 
     // Transform prompt using request transform
     const transformedPrompt = await (await this.transformRequest)(prompt);
@@ -729,58 +782,58 @@ export class HttpProvider implements ApiProvider {
       `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
     );
 
-    const renderedConfig: Partial<HttpProviderConfig> = {
+    const renderedMethodConfig: Partial<HttpProviderConfig> = {
       url: this.url,
-      method: getNunjucksEngine().renderString(this.config.method || 'GET', vars),
+      method: getNunjucksEngine().renderString(renderedConfig.method || 'GET', vars),
       headers,
       body: determineRequestBody(
         contentTypeIsJson(headers),
         transformedPrompt,
-        this.config.body,
+        renderedConfig.body,
         vars,
       ),
-      queryParams: this.config.queryParams
+      queryParams: renderedConfig.queryParams
         ? Object.fromEntries(
-            Object.entries(this.config.queryParams).map(([key, value]) => [
+            Object.entries(renderedConfig.queryParams).map(([key, value]) => [
               key,
               getNunjucksEngine().renderString(value, vars),
             ]),
           )
         : undefined,
-      transformResponse: this.config.transformResponse || this.config.responseParser,
+      transformResponse: renderedConfig.transformResponse || renderedConfig.responseParser,
     };
 
-    const method = renderedConfig.method || 'POST';
+    const method = renderedMethodConfig.method || 'POST';
 
     invariant(typeof method === 'string', 'Expected method to be a string');
     invariant(typeof headers === 'object', 'Expected headers to be an object');
 
     // Construct URL with query parameters for GET requests
     let url = this.url;
-    if (renderedConfig.queryParams) {
-      const queryString = new URLSearchParams(renderedConfig.queryParams).toString();
+    if (renderedMethodConfig.queryParams) {
+      const queryString = new URLSearchParams(renderedMethodConfig.queryParams).toString();
       url = `${url}?${queryString}`;
     }
 
     logger.debug(
-      `[HTTP Provider]: Calling ${url} with config: ${safeJsonStringify(renderedConfig)}`,
+      `[HTTP Provider]: Calling ${url} with config: ${safeJsonStringify(renderedMethodConfig)}`,
     );
 
     const response = await fetchWithCache(
       url,
       {
-        method: renderedConfig.method,
-        headers: renderedConfig.headers,
+        method: renderedMethodConfig.method,
+        headers: renderedMethodConfig.headers,
         ...(method !== 'GET' && {
           body: contentTypeIsJson(headers)
-            ? JSON.stringify(renderedConfig.body)
-            : String(renderedConfig.body)?.trim(),
+            ? JSON.stringify(renderedMethodConfig.body)
+            : String(renderedMethodConfig.body)?.trim(),
         }),
       },
       REQUEST_TIMEOUT_MS,
       'text',
       context?.debug,
-      this.config.maxRetries,
+      renderedConfig.maxRetries,
     );
 
     logger.debug(`[HTTP Provider]: Response: ${safeJsonStringify(response.data)}`);
@@ -839,12 +892,18 @@ export class HttpProvider implements ApiProvider {
   private async callApiWithRawRequest(
     vars: Record<string, any>,
     context?: CallApiContextParams,
+    renderedConfig?: HttpProviderConfig,
   ): Promise<ProviderResponse> {
-    invariant(this.config.request, 'Expected request to be set in http provider config');
-    const renderedRequest = getNunjucksEngine().renderString(this.config.request, vars);
+    // Use the rendered config if provided, otherwise use the original config
+    const config = renderedConfig || this.config;
+    invariant(config.request, 'Expected request to be set in http provider config');
+
+    const renderedRequest = getNunjucksEngine().renderString(config.request, vars);
     const parsedRequest = parseRawRequest(renderedRequest.trim());
 
-    const protocol = this.url.startsWith('https') || this.config.useHttps ? 'https' : 'http';
+    // Get protocol based on useHttps value which may have been rendered from a template
+    const protocol = this.url.startsWith('https') || config.useHttps ? 'https' : 'http';
+
     const url = new URL(
       parsedRequest.url,
       `${protocol}://${parsedRequest.headers['host']}`,
@@ -866,7 +925,7 @@ export class HttpProvider implements ApiProvider {
       REQUEST_TIMEOUT_MS,
       'text',
       context?.debug,
-      this.config.maxRetries,
+      config.maxRetries,
     );
 
     logger.debug(`[HTTP Provider]: Response: ${safeJsonStringify(response.data)}`);
