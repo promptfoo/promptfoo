@@ -15,7 +15,7 @@ export function createTogetherAiProvider(
   const splits = providerPath.split(':');
 
   // Build the passthrough object with max_tokens if available
-  const existingPassthrough = (options.config as any)?.passthrough || {};
+  const existingPassthrough = options.config?.passthrough || {};
   const maxTokens = (options.config as any)?.max_tokens;
 
   // Only add max_tokens to passthrough if it exists
