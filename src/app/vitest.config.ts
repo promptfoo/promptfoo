@@ -4,6 +4,23 @@ import path from 'path';
 import { defineConfig } from 'vitest/config';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 
+// Special plugin to handle direct imports from vite-plugin-node-polyfills/shims
+const shimsResolverPlugin = {
+  name: 'shims-resolver',
+  resolveId(id) {
+    if (id === 'vite-plugin-node-polyfills/shims/buffer') {
+      return path.resolve(__dirname, 'src/shims/buffer.js');
+    }
+    if (id === 'vite-plugin-node-polyfills/shims/process') {
+      return path.resolve(__dirname, 'src/shims/process.js');
+    }
+    if (id === 'vite-plugin-node-polyfills/shims/global') {
+      return path.resolve(__dirname, 'src/shims/global.js');
+    }
+    return null;
+  }
+};
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
@@ -18,6 +35,7 @@ export default defineConfig({
       include: ['buffer', 'process', 'util', 'events', 'path', 'stream', 'os'],
       protocolImports: true,
     }),
+    shimsResolverPlugin
   ],
   resolve: {
     alias: {
@@ -46,11 +64,7 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
-      external: [
-        'vite-plugin-node-polyfills/shims/buffer',
-        'vite-plugin-node-polyfills/shims/global',
-        'vite-plugin-node-polyfills/shims/process'
-      ]
+      // Remove external declarations since we now have mock implementations
     }
   },
   test: {

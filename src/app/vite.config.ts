@@ -19,6 +19,23 @@ if (process.env.NODE_ENV === 'development') {
     process.env.PROMPTFOO_REMOTE_API_BASE_URL || '';
 }
 
+// Special plugin to handle direct imports from vite-plugin-node-polyfills/shims
+const shimsResolverPlugin = {
+  name: 'shims-resolver',
+  resolveId(id) {
+    if (id === 'vite-plugin-node-polyfills/shims/buffer') {
+      return path.resolve(__dirname, 'src/shims/buffer.js');
+    }
+    if (id === 'vite-plugin-node-polyfills/shims/process') {
+      return path.resolve(__dirname, 'src/shims/process.js');
+    }
+    if (id === 'vite-plugin-node-polyfills/shims/global') {
+      return path.resolve(__dirname, 'src/shims/global.js');
+    }
+    return null;
+  }
+};
+
 // https://vitejs.dev/config/
 export default defineConfig({
   server: {
@@ -38,7 +55,8 @@ export default defineConfig({
       include: ['buffer', 'process', 'util', 'events', 'path', 'stream', 'os'],
       // exclude: [],
       protocolImports: true,
-    })
+    }),
+    shimsResolverPlugin
   ] as PluginOption[],
   resolve: {
     alias: {
@@ -79,11 +97,6 @@ export default defineConfig({
     // Vite 6 now uses native ESM for all output by default
     // No need to specify module format
     rollupOptions: {
-      external: [
-        'vite-plugin-node-polyfills/shims/buffer',
-        'vite-plugin-node-polyfills/shims/global',
-        'vite-plugin-node-polyfills/shims/process'
-      ],
       output: {
         // Ensure proper resolution of polyfills
         manualChunks(id) {
