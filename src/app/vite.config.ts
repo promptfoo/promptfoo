@@ -19,23 +19,6 @@ if (process.env.NODE_ENV === 'development') {
     process.env.PROMPTFOO_REMOTE_API_BASE_URL || '';
 }
 
-// Special plugin to handle direct imports from vite-plugin-node-polyfills/shims
-const shimsResolverPlugin = {
-  name: 'shims-resolver',
-  resolveId(id) {
-    if (id === 'vite-plugin-node-polyfills/shims/buffer') {
-      return path.resolve(__dirname, 'src/shims/buffer.js');
-    }
-    if (id === 'vite-plugin-node-polyfills/shims/process') {
-      return path.resolve(__dirname, 'src/shims/process.js');
-    }
-    if (id === 'vite-plugin-node-polyfills/shims/global') {
-      return path.resolve(__dirname, 'src/shims/global.js');
-    }
-    return null;
-  }
-};
-
 // https://vitejs.dev/config/
 export default defineConfig({
   server: {
@@ -45,43 +28,28 @@ export default defineConfig({
   plugins: [
     react(), 
     nodePolyfills({
-      // Configure polyfills as needed
+      // Include all Node.js polyfills
+      include: ['buffer', 'process', 'util', 'events', 'stream', 'path', 'querystring', 
+                'url', 'string_decoder', 'punycode', 'http', 'https', 'os', 
+                'assert', 'constants', 'timers', 'console', 'vm', 'zlib', 
+                'tty', 'domain', 'dns', 'dgram', 'child_process', 'cluster', 
+                'module', 'net', 'readline', 'repl', 'tls', 'fs', 'crypto'],
       globals: {
         Buffer: true,
         global: true,
         process: true,
       },
-      // Use internal versions for better compatibility
-      include: ['buffer', 'process', 'util', 'events', 'path', 'stream', 'os'],
-      // exclude: [],
+      // Enables auto resolution of Node.js built-ins
       protocolImports: true,
-    }),
-    shimsResolverPlugin
+    })
   ] as PluginOption[],
   resolve: {
     alias: {
       '@app': path.resolve(__dirname, './src'),
       '@promptfoo': path.resolve(__dirname, '../'),
-      // Provide explicit paths for node polyfills in case they're imported directly
-      'node:buffer': 'vite-plugin-node-polyfills/polyfills/buffer',
-      'node:process': 'vite-plugin-node-polyfills/polyfills/process',
-      'node:util': 'vite-plugin-node-polyfills/polyfills/util',
-      'node:stream': 'vite-plugin-node-polyfills/polyfills/stream',
-      'node:events': 'vite-plugin-node-polyfills/polyfills/events',
-      'node:path': 'vite-plugin-node-polyfills/polyfills/path',
-      'node:os': 'vite-plugin-node-polyfills/polyfills/os',
     },
   },
   optimizeDeps: {
-    include: [
-      'vite-plugin-node-polyfills/polyfills/buffer',
-      'vite-plugin-node-polyfills/polyfills/process',
-      'vite-plugin-node-polyfills/polyfills/util',
-      'vite-plugin-node-polyfills/polyfills/stream',
-      'vite-plugin-node-polyfills/polyfills/events',
-      'vite-plugin-node-polyfills/polyfills/path',
-      'vite-plugin-node-polyfills/polyfills/os',
-    ],
     esbuildOptions: {
       // Node.js global to browser globalThis
       define: {
@@ -95,10 +63,9 @@ export default defineConfig({
     // Target modern browsers for better performance
     target: 'esnext',
     // Vite 6 now uses native ESM for all output by default
-    // No need to specify module format
     rollupOptions: {
       output: {
-        // Ensure proper resolution of polyfills
+        // Group polyfills into a separate chunk
         manualChunks(id) {
           if (id.includes('node_modules/vite-plugin-node-polyfills')) {
             return 'polyfills';
@@ -117,7 +84,7 @@ export default defineConfig({
     'import.meta.env.VITE_PROMPTFOO_DISABLE_TELEMETRY': JSON.stringify(
       process.env.PROMPTFOO_DISABLE_TELEMETRY || 'false',
     ),
-    // Make sure Buffer, process, and global are available
+    // Make sure global is defined
     'global': 'globalThis',
   },
 });

@@ -1,32 +1,13 @@
 // polyfills.ts
-// This file provides browser-compatible polyfills for Node.js built-ins
+// This is a lightweight polyfill entry point to ensure Node.js globals are available
+// The actual implementation will be handled by vite-plugin-node-polyfills
 
-// Buffer polyfill
-if (typeof window !== 'undefined' && !window.Buffer) {
-  // Simple Buffer implementation
-  (window as any).Buffer = {
-    from: (data: string, encoding?: string) => {
-      return {
-        toString: (encoding?: string) => data,
-      };
-    },
-    isBuffer: () => false,
-  };
+// Ensure global is defined if not already
+if (typeof window !== 'undefined' && typeof window.global === 'undefined') {
+  window.global = window;
 }
 
-// Global polyfill
-if (typeof window !== 'undefined') {
-  (window as any).global = window;
-}
-
-// Process polyfill
-if (typeof window !== 'undefined' && !(window as any).process) {
-  (window as any).process = {
-    env: {},
-    nextTick: (fn: Function) => setTimeout(fn, 0),
-    version: '',
-    browser: true,
-  };
-}
+// Let the plugin handle the rest of the polyfills
+// This is mostly a marker file to ensure polyfills are loaded early in the application
 
 export const polyfillsLoaded = true; 

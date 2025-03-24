@@ -31,8 +31,12 @@ export default defineConfig({
         global: true,
         process: true,
       },
-      // Use internal versions for better compatibility
-      include: ['buffer', 'process', 'util', 'events', 'path', 'stream', 'os'],
+      // Include the same polyfills as in vite.config.ts
+      include: ['buffer', 'process', 'util', 'events', 'stream', 'path', 'querystring', 
+                'url', 'string_decoder', 'punycode', 'http', 'https', 'os', 
+                'assert', 'constants', 'timers', 'console', 'vm', 'zlib', 
+                'tty', 'domain', 'dns', 'dgram', 'child_process', 'cluster', 
+                'module', 'net', 'readline', 'repl', 'tls', 'fs', 'crypto'],
       protocolImports: true,
     }),
     shimsResolverPlugin
@@ -41,31 +45,14 @@ export default defineConfig({
     alias: {
       '@app': path.resolve(__dirname, './src'),
       '@promptfoo': path.resolve(__dirname, '../'),
-      // Provide explicit paths for node polyfills in case they're imported directly
-      'node:buffer': 'vite-plugin-node-polyfills/polyfills/buffer',
-      'node:process': 'vite-plugin-node-polyfills/polyfills/process',
-      'node:util': 'vite-plugin-node-polyfills/polyfills/util',
-      'node:stream': 'vite-plugin-node-polyfills/polyfills/stream',
-      'node:events': 'vite-plugin-node-polyfills/polyfills/events',
-      'node:path': 'vite-plugin-node-polyfills/polyfills/path',
-      'node:os': 'vite-plugin-node-polyfills/polyfills/os',
     },
   },
   optimizeDeps: {
-    include: [
-      'vite-plugin-node-polyfills/polyfills/buffer',
-      'vite-plugin-node-polyfills/polyfills/process',
-      'vite-plugin-node-polyfills/polyfills/util',
-      'vite-plugin-node-polyfills/polyfills/stream',
-      'vite-plugin-node-polyfills/polyfills/events',
-      'vite-plugin-node-polyfills/polyfills/path',
-      'vite-plugin-node-polyfills/polyfills/os',
-    ],
-  },
-  build: {
-    rollupOptions: {
-      // Remove external declarations since we now have mock implementations
-    }
+    esbuildOptions: {
+      define: {
+        global: 'globalThis',
+      },
+    },
   },
   test: {
     environment: 'jsdom',
@@ -73,7 +60,6 @@ export default defineConfig({
     globals: true,
   },
   define: {
-    // Make sure Buffer, process, and global are available
     'global': 'globalThis',
   },
 });
