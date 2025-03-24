@@ -26,7 +26,7 @@ export default defineConfig({
   },
   base: process.env.VITE_PUBLIC_BASENAME || '/',
   plugins: [
-    react(),
+    react(), 
     nodePolyfills({
       // Configure polyfills as needed
       globals: {
@@ -34,29 +34,41 @@ export default defineConfig({
         global: true,
         process: true,
       },
-      // Enable polyfills for specific Node.js modules if needed
-      // include: ['buffer', 'process', 'util', 'events', 'path', 'stream'],
-      // Exclude any modules you don't need
-      // exclude: ['http', 'crypto'],
+      // Use internal versions for better compatibility
+      include: ['buffer', 'process', 'util', 'events', 'path', 'stream', 'os'],
+      // exclude: [],
       protocolImports: true,
-    }),
+    })
   ] as PluginOption[],
   resolve: {
     alias: {
       '@app': path.resolve(__dirname, './src'),
       '@promptfoo': path.resolve(__dirname, '../'),
-      'vite-plugin-node-polyfills/shims/buffer': path.resolve(
-        __dirname,
-        'node_modules/vite-plugin-node-polyfills/shims/buffer',
-      ),
-      'vite-plugin-node-polyfills/shims/global': path.resolve(
-        __dirname,
-        'node_modules/vite-plugin-node-polyfills/shims/global',
-      ),
-      'vite-plugin-node-polyfills/shims/process': path.resolve(
-        __dirname,
-        'node_modules/vite-plugin-node-polyfills/shims/process',
-      ),
+      // Provide explicit paths for node polyfills in case they're imported directly
+      'node:buffer': 'vite-plugin-node-polyfills/polyfills/buffer',
+      'node:process': 'vite-plugin-node-polyfills/polyfills/process',
+      'node:util': 'vite-plugin-node-polyfills/polyfills/util',
+      'node:stream': 'vite-plugin-node-polyfills/polyfills/stream',
+      'node:events': 'vite-plugin-node-polyfills/polyfills/events',
+      'node:path': 'vite-plugin-node-polyfills/polyfills/path',
+      'node:os': 'vite-plugin-node-polyfills/polyfills/os',
+    },
+  },
+  optimizeDeps: {
+    include: [
+      'vite-plugin-node-polyfills/polyfills/buffer',
+      'vite-plugin-node-polyfills/polyfills/process',
+      'vite-plugin-node-polyfills/polyfills/util',
+      'vite-plugin-node-polyfills/polyfills/stream',
+      'vite-plugin-node-polyfills/polyfills/events',
+      'vite-plugin-node-polyfills/polyfills/path',
+      'vite-plugin-node-polyfills/polyfills/os',
+    ],
+    esbuildOptions: {
+      // Node.js global to browser globalThis
+      define: {
+        global: 'globalThis',
+      },
     },
   },
   build: {
@@ -70,9 +82,17 @@ export default defineConfig({
       external: [
         'vite-plugin-node-polyfills/shims/buffer',
         'vite-plugin-node-polyfills/shims/global',
-        'vite-plugin-node-polyfills/shims/process',
+        'vite-plugin-node-polyfills/shims/process'
       ],
-    },
+      output: {
+        // Ensure proper resolution of polyfills
+        manualChunks(id) {
+          if (id.includes('node_modules/vite-plugin-node-polyfills')) {
+            return 'polyfills';
+          }
+        }
+      }
+    }
   },
   test: {
     environment: 'jsdom',
@@ -84,5 +104,7 @@ export default defineConfig({
     'import.meta.env.VITE_PROMPTFOO_DISABLE_TELEMETRY': JSON.stringify(
       process.env.PROMPTFOO_DISABLE_TELEMETRY || 'false',
     ),
+    // Make sure Buffer, process, and global are available
+    'global': 'globalThis',
   },
 });
