@@ -25,16 +25,45 @@ export default defineConfig({
     port: 3000,
   },
   base: process.env.VITE_PUBLIC_BASENAME || '/',
-  plugins: [react(), nodePolyfills()] as PluginOption[],
+  plugins: [
+    react(), 
+    nodePolyfills({
+      // Configure polyfills as needed
+      globals: {
+        Buffer: true,
+        global: true,
+        process: true,
+      },
+      // Enable polyfills for specific Node.js modules if needed
+      // include: ['buffer', 'process', 'util', 'events', 'path', 'stream'],
+      // Exclude any modules you don't need
+      // exclude: ['http', 'crypto'],
+      protocolImports: true,
+    })
+  ] as PluginOption[],
   resolve: {
     alias: {
       '@app': path.resolve(__dirname, './src'),
       '@promptfoo': path.resolve(__dirname, '../'),
+      'vite-plugin-node-polyfills/shims/buffer': path.resolve(__dirname, 'node_modules/vite-plugin-node-polyfills/shims/buffer'),
+      'vite-plugin-node-polyfills/shims/global': path.resolve(__dirname, 'node_modules/vite-plugin-node-polyfills/shims/global'),
+      'vite-plugin-node-polyfills/shims/process': path.resolve(__dirname, 'node_modules/vite-plugin-node-polyfills/shims/process')
     },
   },
   build: {
     emptyOutDir: true,
     outDir: '../../dist/src/app',
+    // Target modern browsers for better performance
+    target: 'esnext',
+    // Vite 6 now uses native ESM for all output by default
+    // No need to specify module format
+    rollupOptions: {
+      external: [
+        'vite-plugin-node-polyfills/shims/buffer',
+        'vite-plugin-node-polyfills/shims/global',
+        'vite-plugin-node-polyfills/shims/process'
+      ]
+    }
   },
   test: {
     environment: 'jsdom',
