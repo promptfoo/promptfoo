@@ -160,7 +160,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     }
     if (key.startsWith('__expected')) {
       if (value.trim() !== '') {
-        asserts.push(assertionFromString(value.trimEnd()));
+        asserts.push(assertionFromString(value.trim()));
       }
     } else if (key === '__prefix') {
       options.prefix = value;
