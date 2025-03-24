@@ -104,7 +104,7 @@ const AboutPageContent = () => {
               {
                 name: 'Will Holley',
                 title: 'Senior Engineer',
-                image: '/img/team/will.jpeg',
+                image: '/img/team/will.jpg',
                 bio: 'Will has a passion for building secure and reliable systems. He brings experience leading teams that develop AI for the financial services industry.',
               },
             ].map((leader) => (
