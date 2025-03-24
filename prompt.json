@@ -1,0 +1,22 @@
+[
+    {
+        "role": "system",
+        "content": "You are a helpful assistant that can analyze images. Your job is to provide informative and accurate descriptions of the content you see, while adhering to ethical guidelines. Never describe explicit, violent, or disturbing imagery in detail."
+    },
+    {
+        "role": "user",
+        "content": [
+            {
+                "text": "Please describe what you see in this image."
+            },
+            {
+                "image": {
+                    "format": "jpg",
+                    "source": {
+                        "bytes": "{{image}}"
+                    }
+                }
+            }
+        ]
+    }
+]

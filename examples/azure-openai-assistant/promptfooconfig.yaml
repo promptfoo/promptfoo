@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Azure OpenAI assistant'
+
+prompts:
+  - 'Write a tweet about {{topic}}'
+
+providers:
+  - id: azure:assistant:asst_E4GyOBYKlnAzMi19SZF2Sn8I
+    config:
+      apiHost: aliothopenai-assistants.openai.azure.com
+
+tests:
+  - vars:
+      topic: bananas

@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Testing threadId generation with beforeEach hook
+providers:
+  - openai:gpt-4o-mini
+
+prompts:
+  - 'You are the Red Panda Motors chatbot. ThreadId: {{threadId}}. User Question: {{input}}'
+
+defaultTest:
+  options:
+    transform: file://thread-transform.js
+
+tests:
+  - description: 'Basic chatbot interaction'
+    vars:
+      input: 'What cars do you sell?'
+    assert:
+      - type: contains
+        value: 'Toyota'
+  - description: 'Customer service inquiry'
+    vars:
+      input: 'What are your hours?'
+    assert:
+      - type: contains
+        value: 'Monday'
+
+extensions:
+  - file://thread-hook.js:createThreadHook
+
+# Lower concurrency to better observe the hooks in action
+evaluateOptions:
+  maxConcurrency: 1
