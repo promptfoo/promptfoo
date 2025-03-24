@@ -51,20 +51,111 @@ describe('createTogetherAiProvider', () => {
       id: 'custom-id',
     };
     createTogetherAiProvider('togetherai:chat:model-name', options);
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-      'model-name',
-      expect.objectContaining({
-        config: {
-          apiBaseUrl: 'https://api.together.xyz/v1',
-          apiKeyEnvar: 'TOGETHER_API_KEY',
-        },
-        id: 'custom-id',
-      }),
-    );
+
+    // Verify that the OpenAI provider was called with the correct parameters
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('model-name', {
+      config: {
+        apiBaseUrl: 'https://api.together.xyz/v1',
+        apiKeyEnvar: 'TOGETHER_API_KEY',
+        passthrough: {},
+      },
+      id: 'custom-id',
+    });
   });
 
   it('should handle model names with colons', () => {
     createTogetherAiProvider('togetherai:chat:org:model:name');
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('org:model:name', expect.any(Object));
+  });
+
+  describe('parameter handling', () => {
+    it('should add all parameters to passthrough', () => {
+      const options = {
+        config: {
+          config: {
+            max_tokens: 4096,
+            temperature: 0.7,
+            top_p: 0.9,
+            repetition_penalty: 1.1,
+            custom_param: 'value',
+          },
+        },
+      };
+
+      createTogetherAiProvider('togetherai:chat:model-name', options);
+
+      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
+        'model-name',
+        expect.objectContaining({
+          config: expect.objectContaining({
+            apiBaseUrl: 'https://api.together.xyz/v1',
+            apiKeyEnvar: 'TOGETHER_API_KEY',
+            passthrough: expect.objectContaining({
+              max_tokens: 4096,
+              temperature: 0.7,
+              top_p: 0.9,
+              repetition_penalty: 1.1,
+              custom_param: 'value',
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('should handle TogetherAI-specific parameters correctly', () => {
+      const options = {
+        config: {
+          config: {
+            stop_sequences: ['END'],
+            top_k: 50,
+            safety_model: 'safety-model',
+          },
+        },
+      };
+
+      createTogetherAiProvider('togetherai:chat:model-name', options);
+
+      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
+        'model-name',
+        expect.objectContaining({
+          config: expect.objectContaining({
+            passthrough: expect.objectContaining({
+              stop_sequences: ['END'],
+              top_k: 50,
+              safety_model: 'safety-model',
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('should handle passthrough correctly', () => {
+      const options = {
+        config: {
+          config: {
+            temperature: 0.7,
+            passthrough: {
+              custom_param: 'value',
+            },
+          },
+        },
+      };
+
+      createTogetherAiProvider('togetherai:chat:model-name', options);
+
+      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
+        'model-name',
+        expect.objectContaining({
+          config: expect.objectContaining({
+            passthrough: expect.objectContaining({
+              temperature: 0.7,
+              passthrough: {
+                custom_param: 'value',
+              },
+            }),
+          }),
+        }),
+      );
+    });
   });
 });
