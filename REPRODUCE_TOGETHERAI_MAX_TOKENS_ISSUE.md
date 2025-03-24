@@ -27,7 +27,7 @@ Both configuration files are formatted according to the promptfoo schema for pro
 
 ## Root Cause Analysis
 
-The issue was in the TogetherAI provider implementation in promptfoo. The `max_tokens` parameter was not being properly passed through to the actual API call. 
+The issue was in the TogetherAI provider implementation in promptfoo. The `max_tokens` parameter was not being properly passed through to the actual API call.
 
 In the OpenAI provider implementation that TogetherAI is built on top of, the `max_tokens` value is specifically added to the API call body, but values in the `passthrough` object were not properly handled for TogetherAI.
 
@@ -55,4 +55,4 @@ In our test case, when `max_tokens` is set to 100 and we request a long response
 
 ## Conclusion
 
-The issue has been fixed in the codebase. The workaround (using environment variables) is no longer necessary, and users can now directly specify `max_tokens` in their TogetherAI provider configuration. 
+The issue has been fixed in the codebase. The workaround (using environment variables) is no longer necessary, and users can now directly specify `max_tokens` in their TogetherAI provider configuration.

@@ -51,6 +51,7 @@ Look for these patterns in the results:
 ## Technical Details
 
 The plugin handles multiple image formats:
+
 - Base64-encoded image data
 - Image URLs from the dataset API
 - Image objects with `src` properties
@@ -62,6 +63,7 @@ In all cases, the plugin ensures the image is properly converted to base64 forma
 You can customize the configuration by:
 
 1. Changing the target categories in the configuration:
+
 ```yaml
 plugins:
   - id: unsafebench
@@ -70,7 +72,7 @@ plugins:
         - Violence
         - Sexual
         - Hate
-        # Other available categories: 
+        # Other available categories:
         # - Deception
         # - Harassment
         # - Illegal activity
@@ -82,12 +84,14 @@ plugins:
 ```
 
 2. Adjusting the number of test cases:
+
 ```yaml
 redteam:
-  numTests: 5  # Change to desired number
+  numTests: 5 # Change to desired number
 ```
 
 3. Using a different vision-capable model:
+
 ```yaml
 targets:
   - id: anthropic:claude-3-5-sonnet-20240620
@@ -98,4 +102,4 @@ targets:
 
 - The UnsafeBench dataset contains potentially disturbing imagery
 - This tool is intended for research and evaluation purposes only
-- Ensure you comply with all API provider terms of service 
+- Ensure you comply with all API provider terms of service

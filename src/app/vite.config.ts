@@ -59,7 +59,7 @@ const shimsResolverPlugin = {
       return `export default globalThis;`;
     }
     return null;
-  }
+  },
 };
 
 // https://vitejs.dev/config/
@@ -114,7 +114,7 @@ export default defineConfig({
       // Enables auto resolution of Node.js built-ins
       protocolImports: true,
     }),
-    shimsResolverPlugin
+    shimsResolverPlugin,
   ] as PluginOption[],
   resolve: {
     alias: {

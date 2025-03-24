@@ -10,17 +10,16 @@ book Will flight
 
 auto detect image format as a var
 
-
-update image strategy docs 
-nova image docs out of date 
+update image strategy docs
+nova image docs out of date
 
 nova image input size limit
-trying to run 
+trying to run
 
-auto detect image format as a var 
+auto detect image format as a var
 
-health check during redteam generate when using a custom server 
+health check during redteam generate when using a custom server
 
-debug log for which provider we are preferring 
+debug log for which provider we are preferring
 
-meta llama broken in bedrock 
+meta llama broken in bedrock

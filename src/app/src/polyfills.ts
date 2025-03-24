@@ -10,4 +10,4 @@ if (typeof window !== 'undefined' && typeof window.global === 'undefined') {
 // Let the plugin handle the rest of the polyfills
 // This is mostly a marker file to ensure polyfills are loaded early in the application
 
-export const polyfillsLoaded = true; 
+export const polyfillsLoaded = true;

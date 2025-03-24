@@ -44,7 +44,7 @@ const shimsResolverPlugin = {
       return `export default globalThis;`;
     }
     return null;
-  }
+  },
 };
 
 // https://vitejs.dev/config/

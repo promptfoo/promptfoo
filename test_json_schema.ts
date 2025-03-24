@@ -1,5 +1,5 @@
-import { OpenAiResponsesProvider } from './src/providers/openai/responses';
 import * as dotenv from 'dotenv';
+import { OpenAiResponsesProvider } from './src/providers/openai/responses';
 
 // Load environment variables
 dotenv.config();
@@ -19,22 +19,22 @@ async function testJsonSchema() {
             properties: {
               title: {
                 type: 'string',
-                description: 'The title of the story'
+                description: 'The title of the story',
               },
               setting: {
                 type: 'object',
                 properties: {
                   location: {
                     type: 'string',
-                    description: 'Where the story takes place'
+                    description: 'Where the story takes place',
                   },
                   time_period: {
                     type: 'string',
-                    description: 'When the story takes place'
-                  }
+                    description: 'When the story takes place',
+                  },
                 },
                 required: ['location', 'time_period'],
-                additionalProperties: false
+                additionalProperties: false,
               },
               characters: {
                 type: 'array',
@@ -42,51 +42,51 @@ async function testJsonSchema() {
                   type: 'object',
                   properties: {
                     name: {
-                      type: 'string'
+                      type: 'string',
                     },
                     description: {
-                      type: 'string'
-                    }
+                      type: 'string',
+                    },
                   },
                   required: ['name', 'description'],
-                  additionalProperties: false
-                }
+                  additionalProperties: false,
+                },
               },
               plot: {
                 type: 'object',
                 properties: {
                   beginning: {
-                    type: 'string'
+                    type: 'string',
                   },
                   middle: {
-                    type: 'string'
+                    type: 'string',
                   },
                   end: {
-                    type: 'string'
-                  }
+                    type: 'string',
+                  },
                 },
                 required: ['beginning', 'middle', 'end'],
-                additionalProperties: false
-              }
+                additionalProperties: false,
+              },
             },
             required: ['title', 'setting', 'characters', 'plot'],
-            additionalProperties: false
-          }
-        }
-      }
-    }
+            additionalProperties: false,
+          },
+        },
+      },
+    },
   });
 
   // Test the provider with a prompt
   try {
     console.log('Calling OpenAI Responses API with JSON Schema...');
     const result = await provider.callApi(
-      'Create a short story about a magical forest with a beginning, middle, and end. Include a title, setting, main characters, and plot.'
+      'Create a short story about a magical forest with a beginning, middle, and end. Include a title, setting, main characters, and plot.',
     );
-    
+
     console.log('Result:');
     console.log(JSON.stringify(result, null, 2));
-    
+
     if (result.error) {
       console.error('Error:', result.error);
     } else {
@@ -99,4 +99,4 @@ async function testJsonSchema() {
 }
 
 // Run the test
-testJsonSchema().catch(console.error); 
+testJsonSchema().catch(console.error);

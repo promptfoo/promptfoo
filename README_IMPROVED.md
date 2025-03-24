@@ -170,4 +170,4 @@ Join our [Discord community](https://discord.gg/promptfoo) for help and discussi
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=promptfoo/promptfoo&type=Date)](https://star-history.com/#promptfoo/promptfoo&Date) 
+[![Star History Chart](https://api.star-history.com/svg?repos=promptfoo/promptfoo&type=Date)](https://star-history.com/#promptfoo/promptfoo&Date)

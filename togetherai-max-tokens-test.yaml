@@ -3,13 +3,13 @@ providers:
   - id: togetherai:chat:Qwen/Qwen2.5-Coder-32B-Instruct
     config:
       temperature: 0.0
-      max_tokens: 100  # Changed from 2 to 100 to better demonstrate our fix
+      max_tokens: 100 # Changed from 2 to 100 to better demonstrate our fix
 
 prompts:
-  - "Write a very long response that would require more than 1024 tokens. Detail the history of artificial intelligence from its inception to the present day, including key milestones, important researchers, breakthrough algorithms, and how each advancement has contributed to the field. Please be comprehensive and include many specific details."
+  - 'Write a very long response that would require more than 1024 tokens. Detail the history of artificial intelligence from its inception to the present day, including key milestones, important researchers, breakthrough algorithms, and how each advancement has contributed to the field. Please be comprehensive and include many specific details.'
 
 tests:
-  - description: "Response should be longer than what would be possible with a 1024 token limit"
+  - description: 'Response should be longer than what would be possible with a 1024 token limit'
     assert:
       - type: javascript
-        value: "output.length > 1024 * 3"  # A response > 1024 tokens would typically have more than ~3000 characters 
+        value: 'output.length > 1024 * 3' # A response > 1024 tokens would typically have more than ~3000 characters
