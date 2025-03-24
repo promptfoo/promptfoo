@@ -26,7 +26,7 @@ export default defineConfig({
   },
   base: process.env.VITE_PUBLIC_BASENAME || '/',
   plugins: [
-    react(), 
+    react(),
     nodePolyfills({
       // Configure polyfills as needed
       globals: {
@@ -39,15 +39,24 @@ export default defineConfig({
       // Exclude any modules you don't need
       // exclude: ['http', 'crypto'],
       protocolImports: true,
-    })
+    }),
   ] as PluginOption[],
   resolve: {
     alias: {
       '@app': path.resolve(__dirname, './src'),
       '@promptfoo': path.resolve(__dirname, '../'),
-      'vite-plugin-node-polyfills/shims/buffer': path.resolve(__dirname, 'node_modules/vite-plugin-node-polyfills/shims/buffer'),
-      'vite-plugin-node-polyfills/shims/global': path.resolve(__dirname, 'node_modules/vite-plugin-node-polyfills/shims/global'),
-      'vite-plugin-node-polyfills/shims/process': path.resolve(__dirname, 'node_modules/vite-plugin-node-polyfills/shims/process')
+      'vite-plugin-node-polyfills/shims/buffer': path.resolve(
+        __dirname,
+        'node_modules/vite-plugin-node-polyfills/shims/buffer',
+      ),
+      'vite-plugin-node-polyfills/shims/global': path.resolve(
+        __dirname,
+        'node_modules/vite-plugin-node-polyfills/shims/global',
+      ),
+      'vite-plugin-node-polyfills/shims/process': path.resolve(
+        __dirname,
+        'node_modules/vite-plugin-node-polyfills/shims/process',
+      ),
     },
   },
   build: {
@@ -61,9 +70,9 @@ export default defineConfig({
       external: [
         'vite-plugin-node-polyfills/shims/buffer',
         'vite-plugin-node-polyfills/shims/global',
-        'vite-plugin-node-polyfills/shims/process'
-      ]
-    }
+        'vite-plugin-node-polyfills/shims/process',
+      ],
+    },
   },
   test: {
     environment: 'jsdom',

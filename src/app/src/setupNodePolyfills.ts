@@ -27,4 +27,4 @@ if (typeof globalThis.process === 'undefined') {
   } as any;
 }
 
-export {}; 
+export {};
