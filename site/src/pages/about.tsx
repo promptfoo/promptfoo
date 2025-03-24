@@ -101,6 +101,12 @@ const AboutPageContent = () => {
                 image: '/img/team/shuo.jpeg',
                 bio: 'Guangshuo brings technical expertise from Meta, ChipperCash, and Smile Identity. Specializes in GenAI systems, product engineering, and building scalable client solutions.',
               },
+              {
+                name: 'Will Holley',
+                title: 'Senior Engineer',
+                image: '/img/team/will.jpeg',
+                bio: 'Will has a passion for building secure and reliable systems. He brings experience leading teams that develop AI for the financial services industry.',
+              },
             ].map((leader) => (
               <Grid item xs={12} sm={6} md={4} key={leader.name}>
                 <Box textAlign="center">
