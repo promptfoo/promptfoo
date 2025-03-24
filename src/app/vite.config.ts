@@ -19,6 +19,49 @@ if (process.env.NODE_ENV === 'development') {
     process.env.PROMPTFOO_REMOTE_API_BASE_URL || '';
 }
 
+// Special plugin to handle direct imports from vite-plugin-node-polyfills/shims
+// Some external modules like csv-parse directly import from these paths
+const shimsResolverPlugin = {
+  name: 'shims-resolver',
+  resolveId(id: string) {
+    if (id === 'vite-plugin-node-polyfills/shims/buffer') {
+      return '\0virtual:buffer-shim';
+    }
+    if (id === 'vite-plugin-node-polyfills/shims/process') {
+      return '\0virtual:process-shim';
+    }
+    if (id === 'vite-plugin-node-polyfills/shims/global') {
+      return '\0virtual:global-shim';
+    }
+    return null;
+  },
+  load(id: string) {
+    if (id === '\0virtual:buffer-shim') {
+      return `
+        const BufferImpl = globalThis.Buffer || { 
+          from: data => ({ toString: () => String(data) }),
+          isBuffer: () => false
+        };
+        export default BufferImpl;
+      `;
+    }
+    if (id === '\0virtual:process-shim') {
+      return `
+        const processImpl = globalThis.process || { 
+          env: {}, 
+          nextTick: fn => setTimeout(fn, 0),
+          browser: true
+        };
+        export default processImpl;
+      `;
+    }
+    if (id === '\0virtual:global-shim') {
+      return `export default globalThis;`;
+    }
+    return null;
+  }
+};
+
 // https://vitejs.dev/config/
 export default defineConfig({
   server: {
@@ -26,14 +69,43 @@ export default defineConfig({
   },
   base: process.env.VITE_PUBLIC_BASENAME || '/',
   plugins: [
-    react(), 
+    react(),
     nodePolyfills({
       // Include all Node.js polyfills
-      include: ['buffer', 'process', 'util', 'events', 'stream', 'path', 'querystring', 
-                'url', 'string_decoder', 'punycode', 'http', 'https', 'os', 
-                'assert', 'constants', 'timers', 'console', 'vm', 'zlib', 
-                'tty', 'domain', 'dns', 'dgram', 'child_process', 'cluster', 
-                'module', 'net', 'readline', 'repl', 'tls', 'fs', 'crypto'],
+      include: [
+        'buffer',
+        'process',
+        'util',
+        'events',
+        'stream',
+        'path',
+        'querystring',
+        'url',
+        'string_decoder',
+        'punycode',
+        'http',
+        'https',
+        'os',
+        'assert',
+        'constants',
+        'timers',
+        'console',
+        'vm',
+        'zlib',
+        'tty',
+        'domain',
+        'dns',
+        'dgram',
+        'child_process',
+        'cluster',
+        'module',
+        'net',
+        'readline',
+        'repl',
+        'tls',
+        'fs',
+        'crypto',
+      ],
       globals: {
         Buffer: true,
         global: true,
@@ -41,7 +113,8 @@ export default defineConfig({
       },
       // Enables auto resolution of Node.js built-ins
       protocolImports: true,
-    })
+    }),
+    shimsResolverPlugin
   ] as PluginOption[],
   resolve: {
     alias: {
@@ -70,9 +143,9 @@ export default defineConfig({
           if (id.includes('node_modules/vite-plugin-node-polyfills')) {
             return 'polyfills';
           }
-        }
-      }
-    }
+        },
+      },
+    },
   },
   test: {
     environment: 'jsdom',
@@ -85,6 +158,6 @@ export default defineConfig({
       process.env.PROMPTFOO_DISABLE_TELEMETRY || 'false',
     ),
     // Make sure global is defined
-    'global': 'globalThis',
+    global: 'globalThis',
   },
 });
