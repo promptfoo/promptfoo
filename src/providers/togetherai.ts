@@ -20,22 +20,16 @@ export function createTogetherAiProvider(
 ): ApiProvider {
   const splits = providerPath.split(':');
 
-  // Get the configuration from options
   const config = options.config?.config || {};
-
-  // Create config with basic TogetherAI settings
   const togetherAiConfig = {
+    ...options,
     config: {
       apiBaseUrl: 'https://api.together.xyz/v1',
       apiKeyEnvar: 'TOGETHER_API_KEY',
-      // Include all configuration parameters in passthrough
       passthrough: {
         ...config,
       },
     },
-    // Include any other options
-    id: options.id,
-    env: options.env,
   };
 
   if (splits[1] === 'chat') {
