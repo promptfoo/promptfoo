@@ -69,9 +69,9 @@
     "typescript": "^5.8.2",
     "typescript-eslint": "^8.27.0",
     "use-debounce": "^10.0.4",
-    "vite": "^5.4.14",
-    "vite-plugin-node-polyfills": "^0.22.0",
-    "vitest": "^3.0.8",
+    "vite": "^6.2.2",
+    "vite-plugin-node-polyfills": "^0.23.0",
+    "vitest": "^3.0.9",
     "zustand": "^5.0.3"
   }
 }
