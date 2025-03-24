@@ -4,6 +4,12 @@ import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 
+/**
+ * Creates a TogetherAI provider using OpenAI-compatible endpoints
+ *
+ * TogetherAI supports many parameters beyond standard OpenAI ones.
+ * All parameters are automatically passed through to the TogetherAI API.
+ */
 export function createTogetherAiProvider(
   providerPath: string,
   options: {
@@ -14,25 +20,22 @@ export function createTogetherAiProvider(
 ): ApiProvider {
   const splits = providerPath.split(':');
 
-  // Build the passthrough object with max_tokens if available
-  const existingPassthrough = options.config?.passthrough || {};
-  const maxTokens = (options.config as any)?.max_tokens;
+  // Get the configuration from options
+  const config = options.config?.config || {};
 
-  // Only add max_tokens to passthrough if it exists
-  const passthrough = { ...existingPassthrough };
-  if (maxTokens !== undefined) {
-    passthrough.max_tokens = maxTokens;
-  }
-
-  // Create configuration with the prepared passthrough
+  // Create config with basic TogetherAI settings
   const togetherAiConfig = {
-    ...options,
     config: {
-      ...options.config,
       apiBaseUrl: 'https://api.together.xyz/v1',
       apiKeyEnvar: 'TOGETHER_API_KEY',
-      passthrough,
+      // Include all configuration parameters in passthrough
+      passthrough: {
+        ...config,
+      },
     },
+    // Include any other options
+    id: options.id,
+    env: options.env,
   };
 
   if (splits[1] === 'chat') {

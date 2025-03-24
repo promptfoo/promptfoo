@@ -51,17 +51,16 @@ describe('createTogetherAiProvider', () => {
       id: 'custom-id',
     };
     createTogetherAiProvider('togetherai:chat:model-name', options);
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-      'model-name',
-      expect.objectContaining({
-        config: {
-          apiBaseUrl: 'https://api.together.xyz/v1',
-          apiKeyEnvar: 'TOGETHER_API_KEY',
-          passthrough: {},
-        },
-        id: 'custom-id',
-      }),
-    );
+
+    // Verify that the OpenAI provider was called with the correct parameters
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('model-name', {
+      config: {
+        apiBaseUrl: 'https://api.together.xyz/v1',
+        apiKeyEnvar: 'TOGETHER_API_KEY',
+        passthrough: {},
+      },
+      id: 'custom-id',
+    });
   });
 
   it('should handle model names with colons', () => {
@@ -69,38 +68,18 @@ describe('createTogetherAiProvider', () => {
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('org:model:name', expect.any(Object));
   });
 
-  describe('max_tokens handling', () => {
-    it('should add max_tokens to passthrough when provided in config', () => {
+  describe('parameter handling', () => {
+    it('should add all parameters to passthrough', () => {
       const options = {
         config: {
-          max_tokens: 4096,
-        } as any,
-      };
-
-      createTogetherAiProvider('togetherai:chat:model-name', options);
-
-      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-        'model-name',
-        expect.objectContaining({
-          config: expect.objectContaining({
+          config: {
             max_tokens: 4096,
-            passthrough: expect.objectContaining({
-              max_tokens: 4096,
-            }),
-          }),
-        }),
-      );
-    });
-
-    it('should preserve existing passthrough properties when adding max_tokens', () => {
-      const options = {
-        config: {
-          max_tokens: 4096,
-          passthrough: {
-            stop: ['END'],
+            temperature: 0.7,
+            top_p: 0.9,
+            repetition_penalty: 1.1,
             custom_param: 'value',
           },
-        } as any,
+        },
       };
 
       createTogetherAiProvider('togetherai:chat:model-name', options);
@@ -109,9 +88,13 @@ describe('createTogetherAiProvider', () => {
         'model-name',
         expect.objectContaining({
           config: expect.objectContaining({
+            apiBaseUrl: 'https://api.together.xyz/v1',
+            apiKeyEnvar: 'TOGETHER_API_KEY',
             passthrough: expect.objectContaining({
               max_tokens: 4096,
-              stop: ['END'],
+              temperature: 0.7,
+              top_p: 0.9,
+              repetition_penalty: 1.1,
               custom_param: 'value',
             }),
           }),
@@ -119,11 +102,15 @@ describe('createTogetherAiProvider', () => {
       );
     });
 
-    it('should not add max_tokens to passthrough when not provided in config', () => {
+    it('should handle TogetherAI-specific parameters correctly', () => {
       const options = {
         config: {
-          temperature: 0.7,
-        } as any,
+          config: {
+            stop_sequences: ['END'],
+            top_k: 50,
+            safety_model: 'safety-model',
+          },
+        },
       };
 
       createTogetherAiProvider('togetherai:chat:model-name', options);
@@ -132,9 +119,39 @@ describe('createTogetherAiProvider', () => {
         'model-name',
         expect.objectContaining({
           config: expect.objectContaining({
+            passthrough: expect.objectContaining({
+              stop_sequences: ['END'],
+              top_k: 50,
+              safety_model: 'safety-model',
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('should handle passthrough correctly', () => {
+      const options = {
+        config: {
+          config: {
             temperature: 0.7,
-            passthrough: expect.not.objectContaining({
-              max_tokens: expect.anything(),
+            passthrough: {
+              custom_param: 'value',
+            },
+          },
+        },
+      };
+
+      createTogetherAiProvider('togetherai:chat:model-name', options);
+
+      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
+        'model-name',
+        expect.objectContaining({
+          config: expect.objectContaining({
+            passthrough: expect.objectContaining({
+              temperature: 0.7,
+              passthrough: {
+                custom_param: 'value',
+              },
             }),
           }),
         }),
