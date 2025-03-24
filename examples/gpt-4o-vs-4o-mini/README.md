@@ -1,13 +1,35 @@
-This example shows how you can use promptfoo to generate a side-by-side eval of multiple prompts to compare gpt-4o and gpt-4o-mini outputs.
+# gpt-4o-vs-4o-mini (Comparing GPT-4o and GPT-4o-Mini)
 
-Configure in `promptfooconfig.yaml`. Run with:
+## Quick Start
+
+1. Initialize this example by running:
+
+```bash
+npx promptfoo@latest init --example gpt-4o-vs-4o-mini
+```
+
+2. Navigate to the newly created `gpt-4o-vs-4o-mini` directory:
+
+```bash
+cd gpt-4o-vs-4o-mini
+```
+
+3. Set an OpenAI API key directly in your environment:
+
+```bash
+export OPENAI_API_KEY="your_openai_api_key"
+```
+
+Alternatively, you can set the API key in a `.env` file:
 
 ```
-promptfoo eval
+OPENAI_API_KEY=your_openai_api_key
 ```
 
-Full command-line equivalent:
+4. Run the evaluation with:
 
+```bash
+npx promptfoo@latest eval -o output.html --no-cache
 ```
-promptfoo eval --prompts prompts.txt --providers openai:gpt-4o openai:gpt-4o-mini
-```
+
+5. Open the `output.html` file in your browser to view the results. The expected output will include the responses from both models for the provided riddles, allowing you to compare their performance side by side.
