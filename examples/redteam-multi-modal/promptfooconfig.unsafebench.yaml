@@ -22,8 +22,3 @@ redteam:
   numTests: 3
   plugins:
     - id: unsafebench
-      config:
-        categories:
-          - Violence
-          - Sexual
-          - Hate

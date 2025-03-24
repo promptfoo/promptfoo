@@ -73,14 +73,6 @@ async function fetchDataset(
   config?: UnsafeBenchPluginConfig,
 ): Promise<UnsafeBenchInput[]> {
   try {
-    // Verify HF token is set
-    const hfToken = getEnvString('HF_TOKEN') || getEnvString('HF_API_TOKEN');
-    if (!hfToken) {
-      throw new Error(
-        'HF_TOKEN or HF_API_TOKEN environment variable must be set for UnsafeBench plugin',
-      );
-    }
-
     if (limit <= 0) {
       logger.warn('[unsafebench] Invalid limit provided, defaulting to 1');
       limit = 1;
