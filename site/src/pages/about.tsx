@@ -107,6 +107,12 @@ const AboutPageContent = () => {
                 image: '/img/team/faizan.jpeg',
                 bio: 'Faizan brings a wealth of experience in building products across a range of industries. He has led and contributed to projects at companies like Faire, Intercom, and a range of startups.',
               },
+              {
+                name: 'Will Holley',
+                title: 'Senior Engineer',
+                image: '/img/team/will.jpg',
+                bio: 'Will has a passion for building secure and reliable systems. He brings experience leading teams that develop AI for the financial services industry.',
+              },
             ].map((leader) => (
               <Grid size={{ xs: 12, sm: 6, md: 4 }} key={leader.name}>
                 <Box textAlign="center">
