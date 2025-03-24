@@ -1,10 +1,14 @@
 # Together AI
 
-[Together AI](https://www.together.ai/) provides access to 200+ open-source and specialized models through an API compatible with OpenAI's interface. The service includes models for chat, image generation, vision, code, and embeddings.
+[Together AI](https://www.together.ai/) provides access to open-source models through an API compatible with OpenAI's interface.
+
+## OpenAI Compatibility
+
+Together AI's API is compatible with OpenAI's API, which means all parameters available in the [OpenAI provider](/docs/providers/openai/) work with Together AI.
 
 ## Basic Configuration
 
-The Together AI provider supports all configuration options available in the [OpenAI provider](/docs/providers/openai/). You can configure a Together AI model in your promptfoo configuration like this:
+Configure a Together AI model in your promptfoo configuration:
 
 ```yaml
 providers:
@@ -13,31 +17,31 @@ providers:
       temperature: 0.7
 ```
 
-The provider requires an API key stored in the `TOGETHER_API_KEY` environment variable. Make sure this environment variable is set before running evals.
+The provider requires an API key stored in the `TOGETHER_API_KEY` environment variable.
 
 ## Model Types
 
-Together AI offers several types of models that you can specify in the provider ID:
+Together AI offers several types of models:
 
 ```yaml
-providers:
-  - id: togetherai:meta-llama/Llama-3.3-70B-Instruct-Turbo
+# Chat model (default)
+- id: togetherai:meta-llama/Llama-3.3-70B-Instruct-Turbo
+
+# Other model types
+- id: togetherai:completion:meta-llama/Llama-2-70b-hf
+- id: togetherai:embedding:togethercomputer/m2-bert-80M-8k-retrieval
 ```
 
 ## Key Features
 
 ### Max Tokens Configuration
 
-To control the maximum length of responses, use the `max_tokens` parameter:
-
 ```yaml
 config:
-  max_tokens: 4096 # Set your desired token limit
+  max_tokens: 4096
 ```
 
 ### Function Calling
-
-To use function calling with supported models:
 
 ```yaml
 config:
@@ -45,7 +49,7 @@ config:
     - type: function
       function:
         name: get_weather
-        description: Get the current weather in a location
+        description: Get the current weather
         parameters:
           type: object
           properties:
@@ -55,8 +59,6 @@ config:
 ```
 
 ### JSON Mode
-
-For structured JSON output:
 
 ```yaml
 config:
@@ -69,61 +71,54 @@ Together AI offers over 200 models. Here are some popular options by category:
 
 ### Chat Models
 
-- **Llama 3 Family**
-
-  - `meta-llama/Llama-3.3-70B-Instruct-Turbo` (131K context)
-  - `meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo` (131K context)
-  - `meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo` (131K context)
-  - `meta-llama/Meta-Llama-3-8B-Instruct-Turbo` (8K context)
-
-- **Reasoning Models**
-  - `deepseek-ai/DeepSeek-R1` (128K context, strong reasoning)
-  - `deepseek-ai/DeepSeek-V3` (16K context, MoE architecture)
-- **Mixture of Experts**
-
-  - `mistralai/Mixtral-8x7B-Instruct-v0.1` (32K context)
-  - `mistralai/Mixtral-8x22B-Instruct-v0.1` (65K context)
-
-- **Coding Specialists**
-  - `Qwen/Qwen2.5-Coder-32B-Instruct` (32K context)
+- **Llama 3**:
+  - `meta-llama/Llama-3.3-70B-Instruct-Turbo`
+  - `meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo`
+  - `meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo`
+- **Reasoning**:
+  - `deepseek-ai/DeepSeek-R1`
+  - `deepseek-ai/DeepSeek-V3`
+- **Mixture of Experts**:
+  - `mistralai/Mixtral-8x7B-Instruct-v0.1`
+  - `mistralai/Mixtral-8x22B-Instruct-v0.1`
+- **Qwen**:
+  - `Qwen/Qwen2.5-7B-Instruct-Turbo`
+  - `Qwen/Qwen2.5-72B-Instruct`
 
 ### Vision Models
 
-- `meta-llama/Llama-3.2-11B-Vision-Instruct-Turbo` (11B parameters)
-- `meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo` (90B parameters)
-- `Qwen/Qwen2-VL-72B-Instruct` (32K context)
+- `meta-llama/Llama-3.2-11B-Vision-Instruct-Turbo`
+- `meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo`
+- `Qwen/Qwen2-VL-72B-Instruct`
+
+### Embedding Models
+
+- `togethercomputer/m2-bert-80M-8k-retrieval`
+- `mistralai/Mixtral-8x7B-Embeddings`
+- `Xenova/all-MiniLM-L6-v2`
 
 ### Free Endpoints
 
 Together AI offers free tiers with reduced rate limits:
 
-- `meta-llama/Llama-3.3-70B-Instruct-Turbo-Free` (multilingual chat)
-- `meta-llama/Llama-Vision-Free` (vision)
-- `deepseek-ai/DeepSeek-R1-Distill-Llama-70B-Free` (reasoning)
-- `black-forest-labs/FLUX.1-schnell-Free` (image generation)
+- `meta-llama/Llama-3.3-70B-Instruct-Turbo-Free`
+- `meta-llama/Llama-Vision-Free`
+- `deepseek-ai/DeepSeek-R1-Distill-Llama-70B-Free`
 
-## Example: Complete Configuration
-
-Here's a complete example showing multiple providers with different configurations:
+## Example Configuration
 
 ```yaml
 providers:
-  # Standard chat model
-  - id: togetherai:meta-llama/Llama-3.3-70B-Instruct-Turbo
+  # Chat model
+  - id: togetherai:meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo
     config:
       temperature: 0.7
-      max_tokens: 2048
+      top_k: 50
 
-  # Vision model
-  - id: togetherai:meta-llama/Llama-3.2-11B-Vision-Instruct-Turbo
-    config:
-      temperature: 0.2
-
-  # Model with function calling and JSON mode
-  - id: togetherai:mistralai/Mixtral-8x7B-Instruct-v0.1
+  # Model with function calling
+  - id: togetherai:deepseek-ai/DeepSeek-R1
     config:
       temperature: 0.0
-      max_tokens: 1024
       response_format: { type: 'json_object' }
       tools:
         - type: function
@@ -137,4 +132,4 @@ providers:
                 unit: { type: 'string', enum: ['celsius', 'fahrenheit'] }
 ```
 
-For complete information about available models and capabilities, refer to the [Together AI documentation](https://docs.together.ai/docs/chat-models).
+For more information, refer to the [Together AI documentation](https://docs.together.ai/docs/chat-models).
