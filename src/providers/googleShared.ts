@@ -36,6 +36,7 @@ export const CHAT_MODELS = [
   'gemini-1.5-pro-preview-0409',
   'gemini-1.5-pro-preview-0514',
   'gemini-1.5-pro-exp-0827',
+  'gemini-2.5-pro-exp-03-25',
   'gemini-pro',
   'gemini-pro-vision',
   'gemini-ultra',
