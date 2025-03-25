@@ -9,9 +9,9 @@ export default function Careers(): JSX.Element {
         <h1>Careers at Promptfoo</h1>
         <p>Our mission is to help developers ship secure and reliable AI apps.</p>
         <p>
-          Our core product is an open-source pentesting and evaluation framework used by tens of
-          thousands of developers. Promptfoo is among the most popular evaluation frameworks and is
-          the first product to adapt AI-specific pentesting techniques to your application.
+          Our core product is an open-source pentesting and evaluation framework used by 70,000+
+          developers. Promptfoo is among the most popular evaluation frameworks and is the first
+          product to adapt AI-specific pentesting techniques to your application.
         </p>
         <p>
           We're betting that the future of AI is open-source and are deeply committed to our
@@ -32,7 +32,7 @@ export default function Careers(): JSX.Element {
         </ul>
         <p>
           If you're a self-driven generalist who can build and ship quickly, aggressively
-          prioritize, and has a passion for security, developer tools, and AI, please get in touch!
+          prioritize, and have a passion for security, developer tools, and AI, please get in touch!
         </p>
         <p>
           If you're interested in exploring opportunities, please reach out to{' '}
