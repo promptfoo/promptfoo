@@ -54,23 +54,25 @@ First, install [Node 18 or later](https://nodejs.org/en/download/package-manager
 Then create a new project for your red teaming needs:
 
 ```sh
-npx promptfoo@latest redteam init my-redteam-project
-cd my-redteam-project
+npx promptfoo@latest redteam init my-redteam-project --no-gui
 ```
 
-The `init` command creates some placeholders, including a `promptfooconfig.yaml` file. This is where we’ll do most of our setup.
+The `init` command will guide you through setting up a redteam for your use case, and includes several useful defaults to quickly get you started.
+
+It will create a `promptfooconfig.yaml` config file where we’ll do most of our setup.
 
 ## Getting started
 
-Edit the config to set up the prompt and the LLM you want to test. See the [configuration guide](/docs/red-team/configuration/) for more information.
+Edit `my-redteam-project/promptfooconfig.yaml` to set up the prompt and the LLM you want to test. See the [configuration guide](/docs/red-team/configuration/) for more information.
 
 Run the eval:
 
-```
+```sh
+cd my-redteam-project
 npx promptfoo@latest redteam run
 ```
 
-This will create a file `redteam.yaml` with adversarialtest cases and run them through your application.
+This will create a file `redteam.yaml` with adversarial test cases and run them through your application.
 
 And view the results:
 
