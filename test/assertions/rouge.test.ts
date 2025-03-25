@@ -1,6 +1,5 @@
 import * as rouge from 'js-rouge';
 import { handleRougeScore } from '../../src/assertions/rouge';
-import type { Assertion, AssertionParams } from '../../src/types';
 
 jest.mock('js-rouge', () => ({
   n: jest.fn(),
@@ -13,124 +12,114 @@ describe('handleRougeScore', () => {
     jest.resetAllMocks();
   });
 
-  const mockAssertion: Assertion = {
-    type: 'rouge-n',
-    value: 'expected text',
-  };
-
-  const baseParams: AssertionParams = {
-    baseType: 'rouge-n' as any,
-    assertion: mockAssertion,
+  const defaultParams: any = {
+    baseType: 'rouge-n',
+    assertion: { type: 'rouge-n' },
     renderedValue: 'expected text',
     outputString: 'actual text',
     inverse: false,
-    context: {
-      prompt: 'test prompt',
-      vars: {},
-      test: { assert: [mockAssertion] },
-      logProbs: undefined,
-      provider: undefined,
-      providerResponse: {
-        raw: 'actual text',
-        error: undefined,
-        cached: false,
-        cost: 0,
-        tokenUsage: {},
-      },
-    },
-    output: { text: 'actual text' },
-    providerResponse: {
-      raw: 'actual text',
-      error: undefined,
-      cached: false,
-      cost: 0,
-      tokenUsage: {},
-    },
-    test: { assert: [mockAssertion] },
+    context: {},
+    output: {},
+    providerResponse: {},
+    test: {},
   };
 
-  it('should pass when score is above default threshold', () => {
+  it('should calculate ROUGE-N score correctly', () => {
     jest.mocked(rouge.n).mockReturnValue(0.8);
 
-    const result = handleRougeScore(baseParams);
+    const result = handleRougeScore(defaultParams);
 
-    expect(result.pass).toBe(true);
-    expect(result.score).toBe(0.8);
-    expect(result.reason).toBe('ROUGE-N score 0.80 is greater than or equal to threshold 0.75');
     expect(rouge.n).toHaveBeenCalledWith('actual text', 'expected text', {});
+    expect(result).toEqual({
+      pass: true,
+      score: 0.8,
+      reason: 'ROUGE-N score 0.80 is greater than or equal to threshold 0.75',
+      assertion: { type: 'rouge-n' },
+    });
   });
 
-  it('should fail when score is below default threshold', () => {
-    jest.mocked(rouge.n).mockReturnValue(0.7);
+  it('should calculate ROUGE-L score correctly', () => {
+    jest.mocked(rouge.l).mockReturnValue(0.7);
 
-    const result = handleRougeScore(baseParams);
+    const result = handleRougeScore({
+      ...defaultParams,
+      baseType: 'rouge-l',
+      assertion: { type: 'rouge-l' },
+    });
 
-    expect(result.pass).toBe(false);
-    expect(result.score).toBe(0.7);
-    expect(result.reason).toBe('ROUGE-N score 0.70 is less than threshold 0.75');
-    expect(rouge.n).toHaveBeenCalledWith('actual text', 'expected text', {});
+    expect(rouge.l).toHaveBeenCalledWith('actual text', 'expected text', {});
+    expect(result).toEqual({
+      pass: false,
+      score: 0.7,
+      reason: 'ROUGE-L score 0.70 is less than threshold 0.75',
+      assertion: { type: 'rouge-l' },
+    });
+  });
+
+  it('should calculate ROUGE-S score correctly', () => {
+    jest.mocked(rouge.s).mockReturnValue(0.9);
+
+    const result = handleRougeScore({
+      ...defaultParams,
+      baseType: 'rouge-s',
+      assertion: { type: 'rouge-s' },
+    });
+
+    expect(rouge.s).toHaveBeenCalledWith('actual text', 'expected text', {});
+    expect(result).toEqual({
+      pass: true,
+      score: 0.9,
+      reason: 'ROUGE-S score 0.90 is greater than or equal to threshold 0.75',
+      assertion: { type: 'rouge-s' },
+    });
   });
 
   it('should use custom threshold when provided', () => {
     jest.mocked(rouge.n).mockReturnValue(0.6);
 
     const result = handleRougeScore({
-      ...baseParams,
-      assertion: { ...mockAssertion, threshold: 0.5 },
+      ...defaultParams,
+      assertion: { type: 'rouge-n', threshold: 0.5 },
     });
 
     expect(result.pass).toBe(true);
-    expect(result.score).toBe(0.6);
-    expect(result.reason).toBe('ROUGE-N score 0.60 is greater than or equal to threshold 0.5');
-    expect(rouge.n).toHaveBeenCalledWith('actual text', 'expected text', {});
+    expect(result.reason).toContain('threshold 0.5');
   });
 
   it('should handle inverse scoring', () => {
     jest.mocked(rouge.n).mockReturnValue(0.8);
 
     const result = handleRougeScore({
-      ...baseParams,
+      ...defaultParams,
       inverse: true,
     });
 
-    expect(result.pass).toBe(false);
-    expect(result.score).toBeCloseTo(0.2, 5);
-    expect(result.reason).toBe('ROUGE-N score 0.80 is less than threshold 0.75');
-    expect(rouge.n).toHaveBeenCalledWith('actual text', 'expected text', {});
-  });
-
-  it('should use ROUGE-L method', () => {
-    jest.mocked(rouge.l).mockReturnValue(0.8);
-
-    const result = handleRougeScore({
-      ...baseParams,
-      baseType: 'rouge-l' as any,
+    expect(result).toEqual({
+      pass: false,
+      score: 0.19999999999999996,
+      reason: 'ROUGE-N score 0.80 is less than threshold 0.75',
+      assertion: { type: 'rouge-n' },
     });
-
-    expect(rouge.l).toHaveBeenCalledWith('actual text', 'expected text', {});
-    expect(result.pass).toBe(true);
-    expect(result.reason).toBe('ROUGE-L score 0.80 is greater than or equal to threshold 0.75');
   });
 
-  it('should use ROUGE-S method', () => {
-    jest.mocked(rouge.s).mockReturnValue(0.8);
-
-    const result = handleRougeScore({
-      ...baseParams,
-      baseType: 'rouge-s' as any,
-    });
-
-    expect(rouge.s).toHaveBeenCalledWith('actual text', 'expected text', {});
-    expect(result.pass).toBe(true);
-    expect(result.reason).toBe('ROUGE-S score 0.80 is greater than or equal to threshold 0.75');
-  });
-
-  it('should throw error if renderedValue is not a string', () => {
-    expect(() =>
+  it('should throw error for non-string rendered value', () => {
+    expect(() => {
       handleRougeScore({
-        ...baseParams,
+        ...defaultParams,
         renderedValue: 123 as any,
-      }),
-    ).toThrow('"rouge" assertion type must be a string value');
+      });
+    }).toThrow('"rouge" assertion type must be a string value');
+  });
+
+  it('should use default threshold when not provided', () => {
+    jest.mocked(rouge.n).mockReturnValue(0.76);
+
+    const result = handleRougeScore({
+      ...defaultParams,
+      assertion: { type: 'rouge-n' },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.reason).toContain('threshold 0.75');
   });
 });
