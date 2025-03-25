@@ -1,28 +1,29 @@
 import { handleSimilar } from '../../src/assertions/similar';
+import { matchesSimilarity } from '../../src/matchers';
 
+// Mock matchesSimilarity
 jest.mock('../../src/matchers', () => ({
-  matchesSimilarity: jest.fn().mockImplementation(async (expected, output, threshold, inverse) => {
-    if (inverse) {
-      return {
-        pass: expected !== output,
-        score: expected === output ? 0 : 1,
-      };
-    }
-    return {
-      pass: expected === output,
-      score: expected === output ? 1 : 0,
-    };
-  }),
+  matchesSimilarity: jest.fn(),
 }));
 
 describe('handleSimilar', () => {
-  it('should handle string similarity assertion', async () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should handle string similarity check', async () => {
+    jest.mocked(matchesSimilarity).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Similarity check passed',
+    });
+
     const result = await handleSimilar({
       assertion: {
         type: 'similar',
         value: 'hello world',
+        threshold: 0.8,
       },
-      baseType: 'similar' as any,
       renderedValue: 'hello world',
       outputString: 'hello world',
       inverse: false,
@@ -32,6 +33,7 @@ describe('handleSimilar', () => {
         assert: [],
         options: {},
       },
+      baseType: 'similar' as any,
       context: {
         prompt: 'test prompt',
         vars: {},
@@ -42,9 +44,59 @@ describe('handleSimilar', () => {
           options: {},
         },
         logProbs: undefined,
-        // @ts-ignore
-        provider: { id: () => 'test-provider', callApi: async () => ({}) },
-        providerResponse: { output: 'hello world' },
+        provider: {
+          id: () => 'test-provider',
+          callApi: async () => ({ output: 'test' }),
+        },
+        providerResponse: { output: 'test output' },
+      },
+      output: 'hello world',
+      providerResponse: { output: 'hello world' },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+    expect(matchesSimilarity).toHaveBeenCalledWith('hello world', 'hello world', 0.8, false, {});
+  });
+
+  it('should handle array of strings similarity check', async () => {
+    jest.mocked(matchesSimilarity).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Similarity check passed',
+    });
+
+    const result = await handleSimilar({
+      assertion: {
+        type: 'similar',
+        value: ['hello world', 'hi there'],
+        threshold: 0.8,
+      },
+      renderedValue: ['hello world', 'hi there'],
+      outputString: 'hello world',
+      inverse: false,
+      test: {
+        description: 'test',
+        vars: {},
+        assert: [],
+        options: {},
+      },
+      baseType: 'similar' as any,
+      context: {
+        prompt: 'test prompt',
+        vars: {},
+        test: {
+          description: 'test',
+          vars: {},
+          assert: [],
+          options: {},
+        },
+        logProbs: undefined,
+        provider: {
+          id: () => 'test-provider',
+          callApi: async () => ({ output: 'test' }),
+        },
+        providerResponse: { output: 'test output' },
       },
       output: 'hello world',
       providerResponse: { output: 'hello world' },
@@ -54,14 +106,20 @@ describe('handleSimilar', () => {
     expect(result.score).toBe(1);
   });
 
-  it('should handle array of strings similarity assertion', async () => {
+  it('should fail when no array values meet threshold', async () => {
+    jest.mocked(matchesSimilarity).mockResolvedValue({
+      pass: false,
+      score: 0.3,
+      reason: 'Below similarity threshold',
+    });
+
     const result = await handleSimilar({
       assertion: {
         type: 'similar',
-        value: ['hello world', 'hi world'],
+        value: ['foo', 'bar'],
+        threshold: 0.8,
       },
-      baseType: 'similar' as any,
-      renderedValue: ['hello world', 'hi world'],
+      renderedValue: ['foo', 'bar'],
       outputString: 'hello world',
       inverse: false,
       test: {
@@ -70,6 +128,7 @@ describe('handleSimilar', () => {
         assert: [],
         options: {},
       },
+      baseType: 'similar' as any,
       context: {
         prompt: 'test prompt',
         vars: {},
@@ -80,9 +139,58 @@ describe('handleSimilar', () => {
           options: {},
         },
         logProbs: undefined,
-        // @ts-ignore
-        provider: { id: () => 'test-provider', callApi: async () => ({}) },
-        providerResponse: { output: 'hello world' },
+        provider: {
+          id: () => 'test-provider',
+          callApi: async () => ({ output: 'test' }),
+        },
+        providerResponse: { output: 'test output' },
+      },
+      output: 'hello world',
+      providerResponse: { output: 'hello world' },
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toBe('None of the provided values met the similarity threshold');
+    expect(result.score).toBe(0.3);
+  });
+
+  it('should use default threshold when not specified', async () => {
+    jest.mocked(matchesSimilarity).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Similarity check passed',
+    });
+
+    const result = await handleSimilar({
+      assertion: {
+        type: 'similar',
+        value: 'hello world',
+      },
+      renderedValue: 'hello world',
+      outputString: 'hello world',
+      inverse: false,
+      test: {
+        description: 'test',
+        vars: {},
+        assert: [],
+        options: {},
+      },
+      baseType: 'similar' as any,
+      context: {
+        prompt: 'test prompt',
+        vars: {},
+        test: {
+          description: 'test',
+          vars: {},
+          assert: [],
+          options: {},
+        },
+        logProbs: undefined,
+        provider: {
+          id: () => 'test-provider',
+          callApi: async () => ({ output: 'test' }),
+        },
+        providerResponse: { output: 'test output' },
       },
       output: 'hello world',
       providerResponse: { output: 'hello world' },
@@ -90,55 +198,24 @@ describe('handleSimilar', () => {
 
     expect(result.pass).toBe(true);
     expect(result.score).toBe(1);
+    expect(matchesSimilarity).toHaveBeenCalledWith('hello world', 'hello world', 0.75, false, {});
   });
 
-  it('should handle custom threshold', async () => {
-    const result = await handleSimilar({
-      assertion: {
-        type: 'similar',
-        value: 'hello world',
-        threshold: 0.5,
-      },
-      baseType: 'similar' as any,
-      renderedValue: 'hello world',
-      outputString: 'hello world',
-      inverse: false,
-      test: {
-        description: 'test',
-        vars: {},
-        assert: [],
-        options: {},
-      },
-      context: {
-        prompt: 'test prompt',
-        vars: {},
-        test: {
-          description: 'test',
-          vars: {},
-          assert: [],
-          options: {},
-        },
-        logProbs: undefined,
-        // @ts-ignore
-        provider: { id: () => 'test-provider', callApi: async () => ({}) },
-        providerResponse: { output: 'hello world' },
-      },
-      output: 'hello world',
-      providerResponse: { output: 'hello world' },
+  it('should handle inverse similarity check', async () => {
+    jest.mocked(matchesSimilarity).mockResolvedValue({
+      pass: true,
+      score: 0.2,
+      reason: 'Inverse similarity check passed',
     });
 
-    expect(result.pass).toBe(true);
-  });
-
-  it('should handle inverse similarity assertion', async () => {
     const result = await handleSimilar({
       assertion: {
         type: 'similar',
-        value: 'hello world',
+        value: 'foo bar',
+        threshold: 0.8,
       },
-      baseType: 'similar' as any,
-      renderedValue: 'hello world',
-      outputString: 'completely different',
+      renderedValue: 'foo bar',
+      outputString: 'hello world',
       inverse: true,
       test: {
         description: 'test',
@@ -146,6 +223,7 @@ describe('handleSimilar', () => {
         assert: [],
         options: {},
       },
+      baseType: 'similar' as any,
       context: {
         prompt: 'test prompt',
         vars: {},
@@ -156,66 +234,30 @@ describe('handleSimilar', () => {
           options: {},
         },
         logProbs: undefined,
-        // @ts-ignore
-        provider: { id: () => 'test-provider', callApi: async () => ({}) },
-        providerResponse: { output: 'completely different' },
+        provider: {
+          id: () => 'test-provider',
+          callApi: async () => ({ output: 'test' }),
+        },
+        providerResponse: { output: 'test output' },
       },
-      output: 'completely different',
-      providerResponse: { output: 'completely different' },
+      output: 'hello world',
+      providerResponse: { output: 'hello world' },
     });
 
     expect(result.pass).toBe(true);
+    expect(result.score).toBe(0.2);
   });
 
-  it('should fail when no array values meet threshold', async () => {
-    const result = await handleSimilar({
-      assertion: {
-        type: 'similar',
-        value: ['hello world', 'hi world'],
-        threshold: 0.9,
-      },
-      baseType: 'similar' as any,
-      renderedValue: ['hello world', 'hi world'],
-      outputString: 'completely different',
-      inverse: false,
-      test: {
-        description: 'test',
-        vars: {},
-        assert: [],
-        options: {},
-      },
-      context: {
-        prompt: 'test prompt',
-        vars: {},
-        test: {
-          description: 'test',
-          vars: {},
-          assert: [],
-          options: {},
-        },
-        logProbs: undefined,
-        // @ts-ignore
-        provider: { id: () => 'test-provider', callApi: async () => ({}) },
-        providerResponse: { output: 'completely different' },
-      },
-      output: 'completely different',
-      providerResponse: { output: 'completely different' },
-    });
-
-    expect(result.pass).toBe(false);
-    expect(result.reason).toBe('None of the provided values met the similarity threshold');
-  });
-
-  it('should throw error for invalid renderedValue type', async () => {
+  it('should throw error for invalid value type', async () => {
     await expect(
       handleSimilar({
         assertion: {
           type: 'similar',
           value: 'test',
+          threshold: 0.8,
         },
-        baseType: 'similar' as any,
-        renderedValue: 123 as any,
-        outputString: 'test',
+        renderedValue: {} as any,
+        outputString: 'hello world',
         inverse: false,
         test: {
           description: 'test',
@@ -223,6 +265,7 @@ describe('handleSimilar', () => {
           assert: [],
           options: {},
         },
+        baseType: 'similar' as any,
         context: {
           prompt: 'test prompt',
           vars: {},
@@ -233,12 +276,14 @@ describe('handleSimilar', () => {
             options: {},
           },
           logProbs: undefined,
-          // @ts-ignore
-          provider: { id: () => 'test-provider', callApi: async () => ({}) },
-          providerResponse: { output: 'test' },
+          provider: {
+            id: () => 'test-provider',
+            callApi: async () => ({ output: 'test' }),
+          },
+          providerResponse: { output: 'test output' },
         },
-        output: 'test',
-        providerResponse: { output: 'test' },
+        output: 'hello world',
+        providerResponse: { output: 'hello world' },
       }),
     ).rejects.toThrow('Similarity assertion type must have a string or array of strings value');
   });
