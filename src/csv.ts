@@ -107,7 +107,7 @@ export function assertionFromString(expected: string): Assertion {
       return {
         type: fullType as AssertionType,
         value,
-        threshold: threshold || (type === 'similar' ? DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD : 0.75),
+        threshold: threshold ?? (type === 'similar' ? DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD : 0.75),
       };
     } else {
       return {
