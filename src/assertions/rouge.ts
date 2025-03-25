@@ -14,7 +14,7 @@ export function handleRougeScore({
   const rougeMethod = rouge[fnName];
   const score = rougeMethod(outputString, renderedValue, {});
   const threshold = assertion.threshold ?? 0.75;
-  const pass = ((score >= threshold) != inverse);
+  const pass = score >= threshold != inverse;
   return {
     pass,
     score: inverse ? 1 - score : score,
