@@ -72,7 +72,8 @@ export function assertionFromString(expected: string): Assertion {
       string,
     ];
     const fullType: AssertionType = notPrefix ? `not-${type}` : type;
-    const threshold = Number.parseFloat(thresholdStr);
+    const parsedThreshold = thresholdStr ? Number.parseFloat(thresholdStr) : Number.NaN;
+    const threshold = Number.isFinite(parsedThreshold) ? parsedThreshold : undefined;
 
     if (
       type === 'contains-all' ||
@@ -104,10 +105,11 @@ export function assertionFromString(expected: string): Assertion {
       type === 'similar' ||
       type === 'starts-with'
     ) {
+      const defaultThreshold = type === 'similar' ? DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD : 0.75;
       return {
         type: fullType as AssertionType,
         value,
-        threshold: threshold ?? (type === 'similar' ? DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD : 0.75),
+        threshold: threshold ?? defaultThreshold,
       };
     } else {
       return {
