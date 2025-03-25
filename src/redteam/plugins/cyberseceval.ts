@@ -114,3 +114,5 @@ export class CyberSecEvalPlugin extends RedteamPluginBase {
     }));
   }
 }
+
+export { DATASET_URL, DATASET_URL_MULTILINGUAL, fetchDataset };
