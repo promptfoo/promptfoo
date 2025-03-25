@@ -7,7 +7,7 @@ You can use it by specifying one of the [available models](https://ai.google.dev
 ## Available Models
 
 - `google:gemini-2.5-pro-exp-03-25` - Latest thinking model, designed to tackle increasingly complex problems with enhanced reasoning capabilities.
-- `google:gemini-2.0-flash-exp` - Latest multimodal model with next generation features
+- `google:gemini-2.0-flash-exp` - Multimodal model with next generation features
 - `google:gemini-2.0-flash-thinking-exp` - Optimized for complex reasoning and problem-solving
 - `google:gemini-1.5-flash-8b` - Fast and cost-efficient multimodal model
 - `google:gemini-1.5-pro` - Best performing multimodal model for complex reasoning
