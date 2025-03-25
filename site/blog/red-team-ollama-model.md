@@ -49,7 +49,7 @@ Create a new directory for your red teaming project and initialize it:
 ```bash
 mkdir redteam-ollama
 cd redteam-ollama
-npx promptfoo@latest redteam init --no-gui --no-interactive
+npx promptfoo@latest redteam init --no-gui
 ```
 
 This creates a `promptfooconfig.yaml` file that we'll customize for Ollama.
