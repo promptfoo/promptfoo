@@ -449,7 +449,7 @@ export async function generate_tests() {
 
 ### Import from Python
 
-You can also import tests from Python files. The Python file should contain a function that returns a list of test cases:
+You can also import tests from Python files. The Python file should contain a function that returns a list of test cases that conform to the [promptfoo schema](https://promptfoo.dev/config-schema.json):
 
 ```yaml title="promptfooconfig.yaml"
 tests: file://path/to/tests.py:generate_tests
@@ -457,27 +457,50 @@ tests: file://path/to/tests.py:generate_tests
 
 ```python title="tests.py"
 import pandas as pd
+from typing import List, Dict, Union, Any, Optional
 
-def generate_tests():
-    # Load test data from CSV - or from any other data source
+# Return type is a list of test case dictionaries
+def generate_tests() -> List[Dict[str, Any]]:
+    """Generate test cases from a CSV with input data and expected outputs"""
+    # Load test data from CSV
     df = pd.read_csv('test_data.csv')
 
     test_cases = []
     for _, row in df.iterrows():
+        # Each test case is a dictionary with vars, assert, and description
         test_case = {
             "vars": {
                 "input": row['input_text'],
                 "context": row['context']
             },
-            "assert": [{
-                "type": "contains",
-                "value": row['expected_output']
-            }],
+            "assert": [
+                # First assertion: check if output contains expected text
+                {
+                    "type": "contains",
+                    "value": row['expected_output']
+                },
+                # Second assertion: evaluate factual accuracy
+                {
+                    "type": "factuality",
+                    "value": row['reference_answer'],
+                    "threshold": float(row['factual_accuracy'])
+                }
+            ],
             "description": f"Test case for: {row['input_text'][:30]}..."
         }
         test_cases.append(test_case)
     return test_cases
 ```
+
+Example CSV with columns for multiple assertion types:
+
+```csv title="test_data.csv"
+input_text,context,expected_output,reference_answer,factual_accuracy
+What is machine learning?,AI technology,algorithm,Machine learning is a branch of AI.,0.8
+What is the capital of France?,Geography,Paris,Paris is the capital of France.,0.9
+```
+
+For more detailed type annotations, see our [Python Types Reference](/docs/python/types) which includes comprehensive TypedDict definitions and examples for working with promptfoo in Python.
 
 ### Import from JSON/JSONL
 

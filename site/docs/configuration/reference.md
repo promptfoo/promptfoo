@@ -86,6 +86,10 @@ interface AssertionValueFunctionContext {
 }
 ```
 
+:::tip Python Types
+For Python users, see our [Python Types Reference](/docs/python/types) for TypedDict definitions and examples of implementing these interfaces in Python.
+:::
+
 :::note
 
 promptfoo supports `.js` and `.json` file extensions in addition to `.yaml`.

@@ -1,0 +1,8 @@
+{
+  "label": "Python",
+  "position": 8,
+  "link": {
+    "type": "generated-index",
+    "description": "Python utilities and type definitions for working with promptfoo"
+  }
+}

@@ -176,6 +176,10 @@ class GradingResult:
     named_scores: Optional[Dict[str, float]] = None  # Appear as metrics in the UI
 ```
 
+:::tip
+For a comprehensive reference of Python types available in promptfoo, see the [Python Types Reference](/docs/python/types).
+:::
+
 ## Overriding the Python binary
 
 By default, promptfoo will run `python` in your shell. Make sure `python` points to the appropriate executable.
