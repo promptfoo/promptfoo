@@ -17,14 +17,14 @@ import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
 import type {
   CsvRow,
+  ProviderOptions,
   TestCase,
   TestCaseWithVarsFile,
   TestSuiteConfig,
-  ProviderOptions,
 } from '../types';
 import { isJavascriptFile } from './file';
 
-export async function readVarsFiles(
+export async function readTestFiles(
   pathOrGlobs: string | string[],
   basePath: string = '',
 ): Promise<Record<string, string | string[] | object>> {
@@ -81,7 +81,7 @@ export async function readStandaloneTestsFile(
   const effectiveColonCount = isWindowsPath ? colonCount - 1 : colonCount;
 
   if (effectiveColonCount > 1) {
-    throw new Error(`Invalid Python test file path: ${varsPath}`);
+    throw new Error(`Too many colons. Invalid test file script path: ${varsPath}`);
   }
 
   const pathWithoutFunction =
@@ -128,11 +128,45 @@ export async function readStandaloneTestsFile(
       feature: 'csv tests file - local',
     });
     const delimiter = getEnvString('PROMPTFOO_CSV_DELIMITER', ',');
-    rows = parseCsv(fs.readFileSync(resolvedVarsPath, 'utf-8'), {
-      columns: true,
-      bom: true,
-      delimiter,
-    });
+    const fileContent = fs.readFileSync(resolvedVarsPath, 'utf-8');
+    const enforceStrict = getEnvBool('PROMPTFOO_CSV_STRICT', false);
+
+    try {
+      // First try parsing with strict mode if enforced
+      if (enforceStrict) {
+        rows = parseCsv(fileContent, {
+          columns: true,
+          bom: true,
+          delimiter,
+          relax_quotes: false,
+        });
+      } else {
+        // Try strict mode first, fall back to relaxed if it fails
+        try {
+          rows = parseCsv(fileContent, {
+            columns: true,
+            bom: true,
+            delimiter,
+            relax_quotes: false,
+          });
+        } catch {
+          // If strict parsing fails, try with relaxed quotes
+          rows = parseCsv(fileContent, {
+            columns: true,
+            bom: true,
+            delimiter,
+            relax_quotes: true,
+          });
+        }
+      }
+    } catch (err) {
+      // Add helpful context to the error message
+      const e = err as { code?: string; message: string };
+      if (e.code === 'CSV_INVALID_OPENING_QUOTE') {
+        throw new Error(e.message);
+      }
+      throw e;
+    }
   } else if (fileExtension === 'json') {
     telemetry.recordAndSendOnce('feature_used', {
       feature: 'json tests file',
@@ -157,7 +191,7 @@ async function loadTestWithVars(
 ): Promise<TestCase> {
   const ret: TestCase = { ...testCase, vars: undefined };
   if (typeof testCase.vars === 'string' || Array.isArray(testCase.vars)) {
-    ret.vars = await readVarsFiles(testCase.vars, testBasePath);
+    ret.vars = await readTestFiles(testCase.vars, testBasePath);
   } else {
     ret.vars = testCase.vars;
   }
@@ -325,7 +359,7 @@ export async function readTests(
         if (
           isJavascriptFile(pathWithoutFunction) ||
           pathWithoutFunction.endsWith('.py') ||
-          globOrTest.includes(':')
+          globOrTest.replace(/^file:\/\//, '').includes(':')
         ) {
           ret.push(...(await readStandaloneTestsFile(globOrTest, basePath)));
         } else {

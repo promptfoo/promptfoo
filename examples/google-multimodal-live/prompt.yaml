@@ -1,0 +1,5 @@
+- role: user
+  content: '{{ first_message}}'
+
+- role: user
+  content: '{{ second_message }}'

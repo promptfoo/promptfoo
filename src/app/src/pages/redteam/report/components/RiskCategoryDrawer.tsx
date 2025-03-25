@@ -21,7 +21,7 @@ import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
 import PluginStrategyFlow from './PluginStrategyFlow';
 import SuggestionsDialog from './SuggestionsDialog';
-import { getStrategyIdFromGradingResult } from './shared';
+import { getStrategyIdFromTest } from './shared';
 import './RiskCategoryDrawer.css';
 
 interface RiskCategoryDrawerProps {
@@ -50,11 +50,11 @@ const PRIORITY_STRATEGIES = ['jailbreak:composite', 'pliny', 'prompt-injections'
 
 // Sort function for prioritizing specific strategies
 function sortByPriorityStrategies(
-  a: { gradingResult?: GradingResult },
-  b: { gradingResult?: GradingResult },
+  a: { gradingResult?: GradingResult; metadata?: Record<string, any> },
+  b: { gradingResult?: GradingResult; metadata?: Record<string, any> },
 ): number {
-  const strategyA = a.gradingResult ? getStrategyIdFromGradingResult(a.gradingResult) : '';
-  const strategyB = b.gradingResult ? getStrategyIdFromGradingResult(b.gradingResult) : '';
+  const strategyA = getStrategyIdFromTest(a);
+  const strategyB = getStrategyIdFromTest(b);
 
   const priorityA = PRIORITY_STRATEGIES.indexOf(strategyA || '');
   const priorityB = PRIORITY_STRATEGIES.indexOf(strategyB || '');
@@ -195,7 +195,16 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
           color="inherit"
           fullWidth
           onClick={(event) => {
-            const url = `/eval/?evalId=${evalId}&search=${encodeURIComponent(`(var=${categoryName}|metric=${categoryName})`)}`;
+            // Check if any test has a pluginId in the metadata
+            const firstFailure = failures.length > 0 ? failures[0] : null;
+            const firstPass = passes.length > 0 ? passes[0] : null;
+            const testWithPluginId = firstFailure || firstPass;
+            const pluginId = testWithPluginId?.result?.metadata?.pluginId;
+
+            const searchQuery = pluginId
+              ? `metadata=pluginId:${pluginId}`
+              : `metric=${categoryName}`;
+            const url = `/eval/?evalId=${evalId}&search=${encodeURIComponent(searchQuery)}`;
             if (event.ctrlKey || event.metaKey) {
               window.open(url, '_blank');
             } else {
@@ -239,7 +248,7 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
                       </Typography>
                       {failure.gradingResult &&
                         (() => {
-                          const strategyId = getStrategyIdFromGradingResult(failure.gradingResult);
+                          const strategyId = getStrategyIdFromTest(failure);
                           return (
                             strategyId && (
                               <Tooltip title={strategyDescriptions[strategyId as Strategy] || ''}>

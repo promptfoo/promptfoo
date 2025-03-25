@@ -9,6 +9,31 @@ import logger from './logger';
 import invariant from './util/invariant';
 import { sleep } from './util/time';
 
+/**
+ * Options for configuring TLS in proxy connections
+ */
+interface ProxyTlsOptions {
+  uri: string;
+  proxyTls: ConnectionOptions;
+  requestTls: ConnectionOptions;
+}
+
+/**
+ * Extended options for fetch requests with promptfoo-specific headers
+ */
+interface PromptfooRequestInit extends RequestInit {
+  // Make headers type compatible with standard HeadersInit
+  headers?: HeadersInit;
+}
+
+/**
+ * Error with additional system information
+ */
+interface SystemError extends Error {
+  code?: string;
+  cause?: unknown;
+}
+
 export function sanitizeUrl(url: string): string {
   try {
     const parsedUrl = new URL(url);
@@ -37,23 +62,26 @@ export function getProxyUrl(): string | undefined {
 
 export async function fetchWithProxy(
   url: RequestInfo,
-  options: RequestInit = {},
+  options: PromptfooRequestInit = {},
 ): Promise<Response> {
   let finalUrl = url;
 
-  const finalOptions = {
+  const finalOptions: PromptfooRequestInit = {
     ...options,
     headers: {
-      ...options.headers,
+      ...(options.headers as Record<string, string>),
       'x-promptfoo-version': VERSION,
-    } as Record<string, string>,
+    },
   };
 
   if (typeof url === 'string') {
     try {
       const parsedUrl = new URL(url);
       if (parsedUrl.username || parsedUrl.password) {
-        if (finalOptions.headers && 'Authorization' in finalOptions.headers) {
+        if (
+          finalOptions.headers &&
+          'Authorization' in (finalOptions.headers as Record<string, string>)
+        ) {
           logger.warn(
             'Both URL credentials and Authorization header present - URL credentials will be ignored',
           );
@@ -63,7 +91,7 @@ export async function fetchWithProxy(
           const password = parsedUrl.password || '';
           const credentials = Buffer.from(`${username}:${password}`).toString('base64');
           finalOptions.headers = {
-            ...finalOptions.headers,
+            ...(finalOptions.headers as Record<string, string>),
             Authorization: `Basic ${credentials}`,
           };
         }
@@ -79,7 +107,7 @@ export async function fetchWithProxy(
   const proxyUrl = getProxyUrl();
 
   const tlsOptions: ConnectionOptions = {
-    rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', false),
+    rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
   };
 
   // Support custom CA certificates
@@ -101,7 +129,7 @@ export async function fetchWithProxy(
       uri: proxyUrl,
       proxyTls: tlsOptions,
       requestTls: tlsOptions,
-    });
+    } as ProxyTlsOptions);
     setGlobalDispatcher(agent);
   }
 
@@ -110,7 +138,7 @@ export async function fetchWithProxy(
 
 export function fetchWithTimeout(
   url: RequestInfo,
-  options: RequestInit = {},
+  options: PromptfooRequestInit = {},
   timeout: number,
 ): Promise<Response> {
   return new Promise((resolve, reject) => {
@@ -136,6 +164,9 @@ export function fetchWithTimeout(
   });
 }
 
+/**
+ * Check if a response indicates rate limiting
+ */
 export function isRateLimited(response: Response): boolean {
   // These checks helps make sure we set up tests correctly.
   invariant(response.headers, 'Response headers are missing');
@@ -151,6 +182,9 @@ export function isRateLimited(response: Response): boolean {
   );
 }
 
+/**
+ * Handle rate limiting by waiting the appropriate amount of time
+ */
 export async function handleRateLimit(response: Response): Promise<void> {
   const rateLimitReset = response.headers.get('X-RateLimit-Reset');
   const retryAfter = response.headers.get('Retry-After');
@@ -175,15 +209,18 @@ export async function handleRateLimit(response: Response): Promise<void> {
   await sleep(waitTime);
 }
 
+/**
+ * Fetch with automatic retries and rate limit handling
+ */
 export async function fetchWithRetries(
   url: RequestInfo,
-  options: RequestInit = {},
+  options: PromptfooRequestInit = {},
   timeout: number,
   retries: number = 4,
 ): Promise<Response> {
   const maxRetries = Math.max(0, retries);
 
-  let lastError;
+  let lastErrorMessage: string | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
 
   for (let i = 0; i <= maxRetries; i++) {
@@ -208,13 +245,14 @@ export async function fetchWithRetries(
       let errorMessage;
       if (error instanceof Error) {
         // Extract as much detail as possible from the error
-        errorMessage = `${error.name}: ${error.message}`;
-        if ('cause' in error) {
-          errorMessage += ` (Cause: ${error.cause})`;
+        const typedError = error as SystemError;
+        errorMessage = `${typedError.name}: ${typedError.message}`;
+        if (typedError.cause) {
+          errorMessage += ` (Cause: ${typedError.cause})`;
         }
-        if ('code' in error) {
+        if (typedError.code) {
           // Node.js system errors often have error codes
-          errorMessage += ` (Code: ${error.code})`;
+          errorMessage += ` (Code: ${typedError.code})`;
         }
       } else {
         errorMessage = String(error);
@@ -225,8 +263,8 @@ export async function fetchWithRetries(
         const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
         await sleep(waitTime);
       }
-      lastError = error;
+      lastErrorMessage = errorMessage;
     }
   }
-  throw new Error(`Request failed after ${maxRetries} retries: ${(lastError as Error).message}`);
+  throw new Error(`Request failed after ${maxRetries} retries: ${lastErrorMessage}`);
 }

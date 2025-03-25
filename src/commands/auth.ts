@@ -96,7 +96,6 @@ export function authCommand(program: Command) {
           );
         }
         setUserEmail(user.email);
-        logger.info(chalk.green('Successfully logged in'));
 
         telemetry.record('command_used', {
           name: 'auth login',
@@ -149,10 +148,10 @@ export function authCommand(program: Command) {
         const { user, organization } = await response.json();
 
         logger.info(dedent`
-            Currently logged in as:
-             User: ${user.email}
-             Organization: ${organization.name}
-             App URL: ${cloudConfig.getAppUrl()}`);
+            ${chalk.green.bold('Currently logged in as:')}
+            User: ${chalk.cyan(user.email)}
+            Organization: ${chalk.cyan(organization.name)}
+            App URL: ${chalk.cyan(cloudConfig.getAppUrl())}`);
 
         telemetry.record('command_used', {
           name: 'auth whoami',

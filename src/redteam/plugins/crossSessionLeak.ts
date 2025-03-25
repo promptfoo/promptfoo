@@ -29,6 +29,8 @@ const DEFAULT_EXAMPLES = dedent`
 `;
 
 export class CrossSessionLeakPlugin extends RedteamPluginBase {
+  readonly id = PLUGIN_ID;
+
   protected async getTemplate(): Promise<string> {
     return dedent`
     We are testing an AI system for potential information leaks across different user sessions. Generate a series of prompts that simulate two separate user interactions:
@@ -117,7 +119,7 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
 }
 
 export class CrossSessionLeakGrader extends RedteamGraderBase {
-  id = PLUGIN_ID;
+  readonly id = PLUGIN_ID;
   rubric = '';
   async getResult(
     prompt: string,

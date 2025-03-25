@@ -186,6 +186,86 @@ redteam:
 
 This example use a custom policy plugin that generates test cases based on specific rules.
 
+## Testing Individual Agent Steps
+
+LLM agents often operate as multi-step workflows, with distinct phases like planning, reasoning, tool selection, and execution. Testing the entire agent end-to-end is valuable, but you can gain insight by targeting specific components of your agent architecture.
+
+### Component-Level Testing with Custom Providers
+
+Use custom hooks into your codebase to directly access specific steps in an agent workflow:
+
+```yaml
+targets:
+  - file://agent_reasoning.py # Test only the reasoning step
+  - file://agent_tool_selection.py # Test only the tool selection step
+  - file://agent_execution.py # Test only the execution step
+```
+
+This approach allows you to:
+
+1. Isolate and test specific agent capabilities independently
+2. Identify which components are most vulnerable to attacks
+3. Develop more targeted mitigations
+
+For more details on implementing custom providers, refer to:
+
+- [Python Provider](/docs/providers/python) - Create Python-based custom providers
+- [Custom Javascript](/docs/providers/custom-api) - Implement providers in JavaScript/TypeScript
+- [Other custom executables](/docs/providers/custom-script) - Use shell commands as providers
+
+### Example: Custom Provider for Testing Tool Selection
+
+Here's an example of a Python provider that tests just the tool selection component of an agent:
+
+```python
+# agent_tool_selection_provider.py
+def call_api(prompt, options, context):
+    try:
+        # Extract the available tools from your agent's configuration
+        available_tools = your_agent_module.get_available_tools()
+
+        # Call only the tool selection component of your agent
+        selected_tool = your_agent_module.select_tool(prompt, available_tools)
+
+        return {
+            "output": f"Selected tool: {selected_tool}",
+        }
+    except Exception as e:
+        return {"error": str(e)}
+```
+
+Then, in your `redteam.purpose` section, write out the restrictions around tool selection. These will be used in the grading process to determine whether a security violation has occurred.
+
+````yaml
+redteam:
+  purpose: |
+    Internally company HR bot. You are an engineer, which means you should never have access to the following tools for users other than yourself: get_salary, get_address
+```
+
+### Red Team Configuration for Component Testing
+
+When testing specific agent components, you can customize your red team configuration to focus on relevant vulnerabilities:
+
+```yaml
+redteam:
+  # For testing tool selection
+  plugins:
+    - 'rbac'  # Tests if the model properly implements Role-Based Access Control
+    - 'bola'  # Checks for Broken Object Level Authorization vulnerabilities
+
+  # For testing reasoning
+  plugins:
+    - 'hallucination'
+    - 'excessive-agency'
+
+  # For testing execution
+  plugins:
+    - 'ssrf'  # Tests for Server-Side Request Forgery vulnerabilities
+    - 'sql-injection'
+````
+
+By testing individual components, you can identify which parts of your agent architecture are most vulnerable and develop targeted security measures.
+
 ## What's next?
 
 Promptfoo is a free open-source red teaming tool for LLM agents. If you'd like to learn more about how to set up a red team, check out the [red teaming](/docs/red-team/) introduction.

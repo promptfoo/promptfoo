@@ -2,12 +2,10 @@ import assertions from './assertions';
 import * as cache from './cache';
 import { evaluate as doEvaluate } from './evaluator';
 import guardrails from './guardrails';
-import logger from './logger';
 import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
-import { readPrompts, readProviderPromptMap } from './prompts';
-import providers, { loadApiProvider } from './providers';
-import { loadApiProviders } from './providers';
+import { readProviderPromptMap, processPrompts } from './prompts';
+import { loadApiProvider, loadApiProviders } from './providers';
 import { extractEntities } from './redteam/extraction/entities';
 import { extractSystemPurpose } from './redteam/extraction/purpose';
 import { GRADERS } from './redteam/graders';
@@ -20,13 +18,11 @@ import type {
   TestSuite,
   EvaluateTestSuite,
   ProviderOptions,
-  PromptFunction,
   Scenario,
 } from './types';
 import { readFilters, writeMultipleOutputs, writeOutput } from './util';
 import invariant from './util/invariant';
 import { readTests } from './util/testCaseReader';
-import { PromptSchema } from './validators/prompts';
 
 export * from './types';
 
@@ -48,32 +44,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     nunjucksFilters: await readFilters(testSuite.nunjucksFilters || {}),
 
     // Full prompts expected (not filepaths)
-    prompts: (
-      await Promise.all(
-        testSuite.prompts.map(async (promptInput) => {
-          if (typeof promptInput === 'function') {
-            return {
-              raw: promptInput.toString(),
-              label: promptInput?.name ?? promptInput.toString(),
-              function: promptInput as PromptFunction,
-            };
-          } else if (typeof promptInput === 'string') {
-            return readPrompts(promptInput);
-          }
-          try {
-            return PromptSchema.parse(promptInput);
-          } catch (error) {
-            logger.warn(
-              `Prompt input is not a valid prompt schema: ${error}\nFalling back to serialized JSON as raw prompt.`,
-            );
-            return {
-              raw: JSON.stringify(promptInput),
-              label: JSON.stringify(promptInput),
-            };
-          }
-        }),
-      )
-    ).flat(),
+    prompts: await processPrompts(testSuite.prompts),
   };
 
   // Resolve nested providers
@@ -170,13 +141,13 @@ const redteam = {
   },
 };
 
-export { assertions, cache, evaluate, providers, redteam, guardrails };
+export { assertions, cache, evaluate, loadApiProvider, redteam, guardrails };
 
 export default {
   assertions,
   cache,
   evaluate,
-  providers,
+  loadApiProvider,
   redteam,
   guardrails,
 };

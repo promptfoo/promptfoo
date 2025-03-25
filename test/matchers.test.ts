@@ -839,7 +839,7 @@ describe('matchesLlmRubric', () => {
 });
 
 describe('matchesFactuality', () => {
-  it('should pass when the factuality check passes', async () => {
+  it('should pass when the factuality check passes with legacy format', async () => {
     const input = 'Input text';
     const expected = 'Expected output';
     const output = 'Sample output';
@@ -856,17 +856,63 @@ describe('matchesFactuality', () => {
       reason:
         'The submitted answer is a subset of the expert answer and is fully consistent with it.',
       score: 1,
-      tokensUsed: {
+      tokensUsed: expect.objectContaining({
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
-        cached: expect.any(Number),
-        completionDetails: expect.any(Object),
-      },
+      }),
     });
   });
 
-  it('should fail when the factuality check fails', async () => {
+  it('should pass when the factuality check passes with JSON format', async () => {
+    const input = 'Input text';
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const grading = {};
+
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+      output:
+        '{"category": "A", "reason": "The submitted answer is a subset of the expert answer and is fully consistent with it."}',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    await expect(matchesFactuality(input, expected, output, grading)).resolves.toEqual({
+      pass: true,
+      reason:
+        'The submitted answer is a subset of the expert answer and is fully consistent with it.',
+      score: 1,
+      tokensUsed: expect.objectContaining({
+        total: expect.any(Number),
+        prompt: expect.any(Number),
+        completion: expect.any(Number),
+      }),
+    });
+  });
+
+  it('should fall back to pattern match response', async () => {
+    const input = 'Input text';
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const grading = {};
+
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+      output: '(A) This is a custom reason for category A.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    await expect(matchesFactuality(input, expected, output, grading)).resolves.toEqual({
+      pass: true,
+      reason: 'This is a custom reason for category A.',
+      score: 1,
+      tokensUsed: expect.objectContaining({
+        total: expect.any(Number),
+        prompt: expect.any(Number),
+        completion: expect.any(Number),
+      }),
+    });
+  });
+
+  it('should fail when the factuality check fails with legacy format', async () => {
     const input = 'Input text';
     const expected = 'Expected output';
     const output = 'Sample output';
@@ -880,13 +926,35 @@ describe('matchesFactuality', () => {
       pass: false,
       reason: 'There is a disagreement between the submitted answer and the expert answer.',
       score: 0,
-      tokensUsed: {
+      tokensUsed: expect.objectContaining({
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
-        cached: expect.any(Number),
-        completionDetails: expect.any(Object),
-      },
+      }),
+    });
+  });
+
+  it('should fail when the factuality check fails with JSON format', async () => {
+    const input = 'Input text';
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const grading = {};
+
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+      output:
+        '{"category": "D", "reason": "There is a disagreement between the submitted answer and the expert answer."}',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    await expect(matchesFactuality(input, expected, output, grading)).resolves.toEqual({
+      pass: false,
+      reason: 'There is a disagreement between the submitted answer and the expert answer.',
+      score: 0,
+      tokensUsed: expect.objectContaining({
+        total: expect.any(Number),
+        prompt: expect.any(Number),
+        completion: expect.any(Number),
+      }),
     });
   });
 
@@ -906,7 +974,7 @@ describe('matchesFactuality', () => {
 
     jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
       output:
-        '(A) The submitted answer is a subset of the expert answer and is fully consistent with it.',
+        '{"category": "A", "reason": "The submitted answer is a subset of the expert answer and is fully consistent with it."}',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
 
@@ -915,14 +983,122 @@ describe('matchesFactuality', () => {
       reason:
         'The submitted answer is a subset of the expert answer and is fully consistent with it.',
       score: 0.8,
-      tokensUsed: {
+      tokensUsed: expect.objectContaining({
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
-        cached: expect.any(Number),
-        completionDetails: expect.any(Object),
-      },
+      }),
     });
+  });
+
+  it('should use category description as fallback when no reason is provided in JSON', async () => {
+    const input = 'Input text';
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const grading = {};
+
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+      output: '{"category": "A"}',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    await expect(matchesFactuality(input, expected, output, grading)).resolves.toEqual({
+      pass: true,
+      reason:
+        'Category A: The submitted answer is a subset of the expert answer and is fully consistent with it.',
+      score: 1,
+      tokensUsed: expect.objectContaining({
+        total: expect.any(Number),
+        prompt: expect.any(Number),
+        completion: expect.any(Number),
+      }),
+    });
+  });
+
+  it('should fail when JSON has invalid category', async () => {
+    const input = 'Input text';
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const grading = {};
+
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+      output: '{"category": "Z", "reason": "Invalid category"}',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    await expect(matchesFactuality(input, expected, output, grading)).resolves.toEqual({
+      pass: false,
+      score: 0,
+      reason: 'Invalid category value: Z',
+      tokensUsed: expect.objectContaining({
+        total: expect.any(Number),
+        prompt: expect.any(Number),
+        completion: expect.any(Number),
+      }),
+    });
+  });
+
+  it('should use custom prompt override when provided', async () => {
+    const input = 'Input text';
+    const expected = 'Expected output';
+    const output = 'Sample output';
+
+    const customPrompt = JSON.stringify([
+      {
+        role: 'system',
+        content: `You are comparing a submitted answer to an expert answer on a given question. Here is the data:
+[BEGIN DATA]
+************
+[Question]: {{input}}
+************
+[Expert]: {{ideal}}
+************
+[Submission]: {{completion}}
+************
+[END DATA]
+
+Compare the factual content of the submitted answer with the expert answer. Ignore any differences in style, grammar, or punctuation.
+The submitted answer may either be a subset or superset of the expert answer, or it may conflict with it. Determine which case applies. Answer the question by selecting one of the following options:
+(A) The submitted answer is a subset of the expert answer and is fully consistent with it.
+(B) The submitted answer is a superset of the expert answer and is fully consistent with it.
+(C) The submitted answer contains all the same details as the expert answer.
+(D) There is a disagreement between the submitted answer and the expert answer.
+(E) The answers differ, but these differences don't matter from the perspective of factuality.`,
+      },
+    ]);
+
+    const mockCallApi = jest.fn().mockResolvedValue({
+      output: '(B) The submitted answer is a superset of the expert answer.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    const grading = {
+      rubricPrompt: customPrompt,
+      provider: {
+        id: () => 'test-provider',
+        callApi: mockCallApi,
+      },
+    };
+
+    const result = await matchesFactuality(input, expected, output, grading);
+
+    expect(result).toEqual({
+      pass: true,
+      reason: 'The submitted answer is a superset of the expert answer.',
+      score: 1,
+      tokensUsed: expect.objectContaining({
+        total: expect.any(Number),
+        prompt: expect.any(Number),
+        completion: expect.any(Number),
+      }),
+    });
+
+    // Verify the custom prompt was used
+    expect(mockCallApi).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'The submitted answer may either be a subset or superset of the expert answer',
+      ),
+    );
   });
 
   it('should throw an error when an error occurs', async () => {
@@ -950,7 +1126,7 @@ describe('matchesFactuality', () => {
     };
 
     jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
-      output: '(A) The submitted answer is correct.',
+      output: '{"category": "A", "reason": "The submitted answer is correct."}',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
 

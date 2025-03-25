@@ -16,7 +16,7 @@ import promptfoo from '../../index';
 import logger from '../../logger';
 import Eval from '../../models/eval';
 import EvalResult from '../../models/evalResult';
-import { updateResult, deleteEval, writeResultsToDatabase } from '../../util';
+import { updateResult, deleteEval, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
 import { ApiSchemas } from '../apiSchemas';
 

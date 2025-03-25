@@ -12,12 +12,15 @@ export XAI_API_KEY=your_api_key_here
 
 ## Provider Format
 
-The xAI provider supports the following model formats:
+The xAI provider includes support for the following model formats:
 
 - `xai:grok-2-latest` - Latest Grok-2 model (131K context)
 - `xai:grok-2-vision-latest` - Latest Grok-2 vision model (32K context)
+- `xai:grok-2-vision-1212`
+- `xai:grok-2-1212`
 - `xai:grok-beta` - Beta version (131K context)
 - `xai:grok-vision-beta` - Vision beta version (8K context)
+- As well as grok-3 variants whenever they become generally available
 
 You can also use specific versioned models:
 
@@ -35,6 +38,19 @@ providers:
       temperature: 0.7
       apiKey: your_api_key_here # Alternative to XAI_API_KEY
 ```
+
+### Region Support
+
+You can specify a region to use a region-specific API endpoint:
+
+```yaml
+providers:
+  - id: xai:grok-2-latest
+    config:
+      region: us-west-1 # Will use https://us-west-1.api.x.ai/v1
+```
+
+This is equivalent to setting `base_url="https://us-west-1.api.x.ai/v1"` in the Python client.
 
 ### Vision Support
 

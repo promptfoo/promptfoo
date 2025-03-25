@@ -34,8 +34,11 @@ import type {
 } from '../types';
 import type { EnvOverrides } from '../types/env';
 import { safeJsonStringify } from '../util/json';
-import { AnthropicMessagesProvider, calculateAnthropicCost } from './anthropic';
-import { AzureChatCompletionProvider, AzureEmbeddingProvider, calculateAzureCost } from './azure';
+import { AnthropicMessagesProvider } from './anthropic/messages';
+import { calculateAnthropicCost } from './anthropic/util';
+import { AzureChatCompletionProvider } from './azure/chat';
+import { AzureEmbeddingProvider } from './azure/embedding';
+import { calculateAzureCost } from './azure/util';
 import { GoogleChatProvider } from './google';
 import { GroqProvider } from './groq';
 import { OpenAiChatCompletionProvider } from './openai/chat';

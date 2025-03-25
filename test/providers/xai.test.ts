@@ -32,6 +32,23 @@ describe('xAI Provider', () => {
     );
   });
 
+  it('uses region-specific API base URL when region is provided', () => {
+    createXAIProvider('xai:grok-2', {
+      config: {
+        region: 'us-west-1',
+      },
+    });
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        config: expect.objectContaining({
+          apiBaseUrl: 'https://us-west-1.api.x.ai/v1',
+          apiKeyEnvar: 'XAI_API_KEY',
+        }),
+      }),
+    );
+  });
+
   it('merges provided options with xAI-specific config', () => {
     const options: ProviderOptions = {
       config: {

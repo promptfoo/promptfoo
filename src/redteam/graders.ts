@@ -44,10 +44,12 @@ import { PoliticsGrader } from './plugins/politics';
 import { PromptExtractionGrader } from './plugins/promptExtraction';
 import { RagDocumentExfiltrationGrader } from './plugins/ragDocumentExfiltration';
 import { RbacGrader } from './plugins/rbac';
+import { ReasoningDosGrader } from './plugins/reasoningDos';
 import { ReligionGrader } from './plugins/religion';
 import { ShellInjectionGrader } from './plugins/shellInjection';
 import { SqlInjectionGrader } from './plugins/sqlInjection';
 import { SsrfGrader } from './plugins/ssrf';
+import { ToolDiscoveryGrader } from './plugins/toolDiscovery';
 import type { RedteamAssertionTypes } from './types';
 
 export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
@@ -61,6 +63,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:debug-access': new DebugAccessGrader(),
   'promptfoo:redteam:divergent-repetition': new DivergentRepetitionGrader(),
   'promptfoo:redteam:excessive-agency': new ExcessiveAgencyGrader(),
+  'promptfoo:redteam:tool-discovery': new ToolDiscoveryGrader(),
   'promptfoo:redteam:hallucination': new HallucinationGrader(),
   'promptfoo:redteam:harmbench': new HarmbenchGrader(),
   'promptfoo:redteam:harmful:chemical-biological-weapons': new HarmfulGrader(),
@@ -105,6 +108,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:politics': new PoliticsGrader(),
   'promptfoo:redteam:prompt-extraction': new PromptExtractionGrader(),
   'promptfoo:redteam:rbac': new RbacGrader(),
+  'promptfoo:redteam:reasoning-dos': new ReasoningDosGrader(),
   'promptfoo:redteam:religion': new ReligionGrader(),
   'promptfoo:redteam:shell-injection': new ShellInjectionGrader(),
   'promptfoo:redteam:sql-injection': new SqlInjectionGrader(),
@@ -112,5 +116,13 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
 };
 
 export function getGraderById(id: string): RedteamGraderBase | undefined {
-  return GRADERS[id as keyof typeof GRADERS];
+  // First try to get the exact grader
+  const grader = id in GRADERS ? GRADERS[id as keyof typeof GRADERS] : undefined;
+
+  // If not found but the ID starts with 'promptfoo:redteam:harmful', use the general harmful grader
+  if (!grader && id.startsWith('promptfoo:redteam:harmful')) {
+    return GRADERS['promptfoo:redteam:harmful'];
+  }
+
+  return grader;
 }

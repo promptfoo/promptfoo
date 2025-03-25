@@ -24,13 +24,11 @@ export function StrategyItem({ strategy, isSelected, onToggle, onConfigClick }: 
         display: 'flex',
         cursor: 'pointer',
         userSelect: 'none',
-        border: isSelected ? `1px solid ${theme.palette.primary.main}` : '1px solid transparent',
+        border: isSelected ? `1px solid ${theme.palette.primary.main}` : undefined,
         backgroundColor: isSelected
           ? alpha(theme.palette.primary.main, 0.04)
           : theme.palette.background.paper,
         transition: 'all 0.2s ease-in-out',
-        boxShadow:
-          theme.palette.mode === 'dark' ? '0 2px 8px 0 rgba(0, 0, 0, 0.5)' : theme.shadows[2],
         '&:hover': {
           backgroundColor: isSelected
             ? alpha(theme.palette.primary.main, 0.08)

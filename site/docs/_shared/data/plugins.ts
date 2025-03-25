@@ -67,6 +67,7 @@ export interface Plugin {
   name: string;
   pluginId: string;
   vulnerabilityType: VulnerabilityType;
+  isRemote?: boolean;
 }
 
 // Type utility at the top
@@ -95,6 +96,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Trust and Safety',
@@ -165,6 +167,7 @@ export const PLUGINS = [
       chat: false,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Security and Access Control',
@@ -179,6 +182,7 @@ export const PLUGINS = [
       chat: false,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Brand',
@@ -193,6 +197,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'misinformation and misuse',
+    isRemote: true,
   },
   {
     category: 'Compliance and Legal',
@@ -278,6 +283,22 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'security',
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests for vulnerability to computational resource exhaustion through excessive reasoning patterns. Applicable to reasoning models.',
+    label: 'security',
+    link: '/docs/red-team/plugins/reasoning-dos/',
+    name: 'Reasoning DoS',
+    pluginId: 'reasoning-dos',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Brand',
@@ -516,6 +537,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'misinformation and misuse',
+    isRemote: true,
   },
   {
     category: 'Compliance and Legal',
@@ -628,6 +650,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'misinformation and misuse',
+    isRemote: true,
   },
   {
     category: 'Compliance and Legal',
@@ -684,6 +707,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Brand',
@@ -713,6 +737,7 @@ export const PLUGINS = [
       chat: false,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Custom',
@@ -755,6 +780,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Security and Access Control',
@@ -896,6 +922,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'misinformation and misuse',
+    isRemote: true,
   },
   {
     category: 'Security and Access Control',
@@ -938,6 +965,7 @@ export const PLUGINS = [
       chat: false,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Security and Access Control',
@@ -952,6 +980,22 @@ export const PLUGINS = [
       agent: true,
       chat: false,
     },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    applicationTypes: {
+      agent: true,
+      chat: true,
+      rag: true,
+    },
+    category: 'Security and Access Control',
+    description:
+      'Tests if an AI system reveals the list of tools, functions, or API calls it has access to',
+    label: 'technical',
+    link: '/docs/red-team/plugins/tool-discovery/',
+    name: 'Tool Discovery',
+    pluginId: 'tool-discovery',
     vulnerabilityType: 'security',
   },
 ] as const as readonly Plugin[];

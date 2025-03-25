@@ -35,5 +35,9 @@ export function addLeetspeak(testCases: TestCase[], injectVar: string): TestCase
       ...testCase.vars,
       [injectVar]: toLeetspeak(String(testCase.vars![injectVar])),
     },
+    metadata: {
+      ...testCase.metadata,
+      strategyId: 'leetspeak',
+    },
   }));
 }

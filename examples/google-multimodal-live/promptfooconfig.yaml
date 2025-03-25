@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+# Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
+
+description: 'Basic query demonstration'
+
+prompts:
+  - Why is {{concept}}?
+
+providers:
+  - id: 'google:live:gemini-2.0-flash-exp'
+    config:
+      generationConfig:
+        response_modalities: ['text']
+      timeoutMs: 10000
+
+defaultTest:
+  assert:
+    - type: icontains
+      value: salt
+      transform: JSON.parse(output).text
+    - type: icontains
+      value: weathering
+      transform: JSON.parse(output).text
+
+tests:
+  - vars:
+      concept: the sea salty

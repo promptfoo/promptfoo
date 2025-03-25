@@ -372,13 +372,13 @@ describe('AwsBedrockGenericProvider', () => {
     });
 
     it('should use default values when config is not provided', () => {
-      const config: BedrockAI21GenerationOptions = { region: 'us-east-1' };
+      const config = {};
       const prompt = 'Tell me a joke.';
+
       const params = modelHandler.params(config, prompt);
 
       expect(params).toEqual({
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: 1024,
         temperature: 0,
         top_p: 1.0,
       });
@@ -388,12 +388,12 @@ describe('AwsBedrockGenericProvider', () => {
       const mockResponse = {
         choices: [{ message: { content: 'This is a test response.' } }],
       };
-      expect(modelHandler.output(mockResponse)).toBe('This is a test response.');
+      expect(modelHandler.output({}, mockResponse)).toBe('This is a test response.');
     });
 
     it('should throw an error for API errors', () => {
       const mockErrorResponse = { error: 'API Error' };
-      expect(() => modelHandler.output(mockErrorResponse)).toThrow('AI21 API error: API Error');
+      expect(() => modelHandler.output({}, mockErrorResponse)).toThrow('AI21 API error: API Error');
     });
   });
 
@@ -774,8 +774,8 @@ describe('llama', () => {
 
     it('should handle output correctly', () => {
       const handler = getLlamaModelHandler(LlamaVersion.V2);
-      expect(handler.output({ generation: 'Test response' })).toBe('Test response');
-      expect(handler.output({})).toBeUndefined();
+      expect(handler.output({}, { generation: 'Test response' })).toBe('Test response');
+      expect(handler.output({}, {})).toBeUndefined();
     });
   });
 
@@ -919,7 +919,6 @@ describe('BEDROCK_MODEL AMAZON_NOVA', () => {
       ],
       system: [{ text: 'You are a helpful assistant.' }],
       inferenceConfig: {
-        max_new_tokens: 1024,
         temperature: 0,
       },
     });
@@ -946,7 +945,6 @@ describe('BEDROCK_MODEL AMAZON_NOVA', () => {
         },
       ],
       inferenceConfig: {
-        max_new_tokens: 1024,
         temperature: 0,
       },
     });
@@ -994,7 +992,6 @@ describe('BEDROCK_MODEL AMAZON_NOVA', () => {
       ],
       system: [{ text: 'You are a helpful assistant.' }],
       inferenceConfig: {
-        max_new_tokens: 1024,
         temperature: 0,
       },
     });
@@ -1014,7 +1011,6 @@ describe('BEDROCK_MODEL AMAZON_NOVA', () => {
         },
       ],
       inferenceConfig: {
-        max_new_tokens: 1024,
         temperature: 0,
       },
     });

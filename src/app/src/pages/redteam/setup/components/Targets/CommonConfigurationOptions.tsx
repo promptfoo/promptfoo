@@ -7,19 +7,33 @@ import Box from '@mui/material/Box';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import type { ProviderOptions } from '@promptfoo/types';
+import ExtensionEditor from './ExtensionEditor';
 import 'prismjs/themes/prism.css';
 
 interface CommonConfigurationOptionsProps {
   selectedTarget: ProviderOptions;
   updateCustomTarget: (field: string, value: any) => void;
+  onValidationChange?: (hasErrors: boolean) => void;
+  extensions?: string[];
+  onExtensionsChange?: (extensions: string[]) => void;
 }
 
 const CommonConfigurationOptions: React.FC<CommonConfigurationOptionsProps> = ({
   selectedTarget,
   updateCustomTarget,
+  onValidationChange,
+  extensions = [],
+  onExtensionsChange,
 }) => {
+  const handleExtensionsChange = React.useCallback(
+    (newExtensions: string[]) => {
+      onExtensionsChange?.(newExtensions);
+    },
+    [onExtensionsChange],
+  );
+
   return (
-    <Box mt={4}>
+    <Box>
       <Accordion defaultExpanded={!!selectedTarget.delay}>
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
           <Box>
@@ -47,6 +61,12 @@ const CommonConfigurationOptions: React.FC<CommonConfigurationOptionsProps> = ({
           </Box>
         </AccordionDetails>
       </Accordion>
+
+      <ExtensionEditor
+        extensions={extensions}
+        onExtensionsChange={handleExtensionsChange}
+        onValidationChange={onValidationChange}
+      />
     </Box>
   );
 };

@@ -17,6 +17,10 @@ export async function addBestOfNTestCases(
         ...config,
       },
     },
+    metadata: {
+      ...testCase.metadata,
+      strategyId: 'best-of-n',
+    },
     assert: useBasicRefusal
       ? // Use a static refusal check for Best-of-N instead of costly llm-as-a-judge assertions
         // Assumes that the metric name is set for the first assertion
