@@ -26,6 +26,9 @@ export const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   'best-of-n': 1,
   pandamonium: 5,
   hex: 1,
+  audio: 1,
+  image: 1,
+  retry: 1,
 };
 
 export function getEstimatedProbes(config: Config) {
