@@ -75,8 +75,6 @@ export class PlinyPlugin extends RedteamPluginBase {
       },
       assert: this.getAssertions(text),
       metadata: {
-        // Store the original text separately in metadata
-        jailbreakContent: text,
         pluginId: 'pliny',
       },
     }));
