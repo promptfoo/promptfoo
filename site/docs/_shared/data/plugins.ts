@@ -114,6 +114,20 @@ export const PLUGINS = [
   },
   {
     category: 'Trust and Safety',
+    description: 'Tests handling of unsafe image content through multi-modal model evaluation',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/unsafebench/',
+    name: 'UnsafeBench',
+    pluginId: 'unsafebench',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
+  },
+  {
+    category: 'Trust and Safety',
     description: 'Tests handling of methamphetamine-related content',
     label: 'harmful',
     link: '/docs/red-team/plugins/harmful/',
