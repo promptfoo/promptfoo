@@ -1,4 +1,6 @@
 import WebSocket from 'ws';
+import { spawn, ChildProcess } from 'child_process';
+import axios from 'axios';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import type {
@@ -12,6 +14,8 @@ import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
 import { parseChatPrompt } from './shared';
 import type { GeminiFormat } from './vertexUtil';
 import { maybeCoerceToGeminiFormat } from './vertexUtil';
+
+
 
 interface Blob {
   mimeType: string;
@@ -120,6 +124,7 @@ interface CompletionOptions {
    * these function tools.
    */
   functionToolCallbacks?: Record<string, (arg: string) => Promise<any>>;
+  functionToolStatefulApiFile?: string
 
   systemInstruction?: Content;
 }
@@ -195,6 +200,12 @@ export class GoogleMMLiveProvider implements ApiProvider {
     }
     let contentIndex = 0;
 
+    let functionToolStatefulApi: ChildProcess;
+    if (this.config.functionToolStatefulApiFile) {
+      logger.debug('Api is spawning...')
+      functionToolStatefulApi = spawn('python3', [this.config.functionToolStatefulApiFile]);
+    }
+
     return new Promise<ProviderResponse>((resolve) => {
       const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${this.getApiKey()}`;
       const ws = new WebSocket(url);
@@ -263,6 +274,23 @@ export class GoogleMMLiveProvider implements ApiProvider {
                     logger.error(`Error executing function ${functionName}: ${error}`);
                   }
                 }
+                else if (this.config.functionToolStatefulApiFile) {
+                  try {
+                    let callbackResponse;
+                    if (functionCall.args) {
+                      callbackResponse = await axios.get('http://localhost:5000/' + functionName, functionCall.args);
+                    }
+                    else {
+                      callbackResponse = await axios.get('http://localhost:5000/' + functionName);
+                    }
+                    console.log('Response 1:', callbackResponse.data);
+                  } catch (error) {
+                    callbackResponse = {
+                      error: `Error executing function ${functionName}: ${JSON.stringify(error)}`,
+                    };
+                    logger.error(`Error executing function ${functionName}: ${JSON.stringify(error)}`);
+                  }
+                }
 
                 const toolMessage = {
                   tool_response: {
@@ -308,6 +336,10 @@ export class GoogleMMLiveProvider implements ApiProvider {
       };
 
       ws.onclose = (event) => {
+        if(functionToolStatefulApi && !functionToolStatefulApi.killed){
+          functionToolStatefulApi.kill('SIGTERM');
+          logger.debug('Python process shutdown.')
+        }
         clearTimeout(timeout);
       };
 
