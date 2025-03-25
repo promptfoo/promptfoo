@@ -515,4 +515,15 @@ describe('assertionFromString', () => {
     expect(result.value).toBe('Expected output');
     expect(result.threshold).toBe(0.9);
   });
+
+  it('should preserve zero threshold when explicitly specified', () => {
+    const expected = 'levenshtein(0):Expected output';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('levenshtein');
+    expect(result.value).toBe('Expected output');
+    expect(result.threshold).toBe(0);
+    // This is especially important to test with the nullish coalescing operator (??),
+    // since it behaves differently than logical OR (||) for the value 0
+  });
 });
