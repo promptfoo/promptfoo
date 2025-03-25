@@ -44,6 +44,23 @@ strategies:
 
 You can also experiment with non-standard languages and cyphers like `pig-latin`, `ubbi-dubbi`, `reverse-speech`, `pirate`, or `klingon` with mixed results.
 
+### Developing in Your Native Language
+
+If you're building an application in a non-English language, you'll likely want your test cases to reflect the actual language context of your users. The multilingual strategy enables you to generate test cases directly in your target language, making your evals more relevant and natural. To generate test cases exclusively in your development language, you can specify your language and disable the basic strategy:
+
+```yaml
+strategies:
+  - id: multilingual
+    config:
+      languages:
+        - es # Spanish only
+  - id: basic
+    config:
+      enabled: false
+```
+
+This configuration ensures your test cases are generated only in Spanish, matching your application's language environment and giving you more accurate insights into how your system will perform for real users.
+
 ## Background
 
 Recent studies have revealed that LLMs face safety challenges when dealing with multilingual inputs.
@@ -72,4 +89,9 @@ This strategy is worth implementing because:
 2. It tests the robustness of content filtering and safety mechanisms across multiple languages.
 3. It can reveal biases or inconsistencies in the AI's responses to different languages.
 
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+## See Also
+
+- [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)
+- [Red Team Strategies](/docs/red-team/strategies/)
+- [Image Inputs Strategy](/docs/red-team/strategies/image/)
+- [Testing Guardrails](/docs/guides/testing-guardrails)

@@ -189,6 +189,14 @@ async function applyStrategies(
   for (const strategy of strategies) {
     logger.debug(`Generating ${strategy.id} tests`);
 
+    // Skip disabled strategies
+    const isEnabled = strategy.config?.enabled ?? true;
+    if (!isEnabled) {
+      logger.debug(`Strategy ${strategy.id} is disabled, skipping`);
+      strategyResults[strategy.id] = { requested: 0, generated: 0 };
+      continue;
+    }
+
     let strategyAction;
     if (strategy.id.startsWith('file://')) {
       const loadedStrategy = await loadStrategy(strategy.id);
@@ -290,26 +298,29 @@ export function calculateTotalTests(
   totalPluginTests: number;
   totalTests: number;
 } {
-  const multilingualStrategy = strategies.find((s) => s.id === 'multilingual');
-  const retryStrategy = strategies.find((s) => s.id === 'retry');
-  const basicStrategy = strategies.find((s) => s.id === 'basic');
+  // Filter out disabled strategies
+  const enabledStrategies = strategies.filter(s => s.config?.enabled !== false);
+  
+  const multilingualStrategy = enabledStrategies.find((s) => s.id === 'multilingual');
+  const retryStrategy = enabledStrategies.find((s) => s.id === 'retry');
+  const basicStrategy = enabledStrategies.find((s) => s.id === 'basic');
 
   const basicStrategyExists = basicStrategy !== undefined;
   const includeBasicTests = basicStrategy?.config?.enabled ?? true;
 
   const effectiveStrategyCount =
-    basicStrategyExists && !includeBasicTests ? strategies.length - 1 : strategies.length;
+    basicStrategyExists && !includeBasicTests ? enabledStrategies.length - 1 : enabledStrategies.length;
 
   const totalPluginTests = plugins.reduce((sum, p) => sum + (p.numTests || 0), 0);
 
   // When there are no strategies, or only a disabled basic strategy
   if (
-    strategies.length === 0 ||
-    (strategies.length === 1 && basicStrategyExists && !includeBasicTests)
+    enabledStrategies.length === 0 ||
+    (enabledStrategies.length === 1 && basicStrategyExists && !includeBasicTests)
   ) {
     return {
       effectiveStrategyCount: 0,
-      includeBasicTests: strategies.length === 0 ? true : includeBasicTests,
+      includeBasicTests: enabledStrategies.length === 0 ? true : includeBasicTests,
       multilingualStrategy: undefined,
       totalPluginTests,
       totalTests: includeBasicTests ? totalPluginTests : 0,
@@ -321,20 +332,20 @@ export function calculateTotalTests(
 
   // Apply retry strategy first if present
   if (retryStrategy) {
-    totalTests = getTestCount(retryStrategy, totalTests, strategies);
+    totalTests = getTestCount(retryStrategy, totalTests, enabledStrategies);
   }
 
   // Apply other non-basic, non-multilingual, non-retry strategies
-  for (const strategy of strategies) {
+  for (const strategy of enabledStrategies) {
     if (['basic', 'multilingual', 'retry'].includes(strategy.id)) {
       continue;
     }
-    totalTests = getTestCount(strategy, totalPluginTests, strategies);
+    totalTests = getTestCount(strategy, totalPluginTests, enabledStrategies);
   }
 
   // Apply multilingual strategy last if present
   if (multilingualStrategy) {
-    totalTests = getTestCount(multilingualStrategy, totalTests, strategies);
+    totalTests = getTestCount(multilingualStrategy, totalTests, enabledStrategies);
   }
 
   return {
@@ -392,13 +403,33 @@ export async function synthesize({
 
   const redteamProvider = await redteamProviderManager.getProvider({ provider });
 
+  // Filter out disabled strategies
+  const enabledStrategies = strategies.filter(s => s.config?.enabled !== false);
+  
+  // Check API health before proceeding
+  if (shouldGenerateRemote()) {
+    const healthUrl = getRemoteHealthUrl();
+    if (healthUrl) {
+      logger.debug(`Checking Promptfoo API health at ${healthUrl}...`);
+      const healthResult = await checkRemoteHealth(healthUrl);
+      if (healthResult.status !== 'OK') {
+        throw new Error(
+          `Unable to proceed with test generation: ${healthResult.message}\n` +
+            'Please check your API configuration or try again later.',
+        );
+      }
+      logger.debug('API health check passed');
+    }
+  }
+
+  // Recalculate test counts with filtered strategies
   const {
     effectiveStrategyCount,
     includeBasicTests,
     multilingualStrategy,
     totalPluginTests,
     totalTests,
-  } = calculateTotalTests(plugins, strategies);
+  } = calculateTotalTests(plugins, enabledStrategies);
 
   logger.info(
     `Synthesizing test cases for ${prompts.length} ${
@@ -512,22 +543,6 @@ export async function synthesize({
       } catch (error) {
         throw new Error(`Validation failed for plugin ${plugin.id}: ${error}`);
       }
-    }
-  }
-
-  // Check API health before proceeding
-  if (shouldGenerateRemote()) {
-    const healthUrl = getRemoteHealthUrl();
-    if (healthUrl) {
-      logger.debug(`Checking Promptfoo API health at ${healthUrl}...`);
-      const healthResult = await checkRemoteHealth(healthUrl);
-      if (healthResult.status !== 'OK') {
-        throw new Error(
-          `Unable to proceed with test generation: ${healthResult.message}\n` +
-            'Please check your API configuration or try again later.',
-        );
-      }
-      logger.debug('API health check passed');
     }
   }
 
@@ -657,7 +672,7 @@ export async function synthesize({
   const strategyResults: Record<string, { requested: number; generated: number }> = {};
 
   // Apply retry strategy first if it exists
-  const retryStrategy = strategies.find((s) => s.id === 'retry');
+  const retryStrategy = enabledStrategies.find((s) => s.id === 'retry');
   if (retryStrategy) {
     logger.debug('Applying retry strategy first');
     retryStrategy.config = {
@@ -678,7 +693,7 @@ export async function synthesize({
   const { testCases: strategyTestCases, strategyResults: otherStrategyResults } =
     await applyStrategies(
       pluginTestCases,
-      strategies.filter((s) => !['basic', 'multilingual', 'retry'].includes(s.id)),
+      enabledStrategies.filter((s) => !['basic', 'multilingual', 'retry'].includes(s.id)),
       injectVar,
     );
 

@@ -239,11 +239,9 @@ export async function validateStrategies(strategies: RedteamStrategyObject[]): P
       invalidStrategies.push(strategy);
     }
 
-    if (strategy.id === 'basic') {
-      if (strategy.config?.enabled !== undefined && typeof strategy.config.enabled !== 'boolean') {
-        throw new Error('Basic strategy enabled config must be a boolean');
-      }
-      continue;
+    // Check if enabled is a boolean for all strategies
+    if (strategy.config?.enabled !== undefined && typeof strategy.config.enabled !== 'boolean') {
+      throw new Error(`Strategy '${strategy.id}' enabled config must be a boolean`);
     }
   }
 
