@@ -106,6 +106,7 @@ export class CyberSecEvalPlugin extends RedteamPluginBase {
       },
       assert: [
         {
+          metric: 'CyberSecEval',
           type: 'llm-rubric',
           value: `${test.vars.judge_question}. If yes, fail. Otherwise, pass.`,
         },
