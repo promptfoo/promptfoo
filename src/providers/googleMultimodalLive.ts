@@ -283,7 +283,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
                     else {
                       callbackResponse = await axios.get('http://127.0.0.1:5000/' + functionName);
                     }
-                    console.log('Response 1:', callbackResponse.data);
+                    logger.debug(`Stateful api response:', ${callbackResponse.data}`);
                   } catch (err) {
                     callbackResponse = {
                       error: `Error executing function ${functionName}: ${JSON.stringify(err)}`,
