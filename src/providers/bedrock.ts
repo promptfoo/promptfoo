@@ -551,7 +551,6 @@ export const BEDROCK_MODEL = {
     },
     output: (config: BedrockOptions, responseJson: any) => novaOutputFromMessage(responseJson),
     tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
-      // Nova models have their token usage in a usage object
       const usage = responseJson?.usage;
       if (!usage) {
         return {
@@ -627,7 +626,12 @@ export const BEDROCK_MODEL = {
           const systemMessages = parsed.filter((msg) => msg.role === 'system');
           const nonSystemMessages = parsed.filter((msg) => msg.role !== 'system');
 
+          // NOTE: Claude models handle system prompts differently than OpenAI models.
+          // For compatibility with prompts designed for OpenAI like the factuality
+          // llm-as-a-judge prompts, we convert lone system messages into user messages
+          // since Bedrock Claude doesn't support system-only prompts.
           if (systemMessages.length === 1 && nonSystemMessages.length === 0) {
+            // If only system message, convert to user message
             messages = [
               {
                 role: 'user',
@@ -638,6 +642,7 @@ export const BEDROCK_MODEL = {
             ];
             systemPrompt = undefined;
           } else {
+            // Normal case - keep system message as system prompt
             messages = nonSystemMessages.map((msg) => ({
               role: msg.role,
               content: Array.isArray(msg.content)
@@ -1064,12 +1069,16 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'mistral.mistral-large-2407-v1:0': BEDROCK_MODEL.MISTRAL,
   'mistral.mistral-small-2402-v1:0': BEDROCK_MODEL.MISTRAL,
   'mistral.mixtral-8x7b-instruct-v0:1': BEDROCK_MODEL.MISTRAL,
+
+  // APAC Models
   'apac.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'apac.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'apac.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'apac.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+
+  // EU Models
   'eu.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'eu.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'eu.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
@@ -1078,8 +1087,12 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'eu.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.meta.llama3-2-1b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'eu.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
+
+  // Gov Cloud Models
   'us-gov.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us-gov.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+
+  // US Models
   'us.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'us.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'us.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
@@ -1101,6 +1114,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.meta.llama3-3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_3,
 };
 
+// See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
 function getHandlerForModel(modelName: string) {
   const ret = AWS_BEDROCK_MODELS[modelName];
   if (ret) {
@@ -1197,6 +1211,7 @@ export abstract class AwsBedrockGenericProvider {
   async getBedrockInstance() {
     if (!this.bedrock) {
       let handler;
+      // set from https://www.npmjs.com/package/proxy-agent
       if (process.env.HTTP_PROXY || process.env.HTTPS_PROXY) {
         try {
           const { NodeHttpHandler } = await import('@smithy/node-http-handler');
@@ -1266,6 +1281,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
     const cacheKey = `bedrock:${this.modelName}:${JSON.stringify(params)}`;
 
     if (isCacheEnabled()) {
+      // Try to get the cached response
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
@@ -1395,6 +1411,8 @@ export class AwsBedrockEmbeddingProvider
 
     try {
       const data = JSON.parse(response.body.transformToString());
+      // Titan Text API returns embeddings in the `embedding` field
+      // Cohere API returns embeddings in the `embeddings` field
       const embedding = data?.embedding || data?.embeddings;
       if (!embedding) {
         throw new Error('No embedding found in AWS Bedrock API response');
