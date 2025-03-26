@@ -10,6 +10,46 @@ const ajv = new Ajv();
 
 // see https://platform.openai.com/docs/models
 export const OPENAI_CHAT_MODELS = [
+  // Transcription models
+  ...['gpt-4o-transcribe', 'gpt-4o-mini-transcribe'].map((model) => ({
+    id: model,
+    cost: {
+      input: 2.5 / 1e6,
+      output: 10 / 1e6,
+      audioInput: 6 / 1e6,
+    },
+  })),
+  // TTS models
+  ...['gpt-4o-mini-tts'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.6 / 1e6,
+      output: 12 / 1e6,
+    },
+  })),
+  // Search preview models
+  ...['gpt-4o-search-preview', 'gpt-4o-search-preview-2025-03-11'].map((model) => ({
+    id: model,
+    cost: {
+      input: 2.5 / 1e6,
+      output: 10 / 1e6,
+    },
+  })),
+  ...['gpt-4o-mini-search-preview', 'gpt-4o-mini-search-preview-2025-03-11'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.15 / 1e6,
+      output: 0.6 / 1e6,
+    },
+  })),
+  // Computer use models
+  ...['computer-use-preview', 'computer-use-preview-2025-03-11'].map((model) => ({
+    id: model,
+    cost: {
+      input: 3 / 1e6,
+      output: 12 / 1e6,
+    },
+  })),
   ...['chatgpt-4o-latest'].map((model) => ({
     id: model,
     cost: {
@@ -22,6 +62,13 @@ export const OPENAI_CHAT_MODELS = [
     cost: {
       input: 75 / 1e6,
       output: 150 / 1e6,
+    },
+  })),
+  ...['o1-pro', 'o1-pro-2025-03-19'].map((model) => ({
+    id: model,
+    cost: {
+      input: 150 / 1e6,
+      output: 600 / 1e6,
     },
   })),
   ...['o1', 'o1-2024-12-17', 'o1-preview', 'o1-preview-2024-09-12'].map((model) => ({
@@ -77,22 +124,22 @@ export const OPENAI_CHAT_MODELS = [
   ...['gpt-4o-2024-05-13'].map((model) => ({
     id: model,
     cost: {
-      input: 5 / 1000000,
-      output: 15 / 1000000,
+      input: 5 / 1e6,
+      output: 15 / 1e6,
     },
   })),
   ...['gpt-4o-mini', 'gpt-4o-mini-2024-07-18'].map((model) => ({
     id: model,
     cost: {
-      input: 0.15 / 1000000,
-      output: 0.6 / 1000000,
+      input: 0.15 / 1e6,
+      output: 0.6 / 1e6,
     },
   })),
   ...['gpt-4', 'gpt-4-0613'].map((model) => ({
     id: model,
     cost: {
-      input: 30 / 1000000,
-      output: 60 / 1000000,
+      input: 30 / 1e6,
+      output: 60 / 1e6,
     },
   })),
   ...[
@@ -101,39 +148,40 @@ export const OPENAI_CHAT_MODELS = [
     'gpt-4-turbo-preview',
     'gpt-4-0125-preview',
     'gpt-4-1106-preview',
+    'gpt-4-1106-vision-preview',
   ].map((model) => ({
     id: model,
     cost: {
-      input: 10 / 1000000,
-      output: 30 / 1000000,
+      input: 10 / 1e6,
+      output: 30 / 1e6,
     },
   })),
   {
     id: 'gpt-3.5-turbo',
     cost: {
-      input: 0.5 / 1000000,
-      output: 1.5 / 1000000,
+      input: 0.5 / 1e6,
+      output: 1.5 / 1e6,
     },
   },
   {
     id: 'gpt-3.5-turbo-0125',
     cost: {
-      input: 0.5 / 1000000,
-      output: 1.5 / 1000000,
+      input: 0.5 / 1e6,
+      output: 1.5 / 1e6,
     },
   },
   {
     id: 'gpt-3.5-turbo-1106',
     cost: {
-      input: 1 / 1000000,
-      output: 2 / 1000000,
+      input: 1 / 1e6,
+      output: 2 / 1e6,
     },
   },
   ...['gpt-3.5-turbo-instruct'].map((model) => ({
     id: model,
     cost: {
-      input: 1.5 / 1000000,
-      output: 2 / 1000000,
+      input: 1.5 / 1e6,
+      output: 2 / 1e6,
     },
   })),
 ];
@@ -157,24 +205,34 @@ export const OPENAI_COMPLETION_MODELS = [
 
 // Realtime models for WebSocket API
 export const OPENAI_REALTIME_MODELS = [
-  // gpt-4o realtime model
+  // gpt-4o realtime models
   {
     id: 'gpt-4o-realtime-preview-2024-12-17',
     type: 'chat',
     cost: {
-      input: 2.5 / 1e6,
-      output: 10 / 1e6,
+      input: 5 / 1e6,
+      output: 20 / 1e6,
       audioInput: 40 / 1e6,
       audioOutput: 80 / 1e6,
     },
   },
-  // gpt-4o-mini realtime model
+  {
+    id: 'gpt-4o-realtime-preview-2024-10-01',
+    type: 'chat',
+    cost: {
+      input: 5 / 1e6,
+      output: 20 / 1e6,
+      audioInput: 100 / 1e6,
+      audioOutput: 200 / 1e6,
+    },
+  },
+  // gpt-4o-mini realtime models
   {
     id: 'gpt-4o-mini-realtime-preview-2024-12-17',
     type: 'chat',
     cost: {
-      input: 0.15 / 1e6,
-      output: 0.6 / 1e6,
+      input: 0.6 / 1e6,
+      output: 2.4 / 1e6,
       audioInput: 10 / 1e6,
       audioOutput: 20 / 1e6,
     },

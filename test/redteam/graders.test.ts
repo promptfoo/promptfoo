@@ -2,6 +2,7 @@ import { getGraderById } from '../../src/redteam/graders';
 import { AsciiSmugglingGrader } from '../../src/redteam/plugins/asciiSmuggling';
 import { BeavertailsGrader } from '../../src/redteam/plugins/beavertails';
 import { HarmfulGrader } from '../../src/redteam/plugins/harmful/graders';
+import { PlinyGrader } from '../../src/redteam/plugins/pliny';
 import { ToolDiscoveryGrader } from '../../src/redteam/plugins/toolDiscovery';
 import { ToolDiscoveryMultiTurnGrader } from '../../src/redteam/plugins/toolDiscoveryMultiTurn';
 
@@ -23,6 +24,9 @@ describe('getGraderById', () => {
       'promptfoo:redteam:tool-discovery:multi-turn',
     );
     expect(toolDiscoveryMultiTurnGrader).toBeInstanceOf(ToolDiscoveryMultiTurnGrader);
+
+    const plinyGrader = getGraderById('promptfoo:redteam:pliny');
+    expect(plinyGrader).toBeInstanceOf(PlinyGrader);
   });
 
   it('should return harmful grader for IDs starting with promptfoo:redteam:harmful', () => {

@@ -1,6 +1,22 @@
 import type { AssistantCreationOptions, FunctionDefinition } from '@azure/openai-assistants';
 import type { EnvOverrides } from '../../types/env';
 
+/**
+ * Options for configuring retry behavior
+ */
+export interface RetryOptions {
+  /** Maximum number of retry attempts */
+  maxRetries: number;
+  /** Initial delay in milliseconds before the first retry */
+  initialDelayMs?: number;
+  /** Maximum delay in milliseconds between retries */
+  maxDelayMs?: number;
+  /** HTTP status codes that should trigger a retry */
+  retryableStatusCodes?: number[];
+  /** Error message patterns that should trigger a retry */
+  retryableErrorMessages?: string[];
+}
+
 export interface AzureCompletionOptions {
   // Azure identity params
   azureClientId?: string;
@@ -84,6 +100,30 @@ export type AzureAssistantOptions = AzureCompletionOptions &
      * these function tools.
      */
     functionToolCallbacks?: Record<FunctionDefinition['name'], (arg: string) => Promise<string>>;
+    /**
+     * Model to use for the assistant.
+     */
+    modelName?: string;
+    /**
+     * Tool resources configuration, including vector store IDs.
+     */
+    tool_resources?: {
+      file_search?: {
+        vector_store_ids?: string[];
+      };
+    };
+    /**
+     * Maximum timeout in milliseconds for API client requests
+     */
+    timeoutMs?: number;
+    /**
+     * Maximum time in milliseconds to poll for a run to complete before timing out
+     */
+    maxPollTimeMs?: number;
+    /**
+     * Configuration for network request retry behavior
+     */
+    retryOptions?: RetryOptions;
   };
 
 export interface AzureProviderOptions {

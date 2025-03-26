@@ -241,7 +241,11 @@ export default function Review() {
     } catch (error) {
       console.error('Error running redteam:', error);
       setIsRunning(false);
-      showToast('An error occurred while starting the evaluation. Please try again.', 'error');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      showToast(
+        `An error occurred while starting the evaluation: ${errorMessage}. Please try again.`,
+        'error',
+      );
     }
   };
 
