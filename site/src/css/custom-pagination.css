@@ -78,15 +78,15 @@
     margin-top: 2.5rem;
     margin-bottom: 1.5rem;
   }
-  
+
   .pagination-nav__link {
     padding: 0.6rem 1rem;
   }
-  
+
   .pagination-nav__label {
     font-size: 0.9rem;
   }
-  
+
   /* Make buttons more compact on mobile */
   .pagination-nav__item {
     flex: 1;
@@ -102,4 +102,4 @@
 [data-theme='dark'] .pagination-nav__link:hover {
   background-color: rgba(255, 255, 255, 0.05);
   border-color: var(--ifm-color-primary-lighter);
-} 
+}
