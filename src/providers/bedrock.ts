@@ -977,10 +977,6 @@ ${prompt}
         0,
       );
       addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('MISTRAL_TOP_P'), 1);
-
-      // Remove top_k as it's not supported according to the error
-      // addConfigParam(params, 'top_k', config?.top_k, getEnvFloat('MISTRAL_TOP_K'), 0);
-
       return params;
     },
     output: (config: BedrockOptions, responseJson: any) => {
@@ -991,7 +987,7 @@ ${prompt}
         return responseJson.choices[0].message.content;
       }
       // Default fallback
-      return responseJson?.content || responseJson?.message?.content || '';
+      return responseJson?.content || responseJson?.message?.content;
     },
     tokenUsage: (responseJson: any, promptText: string) => {
       // Log the full response structure for debugging
