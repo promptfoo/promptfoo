@@ -1,7 +1,7 @@
-import WebSocket from 'ws';
+import axios from 'axios';
 import { spawn } from 'child_process';
 import type { ChildProcess } from 'child_process';
-import axios from 'axios';
+import WebSocket from 'ws';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import type {
@@ -15,7 +15,6 @@ import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
 import { parseChatPrompt } from './shared';
 import type { GeminiFormat } from './vertexUtil';
 import { maybeCoerceToGeminiFormat } from './vertexUtil';
-
 
 interface Blob {
   mimeType: string;
@@ -124,7 +123,7 @@ interface CompletionOptions {
    * these function tools.
    */
   functionToolCallbacks?: Record<string, (arg: string) => Promise<any>>;
-  functionToolStatefulApiFile?: string
+  functionToolStatefulApiFile?: string;
 
   systemInstruction?: Content;
 }
@@ -202,7 +201,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
 
     let functionToolStatefulApi: ChildProcess;
     if (this.config.functionToolStatefulApiFile) {
-      logger.debug('Api is spawning...')
+      logger.debug('Api is spawning...');
       functionToolStatefulApi = spawn('python3', [this.config.functionToolStatefulApiFile]);
     }
 
@@ -271,24 +270,29 @@ export class GoogleMMLiveProvider implements ApiProvider {
                     callbackResponse = {
                       error: `Error executing function ${functionName}: ${JSON.stringify(err)}`,
                     };
-                    logger.error(`Error executing function ${functionName}: ${JSON.stringify(err)}`);
+                    logger.error(
+                      `Error executing function ${functionName}: ${JSON.stringify(err)}`,
+                    );
                   }
-                }
-                else if (this.config.functionToolStatefulApiFile) {
+                } else if (this.config.functionToolStatefulApiFile) {
                   try {
                     let callbackResponse;
                     if (functionCall.args) {
-                      callbackResponse = await axios.post('http://127.0.0.1:5000/' + functionName, functionCall.args);
-                    }
-                    else {
+                      callbackResponse = await axios.post(
+                        'http://127.0.0.1:5000/' + functionName,
+                        functionCall.args,
+                      );
+                    } else {
                       callbackResponse = await axios.get('http://127.0.0.1:5000/' + functionName);
                     }
-                    logger.debug(`Stateful api response:', ${callbackResponse.data}`);
+                    logger.debug(`Stateful api response: ${JSON.stringify(callbackResponse.data)}`);
                   } catch (err) {
                     callbackResponse = {
                       error: `Error executing function ${functionName}: ${JSON.stringify(err)}`,
                     };
-                    logger.error(`Error executing function ${functionName}: ${JSON.stringify(err)}`);
+                    logger.error(
+                      `Error executing function ${functionName}: ${JSON.stringify(err)}`,
+                    );
                   }
                 }
 
@@ -312,10 +316,17 @@ export class GoogleMMLiveProvider implements ApiProvider {
               logger.debug(`WebSocket sent: ${JSON.stringify(contentMessage)}`);
               ws.send(JSON.stringify(contentMessage));
             } else {
+              let statefulApiState;
+              if (this.config.functionToolStatefulApiFile) {
+                const apiResponse = await axios.get('http://127.0.0.1:5000/get_state');
+                statefulApiState = apiResponse.data;
+                logger.debug(`Stateful api state: ${JSON.stringify(statefulApiState)}`);
+              }
               resolve({
                 output: JSON.stringify({
                   text: response_text_total,
                   toolCall: { functionCalls: function_calls_total },
+                  statefulApiState,
                 }),
               });
               ws.close();
@@ -336,9 +347,9 @@ export class GoogleMMLiveProvider implements ApiProvider {
       };
 
       ws.onclose = (event) => {
-        if(functionToolStatefulApi && !functionToolStatefulApi.killed){
+        if (functionToolStatefulApi && !functionToolStatefulApi.killed) {
           functionToolStatefulApi.kill('SIGTERM');
-          logger.debug('Python process shutdown.')
+          logger.debug('Python process shutdown.');
         }
         clearTimeout(timeout);
       };
