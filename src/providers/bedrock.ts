@@ -11,13 +11,19 @@ import type {
   ApiEmbeddingProvider,
   ApiProvider,
   ProviderEmbeddingResponse,
+  ProviderOptions,
   ProviderResponse,
-} from '../types';
+} from '../types/providers';
+import type { TokenUsage } from '../types/shared';
 import type { EnvOverrides } from '../types/env';
 import { maybeLoadFromExternalFile } from '../util';
 import { outputFromMessage, parseMessages } from './anthropic/util';
 import { novaOutputFromMessage, novaParseMessages } from './bedrockUtil';
 import { parseChatPrompt } from './shared';
+import { readFileSync } from 'fs';
+import { NodeHttpHandler } from '@smithy/node-http-handler';
+import { z } from 'zod';
+import { Anthropic as SharedAnthropic } from './shared/anthropic';
 
 interface BedrockOptions {
   accessKeyId?: string;
@@ -243,6 +249,7 @@ export interface BedrockDeepseekGenerationOptions extends BedrockOptions {
 interface IBedrockModel {
   params: (config: BedrockOptions, prompt: string, stop: string[]) => any;
   output: (config: BedrockOptions, responseJson: any) => any;
+  tokenUsage?: (responseJson: any, promptText: string) => { prompt?: number; completion?: number; total?: number };
 }
 
 export function parseValue(value: string | number, defaultValue: any) {
@@ -392,6 +399,23 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
       return params;
     },
     output: (config: BedrockOptions, responseJson: any) => responseJson?.generation,
+    tokenUsage: (responseJson: any, promptText: string) => {
+      // Llama models typically return token counts in this format
+      const promptTokens = responseJson?.prompt_token_count;
+      const completionTokens = responseJson?.generation_token_count;
+      
+      // Calculate total if possible
+      const totalTokens = 
+        (promptTokens !== undefined && completionTokens !== undefined)
+          ? promptTokens + completionTokens
+          : undefined;
+      
+      return {
+        prompt: promptTokens,
+        completion: completionTokens,
+        total: totalTokens,
+      };
+    },
   };
 };
 
@@ -437,6 +461,14 @@ export const BEDROCK_MODEL = {
         throw new Error(`AI21 API error: ${responseJson.error}`);
       }
       return responseJson.choices?.[0]?.message?.content;
+    },
+    tokenUsage: (responseJson: any, promptText: string) => {
+      // AI21 models return usage information
+      return {
+        prompt: responseJson?.usage?.prompt_tokens,
+        completion: responseJson?.usage?.completion_tokens,
+        total: responseJson?.usage?.total_tokens,
+      };
     },
   },
   AMAZON_NOVA: {
@@ -498,6 +530,19 @@ export const BEDROCK_MODEL = {
       return params;
     },
     output: (config: BedrockOptions, responseJson: any) => novaOutputFromMessage(responseJson),
+    tokenUsage: (responseJson: any, promptText: string) => {
+      // Nova models have their token usage in a usage object
+      const usage = responseJson?.usage;
+      if (!usage) {
+        return {};
+      }
+      
+      return {
+        prompt: usage.inputTokens,
+        completion: usage.outputTokens,
+        total: usage.totalTokens,
+      };
+    },
   },
   CLAUDE_COMPLETION: {
     params: (config: BedrockClaudeLegacyCompletionOptions, prompt: string, stop: string[]) => {
@@ -522,6 +567,14 @@ export const BEDROCK_MODEL = {
       return params;
     },
     output: (config: BedrockOptions, responseJson: any) => responseJson?.completion,
+    tokenUsage: (responseJson: any, promptText: string) => {
+      // Claude Completion uses prompt_tokens and completion_tokens
+      return {
+        prompt: responseJson?.usage?.prompt_tokens,
+        completion: responseJson?.usage?.completion_tokens,
+        total: responseJson?.usage?.total_tokens,
+      };
+    },
   },
   CLAUDE_MESSAGES: {
     params: (config: BedrockClaudeMessagesCompletionOptions, prompt: string) => {
@@ -610,6 +663,14 @@ export const BEDROCK_MODEL = {
     output: (config: BedrockClaudeMessagesCompletionOptions, responseJson: any) => {
       return outputFromMessage(responseJson, config?.showThinking ?? true);
     },
+    tokenUsage: (responseJson: any, promptText: string) => {
+      // Claude uses standard prompt/completion token fields
+      return {
+        prompt: responseJson?.usage?.prompt_tokens,
+        completion: responseJson?.usage?.completion_tokens,
+        total: responseJson?.usage?.total_tokens,
+      };
+    },
   },
   TITAN_TEXT: {
     params: (config: BedrockTextGenerationOptions, prompt: string, stop: string[]) => {
@@ -645,6 +706,18 @@ export const BEDROCK_MODEL = {
       return { inputText: prompt, textGenerationConfig };
     },
     output: (config: BedrockOptions, responseJson: any) => responseJson?.results[0]?.outputText,
+    tokenUsage: (responseJson: any, promptText: string) => {
+      // Titan doesn't explicitly return token counts, so we estimate
+      const outputText = responseJson?.results?.[0]?.outputText || '';
+      const estimatedOutputTokens = Math.ceil(outputText.length / 4);
+      const estimatedPromptTokens = Math.ceil(promptText.length / 4);
+      
+      return {
+        prompt: estimatedPromptTokens,
+        completion: estimatedOutputTokens,
+        total: estimatedPromptTokens + estimatedOutputTokens,
+      };
+    },
   },
   LLAMA2: getLlamaModelHandler(LlamaVersion.V2),
   LLAMA3: getLlamaModelHandler(LlamaVersion.V3),
@@ -679,6 +752,29 @@ export const BEDROCK_MODEL = {
       return params;
     },
     output: (config: BedrockOptions, responseJson: any) => responseJson?.generations[0]?.text,
+    tokenUsage: (responseJson: any, promptText: string) => {
+      // Cohere might provide token info in meta
+      if (responseJson?.meta?.billed_units) {
+        return {
+          prompt: responseJson.meta.billed_units.input_tokens,
+          completion: responseJson.meta.billed_units.output_tokens,
+          total: 
+            responseJson.meta.billed_units.input_tokens + 
+            responseJson.meta.billed_units.output_tokens,
+        };
+      }
+      
+      // Fallback to estimation
+      const outputText = responseJson?.generations?.[0]?.text || '';
+      const estimatedOutputTokens = Math.ceil(outputText.length / 4);
+      const estimatedPromptTokens = Math.ceil(promptText.length / 4);
+      
+      return {
+        prompt: estimatedPromptTokens,
+        completion: estimatedOutputTokens,
+        total: estimatedPromptTokens + estimatedOutputTokens,
+      };
+    },
   },
   COHERE_COMMAND_R: {
     params: (config: BedrockCohereCommandRGenerationOptions, prompt: string, stop: string[]) => {
@@ -713,29 +809,29 @@ export const BEDROCK_MODEL = {
       return params;
     },
     output: (config: BedrockOptions, responseJson: any) => responseJson?.text,
-  },
-  MISTRAL: {
-    params: (config: BedrockMistralGenerationOptions, prompt: string, stop: string[]) => {
-      const params: any = { prompt, stop };
-      addConfigParam(
-        params,
-        'max_tokens',
-        config?.max_tokens,
-        getEnvInt('MISTRAL_MAX_TOKENS'),
-        1024,
-      );
-      addConfigParam(
-        params,
-        'temperature',
-        config?.temperature,
-        getEnvFloat('MISTRAL_TEMPERATURE'),
-        0,
-      );
-      addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('MISTRAL_TOP_P'), 1);
-      addConfigParam(params, 'top_k', config?.top_k, getEnvFloat('MISTRAL_TOP_K'), 0);
-      return params;
+    tokenUsage: (responseJson: any, promptText: string) => {
+      // Cohere might provide token info in meta
+      if (responseJson?.meta?.billed_units) {
+        return {
+          prompt: responseJson.meta.billed_units.input_tokens,
+          completion: responseJson.meta.billed_units.output_tokens,
+          total: 
+            responseJson.meta.billed_units.input_tokens + 
+            responseJson.meta.billed_units.output_tokens,
+        };
+      }
+      
+      // Fallback to estimation
+      const outputText = responseJson?.text || '';
+      const estimatedOutputTokens = Math.ceil(outputText.length / 4);
+      const estimatedPromptTokens = Math.ceil(promptText.length / 4);
+      
+      return {
+        prompt: estimatedPromptTokens,
+        completion: estimatedOutputTokens,
+        total: estimatedPromptTokens + estimatedOutputTokens,
+      };
     },
-    output: (config: BedrockOptions, responseJson: any) => responseJson?.outputs[0]?.text,
   },
   DEEPSEEK: {
     params: (config: BedrockDeepseekGenerationOptions, prompt: string) => {
@@ -785,6 +881,121 @@ ${prompt}
       }
 
       return undefined;
+    },
+    tokenUsage: (responseJson: any, promptText: string) => {
+      // Check if DeepSeek returns token counts
+      if (responseJson?.usage) {
+        return {
+          prompt: responseJson.usage.prompt_tokens,
+          completion: responseJson.usage.completion_tokens,
+          total: responseJson.usage.total_tokens,
+        };
+      }
+      
+      // Fallback to estimation
+      let outputText = '';
+      if (responseJson.choices && Array.isArray(responseJson.choices)) {
+        outputText = responseJson.choices[0]?.text || '';
+      }
+      
+      const estimatedOutputTokens = Math.ceil(outputText.length / 4);
+      const estimatedPromptTokens = Math.ceil(promptText.length / 4);
+      
+      return {
+        prompt: estimatedPromptTokens,
+        completion: estimatedOutputTokens,
+        total: estimatedPromptTokens + estimatedOutputTokens,
+      };
+    },
+  },
+  MISTRAL: {
+    params: (config: BedrockMistralGenerationOptions, prompt: string, stop: string[]) => {
+      const params: any = { prompt, stop };
+      addConfigParam(
+        params,
+        'max_tokens',
+        config?.max_tokens,
+        getEnvInt('MISTRAL_MAX_TOKENS'),
+        1024,
+      );
+      addConfigParam(
+        params,
+        'temperature',
+        config?.temperature,
+        getEnvFloat('MISTRAL_TEMPERATURE'),
+        0,
+      );
+      addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('MISTRAL_TOP_P'), 1);
+      addConfigParam(params, 'top_k', config?.top_k, getEnvFloat('MISTRAL_TOP_K'), 0);
+      return params;
+    },
+    output: (config: BedrockOptions, responseJson: any) => responseJson?.outputs[0]?.text,
+    tokenUsage: (responseJson: any, promptText: string) => {
+      // Log the full response structure for debugging
+      logger.debug(`Mistral response structure: ${JSON.stringify(responseJson, null, 2)}`);
+      
+      // Check if Mistral actually provides any token info (future-proofing)
+      if (responseJson?.usage) {
+        logger.debug(`Mistral provided usage information: ${JSON.stringify(responseJson.usage)}`);
+        return {
+          prompt: responseJson.usage.prompt_tokens,
+          completion: responseJson.usage.completion_tokens,
+          total: responseJson.usage.total_tokens,
+          numRequests: 1
+        };
+      }
+      
+      // Mistral doesn't provide token counts, so we estimate them
+      const outputText = responseJson?.outputs?.[0]?.text || '';
+      
+      // More sophisticated token estimation based on token counting heuristics
+      // Different language models use different tokenization schemes
+      // For Mistral, we use a rough estimate of 100 tokens ≈ 75 words ≈ 400 characters
+      const tokensPerChar = 0.25; // Approximate ratio: 1 token per 4 characters
+      
+      // Get a better estimation for the output by counting words, punctuation, and spaces
+      const wordCount = outputText.split(/\s+/).length;
+      const charCount = outputText.length;
+      
+      // Compute multiple estimates and take a reasonable value
+      const charBasedEstimate = Math.ceil(charCount * tokensPerChar);
+      const wordBasedEstimate = Math.ceil(wordCount * 1.33); // ~4 words per 3 tokens
+      
+      // Use the larger of the two estimates for safety
+      const estimatedOutputTokens = Math.max(charBasedEstimate, wordBasedEstimate);
+      
+      // Similar calculation for prompt
+      const promptCharCount = promptText.length;
+      const promptWordCount = promptText.split(/\s+/).length;
+      const promptCharBasedEstimate = Math.ceil(promptCharCount * tokensPerChar);
+      const promptWordBasedEstimate = Math.ceil(promptWordCount * 1.33);
+      const estimatedPromptTokens = Math.max(promptCharBasedEstimate, promptWordBasedEstimate);
+      
+      // Calculate total tokens
+      const totalTokens = estimatedPromptTokens + estimatedOutputTokens;
+      
+      // Log our estimation process
+      logger.debug(`Mistral token estimation:
+        - Output text length: ${charCount} chars, ${wordCount} words
+        - Char-based estimate: ${charBasedEstimate}
+        - Word-based estimate: ${wordBasedEstimate}
+        - Selected output tokens: ${estimatedOutputTokens}
+        - Prompt length: ${promptCharCount} chars, ${promptWordCount} words
+        - Estimated prompt tokens: ${estimatedPromptTokens}
+        - Total estimated tokens: ${totalTokens}
+      `);
+      
+      const tokenUsage = {
+        prompt: estimatedPromptTokens,
+        completion: estimatedOutputTokens,
+        total: totalTokens,
+        numRequests: 1
+      };
+      
+      // Log the final token usage object being returned
+      logger.debug(`Returning Mistral token usage: ${JSON.stringify(tokenUsage)}`);
+      
+      return tokenUsage;
     },
   },
 };
@@ -1082,13 +1293,39 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
     try {
       const output = JSON.parse(new TextDecoder().decode(response.body));
 
+      // Use the model-specific token usage extractor if available
+      let tokenUsage: Partial<TokenUsage> = {};
+      if (model.tokenUsage) {
+        tokenUsage = model.tokenUsage(output, prompt);
+      } else {
+        // Fallback to generic token extraction for models without a tokenUsage method
+        const promptTokens = output.usage?.inputTokens ?? output.prompt_tokens ?? output.prompt_token_count;
+        const completionTokens = output.usage?.outputTokens ?? output.completion_tokens ?? output.generation_token_count;
+        
+        // Calculate total if possible
+        const totalTokens = 
+          output.usage?.totalTokens ?? 
+          output.total_tokens ?? 
+          ((promptTokens !== undefined && completionTokens !== undefined) 
+            ? (promptTokens + completionTokens) 
+            : undefined);
+            
+        tokenUsage = {
+          total: totalTokens,
+          prompt: promptTokens,
+          completion: completionTokens,
+          numRequests: 1
+        };
+      }
+
+      // Ensure tokenUsage is never undefined and conforms to the TokenUsage interface
+      if (!tokenUsage.numRequests) {
+        tokenUsage.numRequests = 1;
+      }
+
       return {
         output: model.output(this.config, output),
-        tokenUsage: {
-          total: output.total_tokens ?? output.prompt_token_count + output.generation_token_count,
-          prompt: output.prompt_tokens ?? output.prompt_token_count,
-          completion: output.completion_tokens ?? output.generation_token_count,
-        },
+        tokenUsage,
         ...(output['amazon-bedrock-guardrailAction']
           ? {
               guardrails: {
