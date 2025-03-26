@@ -17,7 +17,6 @@ import type { GeminiFormat } from './vertexUtil';
 import { maybeCoerceToGeminiFormat } from './vertexUtil';
 
 
-
 interface Blob {
   mimeType: string;
   data: string; // base64-encoded string
