@@ -244,10 +244,7 @@ export interface BedrockDeepseekGenerationOptions extends BedrockOptions {
 interface IBedrockModel {
   params: (config: BedrockOptions, prompt: string, stop: string[]) => any;
   output: (config: BedrockOptions, responseJson: any) => any;
-  tokenUsage?: (
-    responseJson: any,
-    promptText: string,
-  ) => { prompt?: number; completion?: number; total?: number };
+  tokenUsage?: (responseJson: any, promptText: string) => TokenUsage;
 }
 
 export function parseValue(value: string | number, defaultValue: any) {
@@ -397,19 +394,36 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
       return params;
     },
     output: (config: BedrockOptions, responseJson: any) => responseJson?.generation,
-    tokenUsage: (responseJson: any, promptText: string) => {
+    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
+      // Check for standard usage format
+      if (responseJson?.usage) {
+        return {
+          prompt: responseJson.usage.prompt_tokens,
+          completion: responseJson.usage.completion_tokens,
+          total: responseJson.usage.total_tokens,
+          numRequests: 1,
+        };
+      }
+
+      // Check for Llama-specific token count fields
       const promptTokens = responseJson?.prompt_token_count;
       const completionTokens = responseJson?.generation_token_count;
 
-      const totalTokens =
-        promptTokens !== undefined && completionTokens !== undefined
-          ? promptTokens + completionTokens
-          : undefined;
+      if (promptTokens !== undefined && completionTokens !== undefined) {
+        return {
+          prompt: promptTokens,
+          completion: completionTokens,
+          total: promptTokens + completionTokens,
+          numRequests: 1,
+        };
+      }
 
+      // Return undefined values when token counts aren't provided by the API
       return {
-        prompt: promptTokens,
-        completion: completionTokens,
-        total: totalTokens,
+        prompt: undefined,
+        completion: undefined,
+        total: undefined,
+        numRequests: 1,
       };
     },
   };
@@ -458,12 +472,22 @@ export const BEDROCK_MODEL = {
       }
       return responseJson.choices?.[0]?.message?.content;
     },
-    tokenUsage: (responseJson: any, promptText: string) => {
-      // AI21 models return usage information
+    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
+      if (responseJson?.usage) {
+        return {
+          prompt: responseJson.usage.prompt_tokens,
+          completion: responseJson.usage.completion_tokens,
+          total: responseJson.usage.total_tokens,
+          numRequests: 1,
+        };
+      }
+
+      // Return undefined values when token counts aren't provided by the API
       return {
-        prompt: responseJson?.usage?.prompt_tokens,
-        completion: responseJson?.usage?.completion_tokens,
-        total: responseJson?.usage?.total_tokens,
+        prompt: undefined,
+        completion: undefined,
+        total: undefined,
+        numRequests: 1,
       };
     },
   },
@@ -526,17 +550,23 @@ export const BEDROCK_MODEL = {
       return params;
     },
     output: (config: BedrockOptions, responseJson: any) => novaOutputFromMessage(responseJson),
-    tokenUsage: (responseJson: any, promptText: string) => {
+    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
       // Nova models have their token usage in a usage object
       const usage = responseJson?.usage;
       if (!usage) {
-        return {};
+        return {
+          prompt: undefined,
+          completion: undefined,
+          total: undefined,
+          numRequests: 1,
+        };
       }
 
       return {
         prompt: usage.inputTokens,
         completion: usage.outputTokens,
         total: usage.totalTokens,
+        numRequests: 1,
       };
     },
   },
@@ -563,9 +593,14 @@ export const BEDROCK_MODEL = {
       return params;
     },
     output: (config: BedrockOptions, responseJson: any) => responseJson?.completion,
-    tokenUsage: (responseJson: any, promptText: string) => {
+    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
       if (!responseJson?.usage) {
-        return {};
+        return {
+          prompt: undefined,
+          completion: undefined,
+          total: undefined,
+          numRequests: 1,
+        };
       }
 
       const usage = responseJson.usage;
@@ -663,9 +698,14 @@ export const BEDROCK_MODEL = {
     output: (config: BedrockClaudeMessagesCompletionOptions, responseJson: any) => {
       return outputFromMessage(responseJson, config?.showThinking ?? true);
     },
-    tokenUsage: (responseJson: any, promptText: string) => {
+    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
       if (!responseJson?.usage) {
-        return {};
+        return {
+          prompt: undefined,
+          completion: undefined,
+          total: undefined,
+          numRequests: 1,
+        };
       }
 
       const usage = responseJson.usage;
@@ -716,15 +756,23 @@ export const BEDROCK_MODEL = {
       return { inputText: prompt, textGenerationConfig };
     },
     output: (config: BedrockOptions, responseJson: any) => responseJson?.results[0]?.outputText,
-    tokenUsage: (responseJson: any, promptText: string) => {
-      const outputText = responseJson?.results?.[0]?.outputText || '';
-      const estimatedOutputTokens = Math.ceil(outputText.length / 4);
-      const estimatedPromptTokens = Math.ceil(promptText.length / 4);
+    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
+      // If token usage is provided by the API, use it
+      if (responseJson?.usage) {
+        return {
+          prompt: responseJson.usage.prompt_tokens,
+          completion: responseJson.usage.completion_tokens,
+          total: responseJson.usage.total_tokens,
+          numRequests: 1,
+        };
+      }
 
+      // Return undefined values when token counts aren't provided by the API
       return {
-        prompt: estimatedPromptTokens,
-        completion: estimatedOutputTokens,
-        total: estimatedPromptTokens + estimatedOutputTokens,
+        prompt: undefined,
+        completion: undefined,
+        total: undefined,
+        numRequests: 1,
       };
     },
   },
@@ -761,7 +809,7 @@ export const BEDROCK_MODEL = {
       return params;
     },
     output: (config: BedrockOptions, responseJson: any) => responseJson?.generations[0]?.text,
-    tokenUsage: (responseJson: any, promptText: string) => {
+    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
       if (responseJson?.meta?.billed_units) {
         return {
           prompt: responseJson.meta.billed_units.input_tokens,
@@ -769,17 +817,16 @@ export const BEDROCK_MODEL = {
           total:
             responseJson.meta.billed_units.input_tokens +
             responseJson.meta.billed_units.output_tokens,
+          numRequests: 1,
         };
       }
 
-      const outputText = responseJson?.generations?.[0]?.text || '';
-      const estimatedOutputTokens = Math.ceil(outputText.length / 4);
-      const estimatedPromptTokens = Math.ceil(promptText.length / 4);
-
+      // Return undefined values when token counts aren't provided by the API
       return {
-        prompt: estimatedPromptTokens,
-        completion: estimatedOutputTokens,
-        total: estimatedPromptTokens + estimatedOutputTokens,
+        prompt: undefined,
+        completion: undefined,
+        total: undefined,
+        numRequests: 1,
       };
     },
   },
@@ -816,7 +863,7 @@ export const BEDROCK_MODEL = {
       return params;
     },
     output: (config: BedrockOptions, responseJson: any) => responseJson?.text,
-    tokenUsage: (responseJson: any, promptText: string) => {
+    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
       if (responseJson?.meta?.billed_units) {
         return {
           prompt: responseJson.meta.billed_units.input_tokens,
@@ -824,17 +871,16 @@ export const BEDROCK_MODEL = {
           total:
             responseJson.meta.billed_units.input_tokens +
             responseJson.meta.billed_units.output_tokens,
+          numRequests: 1,
         };
       }
 
-      const outputText = responseJson?.text || '';
-      const estimatedOutputTokens = Math.ceil(outputText.length / 4);
-      const estimatedPromptTokens = Math.ceil(promptText.length / 4);
-
+      // Return undefined values when token counts aren't provided by the API
       return {
-        prompt: estimatedPromptTokens,
-        completion: estimatedOutputTokens,
-        total: estimatedPromptTokens + estimatedOutputTokens,
+        prompt: undefined,
+        completion: undefined,
+        total: undefined,
+        numRequests: 1,
       };
     },
   },
@@ -887,27 +933,22 @@ ${prompt}
 
       return undefined;
     },
-    tokenUsage: (responseJson: any, promptText: string) => {
+    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
       if (responseJson?.usage) {
         return {
           prompt: responseJson.usage.prompt_tokens,
           completion: responseJson.usage.completion_tokens,
           total: responseJson.usage.total_tokens,
+          numRequests: 1,
         };
       }
 
-      let outputText = '';
-      if (responseJson.choices && Array.isArray(responseJson.choices)) {
-        outputText = responseJson.choices[0]?.text || '';
-      }
-
-      const estimatedOutputTokens = Math.ceil(outputText.length / 4);
-      const estimatedPromptTokens = Math.ceil(promptText.length / 4);
-
+      // Return undefined values when token counts aren't provided by the API
       return {
-        prompt: estimatedPromptTokens,
-        completion: estimatedOutputTokens,
-        total: estimatedPromptTokens + estimatedOutputTokens,
+        prompt: undefined,
+        completion: undefined,
+        total: undefined,
+        numRequests: 1,
       };
     },
   },
@@ -964,7 +1005,7 @@ ${prompt}
       }
       return responseJson?.content || responseJson?.message?.content;
     },
-    tokenUsage: (responseJson: any, promptText: string) => {
+    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
       if (responseJson?.usage) {
         return {
           prompt: responseJson.usage.prompt_tokens,

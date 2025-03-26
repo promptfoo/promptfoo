@@ -1210,6 +1210,7 @@ describe('BEDROCK_MODEL token counting functionality', () => {
         prompt: 10,
         completion: 20,
         total: 30,
+        numRequests: 1,
       });
     });
   });
