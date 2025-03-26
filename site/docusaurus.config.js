@@ -179,6 +179,10 @@ const config = {
                 label: 'Foundation Model Reports',
               },
               {
+                href: '/events/',
+                label: 'Events',
+              },
+              {
                 href: 'https://github.com/promptfoo/promptfoo',
                 label: 'GitHub',
               },
@@ -241,6 +245,10 @@ const config = {
               {
                 label: 'Foundation Model Reports',
                 to: 'https://www.promptfoo.dev/models/',
+              },
+              {
+                label: 'Events',
+                to: '/events/',
               },
               {
                 label: 'Running Benchmarks',

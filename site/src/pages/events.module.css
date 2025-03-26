@@ -1,0 +1,426 @@
+/* Hero section */
+.heroBanner {
+  padding: 4rem 0;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  background-color: var(--ifm-color-primary-lightest);
+  /* Better contrasting text for accessibility */
+  color: var(--ifm-color-emphasis-900);
+}
+
+.title {
+  font-size: 3rem;
+  font-weight: 800;
+  margin-bottom: 1rem;
+}
+
+.subtitle {
+  font-size: 1.2rem;
+  max-width: 700px;
+  margin: 0 auto;
+  color: var(--ifm-color-emphasis-800);
+}
+
+/* Main content */
+.main {
+  padding: 3rem 0;
+}
+
+/* Controls container for filters and view toggle */
+.controlsContainer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+/* View toggle */
+.viewToggle {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.viewButton {
+  padding: 0.5rem 1.5rem;
+  border: 1px solid var(--ifm-color-primary);
+  background: transparent;
+  color: var(--ifm-color-primary);
+  border-radius: 2rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.viewButton:after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.5);
+  opacity: 0;
+  border-radius: 100%;
+  transform: scale(1, 1) translate(-50%);
+  transform-origin: 50% 50%;
+}
+
+.viewButton:focus:not(:active)::after {
+  animation: ripple 1s ease-out;
+}
+
+@keyframes ripple {
+  0% {
+    transform: scale(0, 0);
+    opacity: 0.5;
+  }
+  20% {
+    transform: scale(25, 25);
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(40, 40);
+  }
+}
+
+.viewButton:hover {
+  background-color: var(--ifm-color-primary-lighter);
+  color: var(--ifm-color-white);
+}
+
+.viewButtonActive {
+  background-color: var(--ifm-color-primary);
+  color: var(--ifm-color-white);
+}
+
+/* Filter toggle */
+.filterToggle {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.filterButton {
+  padding: 0.5rem 1.5rem;
+  border: 1px solid var(--ifm-color-emphasis-500);
+  background: transparent;
+  color: var(--ifm-color-emphasis-700);
+  border-radius: 2rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.filterButton:hover {
+  background-color: var(--ifm-color-emphasis-200);
+  border-color: var(--ifm-color-emphasis-600);
+}
+
+.filterButtonActive {
+  background-color: var(--ifm-color-emphasis-200);
+  border-color: var(--ifm-color-emphasis-600);
+  color: var(--ifm-color-emphasis-900);
+}
+
+/* Event cards */
+.listView {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.eventCard {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--ifm-card-background-color);
+  border-radius: var(--ifm-card-border-radius);
+  box-shadow: var(--ifm-global-shadow-lw);
+  overflow: hidden;
+  transition:
+    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid var(--ifm-color-emphasis-200);
+  animation: fadeIn 0.5s ease-out;
+  animation-fill-mode: both;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.eventCard:hover {
+  transform: translateY(-5px);
+  box-shadow: var(--ifm-global-shadow-md);
+}
+
+.eventCardHeader {
+  display: flex;
+  align-items: center;
+  padding: 1.5rem;
+  background-color: var(--ifm-color-emphasis-100);
+  gap: 1rem;
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.eventTitleArea {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.eventLogo {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+  border-radius: 8px;
+  background-color: var(--ifm-background-color);
+  padding: 0.5rem;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  transition: transform 0.3s ease;
+}
+
+.eventCard:hover .eventLogo {
+  transform: scale(1.05);
+}
+
+.boothBadge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  background-color: var(--ifm-color-success-contrast-background);
+  color: var(--ifm-color-success-contrast-foreground);
+  border-radius: 1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  align-self: flex-start;
+}
+
+.eventName {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--ifm-heading-color);
+}
+
+.eventDetails {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.eventMeta {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.eventDate,
+.eventLocation {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.9rem;
+}
+
+.icon {
+  width: 1.2rem;
+  height: 1.2rem;
+  color: var(--ifm-color-primary);
+}
+
+.eventDescription {
+  color: var(--ifm-color-emphasis-800);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.eventActions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.eventButton {
+  flex: 1;
+  text-align: center;
+  font-weight: 500;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s ease;
+}
+
+.eventButton:active {
+  transform: scale(0.98);
+}
+
+/* No events message */
+.noEvents {
+  text-align: center;
+  padding: 3rem;
+  background-color: var(--ifm-color-emphasis-100);
+  border-radius: var(--ifm-card-border-radius);
+  color: var(--ifm-color-emphasis-700);
+}
+
+/* Calendar view */
+.calendarView {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.monthSection {
+  margin-bottom: 2rem;
+  animation: fadeIn 0.5s ease-out;
+  animation-fill-mode: both;
+}
+
+.monthTitle {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid var(--ifm-color-primary-lightest);
+  color: var(--ifm-heading-color);
+}
+
+.monthEvents {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.calendarEvent {
+  display: flex;
+  gap: 1.5rem;
+  padding: 1rem;
+  background-color: var(--ifm-card-background-color);
+  border-radius: var(--ifm-card-border-radius);
+  box-shadow: var(--ifm-global-shadow-lw);
+  border: 1px solid var(--ifm-color-emphasis-200);
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.calendarEvent:hover,
+.calendarEvent:focus {
+  transform: translateX(5px);
+  box-shadow: var(--ifm-global-shadow-md);
+}
+
+.calendarEventDate {
+  min-width: 100px;
+  font-weight: 600;
+  color: var(--ifm-color-primary);
+}
+
+.calendarEventDetails {
+  flex: 1;
+}
+
+.calendarEventName {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  color: var(--ifm-heading-color);
+}
+
+.calendarEventLocation {
+  font-size: 0.9rem;
+  color: var(--ifm-color-emphasis-700);
+}
+
+/* Add specific styling for security-themed events */
+[data-theme='dark'] .eventCard[data-event-type='security'] {
+  border-color: var(--ifm-color-danger-dark);
+}
+
+[data-theme='light'] .eventCard[data-event-type='security'] {
+  border-color: var(--ifm-color-danger-light);
+}
+
+/* Special styling for the conference name on security events */
+.eventCard[data-event-type='security'] .eventName {
+  color: var(--ifm-color-danger);
+}
+
+.eventCard[data-event-type='security'] .boothBadge {
+  background-color: var(--ifm-color-danger-contrast-background);
+  color: var(--ifm-color-danger-contrast-foreground);
+}
+
+/* Responsive styles */
+@media screen and (max-width: 768px) {
+  .heroBanner {
+    padding: 2rem 0;
+  }
+
+  .title {
+    font-size: 2.5rem;
+  }
+
+  .controlsContainer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .viewToggle,
+  .filterToggle {
+    width: 100%;
+  }
+
+  .viewButton,
+  .filterButton {
+    flex: 1;
+  }
+
+  .eventCardHeader {
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: center;
+  }
+
+  .eventLogo {
+    margin: 0 auto;
+  }
+
+  .eventTitleArea {
+    width: 100%;
+    align-items: center;
+  }
+
+  .eventMeta {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .eventActions {
+    flex-direction: column;
+  }
+
+  .calendarEvent {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .calendarEventDate {
+    min-width: auto;
+  }
+}
