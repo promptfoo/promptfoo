@@ -1,6 +1,7 @@
 import Cal, { getCalApi } from '@calcom/embed-react';
 import React, { useEffect, useState } from 'react';
 import { useColorMode } from '@docusaurus/theme-common';
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
@@ -37,6 +38,77 @@ function Calendar() {
         config={{ layout: 'month_view' }}
       />
     </div>
+  );
+}
+
+function UpcomingEventsSection() {
+  // Next few security events
+  const upcomingEvents = [
+    {
+      id: 2,
+      name: 'BSides SF 2025',
+      displayDate: 'April 26-27, 2025',
+      startDate: '2025-04-26',
+      endDate: '2025-04-27',
+      location: 'San Francisco, CA',
+    },
+    {
+      id: 4,
+      name: 'RSA Conference USA 2025',
+      displayDate: 'April 28-May 1, 2025',
+      startDate: '2025-04-28',
+      endDate: '2025-05-01',
+      location: 'San Francisco, CA',
+    },
+    {
+      id: 1,
+      name: 'DEF CON 33',
+      displayDate: 'August 7-10, 2025',
+      startDate: '2025-08-07',
+      endDate: '2025-08-10',
+      location: 'Las Vegas, NV',
+    },
+  ];
+
+  // Sort by the closest upcoming date
+  const sortedEvents = [...upcomingEvents].sort((a, b) => {
+    const dateA = new Date(a.startDate);
+    const dateB = new Date(b.startDate);
+
+    return dateA.getTime() - dateB.getTime();
+  });
+
+  return (
+    <Box my={4} className={styles.upcomingEventsSection}>
+      <Typography variant="h5" gutterBottom className={styles.upcomingEventsTitle}>
+        <CalendarTodayIcon className={styles.upcomingEventsIcon} />
+        Meet Us In Person
+      </Typography>
+      <Typography variant="body1" paragraph>
+        The promptfoo team will be at these upcoming security conferences. Connect with us to
+        discuss LLM security and evaluation in person!
+      </Typography>
+      <div className={styles.upcomingEventsList}>
+        {sortedEvents.map((event) => (
+          <div key={event.id} className={styles.upcomingEventItem}>
+            <Typography variant="subtitle1" className={styles.upcomingEventName}>
+              {event.name}
+            </Typography>
+            <Typography variant="body2" className={styles.upcomingEventDetails}>
+              {event.displayDate} · {event.location}
+            </Typography>
+          </div>
+        ))}
+      </div>
+      <Button
+        variant="outlined"
+        component={Link}
+        href="/events/"
+        className={styles.upcomingEventsButton}
+      >
+        View All Events
+      </Button>
+    </Box>
   );
 }
 
@@ -192,6 +264,8 @@ function Contact(): JSX.Element {
             </form>
           </TabPanel>
         </Box>
+
+        <UpcomingEventsSection />
       </Container>
     </ThemeProvider>
   );

@@ -2,6 +2,7 @@ import React from 'react';
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import { useColorMode } from '@docusaurus/theme-common';
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import CompareIcon from '@mui/icons-material/Compare';
 import DescriptionIcon from '@mui/icons-material/Description';
 import SecurityIcon from '@mui/icons-material/Security';
@@ -238,6 +239,98 @@ function AsSeenOnSection() {
   );
 }
 
+// Upcoming Events component
+function UpcomingEvents() {
+  // Simplified version of conference events data (from events.tsx)
+  const featuredEvents = [
+    {
+      id: 1,
+      name: 'DEF CON 33',
+      displayDate: 'August 7-10, 2025',
+      startDate: '2025-08-07',
+      endDate: '2025-08-10',
+      location: 'Las Vegas, NV',
+      logo: '/img/events/defcon-33.png',
+    },
+    {
+      id: 2,
+      name: 'BSides SF 2025',
+      displayDate: 'April 26-27, 2025',
+      startDate: '2025-04-26',
+      endDate: '2025-04-27',
+      location: 'San Francisco, CA',
+      logo: '/img/events/bsides-sf-2025.png',
+    },
+    {
+      id: 4,
+      name: 'RSA Conference USA 2025',
+      displayDate: 'April 28-May 1, 2025',
+      startDate: '2025-04-28',
+      endDate: '2025-05-01',
+      location: 'San Francisco, CA',
+      logo: '/img/events/rsa-conference.png',
+    },
+  ];
+
+  // Sort events by date (upcoming first)
+  const sortedEvents = [...featuredEvents].sort((a, b) => {
+    const dateA = new Date(a.startDate);
+    const dateB = new Date(b.startDate);
+
+    return dateA.getTime() - dateB.getTime();
+  });
+
+  // Only show next 2 upcoming events
+  const upcomingEventsToShow = sortedEvents.slice(0, 2);
+
+  return (
+    <section className={styles.upcomingEventsSection}>
+      <div className="container">
+        <div className={styles.upcomingEventsHeader}>
+          <h2>
+            <CalendarTodayIcon className={styles.upcomingEventsIcon} />
+            Upcoming Security Conferences
+          </h2>
+          <Link to="/events/" className={styles.viewAllLink}>
+            View All Events
+          </Link>
+        </div>
+        <div className={styles.upcomingEventsGrid}>
+          {upcomingEventsToShow.map((event) => (
+            <Link key={event.id} to="/events/" className={styles.upcomingEventCard}>
+              <div className={styles.upcomingEventImageContainer}>
+                <img
+                  src={event.logo}
+                  alt={`${event.name} logo`}
+                  className={styles.upcomingEventLogo}
+                  onError={(e) => {
+                    e.currentTarget.src = '/img/logo-panda.svg'; // Fallback to promptfoo logo
+                  }}
+                />
+              </div>
+              <div className={styles.upcomingEventDetails}>
+                <h3 className={styles.upcomingEventName}>{event.name}</h3>
+                <p className={styles.upcomingEventDate}>{event.displayDate}</p>
+                <p className={styles.upcomingEventLocation}>{event.location}</p>
+              </div>
+            </Link>
+          ))}
+          <div className={styles.upcomingEventsCTA}>
+            <h3>Meet the promptfoo Team</h3>
+            <p>
+              Connect with us at these security conferences to discuss LLM security testing and
+              evaluation strategies.
+            </p>
+            <Link to="/events/" className={clsx('button', 'button--primary')}>
+              Schedule a Meeting
+            </Link>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function Home(): JSX.Element {
   const [getStartedUrl, setGetStartedUrl] = React.useState('/docs/intro/');
 
@@ -266,6 +359,7 @@ export default function Home(): JSX.Element {
             <LogoContainer noBackground noBorder />
           </div>
         </section>
+        <UpcomingEvents />
         <HomepageFeatures />
         <HomepageInfo />
         <AsSeenOnSection />

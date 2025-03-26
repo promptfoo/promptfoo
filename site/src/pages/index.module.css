@@ -442,3 +442,144 @@
     gap: 1.5rem;
   }
 }
+
+/* Upcoming Events Section */
+.upcomingEventsSection {
+  padding: 3rem 0;
+  background-color: var(--ifm-color-emphasis-100);
+}
+
+.upcomingEventsHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.upcomingEventsIcon {
+  margin-right: 0.5rem;
+  vertical-align: middle;
+  color: var(--ifm-color-primary);
+}
+
+.viewAllLink {
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+}
+
+.viewAllLink:hover {
+  text-decoration: underline;
+}
+
+.upcomingEventsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+}
+
+.upcomingEventCard {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--ifm-background-color);
+  border-radius: var(--ifm-card-border-radius);
+  box-shadow: var(--ifm-card-shadow);
+  border: 1px solid var(--ifm-card-border-color);
+  overflow: hidden;
+  transition:
+    transform 0.3s ease,
+    box-shadow 0.3s ease;
+  text-decoration: none;
+  color: var(--ifm-font-color-base);
+}
+
+.upcomingEventCard:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  text-decoration: none;
+  color: var(--ifm-font-color-base);
+}
+
+.upcomingEventImageContainer {
+  height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--ifm-color-emphasis-200);
+  padding: 1rem;
+}
+
+.upcomingEventLogo {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.upcomingEventDetails {
+  padding: 1.5rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.upcomingEventName {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--ifm-heading-color);
+}
+
+.upcomingEventDate {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.9rem;
+  color: var(--ifm-color-primary);
+  font-weight: 500;
+}
+
+.upcomingEventLocation {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.upcomingEventsCTA {
+  padding: 2rem;
+  background-color: var(--ifm-background-color);
+  border-radius: var(--ifm-card-border-radius);
+  box-shadow: var(--ifm-card-shadow);
+  border: 1px solid var(--ifm-card-border-color);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.upcomingEventsCTA h3 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  font-size: 1.25rem;
+  color: var(--ifm-heading-color);
+}
+
+.upcomingEventsCTA p {
+  margin-bottom: 1.5rem;
+  color: var(--ifm-color-emphasis-700);
+  line-height: 1.5;
+}
+
+@media (max-width: 996px) {
+  .upcomingEventsGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .upcomingEventsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .upcomingEventsHeader {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+}

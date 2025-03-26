@@ -1,5 +1,6 @@
 import React from 'react';
 import Layout from '@theme/Layout';
+import EventBanner from '../../components/EventBanner';
 import CallToAction from './components/CallToAction';
 import FAQ from './components/FAQ';
 import Features from './components/Features';
@@ -17,6 +18,7 @@ export default function SecurityLandingPage(): JSX.Element {
     >
       <main className={styles.securityLandingPage}>
         <Hero />
+        <EventBanner />
         <LogoSection />
         <Stats />
         <Features />

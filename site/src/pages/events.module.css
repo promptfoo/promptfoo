@@ -1,17 +1,31 @@
-/* Hero section */
+/* Page layout */
+.main {
+  padding: 2rem 0;
+}
+
 .heroBanner {
   padding: 4rem 0;
   text-align: center;
   position: relative;
   overflow: hidden;
-  background-color: var(--ifm-color-primary-lightest);
-  /* Better contrasting text for accessibility */
-  color: var(--ifm-color-emphasis-900);
+  background: linear-gradient(
+    90deg,
+    var(--ifm-color-primary-lightest) 0%,
+    var(--ifm-color-primary-light) 100%
+  );
+}
+
+[data-theme='dark'] .heroBanner {
+  background: linear-gradient(
+    90deg,
+    var(--ifm-color-primary-darkest) 0%,
+    var(--ifm-color-primary-dark) 100%
+  );
 }
 
 .title {
   font-size: 3rem;
-  font-weight: 800;
+  font-weight: 700;
   margin-bottom: 1rem;
 }
 
@@ -19,15 +33,9 @@
   font-size: 1.2rem;
   max-width: 700px;
   margin: 0 auto;
-  color: var(--ifm-color-emphasis-800);
 }
 
-/* Main content */
-.main {
-  padding: 3rem 0;
-}
-
-/* Controls container for filters and view toggle */
+/* Controls */
 .controlsContainer {
   display: flex;
   justify-content: space-between;
@@ -37,125 +45,55 @@
   gap: 1rem;
 }
 
-/* View toggle */
-.viewToggle {
-  display: flex;
-  justify-content: center;
-  gap: 0.5rem;
-}
-
-.viewButton {
-  padding: 0.5rem 1.5rem;
-  border: 1px solid var(--ifm-color-primary);
-  background: transparent;
-  color: var(--ifm-color-primary);
-  border-radius: 2rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
-  overflow: hidden;
-}
-
-.viewButton:after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 5px;
-  height: 5px;
-  background: rgba(255, 255, 255, 0.5);
-  opacity: 0;
-  border-radius: 100%;
-  transform: scale(1, 1) translate(-50%);
-  transform-origin: 50% 50%;
-}
-
-.viewButton:focus:not(:active)::after {
-  animation: ripple 1s ease-out;
-}
-
-@keyframes ripple {
-  0% {
-    transform: scale(0, 0);
-    opacity: 0.5;
-  }
-  20% {
-    transform: scale(25, 25);
-    opacity: 0.5;
-  }
-  100% {
-    opacity: 0;
-    transform: scale(40, 40);
-  }
-}
-
-.viewButton:hover {
-  background-color: var(--ifm-color-primary-lighter);
-  color: var(--ifm-color-white);
-}
-
-.viewButtonActive {
-  background-color: var(--ifm-color-primary);
-  color: var(--ifm-color-white);
-}
-
-/* Filter toggle */
+.viewToggle,
 .filterToggle {
   display: flex;
-  gap: 0.5rem;
+  border-radius: var(--ifm-button-border-radius);
+  overflow: hidden;
+  border: 1px solid var(--ifm-color-emphasis-300);
 }
 
+.viewButton,
 .filterButton {
-  padding: 0.5rem 1.5rem;
-  border: 1px solid var(--ifm-color-emphasis-500);
-  background: transparent;
-  color: var(--ifm-color-emphasis-700);
-  border-radius: 2rem;
-  font-weight: 500;
+  padding: 0.5rem 1rem;
+  border: none;
+  background-color: transparent;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-weight: 500;
+  transition: all 0.2s ease;
 }
 
-.filterButton:hover {
-  background-color: var(--ifm-color-emphasis-200);
-  border-color: var(--ifm-color-emphasis-600);
-}
-
+.viewButtonActive,
 .filterButtonActive {
-  background-color: var(--ifm-color-emphasis-200);
-  border-color: var(--ifm-color-emphasis-600);
-  color: var(--ifm-color-emphasis-900);
+  background-color: var(--ifm-color-primary);
+  color: white;
 }
 
-/* Event cards */
+/* List view */
 .listView {
   display: flex;
   flex-direction: column;
   gap: 2rem;
-  max-width: 900px;
-  margin: 0 auto;
 }
 
 .eventCard {
-  display: flex;
-  flex-direction: column;
-  background-color: var(--ifm-card-background-color);
   border-radius: var(--ifm-card-border-radius);
-  box-shadow: var(--ifm-global-shadow-lw);
+  box-shadow: var(--ifm-card-shadow);
+  background-color: var(--ifm-card-background-color);
+  border: 1px solid var(--ifm-card-border-color);
   overflow: hidden;
   transition:
-    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-    box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1px solid var(--ifm-color-emphasis-200);
-  animation: fadeIn 0.5s ease-out;
-  animation-fill-mode: both;
+    transform 0.3s ease,
+    box-shadow 0.3s ease;
+  position: relative;
+  animation: fadeIn 0.5s ease forwards;
+  opacity: 0;
 }
 
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(20px);
   }
   to {
     opacity: 1;
@@ -165,22 +103,15 @@
 
 .eventCard:hover {
   transform: translateY(-5px);
-  box-shadow: var(--ifm-global-shadow-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
 }
 
 .eventCardHeader {
   display: flex;
   align-items: center;
   padding: 1.5rem;
-  background-color: var(--ifm-color-emphasis-100);
   gap: 1rem;
-  border-bottom: 1px solid var(--ifm-color-emphasis-200);
-}
-
-.eventTitleArea {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  border-bottom: 1px solid var(--ifm-card-border-color);
 }
 
 .eventLogo {
@@ -188,45 +119,31 @@
   height: 80px;
   object-fit: contain;
   border-radius: 8px;
-  background-color: var(--ifm-background-color);
+  background-color: white;
   padding: 0.5rem;
-  border: 1px solid var(--ifm-color-emphasis-200);
-  transition: transform 0.3s ease;
 }
 
-.eventCard:hover .eventLogo {
-  transform: scale(1.05);
-}
-
-.boothBadge {
-  display: inline-block;
-  padding: 0.25rem 0.75rem;
-  background-color: var(--ifm-color-success-contrast-background);
-  color: var(--ifm-color-success-contrast-foreground);
-  border-radius: 1rem;
-  font-size: 0.8rem;
-  font-weight: 600;
-  align-self: flex-start;
+.eventTitleArea {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
 }
 
 .eventName {
   margin: 0;
   font-size: 1.5rem;
   font-weight: 700;
-  color: var(--ifm-heading-color);
 }
 
 .eventDetails {
   padding: 1.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
 }
 
 .eventMeta {
   display: flex;
-  gap: 1.5rem;
-  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1rem;
 }
 
 .eventDate,
@@ -241,95 +158,67 @@
 .icon {
   width: 1.2rem;
   height: 1.2rem;
-  color: var(--ifm-color-primary);
 }
 
 .eventDescription {
-  color: var(--ifm-color-emphasis-800);
+  margin-bottom: 1.5rem;
   line-height: 1.6;
-  margin: 0;
 }
 
 .eventActions {
   display: flex;
   gap: 1rem;
-  margin-top: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 .eventButton {
   flex: 1;
-  text-align: center;
-  font-weight: 500;
-  position: relative;
-  overflow: hidden;
-  transition: transform 0.2s ease;
+  min-width: 160px;
 }
 
-.eventButton:active {
-  transform: scale(0.98);
-}
-
-/* No events message */
-.noEvents {
-  text-align: center;
-  padding: 3rem;
-  background-color: var(--ifm-color-emphasis-100);
-  border-radius: var(--ifm-card-border-radius);
-  color: var(--ifm-color-emphasis-700);
-}
-
-/* Calendar view */
+/* Calendar View */
 .calendarView {
   display: flex;
   flex-direction: column;
   gap: 2rem;
-  max-width: 900px;
-  margin: 0 auto;
 }
 
 .monthSection {
   margin-bottom: 2rem;
-  animation: fadeIn 0.5s ease-out;
-  animation-fill-mode: both;
 }
 
 .monthTitle {
-  font-size: 1.8rem;
-  font-weight: 700;
+  font-size: 1.5rem;
   margin-bottom: 1rem;
   padding-bottom: 0.5rem;
-  border-bottom: 2px solid var(--ifm-color-primary-lightest);
-  color: var(--ifm-heading-color);
+  border-bottom: 2px solid var(--ifm-color-primary);
+  color: var(--ifm-color-primary);
 }
 
 .monthEvents {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.5rem;
 }
 
 .calendarEvent {
   display: flex;
-  gap: 1.5rem;
   padding: 1rem;
   background-color: var(--ifm-card-background-color);
   border-radius: var(--ifm-card-border-radius);
-  box-shadow: var(--ifm-global-shadow-lw);
-  border: 1px solid var(--ifm-color-emphasis-200);
-  transition: all 0.3s ease;
+  border: 1px solid var(--ifm-card-border-color);
+  transition: background-color 0.2s ease;
   cursor: pointer;
 }
 
-.calendarEvent:hover,
-.calendarEvent:focus {
-  transform: translateX(5px);
-  box-shadow: var(--ifm-global-shadow-md);
+.calendarEvent:hover {
+  background-color: var(--ifm-color-emphasis-100);
 }
 
 .calendarEventDate {
-  min-width: 100px;
-  font-weight: 600;
-  color: var(--ifm-color-primary);
+  min-width: 120px;
+  font-weight: 700;
 }
 
 .calendarEventDetails {
@@ -337,9 +226,8 @@
 }
 
 .calendarEventName {
-  font-weight: 600;
+  font-weight: 500;
   margin-bottom: 0.25rem;
-  color: var(--ifm-heading-color);
 }
 
 .calendarEventLocation {
@@ -347,33 +235,14 @@
   color: var(--ifm-color-emphasis-700);
 }
 
-/* Add specific styling for security-themed events */
-[data-theme='dark'] .eventCard[data-event-type='security'] {
-  border-color: var(--ifm-color-danger-dark);
-}
-
-[data-theme='light'] .eventCard[data-event-type='security'] {
-  border-color: var(--ifm-color-danger-light);
-}
-
-/* Special styling for the conference name on security events */
-.eventCard[data-event-type='security'] .eventName {
-  color: var(--ifm-color-danger);
-}
-
-.eventCard[data-event-type='security'] .boothBadge {
-  background-color: var(--ifm-color-danger-contrast-background);
-  color: var(--ifm-color-danger-contrast-foreground);
-}
-
-/* Responsive styles */
-@media screen and (max-width: 768px) {
+/* Responsive adjustments */
+@media (max-width: 768px) {
   .heroBanner {
     padding: 2rem 0;
   }
 
   .title {
-    font-size: 2.5rem;
+    font-size: 2rem;
   }
 
   .controlsContainer {
@@ -381,34 +250,9 @@
     align-items: stretch;
   }
 
-  .viewToggle,
-  .filterToggle {
-    width: 100%;
-  }
-
-  .viewButton,
-  .filterButton {
-    flex: 1;
-  }
-
   .eventCardHeader {
     flex-direction: column;
-    align-items: flex-start;
     text-align: center;
-  }
-
-  .eventLogo {
-    margin: 0 auto;
-  }
-
-  .eventTitleArea {
-    width: 100%;
-    align-items: center;
-  }
-
-  .eventMeta {
-    flex-direction: column;
-    gap: 0.5rem;
   }
 
   .eventActions {
@@ -419,8 +263,101 @@
     flex-direction: column;
     gap: 0.5rem;
   }
+}
 
-  .calendarEventDate {
-    min-width: auto;
-  }
+/* Cal.com integration styles */
+.calendarContainer {
+  margin-top: 2rem;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: var(--ifm-card-border-radius);
+  overflow: hidden;
+}
+
+.calendarTitle {
+  padding: 1rem;
+  background-color: var(--ifm-color-emphasis-100);
+  margin: 0;
+  border-bottom: 1px solid var(--ifm-color-emphasis-300);
+  font-size: 1.2rem;
+}
+
+.scheduleContainer {
+  margin-top: 1.5rem;
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+/* Status badges */
+.eventStatusBadge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background-color: var(--ifm-color-primary);
+  color: white;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.8rem;
+  border-bottom-left-radius: var(--ifm-card-border-radius);
+  font-weight: 500;
+  z-index: 1;
+}
+
+.statusOngoing {
+  background-color: #16a34a; /* Green */
+}
+
+.statusPast {
+  background-color: var(--ifm-color-emphasis-500);
+}
+
+.boothBadge {
+  display: inline-block;
+  background-color: var(--ifm-color-emphasis-200);
+  color: var(--ifm-color-emphasis-800);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  margin-top: 0.5rem;
+}
+
+.daysUntil {
+  font-size: 0.8rem;
+  margin-top: 0.25rem;
+  color: var(--ifm-color-primary);
+  font-weight: 500;
+}
+
+.noEvents {
+  padding: 2rem;
+  text-align: center;
+  background-color: var(--ifm-color-emphasis-100);
+  border-radius: var(--ifm-card-border-radius);
+}
+
+/* Calendar integration button */
+.calendarIntegration {
+  display: flex;
+  margin-top: 1rem;
+  width: 100%;
+}
+
+.calendarButton {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  padding: 0.5rem 1rem;
+  border-radius: var(--ifm-button-border-radius);
+  background-color: var(--ifm-color-emphasis-200);
+  color: var(--ifm-color-emphasis-800);
+  text-decoration: none;
+  transition: background-color 0.2s ease;
+}
+
+.calendarButton:hover {
+  background-color: var(--ifm-color-emphasis-300);
+  text-decoration: none;
+}
+
+.calendarIcon {
+  flex-shrink: 0;
 }

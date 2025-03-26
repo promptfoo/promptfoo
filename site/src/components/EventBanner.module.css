@@ -1,0 +1,73 @@
+.eventBanner {
+  background: linear-gradient(
+    90deg,
+    var(--ifm-color-primary-darker) 0%,
+    var(--ifm-color-primary) 100%
+  );
+  padding: 0.75rem 1rem;
+  margin-bottom: 2rem;
+}
+
+.eventBannerContent {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: var(--ifm-container-width);
+  margin: 0 auto;
+  padding: 0 var(--ifm-spacing-horizontal);
+  color: white;
+}
+
+.eventBannerInfo {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.eventBannerIcon {
+  font-size: 1.25rem;
+}
+
+.eventBannerLabel {
+  font-weight: 500;
+}
+
+.eventBannerName {
+  font-weight: 700;
+}
+
+.eventBannerDate {
+  background-color: rgba(255, 255, 255, 0.15);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.eventBannerLink {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: white;
+  font-weight: 500;
+  transition: opacity 0.2s ease;
+  text-decoration: none;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.eventBannerLink:hover {
+  opacity: 0.9;
+  background-color: rgba(255, 255, 255, 0.2);
+  text-decoration: none;
+  color: white;
+}
+
+@media (max-width: 768px) {
+  .eventBannerContent {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+}
