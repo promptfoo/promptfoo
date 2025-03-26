@@ -114,3 +114,6 @@ code p {
   opacity: 0.4;
   background-size: 16px;
 }
+
+/* Import custom pagination styles */
+@import url('./custom-pagination.css');
