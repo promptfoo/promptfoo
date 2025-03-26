@@ -1,5 +1,6 @@
 import WebSocket from 'ws';
-import { spawn, ChildProcess } from 'child_process';
+import { spawn } from 'child_process';
+import type { ChildProcess } from 'child_process';
 import axios from 'axios';
 import { getEnvString } from '../envars';
 import logger from '../logger';
@@ -267,28 +268,28 @@ export class GoogleMMLiveProvider implements ApiProvider {
                           : functionCall.args,
                       ),
                     );
-                  } catch (error) {
+                  } catch (err) {
                     callbackResponse = {
-                      error: `Error executing function ${functionName}: ${error}`,
+                      error: `Error executing function ${functionName}: ${JSON.stringify(err)}`,
                     };
-                    logger.error(`Error executing function ${functionName}: ${error}`);
+                    logger.error(`Error executing function ${functionName}: ${JSON.stringify(err)}`);
                   }
                 }
                 else if (this.config.functionToolStatefulApiFile) {
                   try {
                     let callbackResponse;
                     if (functionCall.args) {
-                      callbackResponse = await axios.get('http://localhost:5000/' + functionName, functionCall.args);
+                      callbackResponse = await axios.post('http://127.0.0.1:5000/' + functionName, functionCall.args);
                     }
                     else {
-                      callbackResponse = await axios.get('http://localhost:5000/' + functionName);
+                      callbackResponse = await axios.get('http://127.0.0.1:5000/' + functionName);
                     }
                     console.log('Response 1:', callbackResponse.data);
-                  } catch (error) {
+                  } catch (err) {
                     callbackResponse = {
-                      error: `Error executing function ${functionName}: ${JSON.stringify(error)}`,
+                      error: `Error executing function ${functionName}: ${JSON.stringify(err)}`,
                     };
-                    logger.error(`Error executing function ${functionName}: ${JSON.stringify(error)}`);
+                    logger.error(`Error executing function ${functionName}: ${JSON.stringify(err)}`);
                   }
                 }
 
@@ -330,7 +331,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
 
       ws.onerror = (err) => {
         clearTimeout(timeout);
-        logger.debug(`WebSocket Error: ${err}`);
+        logger.debug(`WebSocket Error: ${JSON.stringify(err)}`);
         ws.close();
         resolve({ error: `WebSocket error: ${JSON.stringify(err)}` });
       };
