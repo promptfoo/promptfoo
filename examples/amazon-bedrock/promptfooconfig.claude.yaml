@@ -8,13 +8,13 @@ providers:
     config:
       temperature: 1
       max_tokens: 2048
-      region: us-east-1
+      region: us-west-2
   - id: bedrock:us.anthropic.claude-3-7-sonnet-20250219-v1:0
     label: Claude 3.7 Sonnet with Thinking
     config:
       temperature: 1
       max_tokens: 2048
-      region: us-east-1
+      region: us-west-2
       showThinking: true
       thinking:
         type: enabled
