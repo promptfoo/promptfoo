@@ -1144,22 +1144,18 @@ describe('BEDROCK_MODEL MISTRAL', () => {
       });
     });
 
-    it('should estimate token usage when not provided by the API', () => {
+    it('should return undefined token counts when not provided by the API', () => {
       const mockResponse = {
         outputs: [{ text: 'This is a test response with several words to estimate tokens.' }],
       };
 
       const result = modelHandler.tokenUsage!(mockResponse, 'What is the capital of France?');
 
-      // Verify structure without exact values as estimation is approximate
-      expect(result).toHaveProperty('prompt');
-      expect(result).toHaveProperty('completion');
-      expect(result).toHaveProperty('total');
+      // Verify structure with undefined values
+      expect(result).toHaveProperty('prompt', undefined);
+      expect(result).toHaveProperty('completion', undefined);
+      expect(result).toHaveProperty('total', undefined);
       expect(result).toHaveProperty('numRequests', 1);
-      expect(typeof result.prompt).toBe('number');
-      expect(typeof result.completion).toBe('number');
-      expect(typeof result.total).toBe('number');
-      expect(result.total).toBe(result.prompt + result.completion);
     });
   });
 });
@@ -1186,15 +1182,15 @@ describe('BEDROCK_MODEL token counting functionality', () => {
       });
     });
 
-    it('should estimate tokens when usage info is not available', () => {
+    it('should return undefined token counts when not provided by the API', () => {
       const mockResponse = {
         outputs: [{ text: 'This is a generated response' }],
       };
 
       const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
-      expect(result).toHaveProperty('prompt');
-      expect(result).toHaveProperty('completion');
-      expect(result).toHaveProperty('total');
+      expect(result).toHaveProperty('prompt', undefined);
+      expect(result).toHaveProperty('completion', undefined);
+      expect(result).toHaveProperty('total', undefined);
       expect(result).toHaveProperty('numRequests', 1);
     });
   });
