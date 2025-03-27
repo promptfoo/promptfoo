@@ -19,7 +19,9 @@ import { safeJsonStringify } from '../util/json';
 import { getCurrentTimestamp } from '../util/time';
 
 // Removes circular references from the provider object and ensures consistent format
-function sanitizeProvider(provider: ApiProvider | ProviderOptions | string): ProviderOptions {
+export function sanitizeProvider(
+  provider: ApiProvider | ProviderOptions | string,
+): ProviderOptions {
   try {
     if (isApiProvider(provider)) {
       return {
@@ -309,5 +311,3 @@ export default class EvalResult {
     };
   }
 }
-
-export { sanitizeProvider };
