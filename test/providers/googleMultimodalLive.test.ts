@@ -63,24 +63,8 @@ describe('GoogleMMLiveProvider', () => {
     });
 
     // Reset mocks before each test
-    spawn.mockClear();
     mockedAxios.get.mockClear();
     mockedAxios.post.mockClear();
-
-    // Create a mock Python process object
-    const mockPythonProcess = {
-      stdout: { on: jest.fn() },
-      stderr: { on: jest.fn() },
-      on: jest.fn((event, callback) => {
-        if (event === 'close') {
-          // Simulate the Python process closing after a delay (or immediately)
-          setTimeout(callback, 100);
-        }
-      }),
-      kill: jest.fn(),
-      killed: false,
-    };
-    spawn.mockReturnValue(mockPythonProcess);
   });
 
   afterEach(() => {
