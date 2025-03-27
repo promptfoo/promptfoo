@@ -3,7 +3,6 @@ import fs from 'fs/promises';
 import * as init from '../../src/commands/init';
 import logger from '../../src/logger';
 
-// Add mock for redteam init
 jest.mock('../../src/redteam/commands/init', () => ({
   redteamInit: jest.fn(),
 }));
@@ -88,16 +87,42 @@ describe('init command', () => {
   });
 
   describe('downloadDirectory', () => {
-    it('should throw an error if fetching directory contents fails', async () => {
+    it('should throw an error if fetching directory contents fails on both VERSION and main', async () => {
       const mockResponse = {
         ok: false,
         statusText: 'Not Found',
       };
-      mockFetch.mockResolvedValue(mockResponse);
+      mockFetch.mockResolvedValueOnce(mockResponse).mockResolvedValueOnce(mockResponse);
 
       await expect(init.downloadDirectory('example', '/path/to/target')).rejects.toThrow(
         'Failed to fetch directory contents: Not Found',
       );
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch.mock.calls[0][0]).toContain('?ref=');
+      expect(mockFetch.mock.calls[1][0]).toContain('?ref=main');
+    });
+
+    it('should succeed if VERSION fails but main succeeds', async () => {
+      const mockFailedResponse = {
+        ok: false,
+        statusText: 'Not Found',
+      };
+
+      const mockSuccessResponse = {
+        ok: true,
+        json: jest.fn().mockResolvedValue([]),
+      };
+
+      mockFetch
+        .mockResolvedValueOnce(mockFailedResponse)
+        .mockResolvedValueOnce(mockSuccessResponse);
+
+      await init.downloadDirectory('example', '/path/to/target');
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch.mock.calls[0][0]).toContain('?ref=');
+      expect(mockFetch.mock.calls[1][0]).toContain('?ref=main');
     });
 
     it('should handle network errors', async () => {

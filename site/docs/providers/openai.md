@@ -60,31 +60,31 @@ providers:
 
 Supported parameters include:
 
-| Parameter               | Description                                                                                                                                                                           |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apiBaseUrl`            | The base URL of the OpenAI API, please also read `OPENAI_BASE_URL` below.                                                                                                             |
-| `apiHost`               | The hostname of the OpenAI API, please also read `OPENAI_API_HOST` below.                                                                                                             |
-| `apiKey`                | Your OpenAI API key, equivalent to `OPENAI_API_KEY` environment variable                                                                                                              |
-| `apiKeyEnvar`           | An environment variable that contains the API key                                                                                                                                     |
-| `best_of`               | Controls the number of alternative outputs to generate and select from.                                                                                                               |
-| `frequency_penalty`     | Applies a penalty to frequent tokens, making them less likely to appear in the output.                                                                                                |
-| `function_call`         | Controls whether the AI should call functions. Can be either 'none', 'auto', or an object with a `name` that specifies the function to call.                                          |
-| `functions`             | Allows you to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`.                                                     |
-| `functionToolCallbacks` | A map of function tool names to function callbacks. Each callback should accept a string and return a string or a `Promise<string>`.                                                  |
-| `headers`               | Additional headers to include in the request.                                                                                                                                         |
-| `max_tokens`            | Controls the maximum length of the output in tokens. Not valid for reasoning models (o1, o3-mini).                                                                                    |
-| `organization`          | Your OpenAI organization key.                                                                                                                                                         |
-| `passthrough`           | Additional parameters to pass through to the API.                                                                                                                                     |
-| `presence_penalty`      | Applies a penalty to new tokens (tokens that haven't appeared in the input), making them less likely to appear in the output.                                                         |
-| `response_format`       | Specifies the desired output format, including `json_object` and `json_schema`. Can also be specified in the prompt config. If specified in both, the prompt config takes precedence. |
-| `seed`                  | Seed used for deterministic output.                                                                                                                                                   |
-| `stop`                  | Defines a list of tokens that signal the end of the output.                                                                                                                           |
-| `temperature`           | Controls the randomness of the AI's output. Higher values (close to 1) make the output more random, while lower values (close to 0) make it more deterministic.                       |
-| `tool_choice`           | Controls whether the AI should use a tool. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                             |
-| `tools`                 | Allows you to define custom tools. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                                     |
-| `top_p`                 | Controls the nucleus sampling, a method that helps control the randomness of the AI's output.                                                                                         |
-| `max_completion_tokens` | Maximum number of tokens to generate for reasoning models (o1, o3-mini).                                                                                                              |
-| `reasoning_effort`      | Allows you to control how long the reasoning model thinks before answering, 'low', 'medium' or 'high'.                                                                                |
+| Parameter               | Description                                                                                                                                                                                                                                                                                       |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apiBaseUrl`            | The base URL of the OpenAI API, please also read `OPENAI_BASE_URL` below.                                                                                                                                                                                                                         |
+| `apiHost`               | The hostname of the OpenAI API, please also read `OPENAI_API_HOST` below.                                                                                                                                                                                                                         |
+| `apiKey`                | Your OpenAI API key, equivalent to `OPENAI_API_KEY` environment variable                                                                                                                                                                                                                          |
+| `apiKeyEnvar`           | An environment variable that contains the API key                                                                                                                                                                                                                                                 |
+| `best_of`               | Controls the number of alternative outputs to generate and select from.                                                                                                                                                                                                                           |
+| `frequency_penalty`     | Applies a penalty to frequent tokens, making them less likely to appear in the output.                                                                                                                                                                                                            |
+| `function_call`         | Controls whether the AI should call functions. Can be either 'none', 'auto', or an object with a `name` that specifies the function to call.                                                                                                                                                      |
+| `functions`             | Allows you to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`.                                                                                                                                                                 |
+| `functionToolCallbacks` | A map of function tool names to function callbacks. Each callback should accept a string and return a string or a `Promise<string>`.                                                                                                                                                              |
+| `headers`               | Additional headers to include in the request.                                                                                                                                                                                                                                                     |
+| `max_tokens`            | Controls the maximum length of the output in tokens. Not valid for reasoning models (o1, o3-mini).                                                                                                                                                                                                |
+| `organization`          | Your OpenAI organization key.                                                                                                                                                                                                                                                                     |
+| `passthrough`           | A flexible object that allows passing arbitrary parameters directly to the OpenAI API request body. Useful for experimental, new, or provider-specific parameters not yet explicitly supported in promptfoo. This parameter is merged into the final API request and can override other settings. |
+| `presence_penalty`      | Applies a penalty to new tokens (tokens that haven't appeared in the input), making them less likely to appear in the output.                                                                                                                                                                     |
+| `response_format`       | Specifies the desired output format, including `json_object` and `json_schema`. Can also be specified in the prompt config. If specified in both, the prompt config takes precedence.                                                                                                             |
+| `seed`                  | Seed used for deterministic output.                                                                                                                                                                                                                                                               |
+| `stop`                  | Defines a list of tokens that signal the end of the output.                                                                                                                                                                                                                                       |
+| `temperature`           | Controls the randomness of the AI's output. Higher values (close to 1) make the output more random, while lower values (close to 0) make it more deterministic.                                                                                                                                   |
+| `tool_choice`           | Controls whether the AI should use a tool. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                                                                                                                                         |
+| `tools`                 | Allows you to define custom tools. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                                                                                                                                                 |
+| `top_p`                 | Controls the nucleus sampling, a method that helps control the randomness of the AI's output.                                                                                                                                                                                                     |
+| `max_completion_tokens` | Maximum number of tokens to generate for reasoning models (o1, o3-mini).                                                                                                                                                                                                                          |
+| `reasoning_effort`      | Allows you to control how long the reasoning model thinks before answering, 'low', 'medium' or 'high'.                                                                                                                                                                                            |
 
 Here are the type declarations of `config` parameters:
 
@@ -835,6 +835,118 @@ The Realtime API supports the same multimedia formats as the Chat API, allowing 
 The Realtime API supports multi-turn conversations with persistent context. For implementation details and examples, see the [OpenAI Realtime example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-realtime), which demonstrates both single-turn interactions and conversation threading using the `conversationId` metadata property.
 
 > **Important**: When implementing multi-turn conversations, use `type: "input_text"` for user inputs and `type: "text"` for assistant responses.
+
+## Responses API
+
+OpenAI's Responses API is the most advanced interface for generating model responses, supporting text and image inputs, function calling, and conversation state. It provides access to OpenAI's full suite of features including reasoning models like o1 and o3 series.
+
+### Supported Responses Models
+
+The Responses API supports a wide range of models, including:
+
+- `gpt-4o` - OpenAI's most capable vision model
+- `o1` - Powerful reasoning model
+- `o1-mini` - Smaller, more affordable reasoning model
+- `o1-pro` - Enhanced reasoning model with more compute
+- `o3-mini` - Latest reasoning model with improved performance
+
+### Using the Responses API
+
+To use the OpenAI Responses API, use the provider format `openai:responses:<model name>`:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-4o
+    config:
+      temperature: 0.7
+      max_output_tokens: 500
+      instructions: 'You are a helpful, creative AI assistant.'
+```
+
+### Responses-specific Configuration Options
+
+The Responses API configuration supports these parameters in addition to standard OpenAI parameters:
+
+| Parameter              | Description                                       | Default    | Options                             |
+| ---------------------- | ------------------------------------------------- | ---------- | ----------------------------------- |
+| `instructions`         | System instructions for the model                 | None       | Any text string                     |
+| `max_output_tokens`    | Maximum tokens to generate in the response        | 1024       | Any number                          |
+| `metadata`             | Key-value pairs attached to the model response    | None       | Map of string keys to string values |
+| `parallel_tool_calls`  | Allow model to run tool calls in parallel         | true       | Boolean                             |
+| `previous_response_id` | ID of a previous response for multi-turn context  | None       | String                              |
+| `store`                | Whether to store the response for later retrieval | true       | Boolean                             |
+| `truncation`           | Strategy to handle context window overflow        | 'disabled' | 'auto', 'disabled'                  |
+| `reasoning`            | Configuration for reasoning models                | None       | Object with `effort` field          |
+
+### Sending Images in Prompts
+
+The Responses API supports structured prompts with text and image inputs. Example:
+
+```json title="prompt.json"
+[
+  {
+    "type": "message",
+    "role": "user",
+    "content": [
+      {
+        "type": "input_text",
+        "text": "Describe what you see in this image about {{topic}}."
+      },
+      {
+        "type": "image_url",
+        "image_url": {
+          "url": "{{image_url}}"
+        }
+      }
+    ]
+  }
+]
+```
+
+### Function Calling
+
+The Responses API supports tool and function calling, similar to the Chat API:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-4o
+    config:
+      tools:
+        - type: function
+          function:
+            name: get_weather
+            description: Get the current weather for a location
+            parameters:
+              type: object
+              properties:
+                location:
+                  type: string
+                  description: The city and state, e.g. San Francisco, CA
+              required: ['location']
+      tool_choice: 'auto'
+```
+
+### Reasoning Models
+
+When using reasoning models like `o1`, `o1-pro`, or `o3-mini`, you can control the reasoning effort:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:o1
+    config:
+      reasoning_effort: 'medium' # Can be "low", "medium", or "high"
+      max_output_tokens: 1000
+```
+
+Reasoning models "think before they answer," generating internal reasoning that isn't visible in the output but counts toward token usage and billing.
+
+### Complete Example
+
+For a complete working example, see the [OpenAI Responses API example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-responses) or initialize it with:
+
+```bash
+npx promptfoo@latest init --example openai-responses
+```
 
 ## Troubleshooting
 

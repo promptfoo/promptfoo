@@ -38,7 +38,6 @@ import { useDebounce } from 'use-debounce';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
-import GenerateTestCases from './GenerateTestCases';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import type { TruncatedTextProps } from './TruncatedText';
 import TruncatedText from './TruncatedText';
@@ -1008,7 +1007,6 @@ function ResultsTable({
           </Typography>
         </Box>
       )}
-      <GenerateTestCases />
     </div>
   );
 }

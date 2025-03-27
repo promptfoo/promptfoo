@@ -394,6 +394,72 @@ providers:
 
 Be sure to replace the assistant ID and the name of your deployment.
 
+### Function Tools with Assistants
+
+Azure OpenAI Assistants support custom function tools. You can define functions in your configuration and provide callback implementations to handle them:
+
+```yaml
+providers:
+  - id: azure:assistant:your_assistant_id
+    config:
+      apiHost: your-resource-name.openai.azure.com
+      # Load function tool definition
+      tools: file://tools/weather-function.json
+      # Define function callback inline
+      functionToolCallbacks:
+        # Use an external file
+        get_weather: file://callbacks/weather.js:getWeather
+        # Or use an inline function
+        get_weather: |
+          async function(args) {
+            try {
+              const parsedArgs = JSON.parse(args);
+              const location = parsedArgs.location;
+              const unit = parsedArgs.unit || 'celsius';
+              // Function implementation...
+              return JSON.stringify({
+                location,
+                temperature: 22,
+                unit,
+                condition: 'sunny'
+              });
+            } catch (error) {
+              return JSON.stringify({ error: String(error) });
+            }
+          }
+```
+
+### Using Vector Stores with Assistants
+
+Azure OpenAI Assistants support vector stores for enhanced file search capabilities. To use a vector store with your assistant, first create a vector store in the Azure Portal or via the API, then configure your assistant to use it:
+
+```yaml
+providers:
+  - id: azure:assistant:your_assistant_id
+    config:
+      apiHost: your-resource-name.openai.azure.com
+      # Add tools for file search
+      tools:
+        - type: file_search
+      # Configure vector store IDs
+      tool_resources:
+        file_search:
+          vector_store_ids:
+            - 'your_vector_store_id'
+      # Optional parameters
+      temperature: 1
+      top_p: 1
+      apiVersion: '2024-05-01-preview'
+```
+
+Make sure to:
+
+1. Set up a tool with `type: file_search`
+2. Configure the `tool_resources.file_search.vector_store_ids` array with your vector store IDs
+3. Set the appropriate `apiVersion` (recommended: `2024-05-01-preview` or later)
+
+### Simple Example
+
 Here's an example of a simple full assistant eval:
 
 ```yaml
@@ -401,13 +467,21 @@ prompts:
   - 'Write a tweet about {{topic}}'
 
 providers:
-  - id: azure:assistant:asst_E4GyOBYKlnAzMi19SZF2Sn8I
+  - id: azure:assistant:your_assistant_id
     config:
-      apiHost: yourdeploymentname.openai.azure.com
+      apiHost: your-resource-name.openai.azure.com
 
 tests:
   - vars:
       topic: bananas
 ```
 
+For complete working examples of Azure OpenAI Assistants with various tool configurations, check out the [azure-openai-assistant example directory](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai-assistant).
+
 See the guide on [How to eval OpenAI assistants](/docs/guides/evaluate-openai-assistants/) for more information on how to compare different models, instructions, and more.
+
+## See Also
+
+- [OpenAI Provider](/docs/providers/openai) - The base provider that Azure shares configuration with
+- [Evaluating Assistants](/docs/guides/evaluate-openai-assistants/) - Learn how to compare different models and instructions
+- [Azure OpenAI Assistant Examples](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai-assistant) - Complete working examples with various tool configurations

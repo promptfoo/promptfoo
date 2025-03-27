@@ -7,9 +7,11 @@ authors:
     given-names: Michael
   - family-names: Klein
     given-names: Steven
+  - family-names: Zang
+    given-names: Guangshuo
 title: promptfoo
-version: 0.107.1
-date-released: '2025-03-14'
+version: 0.107.5
+date-released: '2025-03-26'
 url: https://promptfoo.dev
 repository-code: https://github.com/promptfoo/promptfoo
 license: MIT

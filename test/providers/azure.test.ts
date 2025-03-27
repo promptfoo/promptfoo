@@ -1,10 +1,8 @@
 import { fetchWithCache } from '../../src/cache';
-import {
-  AzureChatCompletionProvider,
-  AzureCompletionProvider,
-  AzureGenericProvider,
-} from '../../src/providers/azure';
-import { maybeEmitAzureOpenAiWarning } from '../../src/providers/azureUtil';
+import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
+import { AzureCompletionProvider } from '../../src/providers/azure/completion';
+import { AzureGenericProvider } from '../../src/providers/azure/generic';
+import { maybeEmitAzureOpenAiWarning } from '../../src/providers/azure/warnings';
 import { HuggingfaceTextGenerationProvider } from '../../src/providers/huggingface';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 import type { TestCase, TestSuite } from '../../src/types';

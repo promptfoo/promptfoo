@@ -149,6 +149,7 @@ export const ADDITIONAL_PLUGINS = [
   'prompt-extraction',
   'pliny',
   'rag-document-exfiltration',
+  'rag-poisoning',
   'rbac',
   'reasoning-dos',
   'religion',
@@ -581,9 +582,8 @@ export const ADDITIONAL_STRATEGIES = [
 ] as const;
 export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
 
-export const ALL_STRATEGIES = [
-  ...['default', ...DEFAULT_STRATEGIES, ...ADDITIONAL_STRATEGIES].sort(),
-] as const;
+const _ALL_STRATEGIES = ['default', ...DEFAULT_STRATEGIES, ...ADDITIONAL_STRATEGIES] as const;
+export const ALL_STRATEGIES = [..._ALL_STRATEGIES].sort();
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
@@ -664,6 +664,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'prompt-extraction': 'Tests for system prompt disclosure vulnerabilities',
   'prompt-injection': 'Tests for direct prompt injection vulnerabilities',
   'rag-document-exfiltration': 'Tests for RAG document exfiltration',
+  'rag-poisoning': 'Tests for vulnerabilities to RAG retrieval poisoning attacks',
   rbac: 'Tests role-based access control implementation',
   religion: 'Tests handling of religious content and bias',
   retry:
@@ -675,6 +676,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
   'reasoning-dos':
     'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
+  audio: 'Tests handling of audio content',
+  image: 'Tests handling of image content',
 };
 
 // These names are displayed in risk cards and in the table
@@ -754,6 +757,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'prompt-extraction': 'System Prompt Disclosure',
   'prompt-injection': 'Direct Prompt Injection',
   'rag-document-exfiltration': 'RAG Document Exfiltration',
+  'rag-poisoning': 'RAG Poisoning',
   rbac: 'RBAC Implementation',
   religion: 'Religious Bias',
   retry: 'Regression Testing',
@@ -763,6 +767,8 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   ssrf: 'SSRF Vulnerability',
   'system-prompt-override': 'System Prompt Override',
   'reasoning-dos': 'Reasoning DoS',
+  audio: 'Audio Content',
+  image: 'Image Content',
 };
 
 export enum Severity {
@@ -842,6 +848,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   politics: Severity.Low,
   'prompt-extraction': Severity.Medium,
   'rag-document-exfiltration': Severity.Medium,
+  'rag-poisoning': Severity.Medium,
   rbac: Severity.High,
   'reasoning-dos': Severity.Low,
   religion: Severity.Low,
@@ -1010,6 +1017,7 @@ export const categoryAliases: Record<Plugin, string> = {
   politics: 'PoliticalStatement',
   'prompt-extraction': 'PromptExtraction',
   'rag-document-exfiltration': 'RAG Document Exfiltration',
+  'rag-poisoning': 'RAG Poisoning',
   rbac: 'RbacEnforcement',
   religion: 'Religion',
   'shell-injection': 'ShellInjection',
@@ -1093,6 +1101,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   politics: 'Tests handling of political content and bias mitigation',
   'prompt-extraction': 'Evaluates protection against system prompt disclosure attempts',
   'rag-document-exfiltration': 'Tests handling of RAG document exfiltration',
+  'rag-poisoning': 'Tests resistance against poisoning attacks on RAG retrieval systems',
   rbac: 'Tests implementation of role-based access control mechanisms',
   religion: 'Assesses handling of religious content and bias mitigation',
   'shell-injection': 'Tests protection against command injection vulnerabilities',

@@ -8,6 +8,7 @@ import type {
 import {
   addConfigParam,
   AwsBedrockGenericProvider,
+  AWS_BEDROCK_MODELS,
   BEDROCK_MODEL,
   formatPromptLlama2Chat,
   formatPromptLlama3Instruct,
@@ -1014,5 +1015,412 @@ describe('BEDROCK_MODEL AMAZON_NOVA', () => {
         temperature: 0,
       },
     });
+  });
+});
+
+describe('BEDROCK_MODEL MISTRAL', () => {
+  const modelHandler = BEDROCK_MODEL.MISTRAL;
+
+  describe('params', () => {
+    it('should include Mistral-specific parameters', () => {
+      const config = {
+        max_tokens: 200,
+        temperature: 0.7,
+        top_p: 0.9,
+        top_k: 50,
+      };
+      const prompt = 'What is the capital of France?';
+      const stop = ['END'];
+
+      const params = modelHandler.params(config, prompt, stop);
+
+      expect(params).toEqual({
+        prompt,
+        stop,
+        max_tokens: 200,
+        temperature: 0.7,
+        top_p: 0.9,
+        top_k: 50,
+      });
+    });
+
+    it('should use default values when config is not provided', () => {
+      const config = {};
+      const prompt = 'Hello, how are you?';
+      const stop: string[] = [];
+
+      const params = modelHandler.params(config, prompt, stop);
+
+      expect(params).toEqual({
+        prompt,
+        stop,
+        max_tokens: 1024,
+        temperature: 0,
+        top_p: 1,
+        top_k: 0,
+      });
+    });
+  });
+
+  describe('output', () => {
+    it('should extract output from outputs[0].text format', () => {
+      const mockResponse = {
+        outputs: [{ text: 'This is a test response.' }],
+      };
+
+      expect(modelHandler.output({}, mockResponse)).toBe('This is a test response.');
+    });
+
+    it('should return undefined for unrecognized formats', () => {
+      const mockResponse = { something: 'else' };
+
+      const result = modelHandler.output({}, mockResponse);
+      expect(result).toBeUndefined();
+    });
+  });
+
+  describe('tokenUsage', () => {
+    it('should use explicit token usage when available', () => {
+      const mockResponse = {
+        usage: {
+          prompt_tokens: 25,
+          completion_tokens: 50,
+          total_tokens: 75,
+        },
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Some input text');
+
+      expect(result).toEqual({
+        prompt: 25,
+        completion: 50,
+        total: 75,
+        numRequests: 1,
+      });
+    });
+
+    it('should return undefined token counts when not provided by the API', () => {
+      const mockResponse = {
+        outputs: [{ text: 'This is a test response with several words to estimate tokens.' }],
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'What is the capital of France?');
+
+      // Verify structure with undefined values
+      expect(result).toHaveProperty('prompt', undefined);
+      expect(result).toHaveProperty('completion', undefined);
+      expect(result).toHaveProperty('total', undefined);
+      expect(result).toHaveProperty('numRequests', 1);
+    });
+  });
+});
+
+describe('BEDROCK_MODEL MISTRAL_LARGE_2407', () => {
+  const modelHandler = BEDROCK_MODEL.MISTRAL_LARGE_2407;
+
+  describe('params', () => {
+    it('should include Mistral-specific parameters without top_k', () => {
+      const config = {
+        max_tokens: 200,
+        temperature: 0.7,
+        top_p: 0.9,
+        top_k: 50, // This should be ignored
+      };
+      const prompt = 'What is the capital of France?';
+      const stop = ['END'];
+
+      const params = modelHandler.params(config, prompt, stop);
+
+      expect(params).toEqual({
+        prompt,
+        stop,
+        max_tokens: 200,
+        temperature: 0.7,
+        top_p: 0.9,
+        // top_k should not be included
+      });
+      expect(params).not.toHaveProperty('top_k');
+    });
+
+    it('should use default values when config is not provided', () => {
+      const config = {};
+      const prompt = 'Hello, how are you?';
+      const stop: string[] = [];
+
+      const params = modelHandler.params(config, prompt, stop);
+
+      expect(params).toEqual({
+        prompt,
+        stop,
+        max_tokens: 1024,
+        temperature: 0,
+        top_p: 1,
+      });
+      expect(params).not.toHaveProperty('top_k');
+    });
+  });
+
+  describe('output', () => {
+    it('should extract output from chat completion format', () => {
+      const mockResponse = {
+        id: 'b8f7363d-4aed-42cf-879a-7a8db4f37be3',
+        object: 'chat.completion',
+        created: 1743034280,
+        model: 'mistral-large-2407',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: 'This is a test response in chat completion format.',
+            },
+            finish_reason: 'stop',
+          },
+        ],
+      };
+
+      expect(modelHandler.output({}, mockResponse)).toBe(
+        'This is a test response in chat completion format.',
+      );
+    });
+
+    it('should return undefined for unrecognized formats', () => {
+      const mockResponse = { something: 'else' };
+
+      const result = modelHandler.output({}, mockResponse);
+      expect(result).toBeUndefined();
+    });
+  });
+
+  describe('tokenUsage', () => {
+    it('should extract token usage from chat completion format', () => {
+      const mockResponse = {
+        id: 'b8f7363d-4aed-42cf-879a-7a8db4f37be3',
+        object: 'chat.completion',
+        created: 1743034280,
+        model: 'mistral-large-2407',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: 'Test response',
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        prompt_tokens: 30,
+        completion_tokens: 45,
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 30,
+        completion: 45,
+        total: 75,
+        numRequests: 1,
+      });
+    });
+
+    it('should return undefined token counts when not provided by the API', () => {
+      const mockResponse = {
+        choices: [
+          {
+            message: {
+              content: 'This is a test response',
+            },
+          },
+        ],
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toHaveProperty('prompt', undefined);
+      expect(result).toHaveProperty('completion', undefined);
+      expect(result).toHaveProperty('total', undefined);
+      expect(result).toHaveProperty('numRequests', 1);
+    });
+  });
+});
+
+describe('BEDROCK_MODEL token counting functionality', () => {
+  describe('MISTRAL model handler', () => {
+    const modelHandler = BEDROCK_MODEL.MISTRAL;
+
+    it('should extract token usage from API response when available', () => {
+      const mockResponse = {
+        usage: {
+          prompt_tokens: 25,
+          completion_tokens: 50,
+          total_tokens: 75,
+        },
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 25,
+        completion: 50,
+        total: 75,
+        numRequests: 1,
+      });
+    });
+
+    it('should return undefined token counts when not provided by the API', () => {
+      const mockResponse = {
+        outputs: [{ text: 'This is a generated response' }],
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toHaveProperty('prompt', undefined);
+      expect(result).toHaveProperty('completion', undefined);
+      expect(result).toHaveProperty('total', undefined);
+      expect(result).toHaveProperty('numRequests', 1);
+    });
+  });
+
+  describe('MISTRAL_LARGE_2407 model handler', () => {
+    const modelHandler = BEDROCK_MODEL.MISTRAL_LARGE_2407;
+
+    it('should extract token usage from chat completion format', () => {
+      const mockResponse = {
+        id: 'b8f7363d-4aed-42cf-879a-7a8db4f37be3',
+        object: 'chat.completion',
+        created: 1743034280,
+        model: 'mistral-large-2407',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: 'Test response',
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        prompt_tokens: 30,
+        completion_tokens: 45,
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 30,
+        completion: 45,
+        total: 75,
+        numRequests: 1,
+      });
+    });
+
+    it('should return undefined token counts when not provided by the API', () => {
+      const mockResponse = {
+        choices: [
+          {
+            message: {
+              content: 'This is a test response',
+            },
+          },
+        ],
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toHaveProperty('prompt', undefined);
+      expect(result).toHaveProperty('completion', undefined);
+      expect(result).toHaveProperty('total', undefined);
+      expect(result).toHaveProperty('numRequests', 1);
+    });
+  });
+
+  describe('Llama model handler', () => {
+    it('should extract token usage from Llama response', () => {
+      const mockResponse = {
+        generation: 'Test response',
+        prompt_token_count: 10,
+        generation_token_count: 20,
+      };
+
+      const handler = getLlamaModelHandler(LlamaVersion.V3);
+      const result = handler.tokenUsage!(mockResponse, 'Test prompt');
+
+      expect(result).toEqual({
+        prompt: 10,
+        completion: 20,
+        total: 30,
+        numRequests: 1,
+      });
+    });
+  });
+
+  describe('Claude model handlers', () => {
+    it('should handle new-style token fields in Claude Messages', () => {
+      const mockResponse = {
+        usage: {
+          input_tokens: 15,
+          output_tokens: 25,
+        },
+      };
+
+      const result = BEDROCK_MODEL.CLAUDE_MESSAGES.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 15,
+        completion: 25,
+        total: 40,
+        numRequests: 1,
+      });
+    });
+
+    it('should handle old-style token fields in Claude Completion', () => {
+      const mockResponse = {
+        usage: {
+          prompt_tokens: 20,
+          completion_tokens: 30,
+          total_tokens: 50,
+        },
+      };
+
+      const result = BEDROCK_MODEL.CLAUDE_COMPLETION.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 20,
+        completion: 30,
+        total: 50,
+        numRequests: 1,
+      });
+    });
+  });
+});
+
+describe('AWS_BEDROCK_MODELS mapping', () => {
+  it('should include mistral.mistral-large-2407-v1:0', () => {
+    expect(AWS_BEDROCK_MODELS['mistral.mistral-large-2407-v1:0']).toBe(
+      BEDROCK_MODEL.MISTRAL_LARGE_2407,
+    );
+  });
+
+  it('should support newer model IDs via region prefixes', () => {
+    [
+      'us.meta.llama3-2-3b-instruct-v1:0',
+      'eu.meta.llama3-2-3b-instruct-v1:0',
+      'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+    ].forEach((modelId) => {
+      // Check if the model starts with a region prefix
+      const baseModelId = modelId.split('.').slice(1).join('.');
+
+      // Check if there's a match for the base model
+      const handler =
+        AWS_BEDROCK_MODELS[baseModelId] ||
+        (baseModelId.startsWith('meta.llama3-2') ? BEDROCK_MODEL.LLAMA3_2 : null) ||
+        (baseModelId.startsWith('anthropic.claude') ? BEDROCK_MODEL.CLAUDE_MESSAGES : null);
+
+      expect(handler).toBeTruthy();
+    });
+  });
+
+  it('should handle mistral models via startsWith fallback', () => {
+    const newMistralModel = 'mistral.some-future-model-v1:0';
+
+    // This simulates the logic in getHandlerForModel
+    let handler = AWS_BEDROCK_MODELS[newMistralModel];
+    if (!handler && newMistralModel.startsWith('mistral.')) {
+      handler = BEDROCK_MODEL.MISTRAL;
+    }
+
+    expect(handler).toBe(BEDROCK_MODEL.MISTRAL);
   });
 });

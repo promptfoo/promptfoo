@@ -295,9 +295,8 @@ jobs:
           npm run test:redteam:integration
 
   redteam-custom-enterprise-server:
-    # FIXME(mldangelo): 2025-03-16: Skip until we replace staging auth
     name: Redteam Custom Enterprise Server
-    if: false # github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo

@@ -47,9 +47,9 @@ const PressContent = () => {
             security industries.
           </Typography>
           <Typography variant="body1" paragraph>
-            Our core product is an open-source pentesting and evaluation framework used by tens of
-            thousands of developers. Promptfoo is among the most popular evaluation frameworks and
-            is the first product to adapt AI-specific pentesting techniques to your application.
+            Our core product is an open-source pentesting and evaluation framework used by 70,000+
+            developers. Promptfoo is among the most popular evaluation frameworks and is the first
+            product to adapt AI-specific pentesting techniques to your application.
           </Typography>
         </Box>
 

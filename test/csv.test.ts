@@ -3,6 +3,10 @@ import logger from '../src/logger';
 import type { Assertion, CsvRow, TestCase } from '../src/types';
 
 describe('testCaseFromCsvRow', () => {
+  afterEach(() => {
+    jest.resetAllMocks();
+  });
+
   it('should create a TestCase with assertions and options from a CSV row', () => {
     const row: CsvRow = {
       __expected1: 'equals:Expected output',
@@ -33,6 +37,28 @@ describe('testCaseFromCsvRow', () => {
       description: 'Test description',
       providerOutput: 'Provider output',
       threshold: 0.8,
+    };
+
+    const result = testCaseFromCsvRow(row);
+    expect(result).toEqual(expectedTestCase);
+  });
+
+  it('should properly trim whitespace and newlines from assertion values', () => {
+    const row: CsvRow = {
+      __expected1: 'equals:Expected output\n',
+      __expected2: ' contains:part of output  ',
+      var1: 'value1',
+    };
+
+    const expectedTestCase: TestCase = {
+      vars: {
+        var1: 'value1',
+      },
+      assert: [
+        { type: 'equals', value: 'Expected output' },
+        { type: 'contains', value: 'part of output' },
+      ],
+      options: {},
     };
 
     const result = testCaseFromCsvRow(row);
@@ -71,9 +97,78 @@ describe('testCaseFromCsvRow', () => {
     );
     expect(logger.warn).toHaveBeenCalledTimes(1);
   });
+
+  it('should handle array metadata with comma splitting', () => {
+    const row: CsvRow = {
+      '__metadata:tags[]': 'tag1,tag2,tag3',
+      var1: 'value1',
+    };
+
+    const expectedTestCase: TestCase = {
+      vars: {
+        var1: 'value1',
+      },
+      assert: [],
+      options: {},
+      metadata: {
+        tags: ['tag1', 'tag2', 'tag3'],
+      },
+    };
+
+    const result = testCaseFromCsvRow(row);
+    expect(result).toEqual(expectedTestCase);
+  });
+
+  it('should handle escaped commas in array metadata', () => {
+    const row: CsvRow = {
+      '__metadata:tags[]': 'tag1,tag with\\, comma,tag3',
+      var1: 'value1',
+    };
+
+    const expectedTestCase: TestCase = {
+      vars: {
+        var1: 'value1',
+      },
+      assert: [],
+      options: {},
+      metadata: {
+        tags: ['tag1', 'tag with, comma', 'tag3'],
+      },
+    };
+
+    const result = testCaseFromCsvRow(row);
+    expect(result).toEqual(expectedTestCase);
+  });
+
+  it('should handle single value metadata', () => {
+    const row: CsvRow = {
+      '__metadata:category': 'test-category',
+      '__metadata:priority': 'high',
+      var1: 'value1',
+    };
+
+    const expectedTestCase: TestCase = {
+      vars: {
+        var1: 'value1',
+      },
+      assert: [],
+      options: {},
+      metadata: {
+        category: 'test-category',
+        priority: 'high',
+      },
+    };
+
+    const result = testCaseFromCsvRow(row);
+    expect(result).toEqual(expectedTestCase);
+  });
 });
 
 describe('assertionFromString', () => {
+  afterEach(() => {
+    jest.resetAllMocks();
+  });
+
   it('should create an equality assertion', () => {
     const expected = 'Expected output';
 
@@ -419,5 +514,16 @@ describe('assertionFromString', () => {
     expect(result.type).toBe('similar');
     expect(result.value).toBe('Expected output');
     expect(result.threshold).toBe(0.9);
+  });
+
+  it('should preserve zero threshold when explicitly specified', () => {
+    const expected = 'levenshtein(0):Expected output';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('levenshtein');
+    expect(result.value).toBe('Expected output');
+    expect(result.threshold).toBe(0);
+    // This is especially important to test with the nullish coalescing operator (??),
+    // since it behaves differently than logical OR (||) for the value 0
   });
 });

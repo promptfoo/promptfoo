@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Web Search for Recent Positive News with OpenAI Responses API
+prompts:
+  - 'Find me something fun or positive that happened recently in the news about {{topic}}. I want to hear about developments or stories from the past week. Make sure to cite your sources.'
+
+providers:
+  - id: openai:responses:gpt-4o
+    config:
+      temperature: 0.7
+      max_output_tokens: 500
+      tools:
+        - type: web_search
+
+tests:
+  - vars:
+      topic: space exploration and NASA missions
+  - vars:
+      topic: artificial intelligence breakthroughs
+  - vars:
+      topic: environmental conservation success stories
