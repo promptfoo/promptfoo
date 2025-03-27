@@ -217,7 +217,7 @@ This is particularly important for applications in development that are being sh
 
 ## Combining Guardrails and Red Teaming
 
-Guardrails enforce policy constraints on the inputs and/or outputs of an LLM application. They can be used to prevent harmful outputs from occurring in the first place, or to catch harmful outputs after they've been generated. It's best to red team *after* you've built guardrails because red teaming helps you figure out what vulnerabilities exist with defeneses already in place. 
+Guardrails enforce policy constraints on the inputs and/or outputs of an LLM application. They can be used to prevent harmful outputs from occurring in the first place, or to catch harmful outputs after they've been generated. It's best to red team *after* you've built guardrails because red teaming helps you figure out what vulnerabilities exist with defenses already in place.
 
 ### Testing Guardrails for Defense-in-Depth
 
