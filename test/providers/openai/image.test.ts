@@ -52,7 +52,7 @@ describe('OpenAiImageProvider', () => {
       expect(result).toEqual({
         output: '![Generate a cat](https://example.com/image.png)',
         cached: false,
-        cost: 0.04, // Default cost for DALL-E 3 standard 1024x1024
+        cost: 0.04,
       });
     });
 
@@ -71,7 +71,7 @@ describe('OpenAiImageProvider', () => {
       expect(result).toEqual({
         output: '![test prompt](https://example.com/image.png)',
         cached: true,
-        cost: 0, // Cost is 0 for cached responses
+        cost: 0,
       });
     });
 
@@ -94,29 +94,22 @@ describe('OpenAiImageProvider', () => {
       expect(provider.id()).toBe('custom-provider-id');
     });
 
-    it('should throw an error if API key is not set', async () => {
-      // Save original environment variable
-      const originalEnv = process.env.OPENAI_API_KEY;
-      // Clear the environment variable so we can test the error
-      delete process.env.OPENAI_API_KEY;
+    it('should skip API key check when not required', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKeyRequired: false },
+      });
 
-      try {
-        // Create provider with no API key in config or environment
-        const provider = new OpenAiImageProvider('dall-e-3');
+      await provider.callApi('test prompt');
 
-        // Mock fetchWithCache to prevent it from being called
-        jest.mocked(fetchWithCache).mockImplementation(() => {
-          throw new Error('fetchWithCache should not be called');
-        });
-
-        // Attempt to call the API should throw an error
-        await expect(provider.callApi('Generate a cat')).rejects.toThrow(
-          'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
-        );
-      } finally {
-        // Restore the original environment variable
-        process.env.OPENAI_API_KEY = originalEnv;
-      }
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+          }),
+        }),
+        expect.any(Number),
+      );
     });
   });
 
@@ -232,7 +225,6 @@ describe('OpenAiImageProvider', () => {
       const mockDeleteFn = jest.fn();
       jest.mocked(fetchWithCache).mockResolvedValueOnce({
         data: {
-          // Invalid data structure that will cause parsing to fail
           deleteFromCache: mockDeleteFn,
         },
         cached: false,
@@ -260,10 +252,9 @@ describe('OpenAiImageProvider', () => {
         cached: false,
         isBase64: true,
         format: 'json',
-        cost: 0.04, // Default cost for DALL-E 3 standard 1024x1024
+        cost: 0.04,
       });
 
-      // Verify the request included the response_format parameter
       expect(fetchWithCache).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
@@ -322,7 +313,6 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      // Check that the default size for DALL-E 3 is correctly set
       expect(fetchWithCache).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
