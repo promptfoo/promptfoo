@@ -309,3 +309,5 @@ export default class EvalResult {
     };
   }
 }
+
+export { sanitizeProvider };
