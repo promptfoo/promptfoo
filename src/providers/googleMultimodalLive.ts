@@ -123,7 +123,7 @@ interface CompletionOptions {
    * these function tools.
    */
   functionToolCallbacks?: Record<string, (arg: string) => Promise<any>>;
-  functionToolStatefulApiFile?: {
+  functionToolStatefulApi?: {
     url: string;
     file?: string;
   };
@@ -202,10 +202,10 @@ export class GoogleMMLiveProvider implements ApiProvider {
     }
     let contentIndex = 0;
 
-    let functionToolStatefulApi: ChildProcess;
-    if (this.config.functionToolStatefulApiFile?.file) {
+    let statefulApi: ChildProcess;
+    if (this.config.functionToolStatefulApi?.file) {
       logger.debug('Api is spawning...');
-      functionToolStatefulApi = spawn('python3', [this.config.functionToolStatefulApiFile.file]);
+      statefulApi = spawn('python3', [this.config.functionToolStatefulApi.file]);
     }
 
     return new Promise<ProviderResponse>((resolve) => {
@@ -269,9 +269,8 @@ export class GoogleMMLiveProvider implements ApiProvider {
                           : functionCall.args,
                       ),
                     );
-                  } else if (this.config.functionToolStatefulApiFile) {
-                    const url = new URL(functionName, this.config.functionToolStatefulApiFile.url)
-                      .href;
+                  } else if (this.config.functionToolStatefulApi) {
+                    const url = new URL(functionName, this.config.functionToolStatefulApi.url).href;
                     try {
                       const axiosResponse = await axios.get(url, functionCall.args || null);
                       callbackResponse = axiosResponse.data;
@@ -309,10 +308,9 @@ export class GoogleMMLiveProvider implements ApiProvider {
               ws.send(JSON.stringify(contentMessage));
             } else {
               let statefulApiState;
-              if (this.config.functionToolStatefulApiFile) {
+              if (this.config.functionToolStatefulApi) {
                 try {
-                  const url = new URL('get_state', this.config.functionToolStatefulApiFile.url)
-                    .href;
+                  const url = new URL('get_state', this.config.functionToolStatefulApi.url).href;
                   const apiResponse = await axios.get(url);
                   statefulApiState = apiResponse.data;
                   logger.debug(`Stateful api state: ${JSON.stringify(statefulApiState)}`);
@@ -345,8 +343,8 @@ export class GoogleMMLiveProvider implements ApiProvider {
       };
 
       ws.onclose = (event) => {
-        if (functionToolStatefulApi && !functionToolStatefulApi.killed) {
-          functionToolStatefulApi.kill('SIGTERM');
+        if (statefulApi && !statefulApi.killed) {
+          statefulApi.kill('SIGTERM');
           logger.debug('Python process shutdown.');
         }
         clearTimeout(timeout);

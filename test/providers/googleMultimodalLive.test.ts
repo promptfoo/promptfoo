@@ -1,11 +1,22 @@
 import axios from 'axios';
-import { spawn } from 'child_process';
 import WebSocket from 'ws';
 import { GoogleMMLiveProvider } from '../../src/providers/googleMultimodalLive';
 
 jest.mock('ws');
-jest.mock('child_process');
 jest.mock('axios');
+jest.mock('child_process', () => ({
+  spawn: jest.fn(() => ({
+    stdout: { on: jest.fn() },
+    stderr: { on: jest.fn() },
+    on: jest.fn((event, callback) => {
+      if (event === 'close') {
+        setTimeout(callback, 100);
+      }
+    }),
+    kill: jest.fn(),
+    killed: false,
+  })),
+}));
 
 const simulateMessage = (mockWs: jest.Mocked<WebSocket>, simulated_data: any) => {
   setTimeout(() => {
@@ -532,7 +543,7 @@ describe('GoogleMMLiveProvider', () => {
         },
         timeoutMs: 500,
         apiKey: 'test-api-key',
-        functionToolStatefulApiFile: {
+        functionToolStatefulApi: {
           file: 'examples/google-multimodal-live/counter_api.py',
           url: 'http://127.0.0.1:5000',
         },
