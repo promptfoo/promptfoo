@@ -23,7 +23,7 @@ def get_state():
     return flask.jsonify({"counter": counter})
 
 
-# If you want the app to be cleaned up properly it must include this method
+# If you want the app to be cleaned up it must include this method
 @app.route("/shutdown", methods=["POST"])
 def shutdown():
     func = flask.request.environ.get("werkzeug.server.shutdown")
