@@ -21,15 +21,7 @@ providers:
       temperature: 0.7
       max_tokens: 200
       top_p: 0.9
-      top_k: 50
-      region: us-east-1
-  - id: bedrock:mistral.mistral-large-2407-v1:0
-    config:
-      temperature: 0.7
-      max_tokens: 200
-      top_p: 0.9
-      top_k: 50
-      region: us-east-1
+      region: us-west-2
   - id: bedrock:mistral.mixtral-8x7b-instruct-v0:1
     config:
       temperature: 0.7
