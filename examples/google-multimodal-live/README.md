@@ -97,7 +97,7 @@ promptfoo eval -c promptfooconfig.statefulapi.yaml -j 3
 
 ### 4. Function Calling Over a Spawned Stateful API
 
-- Promptfoo spawns a statefull api that can be intereacted with.
+- Promptfoo spawns a stateful API that can be interacted with.
 - Must have local python3 and the api must be implemented as a python script.
 
 ## Configuration Details

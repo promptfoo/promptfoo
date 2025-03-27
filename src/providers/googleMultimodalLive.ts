@@ -202,7 +202,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
     }
     let contentIndex = 0;
 
-    let statefulApi: ChildProcess;
+    let statefulApi: ChildProcess | undefined;
     if (this.config.functionToolStatefulApi?.file) {
       logger.debug('Api is spawning...');
       statefulApi = spawn('python3', [this.config.functionToolStatefulApi.file]);
@@ -272,7 +272,9 @@ export class GoogleMMLiveProvider implements ApiProvider {
                   } else if (this.config.functionToolStatefulApi) {
                     const url = new URL(functionName, this.config.functionToolStatefulApi.url).href;
                     try {
-                      const axiosResponse = await axios.get(url, functionCall.args || null);
+                      const axiosResponse = await axios.get(url, {
+                        params: functionCall.args || null,
+                      });
                       callbackResponse = axiosResponse.data;
                     } catch {
                       const axiosResponse = await axios.post(url, functionCall.args || null);

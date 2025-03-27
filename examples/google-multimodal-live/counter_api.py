@@ -9,7 +9,7 @@ counter = 3
 def add_one():
     global counter
     counter += 1
-    return {}
+    return flask.jsonify({})
 
 
 @app.route("/get_count", methods=["GET"])
