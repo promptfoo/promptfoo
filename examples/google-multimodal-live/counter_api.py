@@ -26,9 +26,7 @@ def get_state():
 def shutdown():
     func = flask.request.environ.get("werkzeug.server.shutdown")
     if func is None:
-        return flask.jsonify(
-            {"message": "Error: not running with the Werkzeug Server"}
-        )
+        return flask.jsonify({"message": "Error: not running with the Werkzeug Server"})
     func()
     return flask.jsonify({"message": "Server shutting down..."})
 
