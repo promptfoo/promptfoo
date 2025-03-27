@@ -18,7 +18,7 @@ export const handleContextRecall = async ({
     ...(await matchesContextRecall(
       typeof test.vars?.context === 'string' ? test.vars.context : prompt,
       renderedValue,
-      assertion.threshold || 0,
+      assertion.threshold ?? 0,
       test.options,
       test.vars,
     )),

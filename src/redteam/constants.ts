@@ -582,9 +582,8 @@ export const ADDITIONAL_STRATEGIES = [
 ] as const;
 export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
 
-export const ALL_STRATEGIES = [
-  ...['default', ...DEFAULT_STRATEGIES, ...ADDITIONAL_STRATEGIES].sort(),
-] as const;
+const _ALL_STRATEGIES = ['default', ...DEFAULT_STRATEGIES, ...ADDITIONAL_STRATEGIES] as const;
+export const ALL_STRATEGIES = [..._ALL_STRATEGIES].sort();
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
@@ -677,6 +676,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
   'reasoning-dos':
     'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
+  audio: 'Tests handling of audio content',
+  image: 'Tests handling of image content',
 };
 
 // These names are displayed in risk cards and in the table
@@ -766,6 +767,8 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   ssrf: 'SSRF Vulnerability',
   'system-prompt-override': 'System Prompt Override',
   'reasoning-dos': 'Reasoning DoS',
+  audio: 'Audio Content',
+  image: 'Image Content',
 };
 
 export enum Severity {
