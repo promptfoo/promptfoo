@@ -183,27 +183,27 @@ export async function runEval({
         concurrency,
       );
     } else {
-      response = await ((test.provider as ApiProvider) || provider).callApi(
-        renderedPrompt,
-        {
-          // Always included
-          vars,
+      const activeProvider = (test.provider as ApiProvider) || provider;
+      logger.debug(`Provider type: ${activeProvider.id()}`);
 
-          // Part of these may be removed in python and script providers, but every Javascript provider gets them
-          prompt,
-          filters,
-          originalProvider: provider,
-          test,
+      response = await activeProvider.callApi(renderedPrompt, {
+        // Always included
+        vars,
 
-          // All of these are removed in python and script providers, but every Javascript provider gets them
-          logger: logger as winston.Logger,
-          fetchWithCache,
-          getCache,
-        },
-        {
-          includeLogProbs: test.assert?.some((a) => a.type === 'perplexity'),
-        },
-      );
+        // Part of these may be removed in python and script providers, but every Javascript provider gets them
+        prompt,
+        filters,
+        originalProvider: provider,
+        test,
+
+        // All of these are removed in python and script providers, but every Javascript provider gets them
+        logger: logger as winston.Logger,
+        fetchWithCache,
+        getCache,
+      });
+
+      logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
+      logger.debug(`Provider response cached property explicitly: ${response.cached}`);
     }
     const endTime = Date.now();
     latencyMs = endTime - startTime;
@@ -223,9 +223,16 @@ export async function runEval({
       });
     }
 
+    logger.debug(`Evaluator response = ${JSON.stringify(response).substring(0, 100)}...`);
+    logger.debug(
+      `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
+    );
+
     if (!response.cached && provider.delay > 0) {
       logger.debug(`Sleeping for ${provider.delay}ms`);
       await sleep(provider.delay);
+    } else if (response.cached) {
+      logger.debug(`Skipping delay because response is cached`);
     }
 
     const ret: EvaluateResult = {
