@@ -7,13 +7,14 @@ import { getCache, isCacheEnabled } from '../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
   ProviderEmbeddingResponse,
   ProviderResponse,
-} from '../types';
-import type { EnvOverrides } from '../types/env';
+} from '../types/providers';
+import type { TokenUsage } from '../types/shared';
 import { maybeLoadFromExternalFile } from '../util';
 import { outputFromMessage, parseMessages } from './anthropic/util';
 import { novaOutputFromMessage, novaParseMessages } from './bedrockUtil';
@@ -241,8 +242,9 @@ export interface BedrockDeepseekGenerationOptions extends BedrockOptions {
   stop?: string[];
 }
 interface IBedrockModel {
-  params: (config: BedrockOptions, prompt: string, stop: string[]) => any;
+  params: (config: BedrockOptions, prompt: string, stop: string[], modelName?: string) => any;
   output: (config: BedrockOptions, responseJson: any) => any;
+  tokenUsage?: (responseJson: any, promptText: string) => TokenUsage;
 }
 
 export function parseValue(value: string | number, defaultValue: any) {
@@ -353,7 +355,12 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
   }
 
   return {
-    params: (config: BedrockLlamaGenerationOptions, prompt: string) => {
+    params: (
+      config: BedrockLlamaGenerationOptions,
+      prompt: string,
+      stop?: string[],
+      modelName?: string,
+    ) => {
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
       let finalPrompt: string;
@@ -392,12 +399,49 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
       return params;
     },
     output: (config: BedrockOptions, responseJson: any) => responseJson?.generation,
+    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
+      // Check for standard usage format
+      if (responseJson?.usage) {
+        return {
+          prompt: responseJson.usage.prompt_tokens,
+          completion: responseJson.usage.completion_tokens,
+          total: responseJson.usage.total_tokens,
+          numRequests: 1,
+        };
+      }
+
+      // Check for Llama-specific token count fields
+      const promptTokens = responseJson?.prompt_token_count;
+      const completionTokens = responseJson?.generation_token_count;
+
+      if (promptTokens !== undefined && completionTokens !== undefined) {
+        return {
+          prompt: promptTokens,
+          completion: completionTokens,
+          total: promptTokens + completionTokens,
+          numRequests: 1,
+        };
+      }
+
+      // Return undefined values when token counts aren't provided by the API
+      return {
+        prompt: undefined,
+        completion: undefined,
+        total: undefined,
+        numRequests: 1,
+      };
+    },
   };
 };
 
 export const BEDROCK_MODEL = {
   AI21: {
-    params: (config: BedrockAI21GenerationOptions, prompt: string) => {
+    params: (
+      config: BedrockAI21GenerationOptions,
+      prompt: string,
+      stop?: string[],
+      modelName?: string,
+    ) => {
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
       const params: any = {
         messages,
@@ -438,9 +482,32 @@ export const BEDROCK_MODEL = {
       }
       return responseJson.choices?.[0]?.message?.content;
     },
+    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
+      if (responseJson?.usage) {
+        return {
+          prompt: responseJson.usage.prompt_tokens,
+          completion: responseJson.usage.completion_tokens,
+          total: responseJson.usage.total_tokens,
+          numRequests: 1,
+        };
+      }
+
+      // Return undefined values when token counts aren't provided by the API
+      return {
+        prompt: undefined,
+        completion: undefined,
+        total: undefined,
+        numRequests: 1,
+      };
+    },
   },
   AMAZON_NOVA: {
-    params: (config: BedrockAmazonNovaGenerationOptions, prompt: string) => {
+    params: (
+      config: BedrockAmazonNovaGenerationOptions,
+      prompt: string,
+      stop?: string[],
+      modelName?: string,
+    ) => {
       let messages;
       let systemPrompt;
       try {
@@ -498,9 +565,32 @@ export const BEDROCK_MODEL = {
       return params;
     },
     output: (config: BedrockOptions, responseJson: any) => novaOutputFromMessage(responseJson),
+    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
+      const usage = responseJson?.usage;
+      if (!usage) {
+        return {
+          prompt: undefined,
+          completion: undefined,
+          total: undefined,
+          numRequests: 1,
+        };
+      }
+
+      return {
+        prompt: usage.inputTokens,
+        completion: usage.outputTokens,
+        total: usage.totalTokens,
+        numRequests: 1,
+      };
+    },
   },
   CLAUDE_COMPLETION: {
-    params: (config: BedrockClaudeLegacyCompletionOptions, prompt: string, stop: string[]) => {
+    params: (
+      config: BedrockClaudeLegacyCompletionOptions,
+      prompt: string,
+      stop: string[],
+      modelName?: string,
+    ) => {
       const params: any = {
         prompt: `${Anthropic.HUMAN_PROMPT} ${prompt} ${Anthropic.AI_PROMPT}`,
         stop_sequences: stop,
@@ -522,9 +612,37 @@ export const BEDROCK_MODEL = {
       return params;
     },
     output: (config: BedrockOptions, responseJson: any) => responseJson?.completion,
+    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
+      if (!responseJson?.usage) {
+        return {
+          prompt: undefined,
+          completion: undefined,
+          total: undefined,
+          numRequests: 1,
+        };
+      }
+
+      const usage = responseJson.usage;
+
+      return {
+        prompt: usage.input_tokens || usage.prompt_tokens,
+        completion: usage.output_tokens || usage.completion_tokens,
+        total:
+          usage.totalTokens ||
+          usage.total_tokens ||
+          (usage.input_tokens || usage.prompt_tokens) +
+            (usage.output_tokens || usage.completion_tokens),
+        numRequests: 1,
+      };
+    },
   },
   CLAUDE_MESSAGES: {
-    params: (config: BedrockClaudeMessagesCompletionOptions, prompt: string) => {
+    params: (
+      config: BedrockClaudeMessagesCompletionOptions,
+      prompt: string,
+      stop?: string[],
+      modelName?: string,
+    ) => {
       let messages;
       let systemPrompt;
       try {
@@ -610,9 +728,37 @@ export const BEDROCK_MODEL = {
     output: (config: BedrockClaudeMessagesCompletionOptions, responseJson: any) => {
       return outputFromMessage(responseJson, config?.showThinking ?? true);
     },
+    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
+      if (!responseJson?.usage) {
+        return {
+          prompt: undefined,
+          completion: undefined,
+          total: undefined,
+          numRequests: 1,
+        };
+      }
+
+      const usage = responseJson.usage;
+
+      return {
+        prompt: usage.input_tokens || usage.prompt_tokens,
+        completion: usage.output_tokens || usage.completion_tokens,
+        total:
+          usage.totalTokens ||
+          usage.total_tokens ||
+          (usage.input_tokens || usage.prompt_tokens) +
+            (usage.output_tokens || usage.completion_tokens),
+        numRequests: 1,
+      };
+    },
   },
   TITAN_TEXT: {
-    params: (config: BedrockTextGenerationOptions, prompt: string, stop: string[]) => {
+    params: (
+      config: BedrockTextGenerationOptions,
+      prompt: string,
+      stop?: string[],
+      modelName?: string,
+    ) => {
       const textGenerationConfig: any = {};
       addConfigParam(
         textGenerationConfig,
@@ -645,6 +791,25 @@ export const BEDROCK_MODEL = {
       return { inputText: prompt, textGenerationConfig };
     },
     output: (config: BedrockOptions, responseJson: any) => responseJson?.results[0]?.outputText,
+    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
+      // If token usage is provided by the API, use it
+      if (responseJson?.usage) {
+        return {
+          prompt: responseJson.usage.prompt_tokens,
+          completion: responseJson.usage.completion_tokens,
+          total: responseJson.usage.total_tokens,
+          numRequests: 1,
+        };
+      }
+
+      // Return undefined values when token counts aren't provided by the API
+      return {
+        prompt: undefined,
+        completion: undefined,
+        total: undefined,
+        numRequests: 1,
+      };
+    },
   },
   LLAMA2: getLlamaModelHandler(LlamaVersion.V2),
   LLAMA3: getLlamaModelHandler(LlamaVersion.V3),
@@ -652,7 +817,12 @@ export const BEDROCK_MODEL = {
   LLAMA3_2: getLlamaModelHandler(LlamaVersion.V3_2),
   LLAMA3_3: getLlamaModelHandler(LlamaVersion.V3_3),
   COHERE_COMMAND: {
-    params: (config: BedrockCohereCommandGenerationOptions, prompt: string, stop: string[]) => {
+    params: (
+      config: BedrockCohereCommandGenerationOptions,
+      prompt: string,
+      stop?: string[],
+      modelName?: string,
+    ) => {
       const params: any = { prompt };
       addConfigParam(
         params,
@@ -679,9 +849,34 @@ export const BEDROCK_MODEL = {
       return params;
     },
     output: (config: BedrockOptions, responseJson: any) => responseJson?.generations[0]?.text,
+    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
+      if (responseJson?.meta?.billed_units) {
+        return {
+          prompt: responseJson.meta.billed_units.input_tokens,
+          completion: responseJson.meta.billed_units.output_tokens,
+          total:
+            responseJson.meta.billed_units.input_tokens +
+            responseJson.meta.billed_units.output_tokens,
+          numRequests: 1,
+        };
+      }
+
+      // Return undefined values when token counts aren't provided by the API
+      return {
+        prompt: undefined,
+        completion: undefined,
+        total: undefined,
+        numRequests: 1,
+      };
+    },
   },
   COHERE_COMMAND_R: {
-    params: (config: BedrockCohereCommandRGenerationOptions, prompt: string, stop: string[]) => {
+    params: (
+      config: BedrockCohereCommandRGenerationOptions,
+      prompt: string,
+      stop?: string[],
+      modelName?: string,
+    ) => {
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
       const lastMessage = messages[messages.length - 1].content;
       if (!messages.every((m) => typeof m.content === 'string')) {
@@ -713,32 +908,34 @@ export const BEDROCK_MODEL = {
       return params;
     },
     output: (config: BedrockOptions, responseJson: any) => responseJson?.text,
-  },
-  MISTRAL: {
-    params: (config: BedrockMistralGenerationOptions, prompt: string, stop: string[]) => {
-      const params: any = { prompt, stop };
-      addConfigParam(
-        params,
-        'max_tokens',
-        config?.max_tokens,
-        getEnvInt('MISTRAL_MAX_TOKENS'),
-        1024,
-      );
-      addConfigParam(
-        params,
-        'temperature',
-        config?.temperature,
-        getEnvFloat('MISTRAL_TEMPERATURE'),
-        0,
-      );
-      addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('MISTRAL_TOP_P'), 1);
-      addConfigParam(params, 'top_k', config?.top_k, getEnvFloat('MISTRAL_TOP_K'), 0);
-      return params;
+    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
+      if (responseJson?.meta?.billed_units) {
+        return {
+          prompt: responseJson.meta.billed_units.input_tokens,
+          completion: responseJson.meta.billed_units.output_tokens,
+          total:
+            responseJson.meta.billed_units.input_tokens +
+            responseJson.meta.billed_units.output_tokens,
+          numRequests: 1,
+        };
+      }
+
+      // Return undefined values when token counts aren't provided by the API
+      return {
+        prompt: undefined,
+        completion: undefined,
+        total: undefined,
+        numRequests: 1,
+      };
     },
-    output: (config: BedrockOptions, responseJson: any) => responseJson?.outputs[0]?.text,
   },
   DEEPSEEK: {
-    params: (config: BedrockDeepseekGenerationOptions, prompt: string) => {
+    params: (
+      config: BedrockDeepseekGenerationOptions,
+      prompt: string,
+      stop?: string[],
+      modelName?: string,
+    ) => {
       const wrappedPrompt = `
 ${prompt}
 <think>\n`;
@@ -786,6 +983,162 @@ ${prompt}
 
       return undefined;
     },
+    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
+      if (responseJson?.usage) {
+        return {
+          prompt: responseJson.usage.prompt_tokens,
+          completion: responseJson.usage.completion_tokens,
+          total: responseJson.usage.total_tokens,
+          numRequests: 1,
+        };
+      }
+
+      // Return undefined values when token counts aren't provided by the API
+      return {
+        prompt: undefined,
+        completion: undefined,
+        total: undefined,
+        numRequests: 1,
+      };
+    },
+  },
+  MISTRAL: {
+    params: (
+      config: BedrockMistralGenerationOptions,
+      prompt: string,
+      stop: string[],
+      modelName?: string,
+    ) => {
+      const params: any = { prompt, stop };
+      addConfigParam(
+        params,
+        'max_tokens',
+        config?.max_tokens,
+        getEnvInt('MISTRAL_MAX_TOKENS'),
+        1024,
+      );
+      addConfigParam(
+        params,
+        'temperature',
+        config?.temperature,
+        getEnvFloat('MISTRAL_TEMPERATURE'),
+        0,
+      );
+      addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('MISTRAL_TOP_P'), 1);
+      addConfigParam(params, 'top_k', config?.top_k, getEnvFloat('MISTRAL_TOP_K'), 0);
+
+      return params;
+    },
+    output: (config: BedrockOptions, responseJson: any) => {
+      if (!responseJson?.outputs || !Array.isArray(responseJson.outputs)) {
+        return undefined;
+      }
+      return responseJson.outputs[0]?.text;
+    },
+    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
+      if (responseJson?.usage) {
+        return {
+          prompt: responseJson.usage.prompt_tokens,
+          completion: responseJson.usage.completion_tokens,
+          total: responseJson.usage.total_tokens,
+          numRequests: 1,
+        };
+      }
+
+      // Some models may return token information at the root level
+      if (
+        responseJson?.prompt_tokens !== undefined &&
+        responseJson?.completion_tokens !== undefined
+      ) {
+        return {
+          prompt: responseJson.prompt_tokens,
+          completion: responseJson.completion_tokens,
+          total:
+            responseJson.total_tokens ||
+            responseJson.prompt_tokens + responseJson.completion_tokens,
+          numRequests: 1,
+        };
+      }
+
+      // Return undefined values when token counts aren't provided by the API
+      return {
+        prompt: undefined,
+        completion: undefined,
+        total: undefined,
+        numRequests: 1,
+      };
+    },
+  },
+  MISTRAL_LARGE_2407: {
+    params: (
+      config: BedrockMistralGenerationOptions,
+      prompt: string,
+      stop: string[],
+      modelName?: string,
+    ) => {
+      const params: any = { prompt, stop };
+      addConfigParam(
+        params,
+        'max_tokens',
+        config?.max_tokens,
+        getEnvInt('MISTRAL_MAX_TOKENS'),
+        1024,
+      );
+      addConfigParam(
+        params,
+        'temperature',
+        config?.temperature,
+        getEnvFloat('MISTRAL_TEMPERATURE'),
+        0,
+      );
+      addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('MISTRAL_TOP_P'), 1);
+      // Note: mistral.mistral-large-2407-v1:0 doesn't support top_k parameter
+
+      return params;
+    },
+    output: (config: BedrockOptions, responseJson: any) => {
+      if (responseJson?.choices && Array.isArray(responseJson.choices)) {
+        return responseJson.choices[0]?.message?.content;
+      }
+      return undefined;
+    },
+    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
+      // Chat completion format (used by mistral-large-2407-v1:0)
+      if (
+        responseJson?.prompt_tokens !== undefined &&
+        responseJson?.completion_tokens !== undefined
+      ) {
+        return {
+          prompt: responseJson.prompt_tokens,
+          completion: responseJson.completion_tokens,
+          total: responseJson.prompt_tokens + responseJson.completion_tokens,
+          numRequests: 1,
+        };
+      }
+
+      // Handle usage object format
+      if (
+        responseJson?.usage?.prompt_tokens !== undefined &&
+        responseJson?.usage?.completion_tokens !== undefined
+      ) {
+        return {
+          prompt: responseJson.usage.prompt_tokens,
+          completion: responseJson.usage.completion_tokens,
+          total:
+            responseJson.usage.total_tokens ||
+            responseJson.usage.prompt_tokens + responseJson.usage.completion_tokens,
+          numRequests: 1,
+        };
+      }
+
+      // Return undefined values when token counts aren't provided by the API
+      return {
+        prompt: undefined,
+        completion: undefined,
+        total: undefined,
+        numRequests: 1,
+      };
+    },
   },
 };
 
@@ -824,6 +1177,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'meta.llama3-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
   'mistral.mistral-7b-instruct-v0:2': BEDROCK_MODEL.MISTRAL,
   'mistral.mistral-large-2402-v1:0': BEDROCK_MODEL.MISTRAL,
+  'mistral.mistral-large-2407-v1:0': BEDROCK_MODEL.MISTRAL_LARGE_2407,
   'mistral.mistral-small-2402-v1:0': BEDROCK_MODEL.MISTRAL,
   'mistral.mixtral-8x7b-instruct-v0:1': BEDROCK_MODEL.MISTRAL,
 
@@ -1030,7 +1384,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       );
       model = BEDROCK_MODEL.CLAUDE_MESSAGES;
     }
-    const params = model.params(this.config, prompt, stop);
+    const params = model.params(this.config, prompt, stop, this.modelName);
 
     logger.debug(`Calling Amazon Bedrock API: ${JSON.stringify(params)}`);
 
@@ -1082,13 +1436,66 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
     try {
       const output = JSON.parse(new TextDecoder().decode(response.body));
 
+      let tokenUsage: Partial<TokenUsage> = {};
+      if (model.tokenUsage) {
+        tokenUsage = model.tokenUsage(output, prompt);
+        logger.debug(`Token usage from model handler: ${JSON.stringify(tokenUsage)}`);
+      } else {
+        // Try to extract token usage from various API response formats
+        logger.debug(`Extracting token usage from API response for ${this.modelName}`);
+
+        const promptTokens =
+          output.usage?.inputTokens ??
+          output.usage?.prompt_tokens ??
+          output.usage?.input_tokens ??
+          output.prompt_tokens ??
+          output.prompt_token_count;
+
+        const completionTokens =
+          output.usage?.outputTokens ??
+          output.usage?.completion_tokens ??
+          output.usage?.output_tokens ??
+          output.completion_tokens ??
+          output.generation_token_count;
+
+        const totalTokens =
+          output.usage?.totalTokens ??
+          output.usage?.total_tokens ??
+          output.total_tokens ??
+          (promptTokens !== undefined && completionTokens !== undefined
+            ? promptTokens + completionTokens
+            : undefined);
+
+        // For models that don't provide token counts, we set numRequests to at least track usage
+        tokenUsage = {
+          total: totalTokens,
+          prompt: promptTokens,
+          completion: completionTokens,
+          numRequests: 1,
+        };
+
+        // If we couldn't extract any token counts but have a response, track usage for metrics
+        if (
+          tokenUsage.prompt === undefined &&
+          tokenUsage.completion === undefined &&
+          tokenUsage.total === undefined &&
+          output
+        ) {
+          logger.debug(
+            `No explicit token counts found for ${this.modelName}, tracking request count only`,
+          );
+        } else {
+          logger.debug(`Extracted token usage: ${JSON.stringify(tokenUsage)}`);
+        }
+      }
+
+      if (!tokenUsage.numRequests) {
+        tokenUsage.numRequests = 1;
+      }
+
       return {
         output: model.output(this.config, output),
-        tokenUsage: {
-          total: output.total_tokens ?? output.prompt_token_count + output.generation_token_count,
-          prompt: output.prompt_tokens ?? output.prompt_token_count,
-          completion: output.completion_tokens ?? output.generation_token_count,
-        },
+        tokenUsage,
         ...(output['amazon-bedrock-guardrailAction']
           ? {
               guardrails: {
