@@ -16,13 +16,13 @@ providers:
 For example, to use gpt-4o:
 
 ```yaml
-  - id: litellm:gpt-4o
+- id: litellm:gpt-4o
 ```
 
 Or to use Anthropic's Claude:
 
 ```yaml
-  - id: litellm:claude-3-5-sonnet-20240620
+- id: litellm:claude-3-5-sonnet-20240620
 ```
 
 By default, the provider will connect to `http://0.0.0.0:4000`. You can customize the API base URL:
