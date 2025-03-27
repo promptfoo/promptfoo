@@ -69,7 +69,7 @@ Additionally ensure required python packages are installed e.g. flask
 python3 -m pip install flask
 ```
 
-The stateful API configuration in `promptfooconfig.statefulapi.yaml` demonstrates a functioncalling interaction with a stateful API:
+The stateful API configuration in `promptfooconfig.statefulapi.yaml` demonstrates a function calling interaction with a stateful API:
 
 ```bash
 promptfoo eval -c promptfooconfig.statefulapi.yaml -j 3
