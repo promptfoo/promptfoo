@@ -1,5 +1,5 @@
 import { runDbMigrations } from '../../src/migrate';
-import EvalResult from '../../src/models/evalResult';
+import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
 import {
   ResultFailureReason,
@@ -7,6 +7,7 @@ import {
   type EvaluateResult,
   type Prompt,
   type ProviderOptions,
+  type ApiProvider,
 } from '../../src/types';
 
 describe('EvalResult', () => {
@@ -48,6 +49,60 @@ describe('EvalResult', () => {
     namedScores: {},
     response: undefined,
   };
+
+  describe('sanitizeProvider', () => {
+    it('should handle ApiProvider objects', () => {
+      const apiProvider: ApiProvider = {
+        id: () => 'test-provider',
+        label: 'Test Provider',
+        callApi: async () => ({ output: 'test' }),
+        config: {
+          apiKey: 'test-key',
+        },
+      };
+
+      const result = sanitizeProvider(apiProvider);
+      expect(result).toEqual({
+        id: 'test-provider',
+        label: 'Test Provider',
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+    });
+
+    it('should handle ProviderOptions objects', () => {
+      const providerOptions: ProviderOptions = {
+        id: 'test-provider',
+        label: 'Test Provider',
+        config: {
+          apiKey: 'test-key',
+        },
+      };
+
+      const result = sanitizeProvider(providerOptions);
+      expect(result).toEqual(providerOptions);
+    });
+
+    it('should handle generic objects with id function', () => {
+      const provider = {
+        id: () => 'test-provider',
+        label: 'Test Provider',
+        config: {
+          apiKey: 'test-key',
+        },
+      } as ApiProvider;
+
+      const result = sanitizeProvider(provider);
+      expect(result).toEqual({
+        id: 'test-provider',
+        label: 'Test Provider',
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+    });
+  });
 
   describe('createFromEvaluateResult', () => {
     it('should create and persist an EvalResult', async () => {
