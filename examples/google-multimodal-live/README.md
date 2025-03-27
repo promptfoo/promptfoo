@@ -53,6 +53,22 @@ After running any evaluation, you can view the results by running:
 promptfoo view
 ```
 
+### Stateful API Example
+
+Ensure that python3 is installed and in your PATH. I.e. when you run:
+
+```bash
+which python3
+```
+
+it returns a python3 version.
+
+The stateful API configuration in `promptfooconfig.statefulapi.yaml` demonstrates a functioncalling interaction with a stateful API:
+
+```bash
+promptfoo eval -c promptfooconfig.statefulapi.yaml -j 3
+```
+
 ## What This Example Demonstrates
 
 ### 1. Basic Query
@@ -72,6 +88,11 @@ promptfoo view
 - Built-in Google Search integration
 - Built-in code execution capabilities
 - Assertions on function calling behavior
+
+### 4. Function Calling Over a Spawned Stateful API
+
+- Promptfoo spawns a statefull api that can be intereacted with.
+- Must have local python3 and the api must be implemented as a python script.
 
 ## Configuration Details
 
