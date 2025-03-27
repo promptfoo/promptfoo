@@ -1,0 +1,105 @@
+/* Custom pagination styles to override Docusaurus defaults */
+
+/* Container for pagination */
+.pagination-nav {
+  margin-top: 3.5rem;
+  display: flex;
+  justify-content: center;
+}
+
+/* Base style for pagination items */
+.pagination-nav__item {
+  margin: 0 0.5rem;
+}
+
+/* Reset some default styles */
+.pagination-nav__link {
+  border: 1px solid var(--ifm-color-emphasis-300);
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 1.25rem;
+  border-radius: 8px;
+  background-color: transparent;
+  color: var(--ifm-color-primary);
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+/* Hover effect */
+.pagination-nav__link:hover {
+  background-color: var(--ifm-color-emphasis-100);
+  color: var(--ifm-color-primary-dark);
+  text-decoration: none;
+  border-color: var(--ifm-color-primary-light);
+}
+
+/* Active/pressed effect */
+.pagination-nav__link:active {
+  background-color: var(--ifm-color-emphasis-200);
+}
+
+/* Next button specific styling */
+.pagination-nav__link--next {
+  flex-direction: row;
+  justify-content: flex-end;
+}
+
+/* Previous button specific styling */
+.pagination-nav__link--prev {
+  flex-direction: row-reverse;
+  justify-content: flex-end;
+}
+
+/* Label style */
+.pagination-nav__label {
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+/* Sublabel style - make it less prominent */
+.pagination-nav__sublabel {
+  font-size: 0.75rem;
+  margin-bottom: 0.25rem;
+  color: var(--ifm-color-secondary-darkest);
+}
+
+/* Ensure proper spacing between icon and text */
+.pagination-nav__link--next .pagination-nav__label {
+  margin-right: 0.5rem;
+}
+
+.pagination-nav__link--prev .pagination-nav__label {
+  margin-left: 0.5rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .pagination-nav {
+    margin-top: 2.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .pagination-nav__link {
+    padding: 0.6rem 1rem;
+  }
+
+  .pagination-nav__label {
+    font-size: 0.9rem;
+  }
+
+  /* Make buttons more compact on mobile */
+  .pagination-nav__item {
+    flex: 1;
+    margin: 0 0.25rem;
+  }
+}
+
+/* Dark mode adjustments */
+[data-theme='dark'] .pagination-nav__link {
+  border-color: var(--ifm-color-emphasis-300);
+}
+
+[data-theme='dark'] .pagination-nav__link:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-color: var(--ifm-color-primary-lighter);
+}
