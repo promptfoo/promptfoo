@@ -17,11 +17,13 @@ def get_count():
     return flask.jsonify({"counter": counter})
 
 
+# If you want to assert on the final state the app must include this method
 @app.route("/get_state", methods=["GET"])
 def get_state():
     return flask.jsonify({"counter": counter})
 
 
+# If you want the app to be cleaned up properly it must include this method
 @app.route("/shutdown", methods=["POST"])
 def shutdown():
     func = flask.request.environ.get("werkzeug.server.shutdown")
