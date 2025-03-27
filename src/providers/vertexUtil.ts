@@ -65,6 +65,8 @@ export interface GeminiErrorResponse {
 export interface GeminiResponseData {
   candidates: Candidate[];
   usageMetadata?: GeminiUsageMetadata;
+  modelVersion?: string;
+  responseId?: string;
 }
 
 interface GeminiPromptFeedback {
