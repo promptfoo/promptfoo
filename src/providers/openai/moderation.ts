@@ -182,7 +182,7 @@ export class OpenAiModerationProvider
     assistantResponse: string | (TextInput | ImageInput)[],
   ): Promise<ProviderModerationResponse> {
     const apiKey = this.getApiKey();
-    if (!apiKey) {
+    if (this.requiresApiKey() && !apiKey) {
       return handleApiError(
         'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
       );
@@ -213,7 +213,7 @@ export class OpenAiModerationProvider
 
     const headers = {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
+      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
       ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
       ...this.config.headers,
     };

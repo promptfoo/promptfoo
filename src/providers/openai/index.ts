@@ -75,6 +75,10 @@ export class OpenAiGenericProvider implements ApiProvider {
     );
   }
 
+  requiresApiKey(): boolean {
+    return this.config.apiKeyRequired ?? true;
+  }
+
   // @ts-ignore: Params are not used in this implementation
   async callApi(
     prompt: string,
