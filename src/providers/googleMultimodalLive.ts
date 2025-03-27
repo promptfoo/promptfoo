@@ -257,11 +257,11 @@ export class GoogleMMLiveProvider implements ApiProvider {
 
                 // Handle function tool callbacks
                 const functionName = functionCall.name;
-                if (
-                  this.config.functionToolCallbacks &&
-                  this.config.functionToolCallbacks[functionName]
-                ) {
-                  try {
+                try {
+                  if (
+                    this.config.functionToolCallbacks &&
+                    this.config.functionToolCallbacks[functionName]
+                  ) {
                     callbackResponse = await this.config.functionToolCallbacks[functionName](
                       JSON.stringify(
                         typeof functionCall.args === 'string'
@@ -269,16 +269,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
                           : functionCall.args,
                       ),
                     );
-                  } catch (err) {
-                    callbackResponse = {
-                      error: `Error executing function ${functionName}: ${JSON.stringify(err)}`,
-                    };
-                    logger.error(
-                      `Error executing function ${functionName}: ${JSON.stringify(err)}`,
-                    );
-                  }
-                } else if (this.config.functionToolStatefulApiFile) {
-                  try {
+                  } else if (this.config.functionToolStatefulApiFile) {
                     const url = new URL(functionName, this.config.functionToolStatefulApiFile.url)
                       .href;
                     try {
@@ -289,14 +280,12 @@ export class GoogleMMLiveProvider implements ApiProvider {
                       callbackResponse = axiosResponse.data;
                     }
                     logger.debug(`Stateful api response: ${JSON.stringify(callbackResponse)}`);
-                  } catch (err) {
-                    callbackResponse = {
-                      error: `Error executing function ${functionName}: ${JSON.stringify(err)}`,
-                    };
-                    logger.error(
-                      `Error executing function ${functionName}: ${JSON.stringify(err)}`,
-                    );
                   }
+                } catch (err) {
+                  callbackResponse = {
+                    error: `Error executing function ${functionName}: ${JSON.stringify(err)}`,
+                  };
+                  logger.error(`Error executing function ${functionName}: ${JSON.stringify(err)}`);
                 }
 
                 const toolMessage = {
