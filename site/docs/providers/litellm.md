@@ -11,6 +11,7 @@ providers:
   - id: openai:chat:<model name>
     config:
       apiBaseUrl: http://0.0.0.0:4000/
+      apiKeyRequired: false
 ```
 
 For example, to use gpt-4o:
@@ -21,6 +22,7 @@ For example, to use gpt-4o:
   // highlight-end
     config:
       apiBaseUrl: http://0.0.0.0:4000/
+      apiKeyRequired: false
 ```
 
 Or to use Anthropic's Claude (remember, we're not actually using the OpenAI API, we're using LiteLLM which supports the OpenAI format):
@@ -31,6 +33,7 @@ Or to use Anthropic's Claude (remember, we're not actually using the OpenAI API,
   // highlight-end
     config:
       apiBaseUrl: http://0.0.0.0:4000/
+      apiKeyRequired: false
 ```
 
 Alternatively, you can use the `OPENAI_BASE_URL` environment variable instead of the `apiBaseUrl` config property:

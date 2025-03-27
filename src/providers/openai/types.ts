@@ -4,6 +4,7 @@ import { type OpenAiFunction, type OpenAiTool } from './util';
 export interface OpenAiSharedOptions {
   apiKey?: string;
   apiKeyEnvar?: string;
+  apiKeyRequired?: boolean;
   apiHost?: string;
   apiBaseUrl?: string;
   organization?: string;
