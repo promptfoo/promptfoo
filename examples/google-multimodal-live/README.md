@@ -63,6 +63,12 @@ which python3
 
 it returns a python3 version.
 
+Additionally install ensure required python packages are installed e.g.
+
+```bash
+python3 -m pip install flask
+```
+
 The stateful API configuration in `promptfooconfig.statefulapi.yaml` demonstrates a functioncalling interaction with a stateful API:
 
 ```bash

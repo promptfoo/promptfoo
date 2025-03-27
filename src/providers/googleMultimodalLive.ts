@@ -123,7 +123,10 @@ interface CompletionOptions {
    * these function tools.
    */
   functionToolCallbacks?: Record<string, (arg: string) => Promise<any>>;
-  functionToolStatefulApiFile?: string;
+  functionToolStatefulApiFile?: {
+    url: string;
+    file?: string;
+  };
 
   systemInstruction?: Content;
 }
@@ -200,9 +203,9 @@ export class GoogleMMLiveProvider implements ApiProvider {
     let contentIndex = 0;
 
     let functionToolStatefulApi: ChildProcess;
-    if (this.config.functionToolStatefulApiFile) {
+    if (this.config.functionToolStatefulApiFile?.file) {
       logger.debug('Api is spawning...');
-      functionToolStatefulApi = spawn('python3', [this.config.functionToolStatefulApiFile]);
+      functionToolStatefulApi = spawn('python3', [this.config.functionToolStatefulApiFile.file]);
     }
 
     return new Promise<ProviderResponse>((resolve) => {
@@ -276,17 +279,13 @@ export class GoogleMMLiveProvider implements ApiProvider {
                   }
                 } else if (this.config.functionToolStatefulApiFile) {
                   try {
+                    const url = new URL(functionName, this.config.functionToolStatefulApiFile.url)
+                      .href;
                     try {
-                      const axiosResponse = await axios.get(
-                        'http://127.0.0.1:5000/' + functionName,
-                        functionCall.args || null,
-                      );
+                      const axiosResponse = await axios.get(url, functionCall.args || null);
                       callbackResponse = axiosResponse.data;
                     } catch {
-                      const axiosResponse = await axios.post(
-                        'http://127.0.0.1:5000/' + functionName,
-                        functionCall.args || null,
-                      );
+                      const axiosResponse = await axios.post(url, functionCall.args || null);
                       callbackResponse = axiosResponse.data;
                     }
                     logger.debug(`Stateful api response: ${JSON.stringify(callbackResponse)}`);
@@ -322,9 +321,15 @@ export class GoogleMMLiveProvider implements ApiProvider {
             } else {
               let statefulApiState;
               if (this.config.functionToolStatefulApiFile) {
-                const apiResponse = await axios.get('http://127.0.0.1:5000/get_state');
-                statefulApiState = apiResponse.data;
-                logger.debug(`Stateful api state: ${JSON.stringify(statefulApiState)}`);
+                try {
+                  const url = new URL('get_state', this.config.functionToolStatefulApiFile.url)
+                    .href;
+                  const apiResponse = await axios.get(url);
+                  statefulApiState = apiResponse.data;
+                  logger.debug(`Stateful api state: ${JSON.stringify(statefulApiState)}`);
+                } catch (err) {
+                  logger.error(`Error retrieving final state of api: ${JSON.stringify(err)}`);
+                }
               }
               resolve({
                 output: JSON.stringify({
