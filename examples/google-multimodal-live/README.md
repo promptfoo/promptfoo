@@ -63,7 +63,7 @@ which python3
 
 it returns a python3 version.
 
-Additionally install ensure required python packages are installed e.g.
+Additionally ensure required python packages are installed e.g. flask
 
 ```bash
 python3 -m pip install flask
