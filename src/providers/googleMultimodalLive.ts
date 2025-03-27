@@ -276,16 +276,20 @@ export class GoogleMMLiveProvider implements ApiProvider {
                   }
                 } else if (this.config.functionToolStatefulApiFile) {
                   try {
-                    let callbackResponse;
-                    if (functionCall.args) {
-                      callbackResponse = await axios.post(
+                    try {
+                      const axiosResponse = await axios.get(
                         'http://127.0.0.1:5000/' + functionName,
-                        functionCall.args,
+                        functionCall.args || null,
                       );
-                    } else {
-                      callbackResponse = await axios.get('http://127.0.0.1:5000/' + functionName);
+                      callbackResponse = axiosResponse.data;
+                    } catch {
+                      const axiosResponse = await axios.post(
+                        'http://127.0.0.1:5000/' + functionName,
+                        functionCall.args || null,
+                      );
+                      callbackResponse = axiosResponse.data;
                     }
-                    logger.debug(`Stateful api response: ${JSON.stringify(callbackResponse.data)}`);
+                    logger.debug(`Stateful api response: ${JSON.stringify(callbackResponse)}`);
                   } catch (err) {
                     callbackResponse = {
                       error: `Error executing function ${functionName}: ${JSON.stringify(err)}`,

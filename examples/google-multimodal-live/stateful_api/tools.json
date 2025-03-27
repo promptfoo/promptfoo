@@ -1,0 +1,23 @@
+[
+  {
+    "functionDeclarations": [
+      {
+        "name": "add_one",
+        "description": "add one to counter"
+      },
+      {
+        "name": "get_count",
+        "description": "return the current value of the counter",
+        "response": {
+          "type": "OBJECT",
+          "properties": {
+            "counter": {
+              "type": "INTEGER",
+              "description": "value of counter"
+            }
+          }
+        }
+      }
+    ]
+  }
+]

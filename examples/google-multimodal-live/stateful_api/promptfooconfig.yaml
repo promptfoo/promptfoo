@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Example for mocking a stateful python api'
+
+prompts: '{{query}}'
+
+providers:
+  - id: 'google:live:gemini-2.0-flash-exp'
+    config:
+      tools: file://tools.json
+      functionToolStatefulApiFile: examples/google-multimodal-live/stateful_api/counter_api.py
+      generationConfig:
+        response_modalities: ['text']
+      timeoutMs: 10000
+
+tests:
+  - vars:
+      query: Add to the counter until it reaches 5
+    assert:
+      - type: equals
+        value: {'counter': 5}
+        transform: JSON.parse(output).statefulApiState
