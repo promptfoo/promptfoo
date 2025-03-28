@@ -223,6 +223,11 @@ export interface PromptWithMetadata {
   count: number;
 }
 
+// The server returns ISO formatted strings for dates, so we need to adjust the type here
+export type ServerPromptWithMetadata = Omit<PromptWithMetadata, 'recentEvalDate'> & {
+  recentEvalDate: string;
+};
+
 export enum ResultFailureReason {
   // The test passed, or we don't know exactly why the test case failed.
   NONE = 0,
