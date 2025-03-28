@@ -53,19 +53,52 @@ export class PythonProvider implements ApiProvider {
     const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(fs.readFileSync(absPath, 'utf-8'));
-    const cacheKey = `python:${this.scriptPath}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
+    // Create a cache key that includes the function name to ensure different functions
+    // from the same Python file don't share caches
+    const cacheKey = `python:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
       this.options,
     )}:${JSON.stringify(context?.vars)}`;
+    logger.debug(`PythonProvider cache key: ${cacheKey}`);
     const cache = await getCache();
     let cachedResult;
 
-    if (isCacheEnabled()) {
-      cachedResult = (await cache.get(cacheKey)) as string;
+    const cacheEnabled = isCacheEnabled();
+    logger.debug(`PythonProvider cache enabled: ${cacheEnabled}`);
+
+    if (cacheEnabled) {
+      cachedResult = await cache.get(cacheKey);
+      logger.debug(`PythonProvider cache hit: ${Boolean(cachedResult)}`);
     }
 
     if (cachedResult) {
       logger.debug(`Returning cached ${apiType} result for script ${absPath}`);
-      return JSON.parse(cachedResult);
+      const parsedResult = JSON.parse(cachedResult as string);
+
+      logger.debug(
+        `PythonProvider parsed cached result type: ${typeof parsedResult}, keys: ${Object.keys(parsedResult).join(',')}`,
+      );
+
+      // IMPORTANT: Set cached flag to true so evaluator recognizes this as cached
+      if (apiType === 'call_api' && typeof parsedResult === 'object' && parsedResult !== null) {
+        logger.debug(`PythonProvider setting cached=true for cached ${apiType} result`);
+        parsedResult.cached = true;
+
+        // If there's token usage information, update it to reflect cached status
+        if (parsedResult.tokenUsage) {
+          const total = parsedResult.tokenUsage.total || 0;
+
+          // Transform the token usage to match the cached format expected by the evaluator
+          parsedResult.tokenUsage = {
+            cached: total,
+            total,
+          };
+
+          logger.debug(
+            `Updated token usage for cached result: ${JSON.stringify(parsedResult.tokenUsage)}`,
+          );
+        }
+      }
+      return parsedResult;
     } else {
       if (context) {
         // These are not useful in Python
@@ -83,9 +116,20 @@ export class PythonProvider implements ApiProvider {
       let result;
       switch (apiType) {
         case 'call_api':
-          result = (await runPython(absPath, functionName, args, {
+          result = await runPython(absPath, functionName, args, {
             pythonExecutable: this.config.pythonExecutable,
-          })) as ProviderResponse;
+          });
+
+          // Add detailed logging about the result structure
+          logger.debug(
+            `Python provider result structure: ${result ? typeof result : 'undefined'}, keys: ${result ? Object.keys(result).join(',') : 'none'}`,
+          );
+          if (result && 'output' in result) {
+            logger.debug(
+              `Python provider output type: ${typeof result.output}, isArray: ${Array.isArray(result.output)}`,
+            );
+          }
+
           if (
             !result ||
             typeof result !== 'object' ||
@@ -99,9 +143,9 @@ export class PythonProvider implements ApiProvider {
           }
           break;
         case 'call_embedding_api':
-          result = (await runPython(absPath, functionName, args, {
+          result = await runPython(absPath, functionName, args, {
             pythonExecutable: this.config.pythonExecutable,
-          })) as ProviderEmbeddingResponse;
+          });
           if (
             !result ||
             typeof result !== 'object' ||
@@ -115,9 +159,9 @@ export class PythonProvider implements ApiProvider {
           }
           break;
         case 'call_classification_api':
-          result = (await runPython(absPath, functionName, args, {
+          result = await runPython(absPath, functionName, args, {
             pythonExecutable: this.config.pythonExecutable,
-          })) as ProviderClassificationResponse;
+          });
           if (
             !result ||
             typeof result !== 'object' ||
@@ -134,9 +178,28 @@ export class PythonProvider implements ApiProvider {
           throw new Error(`Unsupported apiType: ${apiType}`);
       }
 
-      if (isCacheEnabled() && !('error' in result)) {
+      // Store in cache if caching is enabled and there are no errors
+      const hasError =
+        'error' in result &&
+        result.error !== null &&
+        result.error !== undefined &&
+        result.error !== '';
+
+      if (isCacheEnabled() && !hasError) {
+        logger.debug(`PythonProvider caching result: ${cacheKey}`);
         await cache.set(cacheKey, JSON.stringify(result));
+      } else {
+        logger.debug(
+          `PythonProvider not caching result: ${isCacheEnabled() ? (hasError ? 'has error' : 'unknown reason') : 'cache disabled'}`,
+        );
       }
+
+      // Set cached=false on fresh results
+      if (typeof result === 'object' && result !== null && apiType === 'call_api') {
+        logger.debug(`PythonProvider explicitly setting cached=false for fresh result`);
+        result.cached = false;
+      }
+
       return result;
     }
   }
