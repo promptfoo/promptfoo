@@ -4,7 +4,7 @@ import winston from 'winston';
 import { getEnvString } from './envars';
 
 type LogCallback = (message: string) => void;
-let globalLogCallback: LogCallback | null = null;
+export let globalLogCallback: LogCallback | null = null;
 
 export function setLogCallback(callback: LogCallback | null) {
   globalLogCallback = callback;
@@ -15,9 +15,66 @@ export const LOG_LEVELS = {
   warn: 1,
   info: 2,
   debug: 3,
+} as const;
+
+type LogLevel = keyof typeof LOG_LEVELS;
+
+// Lazy source map support - only loaded when debug is enabled
+let sourceMapSupportInitialized = false;
+
+async function initializeSourceMapSupport(): Promise<void> {
+  if (!sourceMapSupportInitialized) {
+    try {
+      const sourceMapSupport = await import('source-map-support');
+      sourceMapSupport.install();
+      sourceMapSupportInitialized = true;
+    } catch {
+      // Ignore errors. This happens in the production build, because source-map-support is a dev dependency.
+    }
+  }
+}
+
+/**
+ * Gets the caller location (filename and line number)
+ * @returns String with file location information
+ */
+function getCallerLocation(): string {
+  try {
+    const error = new Error();
+    const stack = error.stack?.split('\n') || [];
+
+    // Skip first 3 lines (Error, getCallerLocation, and the logger method)
+    const callerLine = stack[3];
+
+    if (callerLine) {
+      // Handle different stack trace formats
+      const matchParens = callerLine.match(/at (?:.*) \((.+):(\d+):(\d+)\)/);
+      const matchNormal = callerLine.match(/at (.+):(\d+):(\d+)/);
+
+      const match = matchParens || matchNormal;
+      if (match) {
+        // matchParens has filePath at index 1, matchNormal has it at index 1 too
+        const filePath = match[1];
+        const line = match[2];
+
+        // Get just the filename from the path
+        const fileName = path.basename(filePath);
+        return `[${fileName}:${line}]`;
+      }
+    }
+  } catch {
+    // Silently handle any errors in stack trace parsing
+  }
+
+  return '';
+}
+
+type StrictLogMethod = (message: string) => winston.Logger;
+type StrictLogger = Omit<winston.Logger, keyof typeof LOG_LEVELS> & {
+  [K in keyof typeof LOG_LEVELS]: StrictLogMethod;
 };
 
-const consoleFormatter = winston.format.printf(
+export const consoleFormatter = winston.format.printf(
   (info: winston.Logform.TransformableInfo): string => {
     const message = info.message as string;
 
@@ -26,26 +83,30 @@ const consoleFormatter = winston.format.printf(
       globalLogCallback(message);
     }
 
+    const location = info.location ? `${info.location} ` : '';
+
     if (info.level === 'error') {
-      return chalk.red(message);
+      return chalk.red(`${location}${message}`);
     } else if (info.level === 'warn') {
-      return chalk.yellow(message);
+      return chalk.yellow(`${location}${message}`);
     } else if (info.level === 'info') {
-      return message;
+      return `${location}${message}`;
     } else if (info.level === 'debug') {
-      return chalk.cyan(message);
+      return `${chalk.cyan(location)}${message}`;
     }
     throw new Error(`Invalid log level: ${info.level}`);
   },
 );
 
-const fileFormatter = winston.format.printf((info: winston.Logform.TransformableInfo): string => {
-  const timestamp = new Date().toISOString();
-  const location = info.location ? ` ${info.location}` : '';
-  return `${timestamp} [${info.level.toUpperCase()}]${location}: ${info.message}`;
-});
+export const fileFormatter = winston.format.printf(
+  (info: winston.Logform.TransformableInfo): string => {
+    const timestamp = new Date().toISOString();
+    const location = info.location ? ` ${info.location}` : '';
+    return `${timestamp} [${info.level.toUpperCase()}]${location}: ${info.message}`;
+  },
+);
 
-const logger = winston.createLogger({
+export const winstonLogger = winston.createLogger({
   levels: LOG_LEVELS,
   transports: [
     new winston.transports.Console({
@@ -56,10 +117,10 @@ const logger = winston.createLogger({
 });
 
 if (!getEnvString('PROMPTFOO_DISABLE_ERROR_LOG', '')) {
-  logger.on('data', (chunk) => {
+  winstonLogger.on('data', (chunk) => {
     if (
       chunk.level === 'error' &&
-      !logger.transports.some((t) => t instanceof winston.transports.File)
+      !winstonLogger.transports.some((t) => t instanceof winston.transports.File)
     ) {
       // Only create the errors file if there are any errors
       const fileTransport = new winston.transports.File({
@@ -67,7 +128,7 @@ if (!getEnvString('PROMPTFOO_DISABLE_ERROR_LOG', '')) {
         level: 'error',
         format: winston.format.combine(winston.format.simple(), fileFormatter),
       });
-      logger.add(fileTransport);
+      winstonLogger.add(fileTransport);
 
       // Re-log the error that triggered this so it's written to the file
       fileTransport.write(chunk);
@@ -75,16 +136,59 @@ if (!getEnvString('PROMPTFOO_DISABLE_ERROR_LOG', '')) {
   });
 }
 
-export function getLogLevel() {
-  return logger.transports[0].level;
+export function getLogLevel(): LogLevel {
+  return winstonLogger.transports[0].level as LogLevel;
 }
 
-export function setLogLevel(level: keyof typeof LOG_LEVELS) {
+export function setLogLevel(level: LogLevel) {
   if (level in LOG_LEVELS) {
-    logger.transports[0].level = level;
+    winstonLogger.transports[0].level = level;
+
+    if (level === 'debug') {
+      initializeSourceMapSupport();
+    }
   } else {
     throw new Error(`Invalid log level: ${level}`);
   }
 }
 
+export function isDebugEnabled(): boolean {
+  return getLogLevel() === 'debug';
+}
+
+// Wrapper enforces strict single-string argument logging
+export const logger: StrictLogger = Object.assign({}, winstonLogger, {
+  error: (message: string) => {
+    const location = isDebugEnabled() ? getCallerLocation() : '';
+    return winstonLogger.error({ message, location });
+  },
+  warn: (message: string) => {
+    const location = isDebugEnabled() ? getCallerLocation() : '';
+    return winstonLogger.warn({ message, location });
+  },
+  info: (message: string) => {
+    const location = isDebugEnabled() ? getCallerLocation() : '';
+    return winstonLogger.info({ message, location });
+  },
+  debug: (message: string) => {
+    initializeSourceMapSupport();
+    const location = getCallerLocation();
+    return winstonLogger.debug({ message, location });
+  },
+  add: winstonLogger.add.bind(winstonLogger),
+  remove: winstonLogger.remove.bind(winstonLogger),
+  transports: winstonLogger.transports,
+}) as StrictLogger & {
+  add: typeof winstonLogger.add;
+  remove: typeof winstonLogger.remove;
+  transports: typeof winstonLogger.transports;
+};
+
+// Initialize source maps if debug is enabled at startup
+if (getEnvString('LOG_LEVEL', 'info') === 'debug') {
+  initializeSourceMapSupport();
+}
+
 export default logger;
+
+export { sourceMapSupportInitialized, initializeSourceMapSupport, getCallerLocation };

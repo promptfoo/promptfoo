@@ -4,18 +4,19 @@ import logger from '../logger';
 import Eval, { EvalQueries } from '../models/eval';
 import { wrapTable } from '../table';
 import telemetry from '../telemetry';
-import { getPrompts, getTestCases, printBorder, setupEnv } from '../util';
+import { printBorder, setupEnv } from '../util';
 import { sha256 } from '../util/createHash';
+import { getPrompts, getTestCases } from '../util/database';
 
 export function listCommand(program: Command) {
   const listCommand = program.command('list').description('List various resources');
 
   listCommand
     .command('evals')
-    .description('List evaluations.')
+    .description('List evaluations')
     .option('--env-file, --env-path <path>', 'Path to .env file')
-    .option('-n <limit>', 'Number of evals to display')
-    .option('--ids-only', 'Show only eval IDs')
+    .option('-n <limit>', 'Number of evaluations to display')
+    .option('--ids-only', 'Only show evaluation IDs')
     .action(async (cmdObj: { envPath?: string; n?: string; idsOnly?: boolean }) => {
       setupEnv(cmdObj.envPath);
       telemetry.record('command_used', {
@@ -32,17 +33,27 @@ export function listCommand(program: Command) {
 
       const vars = await EvalQueries.getVarsFromEvals(evals);
 
-      const tableData = evals.map((evl) => {
-        const prompts = evl.getPrompts();
-        return {
-          'Eval ID': evl.id,
-          Description: evl.description || '',
-          Prompts: prompts.map((p) => sha256(p.raw).slice(0, 6)).join(', ') || '',
-          Vars: vars[evl.id]?.join(', ') || '',
-        };
-      });
+      const tableData = evals
+        .sort((a, b) => a.createdAt - b.createdAt)
+        .map((evl) => {
+          const prompts = evl.getPrompts();
+          const description = evl.config.description || '';
+          return {
+            'eval id': evl.id,
+            description: description.slice(0, 100) + (description.length > 100 ? '...' : ''),
+            prompts: prompts.map((p) => sha256(p.raw).slice(0, 6)).join(', ') || '',
+            vars: vars[evl.id]?.join(', ') || '',
+          };
+        });
 
-      logger.info(wrapTable(tableData));
+      const columnWidths = {
+        'eval id': 32,
+        description: 25,
+        prompts: 10,
+        vars: 12,
+      };
+
+      logger.info(wrapTable(tableData, columnWidths) as string);
       printBorder();
 
       logger.info(
@@ -55,10 +66,10 @@ export function listCommand(program: Command) {
 
   listCommand
     .command('prompts')
-    .description('List prompts used')
+    .description('List prompts')
     .option('--env-file, --env-path <path>', 'Path to .env file')
     .option('-n <limit>', 'Number of prompts to display')
-    .option('--ids-only', 'Show only prompt IDs')
+    .option('--ids-only', 'Only show prompt IDs')
     .action(async (cmdObj: { envPath?: string; n?: string; idsOnly?: boolean }) => {
       setupEnv(cmdObj.envPath);
       telemetry.record('command_used', {
@@ -67,7 +78,7 @@ export function listCommand(program: Command) {
       await telemetry.send();
 
       const prompts = (await getPrompts(Number(cmdObj.n) || undefined)).sort((a, b) =>
-        b.recentEvalId.localeCompare(a.recentEvalId),
+        a.recentEvalId.localeCompare(b.recentEvalId),
       );
 
       if (cmdObj.idsOnly) {
@@ -76,13 +87,20 @@ export function listCommand(program: Command) {
       }
 
       const tableData = prompts.map((prompt) => ({
-        'Prompt ID': prompt.id.slice(0, 6),
-        Raw: prompt.prompt.raw.slice(0, 100) + (prompt.prompt.raw.length > 100 ? '...' : ''),
-        '# evals': prompt.count,
-        'Most recent eval': prompt.recentEvalId.slice(0, 6),
+        'prompt id': prompt.id.slice(0, 6),
+        raw: prompt.prompt.raw.slice(0, 100) + (prompt.prompt.raw.length > 100 ? '...' : ''),
+        evals: prompt.count,
+        'recent eval': prompt.recentEvalId,
       }));
 
-      logger.info(wrapTable(tableData));
+      const columnWidths = {
+        'prompt id': 12,
+        raw: 30,
+        evals: 8,
+        'recent eval': 30,
+      };
+
+      logger.info(wrapTable(tableData, columnWidths) as string);
       printBorder();
       logger.info(
         `Run ${chalk.green('promptfoo show prompt <id>')} to see details of a specific prompt.`,
@@ -94,10 +112,10 @@ export function listCommand(program: Command) {
 
   listCommand
     .command('datasets')
-    .description('List datasets used')
+    .description('List datasets')
     .option('--env-file, --env-path <path>', 'Path to .env file')
     .option('-n <limit>', 'Number of datasets to display')
-    .option('--ids-only', 'Show only dataset IDs')
+    .option('--ids-only', 'Only show dataset IDs')
     .action(async (cmdObj: { envPath?: string; n?: string; idsOnly?: boolean }) => {
       setupEnv(cmdObj.envPath);
       telemetry.record('command_used', {
@@ -115,16 +133,27 @@ export function listCommand(program: Command) {
       }
 
       const tableData = datasets.map((dataset) => ({
-        'Dataset ID': dataset.id.slice(0, 6),
-        'Highest scoring prompt': dataset.prompts
-          .sort((a, b) => (b.prompt.metrics?.score || 0) - (a.prompt.metrics?.score || 0))[0]
-          .id.slice(0, 6),
-        '# evals': dataset.count,
-        '# prompts': dataset.prompts.length,
-        'Most recent eval': dataset.recentEvalId.slice(0, 6),
+        'dataset id': dataset.id.slice(0, 6),
+        'best prompt':
+          dataset.prompts.length > 0
+            ? dataset.prompts
+                .sort((a, b) => (b.prompt.metrics?.score || 0) - (a.prompt.metrics?.score || 0))[0]
+                ?.id.slice(0, 6) || 'N/A'
+            : 'N/A',
+        evals: dataset.count,
+        prompts: dataset.prompts.length,
+        'recent eval': dataset.recentEvalId,
       }));
 
-      logger.info(wrapTable(tableData));
+      const columnWidths = {
+        'dataset id': 12,
+        'best prompt': 15,
+        evals: 8,
+        prompts: 10,
+        'recent eval': 30,
+      };
+
+      logger.info(wrapTable(tableData, columnWidths) as string);
       printBorder();
       logger.info(
         `Run ${chalk.green('promptfoo show dataset <id>')} to see details of a specific dataset.`,

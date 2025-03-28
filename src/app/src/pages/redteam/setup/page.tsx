@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import CrispChat from '@app/components/CrispChat';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
 import AppIcon from '@mui/icons-material/Apps';
-import CloseIcon from '@mui/icons-material/Close';
 import DownloadIcon from '@mui/icons-material/Download';
 import PluginIcon from '@mui/icons-material/Extension';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
@@ -20,8 +19,6 @@ import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
-import Drawer from '@mui/material/Drawer';
-import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
@@ -30,6 +27,8 @@ import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { styled } from '@mui/material/styles';
+import type { RedteamStrategy } from '@promptfoo/types';
+import { ProviderOptionsSchema } from '@promptfoo/validators/providers';
 import yaml from 'js-yaml';
 import Plugins from './components/Plugins';
 import Purpose from './components/Purpose';
@@ -37,9 +36,10 @@ import Review from './components/Review';
 import Setup from './components/Setup';
 import Strategies from './components/Strategies';
 import Targets from './components/Targets';
-import YamlPreview from './components/YamlPreview';
+import { predefinedTargets, customTargetOption } from './components/constants';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useSetupState } from './hooks/useSetupState';
+import type { RedteamUITarget } from './types';
 import type { Config } from './types';
 import { generateOrderedYaml } from './utils/yamlHelpers';
 import './page.css';
@@ -189,14 +189,6 @@ const TabContent = styled(Box)(({ theme }) => ({
   }),
 }));
 
-const DrawerHeader = styled(Box)(({ theme }) => ({
-  display: 'flex',
-  alignItems: 'center',
-  padding: theme.spacing(0, 1),
-  ...theme.mixins.toolbar,
-  justifyContent: 'flex-start',
-}));
-
 /*
 const StyledFab = styled(Fab)(({ theme }) => ({
   position: 'fixed',
@@ -269,7 +261,6 @@ export default function RedTeamSetupPage() {
     return hash ? Number.parseInt(hash, 10) : 0;
   });
 
-  const [yamlPreviewOpen, setYamlPreviewOpen] = useState(false);
   const { hasSeenSetup, markSetupAsSeen } = useSetupState();
   const [setupModalOpen, setSetupModalOpen] = useState(!hasSeenSetup);
   const { config, setFullConfig, resetConfig } = useRedTeamConfig();
@@ -314,6 +305,7 @@ export default function RedTeamSetupPage() {
     setValue((prevValue) => {
       const newValue = prevValue + 1;
       updateHash(newValue);
+      window.scrollTo({ top: 0 });
       return newValue;
     });
   };
@@ -322,6 +314,7 @@ export default function RedTeamSetupPage() {
     setValue((prevValue) => {
       const newValue = prevValue - 1;
       updateHash(newValue);
+      window.scrollTo({ top: 0 });
       return newValue;
     });
   };
@@ -329,10 +322,7 @@ export default function RedTeamSetupPage() {
   const handleChange = (event: React.SyntheticEvent, newValue: number) => {
     updateHash(newValue);
     setValue(newValue);
-  };
-
-  const toggleYamlPreview = () => {
-    setYamlPreviewOpen(!yamlPreviewOpen);
+    window.scrollTo({ top: 0 });
   };
 
   const closeSetupModal = () => {
@@ -447,13 +437,38 @@ export default function RedTeamSetupPage() {
       const content = await readFileAsText(file);
       const yamlConfig = yaml.load(content) as any;
 
+      const strategies = yamlConfig?.redteam?.strategies || [];
+      let target = yamlConfig.targets?.[0] || yamlConfig.providers?.[0] || DEFAULT_HTTP_TARGET;
+
+      // Convert string targets to objects
+      if (typeof target === 'string') {
+        const targetType = predefinedTargets.find((t: RedteamUITarget) => t.value === target);
+
+        target = ProviderOptionsSchema.parse({
+          id: targetType ? targetType.value : customTargetOption.value,
+          label: target,
+        });
+      }
+
+      const hasAnyStatefulStrategies = strategies.some(
+        (strat: RedteamStrategy) => typeof strat !== 'string' && strat?.config?.stateful,
+      );
+      console.log({ hasAnyStatefulStrategies, strategies });
+      if (hasAnyStatefulStrategies) {
+        if (typeof target === 'string') {
+          target = { id: target, config: { stateful: true } };
+        } else {
+          target.config = { ...target.config, stateful: true };
+        }
+      }
+
       // Map the YAML structure to our expected Config format
       const mappedConfig: Config = {
         description: yamlConfig.description || 'My Red Team Configuration',
         prompts: yamlConfig.prompts || ['{{prompt}}'],
-        target: yamlConfig.targets?.[0] || yamlConfig.providers?.[0] || DEFAULT_HTTP_TARGET,
+        target,
         plugins: yamlConfig.redteam?.plugins || ['default'],
-        strategies: yamlConfig.redteam?.strategies || [],
+        strategies,
         purpose: yamlConfig.redteam?.purpose || '',
         entities: yamlConfig.redteam?.entities || [],
         applicationDefinition: {
@@ -566,7 +581,7 @@ export default function RedTeamSetupPage() {
                 <StyledTab
                   icon={<AppIcon />}
                   iconPosition="start"
-                  label="Application"
+                  label="Usage Details"
                   {...a11yProps(0)}
                 />
                 <StyledTab
@@ -578,13 +593,13 @@ export default function RedTeamSetupPage() {
                 <StyledTab
                   icon={<PluginIcon />}
                   iconPosition="start"
-                  label="Plugins"
+                  label={`Plugins${config.plugins?.length ? ` (${config.plugins.length})` : ''}`}
                   {...a11yProps(2)}
                 />
                 <StyledTab
                   icon={<StrategyIcon />}
                   iconPosition="start"
-                  label="Strategies"
+                  label={`Strategies${config.strategies?.length ? ` (${config.strategies.length})` : ''}`}
                   {...a11yProps(3)}
                 />
                 <StyledTab
@@ -643,37 +658,8 @@ export default function RedTeamSetupPage() {
             <Review />
           </CustomTabPanel>
         </TabContent>
-        <Drawer
-          anchor="right"
-          open={yamlPreviewOpen}
-          onClose={toggleYamlPreview}
-          variant="persistent"
-        >
-          <DrawerHeader>
-            <IconButton onClick={toggleYamlPreview}>
-              <CloseIcon />
-            </IconButton>
-            <Typography variant="h6" sx={{ ml: 2 }}>
-              YAML Preview
-            </Typography>
-          </DrawerHeader>
-          <Box sx={{ height: 'calc(100% - 64px)', overflow: 'auto' }}>
-            <YamlPreview config={config} />
-          </Box>
-        </Drawer>
       </Content>
-      {/*
-      <Zoom in={!yamlPreviewOpen} unmountOnExit>
-        <StyledFab color="primary" onClick={toggleYamlPreview} aria-label="toggle yaml preview">
-          <DescriptionIcon />
-        </StyledFab>
-      </Zoom>
-      <Zoom in={yamlPreviewOpen} unmountOnExit>
-        <StyledFab color="secondary" onClick={toggleYamlPreview} aria-label="close yaml preview">
-          <CloseIcon />
-        </StyledFab>
-      </Zoom>
-      */}
+
       <Setup open={setupModalOpen} onClose={closeSetupModal} />
       <CrispChat />
       <Dialog

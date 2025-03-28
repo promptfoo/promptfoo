@@ -11,12 +11,6 @@ import {
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import type { ApiProvider } from '../../../src/types';
 
-jest.mock('../../../src/logger', () => ({
-  error: jest.fn(),
-  warn: jest.fn(),
-  debug: jest.fn(),
-}));
-
 jest.mock('../../../src/cache', () => ({
   fetchWithCache: jest.fn(),
 }));
@@ -59,6 +53,7 @@ describe('fetchRemoteGeneration', () => {
           task: 'purpose',
           prompts: ['prompt1', 'prompt2'],
           version: VERSION,
+          email: null,
         }),
       },
       REQUEST_TIMEOUT_MS,
@@ -90,6 +85,7 @@ describe('fetchRemoteGeneration', () => {
           task: 'entities',
           prompts: ['prompt1', 'prompt2'],
           version: VERSION,
+          email: null,
         }),
       },
       REQUEST_TIMEOUT_MS,

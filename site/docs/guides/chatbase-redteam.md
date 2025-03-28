@@ -1,7 +1,5 @@
 # Redteaming a Chatbase Chatbot
 
-## Introduction
-
 [Chatbase](https://www.chatbase.co) is a platform for building custom AI chatbots that can be embedded into websites for customer support, lead generation, and user engagement. These chatbots use RAG (Retrieval-Augmented Generation) to access your organization's knowledge base and maintain conversations with users.
 
 ## Multi-turn vs Single-turn Testing
@@ -81,10 +79,10 @@ Enable multi-turn testing strategies in your `promptfooconfig.yaml`:
 strategies:
   - id: 'goat'
     config:
-      stateless: false
+      stateful: true
   - id: 'crescendo'
     config:
-      stateless: false
+      stateful: true
 ```
 
 ## Test Execution

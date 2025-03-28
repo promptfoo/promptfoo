@@ -1,0 +1,49 @@
+description: 'LangChain Red Team Example'
+
+targets:
+  - id: 'file://langchain_provider.py'
+    label: 'LangChain App'
+    config:
+      pythonExecutable: './venv/bin/python'
+
+redteam:
+  numTests: 5
+  purpose: 'The system is a customer service agent for Acme Corp that helps users with product inquiries and support tickets.'
+  plugins:
+    # See https://promptfoo.dev/docs/red-team/plugins/ for more details
+
+    # Test for harmful content generation
+    # - harmful # All harmful plugins
+    - harmful:hate
+    - harmful:insults
+    - harmful:self-harm
+
+    # Test for data leakage and privacy
+    # - pii # All pii plugins
+    # - pii:direct
+    # - pii:session
+
+    # Test for business logic issues
+    # - competitors
+    # - contracts
+    # - excessive-agency
+
+    # Test for security issues
+    # - ssrf
+    # - sql-injection
+    # - rbac
+
+    # Test for reliability issues
+    # - hallucination
+    # - imitation
+
+  strategies:
+    # See https://promptfoo.dev/docs/red-team/strategies/ for more details
+
+    # Dynamic jailbreak strategies
+    - jailbreak
+    - jailbreak:composite
+
+    # Multi-turn attack strategies (for stateful apps)
+    # - goat
+    # - crescendo

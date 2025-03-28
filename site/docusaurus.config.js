@@ -89,10 +89,13 @@ const config = {
         theme: {
           customCss: require.resolve('./src/css/custom.css'),
         },
-        gtag: {
-          trackingID: 'G-3TS8QLZQ93',
-          anonymizeIP: true,
-        },
+        gtag:
+          process.env.NODE_ENV === 'development'
+            ? undefined
+            : {
+                trackingID: 'G-3TS8QLZQ93',
+                anonymizeIP: true,
+              },
       }),
     ],
   ],
@@ -149,6 +152,10 @@ const config = {
                 label: 'Blog',
               },
               {
+                href: '/press/',
+                label: 'Press',
+              },
+              {
                 href: '/contact/',
                 label: 'Contact',
               },
@@ -168,56 +175,72 @@ const config = {
                 label: 'Docs',
               },
               {
+                href: 'https://www.promptfoo.dev/models/',
+                label: 'Foundation Model Reports',
+              },
+              {
                 href: 'https://github.com/promptfoo/promptfoo',
                 label: 'GitHub',
               },
               {
-                href: 'https://discord.gg/gHPS9jjfbs',
+                href: 'https://discord.gg/promptfoo',
                 label: 'Discord',
               },
             ],
           },
           { to: '/pricing/', label: 'Enterprise', position: 'left' },
+          {
+            href: 'https://github.com/promptfoo/promptfoo',
+            position: 'right',
+            className: 'header-github-link',
+            'aria-label': 'GitHub repository',
+          },
+          {
+            href: 'https://discord.gg/promptfoo',
+            position: 'right',
+            className: 'header-discord-link',
+            'aria-label': 'Discord community',
+          },
         ],
       },
       footer: {
         style: 'dark',
         links: [
           {
-            title: 'Docs',
+            title: 'Product',
             items: [
               {
-                label: 'Intro',
-                to: '/docs/intro',
+                label: 'Docs',
+                to: '/docs/intro/',
               },
               {
                 label: 'Command Line',
-                to: '/docs/getting-started',
+                to: '/docs/getting-started/',
               },
               {
                 label: 'Node Package',
-                to: '/docs/usage/node-package',
+                to: '/docs/usage/node-package/',
               },
               {
-                label: 'Privacy Policy',
-                to: '/privacy',
+                label: 'Enterprise',
+                href: '/pricing/',
               },
               {
-                html: `
-                <div style="position: relative; margin-top:8px">
-                  <span style="position: absolute; left: 65px; top: 25px; font-size: 10px; font-weight: bold; background-color: #25842c; padding: 2px 4px; border-radius: 4px;">In Progress</span>
-                  <img loading="lazy" src="/img/badges/soc2.png" alt="SOC2 Compliance in progress" style="width:80px; height: auto"/>
-                </div>
-                `,
+                label: 'Status',
+                href: 'https://status.promptfoo.dev',
               },
             ],
           },
           {
-            title: 'Guides & Tools',
+            title: 'Resources',
             items: [
               {
                 label: 'LLM Red Teaming',
                 to: '/docs/red-team',
+              },
+              {
+                label: 'Foundation Model Reports',
+                to: 'https://www.promptfoo.dev/models/',
               },
               {
                 label: 'Running Benchmarks',
@@ -236,45 +259,66 @@ const config = {
                 to: '/docs/guides/prevent-llm-hallucations',
               },
               {
-                label: 'Promptfoo Config Validator',
+                label: 'Config Validator',
                 to: '/validator',
               },
             ],
           },
           {
-            title: 'Resources',
+            title: 'Company',
             items: [
               {
                 label: 'About',
-                href: '/about/',
+                to: '/about/',
               },
               {
                 label: 'Blog',
-                href: '/blog/',
+                to: '/blog/',
               },
               {
-                label: 'Enterprise',
-                href: '/pricing/',
+                label: 'Press',
+                to: '/press/',
               },
               {
-                label: 'Contact Us',
-                href: '/contact/',
+                label: 'Contact',
+                to: '/contact/',
               },
               {
                 label: 'Careers',
-                href: '/careers/',
+                to: '/careers/',
               },
+            ],
+          },
+          {
+            title: 'Legal & Social',
+            items: [
               {
                 label: 'GitHub',
                 href: 'https://github.com/promptfoo/promptfoo',
               },
               {
                 label: 'Discord',
-                href: 'https://discord.gg/gHPS9jjfbs',
+                href: 'https://discord.gg/promptfoo',
               },
               {
                 label: 'LinkedIn',
                 href: 'https://www.linkedin.com/company/promptfoo/',
+              },
+              {
+                label: 'Privacy Policy',
+                to: '/privacy/',
+              },
+              {
+                label: 'Terms of Service',
+                to: '/terms-of-service/',
+              },
+              {
+                html: `
+                <div style="position: relative; margin-top:8px">
+                  <span style="position: absolute; left: 65px; top: 25px; font-size: 10px; font-weight: bold; background-color: #25842c; padding: 2px 4px; border-radius: 4px;">In Progress</span>
+                  <img loading="lazy" src="/img/badges/soc2.png" alt="SOC2 Compliance in progress" style="width:80px; height: auto"/>
+                </div>
+                `,
               },
             ],
           },
@@ -308,7 +352,24 @@ const config = {
         indexName: 'promptfoo',
       },
     }),
-  plugins: [require.resolve('docusaurus-plugin-image-zoom')],
+  plugins: [
+    require.resolve('docusaurus-plugin-image-zoom'),
+    [
+      '@docusaurus/plugin-client-redirects',
+      {
+        redirects: [
+          {
+            from: '/docs/category/troubleshooting',
+            to: '/docs/usage/troubleshooting',
+          },
+          {
+            from: '/docs/providers/palm',
+            to: '/docs/providers/google',
+          },
+        ],
+      },
+    ],
+  ],
 
   // Mermaid diagram support
   markdown: {

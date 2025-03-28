@@ -14,7 +14,7 @@ export const handleGEval = async ({
     'G-Eval assertion type must have a string or array of strings value',
   );
 
-  const threshold = assertion.threshold || 0.7;
+  const threshold = assertion.threshold ?? 0.7;
 
   if (Array.isArray(renderedValue)) {
     const scores: number[] = [];

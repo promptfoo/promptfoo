@@ -12,6 +12,17 @@ export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation
 
 export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
 
+// Local interface to avoid circular dependency with src/types/index.ts
+interface AtomicTestCase {
+  description?: string;
+  vars?: Record<string, string | object>;
+  providerResponse?: ProviderResponse;
+  tokenUsage?: TokenUsage;
+  success?: boolean;
+  score?: number;
+  failureReason?: string;
+}
+
 export interface ProviderModerationResponse {
   error?: string;
   flags?: ModerationFlag[];
@@ -42,6 +53,9 @@ export interface CallApiContextParams {
   prompt: Prompt;
   vars: Record<string, string | object>;
   debug?: boolean;
+  // This was added so we have access to the grader inside the provider.
+  // Vars and prompts should be access using the arguments above.
+  test?: AtomicTestCase;
 }
 
 export interface CallApiOptionsParams {
@@ -51,13 +65,14 @@ export interface CallApiOptionsParams {
 export interface ApiProvider {
   id: () => string;
   callApi: CallApiFunction;
-  callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
   callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
+  callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
+  config?: any;
+  delay?: number;
+  getSessionId?: () => string;
   label?: ProviderLabel;
   transform?: string;
-  delay?: number;
-  config?: any;
-  getSessionId?: () => string;
+  toJSON?: () => any;
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {
@@ -76,6 +91,12 @@ export interface ApiModerationProvider extends ApiProvider {
   callModerationApi: (prompt: string, response: string) => Promise<ProviderModerationResponse>;
 }
 
+export interface GuardrailResponse {
+  flaggedInput?: boolean;
+  flaggedOutput?: boolean;
+  flagged?: boolean;
+}
+
 export interface ProviderResponse {
   cached?: boolean;
   cost?: number;
@@ -90,6 +111,14 @@ export interface ProviderResponse {
   tokenUsage?: TokenUsage;
   isRefusal?: boolean;
   sessionId?: string;
+  guardrails?: GuardrailResponse;
+  audio?: {
+    id?: string;
+    expiresAt?: number;
+    data?: string; // base64 encoded audio data
+    transcript?: string;
+    format?: string;
+  };
 }
 
 export interface ProviderEmbeddingResponse {
@@ -97,6 +126,11 @@ export interface ProviderEmbeddingResponse {
   error?: string;
   embedding?: number[];
   tokenUsage?: Partial<TokenUsage>;
+  metadata?: {
+    transformed?: boolean;
+    originalText?: string;
+    [key: string]: any;
+  };
 }
 
 export interface ProviderSimilarityResponse {
@@ -137,4 +171,30 @@ export function isProviderOptions(provider: any): provider is ProviderOptions {
     'id' in provider &&
     typeof provider.id === 'string'
   );
+}
+
+export interface ProviderTestResponse {
+  testResult: {
+    error?: string;
+    changes_needed?: boolean;
+    changes_needed_reason?: string;
+    changes_needed_suggestions?: string[];
+  };
+  providerResponse: ProviderResponse;
+  unalignedProviderResult?: ProviderResponse;
+  redteamProviderResult?: ProviderResponse;
+}
+
+/**
+ * Interface defining the default providers used by the application
+ */
+export interface DefaultProviders {
+  datasetGenerationProvider: ApiProvider;
+  embeddingProvider: ApiProvider;
+  gradingJsonProvider: ApiProvider;
+  gradingProvider: ApiProvider;
+  llmRubricProvider?: ApiProvider;
+  moderationProvider: ApiProvider;
+  suggestionsProvider: ApiProvider;
+  synthesizeProvider: ApiProvider;
 }

@@ -1,5 +1,4 @@
 import React from 'react';
-import Editor from 'react-simple-code-editor';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import InfoIcon from '@mui/icons-material/Info';
 import Accordion from '@mui/material/Accordion';
@@ -15,30 +14,16 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
-import dedent from 'dedent';
-import 'prismjs/components/prism-clike';
-// @ts-expect-error: No types available
-import { highlight, languages } from 'prismjs/components/prism-core';
-import 'prismjs/components/prism-javascript';
 import type { ProviderOptions } from '../../types';
-import 'prismjs/themes/prism.css';
+import ProviderResponse from './ProviderResponse';
 
 interface TestTargetConfigurationProps {
   testingTarget: boolean;
   handleTestTarget: () => void;
   selectedTarget: ProviderOptions;
   testResult: any;
-  requiresTransformResponse: (target: ProviderOptions) => boolean;
-  updateCustomTarget: (field: string, value: any) => void;
-  hasTestedTarget: boolean;
 }
 
 const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
@@ -46,122 +31,11 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
   handleTestTarget,
   selectedTarget,
   testResult,
-  requiresTransformResponse,
-  updateCustomTarget,
 }) => {
   const theme = useTheme();
-  const darkMode = theme.palette.mode === 'dark';
 
   return (
     <Box mt={4}>
-      {requiresTransformResponse(selectedTarget) && (
-        <Box>
-          <Typography variant="h6" gutterBottom>
-            Configure Request Transform
-          </Typography>
-          <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
-            <Box
-              sx={{
-                border: 1,
-                borderColor: 'grey.300',
-                borderRadius: 1,
-                mt: 1,
-                position: 'relative',
-                backgroundColor: darkMode ? '#1e1e1e' : '#fff',
-              }}
-            >
-              <Editor
-                value={selectedTarget.config.transformRequest || ''}
-                onValueChange={(code) => updateCustomTarget('transformRequest', code)}
-                highlight={(code) => highlight(code, languages.javascript)}
-                padding={10}
-                placeholder={dedent`Optional: A JavaScript expression to transform the prompt before sending.
-
-                  e.g. \`{ messages: [{ role: 'user', content: prompt }] }\``}
-                style={{
-                  fontFamily: '"Fira code", "Fira Mono", monospace',
-                  fontSize: 14,
-                  minHeight: '100px',
-                }}
-              />
-            </Box>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Optionally, configure a request transform to modify the prompt before sending. This
-              can be used to format the prompt into a specific structure required by your API.
-            </Typography>
-          </Box>
-          <Typography variant="h6" gutterBottom mt={4}>
-            Configure Response Transform
-          </Typography>
-          <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
-            <Box
-              sx={{
-                border: 1,
-                borderColor: 'grey.300',
-                borderRadius: 1,
-                mt: 1,
-                position: 'relative',
-                backgroundColor: darkMode ? '#1e1e1e' : '#fff',
-              }}
-            >
-              <Editor
-                value={selectedTarget.config.transformResponse || ''}
-                onValueChange={(code) => updateCustomTarget('transformResponse', code)}
-                highlight={(code) => highlight(code, languages.javascript)}
-                padding={10}
-                placeholder={dedent`Optional: A JavaScript expression to parse the response.
-
-                  e.g. \`json.choices[0].message.content\``}
-                style={{
-                  fontFamily: '"Fira code", "Fira Mono", monospace',
-                  fontSize: 14,
-                  minHeight: '100px',
-                }}
-              />
-            </Box>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Optionally, configure a response transform to extract a specific part of the HTTP
-              response. See{' '}
-              <a
-                href="https://www.promptfoo.dev/docs/providers/http/#response-parser"
-                target="_blank"
-              >
-                docs
-              </a>{' '}
-              for more information.
-            </Typography>
-          </Box>
-          <Box mt={4} mb={2}>
-            <Typography variant="h6" gutterBottom>
-              Configure Session Header
-            </Typography>
-            <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
-              <TextField
-                fullWidth
-                label="Session Header"
-                value={selectedTarget.config.sessionParser}
-                placeholder="Optional: Enter the name of the header that contains the session ID"
-                onChange={(e) => updateCustomTarget('sessionParser', e.target.value)}
-                margin="normal"
-                InputLabelProps={{
-                  shrink: true,
-                }}
-              />
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                Optionally, configure a session parser to extract the session ID from the HTTP
-                response headers. This is only needed for stateful systems. See{' '}
-                <a
-                  href="https://www.promptfoo.dev/docs/providers/http/#session-management"
-                  target="_blank"
-                >
-                  docs
-                </a>{' '}
-                for more information.
-              </Typography>
-            </Box>
-          </Box>
-        </Box>
-      )}
       <Stack direction="row" alignItems="center" spacing={2} mb={2}>
         <Typography variant="h6" sx={{ flexGrow: 1 }}>
           Test Target Configuration
@@ -169,7 +43,7 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
         <Button
           variant="contained"
           onClick={handleTestTarget}
-          disabled={testingTarget || !selectedTarget.config.url}
+          disabled={testingTarget || (!selectedTarget.config.url && !selectedTarget.config.request)}
           startIcon={testingTarget ? <CircularProgress size={20} /> : null}
           color="primary"
         >
@@ -182,39 +56,51 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
           Please configure the HTTP endpoint above and click "Test Target" to proceed.
         </Alert>
       )}
-      {selectedTarget.config.request && (
-        <Alert severity="info">
-          Automated target testing is not available in raw request mode.
-        </Alert>
-      )}
 
       {testResult && (
         <Box mt={2}>
-          <Alert severity={testResult.success ? 'success' : 'error'}>{testResult.message}</Alert>
-          {testResult.suggestions && (
-            <Box mt={2}>
-              <Typography variant="subtitle1" gutterBottom>
-                Suggestions:
-              </Typography>
-              <Paper
-                elevation={1}
-                sx={{
-                  p: 2,
-                  bgcolor: theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
-                }}
+          {!testResult.unalignedProviderResult && testResult.success != null && (
+            <>
+              <Alert
+                severity={
+                  testResult.success &&
+                  // If it's a redteam test make sure the openAI formmated prompt doesn't include any JSON and it exists
+                  (!testResult.redteamProviderResult ||
+                    (testResult.redteamProviderResult.output.length > 5 &&
+                      !testResult.redteamProviderResult.output.includes('{')))
+                    ? 'success'
+                    : 'error'
+                }
               >
-                <List>
-                  {testResult.suggestions.map((suggestion: string, index: number) => (
-                    <ListItem key={index}>
-                      <ListItemIcon>
-                        <InfoIcon color="primary" />
-                      </ListItemIcon>
-                      <ListItemText primary={suggestion} />
-                    </ListItem>
-                  ))}
-                </List>
-              </Paper>
-            </Box>
+                {testResult.message}
+              </Alert>
+
+              {testResult.suggestions && (
+                <Box mt={2}>
+                  <Typography variant="subtitle1" gutterBottom>
+                    Suggestions:
+                  </Typography>
+                  <Paper
+                    elevation={1}
+                    sx={{
+                      p: 2,
+                      bgcolor: theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
+                    }}
+                  >
+                    <List>
+                      {testResult.suggestions.map((suggestion: string, index: number) => (
+                        <ListItem key={index}>
+                          <ListItemIcon>
+                            <InfoIcon color="primary" />
+                          </ListItemIcon>
+                          <ListItemText primary={suggestion} />
+                        </ListItem>
+                      ))}
+                    </List>
+                  </Paper>
+                </Box>
+              )}
+            </>
           )}
           <Accordion sx={{ mt: 2 }} expanded>
             <AccordionSummary
@@ -225,109 +111,63 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
               <Typography>Provider Response Details</Typography>
             </AccordionSummary>
             <AccordionDetails>
-              <Typography variant="subtitle2" gutterBottom>
-                Headers:
-              </Typography>
-              <Paper
-                elevation={0}
-                sx={{
-                  p: 2,
-                  bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
-                  maxHeight: '200px',
-                  overflow: 'auto',
-                  mb: 2,
-                }}
-              >
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Header</TableCell>
-                      <TableCell>Value</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {Object.entries(testResult.providerResponse?.metadata?.headers || {}).map(
-                      ([key, value]) => (
-                        <TableRow key={key}>
-                          <TableCell>{key}</TableCell>
-                          <TableCell>{value as string}</TableCell>
-                        </TableRow>
-                      ),
+              {/* If It's a unaligned test show the harmful outputs */}
+              {testResult.unalignedProviderResult && (
+                <>
+                  <Box>
+                    {testResult.unalignedProviderResult.outputs.length > 0 ? (
+                      <Alert severity="info" sx={{ mb: 2 }}>
+                        The provider appears to be working properly. Review the harmful outputs
+                        below. If you have at least one result, it is working as intended. This
+                        should have a harmful intent.
+                      </Alert>
+                    ) : (
+                      <Alert severity="error">
+                        We weren't able to get any harmful outputs from the provider. Please review
+                        the raw request and response below.
+                      </Alert>
                     )}
-                  </TableBody>
-                </Table>
-              </Paper>
-              <Typography variant="subtitle2" gutterBottom>
-                Raw Result:
-              </Typography>
 
-              <Paper
-                elevation={0}
-                sx={{
-                  p: 2,
-                  bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
-                  maxHeight: '200px',
-                  overflow: 'auto',
-                }}
-              >
-                <pre
-                  style={{
-                    margin: 0,
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                  }}
-                >
-                  {typeof testResult.providerResponse?.raw === 'string'
-                    ? testResult.providerResponse?.raw
-                    : JSON.stringify(testResult.providerResponse?.raw, null, 2)}
-                </pre>
-              </Paper>
-              <Typography variant="subtitle2" gutterBottom sx={{ mt: 2 }}>
-                Parsed Result:
-              </Typography>
-              <Paper
-                elevation={0}
-                sx={{
-                  p: 2,
-                  bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
-                  maxHeight: '200px',
-                  overflow: 'auto',
-                }}
-              >
-                <pre
-                  style={{
-                    margin: 0,
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                  }}
-                >
-                  {typeof testResult.providerResponse?.output === 'string'
-                    ? testResult.providerResponse?.output
-                    : JSON.stringify(testResult.providerResponse?.output, null, 2)}
-                </pre>
-              </Paper>
-              <Typography variant="subtitle2" gutterBottom sx={{ mt: 2 }}>
-                Session ID:
-              </Typography>
-              <Paper
-                elevation={0}
-                sx={{
-                  p: 2,
-                  bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
-                  maxHeight: '200px',
-                  overflow: 'auto',
-                }}
-              >
-                <pre
-                  style={{
-                    margin: 0,
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                  }}
-                >
-                  {testResult.providerResponse?.sessionId}
-                </pre>
-              </Paper>
+                    <Typography variant="h6" gutterBottom>
+                      Harmful Outputs:
+                    </Typography>
+                    <Paper
+                      elevation={0}
+                      sx={{
+                        p: 2,
+                        bgcolor: (theme) =>
+                          theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
+                        maxHeight: '200px',
+                        overflow: 'auto',
+                        mb: 2,
+                      }}
+                    >
+                      <pre> - {testResult.unalignedProviderResult.outputs.join('\n - ')}</pre>
+                    </Paper>
+                  </Box>
+                  <Typography variant="h6" sx={{ mt: 10 }} gutterBottom>
+                    When testing harmful outputs, we also do a raw request to the provider to help
+                    troubleshooting. If there are any issues, you can review the raw request and
+                    response below:
+                  </Typography>
+                </>
+              )}
+              {/* If It's a redteam test show a header since we have two prompts */}
+              {testResult.redteamProviderResult && (
+                <Typography variant="h6" gutterBottom>
+                  Simple String Prompt "hello world"
+                </Typography>
+              )}
+              {/* If It's a redteam test show the second test */}
+              <ProviderResponse providerResponse={testResult.providerResponse} />
+              {testResult.redteamProviderResult && (
+                <>
+                  <Typography variant="h6" sx={{ mt: 4 }} gutterBottom>
+                    OpenAI Formatted Prompt
+                  </Typography>
+                  <ProviderResponse providerResponse={testResult.redteamProviderResult} />
+                </>
+              )}
             </AccordionDetails>
           </Accordion>
         </Box>

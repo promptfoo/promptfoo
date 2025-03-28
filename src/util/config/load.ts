@@ -1,20 +1,22 @@
 import $RefParser from '@apidevtools/json-schema-ref-parser';
+import chalk from 'chalk';
+import dedent from 'dedent';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
+import process from 'process';
 import { fromError } from 'zod-validation-error';
 import { readAssertions } from '../../assertions';
 import { validateAssertions } from '../../assertions/validateAssertions';
 import cliState from '../../cliState';
 import { filterTests } from '../../commands/eval/filterTests';
-import { getEnvBool } from '../../envars';
+import { getEnvBool, isCI } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import { readPrompts, readProviderPromptMap } from '../../prompts';
 import { loadApiProviders } from '../../providers';
 import telemetry from '../../telemetry';
-import { readTest, readTests } from '../../testCases';
 import {
   UnifiedConfigSchema,
   type CommandLineOptions,
@@ -27,10 +29,11 @@ import {
   type TestSuite,
   type UnifiedConfig,
 } from '../../types';
-import { maybeLoadFromExternalFile, readFilters } from '../../util';
+import { isRunningUnderNpx, maybeLoadFromExternalFile, readFilters } from '../../util';
 import { isJavascriptFile } from '../../util/file';
 import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
+import { readTest, readTests } from '../testCaseReader';
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
   if (getEnvBool('PROMPTFOO_DISABLE_REF_PARSER')) {
@@ -151,7 +154,7 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   };
   const ext = path.parse(configPath).ext;
   if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
-    const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8'));
+    const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) ?? {};
     const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
     // Validator requires `prompts`, but prompts is not actually required for redteam.
     const UnifiedConfigSchemaWithoutPrompts = UnifiedConfigSchema.innerType()
@@ -423,7 +426,14 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     extensions,
     redteam,
     metadata: configs.reduce((prev, curr) => ({ ...prev, ...curr.metadata }), {}),
-    sharing: !configs.some((config) => config.sharing === false),
+    sharing: (() => {
+      if (configs.some((config) => config.sharing === false)) {
+        return false;
+      }
+
+      const sharingConfig = configs.find((config) => typeof config.sharing === 'object');
+      return sharingConfig ? sharingConfig.sharing : true;
+    })(),
   };
 
   return combinedConfig;
@@ -500,16 +510,37 @@ export async function resolveConfigs(
     redteam: fileConfig.redteam || defaultConfig.redteam,
   };
 
-  // Validation
-  if (!config.prompts || config.prompts.length === 0) {
+  const hasPrompts = [config.prompts].flat().filter(Boolean).length > 0;
+  const hasProviders = [config.providers].flat().filter(Boolean).length > 0;
+  const hasConfigFile = Boolean(configPaths);
+
+  if (!hasConfigFile && !hasPrompts && !hasProviders && !isCI()) {
+    const runCommand = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
+
+    logger.warn(dedent`
+      ${chalk.yellow.bold('⚠️  No promptfooconfig found')}
+
+      ${chalk.white('Try running with:')}
+  
+      ${chalk.cyan(`${runCommand} eval -c ${chalk.bold('path/to/promptfooconfig.yaml')}`)}
+  
+      ${chalk.white('Or create a config with:')}
+  
+      ${chalk.green(`${runCommand} init`)}
+    `);
+    process.exit(1);
+  }
+
+  if (!hasPrompts) {
     logger.error('You must provide at least 1 prompt');
     process.exit(1);
   }
 
-  if (!config.providers || config.providers.length === 0) {
+  if (!hasProviders) {
     logger.error('You must specify at least 1 provider (for example, openai:gpt-4o)');
     process.exit(1);
   }
+
   invariant(Array.isArray(config.providers), 'providers must be an array');
   // Parse prompts, providers, and tests
   const parsedPrompts = await readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);

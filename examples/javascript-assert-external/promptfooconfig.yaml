@@ -8,7 +8,7 @@ providers:
 defaultTest:
   assert:
     - type: javascript
-      value: file://assert.js
+      value: file://assert.js:customFunction
       config:
         foo: bar
 

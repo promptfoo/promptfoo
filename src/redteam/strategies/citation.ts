@@ -2,6 +2,7 @@ import async from 'async';
 import { SingleBar, Presets } from 'cli-progress';
 import dedent from 'dedent';
 import { fetchWithCache } from '../../cache';
+import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { TestCase } from '../../types';
@@ -41,6 +42,7 @@ async function generateCitations(
         injectVar,
         topic: testCase.vars[injectVar],
         config,
+        email: getUserEmail(),
       };
 
       const { data } = await fetchWithCache(
@@ -77,6 +79,7 @@ async function generateCitations(
         metadata: {
           ...testCase.metadata,
           citation: data.result.citation,
+          strategyId: 'citation',
         },
       };
 

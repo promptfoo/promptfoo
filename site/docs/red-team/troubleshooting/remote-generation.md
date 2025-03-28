@@ -18,7 +18,7 @@ You should receive a response like:
 
 ```json
 {
-  "version": "0.100.5"
+  "version": "0.103.3"
 }
 ```
 
@@ -38,7 +38,7 @@ If this request fails or times out, it likely means your network is blocking acc
    - Mobile hotspot
    - Development environment outside corporate network
 
-3. **Configure Proxy**: If you need to use a corporate proxy, you can configure it using environment variables. Promptfoo uses [proxy-agent](https://www.npmjs.com/package/proxy-agent) to handle proxy configuration. It automatically detects and uses standard proxy environment variables. The proxy URL format is: `[protocol://][user:password@]host[:port]`
+3. **Configure Proxy**: If you need to use a corporate proxy, you can configure it using environment variables. Promptfoo uses Node.js's [Unidici](https://undici.nodejs.org/#/docs/api/ProxyAgent.md) to handle proxy configuration. It automatically detects and uses standard proxy environment variables. The proxy URL format is: `[protocol://][user:password@]host[:port]`
 
    ```bash
    export HTTPS_PROXY=http://proxy.company.com:8080

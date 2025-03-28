@@ -3,7 +3,7 @@
   "label": "Strategies",
   "collapsed": true,
   "link": {
-    "type": "generated-index",
-    "description": "Supported strategies for red teaming your LLM applications."
+    "type": "doc",
+    "id": "red-team/strategies/index"
   }
 }

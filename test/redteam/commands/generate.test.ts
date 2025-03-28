@@ -7,7 +7,6 @@ import * as configModule from '../../../src/util/config/load';
 import { writePromptfooConfig } from '../../../src/util/config/manage';
 
 jest.mock('fs');
-jest.mock('../../../src/logger');
 jest.mock('../../../src/redteam');
 jest.mock('../../../src/telemetry');
 jest.mock('../../../src/util/config/load', () => ({
@@ -82,6 +81,7 @@ describe('doGenerateRedteam', () => {
       ],
       purpose: 'Test purpose',
       entities: ['Test entity'],
+      injectVar: 'input',
     });
 
     await doGenerateRedteam(options);
@@ -140,6 +140,7 @@ describe('doGenerateRedteam', () => {
       ],
       purpose: 'Test purpose',
       entities: [],
+      injectVar: 'input',
     });
 
     await doGenerateRedteam(options);
@@ -202,6 +203,7 @@ describe('doGenerateRedteam', () => {
       ],
       purpose: 'Test purpose',
       entities: ['Test entity'],
+      injectVar: 'input',
     });
 
     await doGenerateRedteam(options);
@@ -213,6 +215,8 @@ describe('doGenerateRedteam', () => {
       plugins: expect.any(Array),
       prompts: expect.any(Array),
       strategies: expect.any(Array),
+      targetLabels: [],
+      showProgressBar: true,
     });
     expect(writePromptfooConfig).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -270,6 +274,7 @@ describe('doGenerateRedteam', () => {
       ],
       purpose: 'Test purpose',
       entities: ['Test entity'],
+      injectVar: 'input',
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -335,6 +340,7 @@ describe('doGenerateRedteam', () => {
       ],
       purpose: 'Test purpose',
       entities: ['Company X', 'John Doe', 'Product Y'],
+      injectVar: 'input',
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -391,6 +397,7 @@ describe('doGenerateRedteam', () => {
       ],
       purpose: 'Test purpose',
       entities: [],
+      injectVar: 'input',
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -452,6 +459,7 @@ describe('doGenerateRedteam', () => {
       ],
       purpose: 'Test purpose',
       entities: ['Company X', 'John Doe', 'Product Y'],
+      injectVar: 'input',
     });
 
     const options: RedteamCliGenerateOptions = {

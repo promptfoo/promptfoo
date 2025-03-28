@@ -1,0 +1,16 @@
+description: Example showing how to load test cases from JavaScript/TypeScript functions
+
+prompts:
+  - 'Translate the following text to {{target_language}}: {{text}}'
+
+providers:
+  - id: openai:o3-mini
+    config:
+      reasoning_effort: low
+
+# Demonstrate different ways to load test cases from JavaScript/TypeScript
+tests:
+  # Load simple test cases
+  - file://staticTests.ts
+  # Load test cases from simulated database
+  - file://dynamicTests.ts:generateFromDatabase

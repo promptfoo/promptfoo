@@ -69,16 +69,10 @@
                             "ANTHROPIC_API_KEY": {
                               "type": "string"
                             },
+                            "ANTHROPIC_BASE_URL": {
+                              "type": "string"
+                            },
                             "AWS_BEDROCK_REGION": {
-                              "type": "string"
-                            },
-                            "AZURE_OPENAI_API_BASE_URL": {
-                              "type": "string"
-                            },
-                            "AZURE_OPENAI_API_HOST": {
-                              "type": "string"
-                            },
-                            "AZURE_OPENAI_API_KEY": {
                               "type": "string"
                             },
                             "AZURE_API_BASE_URL": {
@@ -90,10 +84,28 @@
                             "AZURE_API_KEY": {
                               "type": "string"
                             },
+                            "AZURE_AUTHORITY_HOST": {
+                              "type": "string"
+                            },
+                            "AZURE_CLIENT_ID": {
+                              "type": "string"
+                            },
+                            "AZURE_CLIENT_SECRET": {
+                              "type": "string"
+                            },
                             "AZURE_DEPLOYMENT_NAME": {
                               "type": "string"
                             },
                             "AZURE_EMBEDDING_DEPLOYMENT_NAME": {
+                              "type": "string"
+                            },
+                            "AZURE_OPENAI_API_BASE_URL": {
+                              "type": "string"
+                            },
+                            "AZURE_OPENAI_API_HOST": {
+                              "type": "string"
+                            },
+                            "AZURE_OPENAI_API_KEY": {
                               "type": "string"
                             },
                             "AZURE_OPENAI_BASE_URL": {
@@ -105,16 +117,7 @@
                             "AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME": {
                               "type": "string"
                             },
-                            "AZURE_CLIENT_SECRET": {
-                              "type": "string"
-                            },
-                            "AZURE_CLIENT_ID": {
-                              "type": "string"
-                            },
                             "AZURE_TENANT_ID": {
-                              "type": "string"
-                            },
-                            "AZURE_AUTHORITY_HOST": {
                               "type": "string"
                             },
                             "AZURE_TOKEN_SCOPE": {
@@ -132,10 +135,16 @@
                             "CLOUDFLARE_API_KEY": {
                               "type": "string"
                             },
-                            "PROMPTFOO_REMOTE_GENERATION_URL": {
+                            "COHERE_API_KEY": {
                               "type": "string"
                             },
-                            "COHERE_API_KEY": {
+                            "COHERE_CLIENT_NAME": {
+                              "type": "string"
+                            },
+                            "DATABRICKS_TOKEN": {
+                              "type": "string"
+                            },
+                            "DATABRICKS_WORKSPACE_URL": {
                               "type": "string"
                             },
                             "FAL_KEY": {
@@ -150,6 +159,27 @@
                             "GROQ_API_KEY": {
                               "type": "string"
                             },
+                            "HELICONE_API_KEY": {
+                              "type": "string"
+                            },
+                            "HF_API_TOKEN": {
+                              "type": "string"
+                            },
+                            "HF_TOKEN": {
+                              "type": "string"
+                            },
+                            "LANGFUSE_HOST": {
+                              "type": "string"
+                            },
+                            "LANGFUSE_PUBLIC_KEY": {
+                              "type": "string"
+                            },
+                            "LANGFUSE_SECRET_KEY": {
+                              "type": "string"
+                            },
+                            "LLAMA_BASE_URL": {
+                              "type": "string"
+                            },
                             "LOCALAI_BASE_URL": {
                               "type": "string"
                             },
@@ -160,6 +190,12 @@
                               "type": "string"
                             },
                             "MISTRAL_API_KEY": {
+                              "type": "string"
+                            },
+                            "OLLAMA_API_KEY": {
+                              "type": "string"
+                            },
+                            "OLLAMA_BASE_URL": {
                               "type": "string"
                             },
                             "OPENAI_API_BASE_URL": {
@@ -183,6 +219,15 @@
                             "PALM_API_KEY": {
                               "type": "string"
                             },
+                            "PORTKEY_API_KEY": {
+                              "type": "string"
+                            },
+                            "PROMPTFOO_CA_CERT_PATH": {
+                              "type": "string"
+                            },
+                            "PROMPTFOO_INSECURE_SSL": {
+                              "type": "string"
+                            },
                             "REPLICATE_API_KEY": {
                               "type": "string"
                             },
@@ -195,6 +240,9 @@
                             "VERTEX_API_KEY": {
                               "type": "string"
                             },
+                            "VERTEX_API_VERSION": {
+                              "type": "string"
+                            },
                             "VERTEX_PROJECT_ID": {
                               "type": "string"
                             },
@@ -204,13 +252,49 @@
                             "VERTEX_REGION": {
                               "type": "string"
                             },
+                            "VOYAGE_API_BASE_URL": {
+                              "type": "string"
+                            },
+                            "VOYAGE_API_KEY": {
+                              "type": "string"
+                            },
                             "WATSONX_AI_APIKEY": {
+                              "type": "string"
+                            },
+                            "WATSONX_AI_AUTH_TYPE": {
+                              "type": "string"
+                            },
+                            "WATSONX_AI_BEARER_TOKEN": {
                               "type": "string"
                             },
                             "WATSONX_AI_PROJECT_ID": {
                               "type": "string"
                             },
-                            "WATSONX_AI_BEARER_TOKEN": {
+                            "AZURE_CONTENT_SAFETY_ENDPOINT": {
+                              "type": "string"
+                            },
+                            "AZURE_CONTENT_SAFETY_API_KEY": {
+                              "type": "string"
+                            },
+                            "AZURE_CONTENT_SAFETY_API_VERSION": {
+                              "type": "string"
+                            },
+                            "AWS_REGION": {
+                              "type": "string"
+                            },
+                            "AWS_DEFAULT_REGION": {
+                              "type": "string"
+                            },
+                            "AWS_SAGEMAKER_MAX_TOKENS": {
+                              "type": "string"
+                            },
+                            "AWS_SAGEMAKER_TEMPERATURE": {
+                              "type": "string"
+                            },
+                            "AWS_SAGEMAKER_TOP_P": {
+                              "type": "string"
+                            },
+                            "AWS_SAGEMAKER_MAX_RETRIES": {
                               "type": "string"
                             }
                           },
@@ -329,23 +413,16 @@
                             {
                               "type": "array",
                               "items": {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "boolean"
-                                  }
+                                "type": [
+                                  "string",
+                                  "number",
+                                  "boolean"
                                 ]
                               }
                             },
                             {
                               "type": "object",
-                              "properties": {},
-                              "additionalProperties": false
+                              "additionalProperties": {}
                             },
                             {
                               "type": "array"
@@ -427,6 +504,7 @@
                                               "equals",
                                               "factuality",
                                               "g-eval",
+                                              "guardrails",
                                               "icontains-all",
                                               "icontains-any",
                                               "icontains",
@@ -497,6 +575,10 @@
                                 },
                                 "threshold": {
                                   "type": "number"
+                                },
+                                "config": {
+                                  "type": "object",
+                                  "additionalProperties": {}
                                 }
                               },
                               "required": [
@@ -510,6 +592,15 @@
                             }
                           ]
                         }
+                      },
+                      "assertScoringFunction": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^file:\\/\\/.*\\.(js|cjs|mjs|ts|cts|mts|py)(?::[\\w.]+)?$"
+                          },
+                          {}
+                        ]
                       },
                       "options": {
                         "allOf": [
@@ -700,6 +791,9 @@
                         "assert": {
                           "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assert"
                         },
+                        "assertScoringFunction": {
+                          "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assertScoringFunction"
+                        },
                         "options": {
                           "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/options"
                         },
@@ -743,6 +837,9 @@
             },
             "assert": {
               "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assert"
+            },
+            "assertScoringFunction": {
+              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assertScoringFunction"
             },
             "options": {
               "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/options"
@@ -795,7 +892,27 @@
           }
         },
         "env": {
-          "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/1/additionalProperties/properties/env"
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/1/additionalProperties/properties/env"
+            },
+            {
+              "type": "object",
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  }
+                ]
+              }
+            }
+          ]
         },
         "derivedMetrics": {
           "type": "array",
@@ -880,20 +997,27 @@
                         "type": "string",
                         "enum": [
                           "ascii-smuggling",
+                          "beavertails",
                           "bfla",
+                          "bias",
                           "bola",
                           "competitors",
                           "contracts",
                           "cross-session-leak",
+                          "cyberseceval",
                           "debug-access",
                           "default",
+                          "divergent-repetition",
                           "excessive-agency",
+                          "foundation",
                           "hallucination",
+                          "harmbench",
                           "harmful",
                           "harmful:chemical-biological-weapons",
                           "harmful:child-exploitation",
                           "harmful:copyright-violations",
                           "harmful:cybercrime",
+                          "harmful:cybercrime:malicious-code",
                           "harmful:graphic-content",
                           "harmful:harassment-bullying",
                           "harmful:hate",
@@ -916,9 +1040,11 @@
                           "harmful:violent-crime",
                           "harmful:weapons:ied",
                           "hijacking",
+                          "illegal-activity",
                           "imitation",
                           "indirect-prompt-injection",
                           "intent",
+                          "misinformation",
                           "mitre:atlas",
                           "mitre:atlas:exfiltration",
                           "mitre:atlas:impact",
@@ -972,6 +1098,7 @@
                           "owasp:llm:08",
                           "owasp:llm:09",
                           "owasp:llm:10",
+                          "personal-safety",
                           "pii",
                           "pii:api-db",
                           "pii:direct",
@@ -981,11 +1108,17 @@
                           "policy",
                           "politics",
                           "prompt-extraction",
+                          "rag-document-exfiltration",
+                          "rag-poisoning",
                           "rbac",
+                          "reasoning-dos",
                           "religion",
                           "shell-injection",
                           "sql-injection",
-                          "ssrf"
+                          "ssrf",
+                          "system-prompt-override",
+                          "tool-discovery",
+                          "toxicity"
                         ]
                       },
                       {
@@ -1004,20 +1137,27 @@
                             "type": "string",
                             "enum": [
                               "ascii-smuggling",
+                              "beavertails",
                               "bfla",
+                              "bias",
                               "bola",
                               "competitors",
                               "contracts",
                               "cross-session-leak",
+                              "cyberseceval",
                               "debug-access",
                               "default",
+                              "divergent-repetition",
                               "excessive-agency",
+                              "foundation",
                               "hallucination",
+                              "harmbench",
                               "harmful",
                               "harmful:chemical-biological-weapons",
                               "harmful:child-exploitation",
                               "harmful:copyright-violations",
                               "harmful:cybercrime",
+                              "harmful:cybercrime:malicious-code",
                               "harmful:graphic-content",
                               "harmful:harassment-bullying",
                               "harmful:hate",
@@ -1040,9 +1180,11 @@
                               "harmful:violent-crime",
                               "harmful:weapons:ied",
                               "hijacking",
+                              "illegal-activity",
                               "imitation",
                               "indirect-prompt-injection",
                               "intent",
+                              "misinformation",
                               "mitre:atlas",
                               "mitre:atlas:exfiltration",
                               "mitre:atlas:impact",
@@ -1096,6 +1238,7 @@
                               "owasp:llm:08",
                               "owasp:llm:09",
                               "owasp:llm:10",
+                              "personal-safety",
                               "pii",
                               "pii:api-db",
                               "pii:direct",
@@ -1105,11 +1248,17 @@
                               "policy",
                               "politics",
                               "prompt-extraction",
+                              "rag-document-exfiltration",
+                              "rag-poisoning",
                               "rbac",
+                              "reasoning-dos",
                               "religion",
                               "shell-injection",
                               "sql-injection",
-                              "ssrf"
+                              "ssrf",
+                              "system-prompt-override",
+                              "tool-discovery",
+                              "toxicity"
                             ]
                           },
                           {
@@ -1152,20 +1301,27 @@
                       {
                         "type": "string",
                         "enum": [
-                          "basic",
-                          "default",
-                          "jailbreak",
-                          "jailbreak:composite",
-                          "prompt-injection",
-                          "ascii-smuggling",
+                          "audio",
                           "base64",
+                          "basic",
+                          "best-of-n",
                           "citation",
                           "crescendo",
+                          "default",
+                          "gcg",
                           "goat",
+                          "hex",
+                          "image",
+                          "jailbreak",
+                          "jailbreak:composite",
+                          "jailbreak:likert",
                           "jailbreak:tree",
                           "leetspeak",
                           "math-prompt",
                           "multilingual",
+                          "pandamonium",
+                          "prompt-injection",
+                          "retry",
                           "rot13"
                         ]
                       },
@@ -1194,7 +1350,7 @@
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to jailbreak, jailbreak:composite\nSupports basic, default, jailbreak, jailbreak:composite, prompt-injection, ascii-smuggling, base64, citation, crescendo, goat, jailbreak:tree, leetspeak, math-prompt, multilingual, rot13",
+              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, base64, basic, best-of-n, citation, crescendo, default, gcg, goat, hex, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, multilingual, pandamonium, prompt-injection, retry, rot13",
               "default": [
                 "default"
               ]
@@ -1327,6 +1483,9 @@
             },
             "watch": {
               "type": "boolean"
+            },
+            "filterErrorsOnly": {
+              "type": "string"
             },
             "filterFailing": {
               "type": "string"

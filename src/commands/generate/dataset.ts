@@ -5,7 +5,7 @@ import yaml from 'js-yaml';
 import { disableCache } from '../../cache';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import { synthesizeFromTestSuite } from '../../testCases';
+import { synthesizeFromTestSuite } from '../../testCase/synthesis';
 import type { TestSuite, UnifiedConfig } from '../../types';
 import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
 import { resolveConfigs } from '../../util/config/load';

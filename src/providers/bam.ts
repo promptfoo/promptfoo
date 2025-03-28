@@ -69,7 +69,7 @@ interface BAMModerations {
       };
 }
 
-function convertResponse(response: TextGenerationCreateOutput): ProviderResponse {
+export function convertResponse(response: TextGenerationCreateOutput): ProviderResponse {
   const totalGeneratedTokens = response.results.reduce(
     (acc, result) => acc + result.generated_token_count,
     0,
@@ -92,7 +92,7 @@ function convertResponse(response: TextGenerationCreateOutput): ProviderResponse
   return providerResponse;
 }
 
-export class BAMChatProvider implements ApiProvider {
+export class BAMProvider implements ApiProvider {
   modelName: string;
   config?: BAMGenerationParameters;
   moderations?: BAMModerations;
@@ -191,5 +191,3 @@ export class BAMChatProvider implements ApiProvider {
     }
   }
 }
-
-export class BAMEmbeddingProvider extends BAMChatProvider {}

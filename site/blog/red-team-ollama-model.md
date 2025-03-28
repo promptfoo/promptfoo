@@ -49,7 +49,7 @@ Create a new directory for your red teaming project and initialize it:
 ```bash
 mkdir redteam-ollama
 cd redteam-ollama
-npx promptfoo@latest redteam init --no-gui --no-interactive
+npx promptfoo@latest redteam init --no-gui
 ```
 
 This creates a `promptfooconfig.yaml` file that we'll customize for Ollama.
@@ -97,7 +97,7 @@ To see the full configuration example on Github, [click here](https://github.com
   - `contracts`: Tests if model makes unauthorized commitments
   - `hallucination`: Tests for false information
   - `imitation`: Tests if model impersonates others
-- **strategies**: Techniques for delivering adversarial inputs (see [full list](/docs/category/strategies-1/)):
+- **strategies**: Techniques for delivering adversarial inputs (see [full list](/docs/red-team/strategies/)):
   - `jailbreak`: Tests if model can escape its constraints using an iterative approach with an attacker model.
   - `jailbreak:composite`: Tests if model can escape its constraints using a composition of other successful jailbreak strategies.
 - **numTests**: Number of test cases per plugin

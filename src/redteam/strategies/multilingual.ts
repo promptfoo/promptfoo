@@ -3,6 +3,7 @@ import { SingleBar, Presets } from 'cli-progress';
 import dedent from 'dedent';
 import yaml from 'js-yaml';
 import { fetchWithCache } from '../../cache';
+import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { TestCase } from '../../types';
@@ -47,6 +48,7 @@ export async function generateMultilingual(
         testCases: batch,
         injectVar,
         config,
+        email: getUserEmail(),
       };
 
       const { data } = await fetchWithCache(
@@ -85,7 +87,7 @@ export async function generateMultilingual(
   }
 }
 
-export async function translate(text: string, lang: string): Promise<string> {
+export async function translate(text: string, lang: string): Promise<string | null> {
   const redteamProvider = await redteamProviderManager.getProvider({
     jsonOnly: true,
     preferSmallModel: true,
@@ -103,7 +105,7 @@ export async function translate(text: string, lang: string): Promise<string> {
     logger.error(
       `[translate] Error parsing translation result: ${error} Provider Output: ${JSON.stringify(result.output, null, 2)}`,
     );
-    throw error;
+    return null;
   }
 }
 
@@ -140,6 +142,7 @@ export async function addMultilingual(
     progressBar.start(totalOperations, 0);
   }
 
+  let testCaseCount = 0;
   for (const testCase of testCases) {
     invariant(
       testCase.vars,
@@ -148,7 +151,14 @@ export async function addMultilingual(
     const originalText = String(testCase.vars[injectVar]);
 
     for (const lang of languages) {
+      testCaseCount++;
       const translatedText = await translate(originalText, lang);
+      if (!translatedText) {
+        logger.debug(
+          `[translate] Failed to translate to ${lang}, skipping ${testCase} #${testCaseCount}`,
+        );
+        continue;
+      }
 
       translatedTestCases.push({
         ...testCase,
@@ -164,7 +174,7 @@ export async function addMultilingual(
         },
         metadata: {
           ...testCase.metadata,
-          ...(testCase.metadata?.harmCategory && { harmCategory: testCase.metadata.harmCategory }),
+          strategyId: 'multilingual',
         },
       });
 

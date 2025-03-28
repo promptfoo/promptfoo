@@ -132,7 +132,7 @@ export default function Navigation({
             <NavLink href="/eval" label="Evals" />
             <NavLink href="/prompts" label="Prompts" />
             <NavLink href="/datasets" label="Datasets" />
-            <NavLink href="/progress" label="History" />
+            <NavLink href="/history" label="History" />
           </NavSection>
           <NavSection>
             <IconButton onClick={handleModalToggle} color="inherit">

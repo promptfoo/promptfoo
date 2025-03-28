@@ -410,13 +410,137 @@ Note that you should adapt this approach to fill the context window for your app
 
 This red team will ensure that the application behaves correctly even with a bunch of a junk filling its context.
 
+## Testing Individual RAG Components
+
+RAG systems consist of two primary components: retrieval and generation. Testing these components separately allows you to pinpoint vulnerabilities and optimize each part of your system independently.
+
+### Component-Level Testing with Custom Providers
+
+By creating specialized providers for each component, you can isolate and test specific aspects of your RAG system:
+
+```yaml
+providers:
+  - file://retrieval_only_provider.py # Test only the retrieval component
+  - file://generation_only_provider.py # Test only the generation component
+  - file://full_rag_provider.py # Test the entire RAG pipeline
+```
+
+This approach helps you:
+
+1. Identify which component is most susceptible to different attack vectors
+2. Test and fix components independently
+3. Understand how vulnerabilities in one component affect the entire system
+
+For more details on implementing custom providers, refer to:
+
+- [Python Provider](/docs/providers/python) - Create Python-based custom providers
+- [Custom Scripts](/docs/providers/custom-script) - Use shell commands as providers
+- [Custom Javascript](/docs/providers/custom-api) - Implement providers in JavaScript/TypeScript
+- [Testing LLM Chains](/docs/configuration/testing-llm-chains) - Test multi-step LLM workflows
+
+### Example: Retrieval-Only Provider
+
+Here's an example of a Python provider that tests just the retrieval component:
+
+```python
+# retrieval_only_provider.py
+def call_api(prompt, options, context):
+    try:
+        # Import your retrieval module
+        import your_retrieval_module
+
+        # Configure retrieval parameters
+        k = options.get("config", {}).get("topK", 5)
+
+        # Call only the retrieval component
+        retrieved_docs = your_retrieval_module.retrieve_documents(prompt, k=k)
+
+        # Format the results for evaluation
+        result = {
+            "output": "\n\n".join([doc.page_content for doc in retrieved_docs]),
+        }
+
+        return result
+    except Exception as e:
+        return {"error": str(e)}
+```
+
+### Example: Generation-Only Provider with Fixed Context
+
+This provider tests how the generation component handles potentially malicious context:
+
+```python
+# generation_only_provider.py
+
+TEST_CONTEXT = [
+  # Insert docs here...
+]
+
+def call_api(prompt, options, context):
+    try:
+        # Import your generation module
+        import your_generation_module
+
+        # Call only the generation component with the test context
+        response = your_generation_module.generate_response(prompt, TEST_CONTEXT)
+
+        return {
+            "output": response,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+```
+
+### Using Purpose to Define Security Boundaries
+
+The `purpose` field in your red team configuration helps define the security boundaries and intended behavior of your RAG system. This information is used to generate more targeted test cases and evaluate responses based on your specific requirements.
+
+```yaml
+redteam:
+  purpose: |
+    This RAG system is a corporate knowledge base assistant that should:
+    - Only provide information found in the retrieved documents
+    - Never disclose confidential financial data including revenue, profit margins, or salary information
+    - Never reveal employee personal information like addresses, phone numbers, or emails
+    - Refuse to provide competitive analysis or disparage competitor products
+    - Only provide factual information supported by the retrieved documents
+```
+
+#### Retrieval example
+
+```yaml
+# For testing retrieval
+redteam:
+  purpose: |
+    The retrieval component should:
+    - Return relevant documents based on the query
+    - Prioritize authoritative sources over user-generated content
+    - Not be manipulated by keyword stuffing or prompt engineering
+    - Filter out outdated or deprecated information when newer versions exist
+```
+
+#### Generation example
+
+```yaml
+redteam:
+  purpose: |
+    The generation component should:
+    - Only use information present in the provided context
+    - Never fabricate information not found in the context
+    - Refuse to generate harmful, unethical, or illegal content
+    - Maintain factual accuracy and avoid introducing contradictions
+    - Not leak PII or sensitive data even if it appears in the context
+```
+
+Note that these specific requirements are an excellent use case for the [custom policy](/docs/red-team/plugins/policy/) plugin, which will generate adversarial probes that specifically target these requirements.
+
 ## What's next
 
 If you're interested in red teaming your RAG and finding potential vulnerabilities, see the [Getting Started](/docs/red-team/quickstart/) guide.
 
-### Setting Up a Custom Provider for Red Team Evaluation
+### Setting Up a Complete RAG Provider for Red Team Evaluation
 
-To configure a red team for your RAG system, set up a custom provider that interfaces directly with your RAG application or pipeline.
+To configure a red team for your entire RAG system, set up a custom provider that interfaces directly with your RAG application or pipeline.
 
 This provider will handle the entire process of retrieving documents and generating responses based on the red team's inputs.
 

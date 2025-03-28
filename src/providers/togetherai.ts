@@ -1,11 +1,15 @@
 import type { ApiProvider, ProviderOptions } from '../types';
 import type { EnvOverrides } from '../types/env';
-import {
-  OpenAiChatCompletionProvider,
-  OpenAiCompletionProvider,
-  OpenAiEmbeddingProvider,
-} from './openai';
+import { OpenAiChatCompletionProvider } from './openai/chat';
+import { OpenAiCompletionProvider } from './openai/completion';
+import { OpenAiEmbeddingProvider } from './openai/embedding';
 
+/**
+ * Creates a TogetherAI provider using OpenAI-compatible endpoints
+ *
+ * TogetherAI supports many parameters beyond standard OpenAI ones.
+ * All parameters are automatically passed through to the TogetherAI API.
+ */
 export function createTogetherAiProvider(
   providerPath: string,
   options: {
@@ -15,12 +19,16 @@ export function createTogetherAiProvider(
   } = {},
 ): ApiProvider {
   const splits = providerPath.split(':');
+
+  const config = options.config?.config || {};
   const togetherAiConfig = {
     ...options,
     config: {
-      ...options.config,
       apiBaseUrl: 'https://api.together.xyz/v1',
       apiKeyEnvar: 'TOGETHER_API_KEY',
+      passthrough: {
+        ...config,
+      },
     },
   };
 

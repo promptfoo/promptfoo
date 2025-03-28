@@ -1,12 +1,12 @@
 ---
-sidebar_label: Qwen vs GPT-4 vs Llama
+sidebar_label: Qwen vs Llama vs GPT
 ---
 
-# Qwen vs GPT-4 vs Llama: Run a Custom Benchmark
+# Qwen vs Llama vs GPT: Run a Custom Benchmark
 
 As a product developer using LLMs, you are likely focused on a specific use case. Generic benchmarks are easily gamed and often not applicable to specific product needs. The best way to improve quality in your LLM app is to construct your own benchmark.
 
-In this guide, we'll walk through the steps to compare Qwen-2-72B, GPT-4, and Llama-3-70B. The end result is a side-by-side comparison view that looks like this:
+In this guide, we'll walk through the steps to compare Qwen-2-72B, GPT-4o, and Llama-3-70B. The end result is a side-by-side comparison view that looks like this:
 
 ![qwen vs gpt vs llama](/img/docs/qwen-eval-webui.png)
 
@@ -20,7 +20,7 @@ The chatbot should provide accurate information, respond quickly, and handle com
 
 - Node 18 or above.
 - Access to OpenRouter for Qwen and Llama (set environment variable `OPENROUTER_API_KEY`)
-- Access to OpenAI for GPT-4 (set environment variable `OPENAI_API_KEY`)
+- Access to OpenAI for GPT-4o (set environment variable `OPENAI_API_KEY`)
 
 ## Step 1: Initial Setup
 
@@ -32,11 +32,11 @@ npx promptfoo@latest init --no-interactive qwen-benchmark
 
 ## Step 2: Configure the Models
 
-Inside of the `qwen-benchmark` directory, edit `promptfooconfig.yaml` to include the models you want to compare. Here's an example configuration with Qwen, GPT-4, and Llama:
+Inside of the `qwen-benchmark` directory, edit `promptfooconfig.yaml` to include the models you want to compare. Here's an example configuration with Qwen, GPT-4o, and Llama:
 
 ```yaml title=promptfooconfig.yaml
 providers:
-  - 'openai:gpt-4'
+  - 'openai:gpt-4o'
   - 'openrouter:meta-llama/llama-3-70b-instruct'
   - 'openrouter:qwen/qwen-2-72b-instruct'
 ```
@@ -54,7 +54,7 @@ Customize the behavior of each model by setting parameters such as `temperature`
 
 ```yaml title=promptfooconfig.yaml
 providers:
-  - id: openai:gpt-4
+  - id: openai:gpt-4o
     config:
       temperature: 0.9
       max_tokens: 512
@@ -181,7 +181,7 @@ npx promptfoo@latest eval -o results.csv
 
 ## Conclusion
 
-The comparison will provide you with a side-by-side performance view of Qwen, GPT-4, and Llama based on your customer support chatbot test cases. Use this data to make informed decisions about which LLM best suits your application.
+The comparison will provide you with a side-by-side performance view of Qwen, GPT-4o, and Llama based on your customer support chatbot test cases. Use this data to make informed decisions about which LLM best suits your application.
 
 Contrast this with public benchmarks from the [Chatbot Arena](https://lmarena.ai/?leaderboard) leaderboard:
 

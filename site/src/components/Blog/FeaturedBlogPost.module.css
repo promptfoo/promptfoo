@@ -8,11 +8,28 @@
   transition:
     box-shadow 0.3s ease,
     transform 0.3s ease;
+  position: relative;
 }
 
 .featuredPost:hover {
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
   transform: translateY(-4px);
+}
+
+.featuredBadge {
+  position: absolute;
+  top: 0;
+  right: 20px;
+  background-color: var(--ifm-color-primary);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 0 0 8px 8px;
+  font-weight: bold;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  z-index: 2;
 }
 
 .featuredPostContent {
@@ -70,6 +87,11 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: transform 0.5s ease;
+}
+
+.featuredPost:hover .featuredPostImage img {
+  transform: scale(1.05);
 }
 
 .preview {
@@ -93,4 +115,43 @@
 .featuredPostLink:hover {
   color: inherit;
   text-decoration: none;
+}
+
+/* Responsive styles */
+@media (max-width: 996px) {
+  .title {
+    font-size: 2rem;
+  }
+
+  .featuredPostContent {
+    padding: 2rem;
+  }
+
+  .preview {
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .featuredPost {
+    flex-direction: column;
+  }
+
+  .featuredPostImage {
+    max-width: 100%;
+    height: 300px;
+    order: -1;
+  }
+
+  .featuredPostContent {
+    padding: 1.5rem;
+  }
+
+  .title {
+    font-size: 1.75rem;
+  }
+
+  .preview {
+    -webkit-line-clamp: 2;
+  }
 }

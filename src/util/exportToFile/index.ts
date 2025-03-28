@@ -44,7 +44,7 @@ export function getHeaderForTable(eval_: Eval) {
   };
 }
 
-function convertEvalResultToTableCell(result: EvalResult): EvaluateTableOutput {
+export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableOutput {
   let resultText: string | undefined;
   const failReasons = (result.gradingResult?.componentResults || [])
     .filter((result) => (result ? !result.pass : false))
@@ -75,6 +75,15 @@ function convertEvalResultToTableCell(result: EvalResult): EvaluateTableOutput {
     provider: result.provider?.label || result.provider?.id || 'unknown provider',
     pass: result.success,
     cost: result.cost || 0,
+    audio: result.response?.audio
+      ? {
+          id: result.response.audio.id,
+          expiresAt: result.response.audio.expiresAt,
+          data: result.response.audio.data,
+          transcript: result.response.audio.transcript,
+          format: result.response.audio.format,
+        }
+      : undefined,
   };
 }
 
@@ -97,6 +106,7 @@ export function convertTestResultsToTableRow(
           .flat()
       : [],
     test: results[0].testCase,
+    testIdx: results[0].testIdx,
   };
 
   for (const result of results) {

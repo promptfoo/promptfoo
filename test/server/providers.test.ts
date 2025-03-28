@@ -38,10 +38,10 @@ describe('providersRouter', () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
-      provider_response: {
+      providerResponse: {
         output: 'Mocked response',
       },
-      test_result: {
+      testResult: {
         changes_needed: true,
         changes_needed_reason: 'Test reason',
         changes_needed_suggestions: ['Test suggestion 1', 'Test suggestion 2'],
@@ -77,24 +77,8 @@ describe('providersRouter', () => {
     const res = await request(app).post('/api/providers/test').send(testProvider);
 
     expect(res.status).toBe(200);
-    expect(res.body.provider_response.output).toBe('Mocked response');
+    expect(res.body.providerResponse.output).toBe('Mocked response');
     expect(mockCallApi).toHaveBeenCalledWith('Hello, world!', expect.any(Object));
-  });
-
-  it('should validate provider config using Zod schema', async () => {
-    const invalidProvider = {
-      id: 'http://example.com/api',
-      config: {
-        // Missing required url field
-        method: 'POST',
-        headers: { 'invalid-header': 123 }, // Invalid header value type
-      },
-    };
-
-    const res = await request(app).post('/api/providers/test').send(invalidProvider);
-
-    expect(res.status).toBe(400);
-    expect(res.body).toHaveProperty('error');
   });
 
   it('should handle non-JSON content types correctly', async () => {
@@ -121,6 +105,6 @@ describe('providersRouter', () => {
     const res = await request(app).post('/api/providers/test').send(testProvider);
 
     expect(res.status).toBe(200);
-    expect(res.body.provider_response.output).toBe('Mocked response');
+    expect(res.body.providerResponse.output).toBe('Mocked response');
   });
 });

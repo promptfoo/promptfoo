@@ -1,0 +1,9 @@
+prompts:
+  - 'Tell me about {{topic}}'
+
+providers:
+  - id: openai:gpt-4
+    config:
+      temperature: 0.7
+
+tests: file://tests.csv

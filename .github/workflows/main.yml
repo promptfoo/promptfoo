@@ -36,10 +36,10 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: 'npm'
 
-      - name: Use Python 3.12
+      - name: Use Python 3.13
         uses: actions/setup-python@v5
         with:
-          python-version: 3.12
+          python-version: 3.13
 
       - name: Install Dependencies
         run: |
@@ -83,10 +83,24 @@ jobs:
 
       - name: Check Dependency Versions
         run: |
-          npm exec check-dependency-version-consistency
+          npx check-dependency-version-consistency
 
       - name: Check for circular dependencies
-        run: npx madge $(git ls-files '*.ts') --circular
+        run: |
+          # shellcheck disable=SC2046
+          npx madge $(git ls-files '*.ts') --circular
+
+  shell-format:
+    name: Shell Format Check
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: luizm/action-sh-checker@17bd25a6ee188d2b91f677060038f4ba37ba14b2
+        env:
+          SHFMT_OPTS: '-i 2' # 2 space indent
+        with:
+          sh_checker_shellcheck_disable: true
 
   assets:
     name: Generate Assets
@@ -124,7 +138,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.9, 3.12]
+        python-version: [3.9, 3.13]
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -208,10 +222,10 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      - name: Use Python 3.12
+      - name: Use Python 3.13
         uses: actions/setup-python@v5
         with:
-          python-version: 3.12
+          python-version: 3.13
 
       - name: Install Dependencies
         run: |
@@ -240,6 +254,8 @@ jobs:
         id: eval
         run: |
           PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:8500 PROMPTFOO_SHARING_APP_BASE_URL=http://localhost:8500  node dist/src/main.js eval -c .github/assets/promptfooconfig.yaml --share
+        env:
+          PROMPTFOO_DISABLE_TELEMETRY: 1
 
       - name: Test that the eval results are uploaded
         run: |
@@ -304,3 +320,36 @@ jobs:
       - name: Run Redteam
         run: |
           npm run test:redteam:integration
+
+  actionlint:
+    name: GitHub Actions Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Run actionlint
+        id: actionlint
+        uses: raven-actions/actionlint@v2
+
+  golang:
+    name: Go Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.6'
+          check-latest: true
+
+      - name: Run wrapper tests
+        working-directory: src/golang
+        run: |
+          go test -v wrapper.go wrapper_test.go

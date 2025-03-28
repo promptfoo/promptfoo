@@ -97,16 +97,20 @@ describe('AssertionSchema', () => {
 
 describe('VarsSchema', () => {
   it('should validate and transform various types of values', () => {
-    expect.assertions(8);
+    expect.assertions(9);
     const testCases = [
       { input: { key: 'string value' }, expected: { key: 'string value' } },
-      { input: { key: 42 }, expected: { key: '42' } },
-      { input: { key: true }, expected: { key: 'true' } },
-      { input: { key: false }, expected: { key: 'false' } },
+      { input: { key: 42 }, expected: { key: 42 } },
+      { input: { key: true }, expected: { key: true } },
+      { input: { key: false }, expected: { key: false } },
       { input: { key: ['a', 'b', 'c'] }, expected: { key: ['a', 'b', 'c'] } },
-      { input: { key: [1, 2, 3] }, expected: { key: ['1', '2', '3'] } },
-      { input: { key: [true, false] }, expected: { key: ['true', 'false'] } },
+      { input: { key: [1, 2, 3] }, expected: { key: [1, 2, 3] } },
+      { input: { key: [true, false] }, expected: { key: [true, false] } },
       { input: { key: [{ nested: 'object' }] }, expected: { key: [{ nested: 'object' }] } },
+      {
+        input: { key: { arbitrary: 'value', nested: { object: true } } },
+        expected: { key: { arbitrary: 'value', nested: { object: true } } },
+      },
     ];
 
     testCases.forEach(({ input, expected }) => {
@@ -171,6 +175,50 @@ describe('TestSuiteConfigSchema', () => {
 
   it('should find configuration files', () => {
     expect(configFiles.length).toBeGreaterThan(0);
+  });
+
+  it('should validate env field with primitive values that get transformed to strings', () => {
+    const customEnvVars = {
+      CUSTOM_STRING_VALUE: 'string-value',
+      CUSTOM_NUMBER_VALUE: 42,
+      CUSTOM_BOOLEAN_TRUE: true,
+      CUSTOM_BOOLEAN_FALSE: false,
+    };
+
+    const recordSchema = z.record(
+      z.string(),
+      z.union([z.string(), z.number(), z.boolean()]).transform(String),
+    );
+    const recordResult = recordSchema.safeParse(customEnvVars);
+
+    expect(recordResult.success).toBe(true);
+
+    const parsedData = recordResult.success ? recordResult.data : {};
+
+    expect(parsedData.CUSTOM_STRING_VALUE).toBe('string-value');
+    expect(parsedData.CUSTOM_NUMBER_VALUE).toBe('42');
+    expect(parsedData.CUSTOM_BOOLEAN_TRUE).toBe('true');
+    expect(parsedData.CUSTOM_BOOLEAN_FALSE).toBe('false');
+
+    const config = {
+      providers: [{ id: 'test-provider' }],
+      prompts: ['test prompt'],
+      env: customEnvVars,
+    };
+
+    const result = TestSuiteConfigSchema.safeParse(config);
+
+    expect(result.success).toBe(true);
+
+    const testProvider = result.success
+      ? {
+          id: 'test-provider',
+          config: { someConfig: true },
+          env: result.data.env,
+        }
+      : { id: 'test-provider', config: { someConfig: true } };
+
+    expect(Object.keys(testProvider)).toContain('env');
   });
 
   for (const file of configFiles) {

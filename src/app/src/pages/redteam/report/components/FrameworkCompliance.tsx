@@ -19,6 +19,7 @@ import {
   categoryAliases,
   displayNameOverrides,
   FRAMEWORK_NAMES,
+  FRAMEWORK_COMPLIANCE_IDS,
 } from '@promptfoo/redteam/constants';
 import { useReportStore } from './store';
 import './FrameworkCompliance.css';
@@ -58,8 +59,8 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
   );
 
   const frameworkCompliance = React.useMemo(() => {
-    return Object.entries(ALIASED_PLUGIN_MAPPINGS).reduce(
-      (acc, [framework, mappings]) => {
+    return FRAMEWORK_COMPLIANCE_IDS.reduce(
+      (acc, framework) => {
         const nonCompliantPlugins = getNonCompliantPlugins(framework);
         acc[framework] = nonCompliantPlugins.length === 0;
         return acc;
@@ -68,14 +69,19 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
     );
   }, [getNonCompliantPlugins]);
 
-  const totalFrameworks = Object.keys(frameworkCompliance).length;
+  const totalFrameworks = FRAMEWORK_COMPLIANCE_IDS.length;
   const compliantFrameworks = Object.values(frameworkCompliance).filter(Boolean).length;
 
   const pluginComplianceStats = React.useMemo(() => {
     let totalPlugins = 0;
     let compliantPlugins = 0;
 
-    Object.entries(ALIASED_PLUGIN_MAPPINGS).forEach(([_, mappings]) => {
+    FRAMEWORK_COMPLIANCE_IDS.forEach((framework) => {
+      const mappings = ALIASED_PLUGIN_MAPPINGS[framework];
+      if (!mappings) {
+        return;
+      }
+
       Object.values(mappings).forEach(({ plugins, strategies }) => {
         const items = [...plugins, ...strategies];
         totalPlugins += items.length;
@@ -111,7 +117,7 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
       <CardContent>
         <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
           <Typography variant="h5">
-            Framework Compliance ({compliantFrameworks}/{totalFrameworks})
+            Frameworks ({compliantFrameworks}/{totalFrameworks})
           </Typography>
           <Typography variant="h6" color="textSecondary">
             {pluginComplianceStats.percentage.toFixed(0)}% ({pluginComplianceStats.compliant}/
@@ -133,8 +139,9 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
           }}
         />
         <Grid container spacing={3} className="framework-grid">
-          {Object.entries(frameworkCompliance).map(([framework, isCompliant]) => {
+          {FRAMEWORK_COMPLIANCE_IDS.map((framework) => {
             const nonCompliantPlugins = getNonCompliantPlugins(framework);
+            const isCompliant = frameworkCompliance[framework];
             const isExpanded = expandedFrameworks[framework];
             return (
               <Grid item xs={12} sm={6} md={3} key={framework}>

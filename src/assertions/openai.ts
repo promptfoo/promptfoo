@@ -1,7 +1,9 @@
-import type { OpenAiChatCompletionProvider } from '../providers/openai';
-import { validateFunctionCall } from '../providers/openaiUtil';
+import type { OpenAiChatCompletionProvider } from '../providers/openai/chat';
+import { validateFunctionCall } from '../providers/openai/util';
 import type { AssertionParams } from '../types';
 import type { GradingResult } from '../types';
+import { renderVarsInObject, maybeLoadFromExternalFile } from '../util';
+import invariant from '../util/invariant';
 
 export const handleIsValidOpenAiFunctionCall = ({
   assertion,
@@ -9,6 +11,9 @@ export const handleIsValidOpenAiFunctionCall = ({
   provider,
   test,
 }: AssertionParams): GradingResult => {
+  if (typeof output === 'object' && 'function_call' in output) {
+    output = (output as { function_call: any }).function_call;
+  }
   const functionOutput = output as { arguments: string; name: string };
   if (
     typeof functionOutput !== 'object' ||
@@ -52,6 +57,9 @@ export const handleIsValidOpenAiToolsCall = ({
   provider,
   test,
 }: AssertionParams): GradingResult => {
+  if (typeof output === 'object' && 'tool_calls' in output) {
+    output = (output as { tool_calls: any }).tool_calls;
+  }
   const toolsOutput = output as {
     type: 'function';
     function: { arguments: string; name: string };
@@ -72,14 +80,24 @@ export const handleIsValidOpenAiToolsCall = ({
     };
   }
 
+  let tools = (provider as OpenAiChatCompletionProvider).config.tools;
+  if (tools) {
+    tools = maybeLoadFromExternalFile(renderVarsInObject(tools, test.vars));
+  }
+  invariant(
+    tools,
+    `Tools are expected to be an array of objects with a function property. Got: ${JSON.stringify(
+      tools,
+    )}`,
+  );
   try {
-    toolsOutput.forEach((toolOutput) =>
+    toolsOutput.forEach((toolOutput) => {
       validateFunctionCall(
         toolOutput.function,
-        (provider as OpenAiChatCompletionProvider).config.tools?.map((tool) => tool.function),
+        tools.map((tool) => tool.function),
         test.vars,
-      ),
-    );
+      );
+    });
     return {
       pass: true,
       score: 1,

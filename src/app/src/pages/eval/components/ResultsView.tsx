@@ -5,25 +5,27 @@ import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
 import { callApi, fetchUserEmail, updateEvalAuthor } from '@app/utils/api';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
+import ClearIcon from '@mui/icons-material/Clear';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import SearchIcon from '@mui/icons-material/Search';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ShareIcon from '@mui/icons-material/Share';
-import SearchIcon from '@mui/icons-material/Source';
 import EyeIcon from '@mui/icons-material/Visibility';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
+import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import type { SelectChangeEvent } from '@mui/material/Select';
-import Stack from '@mui/material/Stack';
 import type { StackProps } from '@mui/material/Stack';
+import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import { styled } from '@mui/material/styles';
@@ -42,8 +44,8 @@ import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
 import { FilterModeSelector } from './FilterModeSelector';
 import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
-import SettingsModal from './ResultsViewSettingsModal';
 import ShareModal from './ShareModal';
+import SettingsModal from './TableSettings/TableSettingsModal';
 import { useStore as useResultsViewStore } from './store';
 import type { EvaluateTable, FilterMode, ResultLightweightWithLabel } from './types';
 import './ResultsView.css';
@@ -61,6 +63,94 @@ interface ResultsViewProps {
   onRecentEvalSelected: (file: string) => void;
   defaultEvalId?: string;
 }
+
+const SearchInputField = React.memo(
+  ({
+    value,
+    onChange,
+    onKeyDown,
+    placeholder = 'Search...',
+  }: {
+    value: string;
+    onChange: (value: string) => void;
+    onKeyDown?: React.KeyboardEventHandler;
+    placeholder?: string;
+  }) => {
+    // Use local state to handle immediate updates
+    const [localValue, setLocalValue] = React.useState(value);
+
+    // Sync with parent when external value changes
+    React.useEffect(() => {
+      setLocalValue(value);
+    }, [value]);
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const newValue = e.target.value;
+      // Update local state immediately for responsive typing
+      setLocalValue(newValue);
+      // Notify parent of change
+      onChange(newValue);
+    };
+
+    const handleClear = () => {
+      setLocalValue('');
+      onChange('');
+    };
+
+    return (
+      <TextField
+        sx={{
+          width: '100%',
+          maxWidth: '400px',
+          '& .MuiInputBase-root': {
+            borderRadius: '20px',
+          },
+          '& .MuiInputAdornment-root': {
+            transition:
+              'opacity 225ms cubic-bezier(0.4, 0, 0.2, 1), width 225ms cubic-bezier(0.4, 0, 0.2, 1), transform 225ms cubic-bezier(0.4, 0, 0.2, 1)',
+          },
+          '& .clear-button': {
+            opacity: localValue ? 1 : 0,
+            width: localValue ? 'auto' : 0,
+            transform: localValue ? 'scale(1)' : 'scale(0.8)',
+            transition:
+              'opacity 225ms cubic-bezier(0.4, 0, 0.2, 1), width 225ms cubic-bezier(0.4, 0, 0.2, 1), transform 225ms cubic-bezier(0.4, 0, 0.2, 1)',
+          },
+        }}
+        size="small"
+        label="Search"
+        placeholder={placeholder}
+        value={localValue}
+        onChange={handleChange}
+        onKeyDown={onKeyDown}
+        InputProps={{
+          startAdornment: (
+            <InputAdornment position="start">
+              <SearchIcon color="action" fontSize="small" />
+            </InputAdornment>
+          ),
+          endAdornment: (
+            <InputAdornment position="end" className="clear-button">
+              <Tooltip title="Clear search (Esc)">
+                <IconButton
+                  aria-label="clear search"
+                  onClick={handleClear}
+                  edge="end"
+                  size="small"
+                  sx={{
+                    visibility: localValue ? 'visible' : 'hidden',
+                  }}
+                >
+                  <ClearIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </InputAdornment>
+          ),
+        }}
+      />
+    );
+  },
+);
 
 export default function ResultsView({
   recentEvals,
@@ -87,7 +177,7 @@ export default function ResultsView({
   const { setStateFromConfig } = useMainStore();
   const { showToast } = useToast();
   const [searchText, setSearchText] = React.useState(searchParams.get('search') || '');
-  const [debouncedSearchText] = useDebounce(searchText, 1000);
+  const [debouncedSearchText] = useDebounce(searchText, 200);
   const handleSearchTextChange = (text: string) => {
     setSearchText(text);
   };
@@ -117,7 +207,6 @@ export default function ResultsView({
   };
 
   const [shareModalOpen, setShareModalOpen] = React.useState(false);
-  const [shareUrl, setShareUrl] = React.useState('');
   const [shareLoading, setShareLoading] = React.useState(false);
 
   // State for anchor element
@@ -138,29 +227,37 @@ export default function ResultsView({
   const handleShareButtonClick = async () => {
     if (IS_RUNNING_LOCALLY) {
       setShareLoading(true);
-      try {
-        const response = await callApi('/results/share', {
-          method: 'POST',
-          body: JSON.stringify({ id: currentEvalId }),
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
-        const { url } = await response.json();
-        if (response.ok) {
-          setShareUrl(url);
-          setShareModalOpen(true);
-        } else {
-          alert('Sorry, something went wrong.');
-        }
-      } catch {
-        alert('Sorry, something went wrong.');
-      } finally {
-        setShareLoading(false);
-      }
-    } else {
-      setShareUrl(`${window.location.host}/eval/?evalId=${currentEvalId}`);
       setShareModalOpen(true);
+    } else {
+      // For non-local instances, just show the modal
+      setShareModalOpen(true);
+    }
+  };
+
+  const handleShare = async (id: string): Promise<string> => {
+    try {
+      if (!IS_RUNNING_LOCALLY) {
+        // For non-local instances, just return the URL directly
+        return `${window.location.host}/eval/?evalId=${id}`;
+      }
+
+      const response = await callApi('/results/share', {
+        method: 'POST',
+        body: JSON.stringify({ id }),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!response.ok) {
+        throw new Error('Failed to generate share URL');
+      }
+      const { url } = await response.json();
+      return url;
+    } catch (error) {
+      console.error('Failed to generate share URL:', error);
+      throw error;
+    } finally {
+      setShareLoading(false);
     }
   };
 
@@ -366,6 +463,17 @@ export default function ResultsView({
     }
   };
 
+  const handleSearchKeyDown = React.useCallback<React.KeyboardEventHandler>(
+    (event) => {
+      if (event.key === 'Escape') {
+        handleSearchTextChange('');
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    },
+    [handleSearchTextChange],
+  );
+
   return (
     <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
       <ResponsiveStack
@@ -427,13 +535,11 @@ export default function ResultsView({
           <FilterModeSelector filterMode={filterMode} onChange={handleFilterModeChange} />
         </Box>
         <Box>
-          <TextField
-            sx={{ minWidth: 180 }}
-            size="small"
-            label="Search"
-            placeholder="Text or regex"
+          <SearchInputField
             value={searchText}
-            onChange={(e) => handleSearchTextChange(e.target.value)}
+            onChange={handleSearchTextChange}
+            onKeyDown={handleSearchKeyDown}
+            placeholder="Text or regex"
           />
         </Box>
         <Box flexGrow={1} />
@@ -453,7 +559,7 @@ export default function ResultsView({
                 Table Settings
               </Button>
             </Tooltip>
-            <Button color="primary" onClick={handleOpenMenu} startIcon={<ArrowDropDownIcon />}>
+            <Button color="primary" onClick={handleOpenMenu} endIcon={<ArrowDropDownIcon />}>
               Eval actions
             </Button>
             {config && (
@@ -549,7 +655,8 @@ export default function ResultsView({
         showStats={showInferenceDetails}
         filterMode={filterMode}
         failureFilter={failureFilter}
-        searchText={debouncedSearchText}
+        searchText={searchText}
+        debouncedSearchText={debouncedSearchText}
         onFailureFilterToggle={handleFailureFilterToggle}
         onSearchTextChange={handleSearchTextChange}
         setFilterMode={setFilterMode}
@@ -558,7 +665,8 @@ export default function ResultsView({
       <ShareModal
         open={shareModalOpen}
         onClose={() => setShareModalOpen(false)}
-        shareUrl={shareUrl}
+        evalId={currentEvalId}
+        onShare={handleShare}
       />
       <SettingsModal open={viewSettingsModalOpen} onClose={() => setViewSettingsModalOpen(false)} />
       <EvalSelectorKeyboardShortcut

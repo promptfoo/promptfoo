@@ -1,13 +1,12 @@
 import { fetchWithCache } from '../../src/cache';
-import { AzureCompletionProvider } from '../../src/providers/azure';
-import { AzureGenericProvider } from '../../src/providers/azure';
-import { AzureChatCompletionProvider } from '../../src/providers/azure';
-import { maybeEmitAzureOpenAiWarning } from '../../src/providers/azureUtil';
+import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
+import { AzureCompletionProvider } from '../../src/providers/azure/completion';
+import { AzureGenericProvider } from '../../src/providers/azure/generic';
+import { maybeEmitAzureOpenAiWarning } from '../../src/providers/azure/warnings';
 import { HuggingfaceTextGenerationProvider } from '../../src/providers/huggingface';
-import { OpenAiCompletionProvider } from '../../src/providers/openai';
-import type { TestSuite, TestCase } from '../../src/types';
+import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
+import type { TestCase, TestSuite } from '../../src/types';
 
-jest.mock('../../src/logger');
 jest.mock('../../src/cache', () => ({
   fetchWithCache: jest.fn(),
 }));
@@ -30,7 +29,7 @@ describe('maybeEmitAzureOpenAiWarning', () => {
 
   it('should not emit warning when Azure provider is used alone, but no model graded eval', () => {
     const testSuite: TestSuite = {
-      providers: [new AzureCompletionProvider('foo')],
+      providers: [new AzureCompletionProvider('foo', { config: { apiHost: 'test.azure.com' } })],
       defaultTest: {},
       prompts: [],
     };
@@ -45,7 +44,7 @@ describe('maybeEmitAzureOpenAiWarning', () => {
 
   it('should emit warning when Azure provider is used alone, but with model graded eval', () => {
     const testSuite: TestSuite = {
-      providers: [new AzureCompletionProvider('foo')],
+      providers: [new AzureCompletionProvider('foo', { config: { apiHost: 'test.azure.com' } })],
       defaultTest: {},
       prompts: [],
     };
@@ -60,7 +59,10 @@ describe('maybeEmitAzureOpenAiWarning', () => {
 
   it('should emit warning when Azure provider used with non-OpenAI provider', () => {
     const testSuite: TestSuite = {
-      providers: [new AzureCompletionProvider('foo'), new HuggingfaceTextGenerationProvider('bar')],
+      providers: [
+        new AzureCompletionProvider('foo', { config: { apiHost: 'test.azure.com' } }),
+        new HuggingfaceTextGenerationProvider('bar'),
+      ],
       defaultTest: {},
       prompts: [],
     };
@@ -75,7 +77,7 @@ describe('maybeEmitAzureOpenAiWarning', () => {
 
   it('should not emit warning when Azure providers are used with a default provider set', () => {
     const testSuite: TestSuite = {
-      providers: [new AzureCompletionProvider('foo')],
+      providers: [new AzureCompletionProvider('foo', { config: { apiHost: 'test.azure.com' } })],
       defaultTest: { options: { provider: 'azureopenai:....' } },
       prompts: [],
     };
@@ -90,7 +92,10 @@ describe('maybeEmitAzureOpenAiWarning', () => {
 
   it('should not emit warning when both Azure and OpenAI providers are used', () => {
     const testSuite: TestSuite = {
-      providers: [new AzureCompletionProvider('foo'), new OpenAiCompletionProvider('bar')],
+      providers: [
+        new AzureCompletionProvider('foo', { config: { apiHost: 'test.azure.com' } }),
+        new OpenAiCompletionProvider('bar'),
+      ],
       defaultTest: {},
       prompts: [],
     };
@@ -333,7 +338,7 @@ describe('AzureOpenAiChatCompletionProvider', () => {
       jest.resetAllMocks();
     });
 
-    it('should parse JSON response with json_schema format', async () => {
+    it('should parse JSON response with json_schema format when finish_reason is not content_filter', async () => {
       const mockResponse = {
         id: 'mock-id',
         object: 'chat.completion',
@@ -381,6 +386,42 @@ describe('AzureOpenAiChatCompletionProvider', () => {
 
       const result = await provider.callApi('test prompt');
       expect(result.output).toEqual({ test: 'value' });
+    });
+
+    it('should handle content_filter finish_reason', async () => {
+      const mockResponse = {
+        id: 'mock-id',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'gpt-4',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: null,
+            },
+            finish_reason: 'content_filter',
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 20,
+          total_tokens: 30,
+        },
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+      expect(result.output).toBe(
+        "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
+      );
     });
 
     it('should handle API errors', async () => {
@@ -450,6 +491,42 @@ describe('AzureOpenAiChatCompletionProvider', () => {
           },
         },
       ]);
+    });
+
+    it('should handle content filter error response', async () => {
+      const mockResponse = {
+        error: {
+          message:
+            "The response was filtered due to the prompt triggering Azure OpenAI's content management policy.",
+          code: 'content_filter',
+          status: 400,
+          innererror: {
+            code: 'ResponsibleAIPolicyViolation',
+            content_filter_result: {
+              hate: { filtered: true, severity: 'medium' },
+              jailbreak: { filtered: false, detected: false },
+              self_harm: { filtered: false, severity: 'safe' },
+              sexual: { filtered: false, severity: 'safe' },
+              violence: { filtered: false, severity: 'low' },
+            },
+          },
+        },
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      });
+
+      const result = await provider.callApi('test prompt');
+      expect(result.output).toBe(mockResponse.error.message);
+      expect(result.guardrails).toEqual({
+        flagged: true,
+        flaggedInput: true,
+        flaggedOutput: false,
+      });
     });
   });
 
@@ -600,42 +677,117 @@ describe('AzureOpenAiChatCompletionProvider', () => {
       );
     });
   });
+
+  describe('reasoning models', () => {
+    it('should detect reasoning models with o1 flag', () => {
+      const provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          o1: true,
+        },
+      });
+      expect((provider as any).isReasoningModel()).toBe(true);
+    });
+
+    it('should detect reasoning models with isReasoningModel flag', () => {
+      const provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          isReasoningModel: true,
+        },
+      });
+      expect((provider as any).isReasoningModel()).toBe(true);
+    });
+
+    it('should detect reasoning models with either flag set', () => {
+      const provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          o1: false,
+          isReasoningModel: true,
+        },
+      });
+      expect((provider as any).isReasoningModel()).toBe(true);
+    });
+
+    it('should use max_completion_tokens for reasoning models', () => {
+      const provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          isReasoningModel: true,
+          max_completion_tokens: 2000,
+          max_tokens: 1000,
+        },
+      });
+      const body = (provider as any).getOpenAiBody('test prompt').body;
+      expect(body).toHaveProperty('max_completion_tokens', 2000);
+      expect(body).not.toHaveProperty('max_tokens');
+    });
+
+    it('should use reasoning_effort for reasoning models', () => {
+      const provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          isReasoningModel: true,
+          reasoning_effort: 'high',
+        },
+      });
+      const body = (provider as any).getOpenAiBody('test prompt').body;
+      expect(body).toHaveProperty('reasoning_effort', 'high');
+    });
+
+    it('should not include temperature for reasoning models', () => {
+      const provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          isReasoningModel: true,
+          temperature: 0.7,
+        },
+      });
+      const body = (provider as any).getOpenAiBody('test prompt').body;
+      expect(body).not.toHaveProperty('temperature');
+    });
+
+    it('should support variable rendering in reasoning_effort', () => {
+      const provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          isReasoningModel: true,
+          reasoning_effort: '{{effort}}' as any,
+          apiHost: 'test.azure.com',
+        },
+      });
+      const context = {
+        prompt: { label: 'test prompt', raw: 'test prompt' },
+        vars: { effort: 'high' as const },
+      };
+      const body = (provider as any).getOpenAiBody('test prompt', context).body;
+      expect(body).toHaveProperty('reasoning_effort', 'high');
+    });
+  });
 });
 
 describe('AzureCompletionProvider', () => {
   it('should handle basic completion with caching', async () => {
-    const provider = new AzureCompletionProvider('test-deployment', {
-      config: {
-        apiHost: 'test.azure.com',
-        apiKey: 'test-key',
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        choices: [{ text: 'hello' }],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
       },
+      cached: false,
+    } as any);
+
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        choices: [{ text: 'hello' }],
+        usage: { total_tokens: 10 },
+      },
+      cached: true,
+    } as any);
+
+    const provider = new AzureCompletionProvider('test', {
+      config: { apiHost: 'test.azure.com' },
     });
+    (provider as any).authHeaders = {};
 
-    const mockResponse = {
-      choices: [{ text: 'Test response' }],
-      usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-    };
+    const result1 = await provider.callApi('test prompt');
+    const result2 = await provider.callApi('test prompt');
 
-    jest
-      .mocked(fetchWithCache)
-      .mockResolvedValueOnce({
-        data: mockResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      })
-      .mockResolvedValueOnce({
-        data: mockResponse,
-        cached: true,
-        status: 200,
-        statusText: 'OK',
-      });
-
-    const result1 = await provider.callApi('Test prompt');
-    const result2 = await provider.callApi('Test prompt');
-
-    expect(fetchWithCache).toHaveBeenCalledTimes(2);
-    expect(result1.output).toBe('Test response');
+    expect(result1.output).toBe('hello');
+    expect(result2.output).toBe('hello');
     expect(result1.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
     expect(result2.tokenUsage).toEqual({ cached: 10, total: 10 });
   });

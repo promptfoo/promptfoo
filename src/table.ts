@@ -2,19 +2,13 @@ import chalk from 'chalk';
 import Table from 'cli-table3';
 import { TERMINAL_MAX_WIDTH } from './constants';
 import { ResultFailureReason, type EvaluateTable } from './types';
-
-function ellipsize(str: string, maxLen: number) {
-  if (str.length > maxLen) {
-    return str.slice(0, maxLen - 3) + '...';
-  }
-  return str;
-}
+import { ellipsize } from './util/text';
 
 export function generateTable(
   evaluateTable: EvaluateTable,
   tableCellMaxLength = 250,
   maxRows = 25,
-) {
+): string {
   const head = evaluateTable.head;
   const headLength = head.prompts.length + head.vars.length;
   const table = new Table({
@@ -51,17 +45,25 @@ export function generateTable(
       }),
     ]);
   }
-  return table;
+  return table.toString();
 }
 
-export function wrapTable(rows: Record<string, string | number>[]) {
+export function wrapTable(
+  rows: Record<string, string | number>[],
+  columnWidths?: Record<string, number>,
+) {
   if (rows.length === 0) {
     return 'No data to display';
   }
   const head = Object.keys(rows[0]);
+
+  // Calculate widths based on content and terminal width
+  const defaultWidth = Math.floor(TERMINAL_MAX_WIDTH / head.length);
+  const colWidths = head.map((column) => columnWidths?.[column] || defaultWidth);
+
   const table = new Table({
     head,
-    colWidths: Array(head.length).fill(Math.floor(TERMINAL_MAX_WIDTH / head.length)),
+    colWidths,
     wordWrap: true,
     wrapOnWordBoundary: true,
   });

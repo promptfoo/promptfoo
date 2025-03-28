@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Adaline Gateway Chat History Example'
+
+prompts:
+  - file://prompt.json
+
+providers:
+  - id: adaline:anthropic:chat:claude-3-5-sonnet-20240620
+    config:
+      temperature: 0.99
+      maxTokens: 120
+
+# Set up the conversation history
+defaultTest:
+  vars:
+    system_message: file://system_message.txt
+    previous_messages:
+      - user: Who founded Facebook?
+      - assistant: Mark Zuckerberg
+      - user: What's his favorite food?
+      - assistant: Pizza
+
+# Test multiple follow-ups
+tests:
+  - vars:
+      question: What is his role at Internet.org?
+  - vars:
+      question: Did he create any other companies?
+  - vars:
+      question: Will he let me borrow $5?

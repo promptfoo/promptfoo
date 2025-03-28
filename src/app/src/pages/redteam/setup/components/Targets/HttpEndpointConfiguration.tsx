@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import Editor from 'react-simple-code-editor';
 import AddIcon from '@mui/icons-material/Add';
 import CheckIcon from '@mui/icons-material/Check';
@@ -29,7 +29,8 @@ import 'prismjs/components/prism-http';
 import 'prismjs/components/prism-json';
 import 'prismjs/components/prism-yaml';
 import type { ProviderOptions } from '../../types';
-import 'prismjs/themes/prism.css';
+import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
+import './syntax-highlighting.css';
 
 interface HttpEndpointConfigurationProps {
   selectedTarget: ProviderOptions;
@@ -38,8 +39,6 @@ interface HttpEndpointConfigurationProps {
   setBodyError: (error: string | null) => void;
   urlError: string | null;
   setUrlError: (error: string | null) => void;
-  forceStructured?: boolean;
-  setForceStructured: (force: boolean) => void;
   updateFullTarget: (target: ProviderOptions) => void;
 }
 
@@ -51,7 +50,9 @@ interface GeneratedConfig {
     headers?: Record<string, string>;
     body?: any;
     request?: string;
+    transformRequest?: string;
     transformResponse?: string;
+    sessionParser?: string;
   };
 }
 
@@ -62,18 +63,11 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
   setBodyError,
   urlError,
   setUrlError,
-  forceStructured,
-  setForceStructured,
   updateFullTarget,
 }): JSX.Element => {
   const theme = useTheme();
   const darkMode = theme.palette.mode === 'dark';
 
-  // Internal state management
-  const [useRawRequest, setUseRawRequest] = useState(
-    forceStructured ? false : !!selectedTarget.config.request,
-  );
-  const [rawRequestValue, setRawRequestValue] = useState(selectedTarget.config.request || '');
   const [requestBody, setRequestBody] = useState(
     typeof selectedTarget.config.body === 'string'
       ? selectedTarget.config.body
@@ -95,7 +89,7 @@ Content-Type: application/json
 {
   "messages": [
     {
-      "role": "user", 
+      "role": "user",
       "content": "{{prompt}}"
     }
   ]
@@ -122,7 +116,6 @@ Content-Type: application/json
 
       if (isRawMode) {
         // Reset to empty raw request
-        setRawRequestValue('');
         updateCustomTarget('request', '');
 
         // Clear structured mode fields
@@ -132,7 +125,6 @@ Content-Type: application/json
         updateCustomTarget('body', undefined);
       } else {
         // Reset to empty structured fields
-        setRawRequestValue('');
         setHeaders([]);
         setRequestBody('');
 
@@ -144,6 +136,7 @@ Content-Type: application/json
         updateCustomTarget('method', 'POST');
         updateCustomTarget('headers', {});
         updateCustomTarget('body', '');
+        updateCustomTarget('useHttps', false);
       }
     },
     [updateCustomTarget, setBodyError, setUrlError],
@@ -159,22 +152,23 @@ Content-Type: application/json
       setHeaders((prev) => {
         const newHeaders = [...prev];
         newHeaders.splice(index, 1);
+
+        // Update target configuration inside setState callback
+        const headerObj = newHeaders.reduce(
+          (acc, { key, value }) => {
+            if (key) {
+              acc[key] = value;
+            }
+            return acc;
+          },
+          {} as Record<string, string>,
+        );
+        updateCustomTarget('headers', headerObj);
+
         return newHeaders;
       });
-
-      // Update target configuration
-      const headerObj = headers.reduce(
-        (acc, { key, value }) => {
-          if (key) {
-            acc[key] = value;
-          }
-          return acc;
-        },
-        {} as Record<string, string>,
-      );
-      updateCustomTarget('headers', headerObj);
     },
-    [headers, updateCustomTarget],
+    [updateCustomTarget],
   );
 
   const updateHeaderKey = useCallback(
@@ -182,22 +176,23 @@ Content-Type: application/json
       setHeaders((prev) => {
         const newHeaders = [...prev];
         newHeaders[index] = { ...newHeaders[index], key: newKey };
+
+        // Update target configuration inside setState callback
+        const headerObj = newHeaders.reduce(
+          (acc, { key, value }) => {
+            if (key) {
+              acc[key] = value;
+            }
+            return acc;
+          },
+          {} as Record<string, string>,
+        );
+        updateCustomTarget('headers', headerObj);
+
         return newHeaders;
       });
-
-      // Update target configuration
-      const headerObj = headers.reduce(
-        (acc, { key, value }) => {
-          if (key) {
-            acc[key] = value;
-          }
-          return acc;
-        },
-        {} as Record<string, string>,
-      );
-      updateCustomTarget('headers', headerObj);
     },
-    [headers, updateCustomTarget],
+    [updateCustomTarget],
   );
 
   const updateHeaderValue = useCallback(
@@ -205,77 +200,36 @@ Content-Type: application/json
       setHeaders((prev) => {
         const newHeaders = [...prev];
         newHeaders[index] = { ...newHeaders[index], value: newValue };
+
+        // Update target configuration inside setState callback
+        const headerObj = newHeaders.reduce(
+          (acc, { key, value }) => {
+            if (key) {
+              acc[key] = value;
+            }
+            return acc;
+          },
+          {} as Record<string, string>,
+        );
+        updateCustomTarget('headers', headerObj);
+
         return newHeaders;
       });
-
-      // Update target configuration
-      const headerObj = headers.reduce(
-        (acc, { key, value }) => {
-          if (key) {
-            acc[key] = value;
-          }
-          return acc;
-        },
-        {} as Record<string, string>,
-      );
-      updateCustomTarget('headers', headerObj);
     },
-    [headers, updateCustomTarget],
+    [updateCustomTarget],
   );
 
-  const handleRequestBodyChange = (code: string) => {
-    setRequestBody(code);
-    // Update state immediately without validation
-    updateCustomTarget('body', code);
+  const handleRequestBodyChange = (content: string) => {
+    setRequestBody(content);
+    updateCustomTarget('body', content);
   };
 
   const handleRawRequestChange = (value: string) => {
-    setRawRequestValue(value);
-    // Update state immediately without validation
     updateCustomTarget('request', value);
   };
 
-  // Separate validation from state updates
-  useEffect(() => {
-    if (!useRawRequest) {
-      setBodyError(null);
-      return;
-    }
-
-    // Don't show errors while typing short content
-    if (!rawRequestValue.trim() || rawRequestValue.trim().length < 20) {
-      setBodyError(null);
-      return;
-    }
-
-    // Debounce validation to avoid blocking input
-    const timeoutId = setTimeout(() => {
-      const request = rawRequestValue.trim();
-
-      // Check for required template variable
-      if (!request.includes('{{prompt}}')) {
-        setBodyError('Request must include {{prompt}} template variable');
-        return;
-      }
-
-      // Check for basic HTTP request format
-      const firstLine = request.split('\n')[0];
-      const hasValidFirstLine = /^(POST|GET|PUT|DELETE)\s+\S+/.test(firstLine);
-      if (!hasValidFirstLine) {
-        setBodyError('First line must be in format: METHOD URL');
-        return;
-      }
-
-      setBodyError(null);
-    }, 750);
-
-    return () => clearTimeout(timeoutId);
-  }, [useRawRequest, rawRequestValue]);
-
   // Note to Michael: don't dedent this, we want to preserve JSON formatting.
-  const placeholderText = `Enter your HTTP request here. Example:
-
-POST /v1/chat/completions HTTP/1.1
+  const exampleRequest = `POST /v1/chat/completions HTTP/1.1
 Host: api.example.com
 Content-Type: application/json
 Authorization: Bearer {{api_key}}
@@ -288,41 +242,15 @@ Authorization: Bearer {{api_key}}
     }
   ]
 }`;
+  const placeholderText = `Enter your HTTP request here. Example:
 
-  // Add effect to handle forceStructured changes
-  useEffect(() => {
-    if (forceStructured) {
-      // Reset all state to structured mode
-      setUseRawRequest(false);
-      setRawRequestValue('');
-      // Clear any validation errors
-      setUrlError(null);
-      setBodyError(null);
-
-      setHeaders(
-        Object.entries(selectedTarget.config.headers || {}).map(([key, value]) => ({
-          key,
-          value: String(value),
-        })),
-      );
-      setRequestBody(
-        typeof selectedTarget.config.body === 'string'
-          ? selectedTarget.config.body
-          : JSON.stringify(selectedTarget.config.body, null, 2) || '',
-      );
-
-      // Only update the target config if we need to clear the raw request
-      if (selectedTarget.config.request) {
-        updateCustomTarget('request', undefined);
-      }
-    }
-  }, [forceStructured, selectedTarget.config]);
+${exampleRequest}`;
 
   const handleGenerateConfig = async () => {
     setGenerating(true);
     setError('');
     try {
-      const res = await fetch('https://api.promptfoo.app/http-provider-generator', {
+      const res = await fetch('https://api.promptfoo.app/api/http-provider-generator', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -355,11 +283,10 @@ Authorization: Bearer {{api_key}}
   const handleApply = () => {
     if (generatedConfig) {
       if (generatedConfig.config.request) {
-        setUseRawRequest(true);
-        setRawRequestValue(generatedConfig.config.request);
+        resetState(true);
         updateCustomTarget('request', generatedConfig.config.request);
       } else {
-        setUseRawRequest(false);
+        resetState(false);
         if (generatedConfig.config.url) {
           updateCustomTarget('url', generatedConfig.config.url);
         }
@@ -387,52 +314,70 @@ Authorization: Bearer {{api_key}}
           updateCustomTarget('body', generatedConfig.config.body);
         }
       }
-      if (generatedConfig.config.transformResponse) {
-        updateCustomTarget('transformResponse', generatedConfig.config.transformResponse);
-      }
+      updateCustomTarget('transformRequest', generatedConfig.config.transformRequest);
+      updateCustomTarget('transformResponse', generatedConfig.config.transformResponse);
+      updateCustomTarget('sessionParser', generatedConfig.config.sessionParser);
       setConfigDialogOpen(false);
     }
   };
 
   return (
-    <Box mt={2}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h6">HTTP Endpoint Configuration</Typography>
-        <Box>
-          <Button variant="outlined" onClick={() => setConfigDialogOpen(true)}>
-            Generate Config
-          </Button>
-        </Box>
-      </Box>
+    <Box>
       <FormControlLabel
         control={
           <Switch
-            checked={useRawRequest}
+            checked={Boolean(selectedTarget.config.request)}
             onChange={(e) => {
-              const enabled = e.target.checked;
-              resetState(enabled);
-              setUseRawRequest(enabled);
+              resetState(e.target.checked);
+              if (e.target.checked) {
+                updateCustomTarget('request', exampleRequest);
+              }
             }}
           />
         }
         label="Use Raw HTTP Request"
         sx={{ mb: 2, display: 'block' }}
       />
-      {useRawRequest ? (
-        <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
+      {selectedTarget.config.request ? (
+        <Box
+          mt={2}
+          p={2}
+          sx={{
+            border: 1,
+            borderColor: theme.palette.divider,
+            borderRadius: 1,
+            backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#ffffff',
+            '& .token': {
+              background: 'transparent !important',
+            },
+          }}
+        >
+          <FormControlLabel
+            control={
+              <Switch
+                checked={selectedTarget.config.useHttps}
+                onChange={(e) => {
+                  const enabled = e.target.checked;
+                  updateCustomTarget('useHttps', enabled);
+                }}
+              />
+            }
+            label="Use HTTPS"
+            sx={{ mb: 2, display: 'block' }}
+          />
           <Editor
-            value={rawRequestValue}
+            value={selectedTarget.config.request || ''}
             onValueChange={handleRawRequestChange}
             highlight={(code) => highlight(code, languages.http)}
             padding={10}
             style={{
               fontFamily: '"Fira code", "Fira Mono", monospace',
               fontSize: 14,
-              backgroundColor: darkMode ? '#1e1e1e' : '#f5f5f5',
-              borderRadius: 4,
-              minHeight: '10rem',
+              backgroundColor: 'transparent',
+              color: theme.palette.text.primary,
             }}
             placeholder={placeholderText}
+            className={theme.palette.mode === 'dark' ? 'dark-syntax' : ''}
           />
           {bodyError && (
             <Typography color="error" variant="body2" sx={{ mt: 1 }}>
@@ -632,6 +577,11 @@ Authorization: Bearer {{api_key}}
           )}
         </DialogActions>
       </Dialog>
+      <HttpAdvancedConfiguration
+        selectedTarget={selectedTarget}
+        updateCustomTarget={updateCustomTarget}
+        defaultRequestTransform={selectedTarget.config.transformRequest}
+      />
     </Box>
   );
 };

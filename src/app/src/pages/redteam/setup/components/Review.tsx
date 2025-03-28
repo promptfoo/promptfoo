@@ -6,6 +6,7 @@ import { callApi } from '@app/utils/api';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SaveIcon from '@mui/icons-material/Save';
+import SearchIcon from '@mui/icons-material/Search';
 import SettingsIcon from '@mui/icons-material/Settings';
 import StopIcon from '@mui/icons-material/Stop';
 import VisibilityIcon from '@mui/icons-material/Visibility';
@@ -28,10 +29,11 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import { strategyDisplayNames } from '@promptfoo/redteam/constants';
+import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
 import type { RedteamPlugin } from '@promptfoo/redteam/types';
 import type { Job } from '@promptfoo/types';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
-import { generateOrderedYaml, getUnifiedConfig } from '../utils/yamlHelpers';
+import { generateOrderedYaml } from '../utils/yamlHelpers';
 import { LogViewer } from './LogViewer';
 
 interface PolicyPlugin {
@@ -66,6 +68,10 @@ export default function Review() {
   const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     updateConfig('description', event.target.value);
   };
+
+  useEffect(() => {
+    recordEvent('webui_page_view', { page: 'redteam_config_review' });
+  }, []);
 
   const handleSaveYaml = () => {
     const blob = new Blob([yamlContent], { type: 'text/yaml' });
@@ -131,6 +137,8 @@ export default function Review() {
       .filter((intent): intent is string => typeof intent === 'string' && intent.trim() !== '');
   }, [config.plugins]);
 
+  const [expanded, setExpanded] = React.useState(false);
+
   const getStrategyId = (strategy: string | { id: string }): string => {
     return typeof strategy === 'string' ? strategy : strategy.id;
   };
@@ -171,6 +179,13 @@ export default function Review() {
       clearInterval(pollInterval);
       setPollInterval(null);
     }
+
+    recordEvent('feature_used', {
+      feature: 'redteam_config_run',
+      numPlugins: config.plugins.length,
+      numStrategies: config.strategies.length,
+      targetType: config.target.id,
+    });
 
     setIsRunning(true);
     setLogs([]);
@@ -226,7 +241,11 @@ export default function Review() {
     } catch (error) {
       console.error('Error running redteam:', error);
       setIsRunning(false);
-      showToast('An error occurred while starting the evaluation. Please try again.', 'error');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      showToast(
+        `An error occurred while starting the evaluation: ${errorMessage}. Please try again.`,
+        'error',
+      );
     }
   };
 
@@ -369,7 +388,7 @@ export default function Review() {
                 Intents ({intents.length})
               </Typography>
               <Stack spacing={1}>
-                {intents.map((intent, index) => (
+                {intents.slice(0, expanded ? undefined : 5).map((intent, index) => (
                   <Box
                     key={index}
                     sx={{
@@ -392,6 +411,11 @@ export default function Review() {
                     </Typography>
                   </Box>
                 ))}
+                {intents.length > 5 && (
+                  <Button onClick={() => setExpanded(!expanded)} size="small" sx={{ mt: 1 }}>
+                    {expanded ? 'Show Less' : `Show ${intents.length - 5} More`}
+                  </Button>
+                )}
               </Stack>
             </Paper>
           </Grid>
@@ -499,14 +523,24 @@ export default function Review() {
                 </Button>
               )}
               {evalId && (
-                <Button
-                  variant="contained"
-                  color="success"
-                  href={`/report?evalId=${evalId}`}
-                  startIcon={<AssessmentIcon />}
-                >
-                  View Report
-                </Button>
+                <>
+                  <Button
+                    variant="contained"
+                    color="success"
+                    href={`/report?evalId=${evalId}`}
+                    startIcon={<AssessmentIcon />}
+                  >
+                    View Report
+                  </Button>
+                  <Button
+                    variant="contained"
+                    color="success"
+                    href={`/eval?evalId=${evalId}`}
+                    startIcon={<SearchIcon />}
+                  >
+                    View Probes
+                  </Button>
+                </>
               )}
               <Tooltip title="Run Settings">
                 <IconButton
@@ -588,6 +622,22 @@ export default function Review() {
                 </Box>
               }
             />
+            <Box>
+              <TextField
+                fullWidth
+                type="number"
+                label="Number of test cases"
+                value={config.numTests}
+                onChange={(e) => {
+                  const value = Number(e.target.value);
+                  if (!Number.isNaN(value) && value > 0 && Number.isInteger(value)) {
+                    updateConfig('numTests', value);
+                  }
+                }}
+                disabled={isRunning}
+                helperText="Number of test cases to generate for each plugin"
+              />
+            </Box>
             <Box>
               <TextField
                 fullWidth

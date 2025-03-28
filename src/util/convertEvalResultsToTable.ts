@@ -1,8 +1,8 @@
 import {
-  ResultFailureReason,
   type CompletedPrompt,
   type EvaluateTable,
   type EvaluateTableRow,
+  ResultFailureReason,
   type ResultsFile,
   type TokenUsage,
 } from '../types';
@@ -75,6 +75,20 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
         : [],
       test: result.testCase,
     };
+
+    if (result.vars && result.metadata?.redteamFinalPrompt) {
+      const varKeys = Object.keys(result.vars);
+      if (varKeys.length === 1 && varKeys[0] !== 'harmCategory') {
+        result.vars[varKeys[0]] = result.metadata.redteamFinalPrompt;
+      } else if (varKeys.length > 1) {
+        // NOTE: This is a hack. We should use config.redteam.injectVar to determine which key to update but we don't have access to the config here
+        const targetKeys = ['prompt', 'query', 'question'];
+        const keyToUpdate = targetKeys.find((key) => result.vars[key]);
+        if (keyToUpdate) {
+          result.vars[keyToUpdate] = result.metadata.redteamFinalPrompt;
+        }
+      }
+    }
     varValuesForRow.set(result.testIdx, result.vars as Record<string, string>);
     rowMap[result.testIdx] = row;
 
@@ -110,6 +124,15 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
       pass: result.success,
       failureReason: result.failureReason,
       cost: result.cost || 0,
+      audio: result.response?.audio
+        ? {
+            id: result.response.audio.id,
+            expiresAt: result.response.audio.expiresAt,
+            data: result.response.audio.data,
+            transcript: result.response.audio.transcript,
+            format: result.response.audio.format,
+          }
+        : undefined,
     };
     invariant(result.promptId, 'Prompt ID is required');
     if (!completedPrompts[result.promptIdx]) {
@@ -119,6 +142,8 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
         metrics: new PromptMetrics(),
       };
     }
+
+    row.testIdx = result.testIdx;
     const prompt = completedPrompts[result.promptIdx];
     invariant(prompt.metrics, 'Prompt metrics are required');
     prompt.metrics.score += result.score;
@@ -141,8 +166,8 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   }
   const rows = Object.values(rowMap);
   const sortedVars = [...varsForHeader].sort();
-  for (const [rowIdx, row] of rows.entries()) {
-    row.vars = sortedVars.map((varName) => varValuesForRow.get(rowIdx)?.[varName] || '');
+  for (const row of rows) {
+    row.vars = sortedVars.map((varName) => varValuesForRow.get(row.testIdx)?.[varName] || '');
   }
 
   return {

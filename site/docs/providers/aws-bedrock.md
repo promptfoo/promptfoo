@@ -1,6 +1,11 @@
+---
+sidebar_label: AWS Bedrock
+sidebar_position: 3
+---
+
 # Bedrock
 
-The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to access Anthropic's Claude, Meta's Llama 3.1, Amazon's Nova, AI21's Jamba, and other models. The complete list of available models can be found [here](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns).
+The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to access Anthropic's Claude, Meta's Llama 3.3, Amazon's Nova, AI21's Jamba, and other models. The complete list of available models can be found [here](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns).
 
 ## Setup
 
@@ -72,9 +77,10 @@ The provider will automatically use AWS SSO credentials when a profile is specif
 
 ## Example
 
-See [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) for full examples of Claude, Nova, AI21, Llama 3.1, and Titan model usage.
+See [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) for full examples of Claude, Nova, AI21, Llama 3.3, and Titan model usage.
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Write a tweet about {{topic}}'
 
@@ -84,6 +90,9 @@ providers:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
+  - id: bedrock:us.meta.llama3-3-70b-instruct-v1:0
+    config:
+      max_gen_len: 256
   - id: bedrock:amazon.nova-lite-v1:0
     config:
       region: 'us-east-1'
@@ -167,7 +176,27 @@ config:
   anthropic_version: 'bedrock-2023-05-31'
   tools: [...] # Optional: Specify available tools
   tool_choice: { ... } # Optional: Specify tool choice
+  thinking: { ... } # Optional: Enable Claude's extended thinking capability
+  showThinking: true # Optional: Control whether thinking content is included in output
 ```
+
+When using Claude's extended thinking capability, you can configure it like this:
+
+```yaml
+config:
+  max_tokens: 20000
+  thinking:
+    type: 'enabled'
+    budget_tokens: 16000 # Must be ≥1024 and less than max_tokens
+  showThinking: true # Whether to include thinking content in the output (default: true)
+```
+
+The `showThinking` parameter controls whether thinking content is included in the response output:
+
+- When set to `true` (default), thinking content will be included in the output
+- When set to `false`, thinking content will be excluded from the output
+
+This is useful when you want to use thinking for better reasoning but don't want to expose the thinking process to end users.
 
 ### Titan Models
 
@@ -183,7 +212,7 @@ config:
 
 ### Llama
 
-For Llama models (e.g., `meta.llama3-1-70b-instruct-v1:0`), you can use the following configuration options:
+For Llama models (e.g., `meta.llama3-1-70b-instruct-v1:0`, `meta.llama3-2-90b-instruct-v1:0`, `meta.llama3-3-70b-instruct-v1:0`), you can use the following configuration options:
 
 ```yaml
 config:
@@ -216,6 +245,28 @@ config:
   top_p: 0.9
   top_k: 50
 ```
+
+### DeepSeek Models
+
+For DeepSeek models, you can use the following configuration options:
+
+```yaml
+config:
+  # Deepseek params
+  max_tokens: 256
+  temperature: 0.7
+  top_p: 0.9
+
+  # Promptfoo control params
+  showThinking: true # Optional: Control whether thinking content is included in output
+```
+
+DeepSeek models support an extended thinking capability. The `showThinking` parameter controls whether thinking content is included in the response output:
+
+- When set to `true` (default), thinking content will be included in the output
+- When set to `false`, thinking content will be excluded from the output
+
+This allows you to access the model's reasoning process during generation while having the option to present only the final response to end users.
 
 ## Model-graded tests
 
@@ -269,6 +320,71 @@ tests:
         value: Do not mention that you are an AI or chat assistant
 ```
 
+## Multimodal Capabilities
+
+Some Bedrock models, like Amazon Nova, support multimodal inputs including images and text. To use these capabilities, you'll need to structure your prompts to include both the image data and text content.
+
+### Nova Vision Capabilities
+
+Amazon Nova supports comprehensive vision understanding for both images and videos:
+
+- **Images**: Supports PNG, JPG, JPEG, GIF, WebP formats via Base-64 encoding. Multiple images allowed per payload (up to 25MB total).
+- **Videos**: Supports various formats (MP4, MKV, MOV, WEBM, etc.) via Base-64 (less than 25MB) or Amazon S3 URI (up to 1GB).
+
+Here's an example configuration for running multimodal evaluations:
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Bedrock Nova Eval with Images'
+
+prompts:
+  - file://nova_multimodal_prompt.json
+
+providers:
+  - id: bedrock:amazon.nova-pro-v1:0
+    config:
+      region: 'us-east-1'
+      inferenceConfig:
+        temperature: 0.7
+        max_new_tokens: 256
+
+tests:
+  - vars:
+      image: file://path/to/image.jpg
+```
+
+The prompt file (`nova_multimodal_prompt.json`) should be structured to include both image and text content. This format will depend on the specific model you're using:
+
+```json title="nova_multimodal_prompt.json"
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "image": {
+          "format": "jpg",
+          "source": { "bytes": "{{image}}" }
+        }
+      },
+      {
+        "text": "What is this a picture of?"
+      }
+    ]
+  }
+]
+```
+
+See [Github](https://github.com/promptfoo/promptfoo/blob/main/examples/amazon-bedrock/promptfooconfig.nova.multimodal.yaml) for a runnable example.
+
+When loading image files as variables, Promptfoo automatically converts them to the appropriate format for the model. The supported image formats include:
+
+- jpg/jpeg
+- png
+- gif
+- bmp
+- webp
+- svg
+
 ## Embeddings
 
 To override the embeddings provider for all assertions that require embeddings (such as similarity), use `defaultTest`:
@@ -305,9 +421,10 @@ The following environment variables can be used to configure the Bedrock provide
 - `AWS_BEDROCK_MAX_TOKENS`: Default maximum number of tokens to generate
 - `AWS_BEDROCK_TEMPERATURE`: Default temperature for generation
 - `AWS_BEDROCK_TOP_P`: Default top_p value for generation
-- `AWS_BEDROCK_STOP`: Default stop sequences (as a JSON string)
 - `AWS_BEDROCK_FREQUENCY_PENALTY`: Default frequency penalty (for supported models)
 - `AWS_BEDROCK_PRESENCE_PENALTY`: Default presence penalty (for supported models)
+- `AWS_BEDROCK_STOP`: Default stop sequences (as a JSON string)
+- `AWS_BEDROCK_MAX_RETRIES`: Number of retry attempts for failed API calls (default: 10)
 
 Model-specific environment variables:
 
@@ -355,3 +472,11 @@ If you see this error. Make sure you have access to the model in the region you'
    - Navigate to "Model access"
    - Enable access for the specific model
 2. Check your region configuration matches the model's region.
+
+## See Also
+
+- [Amazon SageMaker Provider](./sagemaker.md) - For custom-deployed or fine-tuned models on AWS
+- [Configuration Reference](../configuration/reference.md)
+- [Command Line Interface](../usage/command-line.md)
+- [Provider Options](../providers/index.md)
+- [Amazon Bedrock Examples](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock)
