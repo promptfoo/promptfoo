@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.107.5",
+  "version": "0.107.6",
   "license": "MIT",
   "type": "commonjs",
   "repository": {
@@ -88,6 +88,7 @@
     "@adaline/types": "0.15.0",
     "@adaline/vertex": "0.9.0",
     "@aws-sdk/client-bedrock-runtime": "^3.602.0",
+    "@aws-sdk/client-sagemaker-runtime": "^3.758.0",
     "@aws-sdk/credential-provider-sso": "^3.686.0",
     "@azure/identity": "^4.0.0",
     "@azure/openai-assistants": "^1.0.0-beta.5",

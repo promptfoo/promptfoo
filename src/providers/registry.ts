@@ -44,6 +44,7 @@ import {
   HuggingfaceTokenExtractionProvider,
 } from './huggingface';
 import { JfrogMlChatCompletionProvider } from './jfrog';
+import { LiteLLMProvider } from './litellm';
 import { LlamaProvider } from './llama';
 import {
   LocalAiChatProvider,
@@ -65,9 +66,9 @@ import { parsePackageProvider } from './packageParser';
 import { PortkeyChatCompletionProvider } from './portkey';
 import { PythonProvider } from './pythonCompletion';
 import {
-  ReplicateImageProvider,
   ReplicateModerationProvider,
   ReplicateProvider,
+  ReplicateImageProvider,
 } from './replicate';
 import { ScriptCompletionProvider } from './scriptCompletion';
 import { SequenceProvider } from './sequence';
@@ -267,6 +268,52 @@ export const providerMap: ProviderFactory[] = [
         `${modelType}${modelName ? `:${modelName}` : ''}`,
         providerOptions,
       );
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('sagemaker:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const modelType = splits[1];
+      const endpointName = splits.slice(2).join(':');
+
+      // Dynamically import SageMaker provider
+      const { SageMakerCompletionProvider, SageMakerEmbeddingProvider } = await import(
+        './sagemaker'
+      );
+
+      if (modelType === 'embedding' || modelType === 'embeddings') {
+        return new SageMakerEmbeddingProvider(endpointName || modelType, providerOptions);
+      }
+
+      // Handle the 'sagemaker:<endpoint>' format (no model type specified)
+      if (splits.length === 2) {
+        return new SageMakerCompletionProvider(modelType, providerOptions);
+      }
+
+      // Handle special case for JumpStart models
+      if (endpointName.includes('jumpstart') || modelType === 'jumpstart') {
+        return new SageMakerCompletionProvider(endpointName, {
+          ...providerOptions,
+          config: {
+            ...providerOptions.config,
+            modelType: 'jumpstart',
+          },
+        });
+      }
+
+      // Handle 'sagemaker:<model-type>:<endpoint>' format for other model types
+      return new SageMakerCompletionProvider(endpointName, {
+        ...providerOptions,
+        config: {
+          ...providerOptions.config,
+          modelType,
+        },
+      });
     },
   },
   {
@@ -518,6 +565,17 @@ export const providerMap: ProviderFactory[] = [
           apiKeyEnvar: 'HYPERBOLIC_API_KEY',
         },
       });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('litellm:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const modelName = providerPath.split(':')[1];
+      return new LiteLLMProvider(modelName, providerOptions);
     },
   },
   {
