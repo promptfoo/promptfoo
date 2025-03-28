@@ -72,7 +72,7 @@ export class PythonProvider implements ApiProvider {
 
     if (cachedResult) {
       logger.debug(`Returning cached ${apiType} result for script ${absPath}`);
-      const parsedResult = JSON.parse(cachedResult);
+      const parsedResult = JSON.parse(cachedResult as string);
 
       logger.debug(
         `PythonProvider parsed cached result type: ${typeof parsedResult}, keys: ${Object.keys(parsedResult).join(',')}`,

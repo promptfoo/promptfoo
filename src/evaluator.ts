@@ -5,6 +5,7 @@ import { randomUUID } from 'crypto';
 import { globSync } from 'glob';
 import * as path from 'path';
 import readline from 'readline';
+import type winston from 'winston';
 import { runAssertions, runCompareAssertion } from './assertions';
 import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';
@@ -15,7 +16,7 @@ import logger from './logger';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
-import type RedteamPandamoniumProvider from './redteam/providers/pandamonium';
+import { isPandamoniumProvider } from './redteam/providers/pandamonium';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import type { EvalConversations, EvalRegisters, ScoringFunction, TokenUsage, Vars } from './types';
@@ -175,16 +176,6 @@ export async function runEval({
       typeof test.provider.id === 'function' &&
       test.provider.id() === 'promptfoo:redteam:pandamonium'
     ) {
-      // Define a type guard for RedteamPandamoniumProvider
-      const isPandamoniumProvider = (provider: unknown): provider is RedteamPandamoniumProvider => {
-        return (
-          typeof provider === 'object' &&
-          provider !== null &&
-          'runPandamonium' in provider &&
-          typeof (provider as Record<string, unknown>)['runPandamonium'] === 'function'
-        );
-      };
-
       if (!isPandamoniumProvider(test.provider)) {
         throw new Error('Provider identified as pandamonium but does not have required methods');
       }
@@ -205,7 +196,7 @@ export async function runEval({
         test,
 
         // All of these are removed in python and script providers, but every Javascript provider gets them
-        logger,
+        logger: logger as unknown as winston.Logger,
         fetchWithCache,
         getCache,
       });
