@@ -595,6 +595,8 @@ export class VertexChatProvider extends VertexGenericProvider {
           cached: false,
           output,
           tokenUsage,
+          responseId: lastData.responseId,
+          modelVersion: lastData.modelVersion,
         };
 
         if (isCacheEnabled()) {

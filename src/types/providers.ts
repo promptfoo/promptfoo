@@ -106,6 +106,8 @@ export interface ProviderResponse {
     redteamFinalPrompt?: string;
     [key: string]: any;
   };
+  modelVersion?: string;
+  responseId?: string;
   raw?: string | any;
   output?: string | any;
   tokenUsage?: TokenUsage;
