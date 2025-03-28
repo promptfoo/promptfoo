@@ -1,0 +1,91 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Human feedback collection via Slack channel integration
+env:
+  SLACK_TIMEOUT: 300000 # 5 minutes
+prompts:
+  - file://prompts/question1.txt
+  - file://prompts/question2.txt
+  - file://prompts/question3.txt
+providers:
+  # AI Model providers for comparison - feel free to remove this
+  - anthropic:messages:claude-3-7-sonnet-20250219
+  # Slack provider for human feedback
+  - id: slack:channel:C0123ABCDEF
+    config:
+      # token: ${SLACK_B
+
+tests:
+  - vars:
+      topic: 'Climate change'
+    assert:
+      # Basic validation that we received a response
+      - type: javascript
+        value: |
+          // Simple validation that we received a response
+          return output && output.length > 0 ? 'pass' : 'fail'
+      # More sophisticated validation using LLM-based evaluation
+      - type: llm-rubric
+        value: |
+          On a scale of 1-5, rate how insightful this response is about climate change.
+          Consider:
+          1. Depth of knowledge
+          2. Nuance in perspective
+          3. Personal insight
+
+          Rating criteria:
+          1: Generic or uninformed
+          3: Shows basic knowledge and perspective
+          5: Demonstrates expertise or unique viewpoint
+  - vars:
+      topic: 'Artificial intelligence'
+    assert:
+      - type: javascript
+        value: |
+          // Check for non-empty response with minimum length
+          if (!output || output.length < 10) return 'fail';
+
+          // Check for basic relevance to AI (simple keyword check)
+          const aiKeywords = ['intelligence', 'ai', 'algorithm', 'machine', 'learning', 'model', 'neural'];
+          const hasAiKeyword = aiKeywords.some(keyword => 
+            output.toLowerCase().includes(keyword)
+          );
+
+          return hasAiKeyword ? 'pass' : 'fail';
+
+      # Sentiment analysis of the response
+      - type: llm-rubric
+        value: |
+          Analyze the sentiment of this response about AI.
+
+          Rate on a scale of 1-5:
+          1: Very negative
+          2: Somewhat negative
+          3: Neutral
+          4: Somewhat positive
+          5: Very positive
+  - vars:
+      topic: 'Remote work'
+    assert:
+      - type: javascript
+        value: |
+          // Validate response contains personal experience
+          const personalPhrases = ['i ', 'my ', 'we ', 'our ', 'me ', 'personally', 'experience'];
+          const hasPersonalPerspective = personalPhrases.some(phrase => 
+            output.toLowerCase().includes(phrase)
+          );
+
+          return hasPersonalPerspective ? 'pass' : 'fail';
+  - vars:
+      topic: 'Public health'
+    assert:
+      - type: comparison
+        value: |
+          On a scale of 1-5, how much does this response address the societal 
+          aspects of public health rather than just individual health?
+
+          1: Focuses only on individual health
+          3: Balanced view of individual and societal aspects
+          5: Strong focus on societal and community aspects
+      - type: similarity
+        threshold: 0.6
+        value: Public health issues require community solutions and not just individual action.

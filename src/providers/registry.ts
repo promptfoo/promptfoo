@@ -1120,4 +1120,69 @@ export const providerMap: ProviderFactory[] = [
       return new PythonProvider(scriptPath, providerOptions);
     },
   },
+  {
+    test: (providerPath: string) => providerPath === 'slackbot',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      try {
+        // Dynamically import the SlackbotProvider
+        const { default: SlackbotProvider } = await import('./slackbot');
+        return new SlackbotProvider(providerOptions);
+      } catch (error) {
+        throw new Error(
+          `Failed to load Slack provider: ${(error as Error).message}. Make sure @slack/web-api and @slack/rtm-api are installed.`,
+        );
+      }
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('slack:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const parts = providerPath.split(':');
+      if (parts.length < 3) {
+        throw new Error(
+          `Invalid Slack provider path: ${providerPath}. Use 'slack:channel:<channel_id>' or 'slack:user:<user_id>'`,
+        );
+      }
+
+      const targetType = parts[1];
+      const targetId = parts.slice(2).join(':');
+
+      try {
+        // Dynamically import the SlackbotProvider
+        const { default: SlackbotProvider } = await import('./slackbot');
+
+        if (targetType === 'channel') {
+          return new SlackbotProvider({
+            ...providerOptions,
+            config: {
+              ...providerOptions.config,
+              channel: targetId,
+            },
+          });
+        } else if (targetType === 'user') {
+          return new SlackbotProvider({
+            ...providerOptions,
+            config: {
+              ...providerOptions.config,
+              userId: targetId,
+            },
+          });
+        } else {
+          throw new Error(`Invalid Slack target type: ${targetType}. Use 'channel' or 'user'`);
+        }
+      } catch (error) {
+        throw new Error(
+          `Failed to load Slack provider: ${(error as Error).message}. Make sure @slack/web-api and @slack/rtm-api are installed.`,
+        );
+      }
+    },
+  },
 ];

@@ -236,7 +236,7 @@ Providers are defined in TypeScript. We also provide language bindings for Pytho
 
 5. Update `src/providers/index.ts` and `site/docs/providers/index.md` to include your new provider. Update `src/envars.ts` to include any new environment variables your provider may need.
 
-6. Ensure all tests pass (`npm test`) and fix any linting issues (`npm run lint`).
+6. Ensure all tests pass (`npm test`) and fix any linting or formatting issues (`npm run l && npm run f`).
 
 ## Contributing to the Web UI
 
