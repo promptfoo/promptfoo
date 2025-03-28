@@ -44,6 +44,7 @@ import {
   HuggingfaceTokenExtractionProvider,
 } from './huggingface';
 import { JfrogMlChatCompletionProvider } from './jfrog';
+import { LiteLLMProvider } from './litellm';
 import { LlamaProvider } from './llama';
 import {
   LocalAiChatProvider,
@@ -564,6 +565,17 @@ export const providerMap: ProviderFactory[] = [
           apiKeyEnvar: 'HYPERBOLIC_API_KEY',
         },
       });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('litellm:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const modelName = providerPath.split(':')[1];
+      return new LiteLLMProvider(modelName, providerOptions);
     },
   },
   {
