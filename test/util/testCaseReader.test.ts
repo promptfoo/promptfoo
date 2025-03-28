@@ -8,12 +8,12 @@ import { fetchCsvFromGoogleSheet } from '../../src/googleSheets';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers';
 import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../../src/types';
+import { readFiles } from '../../src/util/fileLoader';
 import {
   loadTestsFromGlob,
   readStandaloneTestsFile,
   readTest,
   readTests,
-  readTestFiles,
 } from '../../src/util/testCaseReader';
 
 jest.mock('proxy-agent', () => ({
@@ -938,7 +938,7 @@ describe('readVarsFiles', () => {
     jest.mocked(fs.readFileSync).mockReturnValue(yamlContent);
     jest.mocked(globSync).mockReturnValue(['vars.yaml']);
 
-    const result = await readTestFiles('vars.yaml');
+    const result = await readFiles('vars.yaml');
 
     expect(result).toEqual({ var1: 'value1', var2: 'value2' });
   });
@@ -952,7 +952,7 @@ describe('readVarsFiles', () => {
       .mockReturnValueOnce(yamlContent2);
     jest.mocked(globSync).mockReturnValue(['vars1.yaml', 'vars2.yaml']);
 
-    const result = await readTestFiles(['vars1.yaml', 'vars2.yaml']);
+    const result = await readFiles(['vars1.yaml', 'vars2.yaml']);
 
     expect(result).toEqual({ var1: 'value1', var2: 'value2' });
   });

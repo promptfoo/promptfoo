@@ -1,19 +1,10 @@
-import $RefParser from '@apidevtools/json-schema-ref-parser';
-import { parse as parseCsv } from 'csv-parse/sync';
 import dedent from 'dedent';
-import * as fs from 'fs';
-import { globSync } from 'glob';
-import yaml from 'js-yaml';
 import * as path from 'path';
-import { parse as parsePath } from 'path';
 import { testCaseFromCsvRow } from '../csv';
-import { getEnvBool, getEnvString } from '../envars';
-import { importModule } from '../esm';
-import { fetchCsvFromGoogleSheet } from '../googleSheets';
+import { getEnvBool } from '../envars';
 import { fetchHuggingFaceDataset } from '../integrations/huggingfaceDatasets';
 import logger from '../logger';
 import { loadApiProvider } from '../providers';
-import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
 import type {
   CsvRow,
@@ -23,29 +14,7 @@ import type {
   TestSuiteConfig,
 } from '../types';
 import { isJavascriptFile } from './file';
-
-export async function readTestFiles(
-  pathOrGlobs: string | string[],
-  basePath: string = '',
-): Promise<Record<string, string | string[] | object>> {
-  if (typeof pathOrGlobs === 'string') {
-    pathOrGlobs = [pathOrGlobs];
-  }
-
-  const ret: Record<string, string | string[] | object> = {};
-  for (const pathOrGlob of pathOrGlobs) {
-    const resolvedPath = path.resolve(basePath, pathOrGlob);
-    const paths = globSync(resolvedPath, {
-      windowsPathsNoEscape: true,
-    });
-
-    for (const p of paths) {
-      const yamlData = yaml.load(fs.readFileSync(p, 'utf-8'));
-      Object.assign(ret, yamlData);
-    }
-  }
-  return ret;
-}
+import { loadFile, loadFilesFromGlob, readFiles } from './fileLoader';
 
 /**
  * Reads test cases from a file in various formats (CSV, JSON, YAML, Python, JavaScript) and returns them as TestCase objects.
@@ -71,118 +40,63 @@ export async function readStandaloneTestsFile(
   varsPath: string,
   basePath: string = '',
 ): Promise<TestCase[]> {
-  const resolvedVarsPath = path.resolve(basePath, varsPath.replace(/^file:\/\//, ''));
-  // Split on the last colon to handle Windows drive letters correctly
-  const colonCount = resolvedVarsPath.split(':').length - 1;
-  const lastColonIndex = resolvedVarsPath.lastIndexOf(':');
-
-  // For Windows paths, we need to account for the drive letter colon
-  const isWindowsPath = /^[A-Za-z]:/.test(resolvedVarsPath);
-  const effectiveColonCount = isWindowsPath ? colonCount - 1 : colonCount;
-
-  if (effectiveColonCount > 1) {
-    throw new Error(`Too many colons. Invalid test file script path: ${varsPath}`);
-  }
-
-  const pathWithoutFunction =
-    lastColonIndex > 1 ? resolvedVarsPath.slice(0, lastColonIndex) : resolvedVarsPath;
-  const maybeFunctionName =
-    lastColonIndex > 1 ? resolvedVarsPath.slice(lastColonIndex + 1) : undefined;
-  const fileExtension = parsePath(pathWithoutFunction).ext.slice(1);
-
+  // For Hugging Face datasets, use the specialized function
   if (varsPath.startsWith('huggingface://datasets/')) {
     telemetry.recordAndSendOnce('feature_used', {
       feature: 'huggingface dataset',
     });
     return await fetchHuggingFaceDataset(varsPath);
   }
-  if (isJavascriptFile(pathWithoutFunction)) {
-    telemetry.recordAndSendOnce('feature_used', {
-      feature: 'js tests file',
-    });
-    const mod = await importModule(pathWithoutFunction, maybeFunctionName);
-    return typeof mod === 'function' ? await mod() : mod;
-  }
-  if (fileExtension === 'py') {
-    telemetry.recordAndSendOnce('feature_used', {
-      feature: 'python tests file',
-    });
-    const result = await runPython(pathWithoutFunction, maybeFunctionName ?? 'generate_tests', []);
-    if (!Array.isArray(result)) {
+
+  // Check for Python files for backward compatibility
+  // This is needed because Python files have different error handling
+  if (varsPath.endsWith('.py') || (varsPath.includes('.py:') && !varsPath.includes('.py:/'))) {
+    // Python files are expected to always return an array
+    // If not, we should throw a specific error for backward compatibility
+    const content = await loadFile(varsPath, { basePath });
+    if (!Array.isArray(content)) {
       throw new Error(
-        `Python test function must return a list of test cases, got ${typeof result}`,
+        `Python test function must return a list of test cases, got ${typeof content}`,
       );
     }
-    return result;
+    return content;
   }
 
-  let rows: CsvRow[] = [];
+  // Use the generic file loader
+  const content = await loadFile(varsPath, { basePath });
 
-  if (varsPath.startsWith('https://docs.google.com/spreadsheets/')) {
-    telemetry.recordAndSendOnce('feature_used', {
-      feature: 'csv tests file - google sheet',
-    });
-    rows = await fetchCsvFromGoogleSheet(varsPath);
-  } else if (fileExtension === 'csv') {
-    telemetry.recordAndSendOnce('feature_used', {
-      feature: 'csv tests file - local',
-    });
-    const delimiter = getEnvString('PROMPTFOO_CSV_DELIMITER', ',');
-    const fileContent = fs.readFileSync(resolvedVarsPath, 'utf-8');
-    const enforceStrict = getEnvBool('PROMPTFOO_CSV_STRICT', false);
+  // Check if the result is an array of objects (from JS, Python, JSON, YAML, etc.)
+  if (Array.isArray(content) && content.length > 0 && typeof content[0] === 'object') {
+    return content.map((row, idx) => {
+      // If this is already a TestCase, return it directly
+      if (
+        row.vars !== undefined ||
+        row.assert !== undefined ||
+        row.description !== undefined ||
+        row.options !== undefined
+      ) {
+        return row;
+      }
 
-    try {
-      // First try parsing with strict mode if enforced
-      if (enforceStrict) {
-        rows = parseCsv(fileContent, {
-          columns: true,
-          bom: true,
-          delimiter,
-          relax_quotes: false,
-        });
-      } else {
-        // Try strict mode first, fall back to relaxed if it fails
-        try {
-          rows = parseCsv(fileContent, {
-            columns: true,
-            bom: true,
-            delimiter,
-            relax_quotes: false,
-          });
-        } catch {
-          // If strict parsing fails, try with relaxed quotes
-          rows = parseCsv(fileContent, {
-            columns: true,
-            bom: true,
-            delimiter,
-            relax_quotes: true,
-          });
-        }
-      }
-    } catch (err) {
-      // Add helpful context to the error message
-      const e = err as { code?: string; message: string };
-      if (e.code === 'CSV_INVALID_OPENING_QUOTE') {
-        throw new Error(e.message);
-      }
-      throw e;
-    }
-  } else if (fileExtension === 'json') {
-    telemetry.recordAndSendOnce('feature_used', {
-      feature: 'json tests file',
+      // Otherwise, convert from CSV row or other format to TestCase
+      const test = testCaseFromCsvRow(row);
+      test.description ||= `Row #${idx + 1}`;
+      return test;
     });
-    rows = yaml.load(fs.readFileSync(resolvedVarsPath, 'utf-8')) as unknown as any;
-  } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
-    telemetry.recordAndSendOnce('feature_used', {
-      feature: 'yaml tests file',
-    });
-    rows = yaml.load(fs.readFileSync(resolvedVarsPath, 'utf-8')) as unknown as any;
   }
-  return rows.map((row, idx) => {
-    const test = testCaseFromCsvRow(row);
-    test.description ||= `Row #${idx + 1}`;
-    return test;
-  });
+
+  // Handle CSV-like data (array of objects with column headers)
+  if (typeof content === 'object' && !Array.isArray(content)) {
+    const rows = content as unknown as CsvRow[];
+    return rows.map((row, idx) => {
+      const test = testCaseFromCsvRow(row);
+      test.description ||= `Row #${idx + 1}`;
+      return test;
+    });
+  }
+
+  // If we couldn't parse it into test cases, return an empty array
+  return [];
 }
 
 async function loadTestWithVars(
@@ -191,7 +105,7 @@ async function loadTestWithVars(
 ): Promise<TestCase> {
   const ret: TestCase = { ...testCase, vars: undefined };
   if (typeof testCase.vars === 'string' || Array.isArray(testCase.vars)) {
-    ret.vars = await readTestFiles(testCase.vars, testBasePath);
+    ret.vars = await readFiles(testCase.vars, testBasePath);
   } else {
     ret.vars = testCase.vars;
   }
@@ -207,7 +121,16 @@ export async function readTest(
   if (typeof test === 'string') {
     const testFilePath = path.resolve(basePath, test);
     const testBasePath = path.dirname(testFilePath);
-    const rawTestCase = yaml.load(fs.readFileSync(testFilePath, 'utf-8')) as TestCaseWithVarsFile;
+
+    // Load the test file content
+    const fileContent = await loadFile(testFilePath);
+
+    // If the content is not an object, it can't be a valid test case
+    if (typeof fileContent !== 'object' || Array.isArray(fileContent)) {
+      throw new Error(`Expected test file to contain an object, got ${typeof fileContent}`);
+    }
+
+    const rawTestCase = fileContent as TestCaseWithVarsFile;
     testCase = await loadTestWithVars(rawTestCase, testBasePath);
   } else {
     testCase = await loadTestWithVars(test, basePath);
@@ -258,82 +181,30 @@ export async function loadTestsFromGlob(
   loadTestsGlob: string,
   basePath: string = '',
 ): Promise<TestCase[]> {
-  if (loadTestsGlob.startsWith('huggingface://datasets/')) {
-    telemetry.recordAndSendOnce('feature_used', {
-      feature: 'huggingface dataset',
-    });
-    return await fetchHuggingFaceDataset(loadTestsGlob);
-  }
-
-  if (loadTestsGlob.startsWith('file://')) {
-    loadTestsGlob = loadTestsGlob.slice('file://'.length);
-  }
-  const resolvedPath = path.resolve(basePath, loadTestsGlob);
-  const testFiles: Array<string> = globSync(resolvedPath, {
-    windowsPathsNoEscape: true,
-  });
-
-  // Check for possible function names in the path
-  const pathWithoutFunction: string = resolvedPath.split(':')[0];
-  // Only add the file if it's not already included by glob and it's a special file type
-  if (
-    (isJavascriptFile(pathWithoutFunction) || pathWithoutFunction.endsWith('.py')) &&
-    !testFiles.some((file) => file === resolvedPath || file === pathWithoutFunction)
-  ) {
-    testFiles.push(resolvedPath);
-  }
-
-  if (loadTestsGlob.startsWith('https://docs.google.com/spreadsheets/')) {
-    testFiles.push(loadTestsGlob);
-  }
-
-  const _deref = async (testCases: TestCase[], file: string) => {
-    logger.debug(`Dereferencing test file: ${file}`);
-    return (await $RefParser.dereference(testCases)) as TestCase[];
-  };
+  // Use the generic file loader to get file contents
+  const contents = await loadFilesFromGlob(loadTestsGlob, { basePath });
 
   const ret: TestCase<Record<string, string | string[] | object>>[] = [];
-  if (testFiles.length < 1) {
-    logger.error(`No test files found for path: ${loadTestsGlob}`);
-    return ret;
-  }
-  for (const testFile of testFiles) {
-    let testCases: TestCase[] | undefined;
-    const pathWithoutFunction: string = testFile.split(':')[0];
 
-    if (
-      testFile.endsWith('.csv') ||
-      testFile.startsWith('https://docs.google.com/spreadsheets/') ||
-      isJavascriptFile(pathWithoutFunction) ||
-      pathWithoutFunction.endsWith('.py')
-    ) {
-      testCases = await readStandaloneTestsFile(testFile, basePath);
-    } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
-      testCases = yaml.load(fs.readFileSync(testFile, 'utf-8')) as TestCase[];
-      testCases = await _deref(testCases, testFile);
-    } else if (testFile.endsWith('.jsonl')) {
-      const fileContent = fs.readFileSync(testFile, 'utf-8');
-      testCases = fileContent
-        .split('\n')
-        .filter((line) => line.trim())
-        .map((line) => JSON.parse(line));
-      testCases = await _deref(testCases, testFile);
-    } else if (testFile.endsWith('.json')) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      testCases = await _deref(require(testFile), testFile);
-    } else {
-      throw new Error(`Unsupported file type for test file: ${testFile}`);
+  for (const content of contents) {
+    let testCases: TestCase[] | undefined;
+
+    // If content is already an array of test cases
+    if (Array.isArray(content)) {
+      testCases = content;
+    } else if (content && typeof content === 'object' && !Array.isArray(content)) {
+      // Single test case object
+      testCases = [content as TestCase];
     }
 
     if (testCases) {
-      if (!Array.isArray(testCases) && typeof testCases === 'object') {
-        testCases = [testCases];
-      }
       for (const testCase of testCases) {
-        ret.push(await readTest(testCase, path.dirname(testFile)));
+        // Further process each test case (load vars, providers, etc.)
+        ret.push(await readTest(testCase, basePath));
       }
     }
   }
+
   return ret;
 }
 
