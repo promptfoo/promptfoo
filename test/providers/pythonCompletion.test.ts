@@ -8,18 +8,28 @@ jest.mock('../../src/python/pythonUtils');
 jest.mock('../../src/cache');
 jest.mock('fs');
 jest.mock('path');
-jest.mock('../../src/util', () => {
-  const actual = jest.requireActual('../../src/util');
-  return {
-    ...actual,
-    parsePathOrGlob: jest.fn(() => ({
-      extension: 'py',
+jest.mock('../../src/util', () => ({
+  ...jest.requireActual('../../src/util'),
+  parsePathOrGlob: jest.fn((basePath, runPath) => {
+    // Handle the special case for testing function names
+    if (runPath === 'script.py:custom_function') {
+      return {
+        filePath: 'script.py',
+        functionName: 'custom_function',
+        isPathPattern: false,
+        extension: '.py',
+      };
+    }
+
+    // Default case
+    return {
+      filePath: runPath,
       functionName: undefined,
       isPathPattern: false,
-      filePath: '/absolute/path/to/script.py',
-    })),
-  };
-});
+      extension: path.extname(runPath),
+    };
+  }),
+}));
 
 describe('PythonProvider', () => {
   const mockRunPython = jest.mocked(runPython);
@@ -220,6 +230,161 @@ describe('PythonProvider', () => {
         'python:undefined:default:call_api:5633d479dfae75ba7a78914ee380fa202bd6126e7c6b7c22e3ebc9e1a6ddc871:test prompt:undefined:undefined',
         '{"output":"new result"}',
       );
+    });
+
+    it('should properly transform token usage in cached results', async () => {
+      const provider = new PythonProvider('script.py');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: jest.fn().mockResolvedValue(
+          JSON.stringify({
+            output: 'cached result with token usage',
+            tokenUsage: {
+              prompt: 10,
+              completion: 15,
+              total: 25,
+            },
+          }),
+        ),
+        set: jest.fn(),
+      };
+      jest.mocked(mockGetCache).mockResolvedValue(mockCache as never);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(mockRunPython).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        output: 'cached result with token usage',
+        cached: true,
+        tokenUsage: {
+          cached: 25,
+          total: 25,
+        },
+      });
+    });
+
+    it('should preserve cached=false for fresh results with token usage', async () => {
+      const provider = new PythonProvider('script.py');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: jest.fn().mockResolvedValue(null),
+        set: jest.fn(),
+      };
+      mockGetCache.mockResolvedValue(mockCache as never);
+      mockRunPython.mockResolvedValue({
+        output: 'fresh result with token usage',
+        tokenUsage: {
+          prompt: 12,
+          completion: 18,
+          total: 30,
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        output: 'fresh result with token usage',
+        cached: false,
+        tokenUsage: {
+          prompt: 12,
+          completion: 18,
+          total: 30,
+        },
+      });
+    });
+
+    it('should handle missing token usage in cached results', async () => {
+      const provider = new PythonProvider('script.py');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: jest.fn().mockResolvedValue(
+          JSON.stringify({
+            output: 'cached result with no token usage',
+          }),
+        ),
+        set: jest.fn(),
+      };
+      jest.mocked(mockGetCache).mockResolvedValue(mockCache as never);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(mockRunPython).not.toHaveBeenCalled();
+      expect(result.tokenUsage).toBeUndefined();
+      expect(result.cached).toBe(true);
+    });
+
+    it('should handle zero token usage in cached results', async () => {
+      const provider = new PythonProvider('script.py');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: jest.fn().mockResolvedValue(
+          JSON.stringify({
+            output: 'cached result with zero token usage',
+            tokenUsage: {
+              prompt: 0,
+              completion: 0,
+              total: 0,
+            },
+          }),
+        ),
+        set: jest.fn(),
+      };
+      jest.mocked(mockGetCache).mockResolvedValue(mockCache as never);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(mockRunPython).not.toHaveBeenCalled();
+      expect(result.tokenUsage).toEqual({
+        cached: 0,
+        total: 0,
+      });
+      expect(result.cached).toBe(true);
+    });
+
+    it('should not cache results with errors', async () => {
+      const provider = new PythonProvider('script.py');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: jest.fn().mockResolvedValue(null),
+        set: jest.fn(),
+      };
+      mockGetCache.mockResolvedValue(mockCache as never);
+      mockRunPython.mockResolvedValue({
+        error: 'This is an error message',
+        output: null,
+      });
+
+      await provider.callApi('test prompt');
+
+      expect(mockCache.set).not.toHaveBeenCalled();
+    });
+
+    it('should properly use different cache keys for different function names', async () => {
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: jest.fn().mockResolvedValue(null),
+        set: jest.fn(),
+      };
+      mockGetCache.mockResolvedValue(mockCache as never);
+      mockRunPython.mockResolvedValue({ output: 'test output' });
+
+      // Create providers with different function names
+      const defaultProvider = new PythonProvider('script.py');
+      const customProvider = new PythonProvider('script.py:custom_function');
+
+      // Call the APIs with the same prompt
+      await defaultProvider.callApi('test prompt');
+      await customProvider.callApi('test prompt');
+
+      // Verify different cache keys were used
+      const cacheSetCalls = mockCache.set.mock.calls;
+      expect(cacheSetCalls).toHaveLength(2);
+
+      // The first call should contain 'default' in the cache key
+      expect(cacheSetCalls[0][0]).toContain(':default:');
+
+      // The second call should contain the custom function name
+      expect(cacheSetCalls[1][0]).toContain(':custom_function:');
     });
   });
 });

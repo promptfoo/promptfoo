@@ -82,6 +82,21 @@ export class PythonProvider implements ApiProvider {
       if (apiType === 'call_api' && typeof parsedResult === 'object' && parsedResult !== null) {
         logger.debug(`PythonProvider setting cached=true for cached ${apiType} result`);
         parsedResult.cached = true;
+
+        // If there's token usage information, update it to reflect cached status
+        if (parsedResult.tokenUsage) {
+          const total = parsedResult.tokenUsage.total || 0;
+
+          // Transform the token usage to match the cached format expected by the evaluator
+          parsedResult.tokenUsage = {
+            cached: total,
+            total,
+          };
+
+          logger.debug(
+            `Updated token usage for cached result: ${JSON.stringify(parsedResult.tokenUsage)}`,
+          );
+        }
       }
       return parsedResult;
     } else {
