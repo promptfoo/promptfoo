@@ -258,7 +258,7 @@ describe('Python file references', () => {
       // This score is less than the assertion threshold in the test
       `{"pass": true, "score": 0.4, "reason": "Foo bar"}`,
       0.4,
-      'Python score 0.4 is less than threshold 0.5',
+      'Python score 0.4 is less than threshold 0.5: Foo bar',
       false,
       0.5,
     ],
