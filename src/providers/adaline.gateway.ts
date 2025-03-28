@@ -34,22 +34,23 @@ import type {
 } from '../types';
 import type { EnvOverrides } from '../types/env';
 import { safeJsonStringify } from '../util/json';
-import { AnthropicMessagesProvider, calculateAnthropicCost } from './anthropic';
-import { AzureChatCompletionProvider, AzureEmbeddingProvider, calculateAzureCost } from './azure';
+import { AnthropicMessagesProvider } from './anthropic/messages';
+import { calculateAnthropicCost } from './anthropic/util';
+import { AzureChatCompletionProvider } from './azure/chat';
+import { AzureEmbeddingProvider } from './azure/embedding';
+import { calculateAzureCost } from './azure/util';
+import { GoogleChatProvider } from './google';
 import { GroqProvider } from './groq';
-import {
-  OpenAiChatCompletionProvider,
-  OpenAiEmbeddingProvider,
-  calculateOpenAICost,
-  type OpenAiCompletionOptions,
-} from './openai';
-import { PalmChatProvider } from './palm';
+import { OpenAiChatCompletionProvider } from './openai/chat';
+import { OpenAiEmbeddingProvider } from './openai/embedding';
+import type { OpenAiCompletionOptions } from './openai/types';
+import { calculateOpenAICost } from './openai/util';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 import { VertexChatProvider, VertexEmbeddingProvider } from './vertex';
 import { getGoogleClient } from './vertexUtil';
 import { VoyageEmbeddingProvider } from './voyage';
 
-// Allows Adaline Gateway to R/W PromptFoo's cache
+// Allows Adaline Gateway to R/W Promptfoo's cache
 class AdalineGatewayCachePlugin<T> implements GatewayCache<T> {
   async get(key: string): Promise<T | undefined> {
     const cache = await getCache();
@@ -264,7 +265,7 @@ export class AdalineGatewayEmbeddingProvider extends AdalineGatewayGenericProvid
         },
       };
     } catch (error) {
-      logger.error('Error calling embedding API on Adaline Gateway:', error);
+      logger.error(`Error calling embedding API on Adaline Gateway: ${error}`);
       throw error;
     }
   }
@@ -455,7 +456,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
         });
       } else if (this.providerName === 'google') {
         const provider = new GatewayGoogle();
-        const parentClass = new PalmChatProvider(this.modelName, this.providerOptions);
+        const parentClass = new GoogleChatProvider(this.modelName, this.providerOptions);
         const apiKey = parentClass.getApiKey();
         if (!apiKey) {
           throw new Error(
@@ -704,3 +705,5 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
     }
   }
 }
+
+export { AdalineGatewayCachePlugin, adalineGateway };

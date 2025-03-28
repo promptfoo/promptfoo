@@ -15,17 +15,37 @@ import {
   ALIASED_PLUGIN_MAPPINGS,
   type Strategy,
   type Plugin,
+  FOUNDATION_PLUGINS,
 } from '../redteam/constants';
-import type { RedteamFileConfig, RedteamPluginObject } from '../redteam/types';
+import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
 import { isJavascriptFile } from '../util/file';
 import { ProviderSchema } from '../validators/providers';
 
+export const pluginOptions: string[] = [
+  ...COLLECTIONS,
+  ...REDTEAM_ALL_PLUGINS,
+  ...ALIASED_PLUGINS,
+].sort();
 /**
  * Schema for individual redteam plugins
  */
-const RedteamPluginObjectSchema = z.object({
+export const RedteamPluginObjectSchema = z.object({
   id: z
-    .enum([...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS] as [string, ...string[]])
+    .union([
+      z.enum(pluginOptions as [string, ...string[]]).superRefine((val, ctx) => {
+        if (!pluginOptions.includes(val)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.invalid_enum_value,
+            options: pluginOptions,
+            received: val,
+            message: `Invalid plugin name. Must be one of: ${pluginOptions.join(', ')} (or a path starting with file://)`,
+          });
+        }
+      }),
+      z.string().startsWith('file://', {
+        message: 'Custom plugins must start with file:// (or use one of the built-in plugins)',
+      }),
+    ])
     .describe('Name of the plugin'),
   numTests: z
     .number()
@@ -42,24 +62,42 @@ const RedteamPluginObjectSchema = z.object({
 export const RedteamPluginSchema = z.union([
   z
     .union([
-      z.enum([...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS] as [string, ...string[]]),
-      z.string().refine((value) => value.startsWith('file://'), {
-        message: 'Plugin must be one of `promptfoo redteam plugins` or start with "file://"',
+      z.enum(pluginOptions as [string, ...string[]]).superRefine((val, ctx) => {
+        if (!pluginOptions.includes(val)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.invalid_enum_value,
+            options: pluginOptions,
+            received: val,
+            message: `Invalid plugin name. Must be one of: ${pluginOptions.join(', ')} (or a path starting with file://)`,
+          });
+        }
+      }),
+      z.string().startsWith('file://', {
+        message: 'Custom plugins must start with file:// (or use one of the built-in plugins)',
       }),
     ])
     .describe('Name of the plugin or path to custom plugin'),
   RedteamPluginObjectSchema,
 ]);
 
-const strategyIdSchema = z
+export const strategyIdSchema = z
   .union([
-    z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]),
+    z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]).superRefine((val, ctx) => {
+      if (!ALL_STRATEGIES.includes(val as Strategy)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.invalid_enum_value,
+          options: [...ALL_STRATEGIES] as [string, ...string[]],
+          received: val,
+          message: `Invalid strategy name. Must be one of: ${[...ALL_STRATEGIES].join(', ')} (or a path starting with file://)`,
+        });
+      }
+    }),
     z.string().refine(
       (value) => {
         return value.startsWith('file://') && isJavascriptFile(value);
       },
       {
-        message: 'Strategy must be a valid file:// path to a .js/.ts file',
+        message: `Custom strategies must start with file:// and end with .js or .ts, or use one of the built-in strategies: ${[...ALL_STRATEGIES].join(', ')}`,
       },
     ),
   ])
@@ -78,6 +116,7 @@ export const RedteamStrategySchema = z.union([
 /**
  * Schema for `promptfoo redteam generate` command options
  */
+// NOTE: Remember to edit types/redteam.ts:RedteamCliGenerateOptions if you edit this schema
 export const RedteamGenerateOptionsSchema = z.object({
   addPlugins: z
     .array(z.enum(REDTEAM_ADDITIONAL_PLUGINS as readonly string[] as [string, ...string[]]))
@@ -94,7 +133,7 @@ export const RedteamGenerateOptionsSchema = z.object({
   delay: z
     .number()
     .int()
-    .positive()
+    .nonnegative()
     .optional()
     .describe('Delay in milliseconds between plugin API calls'),
   envFile: z.string().optional().describe('Path to the environment file'),
@@ -114,6 +153,8 @@ export const RedteamGenerateOptionsSchema = z.object({
   purpose: z.string().optional().describe('Purpose of the redteam generation'),
   strategies: z.array(RedteamStrategySchema).optional().describe('Strategies to use'),
   write: z.boolean().describe('Whether to write the output'),
+  burpEscapeJson: z.boolean().describe('Whether to escape quotes in Burp payloads').optional(),
+  progressBar: z.boolean().describe('Whether to show a progress bar').optional(),
 });
 
 /**
@@ -131,10 +172,7 @@ export const RedteamConfigSchema = z
       .string()
       .optional()
       .describe('Purpose override string - describes the prompt templates'),
-    provider: z
-      .lazy(() => ProviderSchema)
-      .optional()
-      .describe('Provider used for generating adversarial inputs'),
+    provider: ProviderSchema.optional().describe('Provider used for generating adversarial inputs'),
     numTests: z.number().int().positive().optional().describe('Number of tests to generate'),
     language: z.string().optional().describe('Language of tests ot generate for this plugin'),
     entities: z
@@ -165,7 +203,7 @@ export const RedteamConfigSchema = z
     delay: z
       .number()
       .int()
-      .positive()
+      .nonnegative()
       .optional()
       .describe('Delay in milliseconds between plugin API calls'),
   })
@@ -200,7 +238,9 @@ export const RedteamConfigSchema = z
     };
 
     const handleCollectionExpansion = (id: string, config: any, numTests: number | undefined) => {
-      if (id === 'harmful') {
+      if (id === 'foundation') {
+        expandCollection([...FOUNDATION_PLUGINS], config, numTests);
+      } else if (id === 'harmful') {
         expandCollection(Object.keys(HARM_PLUGINS), config, numTests);
       } else if (id === 'pii') {
         expandCollection([...PII_PLUGINS], config, numTests);
@@ -262,31 +302,38 @@ export const RedteamConfigSchema = z
       });
 
     const strategies = Array.from(
-      new Set(
-        [...(data.strategies || []), ...Array.from(strategySet)].flatMap((strategy) => {
-          if (typeof strategy === 'string') {
-            if (strategy === 'basic') {
-              return [];
+      new Map<string, RedteamStrategy>(
+        [...(data.strategies || []), ...Array.from(strategySet)].flatMap(
+          (strategy): Array<[string, RedteamStrategy]> => {
+            if (typeof strategy === 'string') {
+              if (strategy === 'basic') {
+                return [];
+              }
+              return strategy === 'default'
+                ? DEFAULT_STRATEGIES.map((id): [string, RedteamStrategy] => [id, { id }])
+                : [[strategy, { id: strategy }]];
             }
-            return strategy === 'default'
-              ? DEFAULT_STRATEGIES.map((id) => ({ id }))
-              : [{ id: strategy }];
-          }
-          // Just return the original strategy object
-          return [strategy];
-        }),
-      ),
-    ).sort((a, b) => a.id.localeCompare(b.id));
+            // Return tuple of [id, strategy] for Map to deduplicate by id
+            return [[strategy.id, strategy]];
+          },
+        ),
+      ).values(),
+    ).sort((a, b) => {
+      const aId = typeof a === 'string' ? a : a.id;
+      const bId = typeof b === 'string' ? b : b.id;
+      return aId.localeCompare(bId);
+    }) as RedteamStrategy[];
 
     return {
       numTests: data.numTests,
       plugins: uniquePlugins,
       strategies,
+      ...(data.delay ? { delay: data.delay } : {}),
+      ...(data.entities ? { entities: data.entities } : {}),
       ...(data.injectVar ? { injectVar: data.injectVar } : {}),
       ...(data.language ? { language: data.language } : {}),
       ...(data.provider ? { provider: data.provider } : {}),
       ...(data.purpose ? { purpose: data.purpose } : {}),
-      ...(data.delay ? { delay: data.delay } : {}),
     };
   });
 

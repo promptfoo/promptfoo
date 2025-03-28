@@ -1,5 +1,5 @@
 import type { Cache } from 'cache-manager';
-import Replicate from 'replicate';
+import type Replicate from 'replicate';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString, getEnvFloat, getEnvInt } from '../envars';
 import logger from '../logger';
@@ -14,7 +14,18 @@ import type {
 } from '../types';
 import type { EnvOverrides } from '../types/env';
 import { safeJsonStringify } from '../util/json';
+import { ellipsize } from '../util/text';
 import { parseChatPrompt } from './shared';
+
+async function getReplicateClient(): Promise<typeof Replicate> {
+  try {
+    return (await import('replicate')).default;
+  } catch (err) {
+    throw new Error(
+      `Failed to import Replicate. Make sure it is installed: npm install replicate. Error: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
 
 interface ReplicateCompletionOptions {
   apiKey?: string;
@@ -41,7 +52,6 @@ interface ReplicateCompletionOptions {
 export class ReplicateProvider implements ApiProvider {
   modelName: string;
   apiKey?: string;
-  replicate: any;
   config: ReplicateCompletionOptions;
 
   constructor(
@@ -97,7 +107,8 @@ export class ReplicateProvider implements ApiProvider {
       }
     }
 
-    const replicate = new Replicate({
+    const ReplicateClient = await getReplicateClient();
+    const replicate = new ReplicateClient({
       auth: this.apiKey,
       fetch: fetch as any,
     });
@@ -169,18 +180,20 @@ export class ReplicateProvider implements ApiProvider {
   }
 }
 
-const LLAMAGUARD_DESCRIPTIONS: { [key: string]: string } = {
+export const LLAMAGUARD_DESCRIPTIONS: { [key: string]: string } = {
   S1: 'Violent Crimes',
   S2: 'Non-Violent Crimes',
-  S3: 'Sex-Related Crimes',
-  S4: 'Child Sexual Exploitation',
-  S5: 'Specialized Advice',
-  S6: 'Privacy',
-  S7: 'Intellectual Property',
-  S8: 'Indiscriminate Weapons',
-  S9: 'Hate',
-  S10: 'Suicide & Self-Harm',
-  S11: 'Sexual Content',
+  S3: 'Sex Crimes',
+  S4: 'Child Exploitation',
+  S5: 'Defamation',
+  S6: 'Specialized Advice',
+  S7: 'Privacy',
+  S8: 'Intellectual Property',
+  S9: 'Indiscriminate Weapons',
+  S10: 'Hate',
+  S11: 'Self-Harm',
+  S12: 'Sexual Content',
+  S13: 'Elections',
 };
 
 export class ReplicateModerationProvider
@@ -211,7 +224,8 @@ export class ReplicateModerationProvider
       }
     }
 
-    const replicate = new Replicate({
+    const ReplicateClient = await getReplicateClient();
+    const replicate = new ReplicateClient({
       auth: this.apiKey,
       fetch: fetch as any,
     });
@@ -270,7 +284,7 @@ export class ReplicateModerationProvider
 }
 
 export const DefaultModerationProvider = new ReplicateModerationProvider(
-  'meta/meta-llama-guard-2-8b:b063023ee937f28e922982abdbf97b041ffe34ad3b35a53d33e1d74bb19b36c4',
+  'meta/llama-guard-3-8b:146d1220d447cdcc639bc17c5f6137416042abee6ae153a2615e6ef5749205c8',
 );
 
 interface ReplicateImageOptions {
@@ -306,7 +320,8 @@ export class ReplicateImageProvider extends ReplicateProvider {
       );
     }
 
-    const replicate = new Replicate({
+    const ReplicateClient = await getReplicateClient();
+    const replicate = new ReplicateClient({
       auth: this.apiKey,
     });
 
@@ -351,8 +366,7 @@ export class ReplicateImageProvider extends ReplicateProvider {
       .replace(/\r?\n|\r/g, ' ')
       .replace(/\[/g, '(')
       .replace(/\]/g, ')');
-    const ellipsizedPrompt =
-      sanitizedPrompt.length > 50 ? `${sanitizedPrompt.substring(0, 47)}...` : sanitizedPrompt;
+    const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
     return {
       output: `![${ellipsizedPrompt}](${url})`,
       cached,

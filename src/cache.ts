@@ -47,6 +47,7 @@ export type FetchWithCacheResult<T> = {
   status: number;
   statusText: string;
   headers?: Record<string, string>;
+  deleteFromCache?: () => Promise<void>;
 };
 
 export async function fetchWithCache<T = any>(
@@ -55,9 +56,10 @@ export async function fetchWithCache<T = any>(
   timeout: number = REQUEST_TIMEOUT_MS,
   format: 'json' | 'text' = 'json',
   bust: boolean = false,
+  maxRetries?: number,
 ): Promise<FetchWithCacheResult<T>> {
   if (!enabled || bust) {
-    const resp = await fetchWithRetries(url, options, timeout);
+    const resp = await fetchWithRetries(url, options, timeout, maxRetries);
 
     const respText = await resp.text();
     try {
@@ -67,17 +69,19 @@ export async function fetchWithCache<T = any>(
         status: resp.status,
         statusText: resp.statusText,
         headers: Object.fromEntries(resp.headers.entries()),
+        deleteFromCache: async () => {
+          // No-op when cache is disabled
+        },
       };
     } catch {
       throw new Error(`Error parsing response as JSON: ${respText}`);
     }
   }
 
-  const cache = await getCache();
-
   const copy = Object.assign({}, options);
   delete copy.headers;
   const cacheKey = `fetch:v2:${url}:${JSON.stringify(copy)}`;
+  const cache = await getCache();
 
   let cached = true;
   let errorResponse = null;
@@ -86,13 +90,14 @@ export async function fetchWithCache<T = any>(
   const cachedResponse = await cache.wrap(cacheKey, async () => {
     // Fetch the actual data and store it in the cache
     cached = false;
-    const response = await fetchWithRetries(url, options, timeout);
+    const response = await fetchWithRetries(url, options, timeout, maxRetries);
     const responseText = await response.text();
     const headers = Object.fromEntries(response.headers.entries());
 
     try {
+      const parsedData = format === 'json' ? JSON.parse(responseText) : responseText;
       const data = JSON.stringify({
-        data: format === 'json' ? JSON.parse(responseText) : responseText,
+        data: parsedData,
         status: response.status,
         statusText: response.statusText,
         headers,
@@ -114,6 +119,11 @@ export async function fetchWithCache<T = any>(
       if (!data) {
         // Don't cache empty responses
         return;
+      }
+      // Don't cache if the parsed data contains an error
+      if (format === 'json' && parsedData?.error) {
+        logger.debug(`Not caching ${url} because it contains an 'error' key: ${parsedData.error}`);
+        return data;
       }
       logger.debug(`Storing ${url} response in cache: ${data}`);
       return data;
@@ -137,6 +147,10 @@ export async function fetchWithCache<T = any>(
     status: parsedResponse.status,
     statusText: parsedResponse.statusText,
     headers: parsedResponse.headers,
+    deleteFromCache: async () => {
+      await cache.del(cacheKey);
+      logger.debug(`Evicted from cache: ${cacheKey}`);
+    },
   };
 }
 

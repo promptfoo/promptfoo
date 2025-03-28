@@ -5,19 +5,20 @@ import dedent from 'dedent';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
-import invariant from 'tiny-invariant';
 import { z } from 'zod';
+import { fromError } from 'zod-validation-error';
 import { synthesize } from '..';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
 import { VERSION } from '../../constants';
 import logger, { setLogLevel } from '../../logger';
 import telemetry from '../../telemetry';
-import type { TestSuite, UnifiedConfig } from '../../types';
+import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
 import { printBorder, setupEnv } from '../../util';
 import { isRunningUnderNpx } from '../../util';
 import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/manage';
+import invariant from '../../util/invariant';
 import { RedteamGenerateOptionsSchema, RedteamConfigSchema } from '../../validators/redteam';
 import {
   REDTEAM_MODEL,
@@ -35,7 +36,9 @@ function getConfigHash(configPath: string): string {
   return createHash('md5').update(`${VERSION}:${content}`).digest('hex');
 }
 
-export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptions>) {
+export async function doGenerateRedteam(
+  options: Partial<RedteamCliGenerateOptions>,
+): Promise<Partial<UnifiedConfig> | null> {
   setupEnv(options.envFile);
   if (!options.cache) {
     logger.info('Cache is disabled');
@@ -49,21 +52,25 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
 
   // Check for updates to the config file and decide whether to generate
   let shouldGenerate = options.force;
-  if (!options.force && fs.existsSync(outputPath) && configPath) {
-    const redteamContent = yaml.load(fs.readFileSync(outputPath, 'utf8')) as any;
-    const storedHash = redteamContent.metadata?.configHash;
-    const currentHash = getConfigHash(configPath);
+  if (!options.force && fs.existsSync(outputPath) && configPath && fs.existsSync(configPath)) {
+    // Skip hash check for .burp files since they're not YAML
+    if (!outputPath.endsWith('.burp')) {
+      const redteamContent = yaml.load(
+        fs.readFileSync(outputPath, 'utf8'),
+      ) as Partial<UnifiedConfig>;
+      const storedHash = redteamContent.metadata?.configHash;
+      const currentHash = getConfigHash(configPath);
 
-    shouldGenerate = storedHash !== currentHash;
+      shouldGenerate = storedHash !== currentHash;
+      if (!shouldGenerate) {
+        logger.warn(
+          'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
+        );
+        return redteamContent;
+      }
+    }
   } else {
     shouldGenerate = true;
-  }
-
-  if (!shouldGenerate) {
-    logger.warn(
-      'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
-    );
-    return;
   }
 
   if (configPath) {
@@ -90,7 +97,7 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
         )} first`,
       ),
     );
-    return;
+    return null;
   }
 
   const startTime = Date.now();
@@ -98,6 +105,8 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
     name: 'generate redteam - started',
     numPrompts: testSuite.prompts.length,
     numTestsExisting: (testSuite.tests || []).length,
+    plugins: redteamConfig?.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) || [],
+    strategies: redteamConfig?.strategies?.map((s) => (typeof s === 'string' ? s : s.id)) || [],
   });
   await telemetry.send();
 
@@ -160,7 +169,7 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
     logger.debug(`strategies: ${strategyObjs.map((s) => s.id ?? s).join(', ')}`);
   } catch (error) {
     logger.error('Error logging plugins and strategies. One did not have a valid id.');
-    logger.error(error);
+    logger.error(`Error details: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   const config = {
@@ -168,23 +177,30 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
     language: redteamConfig?.language || options.language,
     maxConcurrency: options.maxConcurrency,
     numTests: redteamConfig?.numTests ?? options.numTests,
+    entities: redteamConfig?.entities,
     plugins,
     provider: redteamConfig?.provider || options.provider,
     purpose: redteamConfig?.purpose || options.purpose,
     strategies: strategyObjs,
     delay: redteamConfig?.delay || options.delay,
+    sharing: redteamConfig?.sharing || options.sharing,
   };
   const parsedConfig = RedteamConfigSchema.safeParse(config);
   if (!parsedConfig.success) {
     logger.error('Invalid redteam configuration:');
-    logger.error(parsedConfig.error.toString());
+    logger.error(fromError(parsedConfig.error).toString());
     throw new Error('Invalid redteam configuration');
   }
+
+  const targetLabels = testSuite.providers
+    .map((provider: ApiProvider) => provider?.label)
+    .filter(Boolean);
 
   const {
     testCases: redteamTests,
     purpose,
     entities,
+    injectVar: finalInjectVar,
   } = await synthesize({
     ...parsedConfig.data,
     language: config.language,
@@ -192,16 +208,44 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
     prompts: testSuite.prompts.map((prompt) => prompt.raw),
     maxConcurrency: config.maxConcurrency,
     delay: config.delay,
+    abortSignal: options.abortSignal,
+    targetLabels,
+    showProgressBar: options.progressBar !== false,
   } as SynthesizeOptions);
+
+  if (redteamTests.length === 0) {
+    logger.warn('No test cases generated. Please check for errors and try again.');
+    return null;
+  }
 
   const updatedRedteamConfig = {
     purpose,
     entities,
     strategies: strategyObjs || [],
     plugins: plugins || [],
+    sharing: config.sharing,
   };
 
-  if (options.output) {
+  let ret: Partial<UnifiedConfig> | undefined;
+  if (options.output && options.output.endsWith('.burp')) {
+    // Write in Burp Intruder compatible format
+    const outputLines = redteamTests
+      .map((test) => {
+        const value = String(test.vars?.[finalInjectVar] ?? '');
+        if (options.burpEscapeJson) {
+          return encodeURIComponent(JSON.stringify(value).slice(1, -1));
+        }
+        return encodeURIComponent(value);
+      })
+      .filter((line) => line.length > 0)
+      .join('\n');
+    fs.writeFileSync(options.output, outputLines);
+    logger.info(
+      chalk.green(`Wrote ${redteamTests.length} test cases to ${chalk.bold(options.output)}`),
+    );
+    // No need to return anything, Burp outputs are only invoked via command line.
+    return {};
+  } else if (options.output) {
     const existingYaml = configPath
       ? (yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>)
       : {};
@@ -224,10 +268,10 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
           : { configHash: 'force-regenerate' }),
       },
     };
-    writePromptfooConfig(updatedYaml, options.output);
+    ret = writePromptfooConfig(updatedYaml, options.output);
     printBorder();
     const relativeOutputPath = path.relative(process.cwd(), options.output);
-    logger.info(`Wrote ${redteamTests.length} new test cases to ${relativeOutputPath}`);
+    logger.info(`Wrote ${redteamTests.length} test cases to ${relativeOutputPath}`);
     if (!options.inRedteamRun) {
       const commandPrefix = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
       logger.info(
@@ -258,7 +302,7 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
       ...(existingConfig.metadata || {}),
       configHash: getConfigHash(configPath),
     };
-    writePromptfooConfig(existingConfig, configPath);
+    ret = writePromptfooConfig(existingConfig, configPath);
     logger.info(
       `\nWrote ${redteamTests.length} new test cases to ${path.relative(process.cwd(), configPath)}`,
     );
@@ -268,7 +312,7 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
       : `${commandPrefix} eval -c ${path.relative(process.cwd(), configPath)}`;
     logger.info('\n' + chalk.green(`Run ${chalk.bold(`${command}`)} to run the red team!`));
   } else {
-    writePromptfooConfig({ tests: redteamTests }, 'redteam.yaml');
+    ret = writePromptfooConfig({ tests: redteamTests }, 'redteam.yaml');
   }
 
   telemetry.record('command_used', {
@@ -277,8 +321,11 @@ export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptio
     numPrompts: testSuite.prompts.length,
     numTestsExisting: (testSuite.tests || []).length,
     numTestsGenerated: redteamTests.length,
+    plugins: plugins.map((p) => p.id),
+    strategies: strategies.map((s) => (typeof s === 'string' ? s : s.id)),
   });
   await telemetry.send();
+  return ret;
 }
 
 export function redteamGenerateCommand(
@@ -352,7 +399,9 @@ export function redteamGenerateCommand(
     )
     .option('--remote', 'Force remote inference wherever possible', false)
     .option('--force', 'Force generation even if no changes are detected', false)
-    .option('--verbose', 'Show debug output', false)
+    .option('--verbose', 'Show debug logs', defaultConfig?.commandLineOptions?.verbose)
+    .option('--no-progress-bar', 'Do not show progress bar')
+    .option('--burp-escape-json', 'Escape quotes in Burp payloads', false)
     .action((opts: Partial<RedteamCliGenerateOptions>): void => {
       if (opts.verbose) {
         setLogLevel('debug');
@@ -402,7 +451,11 @@ export function redteamGenerateCommand(
             logger.error(`  ${err.path.join('.')}: ${err.message}`);
           });
         } else {
-          logger.error('An unexpected error occurred:', error);
+          logger.error(
+            `An unexpected error occurred during generation: ${error instanceof Error ? error.message : String(error)}\n${
+              error instanceof Error ? error.stack : ''
+            }`,
+          );
         }
         process.exit(1);
       }

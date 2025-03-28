@@ -1,8 +1,9 @@
 import type { ProviderOptions } from '../types';
-import { OpenAiChatCompletionProvider, type OpenAiCompletionOptions } from './openai';
+import { OpenAiChatCompletionProvider } from './openai/chat';
+import type { OpenAiCompletionOptions } from './openai/types';
 
 interface PortkeyProviderOptions extends ProviderOptions {
-  config?: {
+  config?: OpenAiCompletionOptions & {
     portkeyApiKey?: string;
     portkeyVirtualKey?: string;
     portkeyMetadata?: Record<string, any>;
@@ -27,7 +28,7 @@ interface PortkeyProviderOptions extends ProviderOptions {
   };
 }
 
-function toKebabCase(str: string): string {
+export function toKebabCase(str: string): string {
   return str.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
 }
 
@@ -44,10 +45,7 @@ export function getPortkeyHeaders(config: Record<string, any> = {}): Record<stri
 }
 
 export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider {
-  constructor(
-    modelName: string,
-    providerOptions: PortkeyProviderOptions & OpenAiCompletionOptions,
-  ) {
+  constructor(modelName: string, providerOptions: PortkeyProviderOptions) {
     super(modelName, {
       ...providerOptions,
       config: {

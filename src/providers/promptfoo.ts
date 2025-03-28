@@ -69,14 +69,12 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
           },
           body: JSON.stringify(body),
         },
-        30000,
+        580000,
         2,
       );
 
       if (!response.ok) {
-        throw new Error(
-          `[HarmfulCompletionProvider] API call failed with status ${response.status}: ${await response.text()}`,
-        );
+        throw new Error(`API call failed with status ${response.status}: ${await response.text()}`);
       }
 
       const data = await response.json();
@@ -85,9 +83,9 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
         output: [data.output].flat(),
       };
     } catch (err) {
-      logger.info(`[HarmfulCompletionProvider] API call error: ${String(err)}`);
+      logger.info(`[HarmfulCompletionProvider] ${err}`);
       return {
-        error: `[HarmfulCompletionProvider]API call error: ${String(err)}`,
+        error: `[HarmfulCompletionProvider] ${err}`,
       };
     }
   }
@@ -131,7 +129,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
     };
 
     try {
-      const { data } = await fetchWithCache(
+      const { data, status, statusText } = await fetchWithCache(
         getRemoteGenerationUrl(),
         {
           method: 'POST',
@@ -146,7 +144,12 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       const { result, tokenUsage } = data;
 
       if (!result) {
-        throw new Error('No choices returned from API');
+        logger.error(
+          `Error from promptfoo completion provider. Status: ${status} ${statusText} ${JSON.stringify(data)} `,
+        );
+        return {
+          error: 'LLM did not return a result, likely refusal',
+        };
       }
 
       return {

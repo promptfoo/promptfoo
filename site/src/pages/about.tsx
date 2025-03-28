@@ -5,9 +5,9 @@ import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Divider from '@mui/material/Divider';
-import Grid from '@mui/material/Grid';
+import Grid from '@mui/material/Grid2';
 import Typography from '@mui/material/Typography';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
 import Layout from '@theme/Layout';
 
 const AboutPageContent = () => {
@@ -37,7 +37,7 @@ const AboutPageContent = () => {
 
         <Box mb={8}>
           <Grid container spacing={4}>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography variant="h4" component="h3" gutterBottom fontWeight="medium">
                 About Us
               </Typography>
@@ -51,7 +51,7 @@ const AboutPageContent = () => {
                 in the technology and security industries.
               </Typography>
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Box display="flex" justifyContent="center" alignItems="center" height="100%">
                 <img
                   src="/img/logo-panda.svg"
@@ -95,8 +95,26 @@ const AboutPageContent = () => {
                 image: '/img/team/vanessa.jpeg',
                 bio: 'Vanessa led hundreds of security and privacy reviews for customers at Gong. She has also pentested dozens of enterprises and launched hundreds of bug bounty programs for a leading crowdsourced security company and is published in Forbes, Lawfare, and Dark Reading.',
               },
+              {
+                name: 'Guangshuo Zang',
+                title: 'Staff Engineer',
+                image: '/img/team/shuo.jpeg',
+                bio: 'Guangshuo brings technical expertise from Meta, ChipperCash, and Smile Identity. Specializes in GenAI systems, product engineering, and building scalable client solutions.',
+              },
+              {
+                name: 'Faizan Minhas',
+                title: 'Senior Engineer',
+                image: '/img/team/faizan.jpeg',
+                bio: 'Faizan brings a wealth of experience in building products across a range of industries. He has led and contributed to projects at companies like Faire, Intercom, and a range of startups.',
+              },
+              {
+                name: 'Will Holley',
+                title: 'Senior Engineer',
+                image: '/img/team/will.jpg',
+                bio: 'Will has a passion for building secure and reliable systems. He brings experience leading teams that develop AI for the financial services industry.',
+              },
             ].map((leader) => (
-              <Grid item xs={12} sm={6} md={3} key={leader.name}>
+              <Grid size={{ xs: 12, sm: 6, md: 4 }} key={leader.name}>
                 <Box textAlign="center">
                   <Avatar
                     alt={leader.name}
@@ -159,7 +177,7 @@ const AboutPageContent = () => {
                 description: 'EVP, Head of Digital Products, Fidelity\nCISO, Fidelity',
               },
             ].map((investor) => (
-              <Grid item xs={12} sm={6} md={4} key={investor.name}>
+              <Grid size={{ xs: 12, sm: 6, md: 4 }} key={investor.name}>
                 <Box textAlign="center">
                   <Avatar
                     alt={investor.name}
@@ -191,7 +209,7 @@ const AboutPageContent = () => {
             An Incredible Open Source Community
           </Typography>
           <Typography variant="body1" paragraph align="center">
-            Promptfoo is proud to be supported by a vibrant community of over 100 open source
+            Promptfoo is proud to be supported by a vibrant community of over 150 open source
             contributors.
           </Typography>
           <Box display="flex" justifyContent="center" mt={4}>

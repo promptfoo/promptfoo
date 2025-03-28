@@ -1,6 +1,6 @@
-import invariant from 'tiny-invariant';
 import { matchesAnswerRelevance } from '../matchers';
 import type { AssertionParams, GradingResult } from '../types';
+import invariant from '../util/invariant';
 
 export const handleAnswerRelevance = async ({
   assertion,
@@ -16,6 +16,6 @@ export const handleAnswerRelevance = async ({
   const input = typeof test?.vars?.query === 'string' ? test.vars.query : prompt;
   return {
     assertion,
-    ...(await matchesAnswerRelevance(input, output, assertion.threshold || 0, test.options)),
+    ...(await matchesAnswerRelevance(input, output, assertion.threshold ?? 0, test.options)),
   };
 };

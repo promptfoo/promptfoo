@@ -9,11 +9,7 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 env:
-  OPENAI_API_KEY: xxx
-  ANTHROPIC_API_KEY: xxx
-  AZURE_OPENAI_API_HOST: xxx
   VITE_TELEMETRY_DISABLED: 1
 jobs:
   build:
@@ -23,9 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Temporarily disabled 22.x due to github runner compatibility issues
-        # TODO(Michael): Re-enable once issues are resolved, 2024-08-23
-        node: ['18.x', '20.x']
+        node: ['18.x', '20.x', '22.x']
         os: [ubuntu-latest, windows-latest, macOS-latest]
         exclude:
           # Remove when https://github.com/nodejs/node/issues/51766 is resolved
@@ -42,10 +36,10 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: 'npm'
 
-      - name: Use Python 3.12
+      - name: Use Python 3.13
         uses: actions/setup-python@v5
         with:
-          python-version: 3.12
+          python-version: 3.13
 
       - name: Install Dependencies
         run: |
@@ -89,10 +83,24 @@ jobs:
 
       - name: Check Dependency Versions
         run: |
-          npm exec check-dependency-version-consistency
+          npx check-dependency-version-consistency
 
       - name: Check for circular dependencies
-        run: npx madge $(git ls-files '*.ts') --circular
+        run: |
+          # shellcheck disable=SC2046
+          npx madge $(git ls-files '*.ts') --circular
+
+  shell-format:
+    name: Shell Format Check
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: luizm/action-sh-checker@17bd25a6ee188d2b91f677060038f4ba37ba14b2
+        env:
+          SHFMT_OPTS: '-i 2' # 2 space indent
+        with:
+          sh_checker_shellcheck_disable: true
 
   assets:
     name: Generate Assets
@@ -130,7 +138,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.9, 3.12]
+        python-version: [3.9, 3.13]
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -214,10 +222,10 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      - name: Use Python 3.12
+      - name: Use Python 3.13
         uses: actions/setup-python@v5
         with:
-          python-version: 3.12
+          python-version: 3.13
 
       - name: Install Dependencies
         run: |
@@ -228,6 +236,7 @@ jobs:
 
   share-test:
     name: Share Test
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -244,7 +253,9 @@ jobs:
       - name: run promptfoo eval
         id: eval
         run: |
-          PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:8500 PROMPTFOO_SHARING_APP_BASE_URL=http://localhost:8500  node dist/src/main.js eval -c .github/workflows/files/promptfooconfig.yaml --share
+          PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:8500 PROMPTFOO_SHARING_APP_BASE_URL=http://localhost:8500  node dist/src/main.js eval -c .github/assets/promptfooconfig.yaml --share
+        env:
+          PROMPTFOO_DISABLE_TELEMETRY: 1
 
       - name: Test that the eval results are uploaded
         run: |
@@ -262,8 +273,83 @@ jobs:
           fi
 
       - name: Share to cloud
+        if: env.PROMPTFOO_STAGING_API_KEY != ''
+        env:
+          PROMPTFOO_STAGING_API_KEY: ${{ secrets.PROMPTFOO_STAGING_API_KEY }}
         run: |
-          if [ -n "${{ secrets.PROMPTFOO_STAGING_API_KEY }}" ]; then
-            node dist/src/main.js auth login -k ${{ secrets.PROMPTFOO_STAGING_API_KEY }} -h https://api.promptfoo-staging.app
-            node dist/src/main.js eval -c .github/workflows/files/promptfooconfig.yaml --share
-          fi
+          node dist/src/main.js auth login -k ${{ secrets.PROMPTFOO_STAGING_API_KEY }} -h https://api.promptfoo-staging.app
+          node dist/src/main.js eval -c .github/assets/promptfooconfig.yaml --share
+
+  redteam:
+    name: Redteam
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Redteam
+        run: |
+          npm run test:redteam:integration
+
+  redteam-custom-enterprise-server:
+    name: Redteam Custom Enterprise Server
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: npm ci
+
+      # Need to build first so we can login
+      - name: Build
+        run: |
+          npm run build
+
+      - name: Login
+        if: env.PROMPTFOO_INTEGRATION_TEST_API_KEY != ''
+        env:
+          PROMPTFOO_INTEGRATION_TEST_API_KEY: ${{ secrets.PROMPTFOO_INTEGRATION_TEST_API_KEY }}
+        run: |
+          npm run bin auth login -- -k ${{ secrets.PROMPTFOO_INTEGRATION_TEST_API_KEY }} -h ${{ secrets.PROMPTFOO_INTEGRATION_TEST_API_HOST }}
+
+      - name: Run Redteam
+        run: |
+          npm run test:redteam:integration
+
+  actionlint:
+    name: GitHub Actions Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Run actionlint
+        id: actionlint
+        uses: raven-actions/actionlint@v2
+
+  golang:
+    name: Go Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.6'
+          check-latest: true
+
+      - name: Run wrapper tests
+        working-directory: src/golang
+        run: |
+          go test -v wrapper.go wrapper_test.go

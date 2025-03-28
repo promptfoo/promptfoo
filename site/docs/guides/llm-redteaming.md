@@ -4,14 +4,14 @@ Promptfoo is a popular open source evaluation framework that includes LLM red te
 
 This guide shows you how to automatically generate adversarial tests specifically for your app. The red team covers a wide range of potential vulnerabilities and failure modes, including:
 
-Privacy and Security:
+**Privacy and Security:**
 
 - PII Leaks
 - Cybercrime and Hacking
 - BFLA, BOLA, and other access control vulnerabilities
 - SSRF (Server-Side Request Forgery)
 
-Technical Vulnerabilities:
+**Technical Vulnerabilities:**
 
 - Prompt Injection and Extraction
 - Jailbreaking
@@ -19,7 +19,7 @@ Technical Vulnerabilities:
 - SQL and Shell Injection
 - ASCII Smuggling (invisible characters)
 
-Criminal Activities and Harmful Content:
+**Criminal Activities and Harmful Content:**
 
 - Hate and Discrimination
 - Violent Crimes
@@ -28,7 +28,7 @@ Criminal Activities and Harmful Content:
 - Indiscriminate and Chemical/Biological Weapons
 - Self-Harm and Graphic Content
 
-Misinformation and Misuse:
+**Misinformation and Misuse:**
 
 - Misinformation and Disinformation
 - Copyright Violations
@@ -54,23 +54,25 @@ First, install [Node 18 or later](https://nodejs.org/en/download/package-manager
 Then create a new project for your red teaming needs:
 
 ```sh
-npx promptfoo@latest redteam init my-redteam-project
-cd my-redteam-project
+npx promptfoo@latest redteam init my-redteam-project --no-gui
 ```
 
-The `init` command creates some placeholders, including a `promptfooconfig.yaml` file. This is where we’ll do most of our setup.
+The `init` command will guide you through setting up a redteam for your use case, and includes several useful defaults to quickly get you started.
+
+It will create a `promptfooconfig.yaml` config file where we’ll do most of our setup.
 
 ## Getting started
 
-Edit the config to set up the prompt and the LLM you want to test. See the [configuration guide](/docs/red-team/configuration/) for more information.
+Edit `my-redteam-project/promptfooconfig.yaml` to set up the prompt and the LLM you want to test. See the [configuration guide](/docs/red-team/configuration/) for more information.
 
 Run the eval:
 
-```
+```sh
+cd my-redteam-project
 npx promptfoo@latest redteam run
 ```
 
-This will create a file `redteam.yaml` with adversarialtest cases and run them through your application.
+This will create a file `redteam.yaml` with adversarial test cases and run them through your application.
 
 And view the results:
 

@@ -14,7 +14,13 @@ jest.mock('os');
 jest.mock('fs');
 jest.mock('js-yaml');
 jest.mock('../../../src/logger', () => ({
-  warn: jest.fn(),
+  __esModule: true,
+  default: {
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  },
 }));
 
 describe('config', () => {
@@ -26,6 +32,11 @@ describe('config', () => {
     jest.mocked(os.homedir).mockReturnValue(mockHomedir);
     jest.mocked(fs.existsSync).mockReturnValue(false);
     delete process.env.PROMPTFOO_CONFIG_DIR;
+    setConfigDirectoryPath(undefined);
+  });
+
+  afterEach(() => {
+    setConfigDirectoryPath(undefined);
   });
 
   describe('getConfigDirectoryPath', () => {

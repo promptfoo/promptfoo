@@ -1,3 +1,4 @@
+import dotenv from 'dotenv';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import * as path from 'path';
@@ -5,7 +6,12 @@ import cliState from '../../src/cliState';
 import { getDb } from '../../src/database';
 import * as googleSheets from '../../src/googleSheets';
 import Eval from '../../src/models/eval';
-import type { ApiProvider, EvaluateResult, TestCase } from '../../src/types';
+import {
+  ResultFailureReason,
+  type ApiProvider,
+  type EvaluateResult,
+  type TestCase,
+} from '../../src/types';
 import {
   maybeLoadFromExternalFile,
   parsePathOrGlob,
@@ -13,6 +19,7 @@ import {
   readFilters,
   readOutput,
   resultIsForTestCase,
+  setupEnv,
   varsMatch,
   writeMultipleOutputs,
   writeOutput,
@@ -41,7 +48,6 @@ jest.mock('fs', () => ({
   mkdirSync: jest.fn(),
 }));
 
-jest.mock('../../src/logger');
 jest.mock('../../src/esm');
 
 jest.mock('../../src/googleSheets', () => ({
@@ -214,6 +220,7 @@ describe('util', () => {
       const results: EvaluateResult[] = [
         {
           success: true,
+          failureReason: ResultFailureReason.NONE,
           score: 1.0,
           namedScores: {},
           latencyMs: 1000,
@@ -238,7 +245,7 @@ describe('util', () => {
         },
       ];
       const eval_ = new Eval({});
-      eval_.addResult(results[0], {});
+      await eval_.addResult(results[0]);
 
       const shareableUrl = null;
       await writeOutput(outputPath, eval_, shareableUrl);
@@ -429,6 +436,16 @@ describe('util', () => {
       });
     });
 
+    it('should parse a Go file path with function name', () => {
+      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      expect(parsePathOrGlob('/base', 'script.go:CallApi')).toEqual({
+        extension: '.go',
+        functionName: 'CallApi',
+        isPathPattern: false,
+        filePath: path.join('/base', 'script.go'),
+      });
+    });
+
     it('should parse a directory path', () => {
       jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => true } as fs.Stats);
       expect(parsePathOrGlob('/base', 'dir')).toEqual({
@@ -458,6 +475,12 @@ describe('util', () => {
       });
       expect(() => parsePathOrGlob('/base', 'nonexistent.js')).toThrow('File does not exist');
       delete process.env.PROMPTFOO_STRICT_FILES;
+    });
+
+    it('should properly test file existence when function name in the path', () => {
+      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      parsePathOrGlob('/base', 'script.py:myFunction');
+      expect(fs.statSync).toHaveBeenCalledWith(path.join('/base', 'script.py'));
     });
 
     it('should return empty extension for files without extension', () => {
@@ -594,22 +617,109 @@ describe('util', () => {
       });
     });
 
-    describe('Grader', () => {
-      it('should have an id and callApi attributes', async () => {
-        const Grader = new TestGrader();
-        expect(Grader.id()).toBe('TestGradingProvider');
-        await expect(Grader.callApi()).resolves.toEqual({
-          output: JSON.stringify({
-            pass: true,
-            reason: 'Test grading output',
-          }),
-          tokenUsage: {
-            completion: 5,
-            prompt: 5,
-            total: 10,
-          },
-        });
+    it('should handle file:// prefix with Go function', () => {
+      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      expect(parsePathOrGlob('/base', 'file://script.go:CallApi')).toEqual({
+        extension: '.go',
+        functionName: 'CallApi',
+        isPathPattern: false,
+        filePath: path.join('/base', 'script.go'),
       });
     });
+
+    it('should handle file:// prefix with absolute path and Go function', () => {
+      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      expect(parsePathOrGlob('/base', 'file:///absolute/path/script.go:CallApi')).toEqual({
+        extension: '.go',
+        functionName: 'CallApi',
+        isPathPattern: false,
+        filePath: expect.stringMatching(/^[/\\]absolute[/\\]path[/\\]script\.go$/),
+      });
+    });
+  });
+
+  describe('Grader', () => {
+    it('should have an id and callApi attributes', async () => {
+      const Grader = new TestGrader();
+      expect(Grader.id()).toBe('TestGradingProvider');
+      await expect(Grader.callApi()).resolves.toEqual({
+        output: JSON.stringify({
+          pass: true,
+          reason: 'Test grading output',
+        }),
+        tokenUsage: {
+          completion: 5,
+          prompt: 5,
+          total: 10,
+        },
+      });
+    });
+  });
+});
+
+describe('setupEnv', () => {
+  let originalEnv: typeof process.env;
+  let dotenvConfigSpy: jest.SpyInstance<
+    dotenv.DotenvConfigOutput,
+    [options?: dotenv.DotenvConfigOptions]
+  >;
+
+  beforeEach(() => {
+    originalEnv = { ...process.env };
+    // Ensure NODE_ENV is not set at the start of each test
+    delete process.env.NODE_ENV;
+    // Spy on dotenv.config to verify it's called with the right parameters
+    dotenvConfigSpy = jest.spyOn(dotenv, 'config').mockImplementation(() => ({ parsed: {} }));
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    jest.resetAllMocks();
+  });
+
+  it('should call dotenv.config without parameters when envPath is undefined', () => {
+    setupEnv(undefined);
+
+    expect(dotenvConfigSpy).toHaveBeenCalledTimes(1);
+    expect(dotenvConfigSpy).toHaveBeenCalledWith();
+  });
+
+  it('should call dotenv.config with path and override=true when envPath is specified', () => {
+    const testEnvPath = '.env.test';
+
+    setupEnv(testEnvPath);
+
+    expect(dotenvConfigSpy).toHaveBeenCalledTimes(1);
+    expect(dotenvConfigSpy).toHaveBeenCalledWith({
+      path: testEnvPath,
+      override: true,
+    });
+  });
+
+  it('should load environment variables with override when specified env file has conflicting values', () => {
+    // Mock dotenv.config to simulate loading variables
+    dotenvConfigSpy.mockImplementation((options?: dotenv.DotenvConfigOptions) => {
+      if (options?.path === '.env.production') {
+        if (options.override) {
+          process.env.NODE_ENV = 'production';
+        } else if (!process.env.NODE_ENV) {
+          process.env.NODE_ENV = 'production';
+        }
+      } else {
+        // Default .env file
+        if (!process.env.NODE_ENV) {
+          process.env.NODE_ENV = 'development';
+        }
+      }
+      return { parsed: {} };
+    });
+
+    // First load the default .env (setting NODE_ENV to 'development')
+    setupEnv(undefined);
+    expect(process.env.NODE_ENV).toBe('development');
+
+    // Then load .env.production with override (should change NODE_ENV to 'production')
+    setupEnv('.env.production');
+    expect(process.env.NODE_ENV).toBe('production');
   });
 });

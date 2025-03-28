@@ -9,6 +9,8 @@ export const REQUEST_TIMEOUT_MS = getEnvInt('REQUEST_TIMEOUT_MS', 300_000);
 interface ModelCost {
   input: number;
   output: number;
+  audioInput?: number;
+  audioOutput?: number;
 }
 
 interface ProviderModel {
@@ -16,8 +18,9 @@ interface ProviderModel {
   cost?: ModelCost;
 }
 
-interface ProviderConfig {
+export interface ProviderConfig {
   cost?: number;
+  audioCost?: number;
 }
 
 /**
@@ -81,8 +84,8 @@ export function parseChatPrompt<T>(prompt: string, defaultValue: T): T {
     } catch (err) {
       if (
         getEnvBool('PROMPTFOO_REQUIRE_JSON_PROMPTS') ||
-        trimmedPrompt.startsWith('{') ||
-        trimmedPrompt.startsWith('[')
+        (trimmedPrompt.startsWith('{') && trimmedPrompt.endsWith('}')) ||
+        (trimmedPrompt.startsWith('[') && trimmedPrompt.endsWith(']'))
       ) {
         throw new Error(`Chat Completion prompt is not a valid JSON string: ${err}\n\n${prompt}`);
       }

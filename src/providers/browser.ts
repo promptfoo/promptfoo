@@ -1,5 +1,4 @@
 import { type Page, type ElementHandle, type BrowserContext } from 'playwright';
-import invariant from 'tiny-invariant';
 import logger from '../logger';
 import type {
   ApiProvider,
@@ -8,6 +7,7 @@ import type {
   ProviderResponse,
 } from '../types';
 import { maybeLoadFromExternalFile } from '../util';
+import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 
@@ -130,7 +130,7 @@ export class BrowserProvider implements ApiProvider {
 
     logger.debug(`Browser results: ${safeJsonStringify(extracted)}`);
     const ret = this.transformResponse(extracted, finalHtml);
-    logger.debug(`Browser response parser output: ${ret}`);
+    logger.debug(`Browser response transform output: ${ret}`);
     return { output: ret };
   }
 

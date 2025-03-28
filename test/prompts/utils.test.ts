@@ -59,6 +59,7 @@ describe('maybeFilePath', () => {
     expect(maybeFilePath('filename.cjs')).toBe(true);
     expect(maybeFilePath('filename.js')).toBe(true);
     expect(maybeFilePath('filename.js:functionName')).toBe(true);
+    expect(maybeFilePath('filename.j2')).toBe(true);
     expect(maybeFilePath('filename.json')).toBe(true);
     expect(maybeFilePath('filename.jsonl')).toBe(true);
     expect(maybeFilePath('filename.mjs')).toBe(true);
@@ -100,6 +101,22 @@ describe('maybeFilePath', () => {
 
   it('should return false for strings ending with a dot', () => {
     expect(maybeFilePath('Write a tweet about {{topic}}.')).toBe(false);
+  });
+
+  it('should recognize Jinja2 template files', () => {
+    expect(maybeFilePath('template.j2')).toBe(true);
+    expect(maybeFilePath('path/to/template.j2')).toBe(true);
+    expect(maybeFilePath('file://path/to/template.j2')).toBe(true);
+    expect(maybeFilePath('*.j2')).toBe(true);
+    expect(maybeFilePath('path/to/*.j2')).toBe(true);
+    expect(maybeFilePath('template.j2:functionName')).toBe(true);
+  });
+
+  it('should return false for prompt strings resembling Jinja2 syntax', () => {
+    expect(maybeFilePath('Hello {{ name }}! How are you?')).toBe(false);
+    expect(maybeFilePath('{% if condition %}Content{% endif %}')).toBe(false);
+    expect(maybeFilePath('{{ variable | filter }}')).toBe(false);
+    expect(maybeFilePath('Text with {{ variable.attribute }} in it.')).toBe(false);
   });
 });
 

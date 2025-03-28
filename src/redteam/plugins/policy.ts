@@ -1,12 +1,12 @@
 import dedent from 'dedent';
-import invariant from 'tiny-invariant';
 import type { Assertion, ApiProvider, TestCase, AtomicTestCase, GradingResult } from '../../types';
+import invariant from '../../util/invariant';
 import { RedteamPluginBase, RedteamGraderBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:policy';
 
 export class PolicyPlugin extends RedteamPluginBase {
-  readonly id = 'policy';
+  readonly id = PLUGIN_ID;
   private policy: string;
 
   constructor(
@@ -69,7 +69,7 @@ export class PolicyPlugin extends RedteamPluginBase {
 }
 
 export class PolicyViolationGrader extends RedteamGraderBase {
-  id = PLUGIN_ID;
+  readonly id = PLUGIN_ID;
   rubric = dedent`
     <system_purpose>
       {{purpose}}

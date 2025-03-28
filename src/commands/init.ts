@@ -23,17 +23,31 @@ export async function downloadFile(url: string, filePath: string): Promise<void>
 }
 
 export async function downloadDirectory(dirPath: string, targetDir: string): Promise<void> {
+  // First try with VERSION
   const url = `${GITHUB_API_BASE}/repos/promptfoo/promptfoo/contents/examples/${dirPath}?ref=${VERSION}`;
-  const response = await fetch(url, {
+  let response = await fetch(url, {
     headers: {
       Accept: 'application/vnd.github.v3+json',
       'User-Agent': 'promptfoo-cli',
     },
   });
 
+  // If VERSION fails, try with 'main'
   if (!response.ok) {
-    throw new Error(`Failed to fetch directory contents: ${response.statusText}`);
+    const mainUrl = `${GITHUB_API_BASE}/repos/promptfoo/promptfoo/contents/examples/${dirPath}?ref=main`;
+    response = await fetch(mainUrl, {
+      headers: {
+        Accept: 'application/vnd.github.v3+json',
+        'User-Agent': 'promptfoo-cli',
+      },
+    });
+
+    // If both attempts fail, throw an error
+    if (!response.ok) {
+      throw new Error(`Failed to fetch directory contents: ${response.statusText}`);
+    }
   }
+
   const contents = await response.json();
 
   for (const item of contents) {
@@ -132,23 +146,31 @@ async function handleExampleDownload(
   }
 
   const runCommand = isRunningUnderNpx() ? 'npx promptfoo eval' : 'promptfoo eval';
-  if (directory === '.' || !directory) {
+  if (!exampleName) {
+    return;
+  }
+
+  const basePath = directory && directory !== '.' ? `${directory}/` : '';
+  const readmePath = path.join(basePath, exampleName, 'README.md');
+  const cdCommand = `cd ${path.join(basePath, exampleName)}`;
+
+  if (exampleName.includes('redteam')) {
     logger.info(
-      dedent`View the README file at ${chalk.bold(`${exampleName}/README.md`)} or run 
-        
-        \`${chalk.bold(`cd ${exampleName} && ${runCommand}`)}\`
-        
-        to get started!`,
+      dedent`
+
+      View the README file at ${chalk.bold(readmePath)} to get started!
+      `,
     );
   } else {
     logger.info(
-      '\n' +
-        dedent`
-        View the README file at: ${chalk.bold(`${directory}/${exampleName}/README.md`)} or run
+      dedent`
 
-        \`${chalk.bold(`cd ${directory}/${exampleName} && ${runCommand}`)}\`
-        
-        to get started!`,
+      View the README at ${chalk.bold(readmePath)} or run:
+
+      \`${chalk.bold(`${cdCommand} && ${runCommand}`)}\`
+
+      to get started!
+      `,
     );
   }
 

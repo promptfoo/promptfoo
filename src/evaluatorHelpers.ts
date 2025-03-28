@@ -1,17 +1,20 @@
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import * as path from 'path';
-import invariant from 'tiny-invariant';
 import cliState from './cliState';
 import { getEnvBool } from './envars';
 import { importModule } from './esm';
+import { getPrompt as getHeliconePrompt } from './integrations/helicone';
+import { getPrompt as getLangfusePrompt } from './integrations/langfuse';
+import { getPrompt as getPortkeyPrompt } from './integrations/portkey';
 import logger from './logger';
 import { isPackagePath, loadFromPackage } from './providers/packageParser';
 import { runPython } from './python/pythonUtils';
 import telemetry from './telemetry';
 import type { ApiProvider, NunjucksFilterMap, Prompt } from './types';
 import { renderVarsInObject } from './util';
-import { isJavascriptFile } from './util/file';
+import { isJavascriptFile, isImageFile, isVideoFile, isAudioFile } from './util/file';
+import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
 
@@ -119,8 +122,34 @@ export async function renderPrompt(
         vars[varName] = JSON.stringify(
           yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object,
         );
-      } else if (fileExtension === 'pdf') {
+      } else if (fileExtension === 'pdf' && !getEnvBool('PROMPTFOO_DISABLE_PDF_AS_TEXT')) {
+        telemetry.recordOnce('feature_used', {
+          feature: 'extract_text_from_pdf',
+        });
         vars[varName] = await extractTextFromPDF(filePath);
+      } else if (
+        (isImageFile(filePath) || isVideoFile(filePath) || isAudioFile(filePath)) &&
+        !getEnvBool('PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64')
+      ) {
+        const fileType = isImageFile(filePath)
+          ? 'image'
+          : isVideoFile(filePath)
+            ? 'video'
+            : 'audio';
+
+        telemetry.recordOnce('feature_used', {
+          feature: `load_${fileType}_as_base64`,
+        });
+
+        logger.debug(`Loading ${fileType} as base64: ${filePath}`);
+        try {
+          const fileBuffer = fs.readFileSync(filePath);
+          vars[varName] = fileBuffer.toString('base64');
+        } catch (error) {
+          throw new Error(
+            `Failed to load ${fileType} ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
       } else {
         vars[varName] = fs.readFileSync(filePath, 'utf8').trim();
       }
@@ -150,7 +179,22 @@ export async function renderPrompt(
     if (typeof result === 'string') {
       basePrompt = result;
     } else if (typeof result === 'object') {
-      basePrompt = JSON.stringify(result);
+      // Check if it's using the structured PromptFunctionResult format
+      if ('prompt' in result) {
+        basePrompt =
+          typeof result.prompt === 'string' ? result.prompt : JSON.stringify(result.prompt);
+
+        // Merge config if provided
+        if (result.config) {
+          prompt.config = {
+            ...(prompt.config || {}),
+            ...result.config,
+          };
+        }
+      } else {
+        // Direct object/array format
+        basePrompt = JSON.stringify(result);
+      }
     } else {
       throw new Error(`Prompt function must return a string or object, got ${typeof result}`);
     }
@@ -162,17 +206,13 @@ export async function renderPrompt(
       vars[key] = (vars[key] as string).replace(/\n$/, '');
     }
   }
-
   // Resolve variable mappings
   resolveVariables(vars);
-
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
-    const { getPrompt } = await import('./integrations/portkey');
-    const portKeyResult = await getPrompt(prompt.raw.slice('portkey://'.length), vars);
+    const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
     return JSON.stringify(portKeyResult.messages);
   } else if (prompt.raw.startsWith('langfuse://')) {
-    const { getPrompt } = await import('./integrations/langfuse');
     const langfusePrompt = prompt.raw.slice('langfuse://'.length);
 
     // we default to "text" type.
@@ -181,7 +221,7 @@ export async function renderPrompt(
       throw new Error('Unknown promptfoo prompt type');
     }
 
-    const langfuseResult = await getPrompt(
+    const langfuseResult = await getLangfusePrompt(
       helper,
       vars,
       promptType,
@@ -189,11 +229,10 @@ export async function renderPrompt(
     );
     return langfuseResult;
   } else if (prompt.raw.startsWith('helicone://')) {
-    const { getPrompt } = await import('./integrations/helicone');
     const heliconePrompt = prompt.raw.slice('helicone://'.length);
     const [id, version] = heliconePrompt.split(':');
     const [majorVersion, minorVersion] = version ? version.split('.') : [undefined, undefined];
-    const heliconeResult = await getPrompt(
+    const heliconeResult = await getHeliconePrompt(
       id,
       vars,
       majorVersion === undefined ? undefined : Number(majorVersion),
@@ -201,7 +240,6 @@ export async function renderPrompt(
     );
     return heliconeResult;
   }
-
   // Render prompt
   try {
     if (getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {
@@ -209,12 +247,11 @@ export async function renderPrompt(
     }
 
     const parsed = JSON.parse(basePrompt);
-
     // The _raw_ prompt is valid JSON. That means that the user likely wants to substitute vars _within_ the JSON itself.
     // Recursively walk the JSON structure. If we find a string, render it with nunjucks.
     return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
   } catch {
-    return nunjucks.renderString(basePrompt, vars);
+    return renderVarsInObject(nunjucks.renderString(basePrompt, vars), vars);
   }
 }
 

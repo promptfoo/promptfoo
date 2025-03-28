@@ -59,13 +59,21 @@ export class Telemetry {
       if (result.success) {
         this.events.push(result.data);
       } else {
-        logger.warn(`Invalid telemetry event: ${result.error}`);
+        logger.debug(
+          `Invalid telemetry event: got ${JSON.stringify(event)}, error: ${result.error}`,
+        );
       }
     }
   }
 
   private recordedEvents: Set<string> = new Set();
 
+  /**
+   * Record an event once, unique by event name and properties.
+   *
+   * @param eventName - The name of the event to record.
+   * @param properties - The properties of the event to record.
+   */
   recordOnce(eventName: TelemetryEventTypes, properties: EventProperties): void {
     if (this.disabled) {
       this.recordTelemetryDisabled();

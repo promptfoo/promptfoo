@@ -7,17 +7,13 @@ import type {
   RedteamFileConfig,
   StrategyConfig,
 } from '../redteam/types';
-import { isJavascriptFile } from '../util/file';
+import type { EnvOverrides } from '../types/env';
+import { ProviderEnvOverridesSchema } from '../types/env';
+import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/file';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
-import {
-  ApiProviderSchema,
-  ProviderEnvOverridesSchema,
-  ProviderOptionsSchema,
-  ProvidersSchema,
-} from '../validators/providers';
+import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
 import { RedteamConfigSchema } from '../validators/redteam';
 import { NunjucksFilterMapSchema, TokenUsageSchema } from '../validators/shared';
-import type { EnvOverrides } from './env';
 import type { Prompt, PromptFunction } from './prompts';
 import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
@@ -27,7 +23,7 @@ export * from './providers';
 export * from '../redteam/types';
 export * from './shared';
 
-export type { EnvOverrides } from './env';
+export type { EnvOverrides };
 
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
@@ -56,11 +52,13 @@ export const CommandLineOptionsSchema = z.object({
   share: z.boolean().optional(),
   progressBar: z.boolean().optional(),
   watch: z.boolean().optional(),
+  filterErrorsOnly: z.string().optional(),
   filterFailing: z.string().optional(),
   filterFirstN: z.coerce.number().int().positive().optional(),
-  filterSample: z.coerce.number().int().positive().optional(),
+  filterMetadata: z.string().optional(),
   filterPattern: z.string().optional(),
   filterProviders: z.string().optional(),
+  filterSample: z.coerce.number().int().positive().optional(),
   filterTargets: z.string().optional(),
   var: z.record(z.string()).optional(),
 
@@ -122,6 +120,13 @@ export const OutputConfigSchema = z.object({
 
 export type OutputConfig = z.infer<typeof OutputConfigSchema>;
 
+export type EvalConversations = Record<
+  string,
+  { prompt: string | object; input: string; output: string | object }[]
+>;
+
+export type EvalRegisters = Record<string, string | object>;
+
 export interface RunEvalOptions {
   provider: ApiProvider;
   prompt: Prompt;
@@ -129,11 +134,19 @@ export interface RunEvalOptions {
 
   test: AtomicTestCase;
   nunjucksFilters?: NunjucksFilterMap;
-  evaluateOptions: EvaluateOptions;
+  evaluateOptions?: EvaluateOptions;
 
   testIdx: number;
   promptIdx: number;
   repeatIndex: number;
+
+  conversations?: EvalConversations;
+  registers?: EvalRegisters;
+  isRedteam: boolean;
+
+  // Used by pandamonium, this should never be passed to callApi, it could be a massive object that will break the stack
+  allTests?: RunEvalOptions[];
+  concurrency?: number;
 }
 
 const EvaluateOptionsSchema = z.object({
@@ -149,17 +162,27 @@ const EvaluateOptionsSchema = z.object({
   interactiveProviders: z.boolean().optional(),
   maxConcurrency: z.number().optional(),
   progressCallback: z
-    .function(z.tuple([z.number(), z.number(), z.number(), z.custom<RunEvalOptions>()]), z.void())
+    .function(
+      z.tuple([
+        z.number(),
+        z.number(),
+        z.number(),
+        z.custom<RunEvalOptions>(),
+        z.custom<PromptMetrics>(),
+      ]),
+      z.void(),
+    )
     .optional(),
   repeat: z.number().optional(),
   showProgressBar: z.boolean().optional(),
 });
-export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema>;
+export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & { abortSignal?: AbortSignal };
 
 const PromptMetricsSchema = z.object({
   score: z.number(),
   testPassCount: z.number(),
   testFailCount: z.number(),
+  testErrorCount: z.number(),
   assertPassCount: z.number(),
   assertFailCount: z.number(),
   totalLatencyMs: z.number(),
@@ -200,6 +223,15 @@ export interface PromptWithMetadata {
   count: number;
 }
 
+export enum ResultFailureReason {
+  // The test passed, or we don't know exactly why the test case failed.
+  NONE = 0,
+  // The test case failed because an assertion rejected it.
+  ASSERT = 1,
+  // Test case failed due to some other error.
+  ERROR = 2,
+}
+
 export interface EvaluateResult {
   id?: string; // on the new version 2, this is stored per-result
   description?: string; // on the new version 2, this is stored per-result // FIXME(ian): The EvalResult model doesn't pass this through, but that's ok since we can use testCase.description?
@@ -209,9 +241,10 @@ export interface EvaluateResult {
   promptId: string; // on the new version 2, this is stored per-result
   provider: Pick<ProviderOptions, 'id' | 'label'>;
   prompt: Prompt;
-  vars: Record<string, string | object>;
+  vars: Vars;
   response?: ProviderResponse;
   error?: string | null;
+  failureReason: ResultFailureReason;
   success: boolean;
   score: number;
   latencyMs: number;
@@ -219,22 +252,32 @@ export interface EvaluateResult {
   namedScores: Record<string, number>;
   cost?: number;
   metadata?: Record<string, any>;
+  tokenUsage?: Required<TokenUsage>;
 }
 
 export interface EvaluateTableOutput {
-  id: string;
-  pass: boolean;
-  score: number;
-  namedScores: Record<string, number>;
-  text: string;
-  prompt: string;
-  latencyMs: number;
-  provider?: string;
-  tokenUsage?: Partial<TokenUsage>;
-  gradingResult?: GradingResult | null;
   cost: number;
+  failureReason: ResultFailureReason;
+  gradingResult?: GradingResult | null;
+  id: string;
+  latencyMs: number;
   metadata?: Record<string, any>;
+  namedScores: Record<string, number>;
+  pass: boolean;
+  prompt: string;
+  provider?: string;
   response?: ProviderResponse;
+  score: number;
+  testCase: AtomicTestCase;
+  text: string;
+  tokenUsage?: Partial<TokenUsage>;
+  audio?: {
+    id?: string;
+    expiresAt?: number;
+    data?: string; // base64 encoded audio data
+    transcript?: string;
+    format?: string;
+  };
 }
 
 export interface EvaluateTableRow {
@@ -242,6 +285,7 @@ export interface EvaluateTableRow {
   outputs: EvaluateTableOutput[];
   vars: string[];
   test: AtomicTestCase;
+  testIdx: number;
 }
 
 export interface EvaluateTable {
@@ -255,6 +299,7 @@ export interface EvaluateTable {
 export interface EvaluateStats {
   successes: number;
   failures: number;
+  errors: number;
   tokenUsage: Required<TokenUsage>;
 }
 
@@ -349,10 +394,13 @@ export const BaseAssertionTypesSchema = z.enum([
   'cost',
   'equals',
   'factuality',
+  'g-eval',
+  'guardrails',
   'icontains-all',
   'icontains-any',
   'icontains',
   'is-json',
+  'is-refusal',
   'is-sql',
   'is-valid-openai-function-call',
   'is-valid-openai-tools-call',
@@ -408,6 +456,10 @@ const AssertionSetSchema = z.object({
   metric: z.string().optional(),
   // The required score for this assert set. If not provided, the test case is graded pass/fail.
   threshold: z.number().optional(),
+
+  // An external mapping of arbitrary strings to values that is defined
+  // for every assertion in the set and passed into each assert
+  config: z.record(z.string(), z.any()).optional(),
 });
 
 export type AssertionSet = z.infer<typeof AssertionSetSchema>;
@@ -421,7 +473,7 @@ export const AssertionSchema = z.object({
   value: z.custom<AssertionValue>().optional(),
 
   // An external mapping of arbitrary strings to values that is passed
-  // to the assertion for custom javascript asserts
+  // to the assertion for custom asserts
   config: z.record(z.string(), z.any()).optional(),
 
   // The threshold value, only applicable for similarity (cosine distance)
@@ -502,15 +554,32 @@ const MetadataSchema = z.record(z.string(), z.any());
 export const VarsSchema = z.record(
   z.union([
     z.string(),
-    z.number().transform(String),
-    z.boolean().transform(String),
-    z.array(z.union([z.string(), z.number().transform(String), z.boolean().transform(String)])),
-    z.object({}),
+    z.number(),
+    z.boolean(),
+    z.array(z.union([z.string(), z.number(), z.boolean()])),
+    z.record(z.string(), z.any()),
     z.array(z.any()),
   ]),
 );
 
 export type Vars = z.infer<typeof VarsSchema>;
+
+export type ScoringFunction = (
+  namedScores: Record<string, number>,
+  context?: {
+    threshold?: number;
+    parentAssertionSet?: {
+      index: number;
+      assertionSet: AssertionSet;
+    };
+    componentResults?: GradingResult[];
+    tokensUsed?: {
+      total: number;
+      prompt: number;
+      completion: number;
+    };
+  },
+) => Promise<GradingResult> | GradingResult;
 
 // Each test case is graded pass/fail with a score.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.
 // HEADS UP: When you add a property here, you probably need to load it from `defaultTest` in evaluator.ts.
@@ -529,6 +598,16 @@ export const TestCaseSchema = z.object({
 
   // Optional list of automatic checks to run on the LLM output
   assert: z.array(z.union([AssertionSetSchema, AssertionSchema])).optional(),
+
+  // Optional scoring function to run on the LLM output
+  assertScoringFunction: z
+    .union([
+      z
+        .string()
+        .regex(new RegExp(`^file://.*\\.(${JAVASCRIPT_EXTENSIONS.join('|')}|py)(?::[\\w.]+)?$`)),
+      z.custom<ScoringFunction>(),
+    ])
+    .optional(),
 
   // Additional configuration settings for the prompt
   options: z
@@ -753,7 +832,19 @@ export const TestSuiteConfigSchema = z.object({
   nunjucksFilters: z.record(z.string(), z.string()).optional(),
 
   // Envvar overrides
-  env: ProviderEnvOverridesSchema.optional(),
+  env: z
+    .union([
+      ProviderEnvOverridesSchema,
+      z.record(
+        z.string(),
+        z.union([
+          z.string(),
+          z.number().transform((n) => String(n)),
+          z.boolean().transform((b) => String(b)),
+        ]),
+      ),
+    ])
+    .optional(),
 
   // Metrics to calculate after the eval has been completed
   derivedMetrics: z.array(DerivedMetricSchema).optional(),
@@ -854,10 +945,12 @@ export interface OutputFile {
 
 // Live eval job state
 export interface Job {
-  status: 'in-progress' | 'complete';
+  evalId: string | null;
+  status: 'in-progress' | 'complete' | 'error';
   progress: number;
   total: number;
   result: EvaluateSummaryV3 | EvaluateSummaryV2 | null;
+  logs: string[];
 }
 
 // used for writing eval results

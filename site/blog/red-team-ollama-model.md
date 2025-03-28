@@ -31,21 +31,38 @@ ollama pull llama3.2
 
 ## Setting Up the Environment
 
+You can either initialize a new project or download the complete example:
+
+### Option 1: Download the Example
+
+```bash
+npx promptfoo@latest init --example redteam-ollama
+cd redteam-ollama
+```
+
+This will create a new directory with `promptfooconfig.yaml` and `system_message.txt` files.
+
+### Option 2: Create from Scratch
+
 Create a new directory for your red teaming project and initialize it:
 
 ```bash
-mkdir ollama-redteam
-cd ollama-redteam
-npx promptfoo@latest redteam init --no-gui --no-interactive
+mkdir redteam-ollama
+cd redteam-ollama
+npx promptfoo@latest redteam init --no-gui
 ```
 
 This creates a `promptfooconfig.yaml` file that we'll customize for Ollama.
 
 ## Configuring the Ollama Provider
 
-Edit `promptfooconfig.yaml` to use Ollama as the target:
+If you're creating from scratch, edit `promptfooconfig.yaml` to use Ollama as the target:
 
 ```yaml
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+prompts:
+  - file://system_message.txt
+
 targets:
   - id: ollama:chat:llama3.2
     label: llama3.2-redteam
@@ -53,9 +70,9 @@ targets:
       temperature: 0.7
       max_tokens: 150
 
-purpose: 'The system is a helpful chatbot assistant that answers questions and helps with tasks.'
-
 redteam:
+  purpose: 'The system is a helpful chatbot assistant that answers questions and helps with tasks.'
+  numTests: 5
   plugins:
     # Replace these with the plugins you want to test
     - harmful
@@ -65,11 +82,10 @@ redteam:
     - imitation
   strategies:
     - jailbreak
-    - prompt-injection
-  numTests: 5
+    - jailbreak:composite
 ```
 
-To see the full configuration example on Github, [click here](https://github.com/promptfoo/promptfoo/blob/main/examples/ollama-redteam).
+To see the full configuration example on Github, [click here](https://github.com/promptfoo/promptfoo/blob/main/examples/redteam-ollama).
 
 ### Configuration Explained
 
@@ -81,10 +97,12 @@ To see the full configuration example on Github, [click here](https://github.com
   - `contracts`: Tests if model makes unauthorized commitments
   - `hallucination`: Tests for false information
   - `imitation`: Tests if model impersonates others
-- **strategies**: Techniques for delivering adversarial inputs (see [full list](/docs/category/strategies-1/)):
-  - `jailbreak`: Tests if model can escape its constraints
-  - `prompt-injection`: Tests if model is susceptible to injected instructions
+- **strategies**: Techniques for delivering adversarial inputs (see [full list](/docs/red-team/strategies/)):
+  - `jailbreak`: Tests if model can escape its constraints using an iterative approach with an attacker model.
+  - `jailbreak:composite`: Tests if model can escape its constraints using a composition of other successful jailbreak strategies.
 - **numTests**: Number of test cases per plugin
+
+> **Note:** The strategies above are designed for single-turn interactions (one prompt, one response). For multi-turn conversations or applications, see our [multi-turn chatbot redteam example](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-chatbot).
 
 ## Running the Red Team Evaluation
 
@@ -143,7 +161,7 @@ Here are some common issues you might find when red teaming Llama models:
 
 ## Mitigating Vulnerabilities
 
-Remeditations will depend on your test results, but in general some things to keep in mind are:
+Remediations will depend on your test results, but in general some things to keep in mind are:
 
 1. **System Prompts**: Add explicit safety constraints in your system prompts
 2. **Input Validation**: Implement pre-processing to catch malicious inputs

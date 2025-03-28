@@ -7,7 +7,7 @@ sidebar_label: Moderation
 
 Use the `moderation` assert type to ensure that LLM outputs are safe.
 
-Currently, this supports [OpenAI's moderation model](https://platform.openai.com/docs/guides/moderation) and [Meta's LlamaGuard 2 model](https://llama.meta.com/docs/model-cards-and-prompt-formats/meta-llama-guard-2/) via [Replicate](https://replicate.com/meta/meta-llama-guard-2-8b).
+Currently, this supports [OpenAI's moderation model](https://platform.openai.com/docs/guides/moderation), [Meta's LlamaGuard 2 model](https://llama.meta.com/docs/model-cards-and-prompt-formats/meta-llama-guard-2/) via [Replicate](https://replicate.com/meta/meta-llama-guard-2-8b), and [Azure Content Safety API](https://learn.microsoft.com/en-us/azure/ai-services/content-safety/overview).
 
 In general, we encourage the use of Meta's LlamaGuard as it substantially outperforms OpenAI's moderation API as well as GPT-4. [See benchmarks](https://github.com/meta-llama/PurpleLlama/blob/main/Llama-Guard2/MODEL_CARD.md#model-performance).
 
@@ -106,4 +106,73 @@ tests:
           - S3
           - S4
         // highlight-end
+```
+
+## Azure Content Safety moderation
+
+You can use the Azure Content Safety API for moderation. To set it up, you need to create an Azure Content Safety resource and get the API key and endpoint.
+
+### Setup
+
+First, set these environment variables:
+
+```bash
+AZURE_CONTENT_SAFETY_ENDPOINT=https://your-resource-name.cognitiveservices.azure.com
+AZURE_CONTENT_SAFETY_API_KEY=your-api-key
+AZURE_CONTENT_SAFETY_API_VERSION=2024-09-01  # Optional, defaults to this version
+```
+
+If `AZURE_CONTENT_SAFETY_ENDPOINT` is set, PromptFoo will automatically use the Azure Content Safety service for moderation instead of OpenAI's moderation API.
+
+Or you can explicitly use the Azure moderation provider in your tests:
+
+```yaml
+tests:
+  - vars:
+      foo: bar
+    assert:
+      - type: moderation
+        provider: 'azure:moderation'
+```
+
+### Moderation Categories
+
+The Azure Content Safety API checks content for these categories:
+
+| Category | Description                                                       |
+| -------- | ----------------------------------------------------------------- |
+| Hate     | Content that expresses discrimination or derogatory sentiments    |
+| SelfHarm | Content related to inflicting physical harm on oneself            |
+| Sexual   | Sexually explicit or adult content                                |
+| Violence | Content depicting or promoting violence against people or animals |
+
+### Check specific categories
+
+The assertion value allows you to only enable moderation for specific categories
+
+```yaml
+tests:
+  - vars:
+      foo: bar
+    assert:
+      - type: moderation
+        provider: 'azure:moderation'
+        value:
+          - hate
+          - sexual
+```
+
+You can also set blocklist names and halt on blocklist hit in the provider config:
+
+```yaml
+tests:
+  - vars:
+      foo: bar
+    assert:
+      - type: moderation
+        provider:
+          id: azure:moderation
+          config:
+            blocklistNames: ['my-custom-blocklist', 'industry-terms']
+            haltOnBlocklistHit: true
 ```

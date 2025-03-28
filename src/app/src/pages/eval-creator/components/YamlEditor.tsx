@@ -32,50 +32,82 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
   initialYaml,
 }) => {
   const darkMode = useTheme().palette.mode === 'dark';
-  const {
-    defaultTest,
-    setDefaultTest,
-    description,
-    setDescription,
-    env,
-    setEnv,
-    evaluateOptions,
-    setEvaluateOptions,
-    prompts,
-    setPrompts,
-    providers,
-    setProviders,
-    scenarios,
-    setScenarios,
-    testCases,
-    setTestCases,
-  } = useStore();
-
   const [code, setCode] = React.useState('');
-  const [isReadOnly, setIsReadOnly] = React.useState(readOnly);
-  const [showCopySuccess, setShowCopySuccess] = React.useState(false);
+  // Always start in read-only mode on initial load, but respect the readOnly prop
+  const [isReadOnly, setIsReadOnly] = React.useState(true);
+  const [parseError, setParseError] = React.useState<string | null>(null);
 
-  const handleChange = (yamlObj: any) => {
-    setDefaultTest(yamlObj.defaultTest || {});
-    setDescription(yamlObj.description || '');
-    setEnv(yamlObj.env || {});
-    setEvaluateOptions(yamlObj.evaluateOptions || {});
-    setPrompts(yamlObj.prompts || []);
-    setProviders(yamlObj.providers || []);
-    setScenarios(yamlObj.scenarios || []);
-    setTestCases(yamlObj.tests || []);
-  };
+  const [notification, setNotification] = React.useState<{
+    show: boolean;
+    message: string;
+  }>({ show: false, message: '' });
 
-  const toggleReadOnly = () => {
-    if (!isReadOnly) {
-      try {
-        const parsed = yaml.load(code, { json: true });
-        handleChange(parsed);
-      } catch {
-        // Invalid YAML, probably mid-edit
+  const { getTestSuite } = useStore();
+
+  const parseAndUpdateStore = (yamlContent: string) => {
+    try {
+      const parsedConfig = yaml.load(yamlContent) as Record<string, any>;
+      if (parsedConfig && typeof parsedConfig === 'object') {
+        useStore.setState((state) => {
+          const newState = {
+            ...state,
+          };
+
+          if (parsedConfig.description !== undefined) {
+            newState.description = parsedConfig.description;
+          }
+
+          if (parsedConfig.providers !== undefined) {
+            newState.providers = parsedConfig.providers;
+          }
+
+          if (parsedConfig.prompts !== undefined) {
+            newState.prompts = parsedConfig.prompts;
+          }
+
+          if (parsedConfig.tests !== undefined) {
+            newState.testCases = parsedConfig.tests;
+          }
+
+          if (parsedConfig.defaultTest !== undefined) {
+            newState.defaultTest = parsedConfig.defaultTest;
+          }
+
+          if (parsedConfig.evaluateOptions !== undefined) {
+            newState.evaluateOptions = parsedConfig.evaluateOptions;
+          }
+
+          if (parsedConfig.scenarios !== undefined) {
+            newState.scenarios = parsedConfig.scenarios;
+          }
+
+          if (parsedConfig.extensions !== undefined) {
+            newState.extensions = parsedConfig.extensions;
+          }
+
+          if (parsedConfig.env !== undefined) {
+            newState.env = parsedConfig.env;
+          }
+
+          return newState;
+        });
+
+        setParseError(null);
+        setNotification({ show: true, message: 'Configuration saved successfully' });
+        return true;
+      } else {
+        const errorMsg = 'Invalid YAML configuration';
+        setParseError(errorMsg);
+        setNotification({ show: true, message: errorMsg });
+        return false;
       }
+    } catch (err) {
+      const errorMsg = `Failed to parse YAML: ${err instanceof Error ? err.message : String(err)}`;
+      console.error(errorMsg, err);
+      setParseError(errorMsg);
+      setNotification({ show: true, message: errorMsg });
+      return false;
     }
-    setIsReadOnly(!isReadOnly);
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -85,21 +117,32 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
       reader.onload = (e) => {
         const content = e.target?.result as string;
         setCode(content);
-        try {
-          const parsed = yaml.load(content, { json: true });
-          handleChange(parsed);
-        } catch (error) {
-          console.error('Error parsing uploaded YAML:', error);
+        if (isReadOnly) {
+          setIsReadOnly(false);
         }
+        parseAndUpdateStore(content);
       };
-      reader.readAsText(file);
+      reader.onerror = () => {
+        const errorMsg = 'Failed to read the uploaded file';
+        setParseError(errorMsg);
+        setNotification({ show: true, message: errorMsg });
+        setIsReadOnly(false);
+      };
+      try {
+        reader.readAsText(file);
+      } catch (err) {
+        const errorMsg = `Error loading file: ${err instanceof Error ? err.message : String(err)}`;
+        setParseError(errorMsg);
+        setNotification({ show: true, message: errorMsg });
+        setIsReadOnly(false);
+      }
     }
   };
 
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(code);
-      setShowCopySuccess(true);
+      setNotification({ show: true, message: 'YAML copied to clipboard' });
     } catch (err) {
       console.error('Failed to copy text:', err);
     }
@@ -108,38 +151,17 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
   React.useEffect(() => {
     if (initialYaml) {
       setCode(initialYaml);
+    } else if (initialConfig) {
+      setCode(yaml.dump(initialConfig));
     } else {
-      const testSuite = initialConfig || {
-        defaultTest,
-        description,
-        env,
-        evaluateOptions,
-        prompts,
-        providers,
-        scenarios,
-        tests: testCases,
-      };
-
-      setCode(yaml.dump(testSuite));
+      const currentConfig = getTestSuite();
+      setCode(yaml.dump(currentConfig));
     }
-  }, [
-    initialYaml,
-    initialConfig,
-    defaultTest,
-    description,
-    env,
-    evaluateOptions,
-    prompts,
-    providers,
-    scenarios,
-    testCases,
-  ]);
+    // Deliberately omitting getTestSuite from dependencies to avoid potential re-render loops
+  }, [initialYaml, initialConfig]);
 
   return (
-    <Box mt={4}>
-      <Typography variant="h5" gutterBottom>
-        Configuration
-      </Typography>
+    <Box>
       <Typography variant="body1" gutterBottom>
         This is the YAML config that defines the evaluation and is processed by promptfoo. See{' '}
         <Link target="_blank" to="https://promptfoo.dev/docs/configuration/guide">
@@ -148,40 +170,78 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
         to learn more.
       </Typography>
       {!readOnly && (
-        <Box display="flex" gap={2} mb={2}>
-          <Button
-            variant="text"
-            color="primary"
-            startIcon={isReadOnly ? <EditIcon /> : <SaveIcon />}
-            onClick={toggleReadOnly}
-          >
-            {isReadOnly ? 'Edit YAML' : 'Save'}
-          </Button>
-          <Button variant="text" color="primary" startIcon={<UploadIcon />} component="label">
-            Upload YAML
-            <input type="file" hidden accept=".yaml,.yml" onChange={handleFileUpload} />
-          </Button>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Box display="flex" gap={2}>
+            <Button
+              variant={isReadOnly ? 'outlined' : 'contained'}
+              color="primary"
+              startIcon={isReadOnly ? <EditIcon /> : <SaveIcon />}
+              onClick={() => {
+                if (isReadOnly) {
+                  setIsReadOnly(false);
+                } else {
+                  const parseSuccess = parseAndUpdateStore(code);
+                  if (parseSuccess) {
+                    setIsReadOnly(true);
+                  }
+                }
+              }}
+            >
+              {isReadOnly ? 'Edit YAML' : 'Save Changes'}
+            </Button>
+            <Button variant="text" color="primary" startIcon={<UploadIcon />} component="label">
+              Upload YAML
+              <input type="file" hidden accept=".yaml,.yml" onChange={handleFileUpload} />
+            </Button>
+            {!isReadOnly && (
+              <Button
+                variant="text"
+                color="warning"
+                onClick={() => {
+                  const currentConfig = getTestSuite();
+                  setCode(yaml.dump(currentConfig));
+                  setNotification({ show: true, message: 'Reset to last saved configuration' });
+                }}
+              >
+                Reset
+              </Button>
+            )}
+          </Box>
+          {!isReadOnly && (
+            <Typography variant="caption" color="text.secondary">
+              Editing mode active - changes will be applied when you save
+            </Typography>
+          )}
         </Box>
       )}
       <Box position="relative">
-        <Editor
-          autoCapitalize="off"
-          value={code}
-          onValueChange={(code) => {
-            if (!isReadOnly) {
-              setCode(code);
-            }
-          }}
-          highlight={(code) => highlight(code, languages.yaml)}
-          padding={10}
-          style={{
-            backgroundColor: darkMode ? '#1e1e1e' : '#fff',
-            fontFamily: '"Fira code", "Fira Mono", monospace',
-            fontSize: 14,
-          }}
-          disabled={isReadOnly}
-          className={!readOnly && !isReadOnly ? 'glowing-border' : ''}
-        />
+        <div
+          className={`editor-container ${
+            isReadOnly ? (readOnly ? '' : 'editor-readonly') : 'glowing-border'
+          }`}
+        >
+          {!isReadOnly && <div className="editing-indicator">Editing</div>}
+          <Editor
+            autoCapitalize="off"
+            value={code}
+            onValueChange={(newCode) => {
+              if (!isReadOnly) {
+                if (parseError) {
+                  setParseError(null);
+                }
+                setCode(newCode);
+              }
+            }}
+            highlight={(code) => highlight(code, languages.yaml)}
+            padding={10}
+            style={{
+              fontFamily: '"Fira code", "Fira Mono", monospace',
+              fontSize: 14,
+              backgroundColor: darkMode ? '#1e1e1e' : '#fff',
+            }}
+            disabled={isReadOnly}
+          />
+        </div>
         <Tooltip title="Copy YAML">
           <IconButton
             onClick={handleCopy}
@@ -200,10 +260,10 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
         </Tooltip>
       </Box>
       <Snackbar
-        open={showCopySuccess}
+        open={notification.show}
         autoHideDuration={2000}
-        onClose={() => setShowCopySuccess(false)}
-        message="YAML copied to clipboard"
+        onClose={() => setNotification({ ...notification, show: false })}
+        message={notification.message}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       />
     </Box>

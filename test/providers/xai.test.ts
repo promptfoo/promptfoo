@@ -1,4 +1,4 @@
-import { OpenAiChatCompletionProvider } from '../../src/providers/openai';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { createXAIProvider } from '../../src/providers/xai';
 import type { ProviderOptions } from '../../src/types/providers';
 
@@ -26,6 +26,23 @@ describe('xAI Provider', () => {
       expect.objectContaining({
         config: expect.objectContaining({
           apiBaseUrl: 'https://api.x.ai/v1',
+          apiKeyEnvar: 'XAI_API_KEY',
+        }),
+      }),
+    );
+  });
+
+  it('uses region-specific API base URL when region is provided', () => {
+    createXAIProvider('xai:grok-2', {
+      config: {
+        region: 'us-west-1',
+      },
+    });
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        config: expect.objectContaining({
+          apiBaseUrl: 'https://us-west-1.api.x.ai/v1',
           apiKeyEnvar: 'XAI_API_KEY',
         }),
       }),

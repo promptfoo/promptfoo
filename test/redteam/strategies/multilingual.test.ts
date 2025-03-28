@@ -6,12 +6,6 @@ import { shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { addMultilingual } from '../../../src/redteam/strategies/multilingual';
 import type { AtomicTestCase } from '../../../src/types';
 
-jest.mock('../../../src/logger', () => ({
-  debug: jest.fn(),
-  error: jest.fn(),
-  level: 'info',
-}));
-
 jest.mock('../../../src/redteam/remoteGeneration', () => ({
   getRemoteGenerationUrl: jest.fn().mockReturnValue('http://test.url'),
   shouldGenerateRemote: jest.fn().mockReturnValue(false),
@@ -71,6 +65,7 @@ describe('addMultilingual', () => {
     expect(result[0].metadata).toEqual({
       harmCategory: 'Illegal Activities - Fraud & scams',
       otherField: 'value',
+      strategyId: 'multilingual',
     });
     expect(result[0].assert).toEqual([
       {
@@ -93,7 +88,9 @@ describe('addMultilingual', () => {
 
     const result = await addMultilingual([testCase], 'text', { languages: ['de'] });
 
-    expect(result[0].metadata).toEqual({});
+    expect(result[0].metadata).toEqual({
+      strategyId: 'multilingual',
+    });
   });
 
   it('should translate text and update vars correctly', async () => {
@@ -171,6 +168,7 @@ describe('addMultilingual', () => {
     expect(result[0].metadata).toEqual({
       harmCategory: 'Illegal Activities - Fraud & scams',
       otherField: 'value',
+      strategyId: 'multilingual',
     });
     expect(result[0].assert).toEqual([
       {

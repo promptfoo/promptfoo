@@ -1,12 +1,12 @@
-import invariant from 'tiny-invariant';
 import type { ApiProvider, ProviderOptions } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { OpenAiChatCompletionProvider } from './openai';
+import invariant from '../util/invariant';
+import { OpenAiChatCompletionProvider } from './openai/chat';
 
 export function createXAIProvider(
   providerPath: string,
   options: {
-    config?: ProviderOptions;
+    config?: ProviderOptions & { region?: string };
     id?: string;
     env?: EnvOverrides;
   } = {},
@@ -15,9 +15,11 @@ export function createXAIProvider(
   const xaiConfig = {
     ...options,
     config: {
-      ...options.config,
-      apiBaseUrl: 'https://api.x.ai/v1',
+      apiBaseUrl: options.config?.region
+        ? `https://${options.config.region}.api.x.ai/v1`
+        : 'https://api.x.ai/v1',
       apiKeyEnvar: 'XAI_API_KEY',
+      ...options.config,
     },
   };
 

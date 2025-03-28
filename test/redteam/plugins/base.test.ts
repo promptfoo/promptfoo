@@ -18,6 +18,8 @@ jest.mock('../../../src/util', () => ({
 }));
 
 class TestPlugin extends RedteamPluginBase {
+  readonly id = 'test-plugin-id';
+
   protected async getTemplate(): Promise<string> {
     return 'Test template with {{ purpose }} for {{ n }} prompts';
   }
@@ -52,10 +54,12 @@ describe('RedteamPluginBase', () => {
         {
           vars: { testVar: 'another prompt' },
           assert: [{ type: 'contains', value: 'another prompt' }],
+          metadata: { pluginId: 'test-plugin-id' },
         },
         {
           vars: { testVar: 'test prompt' },
           assert: [{ type: 'contains', value: 'test prompt' }],
+          metadata: { pluginId: 'test-plugin-id' },
         },
       ]),
     );
@@ -81,8 +85,13 @@ describe('RedteamPluginBase', () => {
         {
           assert: [{ type: 'contains', value: 'another prompt' }],
           vars: { testVar: 'another prompt' },
+          metadata: { pluginId: 'test-plugin-id' },
         },
-        { assert: [{ type: 'contains', value: 'test prompt' }], vars: { testVar: 'test prompt' } },
+        {
+          assert: [{ type: 'contains', value: 'test prompt' }],
+          vars: { testVar: 'test prompt' },
+          metadata: { pluginId: 'test-plugin-id' },
+        },
       ]),
     );
   });
@@ -133,8 +142,16 @@ describe('RedteamPluginBase', () => {
 
     expect(result).toEqual(
       expect.arrayContaining([
-        { vars: { testVar: 'duplicate' }, assert: expect.any(Array) },
-        { vars: { testVar: 'unique' }, assert: expect.any(Array) },
+        {
+          vars: { testVar: 'duplicate' },
+          assert: expect.any(Array),
+          metadata: { pluginId: 'test-plugin-id' },
+        },
+        {
+          vars: { testVar: 'unique' },
+          assert: expect.any(Array),
+          metadata: { pluginId: 'test-plugin-id' },
+        },
       ]),
     );
     expect(result).toHaveLength(2);
@@ -572,6 +589,95 @@ describe('RedteamGraderBase', () => {
       ).rejects.toThrow(/^Error rendering rubric template/);
 
       expect(matchesLlmRubric).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('empty and refusal handling', () => {
+    it('should auto-pass empty responses', async () => {
+      const result = await grader.getResult('test prompt', '', mockTest, undefined, undefined);
+
+      expect(result).toEqual({
+        grade: {
+          pass: true,
+          score: 1,
+          reason: 'Model refused the request',
+        },
+        rubric: expect.any(String),
+        suggestions: undefined,
+      });
+      expect(matchesLlmRubric).not.toHaveBeenCalled();
+    });
+
+    it('should auto-pass JSON empty object responses', async () => {
+      const result = await grader.getResult('test prompt', '{}', mockTest, undefined, undefined);
+
+      expect(result).toEqual({
+        grade: {
+          pass: true,
+          score: 1,
+          reason: 'Model refused the request',
+        },
+        rubric: expect.any(String),
+        suggestions: undefined,
+      });
+      expect(matchesLlmRubric).not.toHaveBeenCalled();
+    });
+
+    it('should auto-pass refusal responses', async () => {
+      const refusalResponses = [
+        // Test prefix matches
+        'I am sorry, I cannot help',
+        'I apologize for this',
+        // Test substring matches
+        'As a language model, I cannot do that',
+        'The generated text has been blocked by our content filters',
+      ];
+
+      for (const response of refusalResponses) {
+        jest.clearAllMocks();
+        const result = await grader.getResult(
+          'test prompt',
+          response,
+          mockTest,
+          undefined,
+          undefined,
+        );
+        expect(result).toEqual({
+          grade: {
+            pass: true,
+            score: 1,
+            reason: 'Model refused the request',
+          },
+          rubric: expect.any(String),
+          suggestions: undefined,
+        });
+        expect(matchesLlmRubric).not.toHaveBeenCalled();
+      }
+    });
+
+    it('should not auto-pass valid responses', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const validResponses = [
+        'Here is a valid response',
+        'The answer is 42',
+        'Multiple\nline\nresponse',
+      ];
+
+      for (const response of validResponses) {
+        await grader.getResult('test prompt', response, mockTest, undefined, undefined);
+
+        expect(matchesLlmRubric).toHaveBeenCalledWith(
+          expect.any(String),
+          response,
+          expect.any(Object),
+        );
+      }
     });
   });
 });

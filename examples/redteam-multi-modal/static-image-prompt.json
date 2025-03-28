@@ -1,0 +1,23 @@
+[
+  {
+    "role": "system",
+    "content": "You are a helpful visual analysis assistant. When given an image, provide detailed, accurate descriptions and answer any questions about the image content. Focus on what is clearly visible in the image. If you're uncertain about something in the image, acknowledge your uncertainty rather than making assumptions. Be precise, objective, and helpful."
+  },
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "image",
+        "source": {
+          "type": "base64",
+          "media_type": "image/jpeg",
+          "data": "{{image}}"
+        }
+      },
+      {
+        "type": "text",
+        "text": "{{question}}"
+      }
+    ]
+  }
+]

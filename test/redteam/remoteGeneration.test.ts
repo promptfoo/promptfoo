@@ -5,10 +5,11 @@ import {
   getRemoteGenerationUrl,
   neverGenerateRemote,
   shouldGenerateRemote,
+  getRemoteHealthUrl,
+  getRemoteGenerationUrlForUnaligned,
 } from '../../src/redteam/remoteGeneration';
 
 jest.mock('../../src/envars');
-jest.mock('../../src/globalConfig/globalConfig');
 jest.mock('../../src/envars');
 jest.mock('../../src/cliState', () => ({
   remote: undefined,
@@ -99,5 +100,85 @@ describe('getRemoteGenerationUrl', () => {
     });
 
     expect(getRemoteGenerationUrl()).toBe('https://api.promptfoo.app/task');
+  });
+});
+
+describe('getRemoteHealthUrl', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+  });
+
+  it('should return null when remote generation is disabled', () => {
+    jest.mocked(getEnvBool).mockReturnValue(true); // neverGenerateRemote = true
+    expect(getRemoteHealthUrl()).toBeNull();
+  });
+
+  it('should return modified env URL with /health path when PROMPTFOO_REMOTE_GENERATION_URL is set', () => {
+    jest.mocked(getEnvBool).mockReturnValue(false);
+    jest.mocked(getEnvString).mockReturnValue('https://custom.api.com/task');
+    expect(getRemoteHealthUrl()).toBe('https://custom.api.com/health');
+  });
+
+  it('should return default health URL when env URL is invalid', () => {
+    jest.mocked(getEnvBool).mockReturnValue(false);
+    jest.mocked(getEnvString).mockReturnValue('invalid-url');
+    expect(getRemoteHealthUrl()).toBe('https://api.promptfoo.app/health');
+  });
+
+  it('should return cloud API health URL when cloud is enabled', () => {
+    jest.mocked(getEnvBool).mockReturnValue(false);
+    jest.mocked(getEnvString).mockReturnValue('');
+    jest.mocked(readGlobalConfig).mockReturnValue({
+      cloud: {
+        apiKey: 'some-api-key',
+        apiHost: 'https://cloud.api.com',
+      },
+    });
+    expect(getRemoteHealthUrl()).toBe('https://cloud.api.com/health');
+  });
+
+  it('should return default health URL when cloud is disabled', () => {
+    jest.mocked(getEnvBool).mockReturnValue(false);
+    jest.mocked(getEnvString).mockReturnValue('');
+    jest.mocked(readGlobalConfig).mockReturnValue({
+      cloud: {
+        apiKey: undefined,
+        apiHost: 'https://cloud.api.com',
+      },
+    });
+    expect(getRemoteHealthUrl()).toBe('https://api.promptfoo.app/health');
+  });
+});
+
+describe('getRemoteGenerationUrlForUnaligned', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+  });
+
+  it('should return env URL when PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT is set', () => {
+    jest.mocked(getEnvString).mockReturnValue('https://custom.api.com/harmful');
+    expect(getRemoteGenerationUrlForUnaligned()).toBe('https://custom.api.com/harmful');
+  });
+
+  it('should return cloud API harmful URL when cloud is enabled', () => {
+    jest.mocked(getEnvString).mockReturnValue('');
+    jest.mocked(readGlobalConfig).mockReturnValue({
+      cloud: {
+        apiKey: 'some-api-key',
+        apiHost: 'https://cloud.api.com',
+      },
+    });
+    expect(getRemoteGenerationUrlForUnaligned()).toBe('https://cloud.api.com/task/harmful');
+  });
+
+  it('should return default harmful URL when cloud is disabled', () => {
+    jest.mocked(getEnvString).mockReturnValue('');
+    jest.mocked(readGlobalConfig).mockReturnValue({
+      cloud: {
+        apiKey: undefined,
+        apiHost: 'https://cloud.api.com',
+      },
+    });
+    expect(getRemoteGenerationUrlForUnaligned()).toBe('https://api.promptfoo.app/task/harmful');
   });
 });

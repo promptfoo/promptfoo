@@ -1,6 +1,6 @@
-import invariant from 'tiny-invariant';
 import { matchesContextRecall } from '../matchers';
 import type { AssertionParams, GradingResult } from '../types';
+import invariant from '../util/invariant';
 
 export const handleContextRecall = async ({
   assertion,
@@ -18,7 +18,7 @@ export const handleContextRecall = async ({
     ...(await matchesContextRecall(
       typeof test.vars?.context === 'string' ? test.vars.context : prompt,
       renderedValue,
-      assertion.threshold || 0,
+      assertion.threshold ?? 0,
       test.options,
       test.vars,
     )),

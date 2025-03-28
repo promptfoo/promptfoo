@@ -1,6 +1,6 @@
 import dedent from 'dedent';
-import invariant from 'tiny-invariant';
 import type { AssertionValue, ResultSuggestion } from '../../types';
+import invariant from '../../util/invariant';
 import { RedteamGraderBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:indirect-prompt-injection';

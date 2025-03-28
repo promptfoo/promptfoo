@@ -19,5 +19,9 @@ export function addRot13(testCases: TestCase[], injectVar: string): TestCase[] {
       ...testCase.vars,
       [injectVar]: rot13(String(testCase.vars![injectVar])),
     },
+    metadata: {
+      ...testCase.metadata,
+      strategyId: 'rot13',
+    },
   }));
 }

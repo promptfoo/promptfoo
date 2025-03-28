@@ -8,8 +8,9 @@ import { clearCache, disableCache, enableCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
 import { loadApiProvider, loadApiProviders } from '../../src/providers';
-import { AnthropicCompletionProvider } from '../../src/providers/anthropic';
-import { AzureChatCompletionProvider, AzureCompletionProvider } from '../../src/providers/azure';
+import { AnthropicCompletionProvider } from '../../src/providers/anthropic/completion';
+import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
+import { AzureCompletionProvider } from '../../src/providers/azure/completion';
 import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock';
 import {
   CloudflareAiChatCompletionProvider,
@@ -31,11 +32,10 @@ import {
   OllamaCompletionProvider,
   OllamaEmbeddingProvider,
 } from '../../src/providers/ollama';
-import {
-  OpenAiAssistantProvider,
-  OpenAiCompletionProvider,
-  OpenAiChatCompletionProvider,
-} from '../../src/providers/openai';
+import { OpenAiAssistantProvider } from '../../src/providers/openai/assistant';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
+import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import {
   ReplicateImageProvider,
@@ -90,18 +90,13 @@ jest.mock('glob', () => ({
 jest.mock('../../src/database', () => ({
   getDb: jest.fn(),
 }));
-jest.mock('../../src/logger', () => ({
-  error: jest.fn(),
-  debug: jest.fn(),
-  info: jest.fn(),
-  warn: jest.fn(),
-}));
 
 jest.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: jest.fn().mockReturnValue(false),
   neverGenerateRemote: jest.fn().mockReturnValue(false),
   getRemoteGenerationUrl: jest.fn().mockReturnValue('http://test-url'),
 }));
+jest.mock('../../src/providers/websocket');
 
 const mockFetch = jest.mocked(jest.fn());
 global.fetch = mockFetch;
@@ -115,266 +110,22 @@ const defaultMockResponse = {
   },
 };
 
+// Dynamic import
+jest.mock('../../src/providers/adaline.gateway', () => ({
+  AdalineGatewayChatProvider: jest.fn().mockImplementation((providerName, modelName) => ({
+    id: () => `adaline:${providerName}:chat:${modelName}`,
+    constructor: { name: 'AdalineGatewayChatProvider' },
+  })),
+  AdalineGatewayEmbeddingProvider: jest.fn().mockImplementation((providerName, modelName) => ({
+    id: () => `adaline:${providerName}:embedding:${modelName}`,
+    constructor: { name: 'AdalineGatewayEmbeddingProvider' },
+  })),
+}));
+
 describe('call provider apis', () => {
   afterEach(async () => {
     jest.clearAllMocks();
     await clearCache();
-  });
-
-  it('OpenAiCompletionProvider callApi', async () => {
-    const mockResponse = {
-      ...defaultMockResponse,
-      text: jest.fn().mockResolvedValue(
-        JSON.stringify({
-          choices: [{ text: 'Test output' }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        }),
-      ),
-    };
-    mockFetch.mockResolvedValue(mockResponse);
-
-    const provider = new OpenAiCompletionProvider('text-davinci-003');
-    const result = await provider.callApi('Test prompt');
-
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('Test output');
-    expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
-  });
-
-  it('OpenAiChatCompletionProvider callApi', async () => {
-    const mockResponse = {
-      ...defaultMockResponse,
-      text: jest.fn().mockResolvedValue(
-        JSON.stringify({
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        }),
-      ),
-      ok: true,
-    };
-    mockFetch.mockResolvedValue(mockResponse);
-
-    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
-    const result = await provider.callApi(
-      JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
-    );
-
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('Test output');
-    expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
-  });
-
-  it('OpenAiChatCompletionProvider callApi with caching', async () => {
-    const mockResponse = {
-      ...defaultMockResponse,
-      text: jest.fn().mockResolvedValue(
-        JSON.stringify({
-          choices: [{ message: { content: 'Test output 2' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        }),
-      ),
-      ok: true,
-    };
-    mockFetch.mockResolvedValue(mockResponse);
-
-    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
-    const result = await provider.callApi(
-      JSON.stringify([{ role: 'user', content: 'Test prompt 2' }]),
-    );
-
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('Test output 2');
-    expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
-
-    const result2 = await provider.callApi(
-      JSON.stringify([{ role: 'user', content: 'Test prompt 2' }]),
-    );
-
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    expect(result2.output).toBe('Test output 2');
-    expect(result2.tokenUsage).toEqual({ total: 10, cached: 10 });
-  });
-
-  it('OpenAiChatCompletionProvider callApi with cache disabled', async () => {
-    const mockResponse = {
-      ...defaultMockResponse,
-      text: jest.fn().mockResolvedValue(
-        JSON.stringify({
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        }),
-      ),
-      ok: true,
-    };
-    mockFetch.mockResolvedValue(mockResponse);
-
-    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
-    const result = await provider.callApi(
-      JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
-    );
-
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('Test output');
-    expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
-
-    disableCache();
-
-    const result2 = await provider.callApi(
-      JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
-    );
-
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-    expect(result2.output).toBe('Test output');
-    expect(result2.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
-
-    enableCache();
-  });
-
-  it('OpenAiChatCompletionProvider constructor with config', async () => {
-    const config = {
-      temperature: 3.1415926,
-      max_tokens: 201,
-    };
-    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', { config });
-    const prompt = 'Test prompt';
-    await provider.callApi(prompt);
-
-    expect(mockFetch).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        body: expect.stringMatching(`temperature\":3.1415926`),
-      }),
-    );
-    expect(provider.config.temperature).toBe(config.temperature);
-    expect(provider.config.max_tokens).toBe(config.max_tokens);
-  });
-
-  it('OpenAiChatCompletionProvider callApi with structured output', async () => {
-    const mockResponse = {
-      ...defaultMockResponse,
-      text: jest.fn().mockResolvedValue(
-        JSON.stringify({
-          choices: [{ message: { content: '{"name": "John", "age": 30}' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        }),
-      ),
-      ok: true,
-    };
-    mockFetch.mockResolvedValue(mockResponse);
-
-    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
-      config: {
-        response_format: {
-          type: 'json_schema',
-          json_schema: {
-            name: 'person',
-            strict: true,
-            schema: {
-              type: 'object',
-              properties: {
-                name: { type: 'string' },
-                age: { type: 'number' },
-              },
-              required: ['name', 'age'],
-              additionalProperties: false,
-            },
-          },
-        },
-      },
-    });
-    const result = await provider.callApi(
-      JSON.stringify([{ role: 'user', content: 'Get me a person' }]),
-    );
-
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    expect(result.output).toEqual({ name: 'John', age: 30 });
-    expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
-  });
-
-  it('OpenAiChatCompletionProvider callApi handles model refusals', async () => {
-    const mockResponse = {
-      ...defaultMockResponse,
-      text: jest.fn().mockResolvedValue(
-        JSON.stringify({
-          choices: [{ message: { refusal: 'Content policy violation' } }],
-          usage: { total_tokens: 5, prompt_tokens: 5, completion_tokens: 0 },
-        }),
-      ),
-      ok: true,
-    };
-    mockFetch.mockResolvedValue(mockResponse);
-
-    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
-    const result = await provider.callApi(
-      JSON.stringify([{ role: 'user', content: 'Generate inappropriate content' }]),
-    );
-
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('Content policy violation');
-    expect(result.tokenUsage).toEqual({ total: 5, prompt: 5, completion: 0 });
-    expect(result.isRefusal).toBe(true);
-  });
-
-  it('OpenAiChatCompletionProvider callApi with function tool callbacks', async () => {
-    const mockResponse = {
-      ...defaultMockResponse,
-      text: jest.fn().mockResolvedValue(
-        JSON.stringify({
-          choices: [
-            {
-              message: {
-                content: null,
-                tool_calls: [
-                  {
-                    function: {
-                      name: 'get_weather',
-                      arguments: '{"location":"New York"}',
-                    },
-                  },
-                ],
-              },
-            },
-          ],
-          usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
-        }),
-      ),
-      ok: true,
-    };
-    mockFetch.mockResolvedValue(mockResponse);
-
-    const mockWeatherFunction = jest.fn().mockResolvedValue('Sunny, 25°C');
-
-    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
-      config: {
-        tools: [
-          {
-            type: 'function',
-            function: {
-              name: 'get_weather',
-              description: 'Get the weather for a location',
-              parameters: {
-                type: 'object',
-                properties: {
-                  location: { type: 'string' },
-                },
-                required: ['location'],
-              },
-            },
-          },
-        ],
-        functionToolCallbacks: {
-          get_weather: mockWeatherFunction,
-        },
-      },
-    });
-    const result = await provider.callApi(
-      JSON.stringify([{ role: 'user', content: "What's the weather in New York?" }]),
-    );
-
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    expect(mockWeatherFunction).toHaveBeenCalledWith('{"location":"New York"}');
-    expect(result.output).toBe('Sunny, 25°C');
-    expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5 });
   });
 
   it('AzureOpenAiCompletionProvider callApi', async () => {
@@ -933,314 +684,24 @@ describe('call provider apis', () => {
       jest.restoreAllMocks();
     });
   });
-
-  describe('OpenAiChatCompletionProvider with functionToolCallbacks', () => {
-    it('should call function tool and return result', async () => {
-      const mockResponse = {
-        ...defaultMockResponse,
-        text: jest.fn().mockResolvedValue(
-          JSON.stringify({
-            choices: [
-              {
-                message: {
-                  content: null,
-                  function_call: {
-                    name: 'addNumbers',
-                    arguments: '{"a":5,"b":6}',
-                  },
-                },
-              },
-            ],
-            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-          }),
-        ),
-        ok: true,
-      };
-      mockFetch.mockResolvedValue(mockResponse);
-
-      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
-        config: {
-          tools: [
-            {
-              type: 'function',
-              function: {
-                name: 'addNumbers',
-                description: 'Add two numbers together',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    a: { type: 'number' },
-                    b: { type: 'number' },
-                  },
-                  required: ['a', 'b'],
-                },
-              },
-            },
-          ],
-          functionToolCallbacks: {
-            addNumbers: (parametersJsonString) => {
-              const { a, b } = JSON.parse(parametersJsonString);
-              return Promise.resolve(JSON.stringify(a + b));
-            },
-          },
-        },
-      });
-
-      const result = await provider.callApi('Add 5 and 6');
-
-      expect(mockFetch).toHaveBeenCalledTimes(1);
-      expect(result.output).toBe('11');
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
-    });
-
-    it('should handle multiple function tool calls', async () => {
-      const mockResponse = {
-        ...defaultMockResponse,
-        text: jest.fn().mockResolvedValue(
-          JSON.stringify({
-            choices: [
-              {
-                message: {
-                  content: null,
-                  tool_calls: [
-                    {
-                      function: {
-                        name: 'addNumbers',
-                        arguments: '{"a":5,"b":6}',
-                      },
-                    },
-                    {
-                      function: {
-                        name: 'multiplyNumbers',
-                        arguments: '{"x":2,"y":3}',
-                      },
-                    },
-                  ],
-                },
-              },
-            ],
-            usage: { total_tokens: 15, prompt_tokens: 7, completion_tokens: 8 },
-          }),
-        ),
-        ok: true,
-      };
-      mockFetch.mockResolvedValue(mockResponse);
-
-      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
-        config: {
-          tools: [
-            {
-              type: 'function',
-              function: {
-                name: 'addNumbers',
-                description: 'Add two numbers together',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    a: { type: 'number' },
-                    b: { type: 'number' },
-                  },
-                  required: ['a', 'b'],
-                },
-              },
-            },
-            {
-              type: 'function',
-              function: {
-                name: 'multiplyNumbers',
-                description: 'Multiply two numbers',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    x: { type: 'number' },
-                    y: { type: 'number' },
-                  },
-                  required: ['x', 'y'],
-                },
-              },
-            },
-          ],
-          functionToolCallbacks: {
-            addNumbers: (parametersJsonString) => {
-              const { a, b } = JSON.parse(parametersJsonString);
-              return Promise.resolve(JSON.stringify(a + b));
-            },
-            multiplyNumbers: (parametersJsonString) => {
-              const { x, y } = JSON.parse(parametersJsonString);
-              return Promise.resolve(JSON.stringify(x * y));
-            },
-          },
-        },
-      });
-
-      const result = await provider.callApi('Add 5 and 6, then multiply 2 and 3');
-
-      expect(mockFetch).toHaveBeenCalledTimes(1);
-      expect(result.output).toBe('11\n6');
-      expect(result.tokenUsage).toEqual({ total: 15, prompt: 7, completion: 8 });
-    });
-
-    it('should handle errors in function tool callbacks', async () => {
-      const mockResponse = {
-        ...defaultMockResponse,
-        text: jest.fn().mockResolvedValue(
-          JSON.stringify({
-            choices: [
-              {
-                message: {
-                  content: null,
-                  function_call: {
-                    name: 'errorFunction',
-                    arguments: '{}',
-                  },
-                },
-              },
-            ],
-            usage: { total_tokens: 5, prompt_tokens: 2, completion_tokens: 3 },
-          }),
-        ),
-        ok: true,
-      };
-      mockFetch.mockResolvedValue(mockResponse);
-
-      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
-        config: {
-          tools: [
-            {
-              type: 'function',
-              function: {
-                name: 'errorFunction',
-                description: 'A function that always throws an error',
-                parameters: {
-                  type: 'object',
-                  properties: {},
-                },
-              },
-            },
-          ],
-          functionToolCallbacks: {
-            errorFunction: () => {
-              throw new Error('Test error');
-            },
-          },
-        },
-      });
-
-      const result = await provider.callApi('Call the error function');
-
-      expect(mockFetch).toHaveBeenCalledTimes(1);
-      expect(result.output).toEqual({ arguments: '{}', name: 'errorFunction' });
-      expect(result.tokenUsage).toEqual({ total: 5, prompt: 2, completion: 3 });
-    });
-  });
-
-  describe('OpenAiChatCompletionProvider response_format', () => {
-    it('should prioritize response_format from prompt config over provider config', async () => {
-      const providerResponseFormat = {
-        type: 'json_object' as const,
-      };
-      const promptResponseFormat = {
-        type: 'json_schema',
-        json_schema: {
-          name: 'test_schema',
-          strict: true,
-          schema: {
-            type: 'object',
-            properties: { key2: { type: 'string' } },
-            additionalProperties: false,
-          },
-        },
-      };
-
-      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
-        config: {
-          response_format: providerResponseFormat,
-        },
-      });
-
-      const mockResponse = {
-        ...defaultMockResponse,
-        text: jest.fn().mockResolvedValue(
-          JSON.stringify({
-            choices: [{ message: { content: '{"key2": "value2"}' } }],
-            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-          }),
-        ),
-      };
-      jest.mocked(fetch).mockResolvedValue(mockResponse as never);
-
-      const result = await provider.callApi('Test prompt', {
-        vars: {},
-        prompt: {
-          raw: 'Test prompt',
-          label: 'Test prompt',
-          config: {
-            response_format: promptResponseFormat,
-          },
-        },
-      });
-
-      expect(fetch).toHaveBeenCalledTimes(1);
-      const fetchArgs = jest.mocked(fetch).mock.calls[0];
-      const requestBody = JSON.parse(fetchArgs[1]?.body as string);
-      expect(requestBody.response_format).toEqual(promptResponseFormat);
-
-      expect(result.output).toEqual({ key2: 'value2' });
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
-    });
-
-    it('should use provider config response_format when prompt config is not provided', async () => {
-      const providerResponseFormat = {
-        type: 'json_object' as const,
-      };
-
-      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
-        config: {
-          response_format: providerResponseFormat,
-        },
-      });
-
-      const mockResponse = {
-        ...defaultMockResponse,
-        text: jest.fn().mockResolvedValue(
-          JSON.stringify({
-            choices: [{ message: { content: '{"key1": "value1"}' } }],
-            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-          }),
-        ),
-      };
-      jest.mocked(fetch).mockResolvedValue(mockResponse as never);
-
-      const result = await provider.callApi('Test prompt', {
-        vars: {},
-        prompt: {
-          raw: 'Test prompt',
-          label: 'Test prompt',
-        },
-      });
-
-      expect(fetch).toHaveBeenCalledTimes(1);
-      const fetchArgs = jest.mocked(fetch).mock.calls[0];
-      const requestBody = JSON.parse(fetchArgs[1]?.body as string);
-      expect(requestBody.response_format).toEqual(providerResponseFormat);
-      expect(result.output).toBe('{"key1": "value1"}');
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
-    });
-  });
 });
 
 describe('loadApiProvider', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('loadApiProvider with yaml filepath', async () => {
     const mockYamlContent = dedent`
     id: 'openai:gpt-4'
     config:
       key: 'value'`;
-    jest.mocked(fs.readFileSync).mockReturnValueOnce(mockYamlContent);
+    const mockReadFileSync = jest.mocked(fs.readFileSync);
+    mockReadFileSync.mockReturnValue(mockYamlContent);
 
     const provider = await loadApiProvider('file://path/to/mock-provider-file.yaml');
     expect(provider.id()).toBe('openai:gpt-4');
-    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-    expect(fs.readFileSync).toHaveBeenCalledWith(
+    expect(mockReadFileSync).toHaveBeenCalledWith(
       expect.stringMatching(/path[\\\/]to[\\\/]mock-provider-file\.yaml/),
       'utf8',
     );
@@ -1389,6 +850,14 @@ describe('loadApiProvider', () => {
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
     // Intentionally openai, because it's just a wrapper around openai
     expect(provider.id()).toBe('gpt-4o-mini');
+  });
+
+  it('loadApiProvider with perplexity', async () => {
+    const provider = await loadApiProvider('perplexity:llama-3-sonar-large-32k-online');
+    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(provider.id()).toBe('llama-3-sonar-large-32k-online');
+    expect(provider.config.apiBaseUrl).toBe('https://api.perplexity.ai');
+    expect(provider.config.apiKeyEnvar).toBe('PERPLEXITY_API_KEY');
   });
 
   it('loadApiProvider with togetherai', async () => {
@@ -1652,10 +1121,10 @@ describe('loadApiProvider', () => {
   });
 
   it('supports templating in provider URL', async () => {
-    process.env.MYHOST = 'api.example.com';
-    process.env.MYPORT = '8080';
+    process.env.MY_HOST = 'api.example.com';
+    process.env.MY_PORT = '8080';
 
-    const provider = await loadApiProvider('https://{{ env.MYHOST }}:{{ env.MYPORT }}/query', {
+    const provider = await loadApiProvider('https://{{ env.MY_HOST }}:{{ env.MY_PORT }}/query', {
       options: {
         config: {
           body: {},
@@ -1663,18 +1132,58 @@ describe('loadApiProvider', () => {
       },
     });
     expect(provider.id()).toBe('https://api.example.com:8080/query');
-    delete process.env.MYHOST;
-    delete process.env.MYPORT;
+    delete process.env.MY_HOST;
+    delete process.env.MY_PORT;
+  });
+
+  it('loadApiProvider with yaml filepath containing multiple providers', async () => {
+    const mockYamlContent = dedent`
+    - id: 'openai:gpt-4o-mini'
+      config:
+        key: 'value1'
+    - id: 'anthropic:messages:claude-3-5-sonnet-20241022'
+      config:
+        key: 'value2'`;
+    const mockReadFileSync = jest.mocked(fs.readFileSync);
+    mockReadFileSync.mockReturnValue(mockYamlContent);
+
+    const providers = await loadApiProviders('file://path/to/mock-providers-file.yaml');
+    expect(providers).toHaveLength(2);
+    expect(providers[0].id()).toBe('openai:gpt-4o-mini');
+    expect(providers[1].id()).toBe('anthropic:messages:claude-3-5-sonnet-20241022');
+    expect(mockReadFileSync).toHaveBeenCalledWith(
+      expect.stringMatching(/path[\\\/]to[\\\/]mock-providers-file\.yaml/),
+      'utf8',
+    );
+  });
+
+  it('loadApiProvider with json filepath containing multiple providers', async () => {
+    const mockJsonContent = JSON.stringify([
+      {
+        id: 'openai:gpt-4o-mini',
+        config: { key: 'value1' },
+      },
+      {
+        id: 'anthropic:messages:claude-3-5-sonnet-20241022',
+        config: { key: 'value2' },
+      },
+    ]);
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(mockJsonContent);
+
+    const providers = await loadApiProviders('file://path/to/mock-providers-file.json');
+    expect(providers).toHaveLength(2);
+    expect(providers[0].id()).toBe('openai:gpt-4o-mini');
+    expect(providers[1].id()).toBe('anthropic:messages:claude-3-5-sonnet-20241022');
   });
 
   it('throws an error for unidentified providers', async () => {
-    const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
-      throw new Error('process.exit called');
-    });
+    const mockError = jest.spyOn(logger, 'error');
     const unknownProviderPath = 'unknown:provider';
 
-    await expect(loadApiProvider(unknownProviderPath)).rejects.toThrow('process.exit called');
-    expect(logger.error).toHaveBeenCalledWith(
+    await expect(loadApiProvider(unknownProviderPath)).rejects.toThrow(
+      `Could not identify provider: ${chalk.bold(unknownProviderPath)}`,
+    );
+    expect(mockError).toHaveBeenCalledWith(
       dedent`
         Could not identify provider: ${chalk.bold(unknownProviderPath)}.
 
@@ -1684,8 +1193,7 @@ describe('loadApiProvider', () => {
           For more information on supported providers, visit: `)} ${chalk.cyan('https://promptfoo.dev/docs/providers/')}
       `,
     );
-    expect(mockExit).toHaveBeenCalledWith(1);
-    mockExit.mockRestore();
+    mockError.mockRestore();
   });
 
   it('renders label using Nunjucks', async () => {
@@ -1705,5 +1213,55 @@ describe('loadApiProvider', () => {
     expect(provider.id()).toBe('grok-2');
     expect(provider.config.apiBaseUrl).toBe('https://api.x.ai/v1');
     expect(provider.config.apiKeyEnvar).toBe('XAI_API_KEY');
+  });
+
+  it('loadApiProvider with adaline:openai:chat', async () => {
+    const provider = await loadApiProvider('adaline:openai:chat:gpt-4');
+    expect(provider.id()).toBe('adaline:openai:chat:gpt-4');
+  });
+
+  it('loadApiProvider with adaline:openai:embedding', async () => {
+    const provider = await loadApiProvider('adaline:openai:embedding:text-embedding-3-large');
+    expect(provider.id()).toBe('adaline:openai:embedding:text-embedding-3-large');
+  });
+
+  it('should throw error for invalid adaline provider path', async () => {
+    await expect(loadApiProvider('adaline:invalid')).rejects.toThrow(
+      "Invalid adaline provider path: adaline:invalid. path format should be 'adaline:<provider_name>:<model_type>:<model_name>' eg. 'adaline:openai:chat:gpt-4o'",
+    );
+  });
+
+  it.each([
+    ['dashscope:chat:qwen-max', 'qwen-max'],
+    ['dashscope:vl:qwen-vl-max', 'qwen-vl-max'],
+    ['alibaba:qwen-plus', 'qwen-plus'],
+    ['alibaba:chat:qwen-max', 'qwen-max'],
+    ['alibaba:vl:qwen-vl-max', 'qwen-vl-max'],
+    ['alicloud:qwen-plus', 'qwen-plus'],
+    ['aliyun:qwen-plus', 'qwen-plus'],
+  ])('loadApiProvider with %s', async (providerId, expectedModelId) => {
+    const provider = await loadApiProvider(providerId);
+    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(provider.id()).toBe(expectedModelId);
+    expect(provider.config.apiBaseUrl).toBe(
+      'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+    );
+    expect(provider.config.apiKeyEnvar).toBe('DASHSCOPE_API_KEY');
+  });
+
+  it('loadApiProvider with alibaba embedding', async () => {
+    const provider = await loadApiProvider('alibaba:embedding:text-embedding-v3');
+    expect(provider).toBeInstanceOf(OpenAiEmbeddingProvider);
+    expect(provider.id()).toBe('text-embedding-v3');
+    expect(provider.config.apiBaseUrl).toBe(
+      'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+    );
+    expect(provider.config.apiKeyEnvar).toBe('DASHSCOPE_API_KEY');
+  });
+
+  it('loadApiProvider with alibaba unknown model', async () => {
+    await expect(loadApiProvider('alibaba:unknown-model')).rejects.toThrow(
+      'Invalid Alibaba Cloud model: unknown-model',
+    );
   });
 });

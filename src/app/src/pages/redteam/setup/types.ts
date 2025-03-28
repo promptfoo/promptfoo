@@ -1,5 +1,5 @@
 import type { RedteamPlugin, RedteamStrategy } from '@promptfoo/redteam/types';
-import type { RedteamFileConfig } from '@promptfoo/redteam/types';
+import type { TestCase } from '@promptfoo/types';
 
 export interface Config {
   description: string;
@@ -8,6 +8,7 @@ export interface Config {
   plugins: (RedteamPlugin | { id: string; config?: any })[];
   strategies: RedteamStrategy[];
   purpose?: string;
+  numTests?: number;
   applicationDefinition: {
     purpose?: string;
     systemPrompt?: string;
@@ -19,11 +20,14 @@ export interface Config {
     connectedSystems?: string;
   };
   entities: string[];
+  defaultTest?: TestCase;
+  extensions?: string[];
 }
 
 export interface ProviderOptions {
   id: string;
   label?: string;
+  delay?: number;
   config: {
     // Custom provider config can have anything
     [key: string]: any;
@@ -33,7 +37,7 @@ export interface ProviderOptions {
     url?: string;
     method?: string;
     headers?: Record<string, string>;
-    body?: string;
+    body?: string | object;
     messageTemplate?: string;
     // Browser specific options
     steps?: BrowserStep[];
@@ -49,6 +53,8 @@ export interface ProviderOptions {
           path?: string;
         }>
       | string;
+    stateful?: boolean;
+    sessionSource?: 'client' | 'server';
   };
 }
 
@@ -88,13 +94,6 @@ export interface YamlPreviewProps {
   config: Config;
 }
 
-export interface YamlConfig {
-  description: string;
-  targets: ProviderOptions[];
-  prompts: string[];
-  redteam: RedteamFileConfig;
-}
-
 export interface LocalPluginConfig {
   [key: string]: {
     indirectInjectionVar?: string;
@@ -106,4 +105,9 @@ export interface LocalPluginConfig {
     targetUrls?: string[];
     [key: string]: string | string[] | undefined;
   };
+}
+
+export interface RedteamUITarget {
+  value: string;
+  label: string;
 }

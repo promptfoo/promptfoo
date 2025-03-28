@@ -39,6 +39,10 @@ module.exports = {
 };
 ```
 
+:::note
+Note that the strategy adds `strategyId` to the metadata while preserving the original `pluginId` using the spread operator (`...testCase.metadata`). Both identifiers are important for tracking and analysis purposes.
+:::
+
 ## Configuration
 
 The strategy action function receives:
@@ -52,3 +56,5 @@ The strategy action function receives:
 - [Prompt Injection](prompt-injection.md)
 - [Iterative Jailbreaks](iterative.md)
 - [Tree-based Jailbreaks](tree.md)
+
+For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.

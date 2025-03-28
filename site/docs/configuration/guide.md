@@ -19,7 +19,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - vertex:gemini-pro
+  - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
       language: French
@@ -47,7 +47,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - vertex:gemini-pro
+  - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
       language: French
@@ -71,7 +71,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - vertex:gemini-pro
+  - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
       language: French
@@ -141,20 +141,20 @@ tests:
 A single string is also valid:
 
 ```yaml
-tests: tests/*
+tests: file://tests/*
 ```
 
 Or a list of paths:
 
 ```yaml
 tests:
-  - 'tests/accuracy'
-  - 'tests/creativity'
-  - 'tests/hallucination'
+  - file://tests/accuracy
+  - file://tests/creativity
+  - file://tests/hallucination
 ```
 
 :::tip
-We also support CSV datasets from [local file](/docs/configuration/parameters/#import-from-csv) and [Google Sheets](/docs/integrations/google-sheets).
+Test files can be defined in YAML/JSON, JSONL, [CSV](/docs/configuration/parameters/#import-from-csv), and TypeScript/JavaScript. We also support [Google Sheets](/docs/integrations/google-sheets) CSV datasets.
 :::
 
 ## Import vars from separate files
@@ -271,7 +271,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - vertex:gemini-pro
+  - vertex:gemini-2.0-flash-exp
 // highlight-start
 defaultTest:
   assert:
@@ -303,6 +303,24 @@ defaultTest:
     provider: openai:gpt-4o-mini-0613
 ```
 
+### Default variables
+
+Use `defaultTest` to define variables that are shared across all tests:
+
+```yaml
+defaultTest:
+  vars:
+    template: 'A reusable prompt template with {{shared_var}}'
+    shared_var: 'some shared content'
+
+tests:
+  - vars:
+      unique_var: value1
+  - vars:
+      unique_var: value2
+      shared_var: 'override shared content' # Optionally override defaults
+```
+
 ### YAML references
 
 promptfoo configurations support JSON schema [references](https://opis.io/json-schema/2.x/references.html), which define reusable blocks.
@@ -315,7 +333,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - vertex:gemini-pro
+  - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
       language: French
@@ -526,6 +544,32 @@ tests:
 
 promptfoo supports tool use and function calling with OpenAI and Anthropic models, as well as other provider-specific configurations like temperature and number of tokens. For more information on defining functions and tools, see the [OpenAI provider docs](/docs/providers/openai#using-tools) and the [Anthropic provider docs](/docs/providers/anthropic#tool-use).
 
+## Thinking Output
+
+Some models, like Anthropic's Claude and DeepSeek, support thinking/reasoning capabilities that allow the model to show its reasoning process before providing a final answer.
+
+This is useful for reasoning tasks or understanding how the model arrived at its conclusion.
+
+### Controlling Thinking Output
+
+By default, thinking content is included in the response. You can hide it by setting `showThinking` to `false`.
+
+For example, for Claude:
+
+```yaml
+providers:
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    config:
+      thinking:
+        type: 'enabled'
+        budget_tokens: 16000
+      showThinking: false # Exclude thinking content from output
+```
+
+This is useful when you want better reasoning but don't want to expose the thinking process to your assertions.
+
+For more details on extended thinking capabilities, see the [Anthropic provider docs](/docs/providers/anthropic#extended-thinking) and [AWS Bedrock provider docs](/docs/providers/aws-bedrock#claude-models).
+
 ## Transforming outputs
 
 Transforms can be applied at both the provider level and in test cases. The order of application is:
@@ -654,7 +698,7 @@ The `transformVars` function should return an object with the transformed variab
 
 ```yaml
 prompts:
-  - 'Summarize the following text in {{topic_length}} words: {{file_content}}'
+  - 'Summarize the following text in {{topic_length}} words: {{processed_content}}'
 
 defaultTest:
   options:
@@ -662,13 +706,13 @@ defaultTest:
       return {
         uppercase_topic: vars.topic.toUpperCase(),
         topic_length: vars.topic.length,
-        file_content: fs.readFileSync(vars.file_path, 'utf-8')
+        processed_content: vars.content.trim()
       };
 
 tests:
   - vars:
       topic: 'climate change'
-      file_path: './data/climate_article.txt'
+      content: '  This is some text about climate change that needs processing.  '
     assert:
       - type: contains
         value: '{{uppercase_topic}}'
@@ -769,7 +813,7 @@ promptfoo eval -c config1.yaml -c config2.yaml -c config3.yaml
 
 ## Loading tests from CSV
 
-YAML is nice, but some organizations maintain their LLM tests in spreadsheets for ease of collaboration. promptfoo supports a special [CSV file format](/docs/configuration/parameters#tests-file).
+YAML is nice, but some organizations maintain their LLM tests in spreadsheets for ease of collaboration. promptfoo supports a special [CSV file format](/docs/configuration/parameters#tests-and-vars).
 
 ```yaml
 prompts:
@@ -777,7 +821,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - vertex:gemini-pro
+  - vertex:gemini-2.0-flash-exp
 // highlight-next-line
 tests: file://tests.csv
 ```
@@ -790,7 +834,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-4o-mini
-  - vertex:gemini-pro
+  - vertex:gemini-2.0-flash-exp
 // highlight-next-line
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
 ```

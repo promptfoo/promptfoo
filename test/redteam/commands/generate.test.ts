@@ -7,13 +7,20 @@ import * as configModule from '../../../src/util/config/load';
 import { writePromptfooConfig } from '../../../src/util/config/manage';
 
 jest.mock('fs');
-jest.mock('../../../src/logger');
 jest.mock('../../../src/redteam');
 jest.mock('../../../src/telemetry');
 jest.mock('../../../src/util/config/load', () => ({
   combineConfigs: jest.fn(),
   resolveConfigs: jest.fn(),
 }));
+
+jest.mock('../../../src/globalConfig/cloud', () => ({
+  CloudConfig: jest.fn().mockImplementation(() => ({
+    isEnabled: jest.fn().mockReturnValue(false),
+    getApiHost: jest.fn().mockReturnValue('https://api.promptfoo.app'),
+  })),
+}));
+
 jest.mock('../../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: jest.fn().mockReturnValue(false),
   neverGenerateRemote: jest.fn().mockReturnValue(false),
@@ -74,6 +81,7 @@ describe('doGenerateRedteam', () => {
       ],
       purpose: 'Test purpose',
       entities: ['Test entity'],
+      injectVar: 'input',
     });
 
     await doGenerateRedteam(options);
@@ -123,20 +131,39 @@ describe('doGenerateRedteam', () => {
 
     jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({}));
     jest.mocked(synthesize).mockResolvedValue({
-      testCases: [],
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'redteam' },
+        },
+      ],
       purpose: 'Test purpose',
       entities: [],
+      injectVar: 'input',
     });
 
     await doGenerateRedteam(options);
 
     expect(writePromptfooConfig).toHaveBeenCalledWith(
       expect.objectContaining({
-        tests: [],
+        defaultTest: {
+          metadata: {
+            purpose: 'Test purpose',
+            entities: [],
+          },
+        },
         redteam: expect.objectContaining({
           purpose: 'Test purpose',
           entities: [],
         }),
+        tests: [
+          {
+            vars: { input: 'Test input' },
+            assert: [{ type: 'equals', value: 'Test output' }],
+            metadata: { pluginId: 'redteam' },
+          },
+        ],
       }),
       'config.yaml',
     );
@@ -176,6 +203,7 @@ describe('doGenerateRedteam', () => {
       ],
       purpose: 'Test purpose',
       entities: ['Test entity'],
+      injectVar: 'input',
     });
 
     await doGenerateRedteam(options);
@@ -187,6 +215,8 @@ describe('doGenerateRedteam', () => {
       plugins: expect.any(Array),
       prompts: expect.any(Array),
       strategies: expect.any(Array),
+      targetLabels: [],
+      showProgressBar: true,
     });
     expect(writePromptfooConfig).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -244,6 +274,7 @@ describe('doGenerateRedteam', () => {
       ],
       purpose: 'Test purpose',
       entities: ['Test entity'],
+      injectVar: 'input',
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -272,6 +303,188 @@ describe('doGenerateRedteam', () => {
         prompts: ['Test prompt'],
         strategies: [],
       }),
+    );
+  });
+
+  it('should pass entities from redteam config to synthesize', async () => {
+    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/mock/path',
+      testSuite: {
+        prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+        providers: [],
+      },
+      config: {
+        redteam: {
+          entities: ['Company X', 'John Doe', 'Product Y'],
+          plugins: ['harmful:hate' as unknown as RedteamPluginObject],
+          strategies: [],
+        },
+      },
+    });
+
+    jest.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        prompts: [{ raw: 'Test prompt' }],
+        providers: [],
+        tests: [],
+      }),
+    );
+
+    jest.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'redteam' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: ['Company X', 'John Doe', 'Product Y'],
+      injectVar: 'input',
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'output.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: true,
+      force: true,
+      config: 'config.yaml',
+    };
+
+    await doGenerateRedteam(options);
+
+    expect(synthesize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entities: ['Company X', 'John Doe', 'Product Y'],
+        plugins: expect.any(Array),
+        prompts: ['Test prompt'],
+        strategies: expect.any(Array),
+      }),
+    );
+  });
+
+  it('should handle undefined entities in redteam config', async () => {
+    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/mock/path',
+      testSuite: {
+        prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+        providers: [],
+      },
+      config: {
+        redteam: {
+          plugins: ['harmful:hate' as unknown as RedteamPluginObject],
+          strategies: [],
+        },
+      },
+    });
+
+    jest.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        prompts: [{ raw: 'Test prompt' }],
+        providers: [],
+        tests: [],
+      }),
+    );
+
+    jest.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'redteam' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'output.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: true,
+      force: true,
+      config: 'config.yaml',
+    };
+
+    await doGenerateRedteam(options);
+
+    expect(synthesize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        plugins: [expect.objectContaining({ id: 'harmful:hate', numTests: 5 })],
+        prompts: ['Test prompt'],
+        strategies: [],
+        abortSignal: undefined,
+        delay: undefined,
+        language: undefined,
+        maxConcurrency: undefined,
+        numTests: undefined,
+      }),
+    );
+  });
+
+  it('should write entities to output config', async () => {
+    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/mock/path',
+      testSuite: {
+        prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+        providers: [],
+      },
+      config: {
+        redteam: {
+          entities: ['Company X', 'John Doe', 'Product Y'],
+          plugins: ['harmful:hate' as unknown as RedteamPluginObject],
+          strategies: [],
+        },
+      },
+    });
+
+    jest.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        prompts: [{ raw: 'Test prompt' }],
+        providers: [],
+        tests: [],
+      }),
+    );
+
+    jest.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'redteam' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: ['Company X', 'John Doe', 'Product Y'],
+      injectVar: 'input',
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'output.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: true,
+      force: true,
+      config: 'config.yaml',
+    };
+
+    await doGenerateRedteam(options);
+
+    expect(writePromptfooConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        redteam: expect.objectContaining({
+          entities: ['Company X', 'John Doe', 'Product Y'],
+        }),
+        defaultTest: expect.objectContaining({
+          metadata: expect.objectContaining({
+            entities: ['Company X', 'John Doe', 'Product Y'],
+          }),
+        }),
+      }),
+      'output.yaml',
     );
   });
 });

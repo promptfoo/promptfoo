@@ -17,15 +17,6 @@ jest.mock('python-shell', () => ({
   },
 }));
 
-jest.mock('../../src/logger', () => ({
-  default: {
-    debug: jest.fn(),
-    error: jest.fn(),
-  },
-  debug: jest.fn(),
-  error: jest.fn(),
-}));
-
 jest.mock('../../src/envars', () => ({
   getEnvString: jest.fn(),
 }));

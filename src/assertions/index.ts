@@ -2,23 +2,21 @@ import async from 'async';
 import fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
-import invariant from 'tiny-invariant';
 import cliState from '../cliState';
 import { getEnvInt } from '../envars';
-import { importModule } from '../esm';
 import logger from '../logger';
 import {
-  matchesSimilarity,
-  matchesLlmRubric,
-  matchesFactuality,
-  matchesClosedQa,
-  matchesClassification,
   matchesAnswerRelevance,
+  matchesClassification,
+  matchesClosedQa,
+  matchesContextFaithfulness,
   matchesContextRecall,
   matchesContextRelevance,
-  matchesContextFaithfulness,
-  matchesSelectBest,
+  matchesFactuality,
+  matchesLlmRubric,
   matchesModeration,
+  matchesSelectBest,
+  matchesSimilarity,
 } from '../matchers';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
@@ -28,6 +26,7 @@ import type {
   AssertionValueFunctionContext,
   BaseAssertionTypes,
   ProviderResponse,
+  ScoringFunction,
 } from '../types';
 import {
   type ApiProvider,
@@ -37,19 +36,20 @@ import {
   type GradingResult,
 } from '../types';
 import { isJavascriptFile } from '../util/file';
+import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { transform } from '../util/transform';
-import { AssertionsResult } from './AssertionsResult';
 import { handleAnswerRelevance } from './answerRelevance';
+import { AssertionsResult } from './assertionsResult';
 import { handleBleuScore } from './bleu';
 import { handleClassifier } from './classifier';
 import {
   handleContains,
-  handleIContains,
-  handleContainsAny,
-  handleIContainsAny,
   handleContainsAll,
+  handleContainsAny,
+  handleIContains,
   handleIContainsAll,
+  handleIContainsAny,
 } from './contains';
 import { handleContextFaithfulness } from './contextFaithfulness';
 import { handleContextRecall } from './contextRecall';
@@ -57,6 +57,8 @@ import { handleContextRelevance } from './contextRelevance';
 import { handleCost } from './cost';
 import { handleEquals } from './equals';
 import { handleFactuality } from './factuality';
+import { handleGEval } from './geval';
+import { handleGuardrails } from './guardrails';
 import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
 import { handleLatency } from './latency';
@@ -68,12 +70,13 @@ import { handleIsValidOpenAiFunctionCall, handleIsValidOpenAiToolsCall } from '.
 import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePython } from './python';
 import { handleRedteam } from './redteam';
+import { handleIsRefusal } from './refusal';
 import { handleRegex } from './regex';
 import { handleRougeScore } from './rouge';
 import { handleSimilar } from './similar';
 import { handleContainsSql, handleIsSql } from './sql';
 import { handleStartsWith } from './startsWith';
-import { coerceString, getFinalTest, processFileReference } from './utils';
+import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
 import { handleIsXml } from './xml';
 
@@ -99,6 +102,7 @@ export async function runAssertion({
   test,
   latencyMs,
   providerResponse,
+  assertIndex,
 }: {
   prompt?: string;
   provider?: ApiProvider;
@@ -106,6 +110,7 @@ export async function runAssertion({
   test: AtomicTestCase;
   providerResponse: ProviderResponse;
   latencyMs?: number;
+  assertIndex?: number;
 }): Promise<GradingResult> {
   const { cost, logProbs, output: originalOutput } = providerResponse;
   let output = originalOutput;
@@ -135,7 +140,7 @@ export async function runAssertion({
     logProbs,
     provider,
     providerResponse,
-    ...(assertion.config ? { config: assertion.config } : {}),
+    ...(assertion.config ? { config: structuredClone(assertion.config) } : {}),
   };
 
   // Render assertion values
@@ -144,23 +149,27 @@ export async function runAssertion({
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
-      const filePath = path.resolve(basePath, renderedValue.slice('file://'.length));
+      const fileRef = renderedValue.slice('file://'.length);
+      let filePath = fileRef;
+      let functionName: string | undefined;
+
+      if (fileRef.includes(':')) {
+        const [pathPart, funcPart] = fileRef.split(':');
+        filePath = pathPart;
+        functionName = funcPart;
+      }
+
+      filePath = path.resolve(basePath, filePath);
 
       if (isJavascriptFile(filePath)) {
-        const requiredModule = await importModule(filePath);
-        if (typeof requiredModule === 'function') {
-          valueFromScript = await Promise.resolve(requiredModule(output, context));
-        } else if (requiredModule.default && typeof requiredModule.default === 'function') {
-          valueFromScript = await Promise.resolve(requiredModule.default(output, context));
-        } else {
-          throw new Error(
-            `Assertion malformed: ${filePath} must export a function or have a default export as a function`,
-          );
-        }
+        valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.py')) {
         try {
-          const pythonScriptOutput = await runPython(filePath, 'get_assert', [output, context]);
+          const pythonScriptOutput = await runPython(filePath, functionName || 'get_assert', [
+            output,
+            context,
+          ]);
           valueFromScript = pythonScriptOutput;
           logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
@@ -238,10 +247,13 @@ export async function runAssertion({
     cost: handleCost,
     equals: handleEquals,
     factuality: handleFactuality,
+    guardrails: handleGuardrails,
+    'g-eval': handleGEval,
     icontains: handleIContains,
     'icontains-all': handleIContainsAll,
     'icontains-any': handleIContainsAny,
     'is-json': handleIsJson,
+    'is-refusal': handleIsRefusal,
     'is-sql': handleIsSql,
     'is-valid-openai-function-call': handleIsValidOpenAiFunctionCall,
     'is-valid-openai-tools-call': handleIsValidOpenAiToolsCall,
@@ -285,17 +297,19 @@ export async function runAssertion({
 }
 
 export async function runAssertions({
+  assertScoringFunction,
+  latencyMs,
   prompt,
   provider,
   providerResponse,
   test,
-  latencyMs,
 }: {
+  assertScoringFunction?: ScoringFunction;
+  latencyMs?: number;
   prompt?: string;
   provider?: ApiProvider;
   providerResponse: ProviderResponse;
   test: AtomicTestCase;
-  latencyMs?: number;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
@@ -351,6 +365,7 @@ export async function runAssertions({
         assertion,
         test,
         latencyMs,
+        assertIndex: index,
       });
 
       assertResult.addResult({
@@ -362,8 +377,8 @@ export async function runAssertions({
     },
   );
 
-  subAssertResults.forEach((subAssertResult) => {
-    const result = subAssertResult.testResult();
+  await async.forEach(subAssertResults, async (subAssertResult) => {
+    const result = await subAssertResult.testResult();
     const {
       index,
       assertionSet: { metric, weight },
@@ -377,7 +392,7 @@ export async function runAssertions({
     });
   });
 
-  return mainAssertResult.testResult();
+  return mainAssertResult.testResult(assertScoringFunction);
 }
 
 export async function runCompareAssertion(

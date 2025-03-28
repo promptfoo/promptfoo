@@ -1,6 +1,5 @@
 import { randomUUID } from 'crypto';
 import { and, desc, eq, like, sql } from 'drizzle-orm';
-import invariant from 'tiny-invariant';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { getDb } from '../database';
 import {
@@ -13,11 +12,11 @@ import {
   evalsToTagsTable,
   evalResultsTable,
 } from '../database/tables';
+import { getEnvBool } from '../envars';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import type {
-  AtomicTestCase,
   CompletedPrompt,
   EvaluateResult,
   EvaluateStats,
@@ -30,6 +29,7 @@ import type {
 } from '../types';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
+import invariant from '../util/invariant';
 import { getCurrentTimestamp } from '../util/time';
 import EvalResult from './evalResult';
 
@@ -63,6 +63,7 @@ export default class Eval {
   config: Partial<UnifiedConfig>;
   // If these are empty, you need to call loadResults(). We don't load them by default to save memory.
   results: EvalResult[];
+  resultsCount: number; // Fast way to get the number of results
   datasetId?: string;
   prompts: CompletedPrompt[];
   oldResults?: EvaluateSummaryV2;
@@ -124,7 +125,7 @@ export default class Eval {
     return evalInstance;
   }
 
-  static async getMany(limit: number = DEFAULT_QUERY_LIMIT) {
+  static async getMany(limit: number = DEFAULT_QUERY_LIMIT): Promise<Eval[]> {
     const db = getDb();
     const evals = await db
       .select()
@@ -197,7 +198,7 @@ export default class Eval {
 
         logger.debug(`Inserting prompt ${promptId}`);
       }
-      if (opts?.results) {
+      if (opts?.results && opts.results.length > 0) {
         const res = await tx
           .insert(evalResultsTable)
           .values(opts.results?.map((r) => ({ ...r, evalId, id: randomUUID() })))
@@ -276,6 +277,7 @@ export default class Eval {
     this.author = opts?.author;
     this.config = config;
     this.results = [];
+    this.resultsCount = 0;
     this.prompts = opts?.prompts || [];
     this.datasetId = opts?.datasetId;
     this.persisted = opts?.persisted || false;
@@ -346,8 +348,8 @@ export default class Eval {
     return convertResultsToTable(await this.toResultsFile());
   }
 
-  async addResult(result: EvaluateResult, test: AtomicTestCase) {
-    const newResult = await EvalResult.createFromEvaluateResult(this.id, result, test, {
+  async addResult(result: EvaluateResult) {
+    const newResult = await EvalResult.createFromEvaluateResult(this.id, result, {
       persist: this.persisted,
     });
     if (!this.persisted) {
@@ -355,6 +357,7 @@ export default class Eval {
       // This is to avoid memory issues when running large evaluations
       this.results.push(newResult);
     }
+    this.resultsCount++;
   }
 
   async *fetchResultsBatched(batchSize: number = 100) {
@@ -375,8 +378,18 @@ export default class Eval {
     }
   }
 
+  async setResults(results: EvalResult[]) {
+    this.results = results;
+    this.resultsCount = results.length;
+    if (this.persisted) {
+      const db = getDb();
+      await db.insert(evalResultsTable).values(results.map((r) => ({ ...r, evalId: this.id })));
+    }
+  }
+
   async loadResults() {
     this.results = await EvalResult.findManyByEvalId(this.id);
+    this.resultsCount = this.results.length;
   }
 
   async getResults(): Promise<EvaluateResult[] | EvalResult[]> {
@@ -387,6 +400,47 @@ export default class Eval {
     await this.loadResults();
     return this.results;
   }
+
+  getStats(): EvaluateStats {
+    const stats: EvaluateStats = {
+      successes: 0,
+      failures: 0,
+      errors: 0,
+      tokenUsage: {
+        cached: 0,
+        completion: 0,
+        prompt: 0,
+        total: 0,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
+      },
+    };
+
+    for (const prompt of this.prompts) {
+      stats.successes += prompt.metrics?.testPassCount || 0;
+      stats.failures += prompt.metrics?.testFailCount || 0;
+      stats.errors += prompt.metrics?.testErrorCount || 0;
+      stats.tokenUsage.prompt += prompt.metrics?.tokenUsage.prompt || 0;
+      stats.tokenUsage.cached += prompt.metrics?.tokenUsage.cached || 0;
+      stats.tokenUsage.completion += prompt.metrics?.tokenUsage.completion || 0;
+      stats.tokenUsage.total += prompt.metrics?.tokenUsage.total || 0;
+      stats.tokenUsage.numRequests += prompt.metrics?.tokenUsage.numRequests || 0;
+
+      stats.tokenUsage.completionDetails.reasoning! +=
+        prompt.metrics?.tokenUsage.completionDetails?.reasoning || 0;
+      stats.tokenUsage.completionDetails.acceptedPrediction! +=
+        prompt.metrics?.tokenUsage.completionDetails?.acceptedPrediction || 0;
+      stats.tokenUsage.completionDetails.rejectedPrediction! +=
+        prompt.metrics?.tokenUsage.completionDetails?.rejectedPrediction || 0;
+    }
+
+    return stats;
+  }
+
   async toEvaluateSummary(): Promise<EvaluateSummaryV3 | EvaluateSummaryV2> {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
@@ -401,32 +455,21 @@ export default class Eval {
     if (this.results.length === 0) {
       await this.loadResults();
     }
-    const stats: EvaluateStats = {
-      successes: 0,
-      failures: 0,
-      tokenUsage: {
-        cached: 0,
-        completion: 0,
-        prompt: 0,
-        total: 0,
-        numRequests: 0,
-      },
-    };
 
-    for (const prompt of this.prompts) {
-      stats.successes += prompt.metrics?.testPassCount || 0;
-      stats.failures += prompt.metrics?.testFailCount || 0;
-      stats.tokenUsage.prompt += prompt.metrics?.tokenUsage.prompt || 0;
-      stats.tokenUsage.cached += prompt.metrics?.tokenUsage.cached || 0;
-      stats.tokenUsage.completion += prompt.metrics?.tokenUsage.completion || 0;
-      stats.tokenUsage.total += prompt.metrics?.tokenUsage.total || 0;
-      stats.tokenUsage.numRequests += prompt.metrics?.tokenUsage.numRequests || 0;
-    }
+    const stats = await this.getStats();
+    const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
+
+    const prompts = shouldStripPromptText
+      ? this.prompts.map((p) => ({
+          ...p,
+          raw: '[prompt stripped]',
+        }))
+      : this.prompts;
 
     return {
       version: 3,
       timestamp: new Date(this.createdAt).toISOString(),
-      prompts: this.prompts,
+      prompts,
       results: this.results.map((r) => r.toEvaluateResult()),
       stats,
     };

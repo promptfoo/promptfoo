@@ -37,6 +37,7 @@ const RiskCard: React.FC<{
     string,
     { prompt: string; output: string; gradingResult?: GradingResult }[]
   >;
+  strategyStats: Record<string, { pass: number; total: number }>;
 }> = ({
   title,
   subtitle,
@@ -47,6 +48,7 @@ const RiskCard: React.FC<{
   evalId,
   failuresByPlugin,
   passesByPlugin,
+  strategyStats,
 }) => {
   const { showPercentagesOnRiskCards, pluginPassRateThreshold } = useReportStore();
   const [drawerOpen, setDrawerOpen] = React.useState(false);
@@ -106,7 +108,12 @@ const RiskCard: React.FC<{
                 }}
               />
             </Box>
-            <Typography variant="h6" className="risk-card-issues">
+            <Typography
+              variant="h6"
+              sx={{
+                color: numTestsFailed === 0 ? 'text.secondary' : 'error.main',
+              }}
+            >
               {numTestsFailed} failed probes
             </Typography>
             <Typography
@@ -180,6 +187,7 @@ const RiskCard: React.FC<{
             evalId={evalId}
             numPassed={testTypes.find((t) => t.name === selectedCategory)?.numPassed || 0}
             numFailed={testTypes.find((t) => t.name === selectedCategory)?.numFailed || 0}
+            strategyStats={strategyStats}
           />
         )}
       </CardContent>
