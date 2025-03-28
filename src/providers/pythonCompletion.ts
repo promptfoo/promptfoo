@@ -66,7 +66,7 @@ export class PythonProvider implements ApiProvider {
     logger.debug(`PythonProvider cache enabled: ${cacheEnabled}`);
 
     if (cacheEnabled) {
-      cachedResult = (await cache.get(cacheKey)) as string;
+      cachedResult = await cache.get(cacheKey);
       logger.debug(`PythonProvider cache hit: ${Boolean(cachedResult)}`);
     }
 
@@ -79,9 +79,9 @@ export class PythonProvider implements ApiProvider {
       );
 
       // IMPORTANT: Set cached flag to true so evaluator recognizes this as cached
-      if (apiType === 'call_api') {
+      if (apiType === 'call_api' && typeof parsedResult === 'object' && parsedResult !== null) {
         logger.debug(`PythonProvider setting cached=true for cached ${apiType} result`);
-        (parsedResult as ProviderResponse).cached = true;
+        parsedResult.cached = true;
       }
       return parsedResult;
     } else {
@@ -101,9 +101,9 @@ export class PythonProvider implements ApiProvider {
       let result;
       switch (apiType) {
         case 'call_api':
-          result = (await runPython(absPath, functionName, args, {
+          result = await runPython(absPath, functionName, args, {
             pythonExecutable: this.config.pythonExecutable,
-          })) as ProviderResponse;
+          });
 
           // Add detailed logging about the result structure
           logger.debug(
@@ -128,9 +128,9 @@ export class PythonProvider implements ApiProvider {
           }
           break;
         case 'call_embedding_api':
-          result = (await runPython(absPath, functionName, args, {
+          result = await runPython(absPath, functionName, args, {
             pythonExecutable: this.config.pythonExecutable,
-          })) as ProviderEmbeddingResponse;
+          });
           if (
             !result ||
             typeof result !== 'object' ||
@@ -144,9 +144,9 @@ export class PythonProvider implements ApiProvider {
           }
           break;
         case 'call_classification_api':
-          result = (await runPython(absPath, functionName, args, {
+          result = await runPython(absPath, functionName, args, {
             pythonExecutable: this.config.pythonExecutable,
-          })) as ProviderClassificationResponse;
+          });
           if (
             !result ||
             typeof result !== 'object' ||
@@ -182,7 +182,7 @@ export class PythonProvider implements ApiProvider {
       // Set cached=false on fresh results
       if (typeof result === 'object' && result !== null && apiType === 'call_api') {
         logger.debug(`PythonProvider explicitly setting cached=false for fresh result`);
-        (result as ProviderResponse).cached = false;
+        result.cached = false;
       }
 
       return result;
