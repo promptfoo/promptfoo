@@ -8,12 +8,12 @@ describe('handleGEval', () => {
     jest.resetAllMocks();
   });
 
-  it('should handle string renderedValue', async () => {
+  it('should handle single string value', async () => {
     const mockMatchesGEval = jest.mocked(matchesGEval);
     mockMatchesGEval.mockResolvedValue({
       pass: true,
       score: 0.8,
-      reason: 'test reason',
+      reason: 'Good match',
     });
 
     const result = await handleGEval({
@@ -22,39 +22,24 @@ describe('handleGEval', () => {
         value: 'test criteria',
         threshold: 0.7,
       },
-      renderedValue: 'test criteria',
+      renderedValue: 'test output',
       prompt: 'test prompt',
-      outputString: 'test output',
+      outputString: 'expected output',
       test: {
-        vars: {},
-        assert: [],
         options: {},
-      },
-      baseType: 'g-eval',
+      } as any,
+      baseType: 'g-eval' as any,
       context: {
-        prompt: 'test prompt',
+        prompt: 'test',
         vars: {},
-        test: {
-          vars: {},
-          assert: [],
-          options: {},
-        },
+        test: {},
         logProbs: undefined,
-        provider: {
-          id: () => 'test-provider',
-          callApi: async () => ({ output: 'test' }),
-        },
-        providerResponse: {
-          output: 'test output',
-          error: undefined,
-        },
-      },
+        output: '',
+        tokenUsage: null,
+      } as any,
       inverse: false,
       output: 'test output',
-      providerResponse: {
-        output: 'test output',
-        error: undefined,
-      },
+      providerResponse: {} as any,
     });
 
     expect(result).toEqual({
@@ -65,82 +50,69 @@ describe('handleGEval', () => {
       },
       pass: true,
       score: 0.8,
-      reason: 'test reason',
+      reason: 'Good match',
     });
 
     expect(mockMatchesGEval).toHaveBeenCalledWith(
-      'test criteria',
-      'test prompt',
       'test output',
+      'test prompt',
+      'expected output',
       0.7,
       {},
     );
   });
 
-  it('should handle array renderedValue', async () => {
+  it('should handle array of strings', async () => {
     const mockMatchesGEval = jest.mocked(matchesGEval);
     mockMatchesGEval.mockResolvedValueOnce({
       pass: true,
       score: 0.8,
-      reason: 'test reason 1',
+      reason: 'Good match 1',
     });
     mockMatchesGEval.mockResolvedValueOnce({
-      pass: false,
-      score: 0.6,
-      reason: 'test reason 2',
+      pass: true,
+      score: 0.9,
+      reason: 'Good match 2',
     });
 
     const result = await handleGEval({
       assertion: {
         type: 'g-eval',
-        value: ['criteria1', 'criteria2'],
+        value: 'test criteria',
         threshold: 0.7,
       },
-      renderedValue: ['criteria1', 'criteria2'],
+      renderedValue: ['output1', 'output2'],
       prompt: 'test prompt',
-      outputString: 'test output',
+      outputString: 'expected output',
       test: {
-        vars: {},
-        assert: [],
         options: {},
-      },
-      baseType: 'g-eval',
+      } as any,
+      baseType: 'g-eval' as any,
       context: {
-        prompt: 'test prompt',
+        prompt: 'test',
         vars: {},
-        test: {
-          vars: {},
-          assert: [],
-          options: {},
-        },
+        test: {},
         logProbs: undefined,
-        provider: {
-          id: () => 'test-provider',
-          callApi: async () => ({ output: 'test' }),
-        },
-        providerResponse: {
-          output: 'test output',
-          error: undefined,
-        },
-      },
+        output: '',
+        tokenUsage: null,
+      } as any,
       inverse: false,
-      output: 'test output',
-      providerResponse: {
-        output: 'test output',
-        error: undefined,
-      },
+      output: ['output1', 'output2'],
+      providerResponse: {} as any,
     });
 
     expect(result).toEqual({
       assertion: {
         type: 'g-eval',
-        value: ['criteria1', 'criteria2'],
+        value: 'test criteria',
         threshold: 0.7,
       },
       pass: true,
-      score: 0.7,
-      reason: 'test reason 2',
+      reason: 'Good match 1\n\nGood match 2',
+      score: 0.8500000000000001,
     });
+
+    expect(mockMatchesGEval).toHaveBeenCalledTimes(2);
   });
 
   it('should use default threshold if not provided', async () => {
@@ -148,53 +120,38 @@ describe('handleGEval', () => {
     mockMatchesGEval.mockResolvedValue({
       pass: true,
       score: 0.8,
-      reason: 'test reason',
+      reason: 'Good match',
     });
 
-    await handleGEval({
+    const _result = await handleGEval({
       assertion: {
         type: 'g-eval',
         value: 'test criteria',
       },
-      renderedValue: 'test criteria',
+      renderedValue: 'test output',
       prompt: 'test prompt',
-      outputString: 'test output',
+      outputString: 'expected output',
       test: {
-        vars: {},
-        assert: [],
         options: {},
-      },
-      baseType: 'g-eval',
+      } as any,
+      baseType: 'g-eval' as any,
       context: {
-        prompt: 'test prompt',
+        prompt: 'test',
         vars: {},
-        test: {
-          vars: {},
-          assert: [],
-          options: {},
-        },
+        test: {},
         logProbs: undefined,
-        provider: {
-          id: () => 'test-provider',
-          callApi: async () => ({ output: 'test' }),
-        },
-        providerResponse: {
-          output: 'test output',
-          error: undefined,
-        },
-      },
+        output: '',
+        tokenUsage: null,
+      } as any,
       inverse: false,
       output: 'test output',
-      providerResponse: {
-        output: 'test output',
-        error: undefined,
-      },
+      providerResponse: {} as any,
     });
 
     expect(mockMatchesGEval).toHaveBeenCalledWith(
-      'test criteria',
-      'test prompt',
       'test output',
+      'test prompt',
+      'expected output',
       0.7,
       {},
     );
@@ -205,42 +162,114 @@ describe('handleGEval', () => {
       handleGEval({
         assertion: {
           type: 'g-eval',
-          value: 'test',
+          value: 'test criteria',
         },
-        renderedValue: undefined,
-        prompt: 'test',
-        outputString: 'test',
+        renderedValue: 123 as any,
+        prompt: 'test prompt',
+        outputString: 'expected output',
         test: {
-          vars: {},
-          assert: [],
           options: {},
-        },
-        baseType: 'g-eval',
+        } as any,
+        baseType: 'g-eval' as any,
         context: {
-          prompt: 'test prompt',
+          prompt: 'test',
           vars: {},
-          test: {
-            vars: {},
-            assert: [],
-            options: {},
-          },
+          test: {},
           logProbs: undefined,
-          provider: {
-            id: () => 'test-provider',
-            callApi: async () => ({ output: 'test' }),
-          },
-          providerResponse: {
-            output: 'test output',
-            error: undefined,
-          },
-        },
+          output: '',
+          tokenUsage: null,
+        } as any,
         inverse: false,
-        output: 'test',
-        providerResponse: {
-          output: 'test',
-          error: undefined,
-        },
+        output: 123 as any,
+        providerResponse: {} as any,
       }),
     ).rejects.toThrow('G-Eval assertion type must have a string or array of strings value');
+  });
+
+  it('should handle empty prompt', async () => {
+    const mockMatchesGEval = jest.mocked(matchesGEval);
+    mockMatchesGEval.mockResolvedValue({
+      pass: true,
+      score: 0.8,
+      reason: 'Good match',
+    });
+
+    const _result = await handleGEval({
+      assertion: {
+        type: 'g-eval',
+        value: 'test criteria',
+      },
+      renderedValue: 'test output',
+      prompt: '',
+      outputString: 'expected output',
+      test: {
+        options: {},
+      } as any,
+      baseType: 'g-eval' as any,
+      context: {
+        prompt: 'test',
+        vars: {},
+        test: {},
+        logProbs: undefined,
+        output: '',
+        tokenUsage: null,
+      } as any,
+      inverse: false,
+      output: 'test output',
+      providerResponse: {} as any,
+    });
+
+    expect(mockMatchesGEval).toHaveBeenCalledWith('test output', '', 'expected output', 0.7, {});
+  });
+
+  it('should handle failing scores in array', async () => {
+    const mockMatchesGEval = jest.mocked(matchesGEval);
+    mockMatchesGEval.mockResolvedValueOnce({
+      pass: false,
+      score: 0.5,
+      reason: 'Low score 1',
+    });
+    mockMatchesGEval.mockResolvedValueOnce({
+      pass: false,
+      score: 0.6,
+      reason: 'Low score 2',
+    });
+
+    const result = await handleGEval({
+      assertion: {
+        type: 'g-eval',
+        value: 'test criteria',
+        threshold: 0.7,
+      },
+      renderedValue: ['output1', 'output2'],
+      prompt: 'test prompt',
+      outputString: 'expected output',
+      test: {
+        options: {},
+      } as any,
+      baseType: 'g-eval' as any,
+      context: {
+        prompt: 'test',
+        vars: {},
+        test: {},
+        logProbs: undefined,
+        output: '',
+        tokenUsage: null,
+      } as any,
+      inverse: false,
+      output: ['output1', 'output2'],
+      providerResponse: {} as any,
+    });
+
+    expect(result).toEqual({
+      assertion: {
+        type: 'g-eval',
+        value: 'test criteria',
+        threshold: 0.7,
+      },
+      pass: false,
+      score: 0.55,
+      reason: 'Low score 1\n\nLow score 2',
+    });
   });
 });
