@@ -15,7 +15,7 @@ import TableSortLabel from '@mui/material/TableSortLabel';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
-import type { PromptWithMetadata } from '@promptfoo/types';
+import type { ServerPromptWithMetadata } from '@promptfoo/types';
 import PromptDialog from './PromptDialog';
 
 const ROWS_PER_PAGE = 10;
@@ -28,7 +28,7 @@ interface SortState {
 }
 
 interface PromptsProps {
-  data: (PromptWithMetadata & { recentEvalDate: string })[];
+  data: ServerPromptWithMetadata[];
   isLoading: boolean;
   error: string | null;
   showDatasetColumn?: boolean;

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { callApi } from '@app/utils/api';
-import type { PromptWithMetadata } from '@promptfoo/types';
+import type { ServerPromptWithMetadata } from '@promptfoo/types';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import Prompts from './Prompts';
 
@@ -9,7 +9,7 @@ interface PromptsPageProps {
 }
 
 function PromptsPageContent({ showDatasetColumn = true }: PromptsPageProps) {
-  const [prompts, setPrompts] = useState<(PromptWithMetadata & { recentEvalDate: string })[]>([]);
+  const [prompts, setPrompts] = useState<ServerPromptWithMetadata[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
