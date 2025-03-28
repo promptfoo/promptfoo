@@ -43,6 +43,7 @@ import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
 import { ToolDiscoveryPlugin } from './toolDiscovery';
+import { ToolDiscoveryMultiTurnPlugin } from './toolDiscoveryMultiTurn';
 
 export interface PluginFactory {
   key: string;
@@ -159,6 +160,7 @@ const pluginFactories: PluginFactory[] = [
   ),
   createPluginFactory(ExcessiveAgencyPlugin, 'excessive-agency'),
   createPluginFactory(ToolDiscoveryPlugin, 'tool-discovery'),
+  createPluginFactory(ToolDiscoveryMultiTurnPlugin, 'tool-discovery:multi-turn'),
   createPluginFactory(HarmbenchPlugin, 'harmbench'),
   createPluginFactory(HallucinationPlugin, 'hallucination'),
   createPluginFactory(ImitationPlugin, 'imitation'),
