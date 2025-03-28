@@ -1,5 +1,5 @@
 ---
-sidebar_label: How to red team foundation models
+sidebar_label: foundation-models
 sidebar_position: 10000
 ---
 
@@ -118,7 +118,7 @@ description: DeepSeek R1 vs. GPT-4o-mini Red Team
 targets:
   - id: openrouter:deepseek/deepseek-r1
     label: deepseek-r1
-- id: openai:gpt-4o-mini
+  - id: openai:gpt-4o-mini
     label: gpt-4o-mini
 
 redteam:
@@ -200,5 +200,29 @@ These reports are curated by the Promptfoo team and are a great starting point f
 <div style={{ textAlign: 'center' }}>
     <img src="/img/foundationmodelreport-comparison.png" style={{ width: '90%', height: 'auto' }} />
 </div>
+
+### Contributing foundation model results 
+
+You can run an example red team against a foundation model using the following command: 
+`npx promptfoo@latest init --example redteam-foundation-model` 
+
+This will run the same tests featured in promptfoo.dev/models. 
+
+To configure this scan with your own model, follow these steps: 
+
+1. Create a .env file with your API keys:
+
+```
+OPENAI_API_KEY=your_openai_api_key
+ANTHROPIC_API_KEY=your_anthropic_api_key
+```
+
+2. Configure your target model: 
+`promptfoo redteam run --target openrouter:...`
+
+3. Run the red team test and save the output to a JSON file:
+`promptfoo redteam run --output output.json`
+
+If this model hasn't been listed in Promptfoo's model directory, you can email results to inquiries@promptfoo.dev for inclusion on the promptfoo.dev/models page
 
 For more information on how to set up a red team, please refer to the [Red Team](/docs/red-team/quickstart/) documentation. 
