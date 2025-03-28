@@ -28,8 +28,9 @@ Red teaming serves three main purposes:
 3. **Manage broader risks** including social engineering and advanced persistent threats
 
 The insights benefit multiple stakeholders:
+
 - Cybersecurity teams
-- AI/ML engineers 
+- AI/ML engineers
 - Risk managers
 - CISOs
 - Architecture and engineering teams
@@ -49,25 +50,25 @@ As a result, **any generative AI red teaming strategy needs to start at a carefu
 
 Since generative AI risks cut across the company, determining your objectives and criteria requires working with different stakeholders. The OWASP guide recommends including AI engineers, cybersecurity experts, and ethics or compliance specialists.
 
-That said, there's more upside than downside to including even more people. When Air Canada [was held liable](https://www.bbc.com/travel/article/20240222-air-canada-chatbot-misinformation-what-travellers-should-know) for the advice its AI chatbot gave to a customer, Air Canada's legal, marketing, and PR teams likely wanted to be involved too (if not before the incident, certainly after). 
+That said, there's more upside than downside to including even more people. When Air Canada [was held liable](https://www.bbc.com/travel/article/20240222-air-canada-chatbot-misinformation-what-travellers-should-know) for the advice its AI chatbot gave to a customer, Air Canada's legal, marketing, and PR teams likely wanted to be involved too (if not before the incident, certainly after).
 
 ### Beyond OWASP
 
 Although our focus here is on OWASP, NIST agrees with this philosophy, too. NIST.AI.600.1 states, "The quality of AI red-teaming outputs is related to the background and expertise of the AI red team itself. Demographically and interdisciplinarily diverse AI red teams can be used to identify flaws in the varying contexts where GenAI will be used. For best results, AI red teams should demonstrate domain expertise, and awareness of socio-cultural aspects within the deployment context."
 
-For models or applications deployed in the EU, you should also consider the [EU AI Act](https://artificialintelligenceact.eu/) and its requirements for AI security. The Act **requires risk management measures and assurances** that the model or application consistently performs its intended purposes. Beyond risk management, the Act also specifies technical requirements for adversarial testing of general-purpose AI models with systemic risk. 
+For models or applications deployed in the EU, you should also consider the [EU AI Act](https://artificialintelligenceact.eu/) and its requirements for AI security. The Act **requires risk management measures and assurances** that the model or application consistently performs its intended purposes. Beyond risk management, the Act also specifies technical requirements for adversarial testing of general-purpose AI models with systemic risk.
 
 You can learn more about leveraging Promptfoo to red team against the EU AI Act [here](https://www.promptfoo.dev/blog/eu-ai-act/).
 
-### Starting at the Business Level 
+### Starting at the Business Level
 
-When generating requirements for LLM red teaming, first work with all the stakeholders you can  to develop an AI code of conduct, identify legal concerns, and determine brand reputation risks. Remember, the nondeterministic nature of generative AI means a broad scope is necessary because the risks are diffuse and unpredictable.
+When generating requirements for LLM red teaming, first work with all the stakeholders you can to develop an AI code of conduct, identify legal concerns, and determine brand reputation risks. Remember, the nondeterministic nature of generative AI means a broad scope is necessary because the risks are diffuse and unpredictable.
 
 :::info
 Red teaming a generative AI application means identifying technical vulnerabilities as well as legal and reputational risks to the business. You should have an understanding of acceptable personas for the application and the types of outputs that are considered harmful or deceptive. These are typically defined by the organization's AI code of conduct, legal, and/or marketing teams.
 :::
 
-Next, integrate the AI code of conduct into your goals and metrics as you develop them. As your generative AI red teaming approach matures, the code of conduct will serve as a reference point that you can return to again and again. 
+Next, integrate the AI code of conduct into your goals and metrics as you develop them. As your generative AI red teaming approach matures, the code of conduct will serve as a reference point that you can return to again and again.
 
 ### Testing Custom Policies
 
@@ -137,7 +138,7 @@ strategies:
 
 Running baseline red teams against foundation models is a recommended best practice to identify the foundation model you want to use and understand its inherent security risks.
 
-Promptfoo [also has an entire repository](https://www.promptfoo.dev/models) of foundation model security reports that you can use to get started. 
+Promptfoo [also has an entire repository](https://www.promptfoo.dev/models) of foundation model security reports that you can use to get started.
 
 ### Pre-Deployment Red Teaming
 
@@ -153,9 +154,9 @@ If you're thinking about red teaming in a post-deployment context, think about h
 
 When conducting post-deployment red teams, you should also consider black-box testing, which is the process of testing an application without prior knowledge of its internal workings. This is different from white-box testing, when an application is tested with prior knowledge of its internal workings.
 
-When red teaming an LLM application in a black-box setting, **try to enumerate as much information about the application as possible**. Can you identify the models, extract the system prompts, determine what guardrails are in place, enumerate any frameworks or tools, or determine what the application's policies are? 
+When red teaming an LLM application in a black-box setting, **try to enumerate as much information about the application as possible**. Can you identify the models, extract the system prompts, determine what guardrails are in place, enumerate any frameworks or tools, or determine what the application's policies are?
 
-When testing agents, try using Promptfoo's [tool discovery plugin](https://www.promptfoo.dev/docs/red-team/plugins/tool-discovery/), which attempts to enumerate the tools, functions, and APIs that an agent has access to. 
+When testing agents, try using Promptfoo's [tool discovery plugin](https://www.promptfoo.dev/docs/red-team/plugins/tool-discovery/), which attempts to enumerate the tools, functions, and APIs that an agent has access to.
 
 Use this information to build more effective red teaming tests that address the most important risks. **Remember, whatever information is exposed to users or the public can be exploited by attackers.**
 
@@ -217,7 +218,7 @@ This is particularly important for applications in development that are being sh
 
 ## Combining Guardrails and Red Teaming
 
-Guardrails enforce policy constraints on the inputs and/or outputs of an LLM application. They can be used to prevent harmful outputs from occurring in the first place, or to catch harmful outputs after they've been generated. It's best to red team *after* you've built guardrails because red teaming helps you figure out what vulnerabilities exist with defenses already in place.
+Guardrails enforce policy constraints on the inputs and/or outputs of an LLM application. They can be used to prevent harmful outputs from occurring in the first place, or to catch harmful outputs after they've been generated. It's best to red team _after_ you've built guardrails because red teaming helps you figure out what vulnerabilities exist with defenses already in place.
 
 ### Testing Guardrails for Defense-in-Depth
 
@@ -225,7 +226,7 @@ In traditional cybersecurity, defense-in-depth strategies use multiple layers of
 
 Promptfoo offers numerous features for testing guardrails, including:
 
-- **Plugins**, which you can use to detect harmful output generation. 
+- **Plugins**, which you can use to detect harmful output generation.
 - **Custom policies**, which you can use to test the specific requirements or constraints of your particular application.
 - **Custom strategies**, which you can use to modify your prompts for adversarial testing, including the ability to transform pre-existing test cases programmatically.
 
@@ -283,11 +284,13 @@ Promptfoo has written more about the key security concerns in AI agents [here](/
 OWASP provides an excellent foundation for AI security with widely recognized standards that are easy to communicate to stakeholders. However, it's just one part of a comprehensive security strategy.
 
 For additional guidance, consider checking out:
+
 - [MITRE ATLAS](https://atlas.mitre.org/matrices/ATLAS) for threat modeling
 - [EU AI Act](https://artificialintelligenceact.eu/) requirements
 - The latest research on [arXiv](https://arxiv.org/search/?query=Red+Teaming+for+Generative+AI&searchtype=all&abstracts=show&order=-announced_date_first&size=50)
 
 Stay updated on generative AI red teaming by:
+
 - [Joining our Discord](https://discord.com/invite/promptfoo)
 - Following our [blog](/blog/)
 - [Scheduling a demo](/contact/) to learn how Promptfoo can help secure your AI applications
