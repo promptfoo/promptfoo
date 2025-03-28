@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 250">
+  <!-- Background -->
+  <rect width="800" height="400" fill="#ffffff"/>
+  
+  <!-- Phase boxes -->
+  <g transform="translate(50,50)">
+    <!-- Model Phase -->
+    <rect x="20" y="20" width="160" height="120" rx="10" fill="#e3f2fd" stroke="#1976d2" stroke-width="2"/>
+    <text x="100" y="50" text-anchor="middle" font-family="Arial" font-weight="bold" fill="#1976d2">1. Model</text>
+    <text x="100" y="80" text-anchor="middle" font-size="12" font-family="Arial">• Alignment</text>
+    <text x="100" y="100" text-anchor="middle" font-size="12" font-family="Arial">• Robustness</text>
+    <text x="100" y="120" text-anchor="middle" font-size="12" font-family="Arial">• Bias Testing</text>
+    
+    <!-- Implementation Phase -->
+    <rect x="220" y="20" width="160" height="120" rx="10" fill="#e8f5e9" stroke="#388e3c" stroke-width="2"/>
+    <text x="300" y="50" text-anchor="middle" font-family="Arial" font-weight="bold" fill="#388e3c">2. Implementation</text>
+    <text x="300" y="80" text-anchor="middle" font-size="12" font-family="Arial">• Guardrails</text>
+    <text x="300" y="100" text-anchor="middle" font-size="12" font-family="Arial">• RAG Security</text>
+    <text x="300" y="120" text-anchor="middle" font-size="12" font-family="Arial">• Control Testing</text>
+
+    <!-- System Phase -->
+    <rect x="420" y="20" width="160" height="120" rx="10" fill="#fff3e0" stroke="#f57c00" stroke-width="2"/>
+    <text x="500" y="50" text-anchor="middle" font-family="Arial" font-weight="bold" fill="#f57c00">3. System</text>
+    <text x="500" y="80" text-anchor="middle" font-size="12" font-family="Arial">• Infrastructure</text>
+    <text x="500" y="100" text-anchor="middle" font-size="12" font-family="Arial">• Integration</text>
+    <text x="500" y="120" text-anchor="middle" font-size="12" font-family="Arial">• Supply Chain</text>
+
+    <!-- Runtime Phase -->
+    <rect x="620" y="20" width="160" height="120" rx="10" fill="#f3e5f5" stroke="#7b1fa2" stroke-width="2"/>
+    <text x="700" y="50" text-anchor="middle" font-family="Arial" font-weight="bold" fill="#7b1fa2">4. Runtime</text>
+    <text x="700" y="80" text-anchor="middle" font-size="12" font-family="Arial">• Human Interaction</text>
+    <text x="700" y="100" text-anchor="middle" font-size="12" font-family="Arial">• Agent Behavior</text>
+    <text x="700" y="120" text-anchor="middle" font-size="12" font-family="Arial">• Business Impact</text>
+
+    <!-- Connecting Arrows -->
+    <path d="M180 80 L220 80" stroke="#666" stroke-width="2" marker-end="url(#arrowhead)"/>
+    <path d="M380 80 L420 80" stroke="#666" stroke-width="2" marker-end="url(#arrowhead)"/>
+    <path d="M580 80 L620 80" stroke="#666" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+    <!-- Arrow Marker Definition -->
+    <defs>
+      <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+        <polygon points="0 0, 10 3.5, 0 7" fill="#666"/>
+      </marker>
+    </defs>
+  </g>
+</svg>
