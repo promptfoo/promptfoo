@@ -1,3 +1,4 @@
+import type { ServerPromptWithMetadata, PromptWithMetadata } from '../../src/types';
 import {
   isGradingResult,
   TestCaseSchema,
@@ -292,5 +293,55 @@ describe('TestSuiteConfigSchema env property', () => {
       prompts: ['prompt1'],
     };
     expect(() => TestSuiteConfigSchema.parse(config)).not.toThrow();
+  });
+});
+
+describe('ServerPromptWithMetadata type', () => {
+  it('should convert PromptWithMetadata to ServerPromptWithMetadata', () => {
+    const promptWithMetadata: PromptWithMetadata = {
+      id: 'test-id',
+      prompt: {
+        raw: 'test prompt',
+        label: 'Test Prompt',
+      },
+      recentEvalDate: new Date('2025-01-01'),
+      recentEvalId: 'eval-123',
+      evals: [
+        {
+          id: 'eval-1',
+          datasetId: 'dataset-1',
+          metrics: {
+            score: 0.9,
+            testPassCount: 5,
+            testFailCount: 1,
+            testErrorCount: 0,
+            assertPassCount: 10,
+            assertFailCount: 2,
+            totalLatencyMs: 1000,
+            tokenUsage: {
+              total: 100,
+              prompt: 50,
+              completion: 50,
+            },
+            namedScores: {},
+            namedScoresCount: {},
+            cost: 0.01,
+          },
+        },
+      ],
+      count: 1,
+    };
+
+    const serverPrompt: ServerPromptWithMetadata = {
+      ...promptWithMetadata,
+      recentEvalDate: promptWithMetadata.recentEvalDate.toISOString(),
+    };
+
+    expect(typeof serverPrompt.recentEvalDate).toBe('string');
+    expect(serverPrompt.recentEvalDate).toBe('2025-01-01T00:00:00.000Z');
+    expect(serverPrompt.id).toBe(promptWithMetadata.id);
+    expect(serverPrompt.prompt).toEqual(promptWithMetadata.prompt);
+    expect(serverPrompt.evals).toEqual(promptWithMetadata.evals);
+    expect(serverPrompt.count).toBe(promptWithMetadata.count);
   });
 });
