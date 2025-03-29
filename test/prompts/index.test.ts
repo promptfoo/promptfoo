@@ -1,10 +1,40 @@
 import dedent from 'dedent';
 import * as fs from 'fs';
 import { globSync } from 'glob';
+import { z } from 'zod';
+import { $RefParser } from '@apidevtools/json-schema-ref-parser';
+import * as yaml from 'js-yaml';
+
+// Define mock functions first
+const mockLoadFile = jest.fn();
+const mockLoadFilesFromGlob = jest.fn();
+
+// Use doMock instead of jest.mock
+jest.doMock('../../src/util/fileLoader', () => ({
+  loadFile: mockLoadFile,
+  loadFilesFromGlob: mockLoadFilesFromGlob,
+  readFiles: jest.fn()
+}));
+
+// Import after mocking
 import { importModule } from '../../src/esm';
-import { readPrompts, readProviderPromptMap, processPrompts } from '../../src/prompts';
 import { maybeFilePath } from '../../src/prompts/utils';
 import type { ApiProvider, Prompt, ProviderResponse, UnifiedConfig } from '../../src/types';
+import {
+  processPrompt,
+  processPrompts,
+  readPrompts,
+  readProviderPromptMap,
+} from '../../src/prompts';
+import { processJsFile } from '../../src/prompts/processors/javascript';
+import { processJsonFile } from '../../src/prompts/processors/json';
+import { processJsonlFile } from '../../src/prompts/processors/jsonl';
+import { processMarkdownFile } from '../../src/prompts/processors/markdown';
+import { processPythonFile } from '../../src/prompts/processors/python';
+import { processString } from '../../src/prompts/processors/string';
+import { processTxtFile } from '../../src/prompts/processors/text';
+import { processYamlFile } from '../../src/prompts/processors/yaml';
+import { loadFile, loadFilesFromGlob } from '../../src/util/fileLoader';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
@@ -47,9 +77,85 @@ jest.mock('../../src/prompts/utils', () => {
   };
 });
 
+jest.mock('@apidevtools/json-schema-ref-parser');
+
+// Add mocks for processors
+jest.mock('../../src/prompts/processors/text', () => ({
+  processTxtFile: jest.fn(),
+}));
+jest.mock('../../src/prompts/processors/json', () => ({
+  processJsonFile: jest.fn(),
+}));
+jest.mock('../../src/prompts/processors/yaml', () => ({
+  processYamlFile: jest.fn(),
+}));
+jest.mock('../../src/prompts/processors/jsonl', () => ({
+  processJsonlFile: jest.fn(),
+}));
+jest.mock('../../src/prompts/processors/markdown', () => ({
+  processMarkdownFile: jest.fn(),
+}));
+jest.mock('../../src/prompts/processors/jinja', () => ({
+  processJinjaFile: jest.fn(),
+}));
+jest.mock('../../src/prompts/processors/javascript', () => ({
+  processJsFile: jest.fn(),
+}));
+jest.mock('../../src/prompts/processors/python', () => ({
+  processPythonFile: jest.fn(),
+}));
+
 describe('readPrompts', () => {
-  afterEach(() => {
+  beforeEach(() => {
+    jest.clearAllMocks();
     delete process.env.PROMPTFOO_STRICT_FILES;
+    
+    // Set up mocks for processors
+    jest.mocked(processTxtFile).mockImplementation(async (filePath, prompt) => {
+      const content = await loadFile(filePath) as string;
+      return content
+        .split('---')
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0)
+        .map((promptText) => ({
+          raw: promptText,
+          label: `${filePath}: ${promptText}`,
+        }));
+    });
+    
+    jest.mocked(processJsonFile).mockImplementation(async (filePath, prompt) => {
+      const content = await loadFile(filePath) as string;
+      return [{
+        raw: content,
+        label: prompt.label || `${filePath}: ${content}`,
+        config: prompt.config,
+      }];
+    });
+    
+    jest.mocked(processYamlFile).mockImplementation(async (filePath, prompt) => {
+      const content = await loadFile(filePath) as string;
+      const parsed = yaml.load(content);
+      const jsonStr = JSON.stringify(parsed);
+      return [{
+        raw: jsonStr,
+        label: prompt.label || `${filePath}: ${jsonStr.slice(0, 80)}`,
+        config: prompt.config,
+      }];
+    });
+    
+    // Implement loadFile mock to use fs.readFileSync for backward compatibility
+    mockLoadFile.mockImplementation(async (filePath) => {
+      return fs.readFileSync(filePath, 'utf-8');
+    });
+    
+    // Implement loadFilesFromGlob mock
+    mockLoadFilesFromGlob.mockImplementation(async (globPattern) => {
+      const paths = globSync(globPattern);
+      return Promise.all(paths.map(path => fs.readFileSync(path, 'utf-8')));
+    });
+  });
+
+  afterEach(() => {
     jest.mocked(fs.readFileSync).mockReset();
     jest.mocked(fs.statSync).mockReset();
     jest.mocked(globSync).mockReset();
@@ -690,6 +796,15 @@ describe('readProviderPromptMap', () => {
 describe('processPrompts', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    
+    // Set up mock for processTxtFile
+    jest.mocked(processTxtFile).mockImplementation(async (filePath, prompt) => {
+      // This simulates the behavior of splitting by delimiter but uses the async pattern
+      return [
+        { raw: 'prompt1', label: `${filePath}: prompt1` },
+        { raw: 'prompt2', label: `${filePath}: prompt2` },
+      ];
+    });
   });
 
   it('should process function prompts', async () => {
@@ -820,6 +935,20 @@ describe('processPrompts', () => {
   it('should flatten array results from readPrompts', async () => {
     jest.mocked(fs.readFileSync).mockReturnValueOnce('prompt1\n---\nprompt2');
     jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+
+    const result = await processPrompts(['test.txt']);
+
+    expect(result).toEqual([
+      { raw: 'prompt1', label: 'test.txt: prompt1' },
+      { raw: 'prompt2', label: 'test.txt: prompt2' },
+    ]);
+    expect(Array.isArray(result)).toBe(true);
+    expect(result).toHaveLength(2);
+  });
+
+  it('should flatten array results from readPrompts', async () => {
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob.toString()]);
 
     const result = await processPrompts(['test.txt']);
 

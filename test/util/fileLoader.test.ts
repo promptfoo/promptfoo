@@ -179,7 +179,7 @@ describe('fileLoader', () => {
     });
 
     it('should load from Google Sheets', async () => {
-      const sheetData = [{ var1: 'value1' }, { var2: 'value2' }];
+      const sheetData = [{ var1: 'value1' }, { var2: 'value2' }] as any;
       jest.mocked(fetchCsvFromGoogleSheet).mockResolvedValue(sheetData);
 
       const result = await loadFile('https://docs.google.com/spreadsheets/d/example');
@@ -191,7 +191,7 @@ describe('fileLoader', () => {
     });
 
     it('should load from HuggingFace dataset', async () => {
-      const hfData = [{ var1: 'value1' }, { var2: 'value2' }];
+      const hfData = [{ var1: 'value1' }, { var2: 'value2' }] as any;
       jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(hfData);
 
       const result = await loadFile('huggingface://datasets/example/dataset');
