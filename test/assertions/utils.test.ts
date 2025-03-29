@@ -33,7 +33,7 @@ describe('processFileReference', () => {
     
     const result = await processFileReference('file://test.json');
     expect(result).toEqual({ key: 'value' });
-    expect(loadFile).toHaveBeenCalledWith('test.json', { basePath: undefined });
+    expect(loadFile).toHaveBeenCalledWith('test.json', { basePath: '' });
   });
 
   it('should process JSON files correctly', async () => {
@@ -79,11 +79,13 @@ describe('processFileReference', () => {
     expect(loadFile).toHaveBeenCalledWith('test.json', { basePath: '/base/path' });
   });
 
-  it('should throw an error for unsupported file types', () => {
-    jest.mocked(path.resolve).mockReturnValue('/base/path/test.unsupported');
+  it('should handle file types by passing them to loadFile', async () => {
     jest.mocked(path.extname).mockReturnValue('.unsupported');
-
-    expect(() => processFileReference('file://test.unsupported')).toThrow('Unsupported file type');
+    (loadFile as jest.Mock).mockResolvedValue('content from unsupported file type');
+    
+    const result = await processFileReference('file://test.unsupported');
+    expect(result).toEqual('content from unsupported file type');
+    expect(loadFile).toHaveBeenCalledWith('test.unsupported', { basePath: '/base/path' });
   });
 });
 
