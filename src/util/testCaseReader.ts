@@ -172,12 +172,33 @@ export async function readStandaloneTestsFile(
       feature: 'json tests file',
     });
     rows = yaml.load(fs.readFileSync(resolvedVarsPath, 'utf-8')) as unknown as any;
+  }
+  // Handle .jsonl files
+  else if (fileExtension === 'jsonl') {
+    telemetry.recordAndSendOnce('feature_used', {
+      feature: 'jsonl tests file',
+    });
+
+    const fileContent = fs.readFileSync(resolvedVarsPath, 'utf-8');
+
+    return fileContent
+      .split('\n')
+      .filter((line) => line.trim())
+      .map((line, idx) => {
+        const row = JSON.parse(line);
+        return {
+          ...row,
+          options: row.options ?? {},
+          description: `Row #${idx + 1}`,
+        };
+      });
   } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
     telemetry.recordAndSendOnce('feature_used', {
       feature: 'yaml tests file',
     });
     rows = yaml.load(fs.readFileSync(resolvedVarsPath, 'utf-8')) as unknown as any;
   }
+
   return rows.map((row, idx) => {
     const test = testCaseFromCsvRow(row);
     test.description ||= `Row #${idx + 1}`;
