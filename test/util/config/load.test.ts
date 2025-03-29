@@ -5,7 +5,7 @@ import yaml from 'js-yaml';
 import * as path from 'path';
 import cliState from '../../../src/cliState';
 import { isCI } from '../../../src/envars';
-import { getEnvBool, getEnvString } from '../../../src/envars';
+import { getEnvBool, getEnvString, getEnvInt } from '../../../src/envars';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import type { UnifiedConfig } from '../../../src/types';
@@ -63,6 +63,7 @@ jest.mock('../../../src/util/testCaseReader', () => ({
 jest.mock('../../../src/envars', () => ({
   getEnvBool: jest.fn(),
   getEnvString: jest.fn(),
+  getEnvInt: jest.fn(),
   isCI: jest.fn(),
 }));
 
@@ -88,6 +89,7 @@ describe('combineConfigs', () => {
     jest.clearAllMocks();
     jest.mocked(getEnvBool).mockImplementation((key) => false);
     jest.mocked(getEnvString).mockImplementation((key) => '');
+    jest.mocked(getEnvInt).mockImplementation((key, defaultValue) => defaultValue);
 
     // Set up mocks for fileLoader
     mockLoadFile.mockImplementation(async (filePath) => {
