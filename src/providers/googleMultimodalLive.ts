@@ -1,3 +1,6 @@
+import axios from 'axios';
+import { spawn } from 'child_process';
+import type { ChildProcess } from 'child_process';
 import WebSocket from 'ws';
 import { getEnvString } from '../envars';
 import logger from '../logger';
@@ -120,6 +123,10 @@ interface CompletionOptions {
    * these function tools.
    */
   functionToolCallbacks?: Record<string, (arg: string) => Promise<any>>;
+  functionToolStatefulApi?: {
+    url: string;
+    file?: string;
+  };
 
   systemInstruction?: Content;
 }
@@ -195,6 +202,12 @@ export class GoogleMMLiveProvider implements ApiProvider {
     }
     let contentIndex = 0;
 
+    let statefulApi: ChildProcess | undefined;
+    if (this.config.functionToolStatefulApi?.file) {
+      logger.debug('Api is spawning...');
+      statefulApi = spawn('python3', [this.config.functionToolStatefulApi.file]);
+    }
+
     return new Promise<ProviderResponse>((resolve) => {
       const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${this.getApiKey()}`;
       const ws = new WebSocket(url);
@@ -244,11 +257,11 @@ export class GoogleMMLiveProvider implements ApiProvider {
 
                 // Handle function tool callbacks
                 const functionName = functionCall.name;
-                if (
-                  this.config.functionToolCallbacks &&
-                  this.config.functionToolCallbacks[functionName]
-                ) {
-                  try {
+                try {
+                  if (
+                    this.config.functionToolCallbacks &&
+                    this.config.functionToolCallbacks[functionName]
+                  ) {
                     callbackResponse = await this.config.functionToolCallbacks[functionName](
                       JSON.stringify(
                         typeof functionCall.args === 'string'
@@ -256,12 +269,24 @@ export class GoogleMMLiveProvider implements ApiProvider {
                           : functionCall.args,
                       ),
                     );
-                  } catch (error) {
-                    callbackResponse = {
-                      error: `Error executing function ${functionName}: ${error}`,
-                    };
-                    logger.error(`Error executing function ${functionName}: ${error}`);
+                  } else if (this.config.functionToolStatefulApi) {
+                    const url = new URL(functionName, this.config.functionToolStatefulApi.url).href;
+                    try {
+                      const axiosResponse = await axios.get(url, {
+                        params: functionCall.args || null,
+                      });
+                      callbackResponse = axiosResponse.data;
+                    } catch {
+                      const axiosResponse = await axios.post(url, functionCall.args || null);
+                      callbackResponse = axiosResponse.data;
+                    }
+                    logger.debug(`Stateful api response: ${JSON.stringify(callbackResponse)}`);
                   }
+                } catch (err) {
+                  callbackResponse = {
+                    error: `Error executing function ${functionName}: ${JSON.stringify(err)}`,
+                  };
+                  logger.error(`Error executing function ${functionName}: ${JSON.stringify(err)}`);
                 }
 
                 const toolMessage = {
@@ -284,10 +309,22 @@ export class GoogleMMLiveProvider implements ApiProvider {
               logger.debug(`WebSocket sent: ${JSON.stringify(contentMessage)}`);
               ws.send(JSON.stringify(contentMessage));
             } else {
+              let statefulApiState;
+              if (this.config.functionToolStatefulApi) {
+                try {
+                  const url = new URL('get_state', this.config.functionToolStatefulApi.url).href;
+                  const apiResponse = await axios.get(url);
+                  statefulApiState = apiResponse.data;
+                  logger.debug(`Stateful api state: ${JSON.stringify(statefulApiState)}`);
+                } catch (err) {
+                  logger.error(`Error retrieving final state of api: ${JSON.stringify(err)}`);
+                }
+              }
               resolve({
                 output: JSON.stringify({
                   text: response_text_total,
                   toolCall: { functionCalls: function_calls_total },
+                  statefulApiState,
                 }),
               });
               ws.close();
@@ -302,12 +339,16 @@ export class GoogleMMLiveProvider implements ApiProvider {
 
       ws.onerror = (err) => {
         clearTimeout(timeout);
-        logger.debug(`WebSocket Error: ${err}`);
+        logger.debug(`WebSocket Error: ${JSON.stringify(err)}`);
         ws.close();
         resolve({ error: `WebSocket error: ${JSON.stringify(err)}` });
       };
 
       ws.onclose = (event) => {
+        if (statefulApi && !statefulApi.killed) {
+          statefulApi.kill('SIGTERM');
+          logger.debug('Python process shutdown.');
+        }
         clearTimeout(timeout);
       };
 

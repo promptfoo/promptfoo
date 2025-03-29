@@ -1,7 +1,22 @@
+import axios from 'axios';
 import WebSocket from 'ws';
 import { GoogleMMLiveProvider } from '../../src/providers/googleMultimodalLive';
 
 jest.mock('ws');
+jest.mock('axios');
+jest.mock('child_process', () => ({
+  spawn: jest.fn(() => ({
+    stdout: { on: jest.fn() },
+    stderr: { on: jest.fn() },
+    on: jest.fn((event, callback) => {
+      if (event === 'close') {
+        setTimeout(callback, 100);
+      }
+    }),
+    kill: jest.fn(),
+    killed: false,
+  })),
+}));
 
 const simulateMessage = (mockWs: jest.Mocked<WebSocket>, simulated_data: any) => {
   setTimeout(() => {
@@ -33,6 +48,7 @@ const simulateCompletionMessage = (mockWs: jest.Mocked<WebSocket>) => {
 
 describe('GoogleMMLiveProvider', () => {
   let mockWs: jest.Mocked<WebSocket>;
+  const mockedAxios = axios as jest.Mocked<typeof axios>;
   let provider: GoogleMMLiveProvider;
 
   beforeEach(() => {
@@ -56,6 +72,10 @@ describe('GoogleMMLiveProvider', () => {
         apiKey: 'test-api-key',
       },
     });
+
+    // Reset mocks before each test
+    mockedAxios.get.mockClear();
+    mockedAxios.post.mockClear();
   });
 
   afterEach(() => {
@@ -472,5 +492,105 @@ describe('GoogleMMLiveProvider', () => {
         },
       }),
     });
+  });
+
+  it('should handle function tool calls to a spawned stateful api', async () => {
+    jest.mocked(WebSocket).mockImplementation(() => {
+      setTimeout(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulatePartsMessage(mockWs, [
+          {
+            executableCode: {
+              language: 'PYTHON',
+              code: 'while True:\n  count_response = default_api.get_count()\n  if count_response and count_response.counter is not None and count_response.counter \u003e= 5:\n    print(f"Counter reached {count_response.counter}, stopping.")\n    break\n  default_api.add_one()\n  print("Counter incremented.")\n',
+            },
+          },
+        ]);
+        simulateFunctionCallMessage(mockWs, [
+          { name: 'get_count', args: {}, id: 'function-call-809368982256348430' },
+        ]);
+        simulateFunctionCallMessage(mockWs, [
+          { name: 'add_one', args: {}, id: 'function-call-7991972082416923583' },
+        ]);
+        simulateFunctionCallMessage(mockWs, [
+          { name: 'get_count', args: {}, id: 'function-call-2287351185126351207' },
+        ]);
+        simulateFunctionCallMessage(mockWs, [
+          { name: 'add_one', args: {}, id: 'function-call-4023509897900237366' },
+        ]);
+        simulateFunctionCallMessage(mockWs, [
+          { name: 'get_count', args: {}, id: 'function-call-2287351185126351304' },
+        ]);
+        simulatePartsMessage(mockWs, [
+          {
+            codeExecutionResult: {
+              outcome: 'OUTCOME_OK',
+              output: 'Counter incremented.\nCounter incremented.\nCounter reached 5, stopping.\n',
+            },
+          },
+        ]);
+        simulateTextMessage(mockWs, 'The counter has been incremented until it reached 5.\n');
+        simulateCompletionMessage(mockWs);
+      }, 60);
+      return mockWs;
+    });
+
+    provider = new GoogleMMLiveProvider('gemini-2.0-flash-exp', {
+      config: {
+        generationConfig: {
+          response_modalities: ['text'],
+        },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+        functionToolStatefulApi: {
+          file: 'examples/google-multimodal-live/counter_api.py',
+          url: 'http://127.0.0.1:5000',
+        },
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: 'add_one',
+                description: 'add one to counter',
+              },
+              {
+                name: 'get_count',
+                description: 'return the current value of the counter',
+                response: {
+                  type: 'OBJECT',
+                  properties: {
+                    counter: {
+                      type: 'INTEGER',
+                      description: 'value of counter',
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    mockedAxios.get.mockResolvedValue({ data: { counter: 5 } });
+
+    const response = await provider.callApi('Add to the counter until it reaches 5');
+    expect(response).toEqual({
+      output: JSON.stringify({
+        text: 'The counter has been incremented until it reached 5.\n',
+        toolCall: {
+          functionCalls: [
+            { name: 'get_count', args: {}, id: 'function-call-809368982256348430' },
+            { name: 'add_one', args: {}, id: 'function-call-7991972082416923583' },
+            { name: 'get_count', args: {}, id: 'function-call-2287351185126351207' },
+            { name: 'add_one', args: {}, id: 'function-call-4023509897900237366' },
+            { name: 'get_count', args: {}, id: 'function-call-2287351185126351304' },
+          ],
+        },
+        statefulApiState: { counter: 5 },
+      }),
+    });
+    expect(mockedAxios.get).toHaveBeenCalledTimes(6);
   });
 });
