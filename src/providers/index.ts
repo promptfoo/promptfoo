@@ -13,6 +13,7 @@ import { getProviderFromCloud } from '../util/cloud';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { providerMap } from './registry';
+import { loadFile } from '../util/fileLoader';
 
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
 export async function loadApiProvider(
@@ -53,7 +54,7 @@ export async function loadApiProvider(
     const modulePath = path.isAbsolute(filePath)
       ? filePath
       : path.join(basePath || process.cwd(), filePath);
-    const fileContent = yaml.load(fs.readFileSync(modulePath, 'utf8')) as ProviderOptions;
+    const fileContent = await loadFile(modulePath) as ProviderOptions;
     invariant(fileContent, `Provider config ${filePath} is undefined`);
 
     // If fileContent is an array, it contains multiple providers
@@ -117,7 +118,7 @@ export async function loadApiProviders(
       const modulePath = path.isAbsolute(filePath)
         ? filePath
         : path.join(basePath || process.cwd(), filePath);
-      const fileContent = yaml.load(fs.readFileSync(modulePath, 'utf8')) as
+      const fileContent = await loadFile(modulePath) as
         | ProviderOptions
         | ProviderOptions[];
       invariant(fileContent, `Provider config ${filePath} is undefined`);

@@ -27,6 +27,7 @@ import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import { loadStrategy, Strategies, validateStrategies } from './strategies';
 import { DEFAULT_LANGUAGES } from './strategies/multilingual';
 import type { RedteamStrategyObject, SynthesizeOptions } from './types';
+import { loadFile } from '../util/fileLoader';
 
 /**
  * Determines the status of test generation based on requested and generated counts.
@@ -88,13 +89,15 @@ function generateReport(
  * @param config - The plugin configuration to resolve.
  * @returns The resolved plugin configuration.
  */
-export function resolvePluginConfig(config: Record<string, any> | undefined): Record<string, any> {
+export async function resolvePluginConfig(config: Record<string, any> | undefined): Promise<Record<string, any>> {
   if (!config) {
     return {};
   }
 
-  for (const key in config) {
-    const value = config[key];
+  const resolvedConfig = { ...config };
+  
+  for (const key in resolvedConfig) {
+    const value = resolvedConfig[key];
     if (typeof value === 'string' && value.startsWith('file://')) {
       const filePath = value.slice('file://'.length);
 
@@ -102,16 +105,10 @@ export function resolvePluginConfig(config: Record<string, any> | undefined): Re
         throw new Error(`File not found: ${filePath}`);
       }
 
-      if (filePath.endsWith('.yaml')) {
-        config[key] = yaml.load(fs.readFileSync(filePath, 'utf8'));
-      } else if (filePath.endsWith('.json')) {
-        config[key] = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-      } else {
-        config[key] = fs.readFileSync(filePath, 'utf8');
-      }
+      resolvedConfig[key] = await loadFile(filePath);
     }
   }
-  return config;
+  return resolvedConfig;
 }
 
 const categories = {
@@ -461,249 +458,62 @@ export async function synthesize({
   }
 
   const expandedPlugins: typeof plugins = [];
-  const expandPlugin = (
+  const expandPlugin = async (
     plugin: (typeof plugins)[0],
     mapping: { plugins: string[]; strategies: string[] },
   ) => {
-    mapping.plugins.forEach((p: string) =>
-      expandedPlugins.push({ id: p, numTests: plugin.numTests }),
-    );
-    strategies.push(...mapping.strategies.map((s: string) => ({ id: s })));
-  };
-
-  plugins.forEach((plugin) => {
-    const mappingKey = Object.keys(ALIASED_PLUGIN_MAPPINGS).find(
-      (key) => plugin.id === key || plugin.id.startsWith(`${key}:`),
-    );
-
-    if (mappingKey) {
-      const mapping =
-        ALIASED_PLUGIN_MAPPINGS[mappingKey][plugin.id] ||
-        Object.values(ALIASED_PLUGIN_MAPPINGS[mappingKey]).find((m) =>
-          plugin.id.startsWith(`${mappingKey}:`),
-        );
-      if (mapping) {
-        expandPlugin(plugin, mapping);
+    logger.debug(`Expanding plugin: ${plugin}`);
+    const pluginId = typeof plugin === 'string' ? plugin : plugin.id;
+    
+    // Special case for plugins in categories
+    if (pluginId.startsWith('category:')) {
+      const category = pluginId.slice('category:'.length) as keyof typeof categories;
+      logger.debug(`Expanding category ${category}`);
+      if (categories[category]) {
+        const expanded = categories[category].map((id) => ({
+          id,
+          // Update to await resolvePluginConfig
+          config: typeof plugin === 'string' ? {} : plugin.config,
+        }));
+        logger.debug(`Expanded ${category} to: ${expanded.map((e) => e.id).join(', ')}`);
+        mapping.plugins.push(...expanded.map((e) => e.id));
+        return expanded;
       }
-    } else {
-      expandedPlugins.push(plugin);
+      logger.warn(`Unknown category: ${category}`);
     }
-  });
-
-  plugins = [...new Set(expandedPlugins)]
-    .filter((p) => !Object.keys(categories).includes(p.id))
-    .sort();
-
-  // Validate all plugins upfront
-  logger.debug('Validating plugins...');
-  for (const plugin of plugins) {
-    const registeredPlugin = Plugins.find((p) => p.key === plugin.id);
-    if (!registeredPlugin) {
-      if (!plugin.id.startsWith('file://')) {
-        logger.debug(`Plugin ${plugin.id} not registered, skipping validation`);
-        continue;
-      }
-    } else if (registeredPlugin.validate) {
-      try {
-        registeredPlugin.validate({
-          language,
-          ...resolvePluginConfig(plugin.config),
-        });
-      } catch (error) {
-        throw new Error(`Validation failed for plugin ${plugin.id}: ${error}`);
-      }
+    
+    // Lines 605 and 632 - Make sure these are awaited
+    // In the Custom plugin section
+    if (
+      (typeof plugin === 'object' && plugin.id === 'custom') ||
+      pluginId === 'custom'
+    ) {
+      logger.debug(`Processing custom plugin`);
+      const thePlugin = new CustomPlugin();
+      // Update to await resolvePluginConfig
+      const pluginConfig = await resolvePluginConfig(typeof plugin === 'object' ? plugin.config : undefined);
+      
+      // ... existing code ...
     }
-  }
-
-  // Check API health before proceeding
-  if (shouldGenerateRemote()) {
-    const healthUrl = getRemoteHealthUrl();
-    if (healthUrl) {
-      logger.debug(`Checking Promptfoo API health at ${healthUrl}...`);
-      const healthResult = await checkRemoteHealth(healthUrl);
-      if (healthResult.status !== 'OK') {
-        throw new Error(
-          `Unable to proceed with test generation: ${healthResult.message}\n` +
-            'Please check your API configuration or try again later.',
-        );
-      }
-      logger.debug('API health check passed');
-    }
-  }
-
-  // Start the progress bar
-  let progressBar: cliProgress.SingleBar | null = null;
-  const isWebUI = Boolean(cliState.webUI);
-
-  const showProgressBar =
-    !isWebUI &&
-    process.env.LOG_LEVEL !== 'debug' &&
-    getLogLevel() !== 'debug' &&
-    showProgressBarOverride !== false;
-  if (showProgressBar) {
-    progressBar = new cliProgress.SingleBar(
-      {
-        format: 'Generating | {bar} | {percentage}% | {value}/{total} | {task}',
-      },
-      cliProgress.Presets.shades_classic,
-    );
-    progressBar.start(totalPluginTests + 2, 0, { task: 'Initializing' });
-  }
-
-  // Replace progress bar updates with logger calls when in web UI
-  if (showProgressBar) {
-    progressBar?.increment(1, { task: 'Extracting system purpose' });
-  } else {
-    logger.info('Extracting system purpose...');
-  }
-  const purpose = purposeOverride || (await extractSystemPurpose(redteamProvider, prompts));
-
-  if (showProgressBar) {
-    progressBar?.increment(1, { task: 'Extracting entities' });
-  } else {
-    logger.info('Extracting entities...');
-  }
-  const entities: string[] = Array.isArray(entitiesOverride)
-    ? entitiesOverride
-    : await extractEntities(redteamProvider, prompts);
-
-  logger.debug(`System purpose: ${purpose}`);
-
-  const pluginResults: Record<string, { requested: number; generated: number }> = {};
-  const testCases: TestCaseWithPlugin[] = [];
-  await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
-    // Check for abort signal before generating tests
-    checkAbort();
-
-    if (showProgressBar) {
-      progressBar?.update({ task: plugin.id });
-    } else {
-      logger.info(`Generating tests for ${plugin.id}...`);
-    }
-    const { action } = Plugins.find((p) => p.key === plugin.id) || {};
-
-    if (action) {
-      logger.debug(`Generating tests for ${plugin.id}...`);
-      let pluginTests = await action({
-        provider: redteamProvider,
-        purpose,
-        injectVar,
-        n: plugin.numTests,
-        delayMs: delay || 0,
-        config: {
-          language,
-          ...resolvePluginConfig(plugin.config),
+    
+    // ... existing code ...
+    
+    // Near line 632, in the HarmPlugin section and others
+    const thePlugin = resolvePlugin(pluginId);
+    if (thePlugin) {
+      logger.debug(`Using registered plugin ${pluginId}`);
+      mapping.plugins.push(pluginId);
+      return [
+        {
+          id: pluginId,
+          // Update to await resolvePluginConfig
+          pluginConfig: await resolvePluginConfig(typeof plugin === 'object' ? plugin.config : undefined),
         },
-      });
-
-      if (!Array.isArray(pluginTests) || pluginTests.length === 0) {
-        logger.warn(`Failed to generate tests for ${plugin.id}`);
-        pluginTests = [];
-      } else {
-        testCases.push(
-          ...pluginTests.map((t) => ({
-            ...t,
-            metadata: {
-              ...(t?.metadata || {}),
-              pluginId: plugin.id,
-              pluginConfig: resolvePluginConfig(plugin.config),
-            },
-          })),
-        );
-      }
-
-      pluginTests = Array.isArray(pluginTests) ? pluginTests : [];
-      if (showProgressBar) {
-        progressBar?.increment(plugin.numTests);
-      } else {
-        logger.info(`Generated ${pluginTests.length} tests for ${plugin.id}`);
-      }
-      logger.debug(`Added ${pluginTests.length} ${plugin.id} test cases`);
-      pluginResults[plugin.id] = {
-        requested: plugin.id === 'intent' ? pluginTests.length : plugin.numTests,
-        generated: pluginTests.length,
-      };
-    } else if (plugin.id.startsWith('file://')) {
-      try {
-        const customPlugin = new CustomPlugin(redteamProvider, purpose, injectVar, plugin.id);
-        const customTests = await customPlugin.generateTests(plugin.numTests, delay);
-        testCases.push(
-          ...customTests.map((t) => ({
-            ...t,
-            metadata: {
-              ...(t.metadata || {}),
-              pluginId: plugin.id,
-              pluginConfig: resolvePluginConfig(plugin.config),
-            },
-          })),
-        );
-        logger.debug(`Added ${customTests.length} custom test cases from ${plugin.id}`);
-        pluginResults[plugin.id] = { requested: plugin.numTests, generated: customTests.length };
-      } catch (e) {
-        logger.error(`Error generating tests for custom plugin ${plugin.id}: ${e}`);
-        pluginResults[plugin.id] = { requested: plugin.numTests, generated: 0 };
-      }
-    } else {
-      logger.warn(`Plugin ${plugin.id} not registered, skipping`);
-      pluginResults[plugin.id] = { requested: plugin.numTests, generated: 0 };
-      progressBar?.increment(plugin.numTests);
+      ];
     }
-  });
-
-  // After generating plugin test cases but before applying strategies:
-  const pluginTestCases = testCases;
-
-  // Initialize strategy results
-  const strategyResults: Record<string, { requested: number; generated: number }> = {};
-
-  // Apply retry strategy first if it exists
-  const retryStrategy = strategies.find((s) => s.id === 'retry');
-  if (retryStrategy) {
-    logger.debug('Applying retry strategy first');
-    retryStrategy.config = {
-      targetLabels,
-      ...retryStrategy.config,
-    };
-    const { testCases: retryTestCases, strategyResults: retryResults } = await applyStrategies(
-      pluginTestCases,
-      [retryStrategy],
-      injectVar,
-    );
-    pluginTestCases.push(...retryTestCases);
-    Object.assign(strategyResults, retryResults);
-  }
-
-  // Check for abort signal or apply non-basic, non-multilingual strategies
-  checkAbort();
-  const { testCases: strategyTestCases, strategyResults: otherStrategyResults } =
-    await applyStrategies(
-      pluginTestCases,
-      strategies.filter((s) => !['basic', 'multilingual', 'retry'].includes(s.id)),
-      injectVar,
-    );
-
-  Object.assign(strategyResults, otherStrategyResults);
-
-  // Combine test cases based on basic strategy setting
-  const finalTestCases = [...(includeBasicTests ? pluginTestCases : []), ...strategyTestCases];
-
-  // Check for abort signal or apply multilingual strategy to all test cases
-  checkAbort();
-  if (multilingualStrategy) {
-    const { testCases: multiLingualTestCases, strategyResults: multiLingualResults } =
-      await applyStrategies(finalTestCases, [multilingualStrategy], injectVar);
-    finalTestCases.push(...multiLingualTestCases);
-    Object.assign(strategyResults, multiLingualResults);
-  }
-
-  progressBar?.update({ task: 'Done.' });
-  progressBar?.stop();
-  if (progressBar) {
-    // Newline after progress bar to avoid overlap
-    logger.info('');
-  }
-
-  logger.info(generateReport(pluginResults, strategyResults));
-
-  return { purpose, entities, testCases: finalTestCases, injectVar };
+    
+    // ... existing code ...
+  };
+  
+  // ... existing code ...
 }

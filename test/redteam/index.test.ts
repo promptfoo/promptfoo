@@ -13,6 +13,7 @@ import { Strategies } from '../../src/redteam/strategies';
 import { validateStrategies } from '../../src/redteam/strategies';
 import { DEFAULT_LANGUAGES } from '../../src/redteam/strategies/multilingual';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
+import { loadFile } from '../../src/util/fileLoader';
 
 jest.mock('cli-progress');
 jest.mock('../../src/providers');
@@ -42,6 +43,11 @@ jest.mock('../../src/redteam/strategies', () => ({
 
 jest.mock('../../src/util/apiHealth');
 jest.mock('../../src/redteam/remoteGeneration');
+
+// Add mock for loadFile
+jest.mock('../../src/util/fileLoader', () => ({
+  loadFile: jest.fn(),
+}));
 
 describe('synthesize', () => {
   const mockProvider = {
@@ -399,94 +405,85 @@ jest.mock('fs');
 jest.mock('js-yaml');
 
 describe('resolvePluginConfig', () => {
-  afterEach(() => {
-    jest.resetAllMocks();
+  beforeEach(() => {
+    jest.clearAllMocks();
   });
 
-  it('should return an empty object if config is undefined', () => {
-    const result = resolvePluginConfig(undefined);
+  it('should return empty object for undefined config', async () => {
+    const result = await resolvePluginConfig(undefined);
     expect(result).toEqual({});
   });
 
-  it('should return the original config if no file references are present', () => {
-    const config = { key: 'value' };
-    const result = resolvePluginConfig(config);
+  it('should return same config for non-file values', async () => {
+    const config = { foo: 'bar', baz: 123 };
+    const result = await resolvePluginConfig(config);
     expect(result).toEqual(config);
   });
 
-  it('should resolve YAML file references', () => {
-    const config = { key: 'file://test.yaml' };
-    const yamlContent = { nested: 'value' };
+  it('should resolve file:// references', async () => {
+    const config = { file: 'file://test/fixtures/redteam/testfile.txt' };
     jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-    jest.spyOn(fs, 'readFileSync').mockReturnValue('yaml content');
-    jest.mocked(yaml.load).mockReturnValue(yamlContent);
-
-    const result = resolvePluginConfig(config);
-
-    expect(result).toEqual({ key: yamlContent });
-    expect(fs.existsSync).toHaveBeenCalledWith('test.yaml');
-    expect(fs.readFileSync).toHaveBeenCalledWith('test.yaml', 'utf8');
-    expect(yaml.load).toHaveBeenCalledWith('yaml content');
+    (loadFile as jest.Mock).mockResolvedValue('test content');
+    
+    const result = await resolvePluginConfig(config);
+    
+    expect(result).toEqual({ file: 'test content' });
+    expect(fs.existsSync).toHaveBeenCalledWith('test/fixtures/redteam/testfile.txt');
+    expect(loadFile).toHaveBeenCalledWith('test/fixtures/redteam/testfile.txt');
   });
 
-  it('should resolve JSON file references', () => {
-    const config = { key: 'file://test.json' };
-    const jsonContent = { nested: 'value' };
+  it('should resolve YAML files', async () => {
+    const config = { file: 'file://test/fixtures/redteam/testfile.yaml' };
     jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-    jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(jsonContent));
-
-    const result = resolvePluginConfig(config);
-
-    expect(result).toEqual({ key: jsonContent });
-    expect(fs.existsSync).toHaveBeenCalledWith('test.json');
-    expect(fs.readFileSync).toHaveBeenCalledWith('test.json', 'utf8');
+    (loadFile as jest.Mock).mockResolvedValue({ key: 'value' });
+    
+    const result = await resolvePluginConfig(config);
+    
+    expect(result).toEqual({ file: { key: 'value' } });
+    expect(loadFile).toHaveBeenCalledWith('test/fixtures/redteam/testfile.yaml');
   });
 
-  it('should resolve text file references', () => {
-    const config = { key: 'file://test.txt' };
-    const fileContent = 'text content';
+  it('should resolve JSON files', async () => {
+    const config = { file: 'file://test/fixtures/redteam/testfile.json' };
     jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-    jest.spyOn(fs, 'readFileSync').mockReturnValue(fileContent);
-
-    const result = resolvePluginConfig(config);
-
-    expect(result).toEqual({ key: fileContent });
-    expect(fs.existsSync).toHaveBeenCalledWith('test.txt');
-    expect(fs.readFileSync).toHaveBeenCalledWith('test.txt', 'utf8');
+    (loadFile as jest.Mock).mockResolvedValue({ key: 'value' });
+    
+    const result = await resolvePluginConfig(config);
+    
+    expect(result).toEqual({ file: { key: 'value' } });
+    expect(loadFile).toHaveBeenCalledWith('test/fixtures/redteam/testfile.json');
   });
 
-  it('should throw an error if the file does not exist', () => {
-    const config = { key: 'file://nonexistent.yaml' };
+  it('should throw if file not found', async () => {
+    const config = { file: 'file://nonexistent.yaml' };
     jest.spyOn(fs, 'existsSync').mockReturnValue(false);
-
-    expect(() => resolvePluginConfig(config)).toThrow('File not found: nonexistent.yaml');
+    
+    await expect(resolvePluginConfig(config)).rejects.toThrow('File not found: nonexistent.yaml');
+    expect(loadFile).not.toHaveBeenCalled();
   });
 
-  it('should handle multiple file references', () => {
+  it('should handle multiple file references', async () => {
     const config = {
-      yaml: 'file://test.yaml',
-      json: 'file://test.json',
-      txt: 'file://test.txt',
+      file1: 'file://test/fixtures/redteam/testfile1.yaml',
+      file2: 'file://test/fixtures/redteam/testfile2.json',
+      normal: 'value',
     };
-    const yamlContent = { nested: 'yaml' };
-    const jsonContent = { nested: 'json' };
-    const txtContent = 'text content';
-
+    
     jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-    jest
-      .spyOn(fs, 'readFileSync')
-      .mockReturnValueOnce('yaml content')
-      .mockReturnValueOnce(JSON.stringify(jsonContent))
-      .mockReturnValueOnce(txtContent);
-    jest.mocked(yaml.load).mockReturnValue(yamlContent);
-
-    const result = resolvePluginConfig(config);
-
+    (loadFile as jest.Mock)
+      .mockResolvedValueOnce({ key: 'yaml-value' })
+      .mockResolvedValueOnce({ key: 'json-value' });
+    
+    const result = await resolvePluginConfig(config);
+    
     expect(result).toEqual({
-      yaml: yamlContent,
-      json: jsonContent,
-      txt: txtContent,
+      file1: { key: 'yaml-value' },
+      file2: { key: 'json-value' },
+      normal: 'value',
     });
+    expect(loadFile).toHaveBeenCalledTimes(2);
+    expect(loadFile).toHaveBeenCalledWith('test/fixtures/redteam/testfile1.yaml');
+    expect(loadFile).toHaveBeenCalledWith('test/fixtures/redteam/testfile2.json');
   });
 });
 
