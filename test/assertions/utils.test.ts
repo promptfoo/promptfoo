@@ -8,6 +8,7 @@ import {
 } from '../../src/assertions/utils';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
+import { loadFile } from '../../src/util/fileLoader';
 import type { TestCase, Assertion, ApiProvider } from '../../src/types';
 
 jest.mock('fs');
@@ -16,6 +17,9 @@ jest.mock('../../src/cliState');
 jest.mock('../../src/esm', () => ({
   importModule: jest.fn(),
 }));
+jest.mock('../../src/util/fileLoader', () => ({
+  loadFile: jest.fn(),
+}));
 
 describe('processFileReference', () => {
   beforeEach(() => {
@@ -23,60 +27,56 @@ describe('processFileReference', () => {
     cliState.basePath = '/base/path';
   });
 
-  it('should handle undefined basePath', () => {
+  it('should handle undefined basePath', async () => {
     cliState.basePath = undefined;
-    const jsonContent = JSON.stringify({ key: 'value' });
-    jest.mocked(fs.readFileSync).mockReturnValue(jsonContent);
-    jest.mocked(path.resolve).mockReturnValue('/test.json');
-    jest.mocked(path.extname).mockReturnValue('.json');
-
-    const result = processFileReference('file://test.json');
+    (loadFile as jest.Mock).mockResolvedValue({ key: 'value' });
+    
+    const result = await processFileReference('file://test.json');
     expect(result).toEqual({ key: 'value' });
-    expect(fs.readFileSync).toHaveBeenCalledWith('/test.json', 'utf8');
+    expect(loadFile).toHaveBeenCalledWith('test.json', { basePath: undefined });
   });
 
-  it('should process JSON files correctly', () => {
-    const jsonContent = JSON.stringify({ key: 'value' });
-    jest.mocked(fs.readFileSync).mockReturnValue(jsonContent);
-    jest.mocked(path.resolve).mockReturnValue('/base/path/test.json');
-    jest.mocked(path.extname).mockReturnValue('.json');
-
-    const result = processFileReference('file://test.json');
+  it('should process JSON files correctly', async () => {
+    (loadFile as jest.Mock).mockResolvedValue({ key: 'value' });
+    
+    const result = await processFileReference('file://test.json');
     expect(result).toEqual({ key: 'value' });
-    expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/test.json', 'utf8');
+    expect(loadFile).toHaveBeenCalledWith('test.json', { basePath: '/base/path' });
   });
 
-  it('should process YAML files correctly', () => {
-    const yamlContent = 'key: value';
-    jest.mocked(fs.readFileSync).mockReturnValue(yamlContent);
-    jest.mocked(path.resolve).mockReturnValue('/base/path/test.yaml');
+  it('should process YAML files correctly', async () => {
+    (loadFile as jest.Mock).mockResolvedValue({ key: 'value' });
     jest.mocked(path.extname).mockReturnValue('.yaml');
-
-    const result = processFileReference('file://test.yaml');
+    
+    const result = await processFileReference('file://test.yaml');
     expect(result).toEqual({ key: 'value' });
-    expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/test.yaml', 'utf8');
+    expect(loadFile).toHaveBeenCalledWith('test.yaml', { basePath: '/base/path' });
   });
 
-  it('should process YML files correctly', () => {
-    const yamlContent = 'key: value';
-    jest.mocked(fs.readFileSync).mockReturnValue(yamlContent);
-    jest.mocked(path.resolve).mockReturnValue('/base/path/test.yml');
+  it('should process YML files correctly', async () => {
+    (loadFile as jest.Mock).mockResolvedValue({ key: 'value' });
     jest.mocked(path.extname).mockReturnValue('.yml');
-
-    const result = processFileReference('file://test.yml');
+    
+    const result = await processFileReference('file://test.yml');
     expect(result).toEqual({ key: 'value' });
-    expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/test.yml', 'utf8');
+    expect(loadFile).toHaveBeenCalledWith('test.yml', { basePath: '/base/path' });
   });
 
-  it('should process TXT files correctly', () => {
-    const txtContent = 'plain text content\n';
-    jest.mocked(fs.readFileSync).mockReturnValue(txtContent);
-    jest.mocked(path.resolve).mockReturnValue('/base/path/test.txt');
+  it('should process TXT files correctly', async () => {
+    (loadFile as jest.Mock).mockResolvedValue('plain text content\n');
     jest.mocked(path.extname).mockReturnValue('.txt');
-
-    const result = processFileReference('file://test.txt');
+    
+    const result = await processFileReference('file://test.txt');
     expect(result).toBe('plain text content');
-    expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/test.txt', 'utf8');
+    expect(loadFile).toHaveBeenCalledWith('test.txt', { basePath: '/base/path' });
+  });
+
+  it('should handle objects returned from loadFile', async () => {
+    (loadFile as jest.Mock).mockResolvedValue({ nested: { object: true } });
+    
+    const result = await processFileReference('file://test.json');
+    expect(result).toEqual({ nested: { object: true } });
+    expect(loadFile).toHaveBeenCalledWith('test.json', { basePath: '/base/path' });
   });
 
   it('should throw an error for unsupported file types', () => {

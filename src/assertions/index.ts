@@ -182,7 +182,7 @@ export async function runAssertion({
           };
         }
       } else {
-        renderedValue = processFileReference(renderedValue);
+        renderedValue = await processFileReference(renderedValue);
       }
     } else if (isPackagePath(renderedValue)) {
       const basePath = cliState.basePath || '';
@@ -200,15 +200,15 @@ export async function runAssertion({
     }
   } else if (renderedValue && Array.isArray(renderedValue)) {
     // Process each element in the array
-    renderedValue = renderedValue.map((v) => {
+    renderedValue = await Promise.all(renderedValue.map(async (v) => {
       if (typeof v === 'string') {
         if (v.startsWith('file://')) {
-          return processFileReference(v);
+          return await processFileReference(v);
         }
         return nunjucks.renderString(v, test.vars || {});
       }
       return v;
-    });
+    }));
   }
 
   const assertionParams: AssertionParams = {

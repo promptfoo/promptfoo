@@ -17,6 +17,7 @@ import { isJavascriptFile, isImageFile, isVideoFile, isAudioFile } from './util/
 import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
+import { loadFile } from './util/fileLoader';
 
 export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   logger.debug(`Extracting text from PDF: ${pdfPath}`);
@@ -119,9 +120,8 @@ export async function renderPrompt(
         );
         vars[varName] = pythonScriptOutput.output.trim();
       } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
-        vars[varName] = JSON.stringify(
-          yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object,
-        );
+        const yamlContent = await loadFile(filePath);
+        vars[varName] = JSON.stringify(yamlContent);
       } else if (fileExtension === 'pdf' && !getEnvBool('PROMPTFOO_DISABLE_PDF_AS_TEXT')) {
         telemetry.recordOnce('feature_used', {
           feature: 'extract_text_from_pdf',

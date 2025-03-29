@@ -37,6 +37,7 @@ import { sha256 } from './createHash';
 import { convertTestResultsToTableRow, getHeaderForTable } from './exportToFile';
 import { isJavascriptFile } from './file';
 import { getNunjucksEngine } from './templates';
+import { loadFile } from './fileLoader';
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
   const passFailText = output.pass
@@ -194,7 +195,7 @@ export async function readOutput(outputPath: string): Promise<OutputFile> {
 
   switch (ext) {
     case 'json':
-      return JSON.parse(fs.readFileSync(outputPath, 'utf-8')) as OutputFile;
+      return await loadFile(outputPath) as OutputFile;
     default:
       throw new Error(`Unsupported output file format: ${ext} currently only supports json`);
   }

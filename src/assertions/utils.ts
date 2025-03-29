@@ -5,6 +5,7 @@ import Clone from 'rfdc';
 import cliState from '../cliState';
 import { importModule } from '../esm';
 import { type Assertion, type TestCase } from '../types';
+import { loadFile } from '../util/fileLoader';
 
 const clone = Clone();
 
@@ -54,18 +55,23 @@ export async function loadFromJavaScriptFile(
   }
 }
 
-export function processFileReference(fileRef: string): object | string {
+export async function processFileReference(fileRef: string): Promise<object | string> {
   const basePath = cliState.basePath || '';
-  const filePath = path.resolve(basePath, fileRef.slice('file://'.length));
-  const fileContent = fs.readFileSync(filePath, 'utf8');
-  const extension = path.extname(filePath);
-  if (['.json', '.yaml', '.yml'].includes(extension)) {
-    return yaml.load(fileContent) as object;
-  } else if (extension === '.txt') {
-    return fileContent.trim();
-  } else {
-    throw new Error(`Unsupported file type: ${filePath}`);
+  const filePath = fileRef.slice('file://'.length);
+  const fileContent = await loadFile(filePath, { basePath });
+  
+  // If fileContent is already an object, return it
+  if (typeof fileContent !== 'string') {
+    return fileContent;
   }
+  
+  // For string content, check if it's a txt file which should be returned as-is
+  const extension = path.extname(filePath);
+  if (extension === '.txt') {
+    return fileContent.trim();
+  }
+  
+  return fileContent;
 }
 
 export function coerceString(value: string | object): string {
