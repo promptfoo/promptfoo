@@ -1,6 +1,20 @@
 ---
+title: How to Red Team Foundation Models
 sidebar_label: How to red team foundation models
 sidebar_position: 10000
+description: Learn how to assess foundation model security risks through red teaming and static scanning using Promptfoo's security testing tools.
+keywords:
+  [
+    LLM security,
+    foundation model,
+    red team,
+    security assessment,
+    model scanning,
+    jailbreak,
+    prompt injection,
+    ModelAudit,
+    AI security,
+  ]
 ---
 
 # How to red team foundation models
@@ -11,7 +25,7 @@ Promptfoo provides a suite of tools to help you assess the security of foundatio
 
 ## Scanning live foundation models
 
-Promptfoo can conduct red team scans against live foundation models. These red teams require inference requests to be made to the model provider's API.
+Promptfoo can conduct red team scans against live foundation models. These red team scans require inference requests to be made to the model provider's API.
 
 ### Running scans in Promptfoo Cloud
 
@@ -41,11 +55,11 @@ Once your foundation model target is saved, you can proceed to create a scan by 
     <img src="/img/foundationmodel-testsetup.png" style={{ width: '90%', height: 'auto' }} />
 </div>
 
-Select on the "New Config" button to create a new scan. You will prompted to either create a new config or use an existing YAML file. Select on "New Config" and then choose the target that you created in the previous step.
+Click the "New Config" button to create a new scan. You will be prompted to either create a new config or use an existing YAML file. Click "New Config" and then choose the target that you created in the previous step.
 
 Choose the "Foundation Model" presets and then select the strategies that you want to run against the model.
 
-Once complete, select the "Review" section to finalize your configuration. When you save your configuration, Promptfoo will create a CLI command that you can use to run the scan locally.
+Once complete, click the "Review" section to finalize your configuration. When you save your configuration, Promptfoo will create a CLI command that you can use to run the scan locally.
 
 <div style={{ textAlign: 'center' }}>
     <img src="/img/redteamrun-cli.png" style={{ width: '90%', height: 'auto' }} />
@@ -59,25 +73,25 @@ When you run the scan, you will receive a report within the Promptfoo applicatio
     <img src="/img/redteam-reports.png" style={{ width: '90%', height: 'auto' }} />
 </div>
 
-Selecting on an individual report will show you a high-level overview of the scan results.
+Clicking on an individual report will show you a high-level overview of the scan results.
 
 <div style={{ textAlign: 'center' }}>
     <img src="/img/foundationmodel-highlevelreport.png" style={{ width: '90%', height: 'auto' }} />
 </div>
 
-You can evaluate the results by selecting the "Vulnerabilities" tab. This will show you the list of vulnerabilities that were detected during the scan, as well as remediation recommendations.
+You can evaluate the results by clicking the "Vulnerabilities" tab. This will show you the list of vulnerabilities that were detected during the scan, as well as remediation recommendations.
 
 <div style={{ textAlign: 'center' }}>
     <img src="/img/foundationmodel-vulnerabilities.png" style={{ width: '90%', height: 'auto' }} />
 </div>
 
-Alternatively, you can view each probe and response in the "Evals" view. Select on the "Evals" tab and you will see a list of all the evaluations you have run. Select the scan that you want to view the results for.
+Alternatively, you can view each probe and response in the "Evals" view. Click on the "Evals" tab and you will see a list of all the evaluations you have run. Select the scan that you want to view the results for.
 
 <div style={{ textAlign: 'center' }}>
     <img src="/img/evalresults-search.png" style={{ width: '90%', height: 'auto' }} />
 </div>
 
-Selecting on an individual eval will show you the all the prompts, responses, and the reason for why each probe was marked a pass or fail.
+Clicking on an individual eval will show you all the prompts, responses, and the reason why each probe was marked as a pass or fail.
 
 <div style={{ textAlign: 'center' }}>
     <img src="/img/foundationmodel-evalresult.png" style={{ width: '90%', height: 'auto' }} />
@@ -86,7 +100,10 @@ Selecting on an individual eval will show you the all the prompts, responses, an
 ### Running scans locally through open-source
 
 You can also run a foundation model scan locally. Initiate a Promptfoo redteam in the CLI by running the following command:
-`promptfoo redteam init`
+
+```bash
+promptfoo redteam init
+```
 
 The red team UI will be displayed in your browser. You can then select the Foundation Model option to begin configuring your scan.
 
@@ -112,7 +129,7 @@ You can also compare the results of multiple foundation models. To do this, crea
 
 Here is a sample Promptfoo configuration file to run a red team scan against multiple foundation models at once:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 description: DeepSeek R1 vs. GPT-4o-mini Red Team
 
 targets:
@@ -122,7 +139,6 @@ targets:
     label: gpt-4o-mini
 
 redteam:
-
   purpose: |-
     The objective of the application is: A foundation model that is intended
     to be as helpful and informative as possible for users who are interacting with it.
@@ -132,14 +148,14 @@ redteam:
     harmful answers from the model with varying forms of cadence and style.
 
 plugins:
-    - foundation # Collection of plugins that assess risks in foundation models
+  - foundation # Collection of plugins that assess risks in foundation models
 
-  strategies:
-    - best-of-n # Jailbreak technique published by Anthropic and Stanford
-    - jailbreak # Single-shot optimization of safety bypass techniques
-    - jailbreak:composite # Combines multiple jailbreak techniques for enhanced effectiveness
-    - jailbreak:likert # Jailbreak technique published by Anthropic and Stanford
-    - prompt-injection # Tests for direct prompt injection vulnerabilities
+strategies:
+  - best-of-n # Jailbreak technique published by Anthropic and Stanford
+  - jailbreak # Single-shot optimization of safety bypass techniques
+  - jailbreak:composite # Combines multiple jailbreak techniques for enhanced effectiveness
+  - jailbreak:likert # Jailbreak technique published by Anthropic and Stanford
+  - prompt-injection # Tests for direct prompt injection vulnerabilities
 ```
 
 ## Scanning static foundation or fine-tuned models
@@ -205,25 +221,34 @@ These reports are curated by the Promptfoo team and are a great starting point f
 ### Contributing foundation model results
 
 You can run an example red team against a foundation model using the following command:
-`npx promptfoo@latest init --example redteam-foundation-model`
+
+```bash
+npx promptfoo@latest init --example redteam-foundation-model
+```
 
 This will run the same tests featured in promptfoo.dev/models.
 
 To configure this scan with your own model, follow these steps:
 
-1. Create a .env file with your API keys:
+1. Create a .env file with your API keys or add them to your environment variables. For example:
 
-```
-OPENAI_API_KEY=your_openai_api_key
-ANTHROPIC_API_KEY=your_anthropic_api_key
+```bash
+export OPENAI_API_KEY=your_openai_api_key
+export ANTHROPIC_API_KEY=your_anthropic_api_key
 ```
 
 2. Configure your target model:
-   `promptfoo redteam run --target openrouter:...`
+
+```bash
+promptfoo redteam run --target openrouter:...
+```
 
 3. Run the red team test and save the output to a JSON file:
-   `promptfoo redteam run --output output.json`
 
-If this model hasn't been listed in Promptfoo's model directory, you can email results to inquiries@promptfoo.dev for inclusion on the promptfoo.dev/models page
+```bash
+promptfoo redteam run --output output.json
+```
+
+If this model hasn't been listed in Promptfoo's model directory, you can email results to inquiries@promptfoo.dev for inclusion on the promptfoo.dev/models page.
 
 For more information on how to set up a red team, please refer to the [Red Team](/docs/red-team/quickstart/) documentation.
