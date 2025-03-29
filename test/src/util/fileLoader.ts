@@ -3,42 +3,40 @@
  * This simulates the behavior of src/util/fileLoader.ts for tests
  */
 import * as fs from 'fs';
+import { globSync } from 'glob';
+import yaml from 'js-yaml';
 
 // Mock the loadFile function
 export const loadFile = jest
   .fn()
   .mockImplementation(async (filePath: string, options: any = {}) => {
-    try {
-      // Simulate the real fileLoader behavior by reading files with fs.readFileSync
-      const content = fs.readFileSync(filePath, 'utf-8');
+    // Simulate the real fileLoader behavior by reading files with fs.readFileSync
+    const content = fs.readFileSync(filePath, 'utf-8');
 
-      // Handle different file formats based on extension
-      if (filePath.endsWith('.json')) {
-        try {
-          return JSON.parse(content);
-        } catch (e) {
-          return content; // Return raw content if parsing fails
-        }
-      } else if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
-        try {
-          return require('js-yaml').load(content);
-        } catch (e) {
-          return content; // Return raw content if parsing fails
-        }
+    // Handle different file formats based on extension
+    if (filePath.endsWith('.json')) {
+      try {
+        return JSON.parse(content);
+      } catch {
+        return content; // Return raw content if parsing fails
       }
-
-      // Default behavior - return content as string
-      return content;
-    } catch (error) {
-      throw error;
+    } else if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
+      try {
+        return yaml.load(content);
+      } catch {
+        return content; // Return raw content if parsing fails
+      }
     }
+
+    // Default behavior - return content as string
+    return content;
   });
 
 // Mock the loadFilesFromGlob function
 export const loadFilesFromGlob = jest
   .fn()
   .mockImplementation(async (globPattern: string, options: any = {}) => {
-    const paths = require('glob').globSync(globPattern);
+    const paths = globSync(globPattern);
     const results = [];
 
     for (const filePath of paths) {

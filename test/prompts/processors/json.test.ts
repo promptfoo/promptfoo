@@ -1,11 +1,11 @@
 import * as fs from 'fs';
-import { loadFile } from '../../../src/util/fileLoader';
 import { processJsonFile } from '../../../src/prompts/processors/json';
+import { loadFile } from '../../../src/util/fileLoader';
 
 // Mock the fileLoader module
 jest.mock('../../../src/util/fileLoader', () => ({
   __esModule: true,
-  loadFile: jest.fn()
+  loadFile: jest.fn(),
 }));
 
 jest.mock('fs');

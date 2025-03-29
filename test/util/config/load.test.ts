@@ -102,15 +102,15 @@ describe('combineConfigs', () => {
 
     // Mock readFileSync to handle any path and return the expected content
     jest.mocked(fs.readFileSync).mockImplementation((filePath, options) => {
-      // For testing path equality, store the original path
-      const pathStr = typeof filePath === 'string' ? filePath : String(filePath);
-      
+      // Use normalizePath to extract just the filename for easier comparison
+      const fileName = normalizePath(filePath);
+
       // Set up a mapping for specific files in our tests
-      if (pathStr.includes('config1.json')) {
+      if (fileName === 'config1.json') {
         return '{}';
-      } else if (pathStr.includes('config2.json')) {
+      } else if (fileName === 'config2.json') {
         return '{}';
-      } else if (pathStr.includes('config.json')) {
+      } else if (fileName === 'config.json') {
         return '{}';
       } else {
         return '';
@@ -119,14 +119,14 @@ describe('combineConfigs', () => {
 
     // Set up mocks for fileLoader
     mockLoadFile.mockImplementation(async (filePath) => {
-      // Extract just the filename for easier matching in tests
-      const fileBaseName = path.basename(filePath);
-      
-      if (fileBaseName === 'config1.json') {
+      // Use normalizePath to extract just the filename for easier comparison
+      const fileName = normalizePath(filePath);
+
+      if (fileName === 'config1.json') {
         return {};
-      } else if (fileBaseName === 'config2.json') {
+      } else if (fileName === 'config2.json') {
         return {};
-      } else if (fileBaseName === 'config.json') {
+      } else if (fileName === 'config.json') {
         return {
           prompts: [
             { id: 'file://prompt1.txt', label: 'My first prompt' },
@@ -215,9 +215,12 @@ describe('combineConfigs', () => {
           path: fs.PathOrFileDescriptor,
           options?: fs.ObjectEncodingOptions | BufferEncoding | null,
         ): string | Buffer => {
-          if (typeof path === 'string' && path.includes('config1.json')) {
+          // Use normalizePath to extract just the filename for easier comparison
+          const fileName = normalizePath(path);
+
+          if (fileName === 'config1.json') {
             return JSON.stringify(config1);
-          } else if (typeof path === 'string' && path.includes('config2.json')) {
+          } else if (fileName === 'config2.json') {
             return JSON.stringify(config2);
           }
           return Buffer.from('');
@@ -226,9 +229,12 @@ describe('combineConfigs', () => {
 
     // Update mockLoadFile to return parsed objects instead of trying to parse
     mockLoadFile.mockImplementation(async (filePath) => {
-      if (filePath.includes('config1.json')) {
+      // Use normalizePath to extract just the filename for easier comparison
+      const fileName = normalizePath(filePath);
+
+      if (fileName === 'config1.json') {
         return config1;
-      } else if (filePath.includes('config2.json')) {
+      } else if (fileName === 'config2.json') {
         return config2;
       }
       return {};
@@ -336,7 +342,7 @@ describe('combineConfigs', () => {
 
   it('combines configs with provider-specific prompts', async () => {
     jest.mocked(fs.existsSync).mockReturnValue(true);
-    
+
     const configData = {
       prompts: [
         { id: 'file://prompt1.txt', label: 'My first prompt' },
@@ -354,7 +360,7 @@ describe('combineConfigs', () => {
       ],
       tests: [{ vars: { topic: 'bananas' } }],
     };
-    
+
     // Mock readFileSync to return the config JSON string
     jest.mocked(fs.readFileSync).mockImplementation((filePath) => {
       if (typeof filePath === 'string' && filePath.includes('config.json')) {
@@ -362,7 +368,7 @@ describe('combineConfigs', () => {
       }
       return '';
     });
-    
+
     // Mock loadFile to return the parsed object directly
     mockLoadFile.mockResolvedValueOnce(configData);
 
@@ -403,17 +409,17 @@ describe('combineConfigs', () => {
 
   it('makeAbsolute should resolve file:// syntax and plaintext prompts', async () => {
     jest.mocked(fs.existsSync).mockReturnValue(true);
-    
+
     const config1 = {
       description: 'test1',
       prompts: ['file://prompt1.txt', 'prompt2'],
     };
-    
+
     const config2 = {
       description: 'test2',
       prompts: ['file://prompt3.txt', 'prompt4'],
     };
-    
+
     // Mock both fs.readFileSync and loadFile for consistent returns
     jest.mocked(fs.readFileSync).mockImplementation((path) => {
       if (typeof path === 'string') {
@@ -425,7 +431,7 @@ describe('combineConfigs', () => {
       }
       return '';
     });
-    
+
     mockLoadFile.mockImplementation(async (filePath) => {
       if (filePath.includes('config1.json')) {
         return config1;
@@ -448,17 +454,17 @@ describe('combineConfigs', () => {
 
   it('de-duplicates prompts when reading configs', async () => {
     jest.mocked(fs.existsSync).mockReturnValue(true);
-    
+
     const config1 = {
       description: 'test1',
       prompts: ['prompt1', 'file://prompt2.txt', 'prompt3'],
     };
-    
+
     const config2 = {
       description: 'test2',
       prompts: ['prompt3', 'file://prompt2.txt', 'prompt4'],
     };
-    
+
     // Mock both fs.readFileSync and loadFile for consistent returns
     jest.mocked(fs.readFileSync).mockImplementation((path) => {
       if (typeof path === 'string') {
@@ -470,7 +476,7 @@ describe('combineConfigs', () => {
       }
       return '';
     });
-    
+
     mockLoadFile.mockImplementation(async (filePath) => {
       if (filePath.includes('config1.json')) {
         return config1;
@@ -1138,10 +1144,7 @@ describe('readConfig', () => {
     const result = await readConfig('config.json');
 
     expect(result).toEqual(mockConfig);
-    expect(fs.readFileSync).toHaveBeenCalledWith(
-      expect.stringContaining('config.json'),
-      'utf-8'
-    );
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('config.json'), 'utf-8');
   });
 
   it('should read YAML config file', async () => {
@@ -1156,10 +1159,7 @@ describe('readConfig', () => {
     const result = await readConfig('config.yaml');
 
     expect(result).toEqual(mockConfig);
-    expect(fs.readFileSync).toHaveBeenCalledWith(
-      expect.stringContaining('config.yaml'),
-      'utf-8'
-    );
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('config.yaml'), 'utf-8');
   });
 
   it('should read JavaScript config file', async () => {
@@ -1269,10 +1269,7 @@ describe('readConfig', () => {
 
     const result = await readConfig('config.yaml');
     expect(result).toEqual(dereferencedConfig);
-    expect(fs.readFileSync).toHaveBeenCalledWith(
-      expect.stringContaining('config.yaml'),
-      'utf-8'
-    );
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('config.yaml'), 'utf-8');
   });
 
   it('should throw validation error for invalid dereferenced config', async () => {
@@ -1293,9 +1290,7 @@ describe('readConfig', () => {
     await readConfig('config.yaml');
 
     expect(logger.warn).toHaveBeenCalledTimes(1);
-    expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining('Invalid configuration file')
-    );
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Invalid configuration file'));
     const calls = jest.mocked(logger.warn).mock.calls;
     expect(calls[0][0]).toContain('Invalid configuration file');
   });
@@ -1311,9 +1306,6 @@ describe('readConfig', () => {
     expect(result).toEqual({
       prompts: ['{{prompt}}'],
     });
-    expect(fs.readFileSync).toHaveBeenCalledWith(
-      expect.stringContaining('empty.yaml'),
-      'utf-8'
-    );
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('empty.yaml'), 'utf-8');
   });
 });

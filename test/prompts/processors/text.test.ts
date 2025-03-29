@@ -1,19 +1,19 @@
 import * as fs from 'fs';
-import { loadFile } from '../../../src/util/fileLoader';
 import { PROMPT_DELIMITER } from '../../../src/prompts/constants';
 import { processTxtFile } from '../../../src/prompts/processors/text';
+import { loadFile } from '../../../src/util/fileLoader';
 
 // Mock the fileLoader module
 jest.mock('../../../src/util/fileLoader', () => ({
   __esModule: true,
-  loadFile: jest.fn()
+  loadFile: jest.fn(),
 }));
 
 // Mock the constants
 jest.mock('../../../src/prompts/constants', () => ({
   __esModule: true,
   PROMPT_DELIMITER: '---',
-  VALID_FILE_EXTENSIONS: ['.txt', '.json', '.yaml', '.yml']
+  VALID_FILE_EXTENSIONS: ['.txt', '.json', '.yaml', '.yml'],
 }));
 
 jest.mock('fs');

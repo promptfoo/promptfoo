@@ -1,12 +1,12 @@
 import * as fs from 'fs';
 import yaml from 'js-yaml';
-import { loadFile } from '../../../src/util/fileLoader';
 import { processYamlFile } from '../../../src/prompts/processors/yaml';
+import { loadFile } from '../../../src/util/fileLoader';
 
 // Mock the fileLoader module
 jest.mock('../../../src/util/fileLoader', () => ({
   __esModule: true,
-  loadFile: jest.fn()
+  loadFile: jest.fn(),
 }));
 
 jest.mock('fs');

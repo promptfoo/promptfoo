@@ -1,12 +1,10 @@
-import dedent from 'dedent';
 import * as fs from 'fs';
 import { globSync } from 'glob';
-import { importModule } from '../../src/esm';
 import { readPrompts, readProviderPromptMap, processPrompts } from '../../src/prompts';
-import { maybeFilePath } from '../../src/prompts/utils';
-import type { ApiProvider, Prompt, ProviderResponse, UnifiedConfig } from '../../src/types';
-import { processTxtFile } from '../../src/prompts/processors/text';
 import { processJinjaFile } from '../../src/prompts/processors/jinja';
+import { processTxtFile } from '../../src/prompts/processors/text';
+import { maybeFilePath } from '../../src/prompts/utils';
+import type { Prompt, ProviderResponse, UnifiedConfig } from '../../src/types';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
@@ -69,24 +67,24 @@ describe('readPrompts', () => {
   it('should throw an error when PROMPTFOO_STRICT_FILES is true and the file does not exist', async () => {
     // Start with a clean slate by clearing all mocks
     jest.resetAllMocks();
-    
+
     // Set the environment variable
     process.env.PROMPTFOO_STRICT_FILES = 'true';
-    
+
     // Mock essential functions
     jest.mocked(maybeFilePath).mockReturnValue(true);
     jest.mocked(fs.existsSync).mockReturnValue(false);
-    
+
     // For parsePathOrGlob behavior
     jest.mocked(fs.statSync).mockImplementation(() => {
       throw new Error("ENOENT: no such file or directory, stat 'non-existent-file.txt'");
     });
-    
+
     // Now expect the error to be thrown
     await expect(async () => {
       await readPrompts('non-existent-file.txt');
     }).rejects.toThrow(/ENOENT: no such file or directory/);
-    
+
     // Clean up
     delete process.env.PROMPTFOO_STRICT_FILES;
   });
@@ -94,12 +92,12 @@ describe('readPrompts', () => {
   it('should read a .txt file with a single prompt', async () => {
     // Start with a clean slate by clearing all mocks
     jest.resetAllMocks();
-    
+
     // Mock essential functions
     jest.mocked(maybeFilePath).mockReturnValue(true);
     jest.mocked(fs.existsSync).mockReturnValue(true);
     jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
-    
+
     // Mock the text processor specifically
     jest.mocked(processTxtFile).mockImplementation(async (filePath, prompt) => {
       return [
@@ -110,10 +108,10 @@ describe('readPrompts', () => {
         },
       ];
     });
-    
+
     // Test reading a text file
     const result = await readPrompts('prompts.txt');
-    
+
     // Verify the result
     expect(result).toEqual([
       {
@@ -318,12 +316,12 @@ describe('processPrompts', () => {
   it('should process string prompts by calling readPrompts', async () => {
     // Start with a clean slate by clearing all mocks
     jest.resetAllMocks();
-    
+
     // Mock essential functions
     jest.mocked(maybeFilePath).mockReturnValue(true);
     jest.mocked(fs.existsSync).mockReturnValue(true);
     jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
-    
+
     // Mock the text processor for the expected result
     jest.mocked(processTxtFile).mockImplementation(async (filePath, prompt) => {
       return [
@@ -334,10 +332,10 @@ describe('processPrompts', () => {
         },
       ];
     });
-    
+
     // Test processing a string prompt
     const result = await processPrompts(['test.txt']);
-    
+
     // Verify the result
     expect(result).toEqual([
       {
@@ -351,15 +349,16 @@ describe('processPrompts', () => {
   it('should process Jinja2 files', async () => {
     // Start with a clean slate by clearing all mocks
     jest.resetAllMocks();
-    
+
     // Set up test data
-    const jinjaContent = 'You are a helpful assistant for {{ user }}.\nPlease provide information about {{ topic }}.';
-    
+    const jinjaContent =
+      'You are a helpful assistant for {{ user }}.\nPlease provide information about {{ topic }}.';
+
     // Mock essential functions
     jest.mocked(maybeFilePath).mockReturnValue(true);
     jest.mocked(fs.existsSync).mockReturnValue(true);
     jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
-    
+
     // Mock the Jinja processor specifically
     jest.mocked(processJinjaFile).mockImplementation(async (filePath, prompt) => {
       return [
@@ -370,15 +369,15 @@ describe('processPrompts', () => {
         },
       ];
     });
-    
+
     // Test processing a Jinja2 file
     const result = await processPrompts(['template.j2']);
-    
+
     // Check that we get a result with the right content
     expect(result).toHaveLength(1);
     expect(result[0].raw).toEqual(jinjaContent);
     expect(result[0].config).toBeUndefined();
-    
+
     // Check that the label contains the expected text but don't test exact truncation
     expect(result[0].label).toContain('template.j2: You are a helpful assistant');
   });
@@ -413,12 +412,12 @@ describe('processPrompts', () => {
   it('should process multiple prompts of different types', async () => {
     // Start with a clean slate by clearing all mocks
     jest.resetAllMocks();
-    
+
     // Mock essential functions
     jest.mocked(maybeFilePath).mockReturnValue(true);
     jest.mocked(fs.existsSync).mockReturnValue(true);
     jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
-    
+
     // Mock the text processor specifically
     jest.mocked(processTxtFile).mockImplementation(async (filePath, prompt) => {
       return [
@@ -429,20 +428,20 @@ describe('processPrompts', () => {
         },
       ];
     });
-    
+
     // Set up test data
     const testFunction = function testFunction(vars) {
       return `Hello ${vars.name}`;
     };
-    
+
     const validPrompt = {
       raw: 'test prompt',
       label: 'test label',
     };
-    
+
     // Test processing multiple prompts of different types
     const result = await processPrompts([testFunction, 'test.txt', validPrompt]);
-    
+
     // Verify the result
     expect(result).toEqual([
       {
@@ -465,12 +464,12 @@ describe('processPrompts', () => {
   it('should flatten array results from readPrompts', async () => {
     // Start with a clean slate by clearing all mocks
     jest.resetAllMocks();
-    
+
     // Mock essential functions
     jest.mocked(maybeFilePath).mockReturnValue(true);
     jest.mocked(fs.existsSync).mockReturnValue(true);
     jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
-    
+
     // Mock the text processor for the expected result
     jest.mocked(processTxtFile).mockImplementation(async (filePath, prompt) => {
       return [
@@ -486,10 +485,10 @@ describe('processPrompts', () => {
         },
       ];
     });
-    
+
     // Test processing a string prompt that returns multiple prompts
     const result = await processPrompts(['test.txt']);
-    
+
     // Verify the result
     expect(result).toEqual([
       { raw: 'prompt1', label: 'test.txt: prompt1', config: undefined },
