@@ -1,10 +1,10 @@
-import * as fs from 'fs';
 import type { Options as PythonShellOptions } from 'python-shell';
 import { PythonShell } from 'python-shell';
 import logger from '../../logger';
 import { runPython } from '../../python/pythonUtils';
 import type { Prompt, ApiProvider, PromptFunctionContext } from '../../types';
 import invariant from '../../util/invariant';
+import { loadFile } from '../../util/fileLoader';
 import { safeJsonStringify } from '../../util/json';
 
 /**
@@ -79,17 +79,22 @@ export const pythonPromptFunctionLegacy = async (
  * @param functionName - Optional function name to execute.
  * @returns Array of prompts extracted or executed from the file.
  */
-export function processPythonFile(
+export async function processPythonFile(
   filePath: string,
   prompt: Partial<Prompt>,
   functionName: string | undefined,
-): Prompt[] {
-  const fileContent = fs.readFileSync(filePath, 'utf-8');
+): Promise<Prompt[]> {
+  const fileContent = await loadFile(filePath);
+  
+  // Make sure we have a string (fileContent could be other types from loadFile)
+  const contentStr = typeof fileContent === 'string' ? fileContent : JSON.stringify(fileContent);
+  
   const label =
-    prompt.label ?? (functionName ? `${filePath}:${functionName}` : `${filePath}: ${fileContent}`);
+    prompt.label ?? (functionName ? `${filePath}:${functionName}` : `${filePath}: ${contentStr}`);
+  
   return [
     {
-      raw: fileContent,
+      raw: contentStr,
       label,
       function: functionName
         ? (context) =>
