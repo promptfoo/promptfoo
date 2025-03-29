@@ -1,5 +1,5 @@
-import * as fs from 'fs';
 import type { Prompt } from '../../types';
+import { loadFile } from '../../util/fileLoader';
 import { PROMPT_DELIMITER } from '../constants';
 
 /**
@@ -8,9 +8,16 @@ import { PROMPT_DELIMITER } from '../constants';
  * @param prompt - The raw prompt data.
  * @returns Array of prompts extracted from the file.
  */
-export function processTxtFile(filePath: string, { label }: Partial<Prompt>): Prompt[] {
-  const fileContent = fs.readFileSync(filePath, 'utf-8');
-  return fileContent // handle leading/trailing delimiters and empty lines
+export async function processTxtFile(
+  filePath: string,
+  { label }: Partial<Prompt>,
+): Promise<Prompt[]> {
+  const fileContent = await loadFile(filePath);
+
+  // Make sure we have a string (fileContent could be other types from loadFile)
+  const contentStr = typeof fileContent === 'string' ? fileContent : JSON.stringify(fileContent);
+
+  return contentStr // handle leading/trailing delimiters and empty lines
     .split(PROMPT_DELIMITER)
     .map((p) => p.trim())
     .filter((p) => p.length > 0)

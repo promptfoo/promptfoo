@@ -201,7 +201,7 @@ export async function loadFile(
     telemetry.recordAndSendOnce('feature_used', {
       feature: 'json file',
     });
-     
+
     const jsonContent = JSON.parse(fs.readFileSync(pathWithoutFunction, 'utf-8'));
     return await $RefParser.dereference(jsonContent);
   }

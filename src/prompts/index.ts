@@ -146,28 +146,28 @@ export async function processPrompt(
   }
 
   if (extension === '.json') {
-    return processJsonFile(filePath, prompt);
+    return await processJsonFile(filePath, prompt);
   }
   if (extension === '.jsonl') {
-    return processJsonlFile(filePath, prompt);
+    return await processJsonlFile(filePath, prompt);
   }
   if (extension && isJavascriptFile(extension)) {
-    return processJsFile(filePath, prompt, functionName);
+    return await processJsFile(filePath, prompt, functionName);
   }
   if (extension === '.md') {
-    return processMarkdownFile(filePath, prompt);
+    return await processMarkdownFile(filePath, prompt);
   }
   if (extension === '.j2') {
-    return processJinjaFile(filePath, prompt);
+    return await processJinjaFile(filePath, prompt);
   }
   if (extension === '.py') {
-    return processPythonFile(filePath, prompt, functionName);
+    return await processPythonFile(filePath, prompt, functionName);
   }
   if (extension === '.txt') {
-    return processTxtFile(filePath, prompt);
+    return await processTxtFile(filePath, prompt);
   }
   if (extension && ['.yml', '.yaml'].includes(extension)) {
-    return processYamlFile(filePath, prompt);
+    return await processYamlFile(filePath, prompt);
   }
   return [];
 }

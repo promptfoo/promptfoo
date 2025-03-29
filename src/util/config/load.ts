@@ -2,7 +2,6 @@ import $RefParser from '@apidevtools/json-schema-ref-parser';
 import chalk from 'chalk';
 import dedent from 'dedent';
 import * as fs from 'fs';
-import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
 import process from 'process';
@@ -34,6 +33,7 @@ import { isJavascriptFile } from '../../util/file';
 import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
 import { readTest, readTests } from '../testCaseReader';
+import { loadFile, loadFilesFromGlob } from '../../util/fileLoader';
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
   if (getEnvBool('PROMPTFOO_DISABLE_REF_PARSER')) {
@@ -154,7 +154,12 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   };
   const ext = path.parse(configPath).ext;
   if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
-    const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) ?? {};
+    const fileContent = await loadFile(configPath);
+    // Convert to object if it's a string
+    const rawConfig = typeof fileContent === 'string' 
+      ? yaml.load(fileContent) ?? {}
+      : fileContent;
+    
     const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
     // Validator requires `prompts`, but prompts is not actually required for redteam.
     const UnifiedConfigSchemaWithoutPrompts = UnifiedConfigSchema.innerType()
@@ -236,14 +241,21 @@ export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig
 export async function combineConfigs(configPaths: string[]): Promise<UnifiedConfig> {
   const configs: UnifiedConfig[] = [];
   for (const configPath of configPaths) {
-    const globPaths = globSync(configPath, {
-      windowsPathsNoEscape: true,
-    });
-    if (globPaths.length === 0) {
-      throw new Error(`No configuration file found at ${configPath}`);
-    }
-    for (const globPath of globPaths) {
-      const config = await readConfig(globPath);
+    // Use loadFilesFromGlob if it's a glob pattern
+    if (configPath.includes('*') || configPath.includes('?') || configPath.includes('[')) {
+      const contents = await loadFilesFromGlob(configPath);
+      if (contents.length === 0) {
+        throw new Error(`No configuration file found at ${configPath}`);
+      }
+      
+      for (const content of contents) {
+        // Each content is already parsed by loadFilesFromGlob
+        const dereferencedConfig = await dereferenceConfig(content as UnifiedConfig);
+        configs.push(dereferencedConfig);
+      }
+    } else {
+      // For a direct path, use readConfig
+      const config = await readConfig(configPath);
       configs.push(config);
     }
   }
@@ -528,7 +540,6 @@ export async function resolveConfigs(
   
       ${chalk.green(`${runCommand} init`)}
     `);
-    process.exit(1);
   }
 
   if (!hasPrompts) {
@@ -560,7 +571,7 @@ export async function resolveConfigs(
   if (Array.isArray(fileConfig.scenarios)) {
     for (const scenario of fileConfig.scenarios) {
       if (typeof scenario === 'object' && scenario.tests && typeof scenario.tests === 'string') {
-        scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
+        scenario.tests = await maybeLoadFromExternalFile(scenario.tests) as TestCase[];
       }
       if (typeof scenario === 'object' && scenario.tests && Array.isArray(scenario.tests)) {
         const parsedScenarioTests: TestCase[] = await readTests(

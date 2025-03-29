@@ -1,7 +1,6 @@
-import * as fs from 'fs';
-import yaml from 'js-yaml';
 import logger from '../../logger';
 import type { Prompt } from '../../types';
+import { loadFile } from '../../util/fileLoader';
 
 /**
  * Processes a YAML file to extract prompts.
@@ -13,18 +12,29 @@ import type { Prompt } from '../../types';
  * @returns An array of `Prompt` objects extracted from the YAML file.
  * @throws Will throw an error if the file cannot be read or parsed.
  */
-export function processYamlFile(filePath: string, prompt: Partial<Prompt>): Prompt[] {
-  const fileContents = fs.readFileSync(filePath, 'utf8');
-  let maybeParsed: string | undefined = fileContents;
-  try {
-    maybeParsed = JSON.stringify(yaml.load(fileContents));
-  } catch (e) {
-    logger.debug(`Error parsing YAML file ${filePath}: ${e}`);
+export async function processYamlFile(
+  filePath: string,
+  prompt: Partial<Prompt>,
+): Promise<Prompt[]> {
+  const fileContent = await loadFile(filePath);
+
+  // Our fileLoader will already have parsed the YAML file if possible
+  let contentStr: string;
+  if (typeof fileContent === 'string') {
+    contentStr = fileContent;
+  } else {
+    try {
+      contentStr = JSON.stringify(fileContent);
+    } catch (e) {
+      logger.debug(`Error stringifying YAML content from ${filePath}: ${e}`);
+      contentStr = String(fileContent);
+    }
   }
+
   return [
     {
-      raw: maybeParsed,
-      label: prompt.label || `${filePath}: ${maybeParsed?.slice(0, 80)}`,
+      raw: contentStr,
+      label: prompt.label || `${filePath}: ${contentStr.slice(0, 80)}`,
       config: prompt.config,
     },
   ];

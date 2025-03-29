@@ -1,5 +1,5 @@
-import * as fs from 'fs';
 import type { Prompt } from '../../types';
+import { loadFile } from '../../util/fileLoader';
 
 /**
  * Processes a JSON file to extract prompts.
@@ -10,13 +10,19 @@ import type { Prompt } from '../../types';
  * @returns An array of one `Prompt` object.
  * @throws Will throw an error if the file cannot be read.
  */
-export function processJsonFile(filePath: string, prompt: Partial<Prompt>): Prompt[] {
-  const fileContents = fs.readFileSync(filePath, 'utf8');
-  // NOTE: We do not validate if this is a valid JSON file.
+export async function processJsonFile(
+  filePath: string,
+  prompt: Partial<Prompt>,
+): Promise<Prompt[]> {
+  const fileContent = await loadFile(filePath);
+
+  // Convert fileContent to string if it's an object (already parsed JSON)
+  const contentStr = typeof fileContent === 'string' ? fileContent : JSON.stringify(fileContent);
+
   return [
     {
-      raw: fileContents,
-      label: prompt.label || `${filePath}: ${fileContents}`,
+      raw: contentStr,
+      label: prompt.label || `${filePath}: ${contentStr}`,
       config: prompt.config,
     },
   ];
