@@ -334,6 +334,10 @@ const sidebars = {
           type: 'doc',
           id: 'guides/testing-guardrails',
         },
+        {
+          type: 'doc',
+          id: 'red-team/foundation-models',
+        },
       ],
     },
   ],
