@@ -5,6 +5,7 @@ import yaml from 'js-yaml';
 import * as path from 'path';
 import cliState from '../../../src/cliState';
 import { isCI } from '../../../src/envars';
+import { getEnvBool, getEnvString } from '../../../src/envars';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import type { UnifiedConfig } from '../../../src/types';
@@ -17,6 +18,17 @@ import {
   combineConfigs,
 } from '../../../src/util/config/load';
 import { readTests } from '../../../src/util/testCaseReader';
+
+// Create mocks for fileLoader functions (at the top of the file)
+const mockLoadFile = jest.fn();
+const mockLoadFilesFromGlob = jest.fn();
+
+// Use doMock instead of jest.mock
+jest.doMock('../../../src/util/fileLoader', () => ({
+  loadFile: mockLoadFile,
+  loadFilesFromGlob: mockLoadFilesFromGlob,
+  readFiles: jest.fn(),
+}));
 
 jest.mock('../../../src/database', () => ({
   getDb: jest.fn(),
@@ -48,14 +60,11 @@ jest.mock('../../../src/util/testCaseReader', () => ({
   readTests: jest.fn(),
 }));
 
-jest.mock('../../../src/envars', () => {
-  const originalModule = jest.requireActual('../../../src/envars');
-  return {
-    ...originalModule,
-    getEnvBool: jest.fn(),
-    isCI: jest.fn(),
-  };
-});
+jest.mock('../../../src/envars', () => ({
+  getEnvBool: jest.fn(),
+  getEnvString: jest.fn(),
+  isCI: jest.fn(),
+}));
 
 jest.mock('../../../src/util', () => {
   const originalModule = jest.requireActual('../../../src/util');
@@ -77,6 +86,34 @@ jest.mock('../../../src/logger', () => ({
 describe('combineConfigs', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.mocked(getEnvBool).mockImplementation((key) => false);
+    jest.mocked(getEnvString).mockImplementation((key) => '');
+
+    // Set up mocks for fileLoader
+    mockLoadFile.mockImplementation(async (filePath) => {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      if (filePath.endsWith('.json')) {
+        return JSON.parse(content);
+      } else if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
+        return yaml.load(content);
+      }
+      return content;
+    });
+
+    mockLoadFilesFromGlob.mockImplementation(async (globPattern) => {
+      const paths = globSync(globPattern);
+      return Promise.all(
+        paths.map(async (path) => {
+          const content = fs.readFileSync(path, 'utf-8');
+          if (path.endsWith('.json')) {
+            return JSON.parse(content);
+          } else if (path.endsWith('.yaml') || path.endsWith('.yml')) {
+            return yaml.load(content);
+          }
+          return content;
+        }),
+      );
+    });
   });
 
   it('reads from existing configs', async () => {

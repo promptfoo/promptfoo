@@ -1,128 +1,118 @@
-import dedent from 'dedent';
 import * as fs from 'fs';
-import logger from '../../../src/logger';
+import yaml from 'js-yaml';
+import { loadFile } from '../../../src/util/fileLoader';
 import { processYamlFile } from '../../../src/prompts/processors/yaml';
 
+// Mock the fileLoader module
+jest.mock('../../../src/util/fileLoader', () => ({
+  __esModule: true,
+  loadFile: jest.fn()
+}));
+
 jest.mock('fs');
+jest.mock('js-yaml');
 
 describe('processYamlFile', () => {
-  const mockReadFileSync = jest.mocked(fs.readFileSync);
+  const _mockReadFileSync = jest.mocked(fs.readFileSync);
+  const _mockYamlLoad = jest.mocked(yaml.load);
+  const mockLoadFileImpl = jest.mocked(loadFile);
 
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.mocked(logger.debug).mockClear();
   });
 
-  it('should process a valid YAML file without a label', () => {
+  it('should process a valid YAML file without a label', async () => {
     const filePath = 'file.yaml';
-    const fileContent = 'key: value';
-    mockReadFileSync.mockReturnValue(fileContent);
-    expect(processYamlFile(filePath, {})).toEqual([
+    const parsedContent = { key: 'value' };
+    mockLoadFileImpl.mockResolvedValue(parsedContent);
+
+    await expect(processYamlFile(filePath, {})).resolves.toEqual([
       {
-        raw: JSON.stringify({ key: 'value' }),
-        label: `${filePath}: ${JSON.stringify({ key: 'value' })}`,
+        raw: JSON.stringify(parsedContent),
+        label: `${filePath}: ${JSON.stringify(parsedContent)}`,
         config: undefined,
       },
     ]);
-    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
+    expect(mockLoadFileImpl).toHaveBeenCalledWith(filePath);
   });
 
-  it('should process a valid YAML file with a label', () => {
+  it('should process a valid YAML file with a label', async () => {
     const filePath = 'file.yaml';
-    const fileContent = 'key: value';
-    mockReadFileSync.mockReturnValue(fileContent);
-    expect(processYamlFile(filePath, { label: 'Label' })).toEqual([
+    const parsedContent = { key: 'value' };
+    mockLoadFileImpl.mockResolvedValue(parsedContent);
+
+    await expect(processYamlFile(filePath, { label: 'Label' })).resolves.toEqual([
       {
-        raw: JSON.stringify({ key: 'value' }),
+        raw: JSON.stringify(parsedContent),
         label: 'Label',
         config: undefined,
       },
     ]);
-    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
+    expect(mockLoadFileImpl).toHaveBeenCalledWith(filePath);
   });
 
-  it('should throw an error if the file cannot be read', () => {
+  it('should throw an error if the file cannot be read', async () => {
     const filePath = 'nonexistent.yaml';
-    mockReadFileSync.mockImplementation(() => {
-      throw new Error('File not found');
-    });
+    mockLoadFileImpl.mockRejectedValue(new Error('File not found'));
 
-    expect(() => processYamlFile(filePath, {})).toThrow('File not found');
-    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
+    await expect(processYamlFile(filePath, {})).rejects.toThrow('File not found');
+    expect(mockLoadFileImpl).toHaveBeenCalledWith(filePath);
   });
 
-  it('should parse YAML and return stringified JSON', () => {
-    const filePath = 'file.yaml';
-    const fileContent = `
-key1: value1
-key2: value2
-    `;
-    const expectedJson = JSON.stringify({ key1: 'value1', key2: 'value2' });
+  it('should parse YAML and return stringified JSON', async () => {
+    const filePath = 'test.yaml';
+    const parsedContent = { name: 'John', age: 30 };
+    mockLoadFileImpl.mockResolvedValue(parsedContent);
 
-    mockReadFileSync.mockReturnValue(fileContent);
-
-    const result = processYamlFile(filePath, {});
-    expect(result[0].raw).toBe(expectedJson);
-    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
+    const result = await processYamlFile(filePath, {});
+    expect(result[0].raw).toBe(JSON.stringify(parsedContent));
+    expect(mockLoadFileImpl).toHaveBeenCalledWith(filePath);
   });
 
-  it('should handle YAML with nested structures', () => {
-    const filePath = 'file.yaml';
-    const fileContent = `
-parent:
-  child1: value1
-  child2: value2
-array:
-  - item1
-  - item2
-    `;
-    const expectedJson = JSON.stringify({
-      parent: { child1: 'value1', child2: 'value2' },
-      array: ['item1', 'item2'],
-    });
+  it('should handle YAML with nested structures', async () => {
+    const filePath = 'test.yaml';
+    const parsedContent = {
+      person: {
+        name: 'John',
+        details: {
+          age: 30,
+          occupation: 'Developer',
+        },
+      },
+    };
+    mockLoadFileImpl.mockResolvedValue(parsedContent);
 
-    mockReadFileSync.mockReturnValue(fileContent);
-
-    const result = processYamlFile(filePath, {});
-    expect(result[0].raw).toBe(expectedJson);
+    const result = await processYamlFile(filePath, {});
+    expect(result[0].raw).toBe(JSON.stringify(parsedContent));
   });
 
-  it('should handle YAML with whitespace in values', () => {
-    const filePath = 'file.yaml';
-    const fileContent = `
-key: "value with    spaces"
-template: "{{ variable }}   "
-    `;
-    const expectedJson = JSON.stringify({
-      key: 'value with    spaces',
-      template: '{{ variable }}   ',
-    });
+  it('should handle YAML with whitespace in values', async () => {
+    const filePath = 'test.yaml';
+    const parsedContent = {
+      description: 'This is a test with    whitespace',
+      multiline: 'Line 1\nLine 2\n  Line 3 with spaces',
+    };
+    mockLoadFileImpl.mockResolvedValue(parsedContent);
 
-    mockReadFileSync.mockReturnValue(fileContent);
-
-    const result = processYamlFile(filePath, {});
-    expect(result[0].raw).toBe(expectedJson);
+    const result = await processYamlFile(filePath, {});
+    expect(result[0].raw).toBe(JSON.stringify(parsedContent));
   });
 
-  it('should handle invalid YAML and return raw file contents', () => {
+  it('should handle invalid YAML and return raw file contents', async () => {
     const filePath = 'issue-2368.yaml';
-    const fileContent = dedent`
-    {% import "system_prompt.yaml" as system_prompt %}
+    const fileContent = `{% import "system_prompt.yaml" as system_prompt %}
     {% import "user_prompt.yaml" as user_prompt %}
     {{ system_prompt.system_prompt() }}
     {{ user_prompt.user_prompt(example) }}`;
 
-    mockReadFileSync.mockReturnValue(fileContent);
+    mockLoadFileImpl.mockResolvedValue(fileContent);
 
-    expect(processYamlFile(filePath, {})).toEqual([
+    await expect(processYamlFile(filePath, {})).resolves.toEqual([
       {
         raw: fileContent,
         label: `${filePath}: ${fileContent.slice(0, 80)}`,
         config: undefined,
       },
     ]);
-    expect(logger.debug).toHaveBeenCalledWith(
-      expect.stringMatching(/Error parsing YAML file issue-2368\.yaml:/),
-    );
   });
 });

@@ -1,48 +1,57 @@
 import * as fs from 'fs';
+import { loadFile } from '../../../src/util/fileLoader';
 import { processJsonFile } from '../../../src/prompts/processors/json';
+
+// Mock the fileLoader module
+jest.mock('../../../src/util/fileLoader', () => ({
+  __esModule: true,
+  loadFile: jest.fn()
+}));
 
 jest.mock('fs');
 
 describe('processJsonFile', () => {
-  const mockReadFileSync = jest.mocked(fs.readFileSync);
+  const _mockReadFileSync = jest.mocked(fs.readFileSync);
+  const mockLoadFileImpl = jest.mocked(loadFile);
 
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('should process a valid JSON file without a label', () => {
+  it('should process a valid JSON file without a label', async () => {
     const filePath = 'file.json';
     const fileContent = JSON.stringify({ key: 'value' });
-    mockReadFileSync.mockReturnValue(fileContent);
-    expect(processJsonFile(filePath, {})).toEqual([
+    mockLoadFileImpl.mockResolvedValue(fileContent);
+
+    await expect(processJsonFile(filePath, {})).resolves.toEqual([
       {
         raw: fileContent,
         label: `${filePath}: ${fileContent}`,
       },
     ]);
-    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
+    expect(mockLoadFileImpl).toHaveBeenCalledWith(filePath);
   });
 
-  it('should process a valid JSON file with a label', () => {
+  it('should process a valid JSON file with a label', async () => {
     const filePath = 'file.json';
     const fileContent = JSON.stringify({ key: 'value' });
-    mockReadFileSync.mockReturnValue(fileContent);
-    expect(processJsonFile(filePath, { label: 'Label' })).toEqual([
+    mockLoadFileImpl.mockResolvedValue(fileContent);
+
+    await expect(processJsonFile(filePath, { label: 'Label' })).resolves.toEqual([
       {
         raw: fileContent,
         label: `Label`,
+        config: undefined,
       },
     ]);
-    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
+    expect(mockLoadFileImpl).toHaveBeenCalledWith(filePath);
   });
 
-  it('should throw an error if the file cannot be read', () => {
+  it('should throw an error if the file cannot be read', async () => {
     const filePath = 'nonexistent.json';
-    mockReadFileSync.mockImplementation(() => {
-      throw new Error('File not found');
-    });
+    mockLoadFileImpl.mockRejectedValue(new Error('File not found'));
 
-    expect(() => processJsonFile(filePath, {})).toThrow('File not found');
-    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
+    await expect(processJsonFile(filePath, {})).rejects.toThrow('File not found');
+    expect(mockLoadFileImpl).toHaveBeenCalledWith(filePath);
   });
 });

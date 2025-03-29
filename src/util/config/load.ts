@@ -30,10 +30,10 @@ import {
 } from '../../types';
 import { isRunningUnderNpx, maybeLoadFromExternalFile, readFilters } from '../../util';
 import { isJavascriptFile } from '../../util/file';
+import { loadFile, loadFilesFromGlob } from '../../util/fileLoader';
 import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
 import { readTest, readTests } from '../testCaseReader';
-import { loadFile, loadFilesFromGlob } from '../../util/fileLoader';
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
   if (getEnvBool('PROMPTFOO_DISABLE_REF_PARSER')) {
@@ -156,10 +156,9 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
     const fileContent = await loadFile(configPath);
     // Convert to object if it's a string
-    const rawConfig = typeof fileContent === 'string' 
-      ? yaml.load(fileContent) ?? {}
-      : fileContent;
-    
+    const rawConfig =
+      typeof fileContent === 'string' ? (yaml.load(fileContent) ?? {}) : fileContent;
+
     const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
     // Validator requires `prompts`, but prompts is not actually required for redteam.
     const UnifiedConfigSchemaWithoutPrompts = UnifiedConfigSchema.innerType()
@@ -247,7 +246,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       if (contents.length === 0) {
         throw new Error(`No configuration file found at ${configPath}`);
       }
-      
+
       for (const content of contents) {
         // Each content is already parsed by loadFilesFromGlob
         const dereferencedConfig = await dereferenceConfig(content as UnifiedConfig);
@@ -571,7 +570,7 @@ export async function resolveConfigs(
   if (Array.isArray(fileConfig.scenarios)) {
     for (const scenario of fileConfig.scenarios) {
       if (typeof scenario === 'object' && scenario.tests && typeof scenario.tests === 'string') {
-        scenario.tests = await maybeLoadFromExternalFile(scenario.tests) as TestCase[];
+        scenario.tests = (await maybeLoadFromExternalFile(scenario.tests)) as TestCase[];
       }
       if (typeof scenario === 'object' && scenario.tests && Array.isArray(scenario.tests)) {
         const parsedScenarioTests: TestCase[] = await readTests(
