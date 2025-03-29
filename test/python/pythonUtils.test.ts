@@ -1,4 +1,5 @@
 import fs from 'fs';
+import path from 'path';
 import { PythonShell } from 'python-shell';
 import { getEnvString } from '../../src/envars';
 import logger from '../../src/logger';
@@ -286,6 +287,46 @@ describe('pythonUtils', () => {
       await pythonUtils.runPython('testScript.py', 'testMethod', ['arg1']);
 
       expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Error removing'));
+    });
+
+    it('should log debug messages about parsed output type and structure', async () => {
+      const mockOutput = JSON.stringify({
+        type: 'final_result',
+        data: { key1: 'value1', key2: 'value2' },
+      });
+
+      jest.mocked(fs.readFileSync).mockReturnValue(mockOutput);
+      mockPythonShellInstance.end.mockImplementation((callback) => callback());
+
+      await pythonUtils.runPython('testScript.py', 'testMethod', ['arg1']);
+
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining(
+          `Python script ${path.resolve('testScript.py')} parsed output type: object`,
+        ),
+      );
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('Python script result data type: object'),
+      );
+    });
+
+    it('should handle undefined result data gracefully', async () => {
+      const mockOutput = JSON.stringify({
+        type: 'final_result',
+        data: undefined,
+      });
+
+      jest.mocked(fs.readFileSync).mockReturnValue(mockOutput);
+      mockPythonShellInstance.end.mockImplementation((callback) => callback());
+
+      const result = await pythonUtils.runPython('testScript.py', 'testMethod', ['arg1']);
+
+      expect(result).toBeUndefined();
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining(
+          `Python script ${path.resolve('testScript.py')} parsed output type: object, structure: ["type"]`,
+        ),
+      );
     });
   });
 });
