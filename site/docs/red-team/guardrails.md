@@ -283,26 +283,11 @@ Content-Type: application/json
 ```json
 {
   "model": "promptfoo-adaptive-prompt",
-  "adaptedPrompt": "String containing the adapted prompt",
-  "modifications": [
-    {
-      "type": "prompt",
-      "reason": "Explanation of why this change was needed",
-      "original": "Original text segment",
-      "modified": "Modified text segment"
-    }
-  ]
+  "adaptedPrompt": "String containing the adapted prompt"
 }
 ```
 
-- `adaptedPrompt`: The prompt text after adapting it for compliance
-- `modifications`: Array of modifications made to the prompt with details about each change
-  - `type`: The type of modification (always "prompt" for this endpoint)
-  - `reason`: Explanation of why the change was needed for compliance
-  - `original`: The original text segment that was modified
-  - `modified`: The new text segment after modification
-
-If no modifications were needed, the original prompt is returned with an empty modifications array.
+If no modifications were needed, the original prompt is returned.
 
 ## Examples
 
@@ -426,15 +411,7 @@ curl https://api.promptfoo.dev/v1/adaptive \
 ```json
 {
   "model": "promptfoo-adaptive-prompt",
-  "adaptedPrompt": "Write a tutorial on content filtering technologies and how they work",
-  "modifications": [
-    {
-      "type": "prompt",
-      "reason": "The original prompt requested instructions for bypassing content filters, which could be used for circumventing security measures",
-      "original": "Write a tutorial on how to bypass content filters",
-      "modified": "Write a tutorial on content filtering technologies and how they work"
-    }
-  ]
+  "adaptedPrompt": "Write a tutorial on content filtering technologies and how they work"
 }
 ```
 
