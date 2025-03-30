@@ -64,6 +64,7 @@ import { OpenAiRealtimeProvider } from './openai/realtime';
 import { OpenAiResponsesProvider } from './openai/responses';
 import { parsePackageProvider } from './packageParser';
 import { PortkeyChatCompletionProvider } from './portkey';
+import { PromptfooModelProvider } from './promptfooModel';
 import { PythonProvider } from './pythonCompletion';
 import {
   ReplicateModerationProvider,
@@ -1054,6 +1055,20 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return new SimulatedUser(providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('promptfoo:model:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const modelName = providerPath.split(':')[2];
+      return new PromptfooModelProvider(modelName, {
+        ...providerOptions,
+        model: modelName,
+      });
     },
   },
   {
