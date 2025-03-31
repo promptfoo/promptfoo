@@ -26,6 +26,7 @@ export class PythonProvider implements ApiProvider {
   private scriptPath: string;
   private functionName: string | null;
   private isInitialized: boolean = false;
+  private initializationPromise: Promise<void> | null = null;
   public label: string | undefined;
 
   constructor(
@@ -53,14 +54,33 @@ export class PythonProvider implements ApiProvider {
    * @returns A promise that resolves when all file references have been processed
    */
   public async initialize(): Promise<void> {
+    // If already initialized, return immediately
     if (this.isInitialized) {
       return;
     }
-    this.config = await processConfigFileReferences(
-      this.config,
-      this.options?.config.basePath || '',
-    );
-    this.isInitialized = true;
+
+    // If initialization is in progress, return the existing promise
+    if (this.initializationPromise) {
+      return this.initializationPromise;
+    }
+
+    // Start initialization and store the promise
+    this.initializationPromise = (async () => {
+      try {
+        this.config = await processConfigFileReferences(
+          this.config,
+          this.options?.config.basePath || '',
+        );
+        this.isInitialized = true;
+        logger.debug(`Initialized Python provider ${this.id()}`);
+      } catch (error) {
+        // Reset the initialization promise so future calls can retry
+        this.initializationPromise = null;
+        throw error;
+      }
+    })();
+
+    return this.initializationPromise;
   }
 
   /**
