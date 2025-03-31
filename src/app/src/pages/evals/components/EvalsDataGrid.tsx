@@ -1,6 +1,6 @@
 import { useMemo, useEffect, useState } from 'react';
 import { callApi } from '@app/utils/api';
-import { Box } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import {
   DataGrid,
   type GridColDef,
@@ -10,6 +10,7 @@ import {
   GridToolbarDensitySelector,
   GridToolbarExport,
   GridToolbarQuickFilter,
+  type GridRowSelectionModel,
 } from '@mui/x-data-grid';
 
 type Eval = {
@@ -64,6 +65,10 @@ export default function EvalsDataGrid({
   const [evals, setEvals] = useState<Eval[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+
+  const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>(
+    focusedEvalId ? [focusedEvalId] : [],
+  );
 
   /**
    * Fetch evals from the API.
@@ -125,7 +130,33 @@ export default function EvalsDataGrid({
       getRowId={(row) => row.evalId}
       slots={{
         toolbar: CustomToolbar,
-        noRowsOverlay: () => (error ? <div>Error loading evals</div> : <div>No evals found</div>),
+        noRowsOverlay: () => (
+          <Box
+            sx={{
+              textAlign: 'center',
+              color: 'text.secondary',
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+          >
+            {error ? (
+              <Typography variant="h6">Error loading evals</Typography>
+            ) : (
+              <>
+                <Box sx={{ fontSize: '2rem', mb: 1 }}>🔍</Box>
+                <Typography variant="h6" gutterBottom>
+                  No evaluations found
+                </Typography>
+                <Typography variant="body2">
+                  Try adjusting your search or create a new evaluation
+                </Typography>
+              </>
+            )}
+          </Box>
+        ),
       }}
       slotProps={{ toolbar: { showUtilityButtons } }}
       onCellClick={handleCellClick}
@@ -134,6 +165,8 @@ export default function EvalsDataGrid({
           cursor: 'pointer',
         },
       }}
+      onRowSelectionModelChange={setRowSelectionModel}
+      rowSelectionModel={rowSelectionModel}
     />
   );
 }

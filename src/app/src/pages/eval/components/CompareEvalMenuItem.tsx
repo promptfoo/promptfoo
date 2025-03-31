@@ -73,10 +73,13 @@ function CompareEvalMenuItem({ initialEvals, onComparisonEvalSelected }: Compare
       <EvalSelectorDialog
         open={dialogOpen}
         onClose={handleCloseDialog}
-        recentEvals={recentEvals}
-        onRecentEvalSelected={handleEvalSelected}
+        onEvalSelected={(evalId) => {
+          handleEvalSelected(evalId);
+          setDialogOpen(false);
+        }}
         title="Select an eval to compare"
         description="Only evals with the same dataset can be compared."
+        focusedEvalId={currentEvalId ?? undefined}
       />
     </>
   );
