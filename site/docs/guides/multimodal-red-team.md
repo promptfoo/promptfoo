@@ -80,7 +80,6 @@ This approach converts potentially harmful text into speech audio and then sends
 Before running any of the examples, set up the necessary environment variables for your chosen provider:
 
 ```bash
-# For AWS Bedrock (used in approaches 1 and 2):
 export AWS_ACCESS_KEY_ID=your_access_key
 export AWS_SECRET_ACCESS_KEY=your_secret_key
 export AWS_REGION=your_region
@@ -91,7 +90,7 @@ export OPENAI_API_KEY=your_api_key
 # For Anthropic:
 export ANTHROPIC_API_KEY=your_api_key
 
-# For UnsafeBench (approach 3):
+# For UnsafeBench plugin:
 export HF_TOKEN=your_huggingface_token
 ```
 

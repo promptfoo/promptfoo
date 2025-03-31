@@ -134,7 +134,6 @@ export type BasePlugin = (typeof BASE_PLUGINS)[number];
 export const ADDITIONAL_PLUGINS = [
   'ascii-smuggling',
   'beavertails',
-  'unsafebench',
   'bfla',
   'bola',
   'competitors',
@@ -142,13 +141,12 @@ export const ADDITIONAL_PLUGINS = [
   'cyberseceval',
   'debug-access',
   'divergent-repetition',
-  'tool-discovery',
   'harmbench',
   'imitation',
   'indirect-prompt-injection',
   'overreliance',
-  'prompt-extraction',
   'pliny',
+  'prompt-extraction',
   'rag-document-exfiltration',
   'rag-poisoning',
   'rbac',
@@ -158,6 +156,8 @@ export const ADDITIONAL_PLUGINS = [
   'sql-injection',
   'ssrf',
   'system-prompt-override',
+  'tool-discovery',
+  'unsafebench',
 ] as const;
 export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
@@ -589,10 +589,10 @@ export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
+  audio: 'Tests handling of audio content',
   base64: 'Tests handling of Base64-encoded malicious payloads',
   basic: 'Original plugin tests without any additional strategies or optimizations',
   beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
-  unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
   'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
   bfla: 'Tests for broken function-level authorization vulnerabilities (OWASP API 5)',
   bola: 'Tests for broken object-level authorization vulnerabilities (OWASP API 1)',
@@ -607,7 +607,6 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'divergent-repetition':
     'Tests for training data leaks through repetitive pattern exploitation that causes model divergence',
   'excessive-agency': 'Tests for unauthorized actions beyond defined system boundaries',
-  'tool-discovery': 'Tests for enumeration of available tools and function calls',
   foundation: 'Tests a collection of plugins designed to run against foundation models',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Dynamic multi-turn attack generation using adversarial techniques',
@@ -642,6 +641,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'harmful:weapons:ied': 'Tests handling of Improvised Explosive Devices',
   hex: 'Tests handling of hex-encoded malicious payloads',
   hijacking: 'Tests for unauthorized resource usage and purpose deviation',
+  image: 'Tests handling of image content',
   imitation: 'Tests for unauthorized impersonation of entities',
   'indirect-prompt-injection': 'Tests for injection vulnerabilities via untrusted variables',
   intent: 'Tests for manipulation of system behavior via specific prompts',
@@ -668,6 +668,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'rag-document-exfiltration': 'Tests for RAG document exfiltration',
   'rag-poisoning': 'Tests for vulnerabilities to RAG retrieval poisoning attacks',
   rbac: 'Tests role-based access control implementation',
+  'reasoning-dos':
+    'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
   religion: 'Tests handling of religious content and bias',
   retry:
     'Automatically incorporates previously failed test cases to build a regression testing suite',
@@ -676,19 +678,17 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'sql-injection': 'Tests for SQL injection vulnerabilities',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
-  'reasoning-dos':
-    'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
-  audio: 'Tests handling of audio content',
-  image: 'Tests handling of image content',
+  'tool-discovery': 'Tests for enumeration of available tools and function calls',
+  unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
 };
 
 // These names are displayed in risk cards and in the table
 export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'ascii-smuggling': 'ASCII Smuggling',
+  audio: 'Audio Content',
   base64: 'Base64 Payload Encoding',
   basic: 'Baseline Testing',
   beavertails: 'BeaverTails Dataset',
-  unsafebench: 'UnsafeBench Dataset',
   'best-of-n': 'Best-of-N',
   bfla: 'Function-Level Authorization Bypass',
   bola: 'Object-Level Authorization Bypass',
@@ -702,7 +702,6 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   default: 'Standard Security Suite',
   'divergent-repetition': 'Divergent Repetition',
   'excessive-agency': 'Excessive Agency',
-  'tool-discovery': 'Tool Discovery',
   foundation: 'Foundation Model Plugin Collection',
   gcg: 'Greedy Coordinate Gradient',
   goat: 'Generative Offensive Agent Tester',
@@ -737,6 +736,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'harmful:weapons:ied': 'Improvised Explosive Devices',
   hex: 'Hex Encoding',
   hijacking: 'Resource Hijacking',
+  image: 'Image Content',
   imitation: 'Entity Impersonation',
   'indirect-prompt-injection': 'Indirect Prompt Injection',
   intent: 'Intent',
@@ -762,6 +762,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'rag-document-exfiltration': 'RAG Document Exfiltration',
   'rag-poisoning': 'RAG Poisoning',
   rbac: 'RBAC Implementation',
+  'reasoning-dos': 'Reasoning DoS',
   religion: 'Religious Bias',
   retry: 'Regression Testing',
   rot13: 'ROT13 Payload Encoding',
@@ -769,9 +770,8 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'sql-injection': 'SQL Injection',
   ssrf: 'SSRF Vulnerability',
   'system-prompt-override': 'System Prompt Override',
-  'reasoning-dos': 'Reasoning DoS',
-  audio: 'Audio Content',
-  image: 'Image Content',
+  'tool-discovery': 'Tool Discovery',
+  unsafebench: 'UnsafeBench Dataset',
 };
 
 export enum Severity {
@@ -795,7 +795,6 @@ export const severityDisplayNames: Record<Severity, string> = {
 export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'ascii-smuggling': Severity.Low,
   beavertails: Severity.Low,
-  unsafebench: Severity.Medium,
   bfla: Severity.High,
   bola: Severity.High,
   competitors: Severity.Low,
@@ -806,7 +805,6 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   default: Severity.Low,
   'divergent-repetition': Severity.Medium,
   'excessive-agency': Severity.Medium,
-  'tool-discovery': Severity.Low,
   foundation: Severity.Medium,
   hallucination: Severity.Medium,
   harmbench: Severity.Medium,
@@ -860,23 +858,24 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'sql-injection': Severity.High,
   ssrf: Severity.High,
   'system-prompt-override': Severity.High,
+  'tool-discovery': Severity.Low,
+  unsafebench: Severity.Medium,
 };
 
 export const riskCategories: Record<string, Plugin[]> = {
   'Security & Access Control': [
     // System security
     'ascii-smuggling',
-    'unsafebench',
     'bfla',
     'bola',
     'debug-access',
-    'tool-discovery',
     'hijacking',
     'indirect-prompt-injection',
     'rbac',
     'shell-injection',
     'sql-injection',
     'ssrf',
+    'tool-discovery',
 
     // Data protection
     'cross-session-leak',
@@ -907,6 +906,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:unsafe-practices',
     'harmful:violent-crime',
     'harmful:weapons:ied',
+    'unsafebench',
   ],
 
   'Trust & Safety': [
@@ -965,7 +965,6 @@ export const categoryLabels = Object.keys(categoryMapReverse);
 export const categoryAliases: Record<Plugin, string> = {
   'ascii-smuggling': 'AsciiSmuggling',
   beavertails: 'BeaverTails',
-  unsafebench: 'UnsafeBench',
   bfla: 'BFLAEnforcement',
   bola: 'BOLAEnforcement',
   competitors: 'CompetitorEndorsement',
@@ -976,7 +975,6 @@ export const categoryAliases: Record<Plugin, string> = {
   default: 'Default',
   'divergent-repetition': 'DivergentRepetition',
   'excessive-agency': 'ExcessiveAgency',
-  'tool-discovery': 'ToolDiscovery',
   foundation: 'Foundation',
   hallucination: 'Hallucination',
   harmbench: 'Harmbench',
@@ -1025,12 +1023,14 @@ export const categoryAliases: Record<Plugin, string> = {
   'rag-document-exfiltration': 'RAG Document Exfiltration',
   'rag-poisoning': 'RAG Poisoning',
   rbac: 'RbacEnforcement',
+  'reasoning-dos': 'Reasoning DoS',
   religion: 'Religion',
   'shell-injection': 'ShellInjection',
   'sql-injection': 'SqlInjection',
   ssrf: 'SSRFEnforcement',
   'system-prompt-override': 'System Prompt Override',
-  'reasoning-dos': 'Reasoning DoS',
+  'tool-discovery': 'ToolDiscovery',
+  unsafebench: 'UnsafeBench',
 };
 
 export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
@@ -1044,8 +1044,6 @@ export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
 export const pluginDescriptions: Record<Plugin, string> = {
   'ascii-smuggling': 'Tests for ASCII-based prompt smuggling vulnerabilities',
   beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
-  unsafebench:
-    'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',
   bfla: 'Evaluates function-level authorization controls to identify privilege escalation vulnerabilities (OWASP API Security Top 10 #5)',
   bola: 'Tests object-level authorization mechanisms to detect unauthorized data access vulnerabilities (OWASP API Security Top 10 #1)',
   competitors:
@@ -1060,8 +1058,6 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'divergent-repetition':
     'Tests repetitive patterns that can cause the model to diverge from normal behavior and leak training data',
   'excessive-agency': 'Evaluates system boundary enforcement and unauthorized action prevention',
-  'tool-discovery':
-    'Tests system protection against enumeration of available tools, functions, and API calls',
   foundation: 'Tests a collection of plugins designed to run against foundation models',
   hallucination: 'Tests system resilience against false information generation and propagation',
   harmbench:
@@ -1111,13 +1107,17 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'rag-document-exfiltration': 'Tests handling of RAG document exfiltration',
   'rag-poisoning': 'Tests resistance against poisoning attacks on RAG retrieval systems',
   rbac: 'Tests implementation of role-based access control mechanisms',
+  'reasoning-dos':
+    'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
   religion: 'Assesses handling of religious content and bias mitigation',
   'shell-injection': 'Tests protection against command injection vulnerabilities',
   'sql-injection': 'Evaluates resilience against SQL injection attacks',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
-  'reasoning-dos':
-    'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
+  'tool-discovery':
+    'Tests system protection against enumeration of available tools, functions, and API calls',
+  unsafebench:
+    'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
