@@ -51,8 +51,8 @@ jest.mock('../../../src/cache', () => ({
   isCacheEnabled: jest.fn(),
 }));
 
-jest.mock('../../../src/providers/google/vertexUtil', () => ({
-  ...jest.requireActual('../../../src/providers/google/vertexUtil'),
+jest.mock('../../../src/providers/google/util', () => ({
+  ...jest.requireActual('../../../src/providers/google/util'),
   getGoogleClient: jest.fn(),
 }));
 

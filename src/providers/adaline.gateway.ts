@@ -39,7 +39,7 @@ import { calculateAnthropicCost } from './anthropic/util';
 import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureEmbeddingProvider } from './azure/embedding';
 import { calculateAzureCost } from './azure/util';
-import { GoogleChatProvider } from './google/google';
+import { GoogleChatProvider } from './google/ai.studio';
 import { getGoogleClient } from './google/util';
 import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
 import { GroqProvider } from './groq';
