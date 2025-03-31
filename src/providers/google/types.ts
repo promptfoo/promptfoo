@@ -104,7 +104,8 @@ export interface CompletionOptions {
     topK?: number;
 
     // AI Studio
-    response_mime_type: string;
+    response_mime_type?: string;
+    response_schema?: string;
 
     // Live API
     response_modalities?: string[];
