@@ -8,6 +8,12 @@ import Eval from '../src/models/eval';
 import { type ApiProvider, type TestSuite, type Prompt, ResultFailureReason } from '../src/types';
 import { sleep } from '../src/util/time';
 
+// Helper function to strip assertions property for test compatibility
+function stripAssertions(tokenUsage: any) {
+  const { assertions, ...rest } = tokenUsage;
+  return rest;
+}
+
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
@@ -134,7 +140,7 @@ describe('evaluator', () => {
     );
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
-    expect(summary.stats.tokenUsage).toEqual({
+    expect(stripAssertions(summary.stats.tokenUsage)).toEqual({
       total: 10,
       prompt: 5,
       completion: 5,
@@ -168,7 +174,7 @@ describe('evaluator', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
-    expect(summary.stats.tokenUsage).toEqual({
+    expect(stripAssertions(summary.stats.tokenUsage)).toEqual({
       total: 10,
       prompt: 5,
       completion: 5,
@@ -202,7 +208,7 @@ describe('evaluator', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
-    expect(summary.stats.tokenUsage).toEqual({
+    expect(stripAssertions(summary.stats.tokenUsage)).toEqual({
       total: 10,
       prompt: 5,
       completion: 5,
@@ -236,7 +242,7 @@ describe('evaluator', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
-    expect(summary.stats.tokenUsage).toEqual({
+    expect(stripAssertions(summary.stats.tokenUsage)).toEqual({
       total: 10,
       prompt: 5,
       completion: 5,
@@ -270,7 +276,7 @@ describe('evaluator', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(4);
     expect(summary.stats.successes).toBe(4);
     expect(summary.stats.failures).toBe(0);
-    expect(summary.stats.tokenUsage).toEqual({
+    expect(stripAssertions(summary.stats.tokenUsage)).toEqual({
       total: 40,
       prompt: 20,
       completion: 20,
@@ -304,7 +310,7 @@ describe('evaluator', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
     expect(summary.stats.successes).toBe(2);
     expect(summary.stats.failures).toBe(0);
-    expect(summary.stats.tokenUsage).toEqual({
+    expect(stripAssertions(summary.stats.tokenUsage)).toEqual({
       total: 20,
       prompt: 10,
       completion: 10,
@@ -333,7 +339,7 @@ describe('evaluator', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
-    expect(summary.stats.tokenUsage).toEqual({
+    expect(stripAssertions(summary.stats.tokenUsage)).toEqual({
       total: 10,
       prompt: 5,
       completion: 5,
@@ -362,7 +368,7 @@ describe('evaluator', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(3);
     expect(summary.stats.successes).toBe(3);
     expect(summary.stats.failures).toBe(0);
-    expect(summary.stats.tokenUsage).toEqual({
+    expect(stripAssertions(summary.stats.tokenUsage)).toEqual({
       total: 30,
       prompt: 15,
       completion: 15,
@@ -391,7 +397,7 @@ describe('evaluator', () => {
     expect(mockReasoningApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
-    expect(summary.stats.tokenUsage).toEqual({
+    expect(stripAssertions(summary.stats.tokenUsage)).toEqual({
       total: 21,
       prompt: 9,
       completion: 12,
@@ -888,7 +894,7 @@ describe('evaluator', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
-    expect(summary.stats.tokenUsage).toEqual({
+    expect(stripAssertions(summary.stats.tokenUsage)).toEqual({
       total: 10,
       prompt: 5,
       completion: 5,
@@ -2283,12 +2289,12 @@ describe('runEval', () => {
       registers: {},
     });
 
-    expect(results[0].tokenUsage).toEqual({
+    expect(stripAssertions(results[0].tokenUsage)).toEqual({
       total: 20, // 10 from provider + 5 from assertion
       prompt: 10, // 5 from provider + 5 from assertion
       completion: 10, // 5 from provider + 5 from assertion
       cached: 0,
-      numRequests: 2, // 1 from provider + 1 from assertion
+      numRequests: 2, // 1 for provider + 1 for assertion
       completionDetails: {
         reasoning: 0,
         acceptedPrediction: 0,
