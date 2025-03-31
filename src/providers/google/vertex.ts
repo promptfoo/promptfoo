@@ -286,7 +286,7 @@ export class VertexChatProvider extends VertexGenericProvider {
       generationConfig: {
         context: this.config.context,
         examples: this.config.examples,
-        stopSequence: this.config.stopSequence,
+        stopSequences: this.config.stopSequences,
         temperature: this.config.temperature,
         maxOutputTokens: this.config.maxOutputTokens,
         topP: this.config.topP,
@@ -494,7 +494,7 @@ export class VertexChatProvider extends VertexGenericProvider {
         context: this.config.context,
         examples: this.config.examples,
         safetySettings: this.config.safetySettings,
-        stopSequence: this.config.stopSequence,
+        stopSequences: this.config.stopSequences,
         temperature: this.config.temperature,
         maxOutputTokens: this.config.maxOutputTokens,
         topP: this.config.topP,

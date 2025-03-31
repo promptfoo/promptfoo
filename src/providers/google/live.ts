@@ -210,7 +210,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
             generation_config: {
               context: this.config.context,
               examples: this.config.examples,
-              stopSequence: this.config.stopSequence,
+              stopSequences: this.config.stopSequences,
               temperature: this.config.temperature,
               maxOutputTokens: this.config.maxOutputTokens,
               topP: this.config.topP,

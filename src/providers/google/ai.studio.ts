@@ -12,32 +12,20 @@ import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
 import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { CHAT_MODELS } from './shared';
+import type { CompletionOptions } from './types';
 import { maybeCoerceToGeminiFormat } from './util';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
 
-interface GoogleCompletionOptions {
-  apiKey?: string;
-  apiHost?: string;
-  safetySettings?: { category: string; probability: string }[];
-  stopSequences?: string[];
-  temperature?: number;
-  maxOutputTokens?: number;
-  topP?: number;
-  topK?: number;
-  generationConfig?: Record<string, any>;
-  responseSchema?: string;
-}
-
 class GoogleGenericProvider implements ApiProvider {
   modelName: string;
 
-  config: GoogleCompletionOptions;
+  config: CompletionOptions;
   env?: EnvOverrides;
 
   constructor(
     modelName: string,
-    options: { config?: GoogleCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: { config?: CompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     const { config, id, env } = options;
     this.env = env;
@@ -90,7 +78,7 @@ class GoogleGenericProvider implements ApiProvider {
 export class GoogleChatProvider extends GoogleGenericProvider {
   constructor(
     modelName: string,
-    options: { config?: GoogleCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: { config?: CompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     if (!CHAT_MODELS.includes(modelName)) {
       logger.debug(`Using unknown Google chat model: ${modelName}`);

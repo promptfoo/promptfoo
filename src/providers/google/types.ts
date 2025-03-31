@@ -82,7 +82,7 @@ export interface CompletionOptions {
   context?: string;
   examples?: { input: string; output: string }[];
   safetySettings?: { category: string; probability: string }[];
-  stopSequence?: string[];
+  stopSequences?: string[];
   temperature?: number;
   maxOutputTokens?: number;
   max_tokens?: number; // Alternative format for Claude models
@@ -97,7 +97,7 @@ export interface CompletionOptions {
   generationConfig?: {
     context?: string;
     examples?: { input: string; output: string }[];
-    stopSequence?: string[];
+    stopSequences?: string[];
     temperature?: number;
     maxOutputTokens?: number;
     topP?: number;
@@ -106,6 +106,8 @@ export interface CompletionOptions {
     // Live API
     response_modalities?: string[];
   };
+
+  responseSchema?: string;
 
   toolConfig?: {
     functionCallingConfig?: {
