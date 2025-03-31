@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { useTheme } from '@mui/material/styles';
 import Layout from '@theme/Layout';
 
-export default function ExternalApiDocs() {
+export default function ApiReference() {
   const theme = useTheme();
   useEffect(() => {
     const script = document.createElement('script');
@@ -26,7 +26,7 @@ export default function ExternalApiDocs() {
     }
   }, [theme.palette.mode]);
   return (
-    <Layout title="External API Docs | Promptfoo" description="External API Docs">
+    <Layout title="API Reference | Promptfoo" description="API Reference">
       <main id="app"></main>
     </Layout>
   );

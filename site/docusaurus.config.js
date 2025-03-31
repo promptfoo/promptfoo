@@ -175,10 +175,6 @@ const config = {
                 label: 'Docs',
               },
               {
-                href: '/external-api-docs',
-                label: 'External API Reference',
-              },
-              {
                 href: 'https://www.promptfoo.dev/models/',
                 label: 'Foundation Model Reports',
               },
