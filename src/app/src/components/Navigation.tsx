@@ -59,7 +59,7 @@ function NavLink({ href, label }: { href: string; label: string }) {
   );
 }
 
-function Dropdown() {
+function CreateDropdown() {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
   const location = useLocation();
@@ -109,6 +109,42 @@ function Dropdown() {
   );
 }
 
+function EvalsDropdown() {
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const open = Boolean(anchorEl);
+  const location = useLocation();
+
+  const handleClick = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
+
+  const isActive = ['/eval', '/evals'].some((route) => location.pathname.startsWith(route));
+
+  return (
+    <>
+      <NavButton
+        onClick={handleClick}
+        endIcon={<ArrowDropDownIcon />}
+        className={isActive ? 'active' : ''}
+      >
+        Evals
+      </NavButton>
+      <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
+        <MenuItem onClick={handleClose} component={Link} to="/eval">
+          Latest Eval
+        </MenuItem>
+        <MenuItem onClick={handleClose} component={Link} to="/evals">
+          All Evals
+        </MenuItem>
+      </Menu>
+    </>
+  );
+}
+
 export default function Navigation({
   darkMode,
   onToggleDarkMode,
@@ -128,8 +164,8 @@ export default function Navigation({
         <NavToolbar>
           <NavSection>
             <Logo />
-            <Dropdown />
-            <NavLink href="/evals" label="Evals" />
+            <CreateDropdown />
+            <EvalsDropdown />
             <NavLink href="/prompts" label="Prompts" />
             <NavLink href="/datasets" label="Datasets" />
             <NavLink href="/history" label="History" />
