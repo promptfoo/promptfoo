@@ -1,6 +1,6 @@
 import * as cache from '../../../src/cache';
 import { GoogleChatProvider } from '../../../src/providers/google/google';
-import * as vertexUtil from '../../../src/providers/google/vertexUtil';
+import * as vertexUtil from '../../../src/providers/google/util';
 import * as templates from '../../../src/util/templates';
 
 jest.mock('../../../src/cache', () => ({

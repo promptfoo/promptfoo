@@ -10,8 +10,8 @@ import type {
 import '../../util';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
 import { parseChatPrompt } from '../shared';
-import type { GeminiFormat } from './vertexUtil';
-import { maybeCoerceToGeminiFormat } from './vertexUtil';
+import type { GeminiFormat } from './util';
+import { maybeCoerceToGeminiFormat } from './util';
 
 interface Blob {
   mimeType: string;

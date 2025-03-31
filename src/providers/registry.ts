@@ -33,7 +33,7 @@ import { EchoProvider } from './echo';
 import { FalImageGenerationProvider } from './fal';
 import { GolangProvider } from './golangCompletion';
 import { GoogleChatProvider } from './google/google';
-import { GoogleMMLiveProvider } from './google/googleMultimodalLive';
+import { GoogleMMLiveProvider } from './google/googleLive';
 import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
 import { GroqProvider } from './groq';
 import { HttpProvider } from './http';

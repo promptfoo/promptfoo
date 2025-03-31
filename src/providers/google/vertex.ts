@@ -18,13 +18,13 @@ import { maybeLoadFromExternalFile } from '../../util';
 import { isValidJson } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
-import type { GeminiErrorResponse, GeminiFormat, Palm2ApiResponse } from './vertexUtil';
+import type { GeminiErrorResponse, GeminiFormat, Palm2ApiResponse } from './util';
 import {
   getGoogleClient,
   maybeCoerceToGeminiFormat,
   type GeminiApiResponse,
   type GeminiResponseData,
-} from './vertexUtil';
+} from './util';
 
 interface Blob {
   mimeType: string;

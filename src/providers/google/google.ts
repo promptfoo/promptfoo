@@ -12,7 +12,7 @@ import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
 import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { CHAT_MODELS } from './googleShared';
-import { maybeCoerceToGeminiFormat } from './vertexUtil';
+import { maybeCoerceToGeminiFormat } from './util';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
 

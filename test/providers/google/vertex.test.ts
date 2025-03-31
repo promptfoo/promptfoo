@@ -2,8 +2,8 @@ import * as fs from 'fs';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
 import { getCache, isCacheEnabled } from '../../../src/cache';
 import logger from '../../../src/logger';
+import * as vertexUtil from '../../../src/providers/google/util';
 import { VertexChatProvider } from '../../../src/providers/google/vertex';
-import * as vertexUtil from '../../../src/providers/google/vertexUtil';
 
 // Mock database
 jest.mock('better-sqlite3', () => {

@@ -6,11 +6,11 @@ import { getAnthropicProviders } from './anthropic/defaults';
 import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureModerationProvider } from './azure/moderation';
+import { hasGoogleDefaultCredentials } from './google/util';
 import {
   DefaultEmbeddingProvider as GeminiEmbeddingProvider,
   DefaultGradingProvider as GeminiGradingProvider,
 } from './google/vertex';
-import { hasGoogleDefaultCredentials } from './google/vertexUtil';
 import {
   DefaultEmbeddingProvider as OpenAiEmbeddingProvider,
   DefaultGradingJsonProvider as OpenAiGradingJsonProvider,
