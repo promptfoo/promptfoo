@@ -146,6 +146,12 @@ export async function processPrompt(
     return prompts;
   }
 
+  if (extension === '.csv') {
+    return processCsvPrompts(filePath, prompt);
+  }
+  if (extension === '.j2') {
+    return processJinjaFile(filePath, prompt);
+  }
   if (extension === '.json') {
     return processJsonFile(filePath, prompt);
   }
@@ -158,9 +164,6 @@ export async function processPrompt(
   if (extension === '.md') {
     return processMarkdownFile(filePath, prompt);
   }
-  if (extension === '.j2') {
-    return processJinjaFile(filePath, prompt);
-  }
   if (extension === '.py') {
     return processPythonFile(filePath, prompt, functionName);
   }
@@ -169,9 +172,6 @@ export async function processPrompt(
   }
   if (extension && ['.yml', '.yaml'].includes(extension)) {
     return processYamlFile(filePath, prompt);
-  }
-  if (extension === '.csv') {
-    return processCsvPrompts(filePath, prompt);
   }
   return [];
 }
