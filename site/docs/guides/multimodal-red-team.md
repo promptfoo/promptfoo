@@ -35,7 +35,7 @@ cd redteam-multi-modal
 
 # Install dependencies for image and audio strategies
 npm install sharp  # Image
-npm instsall node-gtts # Audio
+npm install node-gtts # Audio
 
 # Generate a red team test for the static image approach
 npx promptfoo@latest redteam generate -c redteam.static-image.yaml

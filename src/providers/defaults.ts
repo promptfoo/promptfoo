@@ -6,6 +6,11 @@ import { getAnthropicProviders } from './anthropic/defaults';
 import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureModerationProvider } from './azure/moderation';
+import { hasGoogleDefaultCredentials } from './google/util';
+import {
+  DefaultEmbeddingProvider as GeminiEmbeddingProvider,
+  DefaultGradingProvider as GeminiGradingProvider,
+} from './google/vertex';
 import {
   DefaultEmbeddingProvider as OpenAiEmbeddingProvider,
   DefaultGradingJsonProvider as OpenAiGradingJsonProvider,
@@ -13,11 +18,6 @@ import {
   DefaultModerationProvider as OpenAiModerationProvider,
   DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
 } from './openai/defaults';
-import {
-  DefaultEmbeddingProvider as GeminiEmbeddingProvider,
-  DefaultGradingProvider as GeminiGradingProvider,
-} from './vertex';
-import { hasGoogleDefaultCredentials } from './vertexUtil';
 
 const COMPLETION_PROVIDERS: (keyof DefaultProviders)[] = [
   'datasetGenerationProvider',
