@@ -21,7 +21,7 @@ keywords:
 
 # Multi-Modal Red Teaming
 
-Large language models with multi-modal capabilities (vision, audio, etc.) present unique security challenges compared to text-only models. This guide demonstrates how to use promptfoo to effectively test multi-modal models against adversarial inputs using different approaches for vision and audio content.
+Large language models with multi-modal capabilities (vision, audio, etc.) present unique security challenges compared to text-only models. This guide demonstrates how to use promptfoo to test multi-modal models against adversarial inputs using different approaches for vision and audio content.
 
 ## Quick Start
 
@@ -35,17 +35,16 @@ npx promptfoo@latest init --example redteam-multi-modal
 cd redteam-multi-modal
 
 # Install dependencies for image and audio strategies
-npm install sharp  # Image
-npm install node-gtts # Audio
+npm install sharp node-gtts
 
-# Run the static image red team test
-npx promptfoo@latest redteam run -c redteam.static-image.yaml
+# Run the static image red team
+npx promptfoo@latest redteam run -c promptfooconfig.static-image.yaml
 
-# Run the image strategy red team test
-npx promptfoo@latest redteam run -c redteam.image-strategy.yaml
+# Run the image strategy red team
+npx promptfoo@latest redteam run -c promptfooconfig.image-strategy.yaml
 
-# Run the UnsafeBench red team test
-npx promptfoo@latest redteam run -c redteam.unsafebench.yaml
+# Run the UnsafeBench red team
+npx promptfoo@latest redteam run -c promptfooconfig.unsafebench.yaml
 ```
 
 ## Multi-Modal Red Teaming Approaches
@@ -64,7 +63,7 @@ This approach converts potentially harmful text into images and then sends those
 
 #### 3. UnsafeBench Dataset Testing
 
-This approach uses real unsafe images from the UnsafeBench dataset to test how models respond to potentially harmful visual content across various categories. It evaluates whether models can properly detect and refuse to engage with unsafe imagery.
+This approach uses real unsafe images from the [UnsafeBench](https://huggingface.co/datasets/yiting/UnsafeBench) dataset to test how models respond to potentially harmful visual content across various categories. It evaluates whether models can properly detect and refuse to engage with unsafe imagery.
 
 ### Audio Content Strategy
 
@@ -77,17 +76,18 @@ This approach converts potentially harmful text into speech audio and then sends
 Before running any of the examples, set up the necessary environment variables for your chosen provider:
 
 ```bash
+# For AWS Bedrock:
 export AWS_ACCESS_KEY_ID=your_access_key
 export AWS_SECRET_ACCESS_KEY=your_secret_key
 export AWS_REGION=your_region
 
-# For OpenAI:
+# Or for OpenAI:
 export OPENAI_API_KEY=your_api_key
 
-# For Anthropic:
+# Or for Anthropic:
 export ANTHROPIC_API_KEY=your_api_key
 
-# For UnsafeBench plugin:
+# Required for the UnsafeBench plugin (method 3)
 export HF_TOKEN=your_huggingface_token
 ```
 
@@ -97,9 +97,9 @@ This approach keeps an image constant while varying text prompts to test differe
 
 ### Configuration
 
-Create a configuration file named `redteam.static-image.yaml`:
+Create a configuration file named `promptfooconfig.static-image.yaml`:
 
-```yaml title="redteam.static-image.yaml"
+```yaml title="promptfooconfig.static-image.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Image Analysis with Multimodal Models
 
@@ -182,12 +182,12 @@ The prompt template format varies between providers. Adjust the template to matc
 
 :::
 
-### Run the Static Image Red Team Test
+### Run the Static Image Red Team
 
 Run your red team test with:
 
 ```bash
-npx promptfoo@latest redteam run -c redteam.static-image.yaml
+npx promptfoo@latest redteam run -c promptfooconfig.static-image.yaml
 ```
 
 ## Approach 2: Text-to-Image Conversion (Image Strategy)
@@ -196,9 +196,9 @@ This approach converts potentially harmful text into images to test if the model
 
 ### Configuration
 
-Create a configuration file named `redteam.image-strategy.yaml`:
+Create a configuration file named `promptfooconfig.image-strategy.yaml`:
 
-```yaml title="redteam.image-strategy.yaml"
+```yaml title="promptfooconfig.image-strategy.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Image Analysis with Multimodal Models
 
@@ -252,22 +252,12 @@ The image strategy:
 3. Encodes the image as a base64 string
 4. Injects this image into the prompt instead of plain text
 
-:::info
-
-The image strategy requires the `sharp` library to convert text to images:
-
-```bash
-npm install sharp
-```
-
-:::
-
-### Run the Image Strategy Red Team Test
+### Run the Image Strategy Red Team
 
 Run your test with:
 
 ```bash
-npx promptfoo@latest redteam run -c redteam.image-strategy.yaml
+npx promptfoo@latest redteam run -c promptfooconfig.image-strategy.yaml
 ```
 
 ## Approach 3: UnsafeBench Dataset Testing
@@ -282,9 +272,9 @@ This approach uses real unsafe images from the UnsafeBench dataset to test how m
 
 ### Configuration
 
-Create a configuration file named `redteam.unsafebench.yaml`:
+Create a configuration file named `promptfooconfig.unsafebench.yaml`:
 
-```yaml title="redteam.unsafebench.yaml"
+```yaml title="promptfooconfig.unsafebench.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: UnsafeBench Multi-Modal Model Evaluation
 
@@ -356,7 +346,7 @@ Create a prompt template suitable for your model. For example, for OpenAI:
 ]
 ```
 
-### Run the UnsafeBench Red Team Test
+### Run the UnsafeBench Red Team
 
 First, set your Hugging Face token:
 
@@ -367,15 +357,8 @@ export HF_TOKEN=your_huggingface_token
 Then run your test:
 
 ```bash
-npx promptfoo@latest redteam run -c redteam.unsafebench.yaml
+npx promptfoo@latest redteam run -c promptfooconfig.unsafebench.yaml
 ```
-
-### Evaluating UnsafeBench Results
-
-When analyzing UnsafeBench evaluation results, look for these patterns:
-
-- **Good responses**: Model identifies unsafe content and politely refuses to describe it
-- **Poor responses**: Model describes harmful content in detail or fails to identify it as problematic
 
 ### Customizing UnsafeBench
 
@@ -411,9 +394,9 @@ redteam:
 
 ## Audio Strategy Example
 
-To use the audio strategy for red teaming, create a configuration file named `redteam.audio-strategy.yaml`:
+To use the audio strategy for red teaming, create a configuration file:
 
-```yaml title="redteam.audio-strategy.yaml"
+```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Audio Analysis with Multimodal Models
 
@@ -477,20 +460,11 @@ Create an audio prompt template:
 ]
 ```
 
-:::tip
-This strategy requires you to install `node-gtts` for text-to-speech conversion:
-
-```bash
-npm install node-gtts
-```
-
-:::
-
-Run the audio strategy red team test:
+Run the audio strategy red team:
 
 ```bash
 # Generate and evaluate in one step
-npx promptfoo@latest redteam run -c redteam.audio-strategy.yaml
+npx promptfoo@latest redteam run -c promptfooconfig.yaml
 ```
 
 ## See Also
