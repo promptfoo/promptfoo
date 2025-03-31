@@ -329,4 +329,55 @@ describe('PythonProvider with file references', () => {
     // No need to verify the call parameters since we're mocking executePythonScript directly
     // and testing the output instead
   });
+
+  it('should pass processed config to Python script instead of raw file references', async () => {
+    // Arrange
+    const mockOriginalConfig = {
+      settings: 'file://settings.json',
+      formats: 'file://formats.yaml',
+    };
+
+    const mockProcessedConfig = {
+      settings: { model: 'gpt-4', temperature: 0.7 },
+      formats: { outputFormat: 'json', includeTokens: true },
+    };
+
+    jest.mocked(processConfigFileReferences).mockResolvedValue(mockProcessedConfig);
+
+    // Create the provider with raw file references
+    const provider = new PythonProvider('test.py', {
+      id: 'test',
+      config: {
+        basePath: '/base/path',
+        ...mockOriginalConfig,
+      },
+    });
+
+    // Reset the runPython mock to capture the exact arguments passed
+    const runPythonMock = jest.mocked(runPython);
+    runPythonMock.mockClear();
+    runPythonMock.mockImplementation(async (scriptPath, method, args) => {
+      // Return success result but capture args for testing
+      return { output: 'Success', args: args };
+    });
+
+    // Act
+    await provider.callApi('Test prompt');
+
+    // Assert
+    expect(runPythonMock).toHaveBeenCalled();
+
+    // Extract the arguments passed to runPython
+    const argsPassedToRunPython = runPythonMock.mock.calls[0][2];
+    // The first element of args is the prompt, the second is options with config
+    const optionsPassedToPython = argsPassedToRunPython[1];
+
+    // Verify the options passed contain the processed config values and not the raw file references
+    expect(optionsPassedToPython.config.settings).toEqual(mockProcessedConfig.settings);
+    expect(optionsPassedToPython.config.formats).toEqual(mockProcessedConfig.formats);
+
+    // Make sure the raw file references are not present
+    expect(optionsPassedToPython.config.settings).not.toBe('file://settings.json');
+    expect(optionsPassedToPython.config.formats).not.toBe('file://formats.yaml');
+  });
 });

@@ -68,12 +68,21 @@ export class PythonProvider implements ApiProvider {
     }
   }
 
+  /**
+   * Execute the Python script with the specified API type
+   * Handles caching, file reference processing, and executing the Python script
+   *
+   * @param prompt - The prompt to pass to the Python script
+   * @param context - Optional context information
+   * @param apiType - The type of API to call (call_api, call_embedding_api, call_classification_api)
+   * @returns The response from the Python script
+   */
   private async executePythonScript(
     prompt: string,
     context: CallApiContextParams | undefined,
     apiType: 'call_api' | 'call_embedding_api' | 'call_classification_api',
   ): Promise<any> {
-    // Ensure config references are processed before execution
+    // Ensure file references in config are processed before execution
     if (!this.configReferencesProcessed) {
       await this.processConfigReferences();
     }
@@ -81,15 +90,16 @@ export class PythonProvider implements ApiProvider {
     const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(fs.readFileSync(absPath, 'utf-8'));
-    // Create a cache key that includes the function name to ensure different functions
-    // from the same Python file don't share caches
+
+    // Create cache key including the function name to ensure different functions don't share caches
     const cacheKey = `python:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
       this.options,
     )}:${JSON.stringify(context?.vars)}`;
     logger.debug(`PythonProvider cache key: ${cacheKey}`);
+
+    // Check cache if enabled
     const cache = await getCache();
     let cachedResult;
-
     const cacheEnabled = isCacheEnabled();
     logger.debug(`PythonProvider cache enabled: ${cacheEnabled}`);
 
@@ -99,6 +109,7 @@ export class PythonProvider implements ApiProvider {
     }
 
     if (cachedResult) {
+      // Return cached result if available
       logger.debug(`Returning cached ${apiType} result for script ${absPath}`);
       const parsedResult = JSON.parse(cachedResult as string);
 
@@ -106,21 +117,18 @@ export class PythonProvider implements ApiProvider {
         `PythonProvider parsed cached result type: ${typeof parsedResult}, keys: ${Object.keys(parsedResult).join(',')}`,
       );
 
-      // IMPORTANT: Set cached flag to true so evaluator recognizes this as cached
+      // Mark as cached so evaluator recognizes it
       if (apiType === 'call_api' && typeof parsedResult === 'object' && parsedResult !== null) {
         logger.debug(`PythonProvider setting cached=true for cached ${apiType} result`);
         parsedResult.cached = true;
 
-        // If there's token usage information, update it to reflect cached status
+        // Update token usage format for cached results
         if (parsedResult.tokenUsage) {
           const total = parsedResult.tokenUsage.total || 0;
-
-          // Transform the token usage to match the cached format expected by the evaluator
           parsedResult.tokenUsage = {
             cached: total,
             total,
           };
-
           logger.debug(
             `Updated token usage for cached result: ${JSON.stringify(parsedResult.tokenUsage)}`,
           );
@@ -128,44 +136,51 @@ export class PythonProvider implements ApiProvider {
       }
       return parsedResult;
     } else {
+      // Execute Python script with processed configuration
       if (context) {
-        // These are not useful in Python
+        // Remove properties not useful in Python
         delete context.fetchWithCache;
         delete context.getCache;
         delete context.logger;
       }
 
-      // Create a copy of options with processed config
+      // Create a new options object with processed file references included in the config
+      // This ensures any file:// references are replaced with their actual content
       const optionsWithProcessedConfig = {
         ...this.options,
         config: {
           ...this.options?.config,
-          ...this.config, // Include the processed config
+          ...this.config, // Merge in the processed config containing resolved file references
         },
       };
 
-      // Add detailed logging about processed config
+      // Log the processed configuration for debugging
       logger.debug(`Using processed config: ${safeJsonStringify(this.config)}`);
       logger.debug(
         `Combined options with processed config: ${safeJsonStringify(optionsWithProcessedConfig)}`,
       );
 
+      // Prepare arguments for the Python script based on API type
       const args =
         apiType === 'call_api'
           ? [prompt, optionsWithProcessedConfig, context]
           : [prompt, optionsWithProcessedConfig];
+
       logger.debug(
         `Running python script ${absPath} with scriptPath ${this.scriptPath} and args: ${safeJsonStringify(args)}`,
       );
+
       const functionName = this.functionName || apiType;
       let result;
+
+      // Execute the appropriate API call
       switch (apiType) {
         case 'call_api':
           result = await runPython(absPath, functionName, args, {
             pythonExecutable: this.config.pythonExecutable,
           });
 
-          // Add detailed logging about the result structure
+          // Log result structure for debugging
           logger.debug(
             `Python provider result structure: ${result ? typeof result : 'undefined'}, keys: ${result ? Object.keys(result).join(',') : 'none'}`,
           );
@@ -175,6 +190,7 @@ export class PythonProvider implements ApiProvider {
             );
           }
 
+          // Validate result format
           if (
             !result ||
             typeof result !== 'object' ||
@@ -191,6 +207,8 @@ export class PythonProvider implements ApiProvider {
           result = await runPython(absPath, functionName, args, {
             pythonExecutable: this.config.pythonExecutable,
           });
+
+          // Validate embedding result format
           if (
             !result ||
             typeof result !== 'object' ||
@@ -207,6 +225,8 @@ export class PythonProvider implements ApiProvider {
           result = await runPython(absPath, functionName, args, {
             pythonExecutable: this.config.pythonExecutable,
           });
+
+          // Validate classification result format
           if (
             !result ||
             typeof result !== 'object' ||
@@ -223,7 +243,7 @@ export class PythonProvider implements ApiProvider {
           throw new Error(`Unsupported apiType: ${apiType}`);
       }
 
-      // Store in cache if caching is enabled and there are no errors
+      // Store result in cache if enabled and no errors
       const hasError =
         'error' in result &&
         result.error !== null &&
@@ -239,7 +259,7 @@ export class PythonProvider implements ApiProvider {
         );
       }
 
-      // Set cached=false on fresh results
+      // Mark as not cached for fresh results
       if (typeof result === 'object' && result !== null && apiType === 'call_api') {
         logger.debug(`PythonProvider explicitly setting cached=false for fresh result`);
         result.cached = false;
