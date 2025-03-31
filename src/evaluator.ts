@@ -44,7 +44,7 @@ import { transform, type TransformContext, TransformInputType } from './util/tra
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
 // Helper function to update assertion metrics safely
-// This function handles the TypeScript type checking issues with potentially undefined assertions field
+// This function handles initialization and safe updating of assertion token usage metrics
 function updateAssertionMetrics(
   metrics: { tokenUsage: Partial<TokenUsage> },
   assertionTokens: Partial<TokenUsage>,
@@ -59,14 +59,12 @@ function updateAssertionMetrics(
     };
   }
 
-  // Type assertion to get TypeScript to understand this is defined now
-  const assertions = metrics.tokenUsage.assertions as NonNullable<TokenUsage['assertions']>;
-
   // Now we can safely update the metrics
-  assertions.total = (assertions.total || 0) + (assertionTokens.total || 0);
-  assertions.prompt = (assertions.prompt || 0) + (assertionTokens.prompt || 0);
-  assertions.completion = (assertions.completion || 0) + (assertionTokens.completion || 0);
-  assertions.cached = (assertions.cached || 0) + (assertionTokens.cached || 0);
+  const assertions = metrics.tokenUsage.assertions;
+  assertions.total = (assertions.total ?? 0) + (assertionTokens.total ?? 0);
+  assertions.prompt = (assertions.prompt ?? 0) + (assertionTokens.prompt ?? 0);
+  assertions.completion = (assertions.completion ?? 0) + (assertionTokens.completion ?? 0);
+  assertions.cached = (assertions.cached ?? 0) + (assertionTokens.cached ?? 0);
 }
 
 /**
@@ -784,28 +782,31 @@ class Evaluator {
                 `Model-graded assertion [${assertion.type}] token usage: ${JSON.stringify(tokensUsed)}`,
               );
 
-              // Ensure assertions object exists and add token usage
-              this.stats.tokenUsage.assertions = this.stats.tokenUsage.assertions || {
-                total: 0,
-                prompt: 0,
-                completion: 0,
-                cached: 0,
-              };
+              // Initialize assertions object if it doesn't exist
+              if (!this.stats.tokenUsage.assertions) {
+                this.stats.tokenUsage.assertions = {
+                  total: 0,
+                  prompt: 0,
+                  completion: 0,
+                  cached: 0,
+                };
+              }
 
-              // Add to assertion stats (using type assertion)
-              const assertions = this.stats.tokenUsage.assertions as Required<
-                NonNullable<TokenUsage['assertions']>
-              >;
-              assertions.total += tokensUsed.total || 0;
-              assertions.prompt += tokensUsed.prompt || 0;
-              assertions.completion += tokensUsed.completion || 0;
-              assertions.cached += tokensUsed.cached || 0;
+              const assertions = this.stats.tokenUsage.assertions;
+              assertions.total = (assertions.total ?? 0) + (tokensUsed.total ?? 0);
+              assertions.prompt = (assertions.prompt ?? 0) + (tokensUsed.prompt ?? 0);
+              assertions.completion = (assertions.completion ?? 0) + (tokensUsed.completion ?? 0);
+              assertions.cached = (assertions.cached ?? 0) + (tokensUsed.cached ?? 0);
 
               // Also add to the overall totals
-              this.stats.tokenUsage.total += tokensUsed.total || 0;
-              this.stats.tokenUsage.prompt += tokensUsed.prompt || 0;
-              this.stats.tokenUsage.completion += tokensUsed.completion || 0;
-              this.stats.tokenUsage.cached += tokensUsed.cached || 0;
+              this.stats.tokenUsage.total =
+                (this.stats.tokenUsage.total ?? 0) + (tokensUsed.total ?? 0);
+              this.stats.tokenUsage.prompt =
+                (this.stats.tokenUsage.prompt ?? 0) + (tokensUsed.prompt ?? 0);
+              this.stats.tokenUsage.completion =
+                (this.stats.tokenUsage.completion ?? 0) + (tokensUsed.completion ?? 0);
+              this.stats.tokenUsage.cached =
+                (this.stats.tokenUsage.cached ?? 0) + (tokensUsed.cached ?? 0);
 
               break; // Only log once per result
             }

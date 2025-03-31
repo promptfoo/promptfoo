@@ -1,7 +1,10 @@
 import { fetchWithCache } from '../src/cache';
-import guardrails from '../src/guardrails';
+import guardrails, { type AdaptiveRequest } from '../src/guardrails';
 
-jest.mock('../src/cache');
+// Mock the cache module
+jest.mock('../src/cache', () => ({
+  fetchWithCache: jest.fn(),
+}));
 
 describe('guardrails', () => {
   const mockFetchResponse = {
@@ -259,6 +262,82 @@ describe('guardrails', () => {
           pii: expect.any(String),
         }),
       );
+    });
+  });
+
+  describe('adaptive function', () => {
+    it('should call fetchWithCache with correct parameters', async () => {
+      const mockResponse = {
+        data: {
+          model: 'promptfoo-adaptive-prompt',
+          adaptedPrompt: 'Adapted test input',
+          modifications: [
+            {
+              type: 'substitution',
+              reason: 'Policy compliance',
+              original: 'test input',
+              modified: 'Adapted test input',
+            },
+          ],
+        },
+      };
+      (fetchWithCache as jest.Mock).mockResolvedValue(mockResponse);
+
+      const request: AdaptiveRequest = {
+        prompt: 'test input',
+        policies: ['No harmful content'],
+      };
+
+      const result = await guardrails.adaptive(request);
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://api.promptfoo.dev/v1/adaptive',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            prompt: 'test input',
+            policies: ['No harmful content'],
+          }),
+        },
+        undefined,
+        'json',
+      );
+      expect(result).toEqual(mockResponse.data);
+    });
+
+    it('should handle missing policies parameter', async () => {
+      const mockResponse = {
+        data: {
+          model: 'promptfoo-adaptive-prompt',
+          adaptedPrompt: 'Adapted test input',
+          modifications: [],
+        },
+      };
+      (fetchWithCache as jest.Mock).mockResolvedValue(mockResponse);
+
+      const request: AdaptiveRequest = {
+        prompt: 'test input',
+      };
+
+      const result = await guardrails.adaptive(request);
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://api.promptfoo.dev/v1/adaptive',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            prompt: 'test input',
+            policies: [],
+          }),
+        },
+        undefined,
+        'json',
+      );
+      expect(result).toEqual(mockResponse.data);
     });
   });
 });

@@ -59,6 +59,37 @@ function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
   }
 }
 
+/**
+ * Format token usage for display in CLI output
+ */
+function formatTokenUsage(type: string, usage: any) {
+  const parts = [];
+
+  // Add token counts
+  if (usage.total !== undefined) {
+    parts.push(`${type} tokens: ${usage.total.toLocaleString()}`);
+  }
+
+  if (usage.prompt !== undefined) {
+    parts.push(`Prompt tokens: ${usage.prompt.toLocaleString()}`);
+  }
+
+  if (usage.completion !== undefined) {
+    parts.push(`Completion tokens: ${usage.completion.toLocaleString()}`);
+  }
+
+  if (usage.cached !== undefined) {
+    parts.push(`Cached tokens: ${usage.cached.toLocaleString()}`);
+  }
+
+  // Add reasoning tokens if present
+  if (usage.completionDetails?.reasoning !== undefined) {
+    parts.push(`Reasoning tokens: ${usage.completionDetails.reasoning.toLocaleString()}`);
+  }
+
+  return parts.join(' / ');
+}
+
 export async function doEval(
   cmdObj: Partial<CommandLineOptions & Command>,
   defaultConfig: Partial<UnifiedConfig>,
@@ -360,23 +391,25 @@ export async function doEval(
         prompt: tokenUsage.prompt,
         completion: tokenUsage.completion,
         cached: tokenUsage.cached,
+        completionDetails: tokenUsage.completionDetails,
       };
 
       // Line 1: Display evaluation tokens
-      logger.info(
-        `${isRedteam ? `Model probes: ${tokenUsage.numRequests.toLocaleString()} / ` : ''}Evaluation tokens: ${evalTokens.total.toLocaleString()} / Prompt tokens: ${evalTokens.prompt.toLocaleString()} / Completion tokens: ${evalTokens.completion.toLocaleString()} / Cached tokens: ${evalTokens.cached.toLocaleString()}${tokenUsage.completionDetails?.reasoning ? ` / Reasoning tokens: ${tokenUsage.completionDetails.reasoning.toLocaleString()}` : ''}`,
-      );
+      if (isRedteam) {
+        logger.info(
+          `Model probes: ${tokenUsage.numRequests.toLocaleString()} / ${formatTokenUsage('Evaluation', evalTokens)}`,
+        );
+      } else {
+        logger.info(formatTokenUsage('Evaluation', evalTokens));
+      }
 
       // Line 2: Assertion/grading tokens (from metrics like llm-rubric)
       if (tokenUsage.assertions.total > 0) {
-        logger.info(
-          `Grading tokens: ${tokenUsage.assertions.total.toLocaleString()} / Prompt tokens: ${tokenUsage.assertions.prompt.toLocaleString()} / Completion tokens: ${tokenUsage.assertions.completion.toLocaleString()} / Cached tokens: ${tokenUsage.assertions.cached.toLocaleString()}`,
-        );
+        logger.info(formatTokenUsage('Grading', tokenUsage.assertions));
       }
 
       // Line 3: Calculate the real total (sum of evaluation and grading)
       const combinedTotal = evalTokens.total + tokenUsage.assertions.total;
-
       logger.info(
         `Total tokens: ${combinedTotal.toLocaleString()} (Evaluation: ${evalTokens.total.toLocaleString()} + Grading: ${tokenUsage.assertions.total.toLocaleString()})`,
       );

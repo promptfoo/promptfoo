@@ -6,17 +6,17 @@ export interface CompletionTokenDetails {
 }
 
 export interface TokenUsage {
-  cached?: number;
-  completion?: number;
   prompt?: number;
+  completion?: number;
+  cached?: number;
   total?: number;
   numRequests?: number;
   completionDetails?: CompletionTokenDetails;
   assertions?: {
-    total?: number;
-    prompt?: number;
-    completion?: number;
-    cached?: number;
+    total: number;
+    prompt: number;
+    completion: number;
+    cached: number;
   };
 }
 

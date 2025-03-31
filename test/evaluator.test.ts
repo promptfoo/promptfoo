@@ -8,8 +8,16 @@ import Eval from '../src/models/eval';
 import { type ApiProvider, type TestSuite, type Prompt, ResultFailureReason } from '../src/types';
 import { sleep } from '../src/util/time';
 
-function stripAssertions(tokenUsage: any) {
-  const { assertions: _, ...rest } = tokenUsage;
+/**
+ * Helper function to remove the assertions field from tokenUsage objects for backward compatibility in tests
+ */
+function stripAssertions(tokenUsage: any): any {
+  if (!tokenUsage) {
+    return {};
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { assertions, ...rest } = tokenUsage;
   return rest;
 }
 

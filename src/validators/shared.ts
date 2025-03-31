@@ -7,18 +7,18 @@ export const CompletionTokenDetailsSchema = z.object({
 });
 
 export const TokenUsageSchema = z.object({
-  cached: z.number().optional(),
-  completion: z.number().optional(),
   prompt: z.number().optional(),
+  completion: z.number().optional(),
+  cached: z.number().optional(),
   total: z.number().optional(),
   numRequests: z.number().optional(),
   completionDetails: CompletionTokenDetailsSchema.optional(),
   assertions: z
     .object({
-      total: z.number().optional(),
-      prompt: z.number().optional(),
-      completion: z.number().optional(),
-      cached: z.number().optional(),
+      total: z.number(),
+      prompt: z.number(),
+      completion: z.number(),
+      cached: z.number(),
     })
     .optional(),
 });
