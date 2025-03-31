@@ -103,6 +103,9 @@ export interface CompletionOptions {
     topP?: number;
     topK?: number;
 
+    // AI Studio
+    response_mime_type: string;
+
     // Live API
     response_modalities?: string[];
   };
