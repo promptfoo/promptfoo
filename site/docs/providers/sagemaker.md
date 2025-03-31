@@ -20,8 +20,8 @@ The `sagemaker` provider allows you to use Amazon SageMaker endpoints in your ev
 
 3. The AWS SDK will automatically pull credentials from the following locations:
 
-   - IAM roles on EC2
-   - `~/.aws/credentials`
+   - IAM roles on EC2, Lambda, or SageMaker Studio
+   - `~/.aws/credentials` or `~/.aws/config` files
    - `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` environment variables
 
    :::info
@@ -48,7 +48,7 @@ The `sagemaker` provider allows you to use Amazon SageMaker endpoints in your ev
          accessKeyId: YOUR_ACCESS_KEY_ID
          secretAccessKey: YOUR_SECRET_ACCESS_KEY
          region: 'us-west-2'
-         modelType: 'openai'
+         modelType: 'jumpstart'
          maxTokens: 256
          temperature: 0.7
    ```
@@ -69,17 +69,19 @@ providers:
       region: 'us-east-1' # Optional, defaults to us-east-1
 ```
 
-2. SSO authentication:
+2. Profile authentication:
 
 ```yaml
 providers:
   - id: sagemaker:my-sagemaker-endpoint
     config:
-      profile: 'YOUR_SSO_PROFILE'
+      profile: 'YOUR_PROFILE_NAME'
       region: 'us-east-1' # Optional, defaults to us-east-1
 ```
 
-The provider will automatically use AWS SSO credentials when a profile is specified. For access key authentication, both `accessKeyId` and `secretAccessKey` are required, while `sessionToken` is optional.
+Setting `profile: 'YourProfileName'` will use that profile from your AWS credentials/config files. This works for AWS SSO profiles as well as standard profiles with access keys.
+
+The AWS SDK uses the standard credential chain ([Setting Credentials in Node.js - AWS SDK for JavaScript](https://docs.aws.amazon.com/sdk-for-javascript/v2/developer-guide/setting-credentials-node.html)). If no region is specified, the provider defaults to `us-east-1`. It's recommended to set `region` to the region where your endpoint is deployed (or use the `AWS_REGION` environment variable) to avoid misrouting requests.
 
 ## Provider Syntax
 
@@ -94,10 +96,10 @@ The SageMaker provider supports several syntax patterns:
 2. Model type specification (for common model formats):
 
    ```yaml
-   sagemaker:openai:my-endpoint-name
+   sagemaker:huggingface:my-endpoint-name
    ```
 
-   This helps format requests properly for the specific model type deployed on your endpoint.
+   This specifies a format handler to properly structure requests and parse responses for the model container type deployed on your endpoint.
 
 3. Embedding endpoint specification:
 
@@ -113,7 +115,7 @@ The SageMaker provider supports several syntax patterns:
    ```
    For AWS JumpStart foundation models that require specific input/output formats.
 
-The provider also automatically detects JumpStart models when the endpoint name contains "jumpstart".
+The provider will auto-detect JumpStart endpoints if `'jumpstart'` is in the name, but manual `modelType` specification is recommended for clarity.
 
 ## Examples
 
@@ -124,12 +126,12 @@ prompts:
   - 'Write a tweet about {{topic}}'
 
 providers:
-  - id: sagemaker:openai:my-gpt-endpoint
+  - id: sagemaker:jumpstart:my-llama-endpoint
     config:
       region: 'us-east-1'
       temperature: 0.7
       maxTokens: 256
-  - id: sagemaker:anthropic:my-claude-endpoint
+  - id: sagemaker:huggingface:my-mistral-endpoint
     config:
       region: 'us-east-1'
       temperature: 0.7
@@ -155,7 +157,7 @@ prompts:
 providers:
   - id: sagemaker:jumpstart:llama-3-2-1b-instruct
     label: 'Llama 3.2 (8B) on SageMaker'
-    delay: 500 # Add 500ms delay between requests to prevent rate limiting
+    delay: 500 # Add 500ms delay between requests to prevent endpoint saturation
     config:
       region: us-west-2
       modelType: jumpstart # Use the JumpStart format handler
@@ -236,7 +238,7 @@ prompts:
 providers:
   - id: sagemaker:huggingface:mistral-7b-v3
     label: 'Mistral 7B v3 on SageMaker'
-    delay: 500 # Add 500ms delay between requests to prevent rate limiting
+    delay: 500 # Add 500ms delay between requests to prevent endpoint saturation
     config:
       region: us-west-2
       modelType: huggingface # Use the Hugging Face format handler
@@ -298,7 +300,7 @@ providers:
       contentType: 'application/json'
       acceptType: 'application/json'
       responseFormat:
-        path: '$[0].generated_text'
+        path: 'json[0].generated_text'
 
 tests:
   - vars:
@@ -324,35 +326,55 @@ The SageMaker provider supports various model types to properly format requests 
 ```yaml
 # In provider ID
 providers:
-  - id: sagemaker:openai:my-endpoint
+  - id: sagemaker:huggingface:my-endpoint
 
 # Or in config
 providers:
   - id: sagemaker:my-endpoint
     config:
-      modelType: 'openai'
+      modelType: 'huggingface'
 ```
 
 Supported model types:
 
-| Model Type    | Description                                     | JavaScript Expression for Results |
-| ------------- | ----------------------------------------------- | --------------------------------- |
-| `openai`      | OpenAI-compatible models                        | Standard format                   |
-| `anthropic`   | Anthropic Claude-compatible models              | Standard format                   |
-| `llama`       | LLama-compatible models                         | Standard format                   |
-| `huggingface` | Hugging Face models (like Mistral)              | `json[0].generated_text`          |
-| `jumpstart`   | AWS JumpStart foundation models                 | `json.generated_text`             |
-| `custom`      | Custom model formats (default if not specified) | Depends on model                  |
+| Model Type    | Description                        | JavaScript Expression for Results |
+| ------------- | ---------------------------------- | --------------------------------- |
+| `openai`      | OpenAI-compatible interface models | Standard format                   |
+| `anthropic`   | Claude-compatible interface models | Standard format                   |
+| `llama`       | LLama-compatible interface models  | Standard format                   |
+| `huggingface` | Hugging Face models (like Mistral) | `json[0].generated_text`          |
+| `jumpstart`   | AWS JumpStart foundation models    | `json.generated_text`             |
+| `custom`      | Custom model formats (default)     | Depends on model                  |
 
-:::warning
+:::warning Important clarification about model types
 
-Different model types return results in different response formats. You should configure the appropriate JavaScript expression for response extraction:
+The `modelType` setting does **not** indicate that SageMaker is providing these proprietary models. It's a formatting helper that structures the request/response as if interacting with that API pattern.
+
+For example:
+
+- Using `modelType: 'openai'` means your custom-deployed endpoint expects an OpenAI-like interface
+- Using `modelType: 'anthropic'` assumes your endpoint container mimics Claude's API format
+
+SageMaker does not provide OpenAI or Anthropic models directly - use the AWS Bedrock provider for those official models.
+
+Different model types return results in different response formats. Configure the appropriate JavaScript expression for extraction:
 
 - **JumpStart models** (Llama): Use `responseFormat.path: "json.generated_text"`
 - **Hugging Face models** (Mistral): Use `responseFormat.path: "json[0].generated_text"`
 
-For more complex extraction logic, you can use file-based transforms as described in the [Response Path Expressions](#response-path-expressions) section.
+For more complex extraction logic, use file-based transforms as described in the [Response Path Expressions](#response-path-expressions) section.
 :::
+
+## Input/Output Format
+
+SageMaker endpoints expect the request in the format that the model container was designed for. For most text-generation models (e.g., Hugging Face Transformers or JumpStart LLMs), this means sending a JSON payload with an `"inputs"` key (and optional `"parameters"` for generation settings).
+
+For example:
+
+- A Hugging Face LLM container typically expects: `{"inputs": "your prompt", "parameters": {...}}`
+- A JumpStart model expects a similar structure, often returning `{"generated_text": "the output"}`
+
+The provider's `modelType` setting will try to format the request appropriately, but ensure your input matches what the model expects. You can provide a custom transformer if needed (see [Transforming Prompts](#transforming-prompts)).
 
 ## Configuration Options
 
@@ -371,6 +393,28 @@ Common configuration options for SageMaker endpoints:
 | `acceptType`    | Accept type for SageMaker response           | `application/json` |
 | `delay`         | Delay between API calls in milliseconds      | `0`                |
 | `transform`     | Function to transform prompts before sending | N/A                |
+
+### Stop Sequences Example
+
+```yaml
+providers:
+  - id: sagemaker:jumpstart:my-llama-endpoint
+    config:
+      region: us-east-1
+      maxTokens: 100
+      stopSequences: ["\nHuman:", '<|endoftext|>'] # examples of stop sequences
+```
+
+These will be passed to the model (if supported) to halt generation when encountered. For instance, JumpStart Hugging Face LLM containers accept a `stop` parameter as a list of strings.
+
+## Content Type and Accept Headers
+
+Ensure the `contentType` and `acceptType` match your model's expectations:
+
+- For most LLM endpoints, use `application/json` (the default)
+- If your model consumes raw text or returns plain text, use `text/plain`
+
+The default is JSON because popular SageMaker LLM containers (Hugging Face, JumpStart) use JSON payloads. If your endpoint returns a non-JSON response, you may need to adjust these settings accordingly.
 
 ## Response Parsing with JavaScript Expressions
 
@@ -407,8 +451,33 @@ providers:
   - id: sagemaker:embedding:my-embedding-endpoint
     config:
       region: 'us-east-1'
-      modelType: 'openai' # Optional, helps format the request
+      modelType: 'huggingface' # Helps format the request appropriately
 ```
+
+When using an embedding endpoint, the request should typically be formatted similarly to a text model (JSON with an input string). Ensure your SageMaker container returns embeddings in a JSON format (e.g., a list of floats). For example, a Hugging Face sentence-transformer model will output a JSON array of embeddings.
+
+If the model returns a specific structure, you may need to specify a path:
+
+```yaml
+providers:
+  - id: sagemaker:embedding:my-embedding-endpoint
+    config:
+      region: us-west-2
+      contentType: application/json
+      acceptType: application/json
+      # if the model returns {"embedding": [..]} for instance:
+      responseFormat:
+        path: 'json.embedding'
+```
+
+Or if it returns a raw array:
+
+```yaml
+responseFormat:
+  path: 'json[0]' # first element of the returned array
+```
+
+The `embedding:` prefix tells Promptfoo to treat the output as an embedding vector rather than text. This is useful for similarity metrics. You should deploy an embedding model to SageMaker that outputs numerical vectors.
 
 For assertions that require embeddings (like similarity comparisons), you can specify a SageMaker embedding provider:
 
@@ -424,7 +493,7 @@ defaultTest:
 
 ## Environment Variables
 
-The following environment variables can be used to configure the SageMaker provider:
+Promptfoo will also read certain environment variables to set default generation parameters:
 
 - `AWS_REGION` or `AWS_DEFAULT_REGION`: Default region for SageMaker API calls
 - `AWS_SAGEMAKER_MAX_TOKENS`: Default maximum number of tokens to generate
@@ -432,7 +501,7 @@ The following environment variables can be used to configure the SageMaker provi
 - `AWS_SAGEMAKER_TOP_P`: Default top_p value for generation
 - `AWS_SAGEMAKER_MAX_RETRIES`: Number of retry attempts for failed API calls (default: 3)
 
-These environment variables can be overridden by the configuration specified in the YAML file.
+These serve as global defaults for your eval runs. You can use them to avoid repetition in config files. Any values set in the provider's YAML config will override these environment defaults.
 
 ## Caching Support
 
@@ -468,7 +537,9 @@ promptfoo eval --no-cache
 
 ## Rate Limiting with Delays
 
-The SageMaker provider supports rate limiting through configurable delays between API calls:
+SageMaker endpoints will process requests as fast as the underlying instance allows. If you send too many requests in rapid succession, you may saturate the endpoint's capacity and get latency spikes or errors. To avoid this, you can configure a delay between calls.
+
+For example, `delay: 1000` will wait 1 second between each request to the endpoint. This is especially useful to prevent hitting concurrency limits on your model or to avoid invoking autoscaling too aggressively.
 
 ```yaml
 providers:
@@ -488,11 +559,7 @@ providers:
       region: us-east-1
 ```
 
-This helps:
-
-- Avoid rate limiting by SageMaker endpoints
-- Reduce costs by spacing out requests
-- Improve reliability for endpoints with concurrency limitations
+Spacing out requests can help avoid bursty usage that might scale up more instances (or, if using a pay-per-request model, it simply spreads out the load). It does not reduce the per-call cost, but it can make the usage more predictable.
 
 Note that delays are only applied for actual API calls, not when responses are retrieved from cache.
 
@@ -545,7 +612,7 @@ module.exports = function (prompt, context) {
 };
 ```
 
-The transform function can also be specified directly at the provider level:
+You can specify the transform at the provider's top level or within the `config`. Both achieve the same effect; use whatever makes your config clearer. In YAML, using a `file://` path is recommended for complex logic.
 
 ```yaml
 providers:
@@ -563,7 +630,7 @@ The `responseFormat.path` configuration option allows you to extract specific fi
 
 ### JavaScript Expressions
 
-You can use JavaScript expressions to access nested properties in the response:
+You can use JavaScript expressions to access nested properties in the response. Use `json` to refer to the response JSON object in the path expression:
 
 ```yaml
 providers:
@@ -587,4 +654,4 @@ If you're getting unusual responses from your endpoint, try:
    - For Llama models (JumpStart): Use `responseFormat.path: "json.generated_text"`
    - For Mistral models (Hugging Face): Use `responseFormat.path: "json[0].generated_text"`
 3. Checking that your endpoint is correctly processing the input format
-4. Adding a delay parameter (e.g., `delay: 500`) to prevent rate limiting
+4. Adding a delay parameter (e.g., `delay: 500`) to prevent endpoint saturation
