@@ -281,7 +281,7 @@ describe('guardrails', () => {
           ],
         },
       };
-      (fetchWithCache as jest.Mock).mockResolvedValue(mockResponse);
+      (jest.mocked(fetchWithCache)).mockResolvedValue(mockResponse);
 
       const request: AdaptiveRequest = {
         prompt: 'test input',
@@ -315,7 +315,7 @@ describe('guardrails', () => {
           modifications: [],
         },
       };
-      (fetchWithCache as jest.Mock).mockResolvedValue(mockResponse);
+      (jest.mocked(fetchWithCache)).mockResolvedValue(mockResponse);
 
       const request: AdaptiveRequest = {
         prompt: 'test input',

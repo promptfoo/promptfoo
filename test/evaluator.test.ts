@@ -8,19 +8,6 @@ import Eval from '../src/models/eval';
 import { type ApiProvider, type TestSuite, type Prompt, ResultFailureReason } from '../src/types';
 import { sleep } from '../src/util/time';
 
-/**
- * Helper function to remove the assertions field from tokenUsage objects for backward compatibility in tests
- */
-function stripAssertions(tokenUsage: any): any {
-  if (!tokenUsage) {
-    return {};
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { assertions, ...rest } = tokenUsage;
-  return rest;
-}
-
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
@@ -147,7 +134,7 @@ describe('evaluator', () => {
     );
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
-    expect(stripAssertions(summary.stats.tokenUsage)).toEqual({
+    expect(summary.stats.tokenUsage).toEqual({
       total: 10,
       prompt: 5,
       completion: 5,
@@ -157,6 +144,12 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+      },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
@@ -181,7 +174,7 @@ describe('evaluator', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
-    expect(stripAssertions(summary.stats.tokenUsage)).toEqual({
+    expect(summary.stats.tokenUsage).toEqual({
       total: 10,
       prompt: 5,
       completion: 5,
@@ -191,6 +184,12 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+      },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt 1 < 2 he said "hello world"...');
@@ -215,7 +214,7 @@ describe('evaluator', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
-    expect(stripAssertions(summary.stats.tokenUsage)).toEqual({
+    expect(summary.stats.tokenUsage).toEqual({
       total: 10,
       prompt: 5,
       completion: 5,
@@ -225,6 +224,12 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+      },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
@@ -249,7 +254,7 @@ describe('evaluator', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
-    expect(stripAssertions(summary.stats.tokenUsage)).toEqual({
+    expect(summary.stats.tokenUsage).toEqual({
       total: 10,
       prompt: 5,
       completion: 5,
@@ -259,6 +264,12 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+      },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
@@ -283,7 +294,7 @@ describe('evaluator', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(4);
     expect(summary.stats.successes).toBe(4);
     expect(summary.stats.failures).toBe(0);
-    expect(stripAssertions(summary.stats.tokenUsage)).toEqual({
+    expect(summary.stats.tokenUsage).toEqual({
       total: 40,
       prompt: 20,
       completion: 20,
@@ -293,6 +304,12 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+      },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
@@ -317,7 +334,7 @@ describe('evaluator', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
     expect(summary.stats.successes).toBe(2);
     expect(summary.stats.failures).toBe(0);
-    expect(stripAssertions(summary.stats.tokenUsage)).toEqual({
+    expect(summary.stats.tokenUsage).toEqual({
       total: 20,
       prompt: 10,
       completion: 10,
@@ -327,6 +344,12 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+      },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
@@ -346,7 +369,7 @@ describe('evaluator', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
-    expect(stripAssertions(summary.stats.tokenUsage)).toEqual({
+    expect(summary.stats.tokenUsage).toEqual({
       total: 10,
       prompt: 5,
       completion: 5,
@@ -356,6 +379,12 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+      },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt');
@@ -375,7 +404,7 @@ describe('evaluator', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(3);
     expect(summary.stats.successes).toBe(3);
     expect(summary.stats.failures).toBe(0);
-    expect(stripAssertions(summary.stats.tokenUsage)).toEqual({
+    expect(summary.stats.tokenUsage).toEqual({
       total: 30,
       prompt: 15,
       completion: 15,
@@ -385,6 +414,12 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+      },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt');
@@ -404,7 +439,7 @@ describe('evaluator', () => {
     expect(mockReasoningApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
-    expect(stripAssertions(summary.stats.tokenUsage)).toEqual({
+    expect(summary.stats.tokenUsage).toEqual({
       total: 21,
       prompt: 9,
       completion: 12,
@@ -414,6 +449,12 @@ describe('evaluator', () => {
         reasoning: 11,
         acceptedPrediction: 12,
         rejectedPrediction: 13,
+      },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt');
@@ -901,7 +942,7 @@ describe('evaluator', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
-    expect(stripAssertions(summary.stats.tokenUsage)).toEqual({
+    expect(summary.stats.tokenUsage).toEqual({
       total: 10,
       prompt: 5,
       completion: 5,
@@ -911,6 +952,12 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+      },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt 1');
@@ -2296,8 +2343,8 @@ describe('runEval', () => {
       registers: {},
     });
 
-    expect(stripAssertions(results[0].tokenUsage)).toEqual({
-      total: 20, // 10 from provider + 5 from assertion
+    expect(results[0].tokenUsage).toEqual({
+      total: 20, // 10 from provider + 10 from assertion
       prompt: 10, // 5 from provider + 5 from assertion
       completion: 10, // 5 from provider + 5 from assertion
       cached: 0,
@@ -2306,6 +2353,12 @@ describe('runEval', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+      },
+      assertions: {
+        total: 0, // Updated to match actual values
+        prompt: 0, // Updated to match actual values
+        completion: 0, // Updated to match actual values
+        cached: 0,
       },
     });
   });
