@@ -64,7 +64,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       config: {
         context: 'test-context',
         examples: [{ input: 'example input', output: 'example output' }],
-        stopSequence: ['\n'],
+        stopSequences: ['\n'],
         temperature: 0.7,
         maxOutputTokens: 100,
         topP: 0.9,
