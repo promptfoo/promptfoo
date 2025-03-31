@@ -344,7 +344,7 @@ Supported model types:
 | `jumpstart`   | AWS JumpStart foundation models    | `json.generated_text`             |
 | `custom`      | Custom model formats (default)     | Depends on model                  |
 
-:::warning Important clarification about model types
+:::info Important clarification about model types
 
 The `modelType` setting helps format requests and responses according to specific patterns expected by different model containers deployed on SageMaker.
 
