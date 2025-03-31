@@ -341,7 +341,7 @@ Supported model types:
 | ------------- | ---------------------------------- | --------------------------------- |
 | `openai`      | OpenAI-compatible interface models | Standard format                   |
 | `anthropic`   | Claude-compatible interface models | Standard format                   |
-| `llama`       | LLama-compatible interface models  | Standard format                   |
+| `llama`       | Llama-compatible interface models  | Standard format                   |
 | `huggingface` | Hugging Face models (like Mistral) | `json[0].generated_text`          |
 | `jumpstart`   | AWS JumpStart foundation models    | `json.generated_text`             |
 | `custom`      | Custom model formats (default)     | Depends on model                  |
