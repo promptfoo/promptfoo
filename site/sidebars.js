@@ -336,6 +336,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          label: 'Working with Multi-Modal Models',
+          id: 'guides/multimodal',
+        },
+        {
+          type: 'doc',
           label: 'Foundation Model Red Teaming',
           id: 'red-team/foundation-models',
         },

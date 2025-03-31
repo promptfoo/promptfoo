@@ -44,9 +44,6 @@ npx promptfoo@latest redteam run -c redteam.static-image.yaml
 # Run the image strategy red team test
 npx promptfoo@latest redteam run -c redteam.image-strategy.yaml
 
-# Generate a red team test for the audio strategy approach
-npx promptfoo@latest redteam run -c redteam.audio-strategy.yaml
-
 # Run the UnsafeBench red team test
 npx promptfoo@latest redteam run -c redteam.unsafebench.yaml
 ```
