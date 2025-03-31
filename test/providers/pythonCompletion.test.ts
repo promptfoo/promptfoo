@@ -93,7 +93,7 @@ describe('PythonProvider', () => {
       expect(mockRunPython).toHaveBeenCalledWith(
         expect.any(String),
         'call_api',
-        ['test prompt', undefined, { someContext: true }],
+        ['test prompt', { config: {} }, { someContext: true }],
         { pythonExecutable: undefined },
       );
       expect(result).toEqual({ output: 'test output', cached: false });
@@ -153,7 +153,7 @@ describe('PythonProvider', () => {
       expect(mockRunPython).toHaveBeenCalledWith(
         expect.any(String),
         'call_embedding_api',
-        ['test prompt', undefined],
+        ['test prompt', { config: {} }],
         { pythonExecutable: undefined },
       );
       expect(result).toEqual({ embedding: [0.1, 0.2, 0.3] });
@@ -179,7 +179,7 @@ describe('PythonProvider', () => {
       expect(mockRunPython).toHaveBeenCalledWith(
         expect.any(String),
         'call_classification_api',
-        ['test prompt', undefined],
+        ['test prompt', { config: {} }],
         { pythonExecutable: undefined },
       );
       expect(result).toEqual({ classification: { label: 'test', score: 0.9 } });
