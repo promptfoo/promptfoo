@@ -18,8 +18,6 @@ providers:
       additionalOption: 123
 ```
 
-### Loading Configuration from External Files
-
 You can load configuration values from external files using the `file://` protocol. This is useful for managing complex configurations or sharing configurations between different providers.
 
 ```yaml title="promptfooconfig.yaml"
