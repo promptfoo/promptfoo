@@ -43,6 +43,32 @@ import { transform, type TransformContext, TransformInputType } from './util/tra
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
+// Helper function to update assertion metrics safely
+// This function handles the TypeScript type checking issues with potentially undefined assertions field
+function updateAssertionMetrics(
+  metrics: { tokenUsage: Partial<TokenUsage> },
+  assertionTokens: Partial<TokenUsage>,
+): void {
+  // Initialize assertions if it doesn't exist
+  if (!metrics.tokenUsage.assertions) {
+    metrics.tokenUsage.assertions = {
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      cached: 0,
+    };
+  }
+
+  // Type assertion to get TypeScript to understand this is defined now
+  const assertions = metrics.tokenUsage.assertions as NonNullable<TokenUsage['assertions']>;
+
+  // Now we can safely update the metrics
+  assertions.total = (assertions.total || 0) + (assertionTokens.total || 0);
+  assertions.prompt = (assertions.prompt || 0) + (assertionTokens.prompt || 0);
+  assertions.completion = (assertions.completion || 0) + (assertionTokens.completion || 0);
+  assertions.cached = (assertions.cached || 0) + (assertionTokens.cached || 0);
+}
+
 /**
  * Validates if a given prompt is allowed based on the provided list of allowed
  * prompt labels. Providers can be configured with a `prompts` attribute, which
@@ -754,34 +780,38 @@ class Evaluator {
           for (const assertion of row.testCase.assert) {
             if (MODEL_GRADED_ASSERTION_TYPES.has(assertion.type as AssertionType)) {
               const tokensUsed = row.gradingResult.tokensUsed;
-              logger.info(`Model-graded assertion [${assertion.type}] token usage: ${JSON.stringify(tokensUsed)}`);
-              
+              logger.info(
+                `Model-graded assertion [${assertion.type}] token usage: ${JSON.stringify(tokensUsed)}`,
+              );
+
               // Ensure assertions object exists and add token usage
               this.stats.tokenUsage.assertions = this.stats.tokenUsage.assertions || {
                 total: 0,
                 prompt: 0,
                 completion: 0,
-                cached: 0
+                cached: 0,
               };
-              
+
               // Add to assertion stats (using type assertion)
-              const assertions = this.stats.tokenUsage.assertions as Required<NonNullable<TokenUsage['assertions']>>;
+              const assertions = this.stats.tokenUsage.assertions as Required<
+                NonNullable<TokenUsage['assertions']>
+              >;
               assertions.total += tokensUsed.total || 0;
               assertions.prompt += tokensUsed.prompt || 0;
               assertions.completion += tokensUsed.completion || 0;
               assertions.cached += tokensUsed.cached || 0;
-              
+
               // Also add to the overall totals
               this.stats.tokenUsage.total += tokensUsed.total || 0;
               this.stats.tokenUsage.prompt += tokensUsed.prompt || 0;
               this.stats.tokenUsage.completion += tokensUsed.completion || 0;
               this.stats.tokenUsage.cached += tokensUsed.cached || 0;
-              
+
               break; // Only log once per result
             }
           }
         }
-        
+
         // capture metrics
         if (row.success) {
           this.stats.successes++;
@@ -891,25 +921,12 @@ class Evaluator {
             (metrics.tokenUsage.completionDetails?.rejectedPrediction || 0) +
             (row.response?.tokenUsage?.completionDetails?.rejectedPrediction || 0),
         };
-        
+
         // Add assertion token usage to the metrics
         if (row.gradingResult?.tokensUsed) {
-          const assertionTokens = row.gradingResult.tokensUsed;
-          // Initialize assertions object if it doesn't exist
-          metrics.tokenUsage.assertions = metrics.tokenUsage.assertions || {
-            total: 0,
-            prompt: 0,
-            completion: 0,
-            cached: 0
-          };
-          
-          // Update assertion token usage metrics
-          metrics.tokenUsage.assertions.total += assertionTokens.total || 0;
-          metrics.tokenUsage.assertions.prompt += assertionTokens.prompt || 0;
-          metrics.tokenUsage.assertions.completion += assertionTokens.completion || 0;
-          metrics.tokenUsage.assertions.cached += assertionTokens.cached || 0;
+          updateAssertionMetrics(metrics, row.gradingResult.tokensUsed);
         }
-        
+
         metrics.cost += row.cost || 0;
 
         await runExtensionHook(testSuite.extensions, 'afterEach', {
