@@ -905,11 +905,16 @@ Explain {{topic}} in simple terms,Simple Explanation`;
 
     const result = await processPrompts(['test.csv']);
 
-    expect(result).toHaveLength(2);
-    expect(result[0].raw).toBe('Tell me about {{topic}}');
-    expect(result[0].label).toBe('Basic Query');
-    expect(result[1].raw).toBe('Explain {{topic}} in simple terms');
-    expect(result[1].label).toBe('Simple Explanation');
+    expect(result).toEqual([
+      {
+        raw: 'Tell me about {{topic}}',
+        label: 'Basic Query',
+      },
+      {
+        raw: 'Explain {{topic}} in simple terms',
+        label: 'Simple Explanation',
+      },
+    ]);
   });
 
   it('should flatten array results from readPrompts', async () => {
