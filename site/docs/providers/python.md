@@ -18,6 +18,49 @@ providers:
       additionalOption: 123
 ```
 
+### Loading Configuration from External Files
+
+You can load configuration values from external files using the `file://` protocol. This is useful for managing complex configurations or sharing configurations between different providers.
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: 'file://my_custom_provider.py:call_api'
+    config:
+      # Load from a JSON file
+      modelSettings: 'file://configs/model_settings.json'
+
+      # Or a YAML file
+      templates: 'file://configs/prompt_templates.yaml'
+
+      # Or a JavaScript file
+      preprocessing: 'file://configs/preprocess.js:getPreprocessingConfig'
+
+      # Or a Python file
+      extra_body: 'file://configs/extra_body.py:get_extra_body'
+
+      # You can also nest file references within an object
+      advanced:
+        {
+          systemPromptPrefix: 'file://templates/system_prompt.txt',
+          guardrails: 'file://configs/guardrails.json',
+          metrics:
+            {
+              evaluation: 'file://configs/metrics/eval.yaml',
+              reporting: 'file://configs/metrics/reporting.js:getReportingConfig',
+            },
+        }
+```
+
+Supported file formats:
+
+- **JSON files** (`.json`): Will be parsed as JSON objects/arrays
+- **YAML files** (`.yaml`, `.yml`): Will be parsed as YAML objects/arrays
+- **JavaScript files** (`.js`, `.mjs`, `.ts`, `.cjs`): Should export a function that takes no arguments and returns configuration values
+- **Python files** (`.py`): Should contain a function that takes no arguments and returns configuration values
+- **Text files** (`.txt`, `.md`): Will be loaded as plain text strings
+
+For JavaScript and Python files, you can specify a specific function to use with the format `file://path/to/file.js:functionName`. If no function name is specified, a default function name is used (`get_config` for Python files or the default export for JavaScript files).
+
 ### Python script
 
 Your Python script should implement a function that accepts a prompt, options, and context as arguments. It should return a JSON-encoded `ProviderResponse`.
