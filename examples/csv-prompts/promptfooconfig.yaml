@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Example of using CSV file to define prompts
+prompts:
+  - file://prompts.csv
+
+providers:
+  # Use the echo provider to see rendered prompts without LLM calls
+  - echo
+  # Uncomment these lines to use actual LLM providers
+  # - openai:gpt-4o-mini
+  # - anthropic:claude-3-7-sonnet-20250219
+
+tests:
+  - vars:
+      topic: artificial intelligence
+  - vars:
+      topic: climate change
+  - vars:
+      topic: space exploration 

@@ -157,6 +157,40 @@ You are a helpful assistant for Promptfoo.
 Please answer the following question about {{ topic }}: {{ question }}
 ```
 
+### Prompts as CSV
+
+CSV (Comma-Separated Values) files are supported for defining multiple prompts in a single file.
+
+#### Single-Column Format
+
+The simplest CSV prompt format has a single column with either a "prompt" header or no header at all:
+
+```csv title="prompts.csv"
+prompt
+"Tell me about {{topic}}"
+"Explain {{topic}} in simple terms"
+"Write a poem about {{topic}}"
+```
+
+Or without a header:
+
+```csv title="prompts.csv"
+"Tell me about {{topic}}"
+"Explain {{topic}} in simple terms"
+"Write a poem about {{topic}}"
+```
+
+#### Two-Column Format
+
+You can include a "label" column to give each prompt a descriptive name:
+
+```csv title="prompts.csv"
+prompt,label
+"Tell me about {{topic}}","Basic Query"
+"Explain {{topic}} in simple terms","Simple Explanation"
+"Write a poem about {{topic}}","Poetry Generator"
+```
+
 ### Different prompts per model
 
 To set separate prompts for different providers, you can specify the prompt files within the `providers` section of your `promptfooconfig.yaml`. Each provider can have its own set of prompts that are tailored to its specific requirements or input format.

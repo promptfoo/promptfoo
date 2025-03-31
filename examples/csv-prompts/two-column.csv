@@ -1,0 +1,6 @@
+prompt,label
+"Tell me about {{topic}}","Basic Query"
+"Explain {{topic}} in simple terms","Simple Explanation"
+"Write a short poem about {{topic}}","Poetry Generator"
+"List 3 facts about {{topic}}","Fact Listing"
+"How does {{topic}} impact everyday life?","Impact Assessment" 
