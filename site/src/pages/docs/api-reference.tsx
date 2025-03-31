@@ -15,6 +15,10 @@ export default function ApiReference() {
       });
     });
     document.head.appendChild(script);
+
+    return () => {
+      document.head.removeChild(script);
+    };
   }, []);
 
   // Hack to apply the theme to the Scalar app
