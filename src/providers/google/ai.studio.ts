@@ -1,18 +1,18 @@
-import { fetchWithCache } from '../cache';
-import { getEnvString } from '../envars';
-import logger from '../logger';
+import { fetchWithCache } from '../../cache';
+import { getEnvString } from '../../envars';
+import logger from '../../logger';
 import type {
   ApiProvider,
   ProviderResponse,
   CallApiContextParams,
   GuardrailResponse,
-} from '../types';
-import type { EnvOverrides } from '../types/env';
-import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
-import { getNunjucksEngine } from '../util/templates';
-import { CHAT_MODELS } from './googleShared';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
-import { maybeCoerceToGeminiFormat } from './vertexUtil';
+} from '../../types';
+import type { EnvOverrides } from '../../types/env';
+import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
+import { getNunjucksEngine } from '../../util/templates';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import { CHAT_MODELS } from './shared';
+import { maybeCoerceToGeminiFormat } from './util';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
 

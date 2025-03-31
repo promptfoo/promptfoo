@@ -1,9 +1,9 @@
 import * as fs from 'fs';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
-import { getCache, isCacheEnabled } from '../../src/cache';
-import logger from '../../src/logger';
-import { VertexChatProvider } from '../../src/providers/vertex';
-import * as vertexUtil from '../../src/providers/vertexUtil';
+import { getCache, isCacheEnabled } from '../../../src/cache';
+import logger from '../../../src/logger';
+import * as vertexUtil from '../../../src/providers/google/util';
+import { VertexChatProvider } from '../../../src/providers/google/vertex';
 
 // Mock database
 jest.mock('better-sqlite3', () => {
@@ -15,7 +15,7 @@ jest.mock('better-sqlite3', () => {
   });
 });
 
-jest.mock('../../src/database', () => ({
+jest.mock('../../../src/database', () => ({
   getDb: jest.fn().mockReturnValue({
     prepare: jest.fn(),
     transaction: jest.fn(),
@@ -39,7 +39,7 @@ jest.mock('fs', () => ({
   statSync: jest.fn(),
 }));
 
-jest.mock('../../src/cache', () => ({
+jest.mock('../../../src/cache', () => ({
   getCache: jest.fn().mockReturnValue({
     get: jest.fn(),
     set: jest.fn(),
@@ -51,8 +51,8 @@ jest.mock('../../src/cache', () => ({
   isCacheEnabled: jest.fn(),
 }));
 
-jest.mock('../../src/providers/vertexUtil', () => ({
-  ...jest.requireActual('../../src/providers/vertexUtil'),
+jest.mock('../../../src/providers/google/util', () => ({
+  ...jest.requireActual('../../../src/providers/google/util'),
   getGoogleClient: jest.fn(),
 }));
 

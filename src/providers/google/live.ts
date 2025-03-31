@@ -1,17 +1,17 @@
 import WebSocket from 'ws';
-import { getEnvString } from '../envars';
-import logger from '../logger';
+import { getEnvString } from '../../envars';
+import logger from '../../logger';
 import type {
   ApiProvider,
   CallApiContextParams,
   ProviderOptions,
   ProviderResponse,
-} from '../types';
-import '../util';
-import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
-import { parseChatPrompt } from './shared';
-import type { GeminiFormat } from './vertexUtil';
-import { maybeCoerceToGeminiFormat } from './vertexUtil';
+} from '../../types';
+import '../../util';
+import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
+import { parseChatPrompt } from '../shared';
+import type { GeminiFormat } from './util';
+import { maybeCoerceToGeminiFormat } from './util';
 
 interface Blob {
   mimeType: string;

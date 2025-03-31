@@ -3,7 +3,7 @@ import {
   maybeCoerceToGeminiFormat,
   getGoogleClient,
   hasGoogleDefaultCredentials,
-} from '../../src/providers/vertexUtil';
+} from '../../../src/providers/google/util';
 
 jest.mock('google-auth-library');
 

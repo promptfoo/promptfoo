@@ -1,9 +1,9 @@
 import type { GaxiosError } from 'gaxios';
 import Clone from 'rfdc';
-import { getCache, isCacheEnabled } from '../cache';
-import cliState from '../cliState';
-import { getEnvString } from '../envars';
-import logger from '../logger';
+import { getCache, isCacheEnabled } from '../../cache';
+import cliState from '../../cliState';
+import { getEnvString } from '../../envars';
+import logger from '../../logger';
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
@@ -11,20 +11,20 @@ import type {
   ProviderResponse,
   ProviderEmbeddingResponse,
   TokenUsage,
-} from '../types';
-import type { EnvOverrides } from '../types/env';
-import { renderVarsInObject } from '../util';
-import { maybeLoadFromExternalFile } from '../util';
-import { isValidJson } from '../util/json';
-import { getNunjucksEngine } from '../util/templates';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
-import type { GeminiErrorResponse, GeminiFormat, Palm2ApiResponse } from './vertexUtil';
+} from '../../types';
+import type { EnvOverrides } from '../../types/env';
+import { renderVarsInObject } from '../../util';
+import { maybeLoadFromExternalFile } from '../../util';
+import { isValidJson } from '../../util/json';
+import { getNunjucksEngine } from '../../util/templates';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import type { GeminiErrorResponse, GeminiFormat, Palm2ApiResponse } from './util';
 import {
   getGoogleClient,
   maybeCoerceToGeminiFormat,
   type GeminiApiResponse,
   type GeminiResponseData,
-} from './vertexUtil';
+} from './util';
 
 interface Blob {
   mimeType: string;

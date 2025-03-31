@@ -1,6 +1,6 @@
 import type { GoogleAuth } from 'google-auth-library';
 import { z } from 'zod';
-import logger from '../logger';
+import logger from '../../logger';
 
 type Probability = 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
 
