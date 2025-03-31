@@ -40,6 +40,28 @@ The Python provider is defined in `provider.py` and includes:
 2. Token usage extraction from the API response
 3. Multiple sample functions showing different ways to call the API
 
+## File Reference Configuration
+
+The file reference example (`promptfooconfig.advanced-config.yaml`) demonstrates how to load configuration values from external files using the `file://` protocol. It shows three main file types:
+
+1. **YAML file** (`settings.yaml`): Contains model settings like temperature and max tokens
+2. **JavaScript file** (`formatting.js`): Provides formatting options through a function export
+3. **Python file** (`params.py`): Supplies additional parameters through a Python function
+
+The provider supports loading from:
+
+- JSON files (`.json`)
+- YAML files (`.yaml`, `.yml`)
+- JavaScript files (`.js`, `.mjs`, `.ts`, `.cjs`)
+- Python files (`.py`)
+- Text files (`.txt`, `.md`)
+
+Run the file reference example with:
+
+```bash
+npx promptfoo@latest evaluate -c examples/python-provider/promptfooconfig.advanced-config.yaml
+```
+
 ## Learn More
 
 For more information on creating custom providers, see the [promptfoo documentation](https://promptfoo.dev/docs/providers/python/).

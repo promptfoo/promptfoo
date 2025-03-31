@@ -34,6 +34,9 @@ def call_api(prompt, options, context):
     return {
         "output": chat_completion.choices[0].message.content,
         "tokenUsage": token_usage,
+        "metadata": {
+            "config": options.get("config", {}),
+        },
     }
 
 
