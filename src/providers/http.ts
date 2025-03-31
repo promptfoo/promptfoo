@@ -16,7 +16,6 @@ import type {
 } from '../types';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
 import { isJavascriptFile } from '../util/file';
-import { loadFileReference } from '../util/fileReference';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
@@ -182,19 +181,24 @@ export async function createSessionParser(
     return (response) => parser(response);
   }
   if (typeof parser === 'string' && parser.startsWith('file://')) {
-    try {
-      // Use our loadFileReference utility
-      const result = await loadFileReference(parser, cliState.basePath || '');
-      if (typeof result === 'function') {
-        return result;
+    let filename = parser.slice('file://'.length);
+    let functionName: string | undefined;
+    if (filename.includes(':')) {
+      const splits = filename.split(':');
+      if (splits[0] && isJavascriptFile(splits[0])) {
+        [filename, functionName] = splits;
       }
-      throw new Error(
-        `Response transform malformed: ${parser} must export a function or have a default export as a function`,
-      );
-    } catch (error) {
-      logger.error(`Error loading file reference ${parser}: ${error}`);
-      throw error;
     }
+    const requiredModule = await importModule(
+      path.resolve(cliState.basePath || '', filename),
+      functionName,
+    );
+    if (typeof requiredModule === 'function') {
+      return requiredModule;
+    }
+    throw new Error(
+      `Response transform malformed: ${filename} must export a function or have a default export as a function`,
+    );
   } else if (typeof parser === 'string') {
     return (data: SessionParserData) => {
       const trimmedParser = parser.trim();
@@ -233,19 +237,24 @@ export async function createTransformResponse(
     };
   }
   if (typeof parser === 'string' && parser.startsWith('file://')) {
-    try {
-      // Use our loadFileReference utility
-      const result = await loadFileReference(parser, cliState.basePath || '');
-      if (typeof result === 'function') {
-        return result;
+    let filename = parser.slice('file://'.length);
+    let functionName: string | undefined;
+    if (filename.includes(':')) {
+      const splits = filename.split(':');
+      if (splits[0] && isJavascriptFile(splits[0])) {
+        [filename, functionName] = splits;
       }
-      throw new Error(
-        `Response transform malformed: ${parser} must export a function or have a default export as a function`,
-      );
-    } catch (error) {
-      logger.error(`Error loading file reference ${parser}: ${error}`);
-      throw error;
     }
+    const requiredModule = await importModule(
+      path.resolve(cliState.basePath || '', filename),
+      functionName,
+    );
+    if (typeof requiredModule === 'function') {
+      return requiredModule;
+    }
+    throw new Error(
+      `Response transform malformed: ${filename} must export a function or have a default export as a function`,
+    );
   } else if (typeof parser === 'string') {
     return (data, text, context) => {
       try {
@@ -398,31 +407,57 @@ function parseRawRequest(input: string) {
 }
 
 export async function createTransformRequest(
-  transform: string | ((prompt: string) => any) | undefined,
+  transform: string | Function | undefined,
 ): Promise<(prompt: string) => any> {
   if (!transform) {
     return (prompt) => prompt;
   }
 
   if (typeof transform === 'function') {
-    return transform;
+    return async (prompt) => {
+      try {
+        return await transform(prompt);
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        const wrappedError = new Error(`Error in request transform function: ${errorMessage}`);
+        logger.error(wrappedError.message);
+        throw wrappedError;
+      }
+    };
   }
 
-  if (typeof transform === 'string' && transform.startsWith('file://')) {
-    try {
-      // Use our loadFileReference utility
-      const result = await loadFileReference(transform, cliState.basePath || '');
-      if (typeof result === 'function') {
-        return result;
+  if (typeof transform === 'string') {
+    if (transform.startsWith('file://')) {
+      let filename = transform.slice('file://'.length);
+      let functionName: string | undefined;
+      if (filename.includes(':')) {
+        const splits = filename.split(':');
+        if (splits[0] && isJavascriptFile(splits[0])) {
+          [filename, functionName] = splits;
+        }
+      }
+      const requiredModule = await importModule(
+        path.resolve(cliState.basePath || '', filename),
+        functionName,
+      );
+      if (typeof requiredModule === 'function') {
+        return async (prompt) => {
+          try {
+            return await requiredModule(prompt);
+          } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            const wrappedError = new Error(
+              `Error in request transform function from ${filename}: ${errorMessage}`,
+            );
+            logger.error(wrappedError.message);
+            throw wrappedError;
+          }
+        };
       }
       throw new Error(
-        `Request transform malformed: ${transform} must export a function or have a default export as a function`,
+        `Request transform malformed: ${filename} must export a function or have a default export as a function`,
       );
-    } catch (error) {
-      logger.error(`Error loading file reference ${transform}: ${error}`);
-      throw error;
     }
-  } else if (typeof transform === 'string') {
     // Handle string template
     return async (prompt) => {
       try {
@@ -473,28 +508,36 @@ export async function createValidateStatus(
   validator: string | ((status: number) => boolean) | undefined,
 ): Promise<(status: number) => boolean> {
   if (!validator) {
-    return (status) => status >= 200 && status < 300;
+    return (status: number) => true;
   }
 
   if (typeof validator === 'function') {
     return validator;
   }
 
-  if (typeof validator === 'string' && validator.startsWith('file://')) {
-    try {
-      // Use our loadFileReference utility
-      const result = await loadFileReference(validator, cliState.basePath || '');
-      if (typeof result === 'function') {
-        return result;
+  if (typeof validator === 'string') {
+    if (validator.startsWith('file://')) {
+      let filename = validator.slice('file://'.length);
+      let functionName: string | undefined;
+      if (filename.includes(':')) {
+        const splits = filename.split(':');
+        if (splits[0] && isJavascriptFile(splits[0])) {
+          [filename, functionName] = splits;
+        }
       }
-      throw new Error(
-        `Status validator malformed: ${validator} must export a function or have a default export as a function`,
-      );
-    } catch (error) {
-      logger.error(`Error loading file reference ${validator}: ${error}`);
-      throw error;
+      try {
+        const requiredModule = await importModule(
+          path.resolve(cliState.basePath || '', filename),
+          functionName,
+        );
+        if (typeof requiredModule === 'function') {
+          return requiredModule;
+        }
+        throw new Error('Exported value must be a function');
+      } catch (err: any) {
+        throw new Error(`Status validator malformed: ${filename} - ${err?.message || String(err)}`);
+      }
     }
-  } else if (typeof validator === 'string') {
     // Handle string template - wrap in a function body
     try {
       const trimmedValidator = validator.trim();

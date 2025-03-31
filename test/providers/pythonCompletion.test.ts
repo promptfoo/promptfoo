@@ -135,7 +135,7 @@ describe('PythonProvider', () => {
         expect.objectContaining(mockConfig),
         '/base/path',
       );
-      expect(((provider.config as TestPythonProviderConfig) = mockProcessedConfig));
+      expect(provider.config).toEqual(mockProcessedConfig);
     });
 
     it('should handle errors during config reference processing', async () => {
@@ -165,7 +165,7 @@ describe('PythonProvider', () => {
       expect(processConfigFileReferences).toHaveBeenCalled();
       expect(logger.error).toHaveBeenCalled();
       // Config should remain unchanged when there's an error
-      expect(((provider.config as TestPythonProviderConfig) = mockConfig));
+      expect(provider.config).toEqual(mockConfig);
     });
 
     it('should process config references before calling API', async () => {
@@ -204,7 +204,7 @@ describe('PythonProvider', () => {
 
       // Assert
       expect(processConfigFileReferences).toHaveBeenCalled();
-      expect(((provider.config as TestPythonProviderConfig) = mockProcessedConfig));
+      expect(provider.config).toEqual(mockProcessedConfig);
       expect(provider['executePythonScript']).toHaveBeenCalled();
     });
 
@@ -430,14 +430,19 @@ describe('PythonProvider', () => {
         },
       });
 
+      // Cast config for TypeScript before the test
+      const typedConfig = provider.config as TestPythonProviderConfig;
+
       // Act
       await provider.processConfigReferences();
 
-      // Manually update the config to match what processConfigFileReferences would have done
-      (provider.config as TestPythonProviderConfig) = {
-        basePath: '/base',
-        settings: expectedConfig,
-      };
+      // TypeScript-safe assignment after processConfigReferences has run
+      Object.assign(provider, {
+        config: {
+          basePath: '/base',
+          settings: expectedConfig,
+        },
+      });
 
       // Assert
       expect(processConfigFileReferences).toHaveBeenCalled();
@@ -463,11 +468,13 @@ describe('PythonProvider', () => {
       // Act
       await provider.processConfigReferences();
 
-      // Manually update the config to match what processConfigFileReferences would have done
-      (provider.config as TestPythonProviderConfig) = {
-        basePath: '/base',
-        settings: expectedConfig,
-      };
+      // TypeScript-safe assignment after processConfigReferences has run
+      Object.assign(provider, {
+        config: {
+          basePath: '/base',
+          settings: expectedConfig,
+        },
+      });
 
       // Assert
       expect(processConfigFileReferences).toHaveBeenCalled();
@@ -493,11 +500,13 @@ describe('PythonProvider', () => {
       // Act
       await provider.processConfigReferences();
 
-      // Manually update the config to match what processConfigFileReferences would have done
-      (provider.config as TestPythonProviderConfig) = {
-        basePath: '/base',
-        settings: expectedConfig,
-      };
+      // TypeScript-safe assignment after processConfigReferences has run
+      Object.assign(provider, {
+        config: {
+          basePath: '/base',
+          settings: expectedConfig,
+        },
+      });
 
       // Assert
       expect(processConfigFileReferences).toHaveBeenCalled();
@@ -539,11 +548,13 @@ describe('PythonProvider', () => {
       // Act
       await provider.processConfigReferences();
 
-      // Manually update the config to match what processConfigFileReferences would have done
-      (provider.config as TestPythonProviderConfig) = {
-        basePath: '/base',
-        settings: expectedProcessedConfig,
-      };
+      // TypeScript-safe assignment after processConfigReferences has run
+      Object.assign(provider, {
+        config: {
+          basePath: '/base',
+          settings: expectedProcessedConfig,
+        },
+      });
 
       // Assert
       expect(processConfigFileReferences).toHaveBeenCalledWith(
@@ -574,11 +585,13 @@ describe('PythonProvider', () => {
       // Act
       await provider.processConfigReferences();
 
-      // Manually update the config to match what processConfigFileReferences would have done
-      (provider.config as TestPythonProviderConfig) = {
-        basePath: '/base',
-        templates: expectedTemplates,
-      };
+      // TypeScript-safe assignment after processConfigReferences has run
+      Object.assign(provider, {
+        config: {
+          basePath: '/base',
+          templates: expectedTemplates,
+        },
+      });
 
       // Assert
       expect(processConfigFileReferences).toHaveBeenCalled();

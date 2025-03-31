@@ -36,7 +36,6 @@ import {
   type GradingResult,
 } from '../types';
 import { isJavascriptFile } from '../util/file';
-import { loadFileReference } from '../util/fileReference';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { transform } from '../util/transform';
@@ -150,33 +149,39 @@ export async function runAssertion({
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
-      try {
-        // Use our new loadFileReference function for JavaScript and Python files
-        if (
-          renderedValue.endsWith('.js') ||
-          renderedValue.endsWith('.py') ||
-          renderedValue.includes('.js:') ||
-          renderedValue.includes('.py:')
-        ) {
-          valueFromScript = await loadFileReference(renderedValue, basePath);
+      const fileRef = renderedValue.slice('file://'.length);
+      let filePath = fileRef;
+      let functionName: string | undefined;
 
-          // For script-based assertions, we need to call the function with output and context
-          if (typeof valueFromScript === 'function') {
-            valueFromScript = await Promise.resolve(valueFromScript(output, context));
-          }
+      if (fileRef.includes(':')) {
+        const [pathPart, funcPart] = fileRef.split(':');
+        filePath = pathPart;
+        functionName = funcPart;
+      }
 
-          logger.debug(`File reference ${renderedValue} output: ${valueFromScript}`);
-        } else {
-          // For other file types (text, JSON, YAML), just load the content
-          renderedValue = await loadFileReference(renderedValue, basePath);
+      filePath = path.resolve(basePath, filePath);
+
+      if (isJavascriptFile(filePath)) {
+        valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);
+        logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
+      } else if (filePath.endsWith('.py')) {
+        try {
+          const pythonScriptOutput = await runPython(filePath, functionName || 'get_assert', [
+            output,
+            context,
+          ]);
+          valueFromScript = pythonScriptOutput;
+          logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
+        } catch (error) {
+          return {
+            pass: false,
+            score: 0,
+            reason: (error as Error).message,
+            assertion,
+          };
         }
-      } catch (error) {
-        return {
-          pass: false,
-          score: 0,
-          reason: (error as Error).message,
-          assertion,
-        };
+      } else {
+        renderedValue = processFileReference(renderedValue);
       }
     } else if (isPackagePath(renderedValue)) {
       const basePath = cliState.basePath || '';
@@ -194,23 +199,15 @@ export async function runAssertion({
     }
   } else if (renderedValue && Array.isArray(renderedValue)) {
     // Process each element in the array
-    renderedValue = await Promise.all(
-      renderedValue.map(async (v) => {
-        if (typeof v === 'string') {
-          if (v.startsWith('file://')) {
-            // Use our new loadFileReference function
-            try {
-              return await loadFileReference(v, cliState.basePath || '');
-            } catch (error) {
-              logger.warn(`Error loading file reference ${v}: ${error}`);
-              return v;
-            }
-          }
-          return nunjucks.renderString(v, test.vars || {});
+    renderedValue = renderedValue.map((v) => {
+      if (typeof v === 'string') {
+        if (v.startsWith('file://')) {
+          return processFileReference(v);
         }
-        return v;
-      }),
-    );
+        return nunjucks.renderString(v, test.vars || {});
+      }
+      return v;
+    });
   }
 
   const assertionParams: AssertionParams = {
