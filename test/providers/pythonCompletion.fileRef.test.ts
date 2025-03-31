@@ -1,13 +1,11 @@
 import fs from 'fs';
 import path from 'path';
-import { Logger } from 'winston';
-import { importModule } from '../../src/esm';
+import type { Logger } from 'winston';
 import logger from '../../src/logger';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import { runPython } from '../../src/python/pythonUtils';
 import { parsePathOrGlob } from '../../src/util';
-import { isJavascriptFile } from '../../src/util/file';
-import { loadFileReference, processConfigFileReferences } from '../../src/util/fileReference';
+import { processConfigFileReferences } from '../../src/util/fileReference';
 
 // Mock dependencies
 jest.mock('fs');
@@ -29,7 +27,7 @@ describe('PythonProvider with file references', () => {
     jest.resetAllMocks();
 
     // Mock logger methods with jest.fn()
-    (logger.debug as jest.Mock).mockImplementation(
+    (jest.mocked(logger.debug)).mockImplementation(
       () =>
         ({
           debug: jest.fn(),
@@ -39,7 +37,7 @@ describe('PythonProvider with file references', () => {
         }) as unknown as Logger,
     );
 
-    (logger.error as jest.Mock).mockImplementation(
+    (jest.mocked(logger.error)).mockImplementation(
       () =>
         ({
           debug: jest.fn(),
@@ -171,8 +169,7 @@ describe('PythonProvider with file references', () => {
     provider['configReferencesProcessed'] = false;
 
     // Mock the entire executePythonScript method
-    provider['executePythonScript'] = jest
-      .fn()
+    jest.spyOn(provider, 'executePythonScript').mockImplementation()
       .mockResolvedValue({ output: 'API result', cached: false });
 
     jest.mocked(runPython).mockResolvedValue({ output: 'API result' });
