@@ -672,10 +672,7 @@ export default function ResultsView({
         onShare={handleShare}
       />
       <SettingsModal open={viewSettingsModalOpen} onClose={() => setViewSettingsModalOpen(false)} />
-      <EvalSelectorKeyboardShortcut
-        recentEvals={recentEvals}
-        onRecentEvalSelected={onRecentEvalSelected}
-      />
+      <EvalSelectorKeyboardShortcut onEvalSelected={onRecentEvalSelected} />
     </div>
   );
 }
