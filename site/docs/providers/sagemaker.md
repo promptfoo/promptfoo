@@ -339,8 +339,6 @@ Supported model types:
 
 | Model Type    | Description                        | JavaScript Expression for Results |
 | ------------- | ---------------------------------- | --------------------------------- |
-| `openai`      | OpenAI-compatible interface models | Standard format                   |
-| `anthropic`   | Claude-compatible interface models | Standard format                   |
 | `llama`       | Llama-compatible interface models  | Standard format                   |
 | `huggingface` | Hugging Face models (like Mistral) | `json[0].generated_text`          |
 | `jumpstart`   | AWS JumpStart foundation models    | `json.generated_text`             |
@@ -348,14 +346,7 @@ Supported model types:
 
 :::warning Important clarification about model types
 
-The `modelType` setting does **not** indicate that SageMaker is providing these proprietary models. It's a formatting helper that structures the request/response as if interacting with that API pattern.
-
-For example:
-
-- Using `modelType: 'openai'` means your custom-deployed endpoint expects an OpenAI-like interface
-- Using `modelType: 'anthropic'` assumes your endpoint container mimics Claude's API format
-
-SageMaker does not provide OpenAI or Anthropic models directly - use the AWS Bedrock provider for those official models.
+The `modelType` setting helps format requests and responses according to specific patterns expected by different model containers deployed on SageMaker.
 
 Different model types return results in different response formats. Configure the appropriate JavaScript expression for extraction:
 
