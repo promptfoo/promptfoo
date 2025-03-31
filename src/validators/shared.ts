@@ -13,6 +13,12 @@ export const TokenUsageSchema = z.object({
   total: z.number().optional(),
   numRequests: z.number().optional(),
   completionDetails: CompletionTokenDetailsSchema.optional(),
+  assertions: z.object({
+    total: z.number().optional(),
+    prompt: z.number().optional(),
+    completion: z.number().optional(),
+    cached: z.number().optional(),
+  }).optional(),
 });
 
 export const NunjucksFilterMapSchema = z.record(

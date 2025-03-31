@@ -6,7 +6,7 @@ import { globSync } from 'glob';
 import * as path from 'path';
 import readline from 'readline';
 import type winston from 'winston';
-import { runAssertions, runCompareAssertion } from './assertions';
+import { MODEL_GRADED_ASSERTION_TYPES, runAssertions, runCompareAssertion } from './assertions';
 import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';
 import { updateSignalFile } from './database/signal';
@@ -22,6 +22,7 @@ import telemetry from './telemetry';
 import type { EvalConversations, EvalRegisters, ScoringFunction, TokenUsage, Vars } from './types';
 import {
   type Assertion,
+  type AssertionType,
   type CompletedPrompt,
   type EvaluateOptions,
   type EvaluateResult,
@@ -78,6 +79,12 @@ export function newTokenUsage(): Required<TokenUsage> {
       reasoning: 0,
       acceptedPrediction: 0,
       rejectedPrediction: 0,
+    },
+    assertions: {
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      cached: 0,
     },
   };
 }
@@ -742,6 +749,39 @@ class Evaluator {
 
       const rows = await runEval(evalStep);
       for (const row of rows) {
+        // Print token usage for model-graded assertions and add to stats
+        if (row.gradingResult?.tokensUsed && row.testCase?.assert) {
+          for (const assertion of row.testCase.assert) {
+            if (MODEL_GRADED_ASSERTION_TYPES.has(assertion.type as AssertionType)) {
+              const tokensUsed = row.gradingResult.tokensUsed;
+              logger.info(`Model-graded assertion [${assertion.type}] token usage: ${JSON.stringify(tokensUsed)}`);
+              
+              // Ensure assertions object exists and add token usage
+              this.stats.tokenUsage.assertions = this.stats.tokenUsage.assertions || {
+                total: 0,
+                prompt: 0,
+                completion: 0,
+                cached: 0
+              };
+              
+              // Add to assertion stats (using type assertion)
+              const assertions = this.stats.tokenUsage.assertions as Required<NonNullable<TokenUsage['assertions']>>;
+              assertions.total += tokensUsed.total || 0;
+              assertions.prompt += tokensUsed.prompt || 0;
+              assertions.completion += tokensUsed.completion || 0;
+              assertions.cached += tokensUsed.cached || 0;
+              
+              // Also add to the overall totals
+              this.stats.tokenUsage.total += tokensUsed.total || 0;
+              this.stats.tokenUsage.prompt += tokensUsed.prompt || 0;
+              this.stats.tokenUsage.completion += tokensUsed.completion || 0;
+              this.stats.tokenUsage.cached += tokensUsed.cached || 0;
+              
+              break; // Only log once per result
+            }
+          }
+        }
+        
         // capture metrics
         if (row.success) {
           this.stats.successes++;
@@ -851,6 +891,25 @@ class Evaluator {
             (metrics.tokenUsage.completionDetails?.rejectedPrediction || 0) +
             (row.response?.tokenUsage?.completionDetails?.rejectedPrediction || 0),
         };
+        
+        // Add assertion token usage to the metrics
+        if (row.gradingResult?.tokensUsed) {
+          const assertionTokens = row.gradingResult.tokensUsed;
+          // Initialize assertions object if it doesn't exist
+          metrics.tokenUsage.assertions = metrics.tokenUsage.assertions || {
+            total: 0,
+            prompt: 0,
+            completion: 0,
+            cached: 0
+          };
+          
+          // Update assertion token usage metrics
+          metrics.tokenUsage.assertions.total += assertionTokens.total || 0;
+          metrics.tokenUsage.assertions.prompt += assertionTokens.prompt || 0;
+          metrics.tokenUsage.assertions.completion += assertionTokens.completion || 0;
+          metrics.tokenUsage.assertions.cached += assertionTokens.cached || 0;
+        }
+        
         metrics.cost += row.cost || 0;
 
         await runExtensionHook(testSuite.extensions, 'afterEach', {
