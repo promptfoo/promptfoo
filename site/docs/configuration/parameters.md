@@ -172,14 +172,6 @@ prompt
 "Write a poem about {{topic}}"
 ```
 
-Or without a header:
-
-```csv title="prompts.csv"
-"Tell me about {{topic}}"
-"Explain {{topic}} in simple terms"
-"Write a poem about {{topic}}"
-```
-
 #### Two-Column Format
 
 You can include a "label" column to give each prompt a descriptive name:
@@ -190,15 +182,6 @@ prompt,label
 "Explain {{topic}} in simple terms","Simple Explanation"
 "Write a poem about {{topic}}","Poetry Generator"
 ```
-
-#### Environment Variables
-
-CSV parsing can be customized with environment variables:
-
-- `PROMPTFOO_CSV_DELIMITER` - Set the delimiter character (default: ',')
-- `PROMPTFOO_CSV_STRICT` - Toggle strict quote handling (default: false)
-
-Rows with missing prompt values are skipped. If a label isn't provided, a numeric label is generated (e.g., "Prompt 1", "Prompt 2").
 
 ### Different prompts per model
 
