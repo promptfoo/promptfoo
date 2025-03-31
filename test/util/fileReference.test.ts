@@ -8,7 +8,6 @@ import * as pythonUtils from '../../src/python/pythonUtils';
 import { isJavascriptFile } from '../../src/util/file';
 import { loadFileReference, processConfigFileReferences } from '../../src/util/fileReference';
 
-// Create mock implementations
 jest.mock('fs');
 jest.mock('path');
 jest.mock('js-yaml');
