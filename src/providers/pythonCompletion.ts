@@ -77,7 +77,6 @@ export class PythonProvider implements ApiProvider {
     context: CallApiContextParams | undefined,
     apiType: 'call_api' | 'call_embedding_api' | 'call_classification_api',
   ): Promise<any> {
-    // Ensure file references in config are processed before execution
     if (!this.isInitialized) {
       await this.initialize();
     }
