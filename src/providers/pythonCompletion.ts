@@ -97,7 +97,6 @@ export class PythonProvider implements ApiProvider {
     )}:${JSON.stringify(context?.vars)}`;
     logger.debug(`PythonProvider cache key: ${cacheKey}`);
 
-    // Check cache if enabled
     const cache = await getCache();
     let cachedResult;
     const cacheEnabled = isCacheEnabled();
@@ -109,7 +108,6 @@ export class PythonProvider implements ApiProvider {
     }
 
     if (cachedResult) {
-      // Return cached result if available
       logger.debug(`Returning cached ${apiType} result for script ${absPath}`);
       const parsedResult = JSON.parse(cachedResult as string);
 
@@ -117,7 +115,7 @@ export class PythonProvider implements ApiProvider {
         `PythonProvider parsed cached result type: ${typeof parsedResult}, keys: ${Object.keys(parsedResult).join(',')}`,
       );
 
-      // Mark as cached so evaluator recognizes it
+      // IMPORTANT: Set cached flag to true so evaluator recognizes this as cached
       if (apiType === 'call_api' && typeof parsedResult === 'object' && parsedResult !== null) {
         logger.debug(`PythonProvider setting cached=true for cached ${apiType} result`);
         parsedResult.cached = true;
@@ -136,7 +134,6 @@ export class PythonProvider implements ApiProvider {
       }
       return parsedResult;
     } else {
-      // Execute Python script with processed configuration
       if (context) {
         // Remove properties not useful in Python
         delete context.fetchWithCache;
@@ -154,12 +151,6 @@ export class PythonProvider implements ApiProvider {
         },
       };
 
-      // Log the processed configuration for debugging
-      logger.debug(`Using processed config: ${safeJsonStringify(this.config)}`);
-      logger.debug(
-        `Combined options with processed config: ${safeJsonStringify(optionsWithProcessedConfig)}`,
-      );
-
       // Prepare arguments for the Python script based on API type
       const args =
         apiType === 'call_api'
@@ -173,7 +164,6 @@ export class PythonProvider implements ApiProvider {
       const functionName = this.functionName || apiType;
       let result;
 
-      // Execute the appropriate API call
       switch (apiType) {
         case 'call_api':
           result = await runPython(absPath, functionName, args, {
@@ -190,7 +180,6 @@ export class PythonProvider implements ApiProvider {
             );
           }
 
-          // Validate result format
           if (
             !result ||
             typeof result !== 'object' ||
@@ -208,7 +197,6 @@ export class PythonProvider implements ApiProvider {
             pythonExecutable: this.config.pythonExecutable,
           });
 
-          // Validate embedding result format
           if (
             !result ||
             typeof result !== 'object' ||
@@ -226,7 +214,6 @@ export class PythonProvider implements ApiProvider {
             pythonExecutable: this.config.pythonExecutable,
           });
 
-          // Validate classification result format
           if (
             !result ||
             typeof result !== 'object' ||
@@ -259,7 +246,7 @@ export class PythonProvider implements ApiProvider {
         );
       }
 
-      // Mark as not cached for fresh results
+      // Set cached=false on fresh results
       if (typeof result === 'object' && result !== null && apiType === 'call_api') {
         logger.debug(`PythonProvider explicitly setting cached=false for fresh result`);
         result.cached = false;
@@ -270,7 +257,6 @@ export class PythonProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    // Ensure config references are processed before calling API
     if (!this.configReferencesProcessed) {
       await this.processConfigReferences();
     }
@@ -278,7 +264,6 @@ export class PythonProvider implements ApiProvider {
   }
 
   async callEmbeddingApi(prompt: string): Promise<ProviderEmbeddingResponse> {
-    // Ensure config references are processed before calling API
     if (!this.configReferencesProcessed) {
       await this.processConfigReferences();
     }
@@ -286,7 +271,6 @@ export class PythonProvider implements ApiProvider {
   }
 
   async callClassificationApi(prompt: string): Promise<ProviderClassificationResponse> {
-    // Ensure config references are processed before calling API
     if (!this.configReferencesProcessed) {
       await this.processConfigReferences();
     }
