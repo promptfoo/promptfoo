@@ -1,6 +1,4 @@
 ---
-title: How to Red Team Foundation Models
-sidebar_label: How to red team foundation models
 sidebar_position: 10000
 description: Learn how to assess foundation model security risks through red teaming and static scanning using Promptfoo's security testing tools.
 keywords:
@@ -17,7 +15,7 @@ keywords:
   ]
 ---
 
-# How to red team foundation models
+# How to Red Team Foundation Models
 
 LLM security starts at the foundation model level. Assessing the security of foundation models is the first step to building secure Generative AI applications. This baseline will give you a starting point to understand what risks are associated with the foundation (or fine-tuned) models that you are using.
 
