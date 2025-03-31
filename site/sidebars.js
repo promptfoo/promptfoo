@@ -328,7 +328,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'guides/redteaming-multi-modal-models',
+          id: 'guides/multimodal-red-team',
         },
         {
           type: 'doc',
