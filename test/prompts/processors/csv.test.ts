@@ -12,7 +12,6 @@ describe('processCsvPrompts', () => {
   });
 
   it('should process a single column CSV with header', async () => {
-    // Example CSV with header
     const csvContent = `prompt
 Tell me about {{topic}}
 Explain {{topic}} in simple terms
@@ -22,18 +21,16 @@ Write a poem about {{topic}}`;
 
     const result = await processCsvPrompts('prompts.csv', {});
 
-    // Should skip the header row
     expect(result).toHaveLength(3);
     expect(result[0].raw).toBe('Tell me about {{topic}}');
     expect(result[1].raw).toBe('Explain {{topic}} in simple terms');
     expect(result[2].raw).toBe('Write a poem about {{topic}}');
-    expect(result[0].label).toBe('Prompt 1');
-    expect(result[1].label).toBe('Prompt 2');
-    expect(result[2].label).toBe('Prompt 3');
+    expect(result[0].label).toBe('Prompt 1 - Tell me about {{topic}}');
+    expect(result[1].label).toBe('Prompt 2 - Explain {{topic}} in simple terms');
+    expect(result[2].label).toBe('Prompt 3 - Write a poem about {{topic}}');
   });
 
   it('should process a single column text file without header', async () => {
-    // Example text file without header and without commas
     const csvContent = `Tell me about {{topic}}
 Explain {{topic}} in simple terms
 Write a poem about {{topic}}`;
@@ -46,13 +43,12 @@ Write a poem about {{topic}}`;
     expect(result[0].raw).toBe('Tell me about {{topic}}');
     expect(result[1].raw).toBe('Explain {{topic}} in simple terms');
     expect(result[2].raw).toBe('Write a poem about {{topic}}');
-    expect(result[0].label).toBe('Prompt 1');
-    expect(result[1].label).toBe('Prompt 2');
-    expect(result[2].label).toBe('Prompt 3');
+    expect(result[0].label).toBe('Prompt 1 - Tell me about {{topic}}');
+    expect(result[1].label).toBe('Prompt 2 - Explain {{topic}} in simple terms');
+    expect(result[2].label).toBe('Prompt 3 - Write a poem about {{topic}}');
   });
 
   it('should process a two column CSV with prompt and label', async () => {
-    // Example CSV with prompt and label columns
     const csvContent = `prompt,label
 Tell me about {{topic}},Basic Query
 Explain {{topic}} in simple terms,Simple Explanation
@@ -71,8 +67,7 @@ Write a poem about {{topic}},Poetry Generator`;
     expect(result[2].label).toBe('Poetry Generator');
   });
 
-  it('should generate labels from prompt content when not provided', async () => {
-    // Example CSV without label column - just a single column with a header
+  it('should generate labels from prompt content', async () => {
     const csvContent = `prompt
 This is a very long prompt that should be truncated for the label`;
 
@@ -82,11 +77,12 @@ This is a very long prompt that should be truncated for the label`;
 
     expect(result).toHaveLength(1);
     expect(result[0].raw).toBe('This is a very long prompt that should be truncated for the label');
-    expect(result[0].label).toBe('Prompt 1');
+    expect(result[0].label).toBe(
+      'Prompt 1 - This is a very long prompt that should be truncated for the label',
+    );
   });
 
   it('should use base prompt properties if provided', async () => {
-    // Example CSV with prompt column and a row of data
     const csvContent = `prompt
 Tell me about {{topic}}`;
 
@@ -106,7 +102,6 @@ Tell me about {{topic}}`;
   });
 
   it('should skip rows with missing prompt values', async () => {
-    // Example CSV with some empty cells
     const csvContent = `prompt,label
 Tell me about {{topic}},Basic Query
 
@@ -119,5 +114,32 @@ Write a poem about {{topic}},Poetry Generator`;
     expect(result).toHaveLength(2);
     expect(result[0].raw).toBe('Tell me about {{topic}}');
     expect(result[1].raw).toBe('Write a poem about {{topic}}');
+  });
+
+  it('should handle custom delimiters', async () => {
+    const csvContent = `prompt;label
+Tell me about {{topic}};Basic Query
+Explain {{topic}} in simple terms;Simple Explanation`;
+
+    jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
+    process.env.PROMPTFOO_CSV_DELIMITER = ';';
+
+    const result = await processCsvPrompts('prompts.csv', {});
+
+    expect(result).toHaveLength(2);
+    expect(result[0].raw).toBe('Tell me about {{topic}}');
+    expect(result[0].label).toBe('Basic Query');
+    expect(result[1].raw).toBe('Explain {{topic}} in simple terms');
+    expect(result[1].label).toBe('Simple Explanation');
+
+    delete process.env.PROMPTFOO_CSV_DELIMITER;
+  });
+
+  it('should handle empty files', async () => {
+    jest.mocked(fs.readFileSync).mockReturnValue('');
+
+    const result = await processCsvPrompts('prompts.csv', {});
+
+    expect(result).toHaveLength(0);
   });
 });
