@@ -135,8 +135,25 @@ export class PythonProvider implements ApiProvider {
         delete context.logger;
       }
 
+      // Create a copy of options with processed config
+      const optionsWithProcessedConfig = {
+        ...this.options,
+        config: {
+          ...this.options?.config,
+          ...this.config, // Include the processed config
+        },
+      };
+
+      // Add detailed logging about processed config
+      logger.debug(`Using processed config: ${safeJsonStringify(this.config)}`);
+      logger.debug(
+        `Combined options with processed config: ${safeJsonStringify(optionsWithProcessedConfig)}`,
+      );
+
       const args =
-        apiType === 'call_api' ? [prompt, this.options, context] : [prompt, this.options];
+        apiType === 'call_api'
+          ? [prompt, optionsWithProcessedConfig, context]
+          : [prompt, optionsWithProcessedConfig];
       logger.debug(
         `Running python script ${absPath} with scriptPath ${this.scriptPath} and args: ${safeJsonStringify(args)}`,
       );
