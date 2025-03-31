@@ -1,5 +1,5 @@
 import WebSocket from 'ws';
-import { GoogleMMLiveProvider } from '../../src/providers/googleMultimodalLive';
+import { GoogleMMLiveProvider } from '../../src/providers/google/googleMultimodalLive';
 
 jest.mock('ws');
 

@@ -1,13 +1,13 @@
 import * as cache from '../../src/cache';
-import { GoogleChatProvider } from '../../src/providers/google';
-import * as vertexUtil from '../../src/providers/vertexUtil';
+import { GoogleChatProvider } from '../../src/providers/google/google';
+import * as vertexUtil from '../../src/providers/google/vertexUtil';
 import * as templates from '../../src/util/templates';
 
 jest.mock('../../src/cache', () => ({
   fetchWithCache: jest.fn(),
 }));
 
-jest.mock('../../src/providers/vertexUtil', () => ({
+jest.mock('../../src/providers/google/vertexUtil', () => ({
   maybeCoerceToGeminiFormat: jest.fn(),
 }));
 

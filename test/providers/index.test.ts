@@ -21,6 +21,7 @@ import {
   type ICloudflareEmbeddingResponse,
   type ICloudflareProviderConfig,
 } from '../../src/providers/cloudflare-ai';
+import { VertexChatProvider, VertexEmbeddingProvider } from '../../src/providers/google/vertex';
 import {
   HuggingfaceTextGenerationProvider,
   HuggingfaceFeatureExtractionProvider,
@@ -43,7 +44,6 @@ import {
   ReplicateProvider,
 } from '../../src/providers/replicate';
 import { ScriptCompletionProvider } from '../../src/providers/scriptCompletion';
-import { VertexChatProvider, VertexEmbeddingProvider } from '../../src/providers/vertex';
 import { VoyageEmbeddingProvider } from '../../src/providers/voyage';
 import { WebhookProvider } from '../../src/providers/webhook';
 import RedteamGoatProvider from '../../src/redteam/providers/goat';

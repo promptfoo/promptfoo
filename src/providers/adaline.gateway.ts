@@ -39,15 +39,15 @@ import { calculateAnthropicCost } from './anthropic/util';
 import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureEmbeddingProvider } from './azure/embedding';
 import { calculateAzureCost } from './azure/util';
-import { GoogleChatProvider } from './google';
+import { GoogleChatProvider } from './google/google';
+import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
+import { getGoogleClient } from './google/vertexUtil';
 import { GroqProvider } from './groq';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 import type { OpenAiCompletionOptions } from './openai/types';
 import { calculateOpenAICost } from './openai/util';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
-import { VertexChatProvider, VertexEmbeddingProvider } from './vertex';
-import { getGoogleClient } from './vertexUtil';
 import { VoyageEmbeddingProvider } from './voyage';
 
 // Allows Adaline Gateway to R/W Promptfoo's cache

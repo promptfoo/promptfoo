@@ -7,17 +7,17 @@ import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureModerationProvider } from './azure/moderation';
 import {
+  DefaultEmbeddingProvider as GeminiEmbeddingProvider,
+  DefaultGradingProvider as GeminiGradingProvider,
+} from './google/vertex';
+import { hasGoogleDefaultCredentials } from './google/vertexUtil';
+import {
   DefaultEmbeddingProvider as OpenAiEmbeddingProvider,
   DefaultGradingJsonProvider as OpenAiGradingJsonProvider,
   DefaultGradingProvider as OpenAiGradingProvider,
   DefaultModerationProvider as OpenAiModerationProvider,
   DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
 } from './openai/defaults';
-import {
-  DefaultEmbeddingProvider as GeminiEmbeddingProvider,
-  DefaultGradingProvider as GeminiGradingProvider,
-} from './vertex';
-import { hasGoogleDefaultCredentials } from './vertexUtil';
 
 const COMPLETION_PROVIDERS: (keyof DefaultProviders)[] = [
   'datasetGenerationProvider',
