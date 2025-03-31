@@ -79,6 +79,7 @@ import { handleStartsWith } from './startsWith';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
 import { handleIsXml } from './xml';
+import { debugTokens } from './debug-tokens';
 
 const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
 
@@ -278,6 +279,65 @@ export async function runAssertion({
   const handler = assertionHandlers[baseType as keyof typeof assertionHandlers];
   if (handler) {
     const result = await handler(assertionParams);
+    
+    // Debug token usage
+    debugTokens(`Assertion result for ${baseType}`, result.tokensUsed);
+    
+    // If this is an LLM-based assertion and it has token usage, update to track by assertion type
+    if (MODEL_GRADED_ASSERTION_TYPES.has(baseType) && result.tokensUsed) {
+      // Make sure tokensUsed.assertions exists
+      if (!result.tokensUsed.assertions) {
+        result.tokensUsed.assertions = {
+          total: 0,
+          prompt: 0,
+          completion: 0,
+          byType: {} as Record<string, {
+            total: number;
+            prompt: number;
+            completion: number;
+            count: number;
+          }>,
+        };
+      }
+      
+      // Update assertion-specific token tracking
+      result.tokensUsed.assertions.total += result.tokensUsed.total || 0;
+      result.tokensUsed.assertions.prompt += result.tokensUsed.prompt || 0;
+      result.tokensUsed.assertions.completion += result.tokensUsed.completion || 0;
+      
+      // Track by assertion type
+      if (!result.tokensUsed.assertions.byType) {
+        result.tokensUsed.assertions.byType = {} as Record<string, {
+          total: number;
+          prompt: number;
+          completion: number;
+          count: number;
+        }>;
+      }
+      
+      if (!result.tokensUsed.assertions.byType[baseType]) {
+        result.tokensUsed.assertions.byType[baseType] = {
+          total: 0,
+          prompt: 0,
+          completion: 0,
+          count: 0,
+        };
+      }
+      
+      result.tokensUsed.assertions.byType[baseType].total += result.tokensUsed.total || 0;
+      result.tokensUsed.assertions.byType[baseType].prompt += result.tokensUsed.prompt || 0;
+      result.tokensUsed.assertions.byType[baseType].completion += result.tokensUsed.completion || 0;
+      result.tokensUsed.assertions.byType[baseType].count += 1;
+    
+      // Force existing token usage to include assertions total in overall total
+      // This ensures assertion tokens are always counted in the main token counter
+      if (result.tokensUsed.assertions.total > 0) {
+        debugTokens(`Ensuring assertion tokens for ${baseType} are counted`, result.tokensUsed);
+      }
+      
+      // Debug after processing
+      debugTokens(`Processed assertion tokens for ${baseType}`, result.tokensUsed);
+    }
 
     // If weight is 0, treat this as a metric-only assertion that can't fail
     if (assertion.weight === 0) {

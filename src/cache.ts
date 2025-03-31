@@ -96,6 +96,12 @@ export async function fetchWithCache<T = any>(
 
     try {
       const parsedData = format === 'json' ? JSON.parse(responseText) : responseText;
+      
+      // Ensure tokenUsage.assertions is preserved in the data
+      if (parsedData?.tokenUsage?.assertions) {
+        logger.debug(`Found token assertions in response: ${JSON.stringify(parsedData.tokenUsage.assertions)}`);
+      }
+      
       const data = JSON.stringify({
         data: parsedData,
         status: response.status,

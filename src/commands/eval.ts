@@ -35,6 +35,21 @@ import invariant from '../util/invariant';
 import { filterProviders } from './eval/filterProviders';
 import type { FilterOptions } from './eval/filterTests';
 import { filterTests } from './eval/filterTests';
+import ora from 'ora';
+import { omit } from 'lodash';
+import csvStringify from 'csv-stringify/lib/sync';
+import table from 'text-table';
+import Database from 'better-sqlite3';
+import stripAnsi from 'strip-ansi';
+
+// Debug helper
+function debugTokenUsage(label: string, tokenUsage: any): void {
+  const debugFile = process.env.TOKEN_DEBUG_FILE || '/tmp/promptfoo-token-eval.log';
+  fs.appendFileSync(
+    debugFile,
+    `\n--- ${label} [${new Date().toISOString()}] ---\n${JSON.stringify(tokenUsage, null, 2)}\n`
+  );
+}
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
   help: z.boolean().optional(),
@@ -240,6 +255,17 @@ export async function doEval(
         acceptedPrediction: 0,
         rejectedPrediction: 0,
       },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        byType: {} as Record<string, {
+          total: number;
+          prompt: number;
+          completion: number;
+          count: number;
+        }>
+      }
     };
 
     // Calculate our total successes and failures
@@ -265,6 +291,42 @@ export async function doEval(
           prompt.metrics.tokenUsage.completionDetails.acceptedPrediction || 0;
         tokenUsage.completionDetails.rejectedPrediction +=
           prompt.metrics.tokenUsage.completionDetails.rejectedPrediction || 0;
+      }
+      
+      // Aggregate assertion token usage
+      if (prompt.metrics?.tokenUsage?.assertions) {
+        // Debug token usage from prompt metrics
+        debugTokenUsage(`Metrics from prompt ${prompt.label}`, prompt.metrics.tokenUsage);
+        
+        tokenUsage.assertions.total += prompt.metrics.tokenUsage.assertions.total || 0;
+        tokenUsage.assertions.prompt += prompt.metrics.tokenUsage.assertions.prompt || 0;
+        tokenUsage.assertions.completion += prompt.metrics.tokenUsage.assertions.completion || 0;
+        
+        // Aggregate by assertion type
+        if (prompt.metrics.tokenUsage.assertions.byType) {
+          for (const [type, usage] of Object.entries(prompt.metrics.tokenUsage.assertions.byType)) {
+            if (!tokenUsage.assertions.byType[type]) {
+              tokenUsage.assertions.byType[type] = {
+                total: 0,
+                prompt: 0,
+                completion: 0,
+                count: 0
+              };
+            }
+            
+            const typedUsage = usage as {
+              total: number;
+              prompt: number;
+              completion: number;
+              count: number;
+            };
+            
+            tokenUsage.assertions.byType[type].total += typedUsage.total || 0;
+            tokenUsage.assertions.byType[type].prompt += typedUsage.prompt || 0;
+            tokenUsage.assertions.byType[type].completion += typedUsage.completion || 0;
+            tokenUsage.assertions.byType[type].count += typedUsage.count || 1;
+          }
+        }
       }
     }
     const totalTests = successes + failures + errors;
@@ -336,9 +398,30 @@ export async function doEval(
       logger.info(chalk.blue.bold(`Pass Rate: ${passRate.toFixed(2)}%`));
     }
     if (tokenUsage.total > 0) {
+      // Debug the token usage before reporting
+      debugTokenUsage('Before reporting', tokenUsage);
+      
       logger.info(
-        `${isRedteam ? `Total probes: ${tokenUsage.numRequests.toLocaleString()} / ` : ''}Total tokens: ${tokenUsage.total.toLocaleString()} / Prompt tokens: ${tokenUsage.prompt.toLocaleString()} / Completion tokens: ${tokenUsage.completion.toLocaleString()} / Cached tokens: ${tokenUsage.cached.toLocaleString()}${tokenUsage.completionDetails?.reasoning ? ` / Reasoning tokens: ${tokenUsage.completionDetails.reasoning.toLocaleString()}` : ''}`,
+        `${isRedteam ? `Total probes: ${tokenUsage.numRequests.toLocaleString()} / ` : ''}Total tokens: ${tokenUsage.total.toLocaleString()} / Prompt tokens: ${tokenUsage.prompt.toLocaleString()} / Completion tokens: ${tokenUsage.completion.toLocaleString()} / Cached tokens: ${tokenUsage.cached.toLocaleString()}${tokenUsage.completionDetails?.reasoning ? ` / Reasoning tokens: ${tokenUsage.completionDetails.reasoning.toLocaleString()}` : ''}${tokenUsage.assertions?.total > 0 ? ` / Assertion tokens: ${tokenUsage.assertions.total.toLocaleString()}` : ''}`,
       );
+      
+      // Add enhanced breakdown of assertion token usage if it exists
+      if (tokenUsage.assertions?.total > 0) {
+        const assertionsTokens = tokenUsage.assertions;
+        logger.info(
+          chalk.blue.bold(`Assertions used ${assertionsTokens.total.toLocaleString()} tokens (${Math.round((assertionsTokens.total / tokenUsage.total) * 100)}% of total)`),
+        );
+        
+        // Add detailed breakdown by assertion type
+        if (assertionsTokens.byType && Object.keys(assertionsTokens.byType).length > 0) {
+          logger.info(chalk.blue.bold(`Breakdown by assertion type:`));
+          for (const [assertType, usage] of Object.entries(assertionsTokens.byType)) {
+            logger.info(
+              `  - ${chalk.cyan(assertType)}: ${usage.total.toLocaleString()} tokens across ${usage.count} calls (${usage.prompt.toLocaleString()} prompt, ${usage.completion.toLocaleString()} completion)`,
+            );
+          }
+        }
+      }
     }
 
     telemetry.record('command_used', {

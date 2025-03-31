@@ -324,6 +324,34 @@ function EvalOutputCell({
       output.response?.tokenUsage?.total ?? 0,
     );
 
+    // Build the tooltip content
+    let tooltipContent = `${promptTokens} prompt tokens + ${completionTokens} completion tokens = ${totalTokens} total`;
+    
+    // Add assertion token usage if available
+    if (output.response?.tokenUsage?.assertions?.total) {
+      const assertionTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
+        output.response.tokenUsage.assertions.total ?? 0,
+      );
+      const percentage = Math.round(
+        ((output.response.tokenUsage.assertions.total ?? 0) / 
+         (output.response.tokenUsage.total ?? 1)) * 100
+      );
+      tooltipContent += `\n${assertionTokens} tokens (${percentage}%) used by assertions`;
+      
+      // Add breakdown by assertion type if available
+      if (output.response.tokenUsage.assertions.byType) {
+        const assertionTypes = Object.entries(output.response.tokenUsage.assertions.byType)
+          .sort(([, a], [, b]) => (b.total || 0) - (a.total || 0));
+        
+        for (const [type, usage] of assertionTypes) {
+          const typeTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
+            usage.total ?? 0
+          );
+          tooltipContent += `\n- ${type}: ${typeTokens} tokens`;
+        }
+      }
+    }
+
     if (output.response?.tokenUsage?.completionDetails?.reasoning) {
       const reasoningTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
         output.response.tokenUsage.completionDetails.reasoning ?? 0,
@@ -331,25 +359,35 @@ function EvalOutputCell({
 
       tokenUsageDisplay = (
         <Tooltip
-          title={`${promptTokens} prompt tokens + ${completionTokens} completion tokens = ${totalTokens} total & ${reasoningTokens} reasoning tokens`}
+          title={tooltipContent + `\n${reasoningTokens} reasoning tokens`}
         >
           <span>
             {totalTokens}
             {(promptTokens !== '0' || completionTokens !== '0') &&
               ` (${promptTokens}+${completionTokens})`}
             {` R${reasoningTokens}`}
+            {output.response?.tokenUsage?.assertions?.total ? 
+              ` A${Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
+                output.response.tokenUsage.assertions.total ?? 0,
+              )}` : 
+              ''}
           </span>
         </Tooltip>
       );
     } else {
       tokenUsageDisplay = (
         <Tooltip
-          title={`${promptTokens} prompt tokens + ${completionTokens} completion tokens = ${totalTokens} total`}
+          title={tooltipContent}
         >
           <span>
             {totalTokens}
             {(promptTokens !== '0' || completionTokens !== '0') &&
               ` (${promptTokens}+${completionTokens})`}
+            {output.response?.tokenUsage?.assertions?.total ? 
+              ` A${Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
+                output.response.tokenUsage.assertions.total ?? 0,
+              )}` : 
+              ''}
           </span>
         </Tooltip>
       );

@@ -79,6 +79,17 @@ export function newTokenUsage(): Required<TokenUsage> {
       acceptedPrediction: 0,
       rejectedPrediction: 0,
     },
+    assertions: {
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      byType: {} as Record<string, {
+        total: number;
+        prompt: number;
+        completion: number;
+        count: number;
+      }>,
+    },
   };
 }
 
@@ -317,6 +328,32 @@ export async function runEval({
           ret.tokenUsage.completionDetails.rejectedPrediction! +=
             checkResult.tokensUsed.completionDetails.rejectedPrediction || 0;
         }
+        
+        // Ensure assertion tokens are properly tracked
+        if (checkResult.tokensUsed.assertions) {
+          ret.tokenUsage.assertions.total += checkResult.tokensUsed.assertions.total || 0;
+          ret.tokenUsage.assertions.prompt += checkResult.tokensUsed.assertions.prompt || 0;
+          ret.tokenUsage.assertions.completion += checkResult.tokensUsed.assertions.completion || 0;
+          
+          // Track by assertion type
+          if (checkResult.tokensUsed.assertions.byType) {
+            for (const [type, usage] of Object.entries(checkResult.tokensUsed.assertions.byType)) {
+              if (!ret.tokenUsage.assertions.byType[type]) {
+                ret.tokenUsage.assertions.byType[type] = {
+                  total: 0,
+                  prompt: 0,
+                  completion: 0,
+                  count: 0
+                };
+              }
+              
+              ret.tokenUsage.assertions.byType[type].total += usage.total || 0;
+              ret.tokenUsage.assertions.byType[type].prompt += usage.prompt || 0;
+              ret.tokenUsage.assertions.byType[type].completion += usage.completion || 0;
+              ret.tokenUsage.assertions.byType[type].count += usage.count || 1;
+            }
+          }
+        }
       }
       ret.response = processedResponse;
       ret.gradingResult = checkResult;
@@ -336,6 +373,32 @@ export async function runEval({
           response.tokenUsage.completionDetails.acceptedPrediction || 0;
         ret.tokenUsage.completionDetails.rejectedPrediction! +=
           response.tokenUsage.completionDetails.rejectedPrediction || 0;
+      }
+      
+      // Make sure assertion tokens are properly tracked
+      if (response.tokenUsage.assertions) {
+        ret.tokenUsage.assertions.total += response.tokenUsage.assertions.total || 0;
+        ret.tokenUsage.assertions.prompt += response.tokenUsage.assertions.prompt || 0;
+        ret.tokenUsage.assertions.completion += response.tokenUsage.assertions.completion || 0;
+        
+        // Track by assertion type
+        if (response.tokenUsage.assertions.byType) {
+          for (const [type, usage] of Object.entries(response.tokenUsage.assertions.byType)) {
+            if (!ret.tokenUsage.assertions.byType[type]) {
+              ret.tokenUsage.assertions.byType[type] = {
+                total: 0,
+                prompt: 0,
+                completion: 0,
+                count: 0
+              };
+            }
+            
+            ret.tokenUsage.assertions.byType[type].total += usage.total || 0;
+            ret.tokenUsage.assertions.byType[type].prompt += usage.prompt || 0;
+            ret.tokenUsage.assertions.byType[type].completion += usage.completion || 0;
+            ret.tokenUsage.assertions.byType[type].count += usage.count || 1;
+          }
+        }
       }
     }
 

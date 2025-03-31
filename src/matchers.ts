@@ -489,6 +489,19 @@ export async function matchesLlmRubric(
           acceptedPrediction: 0,
           rejectedPrediction: 0,
         },
+        assertions: {
+          total: resp.tokenUsage?.total || 0,
+          prompt: resp.tokenUsage?.prompt || 0,
+          completion: resp.tokenUsage?.completion || 0,
+          byType: {
+            'llm-rubric': {
+              total: resp.tokenUsage?.total || 0,
+              prompt: resp.tokenUsage?.prompt || 0,
+              completion: resp.tokenUsage?.completion || 0,
+              count: 1
+            }
+          }
+        }
       },
     };
   } catch (err) {

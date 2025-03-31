@@ -417,6 +417,12 @@ export default class Eval {
           acceptedPrediction: 0,
           rejectedPrediction: 0,
         },
+        assertions: {
+          total: 0,
+          prompt: 0,
+          completion: 0,
+          byType: {},
+        },
       },
     };
 
@@ -436,6 +442,40 @@ export default class Eval {
         prompt.metrics?.tokenUsage.completionDetails?.acceptedPrediction || 0;
       stats.tokenUsage.completionDetails.rejectedPrediction! +=
         prompt.metrics?.tokenUsage.completionDetails?.rejectedPrediction || 0;
+        
+      // Also aggregate assertion-specific token usage
+      if (prompt.metrics?.tokenUsage?.assertions) {
+        stats.tokenUsage.assertions.total += prompt.metrics.tokenUsage.assertions.total || 0;
+        stats.tokenUsage.assertions.prompt += prompt.metrics.tokenUsage.assertions.prompt || 0;
+        stats.tokenUsage.assertions.completion += prompt.metrics.tokenUsage.assertions.completion || 0;
+        
+        // Add a debug log to verify we're reaching this point
+        console.log(`Adding ${prompt.metrics.tokenUsage.assertions.total} assertion tokens from prompt ${prompt.label}`);
+        
+        // Aggregate by assertion type
+        if (prompt.metrics.tokenUsage.assertions.byType) {
+          // Ensure byType is initialized
+          stats.tokenUsage.assertions.byType = stats.tokenUsage.assertions.byType || {} as Record<string, any>;
+          
+          for (const [assertType, usage] of Object.entries(prompt.metrics.tokenUsage.assertions.byType)) {
+            if (!stats.tokenUsage.assertions.byType[assertType]) {
+              stats.tokenUsage.assertions.byType[assertType] = {
+                total: 0,
+                prompt: 0,
+                completion: 0,
+                count: 0,
+              };
+            }
+            
+            // Use type assertion to avoid TypeScript errors
+            const byType = stats.tokenUsage.assertions.byType as Record<string, any>;
+            byType[assertType].total += usage.total || 0;
+            byType[assertType].prompt += usage.prompt || 0;
+            byType[assertType].completion += usage.completion || 0;
+            byType[assertType].count += usage.count || 1;
+          }
+        }
+      }
     }
 
     return stats;

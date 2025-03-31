@@ -7,6 +7,17 @@ export const DEFAULT_TOKENS_USED = {
   prompt: 0,
   completion: 0,
   cached: 0,
+  assertions: {
+    total: 0,
+    prompt: 0,
+    completion: 0,
+    byType: {} as Record<string, {
+      total: number;
+      prompt: number;
+      completion: number;
+      count: number;
+    }>,
+  },
 };
 
 interface ParentAssertionSet {
@@ -92,6 +103,55 @@ export class AssertionsResult {
       this.tokensUsed.prompt += result.tokensUsed.prompt || 0;
       this.tokensUsed.completion += result.tokensUsed.completion || 0;
       this.tokensUsed.cached += result.tokensUsed.cached || 0;
+      
+      // Also track assertion-specific token usage
+      if (result.tokensUsed.assertions) {
+        if (!this.tokensUsed.assertions) {
+          this.tokensUsed.assertions = { 
+            total: 0, 
+            prompt: 0, 
+            completion: 0,
+            byType: {} as Record<string, {
+              total: number;
+              prompt: number;
+              completion: number;
+              count: number;
+            }>,
+          };
+        }
+        
+        this.tokensUsed.assertions.total += result.tokensUsed.assertions.total || 0;
+        this.tokensUsed.assertions.prompt += result.tokensUsed.assertions.prompt || 0;
+        this.tokensUsed.assertions.completion += result.tokensUsed.assertions.completion || 0;
+        
+        // Aggregate by assertion type
+        if (result.tokensUsed.assertions.byType) {
+          if (!this.tokensUsed.assertions.byType) {
+            this.tokensUsed.assertions.byType = {} as Record<string, {
+              total: number;
+              prompt: number;
+              completion: number;
+              count: number;
+            }>;
+          }
+          
+          for (const [assertType, usage] of Object.entries(result.tokensUsed.assertions.byType)) {
+            if (!this.tokensUsed.assertions.byType[assertType]) {
+              this.tokensUsed.assertions.byType[assertType] = {
+                total: 0,
+                prompt: 0,
+                completion: 0,
+                count: 0,
+              };
+            }
+            
+            this.tokensUsed.assertions.byType[assertType].total += usage.total || 0;
+            this.tokensUsed.assertions.byType[assertType].prompt += usage.prompt || 0;
+            this.tokensUsed.assertions.byType[assertType].completion += usage.completion || 0;
+            this.tokensUsed.assertions.byType[assertType].count += usage.count || 1;
+          }
+        }
+      }
     }
 
     if (result.pass) {
