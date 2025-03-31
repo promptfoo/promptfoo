@@ -1,627 +1,390 @@
 import fs from 'fs';
 import path from 'path';
-import type { Logger } from 'winston';
 import { getCache, isCacheEnabled } from '../../src/cache';
-import logger from '../../src/logger';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import { runPython } from '../../src/python/pythonUtils';
-import { parsePathOrGlob } from '../../src/util';
-import { processConfigFileReferences } from '../../src/util/fileReference';
 
-// Mock dependencies
+jest.mock('../../src/python/pythonUtils');
+jest.mock('../../src/cache');
 jest.mock('fs');
 jest.mock('path');
-jest.mock('../../src/python/pythonUtils');
-jest.mock('../../src/util/file');
-jest.mock('../../src/logger');
-jest.mock('../../src/esm');
-jest.mock('../../src/util');
-jest.mock('../../src/cache', () => ({
-  getCache: jest.fn(),
-  isCacheEnabled: jest.fn(),
-}));
-
-// Mock the fileReference utility functions for controlled testing
-jest.mock('../../src/util/fileReference', () => ({
-  loadFileReference: jest.fn(),
-  processConfigFileReferences: jest.fn(),
-}));
-
-// Extend the PythonProviderConfig for testing
-interface TestPythonProviderConfig {
-  pythonExecutable?: string;
-  settings?: any;
-  templates?: any[];
-  basePath?: string;
-  [key: string]: any;
-}
-
-describe('PythonProvider', () => {
-  beforeEach(() => {
-    jest.resetAllMocks();
-
-    // Mock logger methods with jest.fn()
-    jest.mocked(logger.debug).mockImplementation(
-      () =>
-        ({
-          debug: jest.fn(),
-          info: jest.fn(),
-          warn: jest.fn(),
-          error: jest.fn(),
-        }) as unknown as Logger,
-    );
-
-    jest.mocked(logger.error).mockImplementation(
-      () =>
-        ({
-          debug: jest.fn(),
-          info: jest.fn(),
-          warn: jest.fn(),
-          error: jest.fn(),
-        }) as unknown as Logger,
-    );
-
-    // Mock path functions
-    jest.mocked(path.resolve).mockImplementation((...parts) => parts.join('/'));
-    jest.mocked(path.relative).mockReturnValue('relative/path');
-    jest.mocked(path.join).mockImplementation((...parts) => parts.join('/'));
-
-    // Mock parsePathOrGlob to return a properly structured object
-    jest.mocked(parsePathOrGlob).mockImplementation((basePath, runPath) => {
-      // Handle the special case for testing function names
-      if (runPath.includes(':')) {
-        const [filePath, functionName] = runPath.split(':');
-        return {
-          filePath,
-          functionName,
-          isPathPattern: false,
-          extension: '.py',
-        };
-      }
-
-      // Default case
+jest.mock('../../src/util', () => ({
+  ...jest.requireActual('../../src/util'),
+  parsePathOrGlob: jest.fn((basePath, runPath) => {
+    // Handle the special case for testing function names
+    if (runPath === 'script.py:custom_function') {
       return {
-        filePath: runPath,
-        functionName: undefined,
+        filePath: 'script.py',
+        functionName: 'custom_function',
         isPathPattern: false,
         extension: '.py',
       };
-    });
+    }
 
-    // Default mocks for other functions
-    jest.mocked(fs.readFileSync).mockReturnValue('mock file content');
-    jest.mocked(runPython).mockResolvedValue({ output: 'Test output' });
+    // Default case
+    return {
+      filePath: runPath,
+      functionName: undefined,
+      isPathPattern: false,
+      extension: path.extname(runPath),
+    };
+  }),
+}));
 
-    // Mock getCache and isCacheEnabled
-    jest.mocked(getCache).mockResolvedValue({
+describe('PythonProvider', () => {
+  const mockRunPython = jest.mocked(runPython);
+  const mockGetCache = jest.mocked(jest.mocked(getCache));
+  const mockIsCacheEnabled = jest.mocked(isCacheEnabled);
+  const mockReadFileSync = jest.mocked(fs.readFileSync);
+  const mockResolve = jest.mocked(path.resolve);
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetCache.mockResolvedValue({
       get: jest.fn(),
       set: jest.fn(),
     } as never);
-    jest.mocked(isCacheEnabled).mockReturnValue(false);
+    mockIsCacheEnabled.mockReturnValue(false);
+    mockReadFileSync.mockReturnValue('mock file content');
+    mockResolve.mockReturnValue('/absolute/path/to/script.py');
   });
 
-  describe('with file references', () => {
-    it('should call processConfigFileReferences when initializing config references', async () => {
-      // Arrange
-      const mockConfig = {
-        settings: 'file://settings.json',
-        templates: ['file://template1.yaml', 'file://template2.txt'],
-      };
-
-      const mockProcessedConfig = {
-        settings: { temperature: 0.7 },
-        templates: [{ prompt: 'Template 1' }, 'Template 2 content'],
-      };
-
-      // Set up the mock implementation
-      jest.mocked(processConfigFileReferences).mockResolvedValue(mockProcessedConfig);
-
-      // Create the provider with the mock config
-      const provider = new PythonProvider('test.py', {
-        id: 'test',
-        config: {
-          basePath: '/base/path',
-          ...mockConfig,
-        },
+  describe('constructor', () => {
+    it('should initialize with correct properties', () => {
+      const provider = new PythonProvider('script.py', {
+        id: 'testId',
+        config: { basePath: '/base' },
       });
-
-      // Act
-      await provider.processConfigReferences();
-
-      // Assert
-      expect(processConfigFileReferences).toHaveBeenCalledWith(
-        expect.objectContaining(mockConfig),
-        '/base/path',
-      );
-      expect(provider.config).toEqual(mockProcessedConfig);
+      expect(provider.id()).toBe('testId');
     });
 
-    it('should handle errors during config reference processing', async () => {
-      // Arrange
-      const mockConfig = {
-        settings: 'file://settings.json',
-        basePath: '/base/path', // Include basePath in the mockConfig
-      };
-
-      // Mock processConfigFileReferences to throw an error
-      const mockError = new Error('Failed to load file');
-      jest.mocked(processConfigFileReferences).mockRejectedValue(mockError);
-
-      // Create the provider
-      const provider = new PythonProvider('test.py', {
-        id: 'test',
-        config: mockConfig,
+    it('should initialize with python: syntax', () => {
+      const provider = new PythonProvider('python:script.py', {
+        id: 'testId',
+        config: { basePath: '/base' },
       });
-
-      // Initialize configReferencesProcessed to false explicitly
-      provider['configReferencesProcessed'] = false;
-
-      // Act
-      await provider.processConfigReferences();
-
-      // Assert
-      expect(processConfigFileReferences).toHaveBeenCalledWith(
-        expect.objectContaining(mockConfig),
-        expect.any(String),
-      );
-      expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining('Error processing file references'),
-      );
-      // Config should remain unchanged when there's an error
-      expect(provider.config).toEqual(mockConfig);
+      expect(provider.id()).toBe('testId');
     });
 
-    it('should process config references before calling API', async () => {
-      // Arrange
-      const mockConfig = {
-        settings: 'file://settings.json',
-      };
-
-      const mockProcessedConfig = {
-        settings: { model: 'gpt-4' },
-      };
-
-      jest.mocked(processConfigFileReferences).mockResolvedValue(mockProcessedConfig);
-
-      // Create the provider
-      const provider = new PythonProvider('test.py', {
-        id: 'test',
-        config: {
-          basePath: '/base/path',
-          ...mockConfig,
-        },
+    it('should initialize with file:// prefix', () => {
+      const provider = new PythonProvider('file://script.py', {
+        id: 'testId',
+        config: { basePath: '/base' },
       });
-
-      // Initialize configReferencesProcessed to false explicitly
-      provider['configReferencesProcessed'] = false;
-
-      // Mock the entire executePythonScript method with a proper approach
-      const mockResult = { output: 'API result', cached: false };
-      // For this test, we need to also properly set up the original method first
-      // @ts-ignore - accessing private method
-      const _originalMethod = provider['executePythonScript'];
-      // Define the mock to use the same arguments
-      const executePythonScriptMock = jest.fn((prompt, context, apiType) =>
-        Promise.resolve(mockResult),
-      );
-
-      // Replace the method on the instance directly
-      // @ts-ignore - accessing private method
-      provider['executePythonScript'] = executePythonScriptMock;
-
-      jest.mocked(runPython).mockResolvedValue({ output: 'API result' });
-
-      // Act - Call API methods which should trigger config processing
-      await provider.callApi('Test prompt');
-
-      // Assert
-      expect(processConfigFileReferences).toHaveBeenCalledWith(
-        expect.objectContaining(mockConfig),
-        '/base/path',
-      );
-      expect(provider.config).toEqual(mockProcessedConfig);
-      expect(executePythonScriptMock).toHaveBeenCalledWith('Test prompt', undefined, 'call_api');
+      expect(provider.id()).toBe('testId');
     });
 
-    it('should only process config references once', async () => {
-      // Arrange
-      const mockConfig = {
-        settings: 'file://settings.json',
-      };
-
-      jest.mocked(processConfigFileReferences).mockResolvedValue({
-        settings: { processed: true },
+    it('should initialize with file:// prefix and function name', () => {
+      const provider = new PythonProvider('file://script.py:function_name', {
+        id: 'testId',
+        config: { basePath: '/base' },
       });
-
-      // Create the provider
-      const provider = new PythonProvider('test.py', {
-        id: 'test',
-        config: {
-          basePath: '/base/path',
-          ...mockConfig,
-        },
-      });
-
-      // Initialize configReferencesProcessed to false explicitly
-      provider['configReferencesProcessed'] = false;
-
-      // Act - Call multiple times
-      await provider.processConfigReferences();
-      await provider.processConfigReferences();
-      await provider.processConfigReferences();
-
-      // Assert - processConfigFileReferences should only be called once
-      expect(processConfigFileReferences).toHaveBeenCalledTimes(1);
-    });
-
-    it('should pass the loaded config to python script execution', async () => {
-      // Arrange
-      const mockConfig = {
-        pythonExecutable: '/custom/python',
-        settings: 'file://settings.json',
-      };
-
-      const mockProcessedConfig = {
-        pythonExecutable: '/custom/python',
-        settings: { temperature: 0.8 },
-      };
-
-      jest.mocked(processConfigFileReferences).mockResolvedValue(mockProcessedConfig);
-
-      // Create the provider
-      const provider = new PythonProvider('test.py', {
-        id: 'test',
-        config: {
-          basePath: '/base/path',
-          ...mockConfig,
-        },
-      });
-
-      // Initialize configReferencesProcessed to false explicitly
-      provider['configReferencesProcessed'] = false;
-
-      // Mock runPython to capture the call
-      const runPythonMock = jest.mocked(runPython);
-      runPythonMock.mockClear(); // Clear previous calls
-      runPythonMock.mockResolvedValue({ output: 'API result' });
-
-      // Act
-      await provider.callApi('Test prompt');
-
-      // Assert
-      expect(runPythonMock).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.any(String),
-        expect.any(Array),
-        {
-          pythonExecutable: '/custom/python', // Should use the pythonExecutable from processed config
-        },
-      );
-    });
-
-    it('should correctly handle integration with different API call types', async () => {
-      // Arrange
-      const mockProcessedConfig = {
-        pythonExecutable: '/custom/python',
-      };
-
-      jest.mocked(processConfigFileReferences).mockResolvedValue(mockProcessedConfig);
-
-      // Create the provider
-      const provider = new PythonProvider('test.py', {
-        id: 'test',
-        config: {
-          basePath: '/base/path',
-        },
-      });
-
-      // Initialize configReferencesProcessed to false explicitly
-      provider['configReferencesProcessed'] = false;
-
-      // Set up different mock responses for different API types
-      const runPythonMock = jest.mocked(runPython);
-      runPythonMock.mockClear(); // Clear previous calls
-
-      // Mock for first call - callApi
-      runPythonMock.mockResolvedValueOnce({ output: 'API result' });
-
-      // Mock executePythonScript for callApi
-      // @ts-ignore - accessing private method
-      jest.spyOn(provider, 'executePythonScript').mockImplementation((prompt, context, apiType) => {
-        if (apiType === 'call_api') {
-          return Promise.resolve({ output: 'API result', cached: false });
-        } else if (apiType === 'call_embedding_api') {
-          return Promise.resolve({ embedding: [0.1, 0.2, 0.3] });
-        } else if (apiType === 'call_classification_api') {
-          return Promise.resolve({ classification: { label: 'positive', score: 0.9 } });
-        }
-        return Promise.resolve({});
-      });
-
-      // Act
-      const apiResult = await provider.callApi('Test prompt');
-      const embeddingResult = await provider.callEmbeddingApi('Get embedding');
-      const classificationResult = await provider.callClassificationApi('Classify this');
-
-      // Assert
-      expect(apiResult).toEqual({ output: 'API result', cached: false });
-      expect(embeddingResult).toEqual({ embedding: [0.1, 0.2, 0.3] });
-      expect(classificationResult).toEqual({ classification: { label: 'positive', score: 0.9 } });
-
-      // No need to verify the call parameters since we're mocking executePythonScript directly
-      // and testing the output instead
+      expect(provider.id()).toBe('testId');
     });
   });
 
-  describe('file reference configuration', () => {
-    beforeEach(() => {
-      // Reset our mocks
-      jest.mocked(processConfigFileReferences).mockReset();
+  describe('callApi', () => {
+    it('should call executePythonScript with correct parameters', async () => {
+      const provider = new PythonProvider('script.py');
+      mockRunPython.mockResolvedValue({ output: 'test output' });
 
-      // Setup mockFileReference for different file types
-      jest.mocked(processConfigFileReferences).mockImplementation(async (config, basePath) => {
-        // If the config is a string starting with file://
-        if (typeof config === 'string' && config.startsWith('file://')) {
-          const fileRef = config;
+      const result = await provider.callApi('test prompt', { someContext: true } as any);
 
-          if (fileRef.includes('config.json')) {
-            return { modelSettings: { temperature: 0.7 } };
-          }
-
-          if (fileRef.includes('config.yaml') || fileRef.includes('config.yml')) {
-            return { modelSettings: { temperature: 0.8 } };
-          }
-
-          if (fileRef.includes('config.py')) {
-            return { temperature: 0.9 };
-          }
-
-          if (fileRef.includes('prompt.txt')) {
-            return 'This is a custom prompt template';
-          }
-
-          return 'Unknown file content';
-        }
-
-        // If config is an object with nested file references
-        if (config && typeof config === 'object' && !Array.isArray(config)) {
-          const result = { ...config };
-
-          for (const key in result) {
-            if (typeof result[key] === 'string' && result[key].startsWith('file://')) {
-              const fileRef = result[key];
-
-              if (fileRef.includes('prompt.txt')) {
-                result[key] = 'This is a custom prompt template';
-              } else if (fileRef.includes('config.json')) {
-                result[key] = { modelSettings: { temperature: 0.7 } };
-              }
-            } else if (typeof result[key] === 'object' && result[key] !== null) {
-              result[key] = await processConfigFileReferences(result[key], basePath);
-            }
-          }
-
-          return result;
-        }
-
-        // If config is an array with file references
-        if (Array.isArray(config)) {
-          const result = [...config];
-
-          for (let i = 0; i < result.length; i++) {
-            if (typeof result[i] === 'string' && result[i].startsWith('file://')) {
-              const fileRef = result[i];
-
-              if (fileRef.includes('prompt.txt')) {
-                result[i] = 'This is a custom prompt template';
-              }
-            }
-          }
-
-          return result;
-        }
-
-        return config;
-      });
+      expect(mockRunPython).toHaveBeenCalledWith(
+        expect.any(String),
+        'call_api',
+        ['test prompt', { config: {} }, { someContext: true }],
+        { pythonExecutable: undefined },
+      );
+      expect(result).toEqual({ output: 'test output', cached: false });
     });
 
-    it('should load JSON file references in config', async () => {
-      // Arrange
-      const expectedConfig = { modelSettings: { temperature: 0.7 } };
-      jest.mocked(processConfigFileReferences).mockResolvedValueOnce({
-        basePath: '/base',
-        settings: expectedConfig,
+    describe('error handling', () => {
+      it('should throw a specific error when Python script returns invalid result', async () => {
+        const provider = new PythonProvider('script.py');
+        mockRunPython.mockResolvedValue({ invalidKey: 'invalid value' });
+
+        await expect(provider.callApi('test prompt')).rejects.toThrow(
+          'The Python script `call_api` function must return a dict with an `output` string/object or `error` string, instead got: {"invalidKey":"invalid value"}',
+        );
       });
 
-      const provider = new PythonProvider('script.py', {
-        id: 'testId',
-        config: {
-          basePath: '/base',
-          settings: 'file://config.json',
-        },
+      it('should not throw an error when Python script returns a valid error', async () => {
+        const provider = new PythonProvider('script.py');
+        mockRunPython.mockResolvedValue({ error: 'valid error message' });
+
+        await expect(provider.callApi('test prompt')).resolves.not.toThrow();
       });
 
-      // Act
-      await provider.processConfigReferences();
+      it('should throw an error when Python script returns null', async () => {
+        const provider = new PythonProvider('script.py');
+        mockRunPython.mockResolvedValue(null as never);
 
-      // Assert
-      expect(processConfigFileReferences).toHaveBeenCalledWith(
-        expect.objectContaining({
-          basePath: '/base',
-          settings: 'file://config.json',
-        }),
+        await expect(provider.callApi('test prompt')).rejects.toThrow(
+          'The Python script `call_api` function must return a dict with an `output` string/object or `error` string, instead got: null',
+        );
+      });
+
+      it('should throw an error when Python script returns a non-object', async () => {
+        const provider = new PythonProvider('script.py');
+        mockRunPython.mockResolvedValue('string result');
+
+        await expect(provider.callApi('test prompt')).rejects.toThrow(
+          "Cannot use 'in' operator to search for 'output' in string result",
+        );
+      });
+
+      it('should not throw an error when Python script returns a valid output', async () => {
+        const provider = new PythonProvider('script.py');
+        mockRunPython.mockResolvedValue({ output: 'valid output' });
+
+        await expect(provider.callApi('test prompt')).resolves.not.toThrow();
+      });
+    });
+  });
+
+  describe('callEmbeddingApi', () => {
+    it('should call executePythonScript with correct parameters', async () => {
+      const provider = new PythonProvider('script.py');
+      mockRunPython.mockResolvedValue({ embedding: [0.1, 0.2, 0.3] });
+
+      const result = await provider.callEmbeddingApi('test prompt');
+
+      expect(mockRunPython).toHaveBeenCalledWith(
         expect.any(String),
+        'call_embedding_api',
+        ['test prompt', { config: {} }],
+        { pythonExecutable: undefined },
+      );
+      expect(result).toEqual({ embedding: [0.1, 0.2, 0.3] });
+    });
+
+    it('should throw an error if Python script returns invalid result', async () => {
+      const provider = new PythonProvider('script.py');
+      mockRunPython.mockResolvedValue({ invalidKey: 'invalid value' });
+
+      await expect(provider.callEmbeddingApi('test prompt')).rejects.toThrow(
+        'The Python script `call_embedding_api` function must return a dict with an `embedding` array or `error` string, instead got {"invalidKey":"invalid value"}',
       );
     });
+  });
 
-    it('should load YAML file references in config', async () => {
-      // Arrange
-      const expectedConfig = { modelSettings: { temperature: 0.8 } };
-      jest.mocked(processConfigFileReferences).mockResolvedValueOnce({
-        basePath: '/base',
-        settings: expectedConfig,
-      });
+  describe('callClassificationApi', () => {
+    it('should call executePythonScript with correct parameters', async () => {
+      const provider = new PythonProvider('script.py');
+      mockRunPython.mockResolvedValue({ classification: { label: 'test', score: 0.9 } });
 
-      const provider = new PythonProvider('script.py', {
-        id: 'testId',
-        config: {
-          basePath: '/base',
-          settings: 'file://config.yaml',
-        },
-      });
+      const result = await provider.callClassificationApi('test prompt');
 
-      // Act
-      await provider.processConfigReferences();
-
-      // Assert
-      expect(processConfigFileReferences).toHaveBeenCalledWith(
-        expect.objectContaining({
-          basePath: '/base',
-          settings: 'file://config.yaml',
-        }),
+      expect(mockRunPython).toHaveBeenCalledWith(
         expect.any(String),
+        'call_classification_api',
+        ['test prompt', { config: {} }],
+        { pythonExecutable: undefined },
       );
+      expect(result).toEqual({ classification: { label: 'test', score: 0.9 } });
     });
 
-    it('should load Python file references with function name in config', async () => {
-      // Arrange
-      const expectedConfig = { temperature: 0.9 };
-      jest.mocked(processConfigFileReferences).mockResolvedValueOnce({
-        basePath: '/base',
-        settings: expectedConfig,
-      });
+    it('should throw an error if Python script returns invalid result', async () => {
+      const provider = new PythonProvider('script.py');
+      mockRunPython.mockResolvedValue({ invalidKey: 'invalid value' });
 
-      const provider = new PythonProvider('script.py', {
-        id: 'testId',
-        config: {
-          basePath: '/base',
-          settings: 'file://config.py:get_settings',
-        },
-      });
-
-      // Act
-      await provider.processConfigReferences();
-
-      // Assert
-      expect(processConfigFileReferences).toHaveBeenCalledWith(
-        expect.objectContaining({
-          basePath: '/base',
-          settings: 'file://config.py:get_settings',
-        }),
-        expect.any(String),
+      await expect(provider.callClassificationApi('test prompt')).rejects.toThrow(
+        'The Python script `call_classification_api` function must return a dict with a `classification` object or `error` string, instead of {"invalidKey":"invalid value"}',
       );
     });
+  });
 
-    it('should handle nested file references in config', async () => {
-      // Arrange
-      const mockNestedConfig = {
-        model: 'gpt-4',
-        promptTemplate: 'file://prompt.txt',
-        advanced: 'file://config.json',
+  describe('caching', () => {
+    it('should use cached result when available', async () => {
+      const provider = new PythonProvider('script.py');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: jest.fn().mockResolvedValue(JSON.stringify({ output: 'cached result' })),
+        set: jest.fn(),
       };
+      jest.mocked(mockGetCache).mockResolvedValue(mockCache as never);
 
-      const expectedProcessedConfig = {
-        model: 'gpt-4',
-        promptTemplate: 'This is a custom prompt template',
-        advanced: { modelSettings: { temperature: 0.7 } },
+      const result = await provider.callApi('test prompt');
+
+      expect(mockCache.get).toHaveBeenCalledWith(
+        'python:undefined:default:call_api:5633d479dfae75ba7a78914ee380fa202bd6126e7c6b7c22e3ebc9e1a6ddc871:test prompt:undefined:undefined',
+      );
+      expect(mockRunPython).not.toHaveBeenCalled();
+      expect(result).toEqual({ output: 'cached result', cached: true });
+    });
+
+    it('should cache result when cache is enabled', async () => {
+      const provider = new PythonProvider('script.py');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: jest.fn().mockResolvedValue(null),
+        set: jest.fn(),
       };
+      mockGetCache.mockResolvedValue(mockCache as never);
+      mockRunPython.mockResolvedValue({ output: 'new result' });
 
-      jest.mocked(processConfigFileReferences).mockImplementation(async (config, basePath) => {
-        if (config && typeof config === 'object' && 'settings' in config) {
-          return {
-            ...config,
-            settings: expectedProcessedConfig,
-          };
-        }
-        return config;
-      });
+      await provider.callApi('test prompt');
 
-      const provider = new PythonProvider('script.py', {
-        id: 'testId',
-        config: {
-          basePath: '/base',
-          settings: mockNestedConfig,
-        },
-      });
-
-      // Act
-      await provider.processConfigReferences();
-
-      // TypeScript-safe assignment after processConfigReferences has run
-      Object.assign(provider, {
-        config: {
-          basePath: '/base',
-          settings: expectedProcessedConfig,
-        },
-      });
-
-      // Assert
-      expect(processConfigFileReferences).toHaveBeenCalledWith(
-        expect.objectContaining({ settings: mockNestedConfig }),
-        '/base',
-      );
-      expect((provider.config as TestPythonProviderConfig).settings).toEqual(
-        expectedProcessedConfig,
+      expect(mockCache.set).toHaveBeenCalledWith(
+        'python:undefined:default:call_api:5633d479dfae75ba7a78914ee380fa202bd6126e7c6b7c22e3ebc9e1a6ddc871:test prompt:undefined:undefined',
+        '{"output":"new result"}',
       );
     });
 
-    it('should handle file references in arrays', async () => {
-      // Arrange
-      const expectedTemplates = ['This is a custom prompt template', 'static template'];
-      jest.mocked(processConfigFileReferences).mockResolvedValueOnce({
-        basePath: '/base',
-        templates: expectedTemplates,
-      });
+    it('should properly transform token usage in cached results', async () => {
+      const provider = new PythonProvider('script.py');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: jest.fn().mockResolvedValue(
+          JSON.stringify({
+            output: 'cached result with token usage',
+            tokenUsage: {
+              prompt: 10,
+              completion: 15,
+              total: 25,
+            },
+          }),
+        ),
+        set: jest.fn(),
+      };
+      jest.mocked(mockGetCache).mockResolvedValue(mockCache as never);
 
-      const provider = new PythonProvider('script.py', {
-        id: 'testId',
-        config: {
-          basePath: '/base',
-          templates: ['file://prompt.txt', 'static template'],
+      const result = await provider.callApi('test prompt');
+
+      expect(mockRunPython).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        output: 'cached result with token usage',
+        cached: true,
+        tokenUsage: {
+          cached: 25,
+          total: 25,
         },
       });
-
-      // Act
-      await provider.processConfigReferences();
-
-      // TypeScript-safe assignment after processConfigReferences has run
-      Object.assign(provider, {
-        config: {
-          basePath: '/base',
-          templates: expectedTemplates,
-        },
-      });
-
-      // Assert
-      expect(processConfigFileReferences).toHaveBeenCalledWith(
-        expect.objectContaining({
-          basePath: '/base',
-          templates: ['file://prompt.txt', 'static template'],
-        }),
-        expect.any(String),
-      );
     });
 
-    it('should gracefully handle errors in file loading', async () => {
-      // Mock processConfigFileReferences to throw an error for this test
-      jest.mocked(processConfigFileReferences).mockRejectedValueOnce(new Error('File not found'));
-
-      const provider = new PythonProvider('script.py', {
-        id: 'testId',
-        config: {
-          basePath: '/base',
-          settings: 'file://missing-file.json',
+    it('should preserve cached=false for fresh results with token usage', async () => {
+      const provider = new PythonProvider('script.py');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: jest.fn().mockResolvedValue(null),
+        set: jest.fn(),
+      };
+      mockGetCache.mockResolvedValue(mockCache as never);
+      mockRunPython.mockResolvedValue({
+        output: 'fresh result with token usage',
+        tokenUsage: {
+          prompt: 12,
+          completion: 18,
+          total: 30,
         },
       });
 
-      // Cast config to our test interface to access the properties
-      const config = provider.config as TestPythonProviderConfig;
+      const result = await provider.callApi('test prompt');
 
-      // Act
-      await provider.processConfigReferences();
+      expect(result).toEqual({
+        output: 'fresh result with token usage',
+        cached: false,
+        tokenUsage: {
+          prompt: 12,
+          completion: 18,
+          total: 30,
+        },
+      });
+    });
 
-      // Assert - The config should remain unchanged
-      expect(config.settings).toBe('file://missing-file.json');
+    it('should handle missing token usage in cached results', async () => {
+      const provider = new PythonProvider('script.py');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: jest.fn().mockResolvedValue(
+          JSON.stringify({
+            output: 'cached result with no token usage',
+          }),
+        ),
+        set: jest.fn(),
+      };
+      jest.mocked(mockGetCache).mockResolvedValue(mockCache as never);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(mockRunPython).not.toHaveBeenCalled();
+      expect(result.tokenUsage).toBeUndefined();
+      expect(result.cached).toBe(true);
+    });
+
+    it('should handle zero token usage in cached results', async () => {
+      const provider = new PythonProvider('script.py');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: jest.fn().mockResolvedValue(
+          JSON.stringify({
+            output: 'cached result with zero token usage',
+            tokenUsage: {
+              prompt: 0,
+              completion: 0,
+              total: 0,
+            },
+          }),
+        ),
+        set: jest.fn(),
+      };
+      jest.mocked(mockGetCache).mockResolvedValue(mockCache as never);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(mockRunPython).not.toHaveBeenCalled();
+      expect(result.tokenUsage).toEqual({
+        cached: 0,
+        total: 0,
+      });
+      expect(result.cached).toBe(true);
+    });
+
+    it('should not cache results with errors', async () => {
+      const provider = new PythonProvider('script.py');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: jest.fn().mockResolvedValue(null),
+        set: jest.fn(),
+      };
+      mockGetCache.mockResolvedValue(mockCache as never);
+      mockRunPython.mockResolvedValue({
+        error: 'This is an error message',
+        output: null,
+      });
+
+      await provider.callApi('test prompt');
+
+      expect(mockCache.set).not.toHaveBeenCalled();
+    });
+
+    it('should properly use different cache keys for different function names', async () => {
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: jest.fn().mockResolvedValue(null),
+        set: jest.fn(),
+      };
+      mockGetCache.mockResolvedValue(mockCache as never);
+      mockRunPython.mockResolvedValue({ output: 'test output' });
+
+      // Create providers with different function names
+      const defaultProvider = new PythonProvider('script.py');
+      const customProvider = new PythonProvider('script.py:custom_function');
+
+      // Call the APIs with the same prompt
+      await defaultProvider.callApi('test prompt');
+      await customProvider.callApi('test prompt');
+
+      // Verify different cache keys were used
+      const cacheSetCalls = mockCache.set.mock.calls;
+      expect(cacheSetCalls).toHaveLength(2);
+
+      // The first call should contain 'default' in the cache key
+      expect(cacheSetCalls[0][0]).toContain(':default:');
+
+      // The second call should contain the custom function name
+      expect(cacheSetCalls[1][0]).toContain(':custom_function:');
     });
   });
 });
