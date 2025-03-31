@@ -75,7 +75,6 @@ function CompareEvalMenuItem({ initialEvals, onComparisonEvalSelected }: Compare
         onClose={handleCloseDialog}
         onEvalSelected={(evalId) => {
           handleEvalSelected(evalId);
-          setDialogOpen(false);
         }}
         title="Select an eval to compare"
         description="Only evals with the same dataset can be compared."
