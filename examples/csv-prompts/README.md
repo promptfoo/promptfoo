@@ -20,7 +20,7 @@ CSV (Comma-Separated Values) files provide a simple, tabular format for defining
 ## Files in this Example
 
 - `promptfooconfig.yaml` - Main configuration file that references the CSV prompt file
-- `prompts.csv` - Multi-column CSV with prompt text, labels, IDs, and configuration
+- `prompts.csv` - CSV file with prompt text and optional labels
 - `single-column.csv` - Simple CSV with just a prompt column and header
 - `two-column.csv` - CSV with prompt and label columns
 - `no-header.csv` - CSV with no header row (each line is a prompt)
@@ -38,6 +38,14 @@ prompt
 "Write a poem about {{topic}}"
 ```
 
+Or without a header:
+
+```csv
+"Tell me about {{topic}}"
+"Explain {{topic}} in simple terms"
+"Write a poem about {{topic}}"
+```
+
 ### Two-Column Format
 
 For better organization, you can include a "label" column to give each prompt a descriptive name:
@@ -47,16 +55,6 @@ prompt,label
 "Tell me about {{topic}}","Basic Query"
 "Explain {{topic}} in simple terms","Simple Explanation"
 "Write a poem about {{topic}}","Poetry Generator"
-```
-
-### Multi-Column Format
-
-For more advanced use cases, additional columns are supported:
-
-```csv
-prompt,label,id,config
-"Tell me about {{topic}}","Basic Query","query1","{""temperature"":0.7}"
-"[{""role"":""system"",""content"":""You are a tutor""}]","Tutor Mode","system1","{""temperature"":0.5}"
 ```
 
 ## Modifying This Example
@@ -78,9 +76,10 @@ prompts:
 
 ## CSV Processing Rules
 
-- All CSV column names are case-insensitive (e.g., "prompt", "Prompt", and "PROMPT" are equivalent)
 - Rows with missing prompt values are skipped
-- For single-column CSVs, if the first row contains "prompt", it's treated as a header
-- If a label isn't provided, one is generated based on the prompt content
-- The `config` column must contain valid JSON if present
+- For single-column CSVs, if the first row contains "prompt", it's treated as a header and skipped
+- If a label isn't provided, a numeric label is generated (e.g., "Prompt 1", "Prompt 2")
+- CSV parsing can be customized with environment variables:
+  - `PROMPTFOO_CSV_DELIMITER` - Set the delimiter character (default: ',')
+  - `PROMPTFOO_CSV_STRICT` - Toggle strict quote handling (default: false)
 - CSV formatting follows standard CSV rules (quote escaping, etc.)

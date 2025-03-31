@@ -191,6 +191,15 @@ prompt,label
 "Write a poem about {{topic}}","Poetry Generator"
 ```
 
+#### Environment Variables
+
+CSV parsing can be customized with environment variables:
+
+- `PROMPTFOO_CSV_DELIMITER` - Set the delimiter character (default: ',')
+- `PROMPTFOO_CSV_STRICT` - Toggle strict quote handling (default: false)
+
+Rows with missing prompt values are skipped. If a label isn't provided, a numeric label is generated (e.g., "Prompt 1", "Prompt 2").
+
 ### Different prompts per model
 
 To set separate prompts for different providers, you can specify the prompt files within the `providers` section of your `promptfooconfig.yaml`. Each provider can have its own set of prompts that are tailored to its specific requirements or input format.

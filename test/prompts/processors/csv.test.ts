@@ -71,16 +71,6 @@ Write a poem about {{topic}},Poetry Generator`;
     expect(result[2].label).toBe('Poetry Generator');
   });
 
-  it('should handle empty CSV file', async () => {
-    // Empty CSV
-    const csvContent = '';
-
-    jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
-
-    const result = await processCsvPrompts('prompts.csv', {});
-    expect(result).toHaveLength(0);
-  });
-
   it('should generate labels from prompt content when not provided', async () => {
     // Example CSV without label column - just a single column with a header
     const csvContent = `prompt

@@ -2,6 +2,9 @@
 description: Example of using CSV file to define prompts
 prompts:
   - file://prompts.csv
+  # - file://single-column.csv
+  # - file://two-column.csv
+  # -  file://no-header.csv
 
 providers:
   # Use the echo provider to see rendered prompts without LLM calls

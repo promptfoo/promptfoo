@@ -18,34 +18,24 @@ export async function processCsvPrompts(
   filePath: string,
   basePrompt: Partial<Prompt>,
 ): Promise<Prompt[]> {
-  // Read the file content
   const content = fs.readFileSync(filePath, 'utf8');
-
-  // Handle empty file
-  if (!content.trim()) {
-    return [];
-  }
 
   const delimiter = getEnvString('PROMPTFOO_CSV_DELIMITER', ',');
   const enforceStrict = getEnvBool('PROMPTFOO_CSV_STRICT', false);
 
-  // Process as a plain text file if it doesn't contain the delimiter
   if (!content.includes(delimiter)) {
     const lines = content.split(/\r?\n/).filter((line) => line.trim());
 
-    // Skip first line if it's "prompt"
     const startIndex = lines[0]?.toLowerCase().trim() === 'prompt' ? 1 : 0;
 
     return lines.slice(startIndex).map((line, index) => ({
       ...basePrompt,
       raw: line,
-      label: basePrompt.label || `Prompt ${index + 1}`,
+      label: basePrompt.label || `Prompt ${index + 1} - ${line}`,
     }));
   }
 
-  // Process as a CSV file
   try {
-    // Define parse options based on environment settings
     const parseOptions = {
       columns: true,
       bom: true,
@@ -55,31 +45,26 @@ export async function processCsvPrompts(
       trim: true,
     };
 
-    // Parse the CSV content
     const records = parse(content, parseOptions);
 
-    // Filter rows with prompt values and map to Prompt objects
     return records
       .filter((row: Record<string, string>) => row.prompt)
       .map((row: Record<string, string>, index: number) => {
-        // Create the prompt object
         return {
           ...basePrompt,
           raw: row.prompt,
-          label: row.label || basePrompt.label || `Prompt ${index + 1}`,
+          label: row.label || basePrompt.label || `Prompt ${index + 1} - ${row.prompt}`,
         };
       });
   } catch {
-    // If CSV parsing fails, try as a plain text file without CSV structure
     const lines = content.split(/\r?\n/).filter((line) => line.trim());
 
-    // Skip first line if it's "prompt"
     const startIndex = lines[0]?.toLowerCase().trim() === 'prompt' ? 1 : 0;
 
     return lines.slice(startIndex).map((line, index) => ({
       ...basePrompt,
       raw: line,
-      label: basePrompt.label || `Prompt ${index + 1}`,
+      label: basePrompt.label || `Prompt ${index + 1} - ${line}`,
     }));
   }
 }
