@@ -13,6 +13,7 @@ import { parsePathOrGlob } from '../util';
 import { isJavascriptFile } from '../util/file';
 import invariant from '../util/invariant';
 import { PromptSchema } from '../validators/prompts';
+import { processCsvPrompts } from './processors/csv';
 import { processJsFile } from './processors/javascript';
 import { processJinjaFile } from './processors/jinja';
 import { processJsonFile } from './processors/json';
@@ -145,6 +146,12 @@ export async function processPrompt(
     return prompts;
   }
 
+  if (extension === '.csv') {
+    return processCsvPrompts(filePath, prompt);
+  }
+  if (extension === '.j2') {
+    return processJinjaFile(filePath, prompt);
+  }
   if (extension === '.json') {
     return processJsonFile(filePath, prompt);
   }
@@ -156,9 +163,6 @@ export async function processPrompt(
   }
   if (extension === '.md') {
     return processMarkdownFile(filePath, prompt);
-  }
-  if (extension === '.j2') {
-    return processJinjaFile(filePath, prompt);
   }
   if (extension === '.py') {
     return processPythonFile(filePath, prompt, functionName);
