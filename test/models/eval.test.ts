@@ -72,7 +72,7 @@ describe('evaluator', () => {
       const providedAuthor = 'provided@example.com';
       const config = { description: 'Test eval' };
       const renderedPrompts: Prompt[] = [
-        { raw: 'Test prompt', display: 'Test prompt', label: 'Test label' },
+        { raw: 'Test prompt', display: 'Test prompt', label: 'Test label' } as Prompt,
       ];
       const evaluation = await Eval.create(config, renderedPrompts, { author: providedAuthor });
       expect(evaluation.author).toBe(providedAuthor);
@@ -85,11 +85,133 @@ describe('evaluator', () => {
       jest.mocked(getUserEmail).mockReturnValue(mockEmail);
       const config = { description: 'Test eval' };
       const renderedPrompts: Prompt[] = [
-        { raw: 'Test prompt', display: 'Test prompt', label: 'Test label' },
+        { raw: 'Test prompt', display: 'Test prompt', label: 'Test label' } as Prompt,
       ];
       const evaluation = await Eval.create(config, renderedPrompts);
       const persistedEval = await Eval.findById(evaluation.id);
       expect(persistedEval?.author).toBe(mockEmail);
+    });
+  });
+
+  describe('getStats', () => {
+    it('should accumulate assertion token usage correctly', () => {
+      const eval1 = new Eval({});
+      eval1.prompts = [
+        {
+          raw: 'test',
+          metrics: {
+            tokenUsage: {
+              prompt: 10,
+              completion: 20,
+              cached: 5,
+              total: 35,
+              numRequests: 1,
+              assertions: {
+                total: 100,
+                prompt: 40,
+                completion: 50,
+                cached: 10,
+              },
+            },
+          },
+        } as any,
+        {
+          raw: 'test2',
+          metrics: {
+            tokenUsage: {
+              prompt: 15,
+              completion: 25,
+              cached: 10,
+              total: 50,
+              numRequests: 1,
+              assertions: {
+                total: 200,
+                prompt: 80,
+                completion: 100,
+                cached: 20,
+              },
+            },
+          },
+        } as any,
+      ];
+
+      const stats = eval1.getStats();
+      expect(stats.tokenUsage.assertions).toEqual({
+        total: 300,
+        prompt: 120,
+        completion: 150,
+        cached: 30,
+      });
+    });
+
+    it('should handle missing assertion token usage', () => {
+      const eval1 = new Eval({});
+      eval1.prompts = [
+        {
+          raw: 'test',
+          metrics: {
+            tokenUsage: {
+              prompt: 10,
+              completion: 20,
+              cached: 5,
+              total: 35,
+              numRequests: 1,
+            },
+          },
+        } as any,
+      ];
+
+      const stats = eval1.getStats();
+      expect(stats.tokenUsage.assertions).toEqual({
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+      });
+    });
+
+    it('should handle mix of prompts with and without assertion usage', () => {
+      const eval1 = new Eval({});
+      eval1.prompts = [
+        {
+          raw: 'test1',
+          metrics: {
+            tokenUsage: {
+              prompt: 10,
+              completion: 20,
+              cached: 5,
+              total: 35,
+              numRequests: 1,
+              assertions: {
+                total: 100,
+                prompt: 40,
+                completion: 50,
+                cached: 10,
+              },
+            },
+          },
+        } as any,
+        {
+          raw: 'test2',
+          metrics: {
+            tokenUsage: {
+              prompt: 15,
+              completion: 25,
+              cached: 10,
+              total: 50,
+              numRequests: 1,
+            },
+          },
+        } as any,
+      ];
+
+      const stats = eval1.getStats();
+      expect(stats.tokenUsage.assertions).toEqual({
+        total: 100,
+        prompt: 40,
+        completion: 50,
+        cached: 10,
+      });
     });
   });
 });
