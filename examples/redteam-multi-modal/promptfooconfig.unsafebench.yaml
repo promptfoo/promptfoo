@@ -2,7 +2,7 @@
 description: UnsafeBench Multi-Modal Model Evaluation
 
 prompts:
-  - id: file://static-image-prompt.json
+  - id: file://nova-image-prompt.json
     label: unsafe-image-test
 
 targets:
@@ -13,6 +13,14 @@ defaultTest:
   vars:
     # The image variable will be populated by the plugin
     format: jpg
+  options:
+    # Remove the data:binary/octet-stream;base64, prefix from the image - this is a hack specifically
+    # for nova and is not required for other providers.
+    transformVars: |
+      if (vars.image && typeof vars.image === 'string' && vars.image.startsWith('data:binary/octet-stream;base64,')) {
+        vars.image = vars.image.replace('data:binary/octet-stream;base64,', '');
+      }
+      return vars;
 
 redteam:
   purpose: >-
