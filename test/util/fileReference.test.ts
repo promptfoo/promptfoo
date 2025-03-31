@@ -1,6 +1,7 @@
 import fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
+import type { Logger } from 'winston';
 import * as esmModule from '../../src/esm';
 import logger from '../../src/logger';
 import * as pythonUtils from '../../src/python/pythonUtils';
@@ -30,8 +31,23 @@ describe('fileReference utility functions', () => {
     jest.resetAllMocks();
 
     // Mock logger methods
-    (jest.mocked(logger.debug)).mockImplementation(() => {});
-    (jest.mocked(logger.error)).mockImplementation(() => {});
+    jest.mocked(logger.debug).mockImplementation((message: string) => {
+      return {
+        debug: jest.fn(),
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+      } as unknown as Logger;
+    });
+
+    jest.mocked(logger.error).mockImplementation((message: string) => {
+      return {
+        debug: jest.fn(),
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+      } as unknown as Logger;
+    });
 
     // Mock path.resolve to return deterministic paths
     jest
@@ -45,14 +61,18 @@ describe('fileReference utility functions', () => {
 
     // Mock path.extname to return file extensions
     jest.mocked(path.extname).mockImplementation((filePath) => {
-      if (!filePath) {return '';}
+      if (!filePath) {
+        return '';
+      }
       const parts = filePath.split('.');
       return parts.length > 1 ? `.${parts[parts.length - 1]}` : '';
     });
 
     // Mock isJavascriptFile to identify JavaScript files
     jest.mocked(isJavascriptFile).mockImplementation((filePath) => {
-      if (!filePath) {return false;}
+      if (!filePath) {
+        return false;
+      }
       return ['.js', '.mjs', '.ts', '.cjs'].some((ext) => filePath.endsWith(ext));
     });
 
@@ -245,18 +265,26 @@ describe('fileReference utility functions', () => {
 
       // Setup mocks
       jest.mocked(fs.readFileSync).mockImplementation((path) => {
-        if (path === '/path/to/setting2.json') {return '{"key": "value2"}';}
-        if (path === '/path/to/setting3.yaml') {return 'key: value3';}
+        if (path === '/path/to/setting2.json') {
+          return '{"key": "value2"}';
+        }
+        if (path === '/path/to/setting3.yaml') {
+          return 'key: value3';
+        }
         return '';
       });
 
       jest.spyOn(JSON, 'parse').mockImplementation((content) => {
-        if (content === '{"key": "value2"}') {return { key: 'value2' };}
+        if (content === '{"key": "value2"}') {
+          return { key: 'value2' };
+        }
         return {};
       });
 
       jest.mocked(yaml.load).mockImplementation((content) => {
-        if (content === 'key: value3') {return { key: 'value3' };}
+        if (content === 'key: value3') {
+          return { key: 'value3' };
+        }
         return {};
       });
 
@@ -284,18 +312,26 @@ describe('fileReference utility functions', () => {
 
       // Setup mocks
       jest.mocked(fs.readFileSync).mockImplementation((path) => {
-        if (path === '/path/to/item1.json') {return '{"name": "item1"}';}
-        if (path === '/path/to/item2.yaml') {return 'name: item2';}
+        if (path === '/path/to/item1.json') {
+          return '{"name": "item1"}';
+        }
+        if (path === '/path/to/item2.yaml') {
+          return 'name: item2';
+        }
         return '';
       });
 
       jest.spyOn(JSON, 'parse').mockImplementation((content) => {
-        if (content === '{"name": "item1"}') {return { name: 'item1' };}
+        if (content === '{"name": "item1"}') {
+          return { name: 'item1' };
+        }
         return {};
       });
 
       jest.mocked(yaml.load).mockImplementation((content) => {
-        if (content === 'name: item2') {return { name: 'item2' };}
+        if (content === 'name: item2') {
+          return { name: 'item2' };
+        }
         return {};
       });
 
@@ -323,7 +359,7 @@ describe('fileReference utility functions', () => {
 
       // Act & Assert
       await expect(processConfigFileReferences(config)).rejects.toThrow('File not found');
-      expect(logger.error).toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('File not found'));
     });
   });
 });
