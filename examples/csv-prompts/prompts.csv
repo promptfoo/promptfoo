@@ -1,6 +1,0 @@
-prompt,label
-"Tell me about {{topic}}","Basic Query"
-"Explain {{topic}} in simple terms as if I'm 5 years old","ELI5"
-"[{""role"":""system"",""content"":""You are a helpful assistant that provides academic-level explanations.""}, {""role"":""user"",""content"":""Provide a detailed academic explanation of {{topic}}.""}]","Academic"
-"Write a short poem about {{topic}}","Poetry"
-"Create a bullet-point list of 5 interesting facts about {{topic}}","Facts" 
