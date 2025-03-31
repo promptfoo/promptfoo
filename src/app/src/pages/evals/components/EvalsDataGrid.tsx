@@ -148,7 +148,7 @@ export default function EvalsDataGrid({
               <>
                 <Box sx={{ fontSize: '2rem', mb: 1 }}>🔍</Box>
                 <Typography variant="h6" gutterBottom>
-                  No evaluations found
+                  No evals found
                 </Typography>
                 <Typography variant="body2">
                   Try adjusting your search or create a new evaluation
