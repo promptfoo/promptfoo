@@ -130,6 +130,30 @@ describe('readStandaloneTestsFile', () => {
     ]);
   });
 
+  it('should read JSONL file and return test cases', async () => {
+    jest.mocked(fs.readFileSync).mockReturnValue(
+      `{"vars":{"var1":"value1","var2":"value2"},"assert":[{"type":"equals","value":"Hello World"}]}
+        {"vars":{"var1":"value3","var2":"value4"},"assert":[{"type":"equals","value":"Hello World"}]}`,
+    );
+    const result = await readStandaloneTestsFile('test.jsonl');
+
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.jsonl'), 'utf-8');
+    expect(result).toEqual([
+      {
+        assert: [{ type: 'equals', value: 'Hello World' }],
+        description: 'Row #1',
+        options: {},
+        vars: { var1: 'value1', var2: 'value2' },
+      },
+      {
+        assert: [{ type: 'equals', value: 'Hello World' }],
+        description: 'Row #2',
+        options: {},
+        vars: { var1: 'value3', var2: 'value4' },
+      },
+    ]);
+  });
+
   it('should read YAML file and return test cases', async () => {
     jest.mocked(fs.readFileSync).mockReturnValue(dedent`
       - var1: value1
