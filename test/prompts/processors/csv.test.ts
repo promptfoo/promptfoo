@@ -2,11 +2,9 @@ import fs from 'fs';
 import { processCsvPrompts } from '../../../src/prompts/processors/csv';
 import type { Prompt } from '../../../src/types';
 
-// Mock fs
 jest.mock('fs');
 
 describe('processCsvPrompts', () => {
-  // Reset mocks before each test
   beforeEach(() => {
     jest.resetAllMocks();
   });
@@ -67,7 +65,7 @@ Write a poem about {{topic}},Poetry Generator`;
     expect(result[2].label).toBe('Poetry Generator');
   });
 
-  it('should generate labels from prompt content', async () => {
+  it('should generate labels from prompt content when not provided', async () => {
     const csvContent = `prompt
 This is a very long prompt that should be truncated for the label`;
 
@@ -113,7 +111,9 @@ Write a poem about {{topic}},Poetry Generator`;
 
     expect(result).toHaveLength(2);
     expect(result[0].raw).toBe('Tell me about {{topic}}');
+    expect(result[0].label).toBe('Basic Query');
     expect(result[1].raw).toBe('Write a poem about {{topic}}');
+    expect(result[1].label).toBe('Poetry Generator');
   });
 
   it('should handle custom delimiters', async () => {
