@@ -11,7 +11,7 @@ export default function ApiReference() {
     script.addEventListener('load', () => {
       // Once Scalar is loaded from the CDN, we can reference the object
       (window as any).Scalar.createApiReference('#app', {
-        url: 'https://api.promptfoo.app/openapi.json',
+        url: 'https://api.promptfoo.app/static/openapi.json',
       });
     });
     document.head.appendChild(script);
