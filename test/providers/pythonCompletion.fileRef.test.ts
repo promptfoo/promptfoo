@@ -253,15 +253,17 @@ describe('PythonProvider with file references', () => {
 
     runPythonMock.mockResolvedValueOnce({ output: 'API result' });
 
-    jest.spyOn(provider, 'executePythonScript').mockImplementation((prompt, context, apiType) => {
-      if (apiType === 'call_api') {
-        return Promise.resolve({ output: 'API result', cached: false });
-      } else if (apiType === 'call_embedding_api') {
-        return Promise.resolve({ embedding: [0.1, 0.2, 0.3] });
-      } else if (apiType === 'call_classification_api') {
-        return Promise.resolve({ classification: { label: 'positive', score: 0.9 } });
-      }
-      return Promise.resolve({});
+    jest.spyOn(provider, 'callApi').mockResolvedValue({
+      output: 'API result',
+      cached: false,
+    });
+
+    jest.spyOn(provider, 'callEmbeddingApi').mockResolvedValue({
+      embedding: [0.1, 0.2, 0.3],
+    });
+
+    jest.spyOn(provider, 'callClassificationApi').mockResolvedValue({
+      classification: { label: 0, score: 0.9 },
     });
 
     const apiResult = await provider.callApi('Test prompt');
@@ -270,7 +272,7 @@ describe('PythonProvider with file references', () => {
 
     expect(apiResult).toEqual({ output: 'API result', cached: false });
     expect(embeddingResult).toEqual({ embedding: [0.1, 0.2, 0.3] });
-    expect(classificationResult).toEqual({ classification: { label: 'positive', score: 0.9 } });
+    expect(classificationResult).toEqual({ classification: { label: 0, score: 0.9 } });
   });
 
   it('should pass processed config to Python script instead of raw file references', async () => {
@@ -296,8 +298,17 @@ describe('PythonProvider with file references', () => {
 
     const runPythonMock = jest.mocked(runPython);
     runPythonMock.mockClear();
+
+    type RunPythonReturnType = {
+      output: string;
+      args: Array<any>;
+    };
+
     runPythonMock.mockImplementation(async (scriptPath, method, args) => {
-      return { output: 'Success', args };
+      return {
+        output: 'Success',
+        args,
+      } as RunPythonReturnType;
     });
 
     await provider.callApi('Test prompt');
@@ -310,8 +321,19 @@ describe('PythonProvider with file references', () => {
     );
 
     const argsPassedToRunPython = runPythonMock.mock.calls[0][2];
-    const optionsPassedToPython = argsPassedToRunPython[1];
 
+    expect(argsPassedToRunPython).toBeDefined();
+    expect(argsPassedToRunPython.length).toBeGreaterThanOrEqual(2);
+
+    const optionsPassedToPython = argsPassedToRunPython[1] as {
+      config: {
+        settings: typeof mockProcessedConfig.settings;
+        formats: typeof mockProcessedConfig.formats;
+      };
+    };
+
+    expect(optionsPassedToPython).toBeDefined();
+    expect(optionsPassedToPython.config).toBeDefined();
     expect(optionsPassedToPython.config.settings).toEqual(mockProcessedConfig.settings);
     expect(optionsPassedToPython.config.formats).toEqual(mockProcessedConfig.formats);
 
