@@ -634,6 +634,8 @@ export class VertexChatProvider extends VertexGenericProvider {
               cached: response.cached,
               output: results.join('\n'),
               tokenUsage: response.tokenUsage,
+              responseId: response.responseId,
+              modelVersion: response.modelVersion,
             };
           }
         }

@@ -173,6 +173,8 @@ export class GoogleChatProvider extends GoogleGenericProvider {
               total: data.usageMetadata?.totalTokenCount,
               numRequests: 1,
             },
+        responseId: data.responseId,
+        modelVersion: data.modelVersion,
         raw: data,
         cached,
       };
