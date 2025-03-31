@@ -43,8 +43,8 @@ const AboutPageContent = () => {
               </Typography>
               <Typography variant="body1" paragraph>
                 We are security and engineering practitioners who have scaled generative AI products
-                100s of millions of users. We're building the tools that we wished we had when we
-                were on the front lines.
+                to hundreds of millions of users. We're building the tools that we wished we had
+                when we were on the front lines.
               </Typography>
               <Typography variant="body1" paragraph>
                 Based in San Mateo, California, we're backed by Andreessen Horowitz and top leaders

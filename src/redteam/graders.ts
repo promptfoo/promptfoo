@@ -39,6 +39,7 @@ import { IndirectPromptInjectionGrader } from './plugins/indirectPromptInjection
 import { IntentGrader } from './plugins/intent';
 import { OverrelianceGrader } from './plugins/overreliance';
 import { PiiGrader } from './plugins/pii';
+import { PlinyGrader } from './plugins/pliny';
 import { PolicyViolationGrader } from './plugins/policy';
 import { PoliticsGrader } from './plugins/politics';
 import { PromptExtractionGrader } from './plugins/promptExtraction';
@@ -100,6 +101,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:indirect-prompt-injection': new IndirectPromptInjectionGrader(),
   'promptfoo:redteam:intent': new IntentGrader(),
   'promptfoo:redteam:overreliance': new OverrelianceGrader(),
+  'promptfoo:redteam:pliny': new PlinyGrader(),
   'promptfoo:redteam:rag-document-exfiltration': new RagDocumentExfiltrationGrader(),
   'promptfoo:redteam:pii:api-db': new PiiGrader(),
   'promptfoo:redteam:pii:direct': new PiiGrader(),

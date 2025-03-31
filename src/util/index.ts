@@ -328,7 +328,7 @@ export function printBorder() {
 export function setupEnv(envPath: string | undefined) {
   if (envPath) {
     logger.info(`Loading environment variables from ${envPath}`);
-    dotenv.config({ path: envPath });
+    dotenv.config({ path: envPath, override: true });
   } else {
     dotenv.config();
   }

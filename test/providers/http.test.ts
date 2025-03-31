@@ -141,6 +141,39 @@ describe('HttpProvider', () => {
     );
   });
 
+  it('should substitute variables in URL path parameters', async () => {
+    const urlWithPathParam = 'http://example.com/users/{{userId}}/profile';
+    provider = new HttpProvider(urlWithPathParam, {
+      config: {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      },
+    });
+    const mockResponse = {
+      data: JSON.stringify({ user: 'data' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt', {
+      vars: { userId: '12345' },
+      prompt: { raw: 'foo', label: 'bar' },
+    });
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      'http://example.com/users/12345/profile',
+      expect.objectContaining({
+        method: 'GET',
+        headers: { 'content-type': 'application/json' },
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
+  });
+
   const testCases = [
     { parser: (data: any) => data.custom, expected: 'parsed' },
     { parser: 'json.result', expected: 'parsed' },
@@ -331,6 +364,49 @@ describe('HttpProvider', () => {
         undefined,
       );
       expect(result.output).toEqual({ result: 'received' });
+    });
+
+    it('should handle a raw request with path parameter variable substitution', async () => {
+      const rawRequest = dedent`
+        GET /api/users/{{userId}}/profile HTTP/1.1
+        Host: example.com
+        Accept: application/json
+      `;
+      const provider = new HttpProvider('https', {
+        config: {
+          request: rawRequest,
+          transformResponse: (data: any) => data,
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ user: { id: '12345', name: 'Test User' } }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt', {
+        vars: { userId: '12345' },
+        prompt: { raw: 'foo', label: 'bar' },
+      });
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://example.com/api/users/12345/profile',
+        expect.objectContaining({
+          method: 'GET',
+          headers: expect.objectContaining({
+            host: 'example.com',
+            accept: 'application/json',
+          }),
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+      expect(result.output).toEqual({ user: { id: '12345', name: 'Test User' } });
     });
 
     it('should load raw request from file if file:// prefix is used', async () => {

@@ -75,6 +75,12 @@ export const ProviderEnvOverridesSchema = z.object({
   AZURE_CONTENT_SAFETY_ENDPOINT: z.string().optional(),
   AZURE_CONTENT_SAFETY_API_KEY: z.string().optional(),
   AZURE_CONTENT_SAFETY_API_VERSION: z.string().optional(),
+  AWS_REGION: z.string().optional(),
+  AWS_DEFAULT_REGION: z.string().optional(),
+  AWS_SAGEMAKER_MAX_TOKENS: z.string().optional(),
+  AWS_SAGEMAKER_TEMPERATURE: z.string().optional(),
+  AWS_SAGEMAKER_TOP_P: z.string().optional(),
+  AWS_SAGEMAKER_MAX_RETRIES: z.string().optional(),
 });
 
 export type EnvOverrides = z.infer<typeof ProviderEnvOverridesSchema>;

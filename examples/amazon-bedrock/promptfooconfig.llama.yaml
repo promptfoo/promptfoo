@@ -5,7 +5,7 @@ prompts:
   - 'Translate to {{language}}: {{input}}'
 
 providers:
-  - id: bedrock:meta.llama3-2-3b-instruct-v1:0
+  - id: bedrock:us.meta.llama3-2-3b-instruct-v1:0
     label: llama3.2 90b
     config:
       max_gen_len: 100

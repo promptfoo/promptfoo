@@ -281,6 +281,24 @@
                             },
                             "AZURE_CONTENT_SAFETY_API_VERSION": {
                               "type": "string"
+                            },
+                            "AWS_REGION": {
+                              "type": "string"
+                            },
+                            "AWS_DEFAULT_REGION": {
+                              "type": "string"
+                            },
+                            "AWS_SAGEMAKER_MAX_TOKENS": {
+                              "type": "string"
+                            },
+                            "AWS_SAGEMAKER_TEMPERATURE": {
+                              "type": "string"
+                            },
+                            "AWS_SAGEMAKER_TOP_P": {
+                              "type": "string"
+                            },
+                            "AWS_SAGEMAKER_MAX_RETRIES": {
+                              "type": "string"
                             }
                           },
                           "additionalProperties": false

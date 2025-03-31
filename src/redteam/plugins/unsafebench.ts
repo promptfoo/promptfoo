@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-import { getEnvString } from '../../envars';
 import { fetchWithProxy } from '../../fetch';
 import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
