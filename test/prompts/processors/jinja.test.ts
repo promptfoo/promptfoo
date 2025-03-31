@@ -1,22 +1,26 @@
 import * as fs from 'fs';
 import { processJinjaFile } from '../../../src/prompts/processors/jinja';
+import { loadFile } from '../../../src/util/fileLoader';
 
 jest.mock('fs');
+jest.mock('../../../src/util/fileLoader', () => ({
+  loadFile: jest.fn(),
+}));
 
 describe('processJinjaFile', () => {
-  const mockReadFileSync = jest.mocked(fs.readFileSync);
+  const mockLoadFile = jest.mocked(loadFile);
 
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('should process a Jinja2 file without a label', () => {
+  it('should process a Jinja2 file without a label', async () => {
     const filePath = 'template.j2';
     const fileContent =
       'You are a helpful assistant for Promptfoo.\nPlease answer the following question about {{ topic }}: {{ question }}';
-    mockReadFileSync.mockReturnValue(fileContent);
+    mockLoadFile.mockResolvedValue(fileContent);
 
-    const result = processJinjaFile(filePath, {});
+    const result = await processJinjaFile(filePath, {});
 
     expect(result).toEqual([
       {
@@ -25,16 +29,16 @@ describe('processJinjaFile', () => {
         config: undefined,
       },
     ]);
-    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
+    expect(mockLoadFile).toHaveBeenCalledWith(filePath);
   });
 
-  it('should process a Jinja2 file with a label', () => {
+  it('should process a Jinja2 file with a label', async () => {
     const filePath = 'template.j2';
     const fileContent =
       'You are a helpful assistant for Promptfoo.\nPlease answer the following question about {{ topic }}: {{ question }}';
-    mockReadFileSync.mockReturnValue(fileContent);
+    mockLoadFile.mockResolvedValue(fileContent);
 
-    const result = processJinjaFile(filePath, { label: 'Custom Label' });
+    const result = await processJinjaFile(filePath, { label: 'Custom Label' });
 
     expect(result).toEqual([
       {
@@ -43,17 +47,17 @@ describe('processJinjaFile', () => {
         config: undefined,
       },
     ]);
-    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
+    expect(mockLoadFile).toHaveBeenCalledWith(filePath);
   });
 
-  it('should include config when provided', () => {
+  it('should include config when provided', async () => {
     const filePath = 'template.j2';
     const fileContent =
       'You are a helpful assistant for Promptfoo.\nPlease answer the following question about {{ topic }}: {{ question }}';
     const config = { temperature: 0.7, max_tokens: 150 };
-    mockReadFileSync.mockReturnValue(fileContent);
+    mockLoadFile.mockResolvedValue(fileContent);
 
-    const result = processJinjaFile(filePath, { config });
+    const result = await processJinjaFile(filePath, { config });
 
     expect(result).toEqual([
       {
@@ -62,20 +66,18 @@ describe('processJinjaFile', () => {
         config,
       },
     ]);
-    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
+    expect(mockLoadFile).toHaveBeenCalledWith(filePath);
   });
 
-  it('should throw an error if the file cannot be read', () => {
+  it('should throw an error if the file cannot be read', async () => {
     const filePath = 'nonexistent.j2';
-    mockReadFileSync.mockImplementation(() => {
-      throw new Error('File not found');
-    });
+    mockLoadFile.mockRejectedValue(new Error('File not found'));
 
-    expect(() => processJinjaFile(filePath, {})).toThrow('File not found');
-    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
+    await expect(processJinjaFile(filePath, {})).rejects.toThrow('File not found');
+    expect(mockLoadFile).toHaveBeenCalledWith(filePath);
   });
 
-  it('should handle variable interpolation syntax properly', () => {
+  it('should handle variable interpolation syntax properly', async () => {
     const filePath = 'complex.j2';
     const fileContent = `
     {% if condition %}
@@ -84,9 +86,9 @@ describe('processJinjaFile', () => {
       Handle {{ variable2 }} without condition
     {% endif %}
     `;
-    mockReadFileSync.mockReturnValue(fileContent);
+    mockLoadFile.mockResolvedValue(fileContent);
 
-    const result = processJinjaFile(filePath, {});
+    const result = await processJinjaFile(filePath, {});
 
     expect(result).toEqual([
       {
@@ -95,6 +97,6 @@ describe('processJinjaFile', () => {
         config: undefined,
       },
     ]);
-    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
+    expect(mockLoadFile).toHaveBeenCalledWith(filePath);
   });
 });

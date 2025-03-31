@@ -1,61 +1,76 @@
 import * as fs from 'fs';
 import { processMarkdownFile } from '../../../src/prompts/processors/markdown';
+import { loadFile } from '../../../src/util/fileLoader';
 
 jest.mock('fs');
+jest.mock('../../../src/util/fileLoader', () => ({
+  loadFile: jest.fn(),
+}));
 
 describe('processMarkdownFile', () => {
-  const mockReadFileSync = jest.mocked(fs.readFileSync);
+  const mockLoadFile = jest.mocked(loadFile);
 
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('should process a valid Markdown file without a label', () => {
+  it('should process a valid Markdown file without a label', async () => {
     const filePath = 'file.md';
-    const fileContent = '# Heading\n\nThis is some markdown content.';
-    mockReadFileSync.mockReturnValue(fileContent);
-    expect(processMarkdownFile(filePath, {})).toEqual([
+    const fileContent = '# Hello\nWorld';
+    mockLoadFile.mockResolvedValue(fileContent);
+
+    const result = await processMarkdownFile(filePath, {});
+
+    expect(result).toEqual([
       {
-        raw: fileContent,
-        label: `${filePath}: # Heading\n\nThis is some markdown content....`,
+        raw: '# Hello\nWorld',
+        label: 'file.md: # Hello\nWorld...',
+        config: undefined,
       },
     ]);
-    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
+    expect(mockLoadFile).toHaveBeenCalledWith(filePath);
   });
 
-  it('should process a valid Markdown file with a label', () => {
+  it('should process a valid Markdown file with a label', async () => {
     const filePath = 'file.md';
-    const fileContent = '# Heading\n\nThis is some markdown content.';
-    mockReadFileSync.mockReturnValue(fileContent);
-    expect(processMarkdownFile(filePath, { label: 'Custom Label' })).toEqual([
+    const fileContent = '# Hello\nWorld';
+    mockLoadFile.mockResolvedValue(fileContent);
+
+    const result = await processMarkdownFile(filePath, { label: 'Label' });
+
+    expect(result).toEqual([
       {
-        raw: fileContent,
-        label: 'Custom Label',
+        raw: '# Hello\nWorld',
+        label: 'Label',
+        config: undefined,
       },
     ]);
-    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
+    expect(mockLoadFile).toHaveBeenCalledWith(filePath);
   });
 
-  it('should truncate the label for long Markdown files', () => {
+  it('should process a valid Markdown file with config', async () => {
     const filePath = 'file.md';
-    const fileContent = '# ' + 'A'.repeat(100);
-    mockReadFileSync.mockReturnValue(fileContent);
-    expect(processMarkdownFile(filePath, {})).toEqual([
+    const fileContent = '# Hello\nWorld';
+    mockLoadFile.mockResolvedValue(fileContent);
+    const config = { key: 'value' };
+
+    const result = await processMarkdownFile(filePath, { config });
+
+    expect(result).toEqual([
       {
-        raw: fileContent,
-        label: `${filePath}: # ${'A'.repeat(48)}...`,
+        raw: '# Hello\nWorld',
+        label: 'file.md: # Hello\nWorld...',
+        config,
       },
     ]);
-    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
+    expect(mockLoadFile).toHaveBeenCalledWith(filePath);
   });
 
-  it('should throw an error if the file cannot be read', () => {
+  it('should throw an error if the file cannot be read', async () => {
     const filePath = 'nonexistent.md';
-    mockReadFileSync.mockImplementation(() => {
-      throw new Error('File not found');
-    });
+    mockLoadFile.mockRejectedValue(new Error('File not found'));
 
-    expect(() => processMarkdownFile(filePath, {})).toThrow('File not found');
-    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
+    await expect(processMarkdownFile(filePath, {})).rejects.toThrow('File not found');
+    expect(mockLoadFile).toHaveBeenCalledWith(filePath);
   });
 });

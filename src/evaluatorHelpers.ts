@@ -1,5 +1,5 @@
 import * as fs from 'fs';
-import yaml from 'js-yaml';
+import * as yaml from 'yaml';
 import * as path from 'path';
 import cliState from './cliState';
 import { getEnvBool } from './envars';
@@ -70,94 +70,109 @@ export function resolveVariables(
 
 export async function renderPrompt(
   prompt: Prompt,
-  vars: Record<string, string | object>,
-  nunjucksFilters?: NunjucksFilterMap,
-  provider?: ApiProvider,
+  vars: Record<string, unknown> = {},
+  evaluateOptions: EvaluateOptions = {},
 ): Promise<string> {
-  const nunjucks = getNunjucksEngine(nunjucksFilters);
+  const nunjucks = getNunjucksEngine(evaluateOptions.nunjucksFilters);
 
   let basePrompt = prompt.raw;
 
-  // Load files
+  const processedVars = { ...vars };
+  
+  // Process file paths in variables
   for (const [varName, value] of Object.entries(vars)) {
-    if (typeof value === 'string' && value.startsWith('file://')) {
-      const basePath = cliState.basePath || '';
-      const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
-      const fileExtension = filePath.split('.').pop();
+    if (typeof value !== 'string') {
+      continue;
+    }
 
-      logger.debug(`Loading var ${varName} from file: ${filePath}`);
-      if (isJavascriptFile(filePath)) {
-        const javascriptOutput = (await (
-          await importModule(filePath)
-        )(varName, basePrompt, vars, provider)) as {
-          output?: string;
-          error?: string;
-        };
-        if (javascriptOutput.error) {
-          throw new Error(`Error running ${filePath}: ${javascriptOutput.error}`);
+    if (isFilePath(value)) {
+      const filePath = value.replace(/^file:\/\//, '');
+      if (filePath.endsWith('.js') || filePath.endsWith('.cjs') || filePath.endsWith('.mjs')) {
+        try {
+          const javascriptOutput = (await (
+            await importModule(filePath)
+          )(varName, basePrompt, vars, evaluateOptions.provider)) as {
+            output?: string;
+            error?: string;
+          };
+          if (javascriptOutput.error) {
+            throw new Error(`Error running ${filePath}: ${javascriptOutput.error}`);
+          }
+          if (!javascriptOutput.output) {
+            throw new Error(
+              `Expected ${filePath} to return { output: string } but got ${javascriptOutput}`,
+            );
+          }
+          processedVars[varName] = javascriptOutput.output;
+        } catch (err) {
+          console.error(`Error loading file ${filePath}:`, err);
+          throw err;
         }
-        if (!javascriptOutput.output) {
-          throw new Error(
-            `Expected ${filePath} to return { output: string } but got ${javascriptOutput}`,
+      } else if (filePath.endsWith('.py')) {
+        try {
+          const pythonScriptOutput = (await runPython(filePath, 'get_var', [
+            varName,
+            basePrompt,
+            vars,
+          ])) as { output?: any; error?: string };
+          if (pythonScriptOutput.error) {
+            throw new Error(`Error running Python script ${filePath}: ${pythonScriptOutput.error}`);
+          }
+          if (!pythonScriptOutput.output) {
+            throw new Error(`Python script ${filePath} did not return any output`);
+          }
+          invariant(
+            typeof pythonScriptOutput.output === 'string',
+            `pythonScriptOutput.output must be a string. Received: ${typeof pythonScriptOutput.output}`,
           );
+          processedVars[varName] = pythonScriptOutput.output.trim();
+        } catch (err) {
+          console.error(`Error loading file ${filePath}:`, err);
+          throw err;
         }
-        vars[varName] = javascriptOutput.output;
-      } else if (fileExtension === 'py') {
-        const pythonScriptOutput = (await runPython(filePath, 'get_var', [
-          varName,
-          basePrompt,
-          vars,
-        ])) as { output?: any; error?: string };
-        if (pythonScriptOutput.error) {
-          throw new Error(`Error running Python script ${filePath}: ${pythonScriptOutput.error}`);
-        }
-        if (!pythonScriptOutput.output) {
-          throw new Error(`Python script ${filePath} did not return any output`);
-        }
-        invariant(
-          typeof pythonScriptOutput.output === 'string',
-          `pythonScriptOutput.output must be a string. Received: ${typeof pythonScriptOutput.output}`,
-        );
-        vars[varName] = pythonScriptOutput.output.trim();
-      } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
-        const yamlContent = await loadFile(filePath);
-        vars[varName] = JSON.stringify(yamlContent);
-      } else if (fileExtension === 'pdf' && !getEnvBool('PROMPTFOO_DISABLE_PDF_AS_TEXT')) {
+      } else if (filePath.endsWith('.pdf') && !getEnvBool('PROMPTFOO_DISABLE_PDF_AS_TEXT')) {
         telemetry.recordOnce('feature_used', {
           feature: 'extract_text_from_pdf',
         });
-        vars[varName] = await extractTextFromPDF(filePath);
+        processedVars[varName] = await extractTextFromPDF(filePath);
       } else if (
         (isImageFile(filePath) || isVideoFile(filePath) || isAudioFile(filePath)) &&
-        !getEnvBool('PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64')
+        !getEnvBool('PROMPTFOO_DISABLE_MEDIA_AS_BASE64')
       ) {
-        const fileType = isImageFile(filePath)
-          ? 'image'
-          : isVideoFile(filePath)
-            ? 'video'
-            : 'audio';
-
         telemetry.recordOnce('feature_used', {
-          feature: `load_${fileType}_as_base64`,
+          feature: 'media_as_base64',
         });
-
-        logger.debug(`Loading ${fileType} as base64: ${filePath}`);
         try {
-          const fileBuffer = fs.readFileSync(filePath);
-          vars[varName] = fileBuffer.toString('base64');
+          const fileBuffer = await fs.promises.readFile(filePath);
+          processedVars[varName] = fileBuffer.toString('base64');
         } catch (error) {
           throw new Error(
-            `Failed to load ${fileType} ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
+            `Error reading file ${filePath}: ${
+              (error instanceof Error && error.message) || 'Unknown error'
+            }`,
           );
         }
       } else {
-        vars[varName] = fs.readFileSync(filePath, 'utf8').trim();
+        try {
+          const content = await loadFile(filePath);
+          
+          if (filePath.endsWith('.json')) {
+            processedVars[varName] = JSON.parse(content);
+          } else if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
+            processedVars[varName] = yaml.parse(content);
+          } else {
+            processedVars[varName] = content.trim();
+          }
+        } catch (err) {
+          console.error(`Error loading file ${filePath}:`, err);
+          throw err;
+        }
       }
     } else if (isPackagePath(value)) {
       const basePath = cliState.basePath || '';
       const javascriptOutput = (await (
         await loadFromPackage(value, basePath)
-      )(varName, basePrompt, vars, provider)) as {
+      )(varName, basePrompt, vars, evaluateOptions.provider)) as {
         output?: string;
         error?: string;
       };
@@ -169,13 +184,13 @@ export async function renderPrompt(
           `Expected ${value} to return { output: string } but got ${javascriptOutput}`,
         );
       }
-      vars[varName] = javascriptOutput.output;
+      processedVars[varName] = javascriptOutput.output;
     }
   }
 
   // Apply prompt functions
   if (prompt.function) {
-    const result = await prompt.function({ vars, provider });
+    const result = await prompt.function({ vars: processedVars, provider: evaluateOptions.provider });
     if (typeof result === 'string') {
       basePrompt = result;
     } else if (typeof result === 'object') {
@@ -201,16 +216,16 @@ export async function renderPrompt(
   }
 
   // Remove any trailing newlines from vars, as this tends to be a footgun for JSON prompts.
-  for (const key of Object.keys(vars)) {
-    if (typeof vars[key] === 'string') {
-      vars[key] = (vars[key] as string).replace(/\n$/, '');
+  for (const key of Object.keys(processedVars)) {
+    if (typeof processedVars[key] === 'string') {
+      processedVars[key] = (processedVars[key] as string).replace(/\n$/, '');
     }
   }
   // Resolve variable mappings
-  resolveVariables(vars);
+  resolveVariables(processedVars);
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
-    const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
+    const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), processedVars);
     return JSON.stringify(portKeyResult.messages);
   } else if (prompt.raw.startsWith('langfuse://')) {
     const langfusePrompt = prompt.raw.slice('langfuse://'.length);
@@ -223,7 +238,7 @@ export async function renderPrompt(
 
     const langfuseResult = await getLangfusePrompt(
       helper,
-      vars,
+      processedVars,
       promptType,
       version === 'latest' ? undefined : Number(version),
     );
@@ -234,7 +249,7 @@ export async function renderPrompt(
     const [majorVersion, minorVersion] = version ? version.split('.') : [undefined, undefined];
     const heliconeResult = await getHeliconePrompt(
       id,
-      vars,
+      processedVars,
       majorVersion === undefined ? undefined : Number(majorVersion),
       minorVersion === undefined ? undefined : Number(minorVersion),
     );
@@ -243,15 +258,15 @@ export async function renderPrompt(
   // Render prompt
   try {
     if (getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {
-      return nunjucks.renderString(basePrompt, vars);
+      return nunjucks.renderString(basePrompt, processedVars);
     }
 
     const parsed = JSON.parse(basePrompt);
     // The _raw_ prompt is valid JSON. That means that the user likely wants to substitute vars _within_ the JSON itself.
     // Recursively walk the JSON structure. If we find a string, render it with nunjucks.
-    return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
+    return JSON.stringify(renderVarsInObject(parsed, processedVars), null, 2);
   } catch {
-    return renderVarsInObject(nunjucks.renderString(basePrompt, vars), vars);
+    return renderVarsInObject(nunjucks.renderString(basePrompt, processedVars), processedVars);
   }
 }
 
@@ -280,4 +295,8 @@ export async function runExtensionHook(
     logger.debug(`Running extension hook ${hookName} with context ${JSON.stringify(context)}`);
     await transform(extension, hookName, context, false);
   }
+}
+
+function isFilePath(value: string): boolean {
+  return typeof value === 'string' && value.startsWith('file://');
 }
