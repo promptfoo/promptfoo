@@ -8,9 +8,8 @@ import Eval from '../src/models/eval';
 import { type ApiProvider, type TestSuite, type Prompt, ResultFailureReason } from '../src/types';
 import { sleep } from '../src/util/time';
 
-// Helper function to strip assertions property for test compatibility
 function stripAssertions(tokenUsage: any) {
-  const { assertions, ...rest } = tokenUsage;
+  const { assertions: _, ...rest } = tokenUsage;
   return rest;
 }
 
