@@ -1,6 +1,6 @@
 import { useMemo, useEffect, useState } from 'react';
 import { callApi } from '@app/utils/api';
-import { Box, Typography } from '@mui/material';
+import { Box, Typography, Paper, CircularProgress, useTheme } from '@mui/material';
 import {
   DataGrid,
   type GridColDef,
@@ -31,18 +31,26 @@ declare module '@mui/x-data-grid' {
 }
 
 function CustomToolbar({ showUtilityButtons }: { showUtilityButtons: boolean }) {
+  const theme = useTheme();
   return (
-    <GridToolbarContainer>
+    <GridToolbarContainer sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
       {showUtilityButtons && (
-        <>
+        <Box sx={{ display: 'flex', gap: 1 }}>
           <GridToolbarColumnsButton />
           <GridToolbarFilterButton />
           <GridToolbarDensitySelector />
           <GridToolbarExport />
-        </>
+        </Box>
       )}
       <Box sx={{ flexGrow: 1 }} />
-      <GridToolbarQuickFilter />
+      <GridToolbarQuickFilter
+        sx={{
+          '& .MuiInputBase-root': {
+            borderRadius: 2,
+            backgroundColor: theme.palette.background.paper,
+          },
+        }}
+      />
     </GridToolbarContainer>
   );
 }
@@ -123,55 +131,102 @@ export default function EvalsDataGrid({
   );
 
   return (
-    <DataGrid
-      rows={evals}
-      columns={columns}
-      loading={isLoading}
-      getRowId={(row) => row.evalId}
-      slots={{
-        toolbar: CustomToolbar,
-        noRowsOverlay: () => (
-          <Box
-            sx={{
-              textAlign: 'center',
-              color: 'text.secondary',
-              height: '100%',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}
-          >
-            {error ? (
-              <Typography variant="h6">Error loading evals</Typography>
-            ) : (
-              <>
-                <Box sx={{ fontSize: '2rem', mb: 1 }}>🔍</Box>
-                <Typography variant="h6" gutterBottom>
-                  No evals found
-                </Typography>
-                <Typography variant="body2">
-                  Try adjusting your search or create a new evaluation
-                </Typography>
-              </>
-            )}
-          </Box>
-        ),
-      }}
-      slotProps={{ toolbar: { showUtilityButtons } }}
-      onCellClick={handleCellClick}
-      sx={{
-        '& .MuiDataGrid-row': {
-          cursor: 'pointer',
-        },
-      }}
-      onRowSelectionModelChange={setRowSelectionModel}
-      rowSelectionModel={rowSelectionModel}
-      initialState={{
-        sorting: {
-          sortModel: [{ field: 'createdAt', sort: 'desc' }],
-        },
-      }}
-    />
+    <Paper elevation={2} sx={{ height: '100%', overflow: 'hidden' }}>
+      <DataGrid
+        rows={evals}
+        columns={columns}
+        loading={isLoading}
+        getRowId={(row) => row.evalId}
+        slots={{
+          toolbar: CustomToolbar,
+          loadingOverlay: () => (
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%',
+                gap: 2,
+              }}
+            >
+              <CircularProgress />
+              <Typography variant="body2" color="text.secondary">
+                Loading evaluations...
+              </Typography>
+            </Box>
+          ),
+          noRowsOverlay: () => (
+            <Box
+              sx={{
+                textAlign: 'center',
+                color: 'text.secondary',
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
+                p: 3,
+              }}
+            >
+              {error ? (
+                <>
+                  <Box sx={{ fontSize: '2rem', mb: 2 }}>⚠️</Box>
+                  <Typography variant="h6" gutterBottom color="error">
+                    Error loading evals
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {error.message}
+                  </Typography>
+                </>
+              ) : (
+                <>
+                  <Box sx={{ fontSize: '2rem', mb: 2 }}>🔍</Box>
+                  <Typography variant="h6" gutterBottom>
+                    No evals found
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Try adjusting your search or create a new evaluation
+                  </Typography>
+                </>
+              )}
+            </Box>
+          ),
+        }}
+        slotProps={{ toolbar: { showUtilityButtons } }}
+        onCellClick={handleCellClick}
+        sx={{
+          border: 'none',
+          '& .MuiDataGrid-row': {
+            cursor: 'pointer',
+            transition: 'background-color 0.2s ease',
+            '&:hover': {
+              backgroundColor: 'action.hover',
+            },
+          },
+          '& .MuiDataGrid-cell': {
+            borderColor: 'divider',
+          },
+          '& .MuiDataGrid-columnHeaders': {
+            backgroundColor: 'background.default',
+            borderColor: 'divider',
+          },
+          '& .MuiDataGrid-selectedRow': {
+            backgroundColor: 'action.selected',
+          },
+        }}
+        onRowSelectionModelChange={setRowSelectionModel}
+        rowSelectionModel={rowSelectionModel}
+        initialState={{
+          sorting: {
+            sortModel: [{ field: 'createdAt', sort: 'desc' }],
+          },
+          pagination: {
+            paginationModel: { pageSize: 25 },
+          },
+        }}
+        pageSizeOptions={[10, 25, 50, 100]}
+      />
+    </Paper>
   );
 }
