@@ -25,7 +25,7 @@ export class PythonProvider implements ApiProvider {
 
   private scriptPath: string;
   private functionName: string | null;
-  private configReferencesProcessed: boolean = false;
+  private isInitialized: boolean = false;
   public label: string | undefined;
 
   constructor(
@@ -52,20 +52,15 @@ export class PythonProvider implements ApiProvider {
    * This should be called after initialization
    * @returns A promise that resolves when all file references have been processed
    */
-  public async processConfigReferences(): Promise<void> {
-    // Skip if already processed
-    if (this.configReferencesProcessed) {
+  public async initialize(): Promise<void> {
+    if (this.isInitialized) {
       return;
     }
-
-    try {
-      const basePath = this.options?.config.basePath || '';
-      this.config = await processConfigFileReferences(this.config, basePath);
-      this.configReferencesProcessed = true;
-      logger.debug(`Processed file references in config for ${this.id()}`);
-    } catch (error) {
-      logger.error(`Error processing file references in config for ${this.id()}: ${error}`);
-    }
+    this.config = await processConfigFileReferences(
+      this.config,
+      this.options?.config.basePath || '',
+    );
+    this.isInitialized = true;
   }
 
   /**
@@ -83,8 +78,8 @@ export class PythonProvider implements ApiProvider {
     apiType: 'call_api' | 'call_embedding_api' | 'call_classification_api',
   ): Promise<any> {
     // Ensure file references in config are processed before execution
-    if (!this.configReferencesProcessed) {
-      await this.processConfigReferences();
+    if (!this.isInitialized) {
+      await this.initialize();
     }
 
     const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
@@ -257,22 +252,22 @@ export class PythonProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    if (!this.configReferencesProcessed) {
-      await this.processConfigReferences();
+    if (!this.isInitialized) {
+      await this.initialize();
     }
     return this.executePythonScript(prompt, context, 'call_api');
   }
 
   async callEmbeddingApi(prompt: string): Promise<ProviderEmbeddingResponse> {
-    if (!this.configReferencesProcessed) {
-      await this.processConfigReferences();
+    if (!this.isInitialized) {
+      await this.initialize();
     }
     return this.executePythonScript(prompt, undefined, 'call_embedding_api');
   }
 
   async callClassificationApi(prompt: string): Promise<ProviderClassificationResponse> {
-    if (!this.configReferencesProcessed) {
-      await this.processConfigReferences();
+    if (!this.isInitialized) {
+      await this.initialize();
     }
     return this.executePythonScript(prompt, undefined, 'call_classification_api');
   }

@@ -92,7 +92,7 @@ describe('PythonProvider with file references', () => {
       },
     });
 
-    await provider.processConfigReferences();
+    await provider.initialize();
 
     expect(processConfigFileReferences).toHaveBeenCalledWith(
       expect.objectContaining(mockConfig),
@@ -115,18 +115,15 @@ describe('PythonProvider with file references', () => {
       config: mockConfig,
     });
 
-    provider['configReferencesProcessed'] = false;
+    provider['isInitialized'] = false;
 
-    await provider.processConfigReferences();
+    await expect(provider.initialize()).rejects.toThrow('Failed to load file');
 
     expect(processConfigFileReferences).toHaveBeenCalledWith(
       expect.objectContaining(mockConfig),
       expect.any(String),
     );
-    expect(logger.error).toHaveBeenCalledWith(
-      expect.stringContaining('Error processing file references'),
-    );
-    expect(provider.config).toEqual(mockConfig);
+    expect(provider['isInitialized']).toBeFalsy();
   });
 
   it('should process config references before calling API', async () => {
@@ -148,7 +145,7 @@ describe('PythonProvider with file references', () => {
       },
     });
 
-    provider['configReferencesProcessed'] = false;
+    provider['isInitialized'] = false;
 
     const mockResult = { output: 'API result', cached: false };
     const _originalMethod = provider['executePythonScript'];
@@ -187,11 +184,11 @@ describe('PythonProvider with file references', () => {
       },
     });
 
-    provider['configReferencesProcessed'] = false;
+    provider['isInitialized'] = false;
 
-    await provider.processConfigReferences();
-    await provider.processConfigReferences();
-    await provider.processConfigReferences();
+    await provider.initialize();
+    await provider.initialize();
+    await provider.initialize();
 
     expect(processConfigFileReferences).toHaveBeenCalledTimes(1);
   });
@@ -217,7 +214,7 @@ describe('PythonProvider with file references', () => {
       },
     });
 
-    provider['configReferencesProcessed'] = false;
+    provider['isInitialized'] = false;
 
     const runPythonMock = jest.mocked(runPython);
     runPythonMock.mockClear();
@@ -249,7 +246,7 @@ describe('PythonProvider with file references', () => {
       },
     });
 
-    provider['configReferencesProcessed'] = false;
+    provider['isInitialized'] = false;
 
     const runPythonMock = jest.mocked(runPython);
     runPythonMock.mockClear();
