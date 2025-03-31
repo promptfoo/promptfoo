@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useUIStore } from '@app/stores/uiStore';
 import DownloadIcon from '@mui/icons-material/Download';
 import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
@@ -22,6 +23,7 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
   const [isDownloading, setIsDownloading] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const setNavbarVisible = useUIStore((state) => state.setNavbarVisible);
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -43,21 +45,29 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
   const handlePdfDownload = async () => {
     setIsDownloading(true);
     handleClose();
+    setNavbarVisible(false);
 
-    setTimeout(async () => {
-      const element = document.documentElement;
-      const canvas = await html2canvas(element, {
-        height: Math.max(element.scrollHeight, element.offsetHeight),
-        windowHeight: document.documentElement.scrollHeight,
-      });
-      const data = canvas.toDataURL('image/png');
+    try {
+      setTimeout(async () => {
+        const element = document.documentElement;
+        const canvas = await html2canvas(element, {
+          height: Math.max(element.scrollHeight, element.offsetHeight),
+          windowHeight: document.documentElement.scrollHeight,
+        });
+        const data = canvas.toDataURL('image/png');
 
-      const pdf = new jsPDF('p', 'pt', [canvas.width, canvas.height]);
-      pdf.addImage(data, 'PNG', 0, 0, canvas.width, canvas.height);
-      pdf.save(getFilename('pdf'));
+        const pdf = new jsPDF('p', 'pt', [canvas.width, canvas.height]);
+        pdf.addImage(data, 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save(getFilename('pdf'));
 
+        setIsDownloading(false);
+        setNavbarVisible(true);
+      }, 100);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
       setIsDownloading(false);
-    }, 100);
+      setNavbarVisible(true);
+    }
   };
 
   const handleCsvDownload = () => {
