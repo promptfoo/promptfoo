@@ -316,27 +316,33 @@ const sidebars = {
       items: [
         {
           type: 'doc',
+          label: 'Application Red Teaming',
           id: 'guides/llm-redteaming',
         },
         {
           type: 'doc',
+          label: 'RAG Red Teaming',
           id: 'red-team/rag',
         },
         {
           type: 'doc',
+          label: 'Agentic Red Teaming',
           id: 'red-team/agents',
         },
         {
           type: 'doc',
+          label: 'Multi-Modal Red Teaming',
           id: 'guides/multimodal-red-team',
         },
         {
           type: 'doc',
-          id: 'guides/testing-guardrails',
+          label: 'Foundation Model Red Teaming',
+          id: 'red-team/foundation-models',
         },
         {
           type: 'doc',
-          id: 'red-team/foundation-models',
+          label: 'Testing Guardrails',
+          id: 'guides/testing-guardrails',
         },
       ],
     },
