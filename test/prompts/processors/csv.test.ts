@@ -1,5 +1,5 @@
-import dedent from 'dedent';
 import fs from 'fs';
+import dedent from 'ts-dedent';
 import { processCsvPrompts } from '../../../src/prompts/processors/csv';
 import type { Prompt } from '../../../src/types';
 
@@ -134,7 +134,7 @@ describe('processCsvPrompts', () => {
     const csvContent = dedent`
       prompt,label
       Tell me about {{topic}},Basic Query
-      
+
       Write a poem about {{topic}},Poetry Generator
     `;
 
@@ -151,5 +151,38 @@ describe('processCsvPrompts', () => {
       raw: 'Write a poem about {{topic}}',
       label: 'Poetry Generator',
     });
+  });
+
+  it('should handle custom delimiters', async () => {
+    const csvContent = dedent`
+      prompt;label
+      Tell me about {{topic}};Basic Query
+      Explain {{topic}} in simple terms;Simple Explanation
+    `;
+
+    jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
+    process.env.PROMPTFOO_CSV_DELIMITER = ';';
+
+    const result = await processCsvPrompts('prompts.csv', {});
+
+    expect(result).toHaveLength(2);
+    expect(result[0]).toEqual({
+      raw: 'Tell me about {{topic}}',
+      label: 'Basic Query',
+    });
+    expect(result[1]).toEqual({
+      raw: 'Explain {{topic}} in simple terms',
+      label: 'Simple Explanation',
+    });
+
+    delete process.env.PROMPTFOO_CSV_DELIMITER;
+  });
+
+  it('should handle empty files', async () => {
+    jest.mocked(fs.readFileSync).mockReturnValue('');
+
+    const result = await processCsvPrompts('prompts.csv', {});
+
+    expect(result).toHaveLength(0);
   });
 });
