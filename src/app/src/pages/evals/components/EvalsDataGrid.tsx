@@ -167,6 +167,11 @@ export default function EvalsDataGrid({
       }}
       onRowSelectionModelChange={setRowSelectionModel}
       rowSelectionModel={rowSelectionModel}
+      initialState={{
+        sorting: {
+          sortModel: [{ field: 'createdAt', sort: 'desc' }],
+        },
+      }}
     />
   );
 }
