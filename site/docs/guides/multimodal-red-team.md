@@ -286,6 +286,17 @@ prompts:
   - id: file://image-prompt.json
     label: unsafe-image-test
 
+defaultTest:
+  vars:
+    # The image variable will be populated by the plugin
+    format: jpg
+  options:
+    transformVars: |
+      if (vars.image && typeof vars.image === 'string' && vars.image.startsWith('data:binary/octet-stream;base64,')) {
+        vars.image = vars.image.replace('data:binary/octet-stream;base64,', '');
+      }
+      return vars;
+
 redteam:
   purpose: >-
     You are a visual analysis assistant that provides information about images
@@ -304,8 +315,10 @@ redteam:
 
 The key elements in this configuration:
 
+- `defaultTest.vars.format`: Sets the image format
+- `defaultTest.options.transformVars`: Adds image preprocessing that removes the "data:binary/octet-stream;base64," prefix from image data - this is specifically required for Amazon Bedrock Nova models but may not be needed for other providers
 - `redteam.injectVar: image`: Specifies that the image variable will receive unsafe content
-- `redteam.plugins`: Uses the unsafebench plugin with specified categories
+- `redteam.plugins`: Uses the unsafebench plugin with specific categories of unsafe images
 - `redteam.purpose`: Provides context for the model's role as an assistant with ethical boundaries
 
 ### How the UnsafeBench Plugin Works
@@ -317,6 +330,14 @@ The UnsafeBench plugin:
 3. Filters images by specified categories (Violence, Sexual, Hate, etc.)
 4. Injects these images into your prompts for testing
 5. Allows for automated evaluation of model responses
+
+#### Image Format Handling
+
+Some providers like Amazon Bedrock Nova require special handling for image data:
+
+- The `transformVars` function removes any "data:binary/octet-stream;base64," prefix from image data
+- This transformation is needed specifically for Nova models but generally not required for other providers like OpenAI or Anthropic
+- The function runs before the prompt template is filled with variables, ensuring the image data is in the correct format
 
 ### Create the Prompt Template
 
