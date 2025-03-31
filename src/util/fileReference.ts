@@ -32,11 +32,11 @@ export async function loadFileReference(fileRef: string, basePath: string = ''):
   try {
     if (extension === '.json') {
       logger.debug(`Loading JSON file: ${resolvedPath}`);
-      const content = fs.readFileSync(resolvedPath, 'utf8');
+      const content = await fs.promises.readFile(resolvedPath, 'utf8');
       return JSON.parse(content);
     } else if (extension === '.yaml' || extension === '.yml') {
       logger.debug(`Loading YAML file: ${resolvedPath}`);
-      const content = fs.readFileSync(resolvedPath, 'utf8');
+      const content = await fs.promises.readFile(resolvedPath, 'utf8');
       return yaml.load(content);
     } else if (isJavascriptFile(resolvedPath)) {
       logger.debug(`Loading JavaScript file: ${resolvedPath}`);
@@ -52,7 +52,7 @@ export async function loadFileReference(fileRef: string, basePath: string = ''):
     } else if (extension === '.txt' || extension === '.md' || extension === '') {
       // For text files, just return the content as a string
       logger.debug(`Loading text file: ${resolvedPath}`);
-      return fs.readFileSync(resolvedPath, 'utf8');
+      return await fs.promises.readFile(resolvedPath, 'utf8');
     } else {
       logger.debug(`Unsupported file extension: ${extension}`);
       throw new Error(`Unsupported file extension: ${extension}`);

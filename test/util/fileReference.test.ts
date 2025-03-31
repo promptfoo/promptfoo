@@ -8,7 +8,12 @@ import * as pythonUtils from '../../src/python/pythonUtils';
 import { isJavascriptFile } from '../../src/util/file';
 import { loadFileReference, processConfigFileReferences } from '../../src/util/fileReference';
 
-jest.mock('fs');
+jest.mock('fs', () => ({
+  ...jest.requireActual('fs'),
+  promises: {
+    readFile: jest.fn(),
+  },
+}));
 jest.mock('path');
 jest.mock('js-yaml');
 jest.mock('../../src/esm', () => ({
@@ -22,6 +27,7 @@ jest.mock('../../src/logger');
 
 const importModule = jest.mocked(esmModule.importModule);
 const runPython = jest.mocked(pythonUtils.runPython);
+const readFileMock = jest.mocked(fs.promises.readFile);
 
 describe('fileReference utility functions', () => {
   beforeEach(() => {
@@ -78,12 +84,12 @@ describe('fileReference utility functions', () => {
       const fileContent = '{"name": "test", "value": 42}';
       const parsedContent = { name: 'test', value: 42 };
 
-      jest.mocked(fs.readFileSync).mockReturnValue(fileContent);
+      readFileMock.mockResolvedValue(fileContent);
       jest.spyOn(JSON, 'parse').mockReturnValue(parsedContent);
 
       const result = await loadFileReference(fileRef);
 
-      expect(fs.readFileSync).toHaveBeenCalledWith('/path/to/config.json', 'utf8');
+      expect(fs.promises.readFile).toHaveBeenCalledWith('/path/to/config.json', 'utf8');
       expect(result).toEqual(parsedContent);
     });
 
@@ -92,12 +98,12 @@ describe('fileReference utility functions', () => {
       const fileContent = 'name: test\nvalue: 42';
       const parsedContent = { name: 'test', value: 42 };
 
-      jest.mocked(fs.readFileSync).mockReturnValue(fileContent);
+      readFileMock.mockResolvedValue(fileContent);
       jest.mocked(yaml.load).mockReturnValue(parsedContent);
 
       const result = await loadFileReference(fileRef);
 
-      expect(fs.readFileSync).toHaveBeenCalledWith('/path/to/config.yaml', 'utf8');
+      expect(fs.promises.readFile).toHaveBeenCalledWith('/path/to/config.yaml', 'utf8');
       expect(yaml.load).toHaveBeenCalledWith(fileContent);
       expect(result).toEqual(parsedContent);
     });
@@ -156,11 +162,11 @@ describe('fileReference utility functions', () => {
       const fileRef = 'file:///path/to/config.txt';
       const fileContent = 'This is a text file';
 
-      jest.mocked(fs.readFileSync).mockReturnValue(fileContent);
+      readFileMock.mockResolvedValue(fileContent);
 
       const result = await loadFileReference(fileRef);
 
-      expect(fs.readFileSync).toHaveBeenCalledWith('/path/to/config.txt', 'utf8');
+      expect(fs.promises.readFile).toHaveBeenCalledWith('/path/to/config.txt', 'utf8');
       expect(result).toEqual(fileContent);
     });
 
@@ -171,13 +177,13 @@ describe('fileReference utility functions', () => {
       const parsedContent = { name: 'test' };
 
       jest.mocked(path.resolve).mockReturnValue('/base/path/config.json');
-      jest.mocked(fs.readFileSync).mockReturnValue(fileContent);
+      readFileMock.mockResolvedValue(fileContent);
       jest.spyOn(JSON, 'parse').mockReturnValue(parsedContent);
 
       const result = await loadFileReference(fileRef, basePath);
 
       expect(path.resolve).toHaveBeenCalledWith('/base/path', 'config.json');
-      expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/config.json', 'utf8');
+      expect(fs.promises.readFile).toHaveBeenCalledWith('/base/path/config.json', 'utf8');
       expect(result).toEqual(parsedContent);
     });
 
@@ -204,7 +210,7 @@ describe('fileReference utility functions', () => {
       const config = 'file:///path/to/config.json';
       const parsedContent = { name: 'test', value: 42 };
 
-      jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(parsedContent));
+      readFileMock.mockResolvedValue(JSON.stringify(parsedContent));
       jest.spyOn(JSON, 'parse').mockReturnValue(parsedContent);
 
       const result = await processConfigFileReferences(config);
@@ -221,14 +227,14 @@ describe('fileReference utility functions', () => {
         },
       };
 
-      jest.mocked(fs.readFileSync).mockImplementation((path) => {
+      readFileMock.mockImplementation((path) => {
         if (path === '/path/to/setting2.json') {
-          return '{"key": "value2"}';
+          return Promise.resolve('{"key": "value2"}');
         }
         if (path === '/path/to/setting3.yaml') {
-          return 'key: value3';
+          return Promise.resolve('key: value3');
         }
-        return '';
+        return Promise.resolve('');
       });
 
       jest.spyOn(JSON, 'parse').mockImplementation((content) => {
@@ -264,14 +270,14 @@ describe('fileReference utility functions', () => {
         42,
       ];
 
-      jest.mocked(fs.readFileSync).mockImplementation((path) => {
+      readFileMock.mockImplementation((path) => {
         if (path === '/path/to/item1.json') {
-          return '{"name": "item1"}';
+          return Promise.resolve('{"name": "item1"}');
         }
         if (path === '/path/to/item2.yaml') {
-          return 'name: item2';
+          return Promise.resolve('name: item2');
         }
-        return '';
+        return Promise.resolve('');
       });
 
       jest.spyOn(JSON, 'parse').mockImplementation((content) => {
@@ -299,11 +305,11 @@ describe('fileReference utility functions', () => {
         invalid: 'file:///path/to/nonexistent.json',
       };
 
-      jest.mocked(fs.readFileSync).mockImplementation((path) => {
+      readFileMock.mockImplementation((path) => {
         if (path === '/path/to/nonexistent.json') {
-          throw new Error('File not found');
+          return Promise.reject(new Error('File not found'));
         }
-        return '';
+        return Promise.resolve('');
       });
 
       await expect(processConfigFileReferences(config)).rejects.toThrow('File not found');
