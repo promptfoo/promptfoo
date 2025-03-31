@@ -83,4 +83,4 @@ prompts:
 - For single-column CSVs, if the first row contains "prompt", it's treated as a header
 - If a label isn't provided, one is generated based on the prompt content
 - The `config` column must contain valid JSON if present
-- CSV formatting follows standard CSV rules (quote escaping, etc.) 
+- CSV formatting follows standard CSV rules (quote escaping, etc.)

@@ -16,4 +16,4 @@ tests:
   - vars:
       topic: climate change
   - vars:
-      topic: space exploration 
+      topic: space exploration

@@ -1,109 +1,85 @@
-import * as fs from 'fs';
 import { parse } from 'csv-parse/sync';
-import logger from '../../logger';
+import fs from 'fs';
+import { getEnvBool, getEnvString } from '../../envars';
 import type { Prompt } from '../../types';
 
 /**
- * Processes a CSV file containing prompts
- * @param filePath - Path to the CSV file
- * @param prompt - Base prompt object with default properties
+ * Process a CSV file containing prompts
+ *
+ * CSV format can be either:
+ * 1. Single column with prompt text per line
+ * 2. CSV with a 'prompt' column and optional 'label' column
+ *
+ * @param filePath Path to the CSV file
+ * @param basePrompt Base prompt properties to include
  * @returns Array of processed prompts
  */
 export async function processCsvPrompts(
   filePath: string,
-  prompt: Partial<Prompt>,
+  basePrompt: Partial<Prompt>,
 ): Promise<Prompt[]> {
+  // Read the file content
+  const content = fs.readFileSync(filePath, 'utf8');
+
+  // Handle empty file
+  if (!content.trim()) {
+    return [];
+  }
+
+  const delimiter = getEnvString('PROMPTFOO_CSV_DELIMITER', ',');
+  const enforceStrict = getEnvBool('PROMPTFOO_CSV_STRICT', false);
+
+  // Process as a plain text file if it doesn't contain the delimiter
+  if (!content.includes(delimiter)) {
+    const lines = content.split(/\r?\n/).filter((line) => line.trim());
+
+    // Skip first line if it's "prompt"
+    const startIndex = lines[0]?.toLowerCase().trim() === 'prompt' ? 1 : 0;
+
+    return lines.slice(startIndex).map((line, index) => ({
+      ...basePrompt,
+      raw: line,
+      label: basePrompt.label || `Prompt ${index + 1}`,
+    }));
+  }
+
+  // Process as a CSV file
   try {
-    const content = fs.readFileSync(filePath, 'utf-8');
-    
-    // Parse CSV with header detection
-    const records = parse(content, {
+    // Define parse options based on environment settings
+    const parseOptions = {
       columns: true,
+      bom: true,
+      delimiter,
+      relax_quotes: !enforceStrict,
       skip_empty_lines: true,
       trim: true,
-      relax_column_count: true, // Allow rows with different column counts
-      // csv-parse auto-detects headers by default, we'll handle the single column case manually
-    });
-    
-    // No rows found
-    if (records.length === 0) {
-      logger.warn(`No prompts found in CSV file: ${filePath}`);
-      return [];
-    }
-    
-    // Check if this is a headerless single column CSV
-    const firstRow = records[0];
-    const keys = Object.keys(firstRow);
-    
-    // Single column CSV - could be with or without header
-    if (keys.length === 1) {
-      const columnName = keys[0];
-      
-      // If the first value looks like a header ("prompt"), treat it as such and skip first row
-      // Otherwise, treat as headerless and use all rows
-      const startsAtIndex = columnName.toLowerCase() === 'prompt' ? 1 : 0;
-      
-      return records.slice(startsAtIndex).map((row: Record<string, string>, index: number) => {
-        const rawValue = row[columnName];
+    };
+
+    // Parse the CSV content
+    const records = parse(content, parseOptions);
+
+    // Filter rows with prompt values and map to Prompt objects
+    return records
+      .filter((row: Record<string, string>) => row.prompt)
+      .map((row: Record<string, string>, index: number) => {
+        // Create the prompt object
         return {
-          ...prompt,
-          raw: rawValue,
-          label: prompt.label || `Prompt ${index + 1}`,
+          ...basePrompt,
+          raw: row.prompt,
+          label: row.label || basePrompt.label || `Prompt ${index + 1}`,
         };
       });
-    }
-    
-    // Multi-column CSV - we expect a header row
-    // Re-parse with headers
-    const recordsWithHeaders = parse(content, {
-      columns: true,
-      skip_empty_lines: true,
-      trim: true,
-    });
-    
-    // Validate column names
-    const columns = Object.keys(recordsWithHeaders[0]).map(c => c.toLowerCase());
-    if (!columns.includes('prompt')) {
-      throw new Error(`CSV file must contain a 'prompt' column. Found: ${columns.join(', ')}`);
-    }
-    
-    // Process rows
-    return recordsWithHeaders.map((row: Record<string, string>, index: number) => {
-      // Find prompt column (case insensitive)
-      const promptKey = Object.keys(row).find(k => k.toLowerCase() === 'prompt');
-      const labelKey = Object.keys(row).find(k => k.toLowerCase() === 'label');
-      const idKey = Object.keys(row).find(k => k.toLowerCase() === 'id');
-      const configKey = Object.keys(row).find(k => k.toLowerCase() === 'config');
-      
-      if (!promptKey || !row[promptKey]) {
-        logger.warn(`Skipping row ${index + 1} due to missing prompt value`);
-        return null;
-      }
-      
-      const rawPrompt = row[promptKey];
-      const label = labelKey && row[labelKey] ? row[labelKey] : prompt.label || rawPrompt.substring(0, 30) + (rawPrompt.length > 30 ? '...' : '');
-      const id = idKey && row[idKey] ? row[idKey] : undefined;
-      
-      // Parse config if provided
-      let config = undefined;
-      if (configKey && row[configKey]) {
-        try {
-          config = JSON.parse(row[configKey]);
-        } catch {
-          logger.warn(`Invalid JSON in config column for row ${index + 1}: ${row[configKey]}`);
-        }
-      }
-      
-      return {
-        ...prompt,
-        raw: rawPrompt,
-        label,
-        ...(id ? { id } : {}),
-        ...(config ? { config } : {}),
-      };
-    }).filter(Boolean) as Prompt[];
-  } catch (error) {
-    logger.error(`Error processing CSV prompts from ${filePath}: ${error}`);
-    throw error;
+  } catch {
+    // If CSV parsing fails, try as a plain text file without CSV structure
+    const lines = content.split(/\r?\n/).filter((line) => line.trim());
+
+    // Skip first line if it's "prompt"
+    const startIndex = lines[0]?.toLowerCase().trim() === 'prompt' ? 1 : 0;
+
+    return lines.slice(startIndex).map((line, index) => ({
+      ...basePrompt,
+      raw: line,
+      label: basePrompt.label || `Prompt ${index + 1}`,
+    }));
   }
-} 
+}

@@ -536,6 +536,62 @@ describe('readPrompts', () => {
     ]);
     expect(promptWithFunction.function).not.toHaveBeenCalled();
   });
+
+  it('should read a single-column CSV file with header', async () => {
+    const csvContent = `prompt
+Tell me about {{topic}}
+Explain {{topic}} in simple terms
+Write a poem about {{topic}}`;
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(csvContent);
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+
+    const result = await readPrompts(['test.csv']);
+
+    expect(result).toHaveLength(3);
+    expect(result[0].raw).toBe('Tell me about {{topic}}');
+    expect(result[1].raw).toBe('Explain {{topic}} in simple terms');
+    expect(result[2].raw).toBe('Write a poem about {{topic}}');
+    expect(result[0].label).toBe('Prompt 1');
+    expect(result[1].label).toBe('Prompt 2');
+    expect(result[2].label).toBe('Prompt 3');
+  });
+
+  it('should read a single-column CSV file without header', async () => {
+    const csvContent = `Tell me about {{topic}}
+Explain {{topic}} in simple terms
+Write a poem about {{topic}}`;
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(csvContent);
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+
+    const result = await readPrompts(['test.csv']);
+
+    expect(result).toHaveLength(3);
+    expect(result[0].raw).toBe('Tell me about {{topic}}');
+    expect(result[1].raw).toBe('Explain {{topic}} in simple terms');
+    expect(result[2].raw).toBe('Write a poem about {{topic}}');
+    expect(result[0].label).toBe('Prompt 1');
+    expect(result[1].label).toBe('Prompt 2');
+    expect(result[2].label).toBe('Prompt 3');
+  });
+
+  it('should read a two-column CSV file with prompt and label', async () => {
+    const csvContent = `prompt,label
+Tell me about {{topic}},Basic Query
+Explain {{topic}} in simple terms,Simple Explanation
+Write a poem about {{topic}},Poetry Generator`;
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(csvContent);
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+
+    const result = await readPrompts(['test.csv']);
+
+    expect(result).toHaveLength(3);
+    expect(result[0].raw).toBe('Tell me about {{topic}}');
+    expect(result[0].label).toBe('Basic Query');
+    expect(result[1].raw).toBe('Explain {{topic}} in simple terms');
+    expect(result[1].label).toBe('Simple Explanation');
+    expect(result[2].raw).toBe('Write a poem about {{topic}}');
+    expect(result[2].label).toBe('Poetry Generator');
+  });
 });
 
 describe('readProviderPromptMap', () => {
@@ -815,6 +871,22 @@ describe('processPrompts', () => {
       },
       validPrompt,
     ]);
+  });
+
+  it('should process CSV files', async () => {
+    const csvContent = `prompt,label
+Tell me about {{topic}},Basic Query
+Explain {{topic}} in simple terms,Simple Explanation`;
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(csvContent);
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+
+    const result = await processPrompts(['test.csv']);
+
+    expect(result).toHaveLength(2);
+    expect(result[0].raw).toBe('Tell me about {{topic}}');
+    expect(result[0].label).toBe('Basic Query');
+    expect(result[1].raw).toBe('Explain {{topic}} in simple terms');
+    expect(result[1].label).toBe('Simple Explanation');
   });
 
   it('should flatten array results from readPrompts', async () => {
