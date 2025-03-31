@@ -15,7 +15,7 @@ keywords:
   ]
 ---
 
-# Red Teaming Multi-Modal Models
+# Multi-Modal Red Teaming
 
 Large language models with vision capabilities present unique security challenges compared to text-only models. This guide demonstrates how to use promptfoo to effectively test multi-modal models against adversarial inputs using two different approaches.
 
