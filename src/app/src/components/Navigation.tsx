@@ -129,7 +129,7 @@ export default function Navigation({
           <NavSection>
             <Logo />
             <Dropdown />
-            <NavLink href="/eval" label="Evals" />
+            <NavLink href="/evals" label="Evals" />
             <NavLink href="/prompts" label="Prompts" />
             <NavLink href="/datasets" label="Datasets" />
             <NavLink href="/history" label="History" />
