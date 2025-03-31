@@ -329,28 +329,39 @@ function EvalOutputCell({
         output.response.tokenUsage.completionDetails.reasoning ?? 0,
       );
 
+      // Add assertion tokens if they exist
+      let tooltipTitle = `${promptTokens} prompt tokens + ${completionTokens} completion tokens = ${totalTokens} total & ${reasoningTokens} reasoning tokens`;
+      let displayText = `${totalTokens} (${promptTokens}+${completionTokens}) R${reasoningTokens}`;
+
+      if (output.response.tokenUsage.assertions?.total) {
+        const assertionTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
+          output.response.tokenUsage.assertions.total ?? 0,
+        );
+        tooltipTitle += ` & ${assertionTokens} assertion tokens`;
+        displayText += ` A${assertionTokens}`;
+      }
+
       tokenUsageDisplay = (
-        <Tooltip
-          title={`${promptTokens} prompt tokens + ${completionTokens} completion tokens = ${totalTokens} total & ${reasoningTokens} reasoning tokens`}
-        >
-          <span>
-            {totalTokens}
-            {(promptTokens !== '0' || completionTokens !== '0') &&
-              ` (${promptTokens}+${completionTokens})`}
-            {` R${reasoningTokens}`}
-          </span>
+        <Tooltip title={tooltipTitle}>
+          <span>{displayText}</span>
         </Tooltip>
       );
     } else {
+      // Add assertion tokens if they exist
+      let tooltipTitle = `${promptTokens} prompt tokens + ${completionTokens} completion tokens = ${totalTokens} total`;
+      let displayText = `${totalTokens} ${promptTokens !== '0' || completionTokens !== '0' ? `(${promptTokens}+${completionTokens})` : ''}`;
+
+      if (output.response.tokenUsage.assertions?.total) {
+        const assertionTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
+          output.response.tokenUsage.assertions.total ?? 0,
+        );
+        tooltipTitle += ` & ${assertionTokens} assertion tokens`;
+        displayText += ` A${assertionTokens}`;
+      }
+
       tokenUsageDisplay = (
-        <Tooltip
-          title={`${promptTokens} prompt tokens + ${completionTokens} completion tokens = ${totalTokens} total`}
-        >
-          <span>
-            {totalTokens}
-            {(promptTokens !== '0' || completionTokens !== '0') &&
-              ` (${promptTokens}+${completionTokens})`}
-          </span>
+        <Tooltip title={tooltipTitle}>
+          <span>{displayText}</span>
         </Tooltip>
       );
     }
@@ -368,6 +379,14 @@ function EvalOutputCell({
       {tokenUsageDisplay && (
         <div className="stat-item">
           <strong>Tokens:</strong> {tokenUsageDisplay}
+        </div>
+      )}
+      {output.response?.tokenUsage?.assertions?.total > 0 && (
+        <div className="stat-item">
+          <strong>Assertion Tokens:</strong>{' '}
+          {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
+            output.response.tokenUsage.assertions.total,
+          )}
         </div>
       )}
       {latencyDisplay && (
