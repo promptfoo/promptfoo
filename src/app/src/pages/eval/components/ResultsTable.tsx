@@ -38,7 +38,6 @@ import { useDebounce } from 'use-debounce';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
-import GenerateTestCases from './GenerateTestCases';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import type { TruncatedTextProps } from './TruncatedText';
 import TruncatedText from './TruncatedText';
@@ -367,33 +366,6 @@ function ResultsTable({
             return false;
           }
 
-          if (
-            debouncedSearchText &&
-            debouncedSearchText.startsWith('metadata=') &&
-            debouncedSearchText.includes(':')
-          ) {
-            const metadataPattern = /^metadata=([^:]+):(.*)/;
-            const match = debouncedSearchText.match(metadataPattern);
-
-            if (match && match.length >= 3) {
-              const metadataKey = match[1];
-              const metadataValue = match[2];
-
-              if (metadataKey && metadataValue !== undefined) {
-                return row.outputs.some((output) => {
-                  if (!output.metadata || !(metadataKey in output.metadata)) {
-                    return false;
-                  }
-
-                  const value = output.metadata[metadataKey];
-                  const valueStr = stringifyMetadataValue(value);
-
-                  return valueStr.toLowerCase().includes(metadataValue.toLowerCase());
-                });
-              }
-            }
-          }
-
           return debouncedSearchText && searchRegex
             ? row.outputs.some((output) => {
                 const vars = row.vars.map((v) => `var=${v}`).join(' ');
@@ -407,9 +379,11 @@ function ResultsTable({
                   output.gradingResult?.reason || ''
                 } ${output.gradingResult?.comment || ''}`;
 
-                const metadataString = generateMetadataSearchString(output.metadata);
-
-                const searchString = `${vars} ${stringifiedOutput} ${metadataString}`;
+                const outputMetadataString = generateMetadataSearchString(output.metadata);
+                const testCaseMetadataString = generateMetadataSearchString(
+                  output.testCase?.metadata,
+                );
+                const searchString = `${vars} ${stringifiedOutput} ${outputMetadataString} ${testCaseMetadataString}`;
                 return searchRegex.test(searchString);
               })
             : true;
@@ -1008,7 +982,6 @@ function ResultsTable({
           </Typography>
         </Box>
       )}
-      <GenerateTestCases />
     </div>
   );
 }

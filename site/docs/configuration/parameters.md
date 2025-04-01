@@ -157,6 +157,32 @@ You are a helpful assistant for Promptfoo.
 Please answer the following question about {{ topic }}: {{ question }}
 ```
 
+### Prompts as CSV
+
+CSV (Comma-Separated Values) files are supported for defining multiple prompts in a single file.
+
+#### Single-Column Format
+
+The simplest CSV prompt format has a single column with either a "prompt" header or no header at all:
+
+```csv title="prompts.csv"
+prompt
+"Tell me about {{topic}}"
+"Explain {{topic}} in simple terms"
+"Write a poem about {{topic}}"
+```
+
+#### Two-Column Format
+
+You can include a "label" column to give each prompt a descriptive name:
+
+```csv title="prompts.csv"
+prompt,label
+"Tell me about {{topic}}","Basic Query"
+"Explain {{topic}} in simple terms","Simple Explanation"
+"Write a poem about {{topic}}","Poetry Generator"
+```
+
 ### Different prompts per model
 
 To set separate prompts for different providers, you can specify the prompt files within the `providers` section of your `promptfooconfig.yaml`. Each provider can have its own set of prompts that are tailored to its specific requirements or input format.
@@ -522,6 +548,26 @@ The tests file optionally supports several special columns:
 - `__description`: The test description
 - `__metric`: The metric assigned to every assertion in the test case
 - `__threshold`: The threshold assigned to the test case
+- `__metadata:*`: Add metadata to the test case that can be filtered using `--filter-metadata`. Replace `*` with your metadata key (e.g., `__metadata:topic`).
+  - For array values, use `__metadata:*[]` format (e.g., `__metadata:topic[]`). Array values are comma-separated and support escaping commas with `\,`.
+
+Example CSV with metadata columns:
+
+```csv
+input,__metadata:topic,__metadata:categories[]
+"Hello world","greeting","basic,introduction"
+"What's 2+2?","math","arithmetic,basic\,math"
+```
+
+You can filter tests by metadata using the `--filter-metadata` option:
+
+```bash
+# Filter by single value metadata
+promptfoo eval --filter-metadata topic=greeting
+
+# Filter by array value metadata (matches any value in the array)
+promptfoo eval --filter-metadata categories=arithmetic
+```
 
 :::tip
 You can load your tests from [Google Sheets](/docs/configuration/guide#loading-tests-from-csv).

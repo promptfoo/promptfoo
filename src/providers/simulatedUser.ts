@@ -62,8 +62,11 @@ export class SimulatedUser implements ApiProvider {
   private async sendMessageToAgent(
     messages: Message[],
     targetProvider: ApiProvider,
+    prompt: string,
   ): Promise<Message[]> {
-    const response = await targetProvider.callApi(JSON.stringify(messages));
+    const response = await targetProvider.callApi(
+      JSON.stringify([{ role: 'system', content: prompt }, ...messages]),
+    );
     if (targetProvider.delay) {
       logger.debug(`[SimulatedUser] Sleeping for ${targetProvider.delay}ms`);
       await sleep(targetProvider.delay);
@@ -89,14 +92,19 @@ export class SimulatedUser implements ApiProvider {
     const maxTurns = this.maxTurns;
     let numRequests = 0;
     for (let i = 0; i < maxTurns; i++) {
-      messages = await this.sendMessageToUser(messages, userProvider);
-      messages = await this.sendMessageToAgent(messages, context.originalProvider);
-      numRequests += 1; // Only count the request to the agent.
-
-      const lastMessage = messages[messages.length - 1];
+      const messagesToUser = await this.sendMessageToUser(messages, userProvider);
+      const lastMessage = messagesToUser[messagesToUser.length - 1];
       if (lastMessage.content.includes('###STOP###')) {
         break;
       }
+
+      const messagesToAgent = await this.sendMessageToAgent(
+        messagesToUser,
+        context.originalProvider,
+        prompt,
+      );
+      messages = messagesToAgent;
+      numRequests += 1; // Only count the request to the agent.
     }
 
     return {

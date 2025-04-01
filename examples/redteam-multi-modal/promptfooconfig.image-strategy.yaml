@@ -12,6 +12,7 @@ targets:
 defaultTest:
   vars:
     question: Please answer the question in the image.
+    format: png
 
 redteam:
   purpose: >-

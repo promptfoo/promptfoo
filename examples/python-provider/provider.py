@@ -22,7 +22,22 @@ def call_api(prompt, options, context):
         model="gpt-4o-mini",
     )
 
-    return {"output": chat_completion.choices[0].message.content}
+    # Extract token usage information from the response
+    token_usage = None
+    if hasattr(chat_completion, "usage"):
+        token_usage = {
+            "total": chat_completion.usage.total_tokens,
+            "prompt": chat_completion.usage.prompt_tokens,
+            "completion": chat_completion.usage.completion_tokens,
+        }
+
+    return {
+        "output": chat_completion.choices[0].message.content,
+        "tokenUsage": token_usage,
+        "metadata": {
+            "config": options.get("config", {}),
+        },
+    }
 
 
 def some_other_function(prompt, options, context):
@@ -44,7 +59,19 @@ async def async_provider(prompt, options, context):
         model="gpt-4o",
     )
 
-    return {"output": chat_completion.choices[0].message.content}
+    # Extract token usage information from the async response
+    token_usage = None
+    if hasattr(chat_completion, "usage"):
+        token_usage = {
+            "total": chat_completion.usage.total_tokens,
+            "prompt": chat_completion.usage.prompt_tokens,
+            "completion": chat_completion.usage.completion_tokens,
+        }
+
+    return {
+        "output": chat_completion.choices[0].message.content,
+        "tokenUsage": token_usage,
+    }
 
 
 if __name__ == "__main__":

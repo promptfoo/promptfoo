@@ -131,7 +131,6 @@ describe('evaluator', () => {
         fetchWithCache: expect.any(Function),
         getCache: expect.any(Function),
       }),
-      expect.anything(),
     );
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
@@ -1579,7 +1578,6 @@ describe('evaluator', () => {
           },
         }),
       }),
-      expect.anything(),
     );
   });
 
@@ -1782,14 +1780,12 @@ describe('evaluator', () => {
       1,
       expect.stringContaining('User: Question 1A'),
       expect.anything(),
-      expect.anything(),
     );
 
     // First conversation, second question (should include history)
     expect(mockApiProvider.callApi).toHaveBeenNthCalledWith(
       2,
       expect.stringContaining('User: Question 1A\nAssistant: Test output\nUser: Question 1B'),
-      expect.anything(),
       expect.anything(),
     );
 
@@ -1798,14 +1794,12 @@ describe('evaluator', () => {
       3,
       expect.stringContaining('User: Question 2A'),
       expect.anything(),
-      expect.anything(),
     );
 
     // Second conversation, second question (should only include second conversation history)
     expect(mockApiProvider.callApi).toHaveBeenNthCalledWith(
       4,
       expect.stringContaining('User: Question 2A\nAssistant: Test output\nUser: Question 2B'),
-      expect.anything(),
       expect.anything(),
     );
   });
@@ -2114,11 +2108,7 @@ describe('runEval', () => {
     expect(result.success).toBe(true);
     expect(result.response?.output).toBe('Test output');
     expect(result.prompt.label).toBe('test-label');
-    expect(mockProvider.callApi).toHaveBeenCalledWith(
-      'Test prompt',
-      expect.anything(),
-      expect.anything(),
-    );
+    expect(mockProvider.callApi).toHaveBeenCalledWith('Test prompt', expect.anything());
   });
 
   it('should handle conversation history', async () => {
@@ -2172,11 +2162,7 @@ describe('runEval', () => {
     });
     const result = results[0];
     expect(result.success).toBe(true);
-    expect(mockProvider.callApi).toHaveBeenCalledWith(
-      'Using stored data',
-      expect.anything(),
-      expect.anything(),
-    );
+    expect(mockProvider.callApi).toHaveBeenCalledWith('Using stored data', expect.anything());
   });
 
   it('should store output in register when specified', async () => {

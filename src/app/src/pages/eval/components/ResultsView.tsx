@@ -509,9 +509,12 @@ export default function ResultsView({
           <EvalSelectorDialog
             open={evalSelectorDialogOpen}
             onClose={() => setEvalSelectorDialogOpen(false)}
-            recentEvals={recentEvals}
-            onRecentEvalSelected={onRecentEvalSelected}
+            onEvalSelected={(evalId) => {
+              setEvalSelectorDialogOpen(false);
+              onRecentEvalSelected(evalId);
+            }}
             title="Select an Eval"
+            focusedEvalId={evalId ?? undefined}
           />
         </Box>
         {evalId && <EvalIdChip evalId={evalId} onCopy={handleEvalIdCopyClick} />}
@@ -669,10 +672,7 @@ export default function ResultsView({
         onShare={handleShare}
       />
       <SettingsModal open={viewSettingsModalOpen} onClose={() => setViewSettingsModalOpen(false)} />
-      <EvalSelectorKeyboardShortcut
-        recentEvals={recentEvals}
-        onRecentEvalSelected={onRecentEvalSelected}
-      />
+      <EvalSelectorKeyboardShortcut onEvalSelected={onRecentEvalSelected} />
     </div>
   );
 }

@@ -141,13 +141,12 @@ export const ADDITIONAL_PLUGINS = [
   'cyberseceval',
   'debug-access',
   'divergent-repetition',
-  'tool-discovery',
   'harmbench',
   'imitation',
   'indirect-prompt-injection',
   'overreliance',
-  'prompt-extraction',
   'pliny',
+  'prompt-extraction',
   'rag-document-exfiltration',
   'rag-poisoning',
   'rbac',
@@ -157,6 +156,8 @@ export const ADDITIONAL_PLUGINS = [
   'sql-injection',
   'ssrf',
   'system-prompt-override',
+  'tool-discovery',
+  'unsafebench',
 ] as const;
 export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
@@ -165,7 +166,7 @@ export const CONFIG_REQUIRED_PLUGINS = ['intent', 'policy'] as const;
 export type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
 
 // Plugins that don't use strategies (standalone plugins)
-export const STRATEGY_EXEMPT_PLUGINS = ['pliny', 'system-prompt-override'] as const;
+export const STRATEGY_EXEMPT_PLUGINS = ['pliny', 'system-prompt-override', 'unsafebench'] as const;
 export type StrategyExemptPlugin = (typeof STRATEGY_EXEMPT_PLUGINS)[number];
 
 export type Plugin =
@@ -582,13 +583,13 @@ export const ADDITIONAL_STRATEGIES = [
 ] as const;
 export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
 
-export const ALL_STRATEGIES = [
-  ...['default', ...DEFAULT_STRATEGIES, ...ADDITIONAL_STRATEGIES].sort(),
-] as const;
+const _ALL_STRATEGIES = ['default', ...DEFAULT_STRATEGIES, ...ADDITIONAL_STRATEGIES] as const;
+export const ALL_STRATEGIES = [..._ALL_STRATEGIES].sort();
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
+  audio: 'Tests handling of audio content',
   base64: 'Tests handling of Base64-encoded malicious payloads',
   basic: 'Original plugin tests without any additional strategies or optimizations',
   beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
@@ -606,7 +607,6 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'divergent-repetition':
     'Tests for training data leaks through repetitive pattern exploitation that causes model divergence',
   'excessive-agency': 'Tests for unauthorized actions beyond defined system boundaries',
-  'tool-discovery': 'Tests for enumeration of available tools and function calls',
   foundation: 'Tests a collection of plugins designed to run against foundation models',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Dynamic multi-turn attack generation using adversarial techniques',
@@ -641,6 +641,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'harmful:weapons:ied': 'Tests handling of Improvised Explosive Devices',
   hex: 'Tests handling of hex-encoded malicious payloads',
   hijacking: 'Tests for unauthorized resource usage and purpose deviation',
+  image: 'Tests handling of image content',
   imitation: 'Tests for unauthorized impersonation of entities',
   'indirect-prompt-injection': 'Tests for injection vulnerabilities via untrusted variables',
   intent: 'Tests for manipulation of system behavior via specific prompts',
@@ -667,6 +668,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'rag-document-exfiltration': 'Tests for RAG document exfiltration',
   'rag-poisoning': 'Tests for vulnerabilities to RAG retrieval poisoning attacks',
   rbac: 'Tests role-based access control implementation',
+  'reasoning-dos':
+    'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
   religion: 'Tests handling of religious content and bias',
   retry:
     'Automatically incorporates previously failed test cases to build a regression testing suite',
@@ -675,13 +678,14 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'sql-injection': 'Tests for SQL injection vulnerabilities',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
-  'reasoning-dos':
-    'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
+  'tool-discovery': 'Tests for enumeration of available tools and function calls',
+  unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
 };
 
 // These names are displayed in risk cards and in the table
 export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'ascii-smuggling': 'ASCII Smuggling',
+  audio: 'Audio Content',
   base64: 'Base64 Payload Encoding',
   basic: 'Baseline Testing',
   beavertails: 'BeaverTails Dataset',
@@ -698,7 +702,6 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   default: 'Standard Security Suite',
   'divergent-repetition': 'Divergent Repetition',
   'excessive-agency': 'Excessive Agency',
-  'tool-discovery': 'Tool Discovery',
   foundation: 'Foundation Model Plugin Collection',
   gcg: 'Greedy Coordinate Gradient',
   goat: 'Generative Offensive Agent Tester',
@@ -733,6 +736,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'harmful:weapons:ied': 'Improvised Explosive Devices',
   hex: 'Hex Encoding',
   hijacking: 'Resource Hijacking',
+  image: 'Image Content',
   imitation: 'Entity Impersonation',
   'indirect-prompt-injection': 'Indirect Prompt Injection',
   intent: 'Intent',
@@ -758,6 +762,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'rag-document-exfiltration': 'RAG Document Exfiltration',
   'rag-poisoning': 'RAG Poisoning',
   rbac: 'RBAC Implementation',
+  'reasoning-dos': 'Reasoning DoS',
   religion: 'Religious Bias',
   retry: 'Regression Testing',
   rot13: 'ROT13 Payload Encoding',
@@ -765,7 +770,8 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'sql-injection': 'SQL Injection',
   ssrf: 'SSRF Vulnerability',
   'system-prompt-override': 'System Prompt Override',
-  'reasoning-dos': 'Reasoning DoS',
+  'tool-discovery': 'Tool Discovery',
+  unsafebench: 'UnsafeBench Dataset',
 };
 
 export enum Severity {
@@ -799,7 +805,6 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   default: Severity.Low,
   'divergent-repetition': Severity.Medium,
   'excessive-agency': Severity.Medium,
-  'tool-discovery': Severity.Low,
   foundation: Severity.Medium,
   hallucination: Severity.Medium,
   harmbench: Severity.Medium,
@@ -853,6 +858,8 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'sql-injection': Severity.High,
   ssrf: Severity.High,
   'system-prompt-override': Severity.High,
+  'tool-discovery': Severity.Low,
+  unsafebench: Severity.Medium,
 };
 
 export const riskCategories: Record<string, Plugin[]> = {
@@ -862,13 +869,13 @@ export const riskCategories: Record<string, Plugin[]> = {
     'bfla',
     'bola',
     'debug-access',
-    'tool-discovery',
     'hijacking',
     'indirect-prompt-injection',
     'rbac',
     'shell-injection',
     'sql-injection',
     'ssrf',
+    'tool-discovery',
 
     // Data protection
     'cross-session-leak',
@@ -899,6 +906,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:unsafe-practices',
     'harmful:violent-crime',
     'harmful:weapons:ied',
+    'unsafebench',
   ],
 
   'Trust & Safety': [
@@ -967,7 +975,6 @@ export const categoryAliases: Record<Plugin, string> = {
   default: 'Default',
   'divergent-repetition': 'DivergentRepetition',
   'excessive-agency': 'ExcessiveAgency',
-  'tool-discovery': 'ToolDiscovery',
   foundation: 'Foundation',
   hallucination: 'Hallucination',
   harmbench: 'Harmbench',
@@ -1016,12 +1023,14 @@ export const categoryAliases: Record<Plugin, string> = {
   'rag-document-exfiltration': 'RAG Document Exfiltration',
   'rag-poisoning': 'RAG Poisoning',
   rbac: 'RbacEnforcement',
+  'reasoning-dos': 'Reasoning DoS',
   religion: 'Religion',
   'shell-injection': 'ShellInjection',
   'sql-injection': 'SqlInjection',
   ssrf: 'SSRFEnforcement',
   'system-prompt-override': 'System Prompt Override',
-  'reasoning-dos': 'Reasoning DoS',
+  'tool-discovery': 'ToolDiscovery',
+  unsafebench: 'UnsafeBench',
 };
 
 export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
@@ -1049,8 +1058,6 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'divergent-repetition':
     'Tests repetitive patterns that can cause the model to diverge from normal behavior and leak training data',
   'excessive-agency': 'Evaluates system boundary enforcement and unauthorized action prevention',
-  'tool-discovery':
-    'Tests system protection against enumeration of available tools, functions, and API calls',
   foundation: 'Tests a collection of plugins designed to run against foundation models',
   hallucination: 'Tests system resilience against false information generation and propagation',
   harmbench:
@@ -1100,13 +1107,17 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'rag-document-exfiltration': 'Tests handling of RAG document exfiltration',
   'rag-poisoning': 'Tests resistance against poisoning attacks on RAG retrieval systems',
   rbac: 'Tests implementation of role-based access control mechanisms',
+  'reasoning-dos':
+    'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
   religion: 'Assesses handling of religious content and bias mitigation',
   'shell-injection': 'Tests protection against command injection vulnerabilities',
   'sql-injection': 'Evaluates resilience against SQL injection attacks',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
-  'reasoning-dos':
-    'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
+  'tool-discovery':
+    'Tests system protection against enumeration of available tools, functions, and API calls',
+  unsafebench:
+    'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {

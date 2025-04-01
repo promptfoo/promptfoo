@@ -23,8 +23,8 @@ tests:
   - vars:
       math_problem: 'Find all values of x that satisfy the equation: log₂(x+3) + log₂(x-1) = 3. Show all steps of your solution and verify your answers.'
     assert:
-      - type: contains
-        value: '-1 + 2√3'
+      - type: llm-rubric
+        value: 'Answer: -1 + 2√3'
 
   - vars:
       math_problem: 'In a right triangle, the hypotenuse is 13 cm, and one of the legs is 5 cm. A circle is inscribed in the triangle (touching all three sides). What is the radius of this inscribed circle? Show your complete solution with all geometric reasoning.'

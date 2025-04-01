@@ -14,19 +14,16 @@ export const handleGEval = async ({
     'G-Eval assertion type must have a string or array of strings value',
   );
 
-  const threshold = assertion.threshold || 0.7;
+  const threshold = assertion.threshold ?? 0.7;
 
   if (Array.isArray(renderedValue)) {
     const scores: number[] = [];
-    const failedReasons: string[] = [];
+    const reasons: string[] = [];
     for (const value of renderedValue) {
       const resp = await matchesGEval(value, prompt || '', outputString, threshold, test.options);
 
       scores.push(resp.score);
-
-      if (resp.score < threshold) {
-        failedReasons.push(resp.reason);
-      }
+      reasons.push(resp.reason);
     }
 
     const scoresSum = scores.reduce((a, b) => a + b, 0);
@@ -35,7 +32,7 @@ export const handleGEval = async ({
       assertion,
       pass: scoresSum / scores.length >= threshold,
       score: scoresSum / scores.length,
-      reason: failedReasons.join('\n'),
+      reason: reasons.join('\n\n'),
     };
   } else {
     const resp = await matchesGEval(

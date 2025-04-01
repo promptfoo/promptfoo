@@ -14,6 +14,7 @@ import { useTelemetry } from './hooks/useTelemetry';
 import DatasetsPage from './pages/datasets/page';
 import EvalCreatorPage from './pages/eval-creator/page';
 import EvalPage from './pages/eval/page';
+import EvalsIndexPage from './pages/evals/page';
 import HistoryPage from './pages/history/page';
 import LauncherPage from './pages/launcher/page';
 import LoginPage from './pages/login';
@@ -53,6 +54,7 @@ const router = createBrowserRouter(
           />
           <Route path="/datasets" element={<DatasetsPage />} />
           <Route path="/eval" element={<EvalPage />} />
+          <Route path="/evals" element={<EvalsIndexPage />} />
           <Route path="/eval/:evalId" element={<EvalPage />} />
 
           {/* Redirect legacy /progress route to /history (since v0.104.5) */}

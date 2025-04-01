@@ -1,5 +1,4 @@
 ---
-sidebar_label: How to red team RAG applications
 sidebar_position: 10000
 ---
 

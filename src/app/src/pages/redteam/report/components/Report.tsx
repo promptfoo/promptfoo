@@ -268,7 +268,9 @@ const App: React.FC = () => {
   let tools = [];
   if (Array.isArray(evalData.config.providers) && isProviderOptions(evalData.config.providers[0])) {
     const providerTools = evalData.config.providers[0].config?.tools;
-    tools = Array.isArray(providerTools) ? providerTools : [providerTools];
+    // If providerTools exists, convert it to an array (if it's not already)
+    // Otherwise, use an empty array
+    tools = providerTools ? (Array.isArray(providerTools) ? providerTools : [providerTools]) : [];
   }
 
   const handlePromptChipClick = () => {
@@ -351,7 +353,7 @@ const App: React.FC = () => {
                 style={{ cursor: prompts.length > 1 ? 'pointer' : 'default' }}
               />
             )}
-            {tools.length > -1 && (
+            {tools.length > 0 && (
               <Chip
                 size="small"
                 label={

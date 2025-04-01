@@ -1,5 +1,4 @@
 ---
-sidebar_label: How to red team Agents
 sidebar_position: 10001
 ---
 
