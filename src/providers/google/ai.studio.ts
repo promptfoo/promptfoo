@@ -13,7 +13,11 @@ import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { CHAT_MODELS } from './shared';
 import type { CompletionOptions } from './types';
-import { maybeCoerceToGeminiFormat } from './util';
+import {
+  type GeminiResponseData,
+  maybeCoerceToGeminiFormat,
+  stringifyCandidateContents,
+} from './util';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
 
@@ -236,18 +240,7 @@ export class GoogleChatProvider extends GoogleGenericProvider {
         'json',
         false,
       )) as {
-        data: {
-          candidates: Array<{
-            content: { parts: Array<{ text: string }> };
-            safetyRatings: Array<{ category: string; probability: string }>;
-          }>;
-          promptFeedback?: { safetyRatings: Array<{ category: string; probability: string }> };
-          usageMetadata?: {
-            promptTokenCount: number;
-            candidatesTokenCount: number;
-            totalTokenCount: number;
-          };
-        };
+        data: GeminiResponseData;
         cached: boolean;
       });
     } catch (err) {
@@ -257,20 +250,7 @@ export class GoogleChatProvider extends GoogleGenericProvider {
     }
 
     logger.debug(`\tGoogle API response: ${JSON.stringify(data)}`);
-    let output = '';
-    if (data.candidates && data.candidates[0]?.content?.parts) {
-      for (const candidate of data.candidates) {
-        if (candidate.content?.parts) {
-          for (const part of candidate.content.parts) {
-            if ('text' in part) {
-              output += part.text;
-            } else {
-              output += JSON.stringify(part);
-            }
-          }
-        }
-      }
-    }
+    const output = stringifyCandidateContents(data);
 
     if (!data?.candidates || data.candidates.length === 0) {
       return {
@@ -279,7 +259,6 @@ export class GoogleChatProvider extends GoogleGenericProvider {
     }
 
     const candidate = data.candidates[0];
-    // const parts = candidate.content.parts.map((part) => part.text).join('');
 
     try {
       let guardrails: GuardrailResponse | undefined;

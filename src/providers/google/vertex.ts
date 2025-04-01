@@ -25,6 +25,7 @@ import {
   maybeCoerceToGeminiFormat,
   type GeminiApiResponse,
   type GeminiResponseData,
+  stringifyCandidateContents,
 } from './util';
 
 const clone = Clone();
@@ -370,17 +371,7 @@ export class VertexChatProvider extends VertexGenericProvider {
         let output = '';
         for (const datum of dataWithResponse) {
           if (datum.candidates && datum.candidates[0]?.content?.parts) {
-            for (const candidate of datum.candidates) {
-              if (candidate.content?.parts) {
-                for (const part of candidate.content.parts) {
-                  if ('text' in part) {
-                    output += part.text;
-                  } else {
-                    output += JSON.stringify(part);
-                  }
-                }
-              }
-            }
+            output += stringifyCandidateContents(datum);
           } else if (datum.candidates && datum.candidates[0]?.finishReason === 'SAFETY') {
             if (cliState.config?.redteam) {
               // Refusals are not errors during redteams, they're actually successes.

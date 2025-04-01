@@ -9,6 +9,7 @@ jest.mock('../../../src/cache', () => ({
 }));
 
 jest.mock('../../../src/providers/google/util', () => ({
+  ...jest.requireActual('../../../src/providers/google/util'),
   maybeCoerceToGeminiFormat: jest.fn(),
 }));
 
@@ -17,10 +18,6 @@ jest.mock('../../../src/util/templates', () => ({
     renderString: jest.fn((str) => str),
   })),
 }));
-
-// jest.mock('csv-stringify/sync', () => ({
-//   stringify: jest.fn().mockReturnValue('mocked,csv,output'),
-// }));
 
 jest.mock('glob', () => ({
   globSync: jest.fn().mockReturnValue([]),
