@@ -580,11 +580,19 @@ export async function synthesize({
     } else {
       logger.info(`Generating tests for ${plugin.id}...`);
     }
-    const { action } = Plugins.find((p) => p.key === plugin.id) || {};
+
+    logger.debug(`Looking for plugin: ${plugin.id}`);
+    const pluginFactory = Plugins.find((p) => p.key === plugin.id);
+    const { action } = pluginFactory || {};
+
+    if (!pluginFactory) {
+      logger.error(`Plugin factory not found for ${plugin.id}`);
+    }
 
     if (action) {
-      logger.debug(`Generating tests for ${plugin.id}...`);
-      let pluginTests = await action({
+      logger.debug(`Found action for plugin ${plugin.id}, preparing to call it`);
+
+      const actionParams = {
         provider: redteamProvider,
         purpose,
         injectVar,
@@ -594,35 +602,73 @@ export async function synthesize({
           language,
           ...resolvePluginConfig(plugin.config),
         },
-      });
-
-      if (!Array.isArray(pluginTests) || pluginTests.length === 0) {
-        logger.warn(`Failed to generate tests for ${plugin.id}`);
-        pluginTests = [];
-      } else {
-        testCases.push(
-          ...pluginTests.map((t) => ({
-            ...t,
-            metadata: {
-              ...(t?.metadata || {}),
-              pluginId: plugin.id,
-              pluginConfig: resolvePluginConfig(plugin.config),
-            },
-          })),
-        );
-      }
-
-      pluginTests = Array.isArray(pluginTests) ? pluginTests : [];
-      if (showProgressBar) {
-        progressBar?.increment(plugin.numTests);
-      } else {
-        logger.info(`Generated ${pluginTests.length} tests for ${plugin.id}`);
-      }
-      logger.debug(`Added ${pluginTests.length} ${plugin.id} test cases`);
-      pluginResults[plugin.id] = {
-        requested: plugin.id === 'intent' ? pluginTests.length : plugin.numTests,
-        generated: pluginTests.length,
       };
+
+      logger.debug(
+        `Action params for ${plugin.id}: n=${actionParams.n}, injectVar=${actionParams.injectVar ? 'set' : 'not set'}`,
+      );
+
+      try {
+        logger.debug(`Calling action for plugin ${plugin.id}...`);
+        let pluginTests = await action(actionParams);
+
+        logger.debug(
+          `Action result for ${plugin.id}: ${pluginTests ? (Array.isArray(pluginTests) ? `array of length ${pluginTests.length}` : `non-array type: ${typeof pluginTests}`) : 'undefined'}`,
+        );
+
+        if (!Array.isArray(pluginTests) || pluginTests.length === 0) {
+          logger.warn(`Failed to generate tests for ${plugin.id}`);
+          pluginTests = [];
+        } else {
+          logger.debug(`Processing ${pluginTests.length} test cases from ${plugin.id}`);
+
+          try {
+            testCases.push(
+              ...pluginTests.map((t) => {
+                if (!t) {
+                  logger.error(`Null or undefined test case found in results from ${plugin.id}`);
+                  return {
+                    metadata: {
+                      pluginId: plugin.id,
+                      pluginConfig: resolvePluginConfig(plugin.config),
+                    },
+                  };
+                }
+
+                return {
+                  ...t,
+                  metadata: {
+                    ...(t?.metadata || {}),
+                    pluginId: plugin.id,
+                    pluginConfig: resolvePluginConfig(plugin.config),
+                  },
+                };
+              }),
+            );
+            logger.debug(`Successfully mapped and added test cases for ${plugin.id}`);
+          } catch (mapError) {
+            logger.error(`Error mapping test cases for ${plugin.id}: ${mapError}`);
+            logger.error(
+              `First test case structure: ${pluginTests.length > 0 ? JSON.stringify(pluginTests[0]) : 'No test cases'}`,
+            );
+          }
+        }
+
+        if (showProgressBar) {
+          progressBar?.increment(plugin.numTests);
+        } else {
+          logger.info(`Generated ${pluginTests.length} tests for ${plugin.id}`);
+        }
+        logger.debug(`Added ${pluginTests.length} ${plugin.id} test cases`);
+        pluginResults[plugin.id] = {
+          requested: plugin.id === 'intent' ? pluginTests.length : plugin.numTests,
+          generated: pluginTests.length,
+        };
+      } catch (e) {
+        logger.error(`Error generating tests for plugin ${plugin.id}: ${e}`);
+        pluginResults[plugin.id] = { requested: plugin.numTests, generated: 0 };
+        progressBar?.increment(plugin.numTests);
+      }
     } else if (plugin.id.startsWith('file://')) {
       try {
         const customPlugin = new CustomPlugin(redteamProvider, purpose, injectVar, plugin.id);
@@ -642,6 +688,7 @@ export async function synthesize({
       } catch (e) {
         logger.error(`Error generating tests for custom plugin ${plugin.id}: ${e}`);
         pluginResults[plugin.id] = { requested: plugin.numTests, generated: 0 };
+        progressBar?.increment(plugin.numTests);
       }
     } else {
       logger.warn(`Plugin ${plugin.id} not registered, skipping`);

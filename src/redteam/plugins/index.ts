@@ -65,12 +65,14 @@ async function fetchRemoteTestCases(
   n: number,
   config?: PluginConfig,
 ): Promise<TestCase[]> {
+  logger.debug(`fetchRemoteTestCases called for ${key}, n=${n}`);
+
   invariant(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
     'fetchRemoteTestCases should never be called when remote generation is disabled',
   );
 
-  const body = JSON.stringify({
+  const requestBody = {
     config,
     injectVar,
     n,
@@ -78,8 +80,24 @@ async function fetchRemoteTestCases(
     task: key,
     version: VERSION,
     email: getUserEmail(),
-  });
+  };
+
+  logger.debug(
+    `Remote generation request for ${key}: ${JSON.stringify(
+      {
+        task: requestBody.task,
+        n: requestBody.n,
+        config: requestBody.config,
+      },
+      null,
+      2,
+    )}`,
+  );
+
+  const body = JSON.stringify(requestBody);
+
   try {
+    logger.debug(`Fetching from ${getRemoteGenerationUrl()} for ${key}`);
     const { data } = await fetchWithCache(
       getRemoteGenerationUrl(),
       {
@@ -96,6 +114,7 @@ async function fetchRemoteTestCases(
     return ret;
   } catch (err) {
     logger.error(`Error generating test cases for ${key}: ${err}`);
+    logger.error(`Stack trace: ${err instanceof Error ? err.stack : 'No stack trace'}`);
     return [];
   }
 }
@@ -242,25 +261,57 @@ function createRemotePlugin<T extends PluginConfig>(
     key,
     validate: validate as ((config: PluginConfig) => void) | undefined,
     action: async ({ purpose, injectVar, n, config }: PluginActionParams) => {
+      logger.debug(`Starting action for plugin ${key} with purpose: ${purpose.slice(0, 50)}...`);
+      logger.debug(`Plugin config: ${JSON.stringify(config || {}, null, 2)}`);
+
       if (neverGenerateRemote()) {
         throw new Error(`${key} plugin requires remote generation to be enabled`);
       }
-      const testCases: TestCase[] = await fetchRemoteTestCases(key, purpose, injectVar, n, config);
-      const testsWithMetadata = testCases.map((testCase) => ({
-        ...testCase,
-        metadata: {
-          ...testCase.metadata,
-          pluginId: getShortPluginId(key),
-        },
-      }));
 
-      if (key.startsWith('harmful:')) {
-        return testsWithMetadata.map((testCase) => ({
+      try {
+        logger.debug(`Calling fetchRemoteTestCases for ${key} with n=${n}`);
+        const testCases: TestCase[] = await fetchRemoteTestCases(
+          key,
+          purpose,
+          injectVar,
+          n,
+          config,
+        );
+
+        logger.debug(
+          `Received testCases: ${testCases ? `(length: ${testCases.length})` : 'undefined'}`,
+        );
+
+        if (!testCases) {
+          logger.error(`testCases is undefined for plugin ${key}`);
+          return [];
+        }
+
+        if (!Array.isArray(testCases)) {
+          logger.error(`testCases is not an array for plugin ${key}, type: ${typeof testCases}`);
+          return [];
+        }
+
+        const testsWithMetadata = testCases.map((testCase) => ({
           ...testCase,
-          assert: getHarmfulAssertions(key as HarmPlugin),
+          metadata: {
+            ...testCase.metadata,
+            pluginId: getShortPluginId(key),
+          },
         }));
+
+        if (key.startsWith('harmful:')) {
+          return testsWithMetadata.map((testCase) => ({
+            ...testCase,
+            assert: getHarmfulAssertions(key as HarmPlugin),
+          }));
+        }
+        return testsWithMetadata;
+      } catch (error) {
+        logger.error(`Error in plugin ${key}: ${error}`);
+        logger.error(`Stack trace: ${error instanceof Error ? error.stack : 'No stack trace'}`);
+        return [];
       }
-      return testsWithMetadata;
     },
   };
 }
