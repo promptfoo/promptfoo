@@ -1,11 +1,5 @@
-import type {
-  ApiProvider,
-  ProviderOptions,
-} from '../types/providers';
-import type {
-  Plugin,
-  Severity,
-} from './constants';
+import type { ApiProvider, ProviderOptions } from '../types/providers';
+import type { Plugin, Severity } from './constants';
 
 // Base types
 export type RedteamObjectConfig = Record<string, unknown>;

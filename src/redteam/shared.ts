@@ -3,12 +3,8 @@ import * as fs from 'fs';
 import yaml from 'js-yaml';
 import * as os from 'os';
 import * as path from 'path';
-
 import { doEval } from '../commands/eval';
-import logger, {
-  setLogCallback,
-  setLogLevel,
-} from '../logger';
+import logger, { setLogCallback, setLogLevel } from '../logger';
 import type Eval from '../models/eval';
 import { createShareableUrl } from '../share';
 import { isRunningUnderNpx } from '../util';
@@ -40,15 +36,15 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   }
 
   let redteamConfig;
-  
+
   if (options.skipGeneration) {
     logger.info('Skipping test generation phase as requested');
-    
+
     if (!fs.existsSync(redteamPath)) {
       logger.error('Cannot skip generation: no test cases file found');
       return;
     }
-    
+
     redteamConfig = yaml.load(fs.readFileSync(redteamPath, 'utf8'));
   } else {
     logger.info('Generating test cases...');
