@@ -152,25 +152,37 @@ describe('GoogleChatProvider', () => {
         systemInstruction: undefined,
       });
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-        data: {
-          candidates: [
-            {
-              content: {
-                parts: null,
-              },
+      const mockResponse = {
+        candidates: [
+          {
+            content: {
+              parts: null,
             },
-          ],
-        },
+          },
+        ],
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
         cached: false,
         status: 200,
         statusText: 'OK',
         headers: {},
       });
 
-      await expect(provider.callGemini('test prompt')).rejects.toThrow(
-        "Cannot read properties of null (reading 'map')",
-      );
+      const response = await provider.callGemini('test prompt');
+
+      expect(response).toEqual({
+        output: '',
+        tokenUsage: {
+          completion: undefined,
+          numRequests: 1,
+          prompt: undefined,
+          total: undefined,
+        },
+        raw: mockResponse,
+        cached: false,
+      });
     });
   });
 

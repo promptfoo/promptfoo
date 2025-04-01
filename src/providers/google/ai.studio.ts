@@ -194,6 +194,10 @@ export class GoogleChatProvider extends GoogleGenericProvider {
         ...this.config.generationConfig,
       },
       safetySettings: this.config.safetySettings,
+      ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
+      ...(this.config.tools
+        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(this.config.tools, context?.vars)) }
+        : {}),
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
     };
 
@@ -253,6 +257,20 @@ export class GoogleChatProvider extends GoogleGenericProvider {
     }
 
     logger.debug(`\tGoogle API response: ${JSON.stringify(data)}`);
+    let output = '';
+    if (data.candidates && data.candidates[0]?.content?.parts) {
+      for (const candidate of data.candidates) {
+        if (candidate.content?.parts) {
+          for (const part of candidate.content.parts) {
+            if ('text' in part) {
+              output += part.text;
+            } else {
+              output += JSON.stringify(part);
+            }
+          }
+        }
+      }
+    }
 
     if (!data?.candidates || data.candidates.length === 0) {
       return {
@@ -261,7 +279,7 @@ export class GoogleChatProvider extends GoogleGenericProvider {
     }
 
     const candidate = data.candidates[0];
-    const parts = candidate.content.parts.map((part) => part.text).join('');
+    // const parts = candidate.content.parts.map((part) => part.text).join('');
 
     try {
       let guardrails: GuardrailResponse | undefined;
@@ -281,7 +299,7 @@ export class GoogleChatProvider extends GoogleGenericProvider {
       }
 
       return {
-        output: parts,
+        output,
         tokenUsage: cached
           ? {
               cached: data.usageMetadata?.totalTokenCount,
