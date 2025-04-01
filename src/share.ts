@@ -393,3 +393,22 @@ export async function createShareableUrl(
 
   return showAuth ? fullUrl : stripAuthFromUrl(fullUrl);
 }
+
+export {
+  VERSION_SUPPORTS_CHUNKS,
+  isVersionGreaterOrEqual,
+  getTargetOpenSourceServerVersion,
+  targetOpenSourceServerCanAcceptChunks,
+  targetHostCanUseNewResults,
+  getResultSize,
+  calculateMedianResultSize,
+  createChunks,
+  sendInitialEvalData,
+  sendChunkOfResults,
+  rollbackEval,
+  sendChunkedResults,
+  sendEvalResults,
+  handleEmailCollection,
+  getApiConfig,
+  handleLegacyResults,
+};

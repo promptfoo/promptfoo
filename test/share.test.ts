@@ -12,11 +12,17 @@ import { cloudCanAcceptChunkedResults } from '../src/util/cloud';
 
 const mockFetch = jest.fn();
 
-jest.mock('../src/globalConfig/cloud');
 jest.mock('../src/fetch', () => ({
   fetchWithProxy: jest.fn().mockImplementation((...args) => mockFetch(...args)),
 }));
 
+jest.mock('../src/constants', () => ({
+  DEFAULT_SHARE_VIEW_BASE_URL: 'https://app.promptfoo.dev',
+  SHARE_API_BASE_URL: 'https://api.promptfoo.dev',
+  SHARE_VIEW_BASE_URL: 'https://app.promptfoo.dev',
+}));
+
+jest.mock('../src/globalConfig/cloud');
 jest.mock('../src/globalConfig/accounts', () => ({
   getUserEmail: jest.fn(),
   setUserEmail: jest.fn(),
@@ -32,12 +38,6 @@ jest.mock('../src/envars', () => ({
   getEnvInt: jest.fn(),
   getEnvString: jest.fn().mockReturnValue(''),
   isCI: jest.fn(),
-}));
-
-jest.mock('../src/constants', () => ({
-  DEFAULT_SHARE_VIEW_BASE_URL: 'https://app.promptfoo.dev',
-  SHARE_API_BASE_URL: 'https://api.promptfoo.dev',
-  SHARE_VIEW_BASE_URL: 'https://app.promptfoo.dev',
 }));
 
 describe('stripAuthFromUrl', () => {
@@ -79,8 +79,8 @@ describe('stripAuthFromUrl', () => {
 describe('isSharingEnabled', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    // Reset cloudConfig mock
     jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    jest.requireMock('../src/constants').SHARE_API_BASE_URL = 'https://api.promptfoo.app';
   });
 
   it('returns true when sharing config is set in eval record', () => {
@@ -96,11 +96,7 @@ describe('isSharingEnabled', () => {
   });
 
   it('returns true when sharing env URL is set and not api.promptfoo.app', () => {
-    // Mock SHARE_API_BASE_URL to a custom value
-    jest.mock('../src/constants', () => ({
-      ...jest.requireActual('../src/constants'),
-      SHARE_API_BASE_URL: 'https://custom-api.example.com',
-    }));
+    jest.requireMock('../src/constants').SHARE_API_BASE_URL = 'https://custom-api.example.com';
 
     const mockEval: Partial<Eval> = {
       config: {},
@@ -121,12 +117,6 @@ describe('isSharingEnabled', () => {
   });
 
   it('returns false when no sharing options are enabled', () => {
-    // Mock SHARE_API_BASE_URL to default value
-    jest.mock('../src/constants', () => ({
-      ...jest.requireActual('../src/constants'),
-      SHARE_API_BASE_URL: 'https://api.promptfoo.app',
-    }));
-
     const mockEval: Partial<Eval> = {
       config: {},
     };
@@ -148,7 +138,6 @@ describe('isSharingEnabled', () => {
 describe('determineShareDomain', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    // Reset the mock to return empty string for all environment variables
     jest.requireMock('../src/envars').getEnvString.mockImplementation((_key: string) => '');
   });
 
@@ -236,9 +225,7 @@ describe('determineShareDomain', () => {
 describe('createShareableUrl', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    // Reset the mock to return empty string for all environment variables
     jest.requireMock('../src/envars').getEnvString.mockImplementation((_key: string) => '');
-    // Setup default successful response
     mockFetch.mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ id: 'mock-eval-id' }),
@@ -284,10 +271,7 @@ describe('createShareableUrl', () => {
 
       jest.mocked(getUserEmail).mockReturnValue('test@example.com');
       jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
-      // Reset the environment variable mock
       jest.requireMock('../src/envars').getEnvString.mockImplementation((_key: string) => '');
-
-      // Reset fetch mock between tests
       mockFetch.mockReset();
     });
 
@@ -297,7 +281,6 @@ describe('createShareableUrl', () => {
       jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
       jest.mocked(cloudCanAcceptChunkedResults).mockResolvedValue(false);
 
-      // Mock successful response
       mockFetch.mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({ id: 'mock-eval-id' }),
@@ -305,7 +288,6 @@ describe('createShareableUrl', () => {
 
       await createShareableUrl(mockEval as Eval);
 
-      // Verify sendEvalResults was used (not chunked)
       expect(mockEval.loadResults).toHaveBeenCalledTimes(1);
       expect(mockFetch).toHaveBeenCalledWith(
         'https://api.example.com/results',
@@ -322,7 +304,6 @@ describe('createShareableUrl', () => {
       jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
       jest.mocked(cloudCanAcceptChunkedResults).mockResolvedValue(true);
 
-      // Mock successful responses for initial request and chunk
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
@@ -335,7 +316,6 @@ describe('createShareableUrl', () => {
 
       await createShareableUrl(mockEval as Eval);
 
-      // Verify chunks were sent
       expect(mockEval.loadResults).toHaveBeenCalledTimes(1);
       expect(mockFetch).toHaveBeenCalledWith(
         'https://api.example.com/results',
@@ -356,7 +336,6 @@ describe('createShareableUrl', () => {
     it('sends regular eval when open source version is older than supported', async () => {
       jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
 
-      // Mock both the health check and eval submission responses
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
@@ -377,7 +356,6 @@ describe('createShareableUrl', () => {
 
       const result = await createShareableUrl(mockEval as Eval);
 
-      // Verify sendEvalResults was used (not chunked)
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining('/api/eval'),
         expect.objectContaining({
@@ -391,7 +369,6 @@ describe('createShareableUrl', () => {
     it('sends chunked eval when open source version is newer than supported', async () => {
       jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
 
-      // Mock health check, initial eval submission, and chunk submission responses
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
@@ -412,7 +389,6 @@ describe('createShareableUrl', () => {
 
       const result = await createShareableUrl(mockEval as Eval);
 
-      // Verify chunks were sent
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining('/api/eval'),
         expect.objectContaining({
@@ -431,7 +407,6 @@ describe('createShareableUrl', () => {
     });
   });
 
-  // Add test for custom domain
   it('creates URL with custom domain from environment variables', async () => {
     jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
 
@@ -454,7 +429,6 @@ describe('createShareableUrl', () => {
       getTable: jest.fn().mockResolvedValue([]),
     };
 
-    // Mock the health check and response
     mockFetch
       .mockResolvedValueOnce({
         ok: true,
@@ -470,8 +444,6 @@ describe('createShareableUrl', () => {
       });
 
     const result = await createShareableUrl(mockEval as Eval);
-
-    // Verify the URL uses the custom domain
     expect(result).toBe(`${customDomain}/eval/?evalId=mock-eval-id`);
   });
 });
