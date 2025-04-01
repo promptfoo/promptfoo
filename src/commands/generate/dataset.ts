@@ -3,11 +3,10 @@ import type { Command } from 'commander';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import { disableCache } from '../../cache';
-import { serializeObjectArrayAsCSV } from '../../csv';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { synthesizeFromTestSuite } from '../../testCase/synthesis';
-import type { TestSuite, UnifiedConfig } from '../../types';
+import type { TestSuite, UnifiedConfig, VarMapping } from '../../types';
 import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
 import { resolveConfigs } from '../../util/config/load';
 
@@ -24,6 +23,18 @@ interface DatasetGenerateOptions {
   defaultConfig: Partial<UnifiedConfig>;
   defaultConfigPath: string | undefined;
 }
+
+/**
+ * Serialize a list of VarMapping objects as a CSV string.
+ * @param vars - The list of VarMapping objects to serialize.
+ * @returns A CSV string.
+ */
+function serializeVarMappingAsCSV(vars: VarMapping[]): string {
+  const columnNames = Object.keys(vars[0]).join(',');
+  const rows = vars.map((result) => Object.values(result).join(',')).join('\n');
+  return [columnNames, rows].join('\n');
+}
+
 async function doGenerateDataset(options: DatasetGenerateOptions): Promise<void> {
   setupEnv(options.envFile);
   if (!options.cache) {
@@ -64,7 +75,7 @@ async function doGenerateDataset(options: DatasetGenerateOptions): Promise<void>
   if (options.output) {
     // Should the output be written as a YAML or CSV?
     if (options.output.endsWith('.csv')) {
-      fs.writeFileSync(options.output, serializeObjectArrayAsCSV(results));
+      fs.writeFileSync(options.output, serializeVarMappingAsCSV(results));
     } else if (options.output.endsWith('.yaml')) {
       fs.writeFileSync(options.output, yamlString);
     } else {
@@ -132,3 +143,5 @@ export function generateDatasetCommand(
     .option('--env-file, --env-path <path>', 'Path to .env file')
     .action((opts) => doGenerateDataset({ ...opts, defaultConfig, defaultConfigPath }));
 }
+
+export { serializeVarMappingAsCSV, doGenerateDataset };
