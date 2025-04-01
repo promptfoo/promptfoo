@@ -543,6 +543,17 @@ The tests file optionally supports several special columns:
 
 - `__expected`: A column that includes [test assertions](/docs/configuration/expected-outputs). This column lets you automatically mark output according to quality expectations.
   - For multiple assertions, use `__expected1`, `__expected2`, `__expected3`, etc.
+
+Example CSV with multiple assertions:
+
+```csv title="tests_with_assertions.csv"
+input,__expected1,__expected2,__expected3
+"What's the capital of France?","contains: Paris","llm-rubric: Is the response accurate and factual?","python: file://verify_capitals.py"
+"What is the sum of 15 + 27","equals: 42","contains: sum","javascript: file://check_math.js"
+```
+
+With this setup, each test will be evaluated against all assertions. The first test checks that the output contains "Paris", uses an LLM judge to verify accuracy, and runs a custom Python verification.
+
 - `__prefix`: This string is prepended to each prompt before it's sent to the API
 - `__suffix`: This string is appended to each prompt before it's sent to the API
 - `__description`: The test description

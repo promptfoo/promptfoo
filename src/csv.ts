@@ -150,7 +150,11 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     'metadata',
   ].map((k) => `_${k}`);
 
-  for (const [key, value] of Object.entries(row)) {
+  // Remove leading and trailing whitespace from keys, as leading/trailing whitespace interferes with
+  // meta key parsing.
+  const sanitizedRows = Object.entries(row).map(([key, value]) => [key.trim(), value]);
+
+  for (const [key, value] of sanitizedRows) {
     // Check for single underscore usage with reserved keys
     if (
       !key.startsWith('__') &&
