@@ -7,7 +7,7 @@ import {
 
 jest.mock('google-auth-library');
 
-describe('vertexUtil', () => {
+describe('util', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     (global as any).cachedAuth = undefined;

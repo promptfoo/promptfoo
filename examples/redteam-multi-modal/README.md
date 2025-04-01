@@ -1,6 +1,6 @@
 # redteam-multi-modal (Multi-Modal Red Team Testing)
 
-This example demonstrates how to use promptfoo's red teaming capabilities with multi-modal models, showing two different approaches to testing model safety and robustness against adversarial inputs involving images.
+This example demonstrates how to use promptfoo's red teaming capabilities with multi-modal models, showing three different approaches to testing model safety and robustness against adversarial inputs involving images.
 
 You can run this example with:
 
@@ -29,21 +29,32 @@ npx promptfoo@latest init --example redteam-multi-modal
    npx promptfoo@latest redteam eval -c redteam.image-strategy.yaml
    ```
 
-5. Review results in the promptfoo interface
+5. Run the UnsafeBench example:
+
+   ```bash
+   npx promptfoo@latest redteam eval -c redteam.unsafebench.yaml
+   ```
+
+6. Review results in the promptfoo interface
 
 ## Environment Variables
 
-This example requires the following environment variables:
+This example requires the following environment variables depending on which approach you're using:
 
-- `AWS_ACCESS_KEY_ID` - Your AWS access key for Amazon Bedrock
-- `AWS_SECRET_ACCESS_KEY` - Your AWS secret key for Amazon Bedrock
-- `AWS_REGION` - Your AWS region (e.g., `us-east-1`)
+- For the Static Image and Image Strategy examples:
+
+  - `AWS_ACCESS_KEY_ID` - Your AWS access key for Amazon Bedrock
+  - `AWS_SECRET_ACCESS_KEY` - Your AWS secret key for Amazon Bedrock
+  - `AWS_REGION` - Your AWS region (e.g., `us-east-1`)
+
+- For the UnsafeBench example:
+  - `HF_TOKEN` or `HF_API_TOKEN` - Your Hugging Face API token (requires access to the UnsafeBench dataset)
 
 You can set these in a `.env` file or directly in your environment.
 
 ## Description
 
-This example provides two different approaches to red team testing with multi-modal models:
+This example provides three different approaches to red team testing with multi-modal models:
 
 ### 1. Static Image Example (`promptfooconfig.static-image.yaml`)
 
@@ -65,12 +76,24 @@ Key features:
 - Converts harmful text content into images using the image strategy
 - Tests if harmful content embedded in images can bypass model safety filters
 
+### 3. UnsafeBench Example (`promptfooconfig.unsafebench.yaml`)
+
+This configuration uses the UnsafeBench plugin to evaluate multi-modal models against potentially unsafe imagery from the UnsafeBench dataset. It tests how well models detect and refuse to engage with harmful content across various categories.
+
+Key features:
+
+- Fetches images labeled as "unsafe" from the UnsafeBench dataset
+- Automatically converts images to base64 format (even if originally provided as URLs)
+- Filters images by category (Violence, Sexual, Hate, etc.)
+- Tests if models appropriately refuse to engage with harmful visual content
+
 ## How It Works: Understanding Variables and Injection
 
-In both examples, we work with prompt templates that have multiple variables:
+In all examples, we work with prompt templates that have multiple variables:
 
 - The static image example uses variables for both `image` and `question`
 - The image strategy example uses these same variables but injects content differently
+- The UnsafeBench example injects the unsafe image into the `image` variable
 
 A crucial concept in these examples is that **red teaming injects content into only one variable at a time** (specified by `injectVar` in the config). The remaining variables need default values, which are set in the `defaultTest` section:
 
@@ -122,6 +145,21 @@ npm install sharp # Required for the image strategy
 npx promptfoo@latest redteam eval -c redteam.image-strategy.yaml
 ```
 
+### Running the UnsafeBench Example
+
+First, ensure you have access to the [UnsafeBench dataset](https://huggingface.co/datasets/yiting/UnsafeBench) and set your Hugging Face token:
+
+```bash
+export HF_TOKEN=your_huggingface_token
+```
+
+Then run:
+
+```bash
+npx promptfoo@latest redteam generate -c promptfooconfig.unsafebench.yaml
+npx promptfoo@latest redteam eval -c redteam.yaml
+```
+
 ## Additional Configuration Options
 
 ### Purpose Statement
@@ -140,7 +178,7 @@ For more information on how the image strategy works, refer to the [Image Inputs
 
 ## Supported Models
 
-This example uses Amazon Bedrock's Nova model by default:
+This example uses Amazon Bedrock's Nova model by default for the first two examples:
 
 ```yaml
 targets:
@@ -183,3 +221,4 @@ After running these examples, consider:
 - **Sharp installation problems**: If you encounter issues installing the Sharp library, check the [Sharp installation guide](https://sharp.pixelplumbing.com/install)
 - **Image encoding errors**: Ensure your image paths are correct and image files are valid
 - **API rate limits**: Be mindful of your model provider's rate limits when running multiple tests
+- **Hugging Face authorization issues**: Make sure you have requested access to the UnsafeBench dataset and your token has the correct permissions

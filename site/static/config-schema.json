@@ -168,6 +168,9 @@
                             "HF_TOKEN": {
                               "type": "string"
                             },
+                            "HUGGING_FACE_HUB_TOKEN": {
+                              "type": "string"
+                            },
                             "LANGFUSE_HOST": {
                               "type": "string"
                             },
@@ -1118,7 +1121,8 @@
                           "ssrf",
                           "system-prompt-override",
                           "tool-discovery",
-                          "toxicity"
+                          "toxicity",
+                          "unsafebench"
                         ]
                       },
                       {
@@ -1258,7 +1262,8 @@
                               "ssrf",
                               "system-prompt-override",
                               "tool-discovery",
-                              "toxicity"
+                              "toxicity",
+                              "unsafebench"
                             ]
                           },
                           {

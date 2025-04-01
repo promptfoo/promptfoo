@@ -15,6 +15,7 @@ import MenuItem from '@mui/material/MenuItem';
 import Toolbar from '@mui/material/Toolbar';
 import Tooltip from '@mui/material/Tooltip';
 import { styled } from '@mui/material/styles';
+import { useUIStore } from '../stores/uiStore';
 import ApiSettingsModal from './ApiSettingsModal';
 import DarkMode from './DarkMode';
 import InfoModal from './InfoModal';
@@ -154,9 +155,14 @@ export default function Navigation({
 }) {
   const [showInfoModal, setShowInfoModal] = useState<boolean>(false);
   const [showApiSettingsModal, setShowApiSettingsModal] = useState<boolean>(false);
+  const isNavbarVisible = useUIStore((state) => state.isNavbarVisible);
 
   const handleModalToggle = () => setShowInfoModal((prevState) => !prevState);
   const handleApiSettingsModalToggle = () => setShowApiSettingsModal((prevState) => !prevState);
+
+  if (!isNavbarVisible) {
+    return null;
+  }
 
   return (
     <>

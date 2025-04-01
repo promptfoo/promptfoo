@@ -13,11 +13,15 @@ import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { CHAT_MODELS } from './shared';
 import type { CompletionOptions } from './types';
-import { maybeCoerceToGeminiFormat } from './util';
+import {
+  type GeminiResponseData,
+  maybeCoerceToGeminiFormat,
+  stringifyCandidateContents,
+} from './util';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
 
-class GoogleGenericProvider implements ApiProvider {
+class AIStudioGenericProvider implements ApiProvider {
   modelName: string;
 
   config: CompletionOptions;
@@ -75,7 +79,7 @@ class GoogleGenericProvider implements ApiProvider {
   }
 }
 
-export class GoogleChatProvider extends GoogleGenericProvider {
+export class AIStudioChatProvider extends AIStudioGenericProvider {
   constructor(
     modelName: string,
     options: { config?: CompletionOptions; id?: string; env?: EnvOverrides } = {},
@@ -194,6 +198,10 @@ export class GoogleChatProvider extends GoogleGenericProvider {
         ...this.config.generationConfig,
       },
       safetySettings: this.config.safetySettings,
+      ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
+      ...(this.config.tools
+        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(this.config.tools, context?.vars)) }
+        : {}),
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
     };
 
@@ -232,18 +240,7 @@ export class GoogleChatProvider extends GoogleGenericProvider {
         'json',
         false,
       )) as {
-        data: {
-          candidates: Array<{
-            content: { parts: Array<{ text: string }> };
-            safetyRatings: Array<{ category: string; probability: string }>;
-          }>;
-          promptFeedback?: { safetyRatings: Array<{ category: string; probability: string }> };
-          usageMetadata?: {
-            promptTokenCount: number;
-            candidatesTokenCount: number;
-            totalTokenCount: number;
-          };
-        };
+        data: GeminiResponseData;
         cached: boolean;
       });
     } catch (err) {
@@ -253,6 +250,10 @@ export class GoogleChatProvider extends GoogleGenericProvider {
     }
 
     logger.debug(`\tGoogle API response: ${JSON.stringify(data)}`);
+    let output;
+    if (data.candidates && data.candidates[0]?.content?.parts) {
+      output = stringifyCandidateContents(data);
+    }
 
     if (!data?.candidates || data.candidates.length === 0) {
       return {
@@ -261,7 +262,6 @@ export class GoogleChatProvider extends GoogleGenericProvider {
     }
 
     const candidate = data.candidates[0];
-    const parts = candidate.content.parts.map((part) => part.text).join('');
 
     try {
       let guardrails: GuardrailResponse | undefined;
@@ -281,7 +281,7 @@ export class GoogleChatProvider extends GoogleGenericProvider {
       }
 
       return {
-        output: parts,
+        output,
         tokenUsage: cached
           ? {
               cached: data.usageMetadata?.totalTokenCount,

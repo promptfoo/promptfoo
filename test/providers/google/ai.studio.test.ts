@@ -1,6 +1,7 @@
+import * as fs from 'fs';
 import * as cache from '../../../src/cache';
-import { GoogleChatProvider } from '../../../src/providers/google/ai.studio';
-import * as vertexUtil from '../../../src/providers/google/util';
+import { AIStudioChatProvider } from '../../../src/providers/google/ai.studio';
+import * as util from '../../../src/providers/google/util';
 import * as templates from '../../../src/util/templates';
 
 jest.mock('../../../src/cache', () => ({
@@ -8,6 +9,7 @@ jest.mock('../../../src/cache', () => ({
 }));
 
 jest.mock('../../../src/providers/google/util', () => ({
+  ...jest.requireActual('../../../src/providers/google/util'),
   maybeCoerceToGeminiFormat: jest.fn(),
 }));
 
@@ -17,11 +19,22 @@ jest.mock('../../../src/util/templates', () => ({
   })),
 }));
 
-describe('GoogleChatProvider', () => {
-  let provider: GoogleChatProvider;
+jest.mock('glob', () => ({
+  globSync: jest.fn().mockReturnValue([]),
+}));
+
+jest.mock('fs', () => ({
+  existsSync: jest.fn(),
+  readFileSync: jest.fn(),
+  writeFileSync: jest.fn(),
+  statSync: jest.fn(),
+}));
+
+describe('AIStudioChatProvider', () => {
+  let provider: AIStudioChatProvider;
 
   beforeEach(() => {
-    provider = new GoogleChatProvider('gemini-pro', {
+    provider = new AIStudioChatProvider('gemini-pro', {
       config: {
         temperature: 0.7,
         maxOutputTokens: 100,
@@ -40,21 +53,21 @@ describe('GoogleChatProvider', () => {
       } as any);
 
       // From config
-      const providerWithConfigKey = new GoogleChatProvider('gemini-pro', {
+      const providerWithConfigKey = new AIStudioChatProvider('gemini-pro', {
         config: { apiKey: 'config-key' },
       });
       expect(providerWithConfigKey.getApiKey()).toBe('rendered-config-key');
       expect(mockRenderString).toHaveBeenCalledWith('config-key', {});
 
       // From env override
-      const providerWithEnvOverride = new GoogleChatProvider('gemini-pro', {
+      const providerWithEnvOverride = new AIStudioChatProvider('gemini-pro', {
         env: { GOOGLE_API_KEY: 'env-key' },
       });
       expect(providerWithEnvOverride.getApiKey()).toBe('rendered-env-key');
       expect(mockRenderString).toHaveBeenCalledWith('env-key', {});
 
       // No API key
-      const providerWithNoKey = new GoogleChatProvider('gemini-pro');
+      const providerWithNoKey = new AIStudioChatProvider('gemini-pro');
       expect(providerWithNoKey.getApiKey()).toBeUndefined();
     });
 
@@ -65,21 +78,21 @@ describe('GoogleChatProvider', () => {
       } as any);
 
       // From config
-      const providerWithConfigHost = new GoogleChatProvider('gemini-pro', {
+      const providerWithConfigHost = new AIStudioChatProvider('gemini-pro', {
         config: { apiHost: 'custom.host.com' },
       });
       expect(providerWithConfigHost.getApiHost()).toBe('rendered-custom.host.com');
       expect(mockRenderString).toHaveBeenCalledWith('custom.host.com', {});
 
       // From env override
-      const providerWithEnvOverride = new GoogleChatProvider('gemini-pro', {
+      const providerWithEnvOverride = new AIStudioChatProvider('gemini-pro', {
         env: { GOOGLE_API_HOST: 'env.host.com' },
       });
       expect(providerWithEnvOverride.getApiHost()).toBe('rendered-env.host.com');
       expect(mockRenderString).toHaveBeenCalledWith('env.host.com', {});
 
       // Default host
-      const providerWithDefaultHost = new GoogleChatProvider('gemini-pro');
+      const providerWithDefaultHost = new AIStudioChatProvider('gemini-pro');
       expect(providerWithDefaultHost.getApiHost()).toBe(
         'rendered-generativelanguage.googleapis.com',
       );
@@ -88,14 +101,14 @@ describe('GoogleChatProvider', () => {
 
     it('should handle custom provider ID', () => {
       const customId = 'custom-google-provider';
-      const providerWithCustomId = new GoogleChatProvider('gemini-pro', {
+      const providerWithCustomId = new AIStudioChatProvider('gemini-pro', {
         id: customId,
       });
       expect(providerWithCustomId.id()).toBe(customId);
     });
 
     it('should handle configuration with safety settings', () => {
-      const providerWithSafety = new GoogleChatProvider('gemini-pro', {
+      const providerWithSafety = new AIStudioChatProvider('gemini-pro', {
         config: {
           safetySettings: [
             { category: 'HARM_CATEGORY_HARASSMENT', probability: 'BLOCK_MEDIUM_AND_ABOVE' },
@@ -108,18 +121,18 @@ describe('GoogleChatProvider', () => {
 
   describe('error handling', () => {
     it('should throw error when API key is not set', async () => {
-      provider = new GoogleChatProvider('gemini-pro', {});
+      provider = new AIStudioChatProvider('gemini-pro', {});
       await expect(provider.callApi('test')).rejects.toThrow('Google API key is not set');
     });
 
     it('should handle empty candidate responses', async () => {
-      const provider = new GoogleChatProvider('gemini-pro', {
+      const provider = new AIStudioChatProvider('gemini-pro', {
         config: {
           apiKey: 'test-key',
         },
       });
 
-      jest.mocked(vertexUtil.maybeCoerceToGeminiFormat).mockReturnValueOnce({
+      jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValueOnce({
         contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
         coerced: false,
         systemInstruction: undefined,
@@ -140,43 +153,55 @@ describe('GoogleChatProvider', () => {
     });
 
     it('should handle malformed API responses', async () => {
-      const provider = new GoogleChatProvider('gemini-pro', {
+      const provider = new AIStudioChatProvider('gemini-pro', {
         config: {
           apiKey: 'test-key',
         },
       });
 
-      jest.mocked(vertexUtil.maybeCoerceToGeminiFormat).mockReturnValueOnce({
+      jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValueOnce({
         contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
         coerced: false,
         systemInstruction: undefined,
       });
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-        data: {
-          candidates: [
-            {
-              content: {
-                parts: null,
-              },
+      const mockResponse = {
+        candidates: [
+          {
+            content: {
+              parts: null,
             },
-          ],
-        },
+          },
+        ],
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
         cached: false,
         status: 200,
         statusText: 'OK',
         headers: {},
       });
 
-      await expect(provider.callGemini('test prompt')).rejects.toThrow(
-        "Cannot read properties of null (reading 'map')",
-      );
+      const response = await provider.callGemini('test prompt');
+
+      expect(response).toEqual({
+        output: undefined,
+        tokenUsage: {
+          completion: undefined,
+          numRequests: 1,
+          prompt: undefined,
+          total: undefined,
+        },
+        raw: mockResponse,
+        cached: false,
+      });
     });
   });
 
   describe('non-Gemini models', () => {
     beforeEach(() => {
-      provider = new GoogleChatProvider('palm2', {
+      provider = new AIStudioChatProvider('palm2', {
         config: {
           temperature: 0.7,
           maxOutputTokens: 100,
@@ -185,7 +210,7 @@ describe('GoogleChatProvider', () => {
     });
 
     it('should handle errors for non-Gemini models', async () => {
-      const provider = new GoogleChatProvider('palm2', {
+      const provider = new AIStudioChatProvider('palm2', {
         config: {
           apiKey: 'test-key',
         },
@@ -208,7 +233,7 @@ describe('GoogleChatProvider', () => {
     });
 
     it('should call the correct API endpoint for non-Gemini models', async () => {
-      const provider = new GoogleChatProvider('palm2', {
+      const provider = new AIStudioChatProvider('palm2', {
         config: {
           apiKey: 'test-key',
         },
@@ -245,7 +270,7 @@ describe('GoogleChatProvider', () => {
       };
 
       jest.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      jest.mocked(vertexUtil.maybeCoerceToGeminiFormat).mockReturnValue({
+      jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
         contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
         coerced: false,
         systemInstruction: undefined,
@@ -291,7 +316,7 @@ describe('GoogleChatProvider', () => {
       };
 
       jest.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      jest.mocked(vertexUtil.maybeCoerceToGeminiFormat).mockReturnValue({
+      jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
         contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
         coerced: false,
         systemInstruction: undefined,
@@ -312,7 +337,7 @@ describe('GoogleChatProvider', () => {
     });
 
     it('should use v1alpha API for thinking model', async () => {
-      provider = new GoogleChatProvider('gemini-2.0-flash-thinking-exp');
+      provider = new AIStudioChatProvider('gemini-2.0-flash-thinking-exp');
       const mockResponse = {
         data: {
           candidates: [{ content: { parts: [{ text: 'thinking response' }] } }],
@@ -321,7 +346,7 @@ describe('GoogleChatProvider', () => {
       };
 
       jest.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      jest.mocked(vertexUtil.maybeCoerceToGeminiFormat).mockReturnValue({
+      jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
         contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
         coerced: false,
         systemInstruction: undefined,
@@ -352,7 +377,7 @@ describe('GoogleChatProvider', () => {
       };
 
       jest.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      jest.mocked(vertexUtil.maybeCoerceToGeminiFormat).mockReturnValue({
+      jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
         contents: [
           { role: 'system' as any, parts: [{ text: 'system instruction' }] },
           { role: 'user', parts: [{ text: 'user message' }] },
@@ -393,13 +418,13 @@ describe('GoogleChatProvider', () => {
     });
 
     it('should handle API call errors', async () => {
-      const provider = new GoogleChatProvider('gemini-pro', {
+      const provider = new AIStudioChatProvider('gemini-pro', {
         config: {
           apiKey: 'test-key',
         },
       });
 
-      jest.mocked(vertexUtil.maybeCoerceToGeminiFormat).mockReturnValueOnce({
+      jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValueOnce({
         contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
         coerced: false,
         systemInstruction: undefined,
@@ -412,7 +437,7 @@ describe('GoogleChatProvider', () => {
     });
 
     it('should handle response schema', async () => {
-      provider = new GoogleChatProvider('gemini-pro', {
+      provider = new AIStudioChatProvider('gemini-pro', {
         config: {
           responseSchema: '{"type":"object","properties":{"name":{"type":"string"}}}',
         },
@@ -431,7 +456,7 @@ describe('GoogleChatProvider', () => {
       };
 
       jest.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      jest.mocked(vertexUtil.maybeCoerceToGeminiFormat).mockReturnValue({
+      jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
         contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
         coerced: false,
         systemInstruction: undefined,
@@ -474,7 +499,7 @@ describe('GoogleChatProvider', () => {
       };
 
       jest.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      jest.mocked(vertexUtil.maybeCoerceToGeminiFormat).mockReturnValue({
+      jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
         contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
         coerced: false,
         systemInstruction: undefined,
@@ -490,7 +515,7 @@ describe('GoogleChatProvider', () => {
     });
 
     it('should handle structured output with response schema', async () => {
-      provider = new GoogleChatProvider('gemini-pro', {
+      provider = new AIStudioChatProvider('gemini-pro', {
         config: {
           generationConfig: {
             response_mime_type: 'application/json',
@@ -520,7 +545,7 @@ describe('GoogleChatProvider', () => {
       };
 
       jest.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      jest.mocked(vertexUtil.maybeCoerceToGeminiFormat).mockReturnValue({
+      jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
         contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
         coerced: false,
         systemInstruction: undefined,
@@ -555,7 +580,7 @@ describe('GoogleChatProvider', () => {
       };
 
       jest.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      jest.mocked(vertexUtil.maybeCoerceToGeminiFormat).mockReturnValue({
+      jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
         contents: [
           {
             role: 'user',
@@ -581,7 +606,7 @@ describe('GoogleChatProvider', () => {
     });
 
     it('should handle additional configuration options', async () => {
-      provider = new GoogleChatProvider('gemini-pro', {
+      provider = new AIStudioChatProvider('gemini-pro', {
         config: {
           generationConfig: {
             temperature: 0.9,
@@ -601,7 +626,7 @@ describe('GoogleChatProvider', () => {
       };
 
       jest.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      jest.mocked(vertexUtil.maybeCoerceToGeminiFormat).mockReturnValue({
+      jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
         contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
         coerced: false,
         systemInstruction: undefined,
@@ -623,8 +648,8 @@ describe('GoogleChatProvider', () => {
     });
 
     it('should handle API version selection', async () => {
-      const v1alphaProvider = new GoogleChatProvider('gemini-2.0-flash-thinking-exp');
-      const v1betaProvider = new GoogleChatProvider('gemini-pro');
+      const v1alphaProvider = new AIStudioChatProvider('gemini-2.0-flash-thinking-exp');
+      const v1betaProvider = new AIStudioChatProvider('gemini-pro');
 
       const mockResponse = {
         data: {
@@ -634,7 +659,7 @@ describe('GoogleChatProvider', () => {
       };
 
       jest.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      jest.mocked(vertexUtil.maybeCoerceToGeminiFormat).mockReturnValue({
+      jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
         contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
         coerced: false,
         systemInstruction: undefined,
@@ -657,6 +682,199 @@ describe('GoogleChatProvider', () => {
         expect.stringContaining('v1beta'),
         expect.any(Object),
         expect.any(Number),
+        'json',
+        false,
+      );
+    });
+
+    it('should handle function calling configuration', async () => {
+      const tools = [
+        {
+          functionDeclarations: [
+            {
+              name: 'get_weather',
+              description: 'Get weather information',
+              parameters: {
+                type: 'OBJECT' as const,
+                properties: {
+                  location: {
+                    type: 'STRING' as const,
+                    description: 'City name',
+                  },
+                },
+                required: ['location'],
+              },
+            },
+          ],
+        },
+      ];
+
+      provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          toolConfig: {
+            functionCallingConfig: {
+              mode: 'AUTO',
+              allowedFunctionNames: ['get_weather'],
+            },
+          },
+          tools,
+        },
+      });
+
+      const mockResponse = {
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    functionCall: {
+                      name: 'get_weather',
+                      args: { location: 'San Francisco' },
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+          usageMetadata: {
+            totalTokenCount: 15,
+            promptTokenCount: 8,
+            candidatesTokenCount: 7,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      };
+
+      jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValueOnce({
+        contents: [{ role: 'user', parts: [{ text: 'What is the weather in San Francisco?' }] }],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const response = await provider.callGemini('What is the weather in San Francisco?');
+
+      expect(response).toEqual({
+        cached: false,
+        output: JSON.stringify({
+          functionCall: {
+            name: 'get_weather',
+            args: { location: 'San Francisco' },
+          },
+        }),
+        raw: mockResponse.data,
+        tokenUsage: {
+          numRequests: 1,
+          total: 15,
+          prompt: 8,
+          completion: 7,
+        },
+      });
+
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        'https://rendered-generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=rendered-test-key',
+        {
+          body: '{"contents":[{"role":"user","parts":[{"text":"What is the weather in San Francisco?"}]}],"generationConfig":{},"toolConfig":{"functionCallingConfig":{"mode":"AUTO","allowedFunctionNames":["get_weather"]}},"tools":[{"functionDeclarations":[{"name":"get_weather","description":"Get weather information","parameters":{"type":"OBJECT","properties":{"location":{"type":"STRING","description":"City name"}},"required":["location"]}}]}]}',
+          headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+        },
+        300000,
+        'json',
+        false,
+      );
+    });
+
+    it('should load tools from external file and render variables', async () => {
+      const mockExternalTools = [
+        {
+          functionDeclarations: [
+            {
+              name: 'get_weather',
+              description: 'Get weather in San Francisco',
+              parameters: {
+                type: 'OBJECT' as const,
+                properties: {
+                  location: { type: 'STRING' as const },
+                },
+              },
+            },
+          ],
+        },
+      ];
+
+      // Mock file system operations
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockExternalTools));
+
+      provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          tools: 'file://tools.json' as any,
+        },
+      });
+
+      const mockResponse = {
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [{ text: 'response with tools' }],
+              },
+            },
+          ],
+          usageMetadata: {
+            totalTokenCount: 10,
+            promptTokenCount: 5,
+            candidatesTokenCount: 5,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      };
+
+      jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValueOnce({
+        contents: [{ role: 'user', parts: [{ text: 'What is the weather in San Francisco?' }] }],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const response = await provider.callGemini('test prompt', {
+        vars: { location: 'San Francisco' },
+        prompt: { raw: 'test prompt', label: 'test' },
+      });
+
+      expect(response).toEqual({
+        cached: false,
+        output: 'response with tools',
+        raw: mockResponse.data,
+        tokenUsage: {
+          numRequests: 1,
+          total: 10,
+          prompt: 5,
+          completion: 5,
+        },
+      });
+
+      expect(fs.existsSync).toHaveBeenCalledWith(expect.stringContaining('tools.json'));
+      expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('tools.json'), 'utf8');
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        'https://rendered-generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=rendered-test-key',
+        {
+          body: '{"contents":[{"role":"user","parts":[{"text":"What is the weather in San Francisco?"}]}],"generationConfig":{},"tools":[{"functionDeclarations":[{"name":"get_weather","description":"Get weather in San Francisco","parameters":{"type":"OBJECT","properties":{"location":{"type":"STRING"}}}}]}]}',
+          headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+        },
+        300000,
         'json',
         false,
       );
