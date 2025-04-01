@@ -224,6 +224,13 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
 export function serializeObjectArrayAsCSV(vars: object[]): string {
   invariant(vars.length > 0, 'No variables to serialize');
   const columnNames = Object.keys(vars[0]).join(',');
-  const rows = vars.map((result) => `"${Object.values(result).map(value => value.replace(/"/g, '""')).join('","')}"`).join('\n');
+  const rows = vars
+    .map(
+      (result) =>
+        `"${Object.values(result)
+          .map((value) => value.toString().replace(/"/g, '""'))
+          .join('","')}"`,
+    )
+    .join('\n');
   return [columnNames, rows].join('\n') + '\n';
 }

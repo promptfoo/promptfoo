@@ -537,4 +537,28 @@ describe('serializeObjectArrayAsCSV', () => {
       ]),
     ).toBe('name,age\n"John","30"\n"Jane","25"\n');
   });
+
+  it('should escape commas in values', () => {
+    expect(
+      serializeObjectArrayAsCSV([
+        { name: 'John, Smith', age: 30 },
+        { name: 'Jane, Doe', age: 25 },
+      ]),
+    ).toBe('name,age\n"John, Smith","30"\n"Jane, Doe","25"\n');
+  });
+
+  it('should escape double quotes in values', () => {
+    expect(
+      serializeObjectArrayAsCSV([
+        { name: 'John "Smithy" Smith', age: 30 },
+        { name: 'Jane "Doge" Doe', age: 25 },
+      ]),
+    ).toBe('name,age\n"John ""Smithy"" Smith","30"\n"Jane ""Doge"" Doe","25"\n');
+  });
+
+  it('should handle multiline values', () => {
+    expect(serializeObjectArrayAsCSV([{ name: 'John Smith\nSmithy', age: 30 }])).toBe(
+      'name,age\n"John Smith\nSmithy","30"\n',
+    );
+  });
 });
