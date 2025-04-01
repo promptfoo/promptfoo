@@ -518,6 +518,7 @@ export type StandaloneEval = CompletedPrompt & {
 
   pluginFailCount: Record<string, number>;
   pluginPassCount: Record<string, number>;
+  uuid: string;
 };
 
 const standaloneEvalCache = new NodeCache({ stdTTL: 60 * 60 * 2 }); // Cache for 2 hours
@@ -566,6 +567,7 @@ export async function getStandaloneEvals({
     .limit(limit)
     .all();
 
+  // TODO(Performance): Load all necessary data in one go rather than re-requesting each eval!
   const standaloneEvals = (
     await Promise.all(
       results.map(async (result) => {
@@ -618,6 +620,12 @@ export async function getStandaloneEvals({
     )
   ).flat();
 
-  standaloneEvalCache.set(cacheKey, standaloneEvals);
-  return standaloneEvals;
+  // Ensure each row has a UUID as the `id` and `evalId` properties are not unique!
+  const withUUIDs = standaloneEvals.map((eval_) => ({
+    ...eval_,
+    uuid: crypto.randomUUID(),
+  }));
+
+  standaloneEvalCache.set(cacheKey, withUUIDs);
+  return withUUIDs;
 }
