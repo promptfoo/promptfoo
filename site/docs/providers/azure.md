@@ -373,41 +373,6 @@ API response error: unsupported_parameter Unsupported parameter: 'max_tokens' is
 
 This means you're using a reasoning model without setting the `isReasoningModel` flag. Update your config as shown above.
 
-## Using DeepSeek Models
-
-Azure AI supports DeepSeek models such as DeepSeek-R1. Like other reasoning models, these require specific configuration:
-
-1. Set `isReasoningModel: true`
-2. Use `max_completion_tokens` instead of `max_tokens`
-3. Set API version to '2024-05-01-preview' (or latest available)
-
-```yaml title="promptfooconfig.yaml"
-providers:
-  - id: azure:chat:DeepSeek-R1
-    config:
-      apiHost: 'your-deployment-name.services.ai.azure.com'
-      apiVersion: '2024-05-01-preview'
-      isReasoningModel: true
-      max_completion_tokens: 2048
-      reasoning_effort: 'medium' # Options: low, medium, high
-```
-
-For model-graded assertions, you can configure your `defaultTest` to use the same provider:
-
-```yaml
-defaultTest:
-  options:
-    provider:
-      id: azure:chat:DeepSeek-R1
-      config:
-        apiHost: 'your-deployment-name.services.ai.azure.com'
-        apiVersion: '2024-05-01-preview'
-        isReasoningModel: true
-        max_completion_tokens: 2048
-```
-
-Adjust `reasoning_effort` to control response quality vs. speed: `low` for faster responses, `medium` for balanced performance (default), or `high` for more thorough reasoning on complex tasks.
-
 ## Assistants
 
 To eval an OpenAI assistant on Azure, first create a deployment for the assistant and create an assistant in the Azure web UI.
