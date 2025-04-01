@@ -32,7 +32,7 @@ import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
 import { EchoProvider } from './echo';
 import { FalImageGenerationProvider } from './fal';
 import { GolangProvider } from './golangCompletion';
-import { GoogleChatProvider } from './google/ai.studio';
+import { AIStudioChatProvider } from './google/ai.studio';
 import { GoogleMMLiveProvider } from './google/live';
 import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
 import { GroqProvider } from './groq';
@@ -907,7 +907,7 @@ export const providerMap: ProviderFactory[] = [
 
       // Default to regular Google API
       const modelName = splits[1];
-      return new GoogleChatProvider(modelName, providerOptions);
+      return new AIStudioChatProvider(modelName, providerOptions);
     },
   },
   {

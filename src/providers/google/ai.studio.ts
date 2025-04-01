@@ -79,7 +79,7 @@ class GoogleGenericProvider implements ApiProvider {
   }
 }
 
-export class GoogleChatProvider extends GoogleGenericProvider {
+export class AIStudioChatProvider extends GoogleGenericProvider {
   constructor(
     modelName: string,
     options: { config?: CompletionOptions; id?: string; env?: EnvOverrides } = {},
