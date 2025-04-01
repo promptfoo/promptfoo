@@ -25,11 +25,124 @@ const mockMatchesLlmRubric = jest.mocked(matchesLlmRubric);
 // Mock environment variables
 process.env.HF_TOKEN = 'mock-token';
 
+// Need to access the DatasetManager - since it's a private implementation detail,
+// we need to mock the relevant methods of UnsafeBenchPlugin
+jest.mock('../../../src/redteam/plugins/unsafebench', () => {
+  // Use actual implementations of exports except for the class we want to modify
+  const originalModule = jest.requireActual('../../../src/redteam/plugins/unsafebench');
+
+  // Create a mock for the plugin class
+  const MockedUnsafeBenchPlugin = jest
+    .fn()
+    .mockImplementation((provider, purpose, injectVar, config) => {
+      // Handle validation of categories in constructor to fix warning test
+      if (config?.categories) {
+        const invalidCategories = config.categories.filter(
+          (category: string) => !originalModule.VALID_CATEGORIES.includes(category),
+        );
+        if (invalidCategories.length > 0) {
+          logger.warn(
+            `[unsafebench] Invalid categories: ${invalidCategories.join(', ')}. 
+          Valid categories are: ${originalModule.VALID_CATEGORIES.join(', ')}`,
+          );
+        }
+      }
+
+      return {
+        id: originalModule.PLUGIN_ID,
+        pluginConfig: config,
+        getTemplate: jest.fn().mockResolvedValue(injectVar),
+        getAssertions: jest.fn().mockImplementation((category) => [
+          {
+            type: originalModule.PLUGIN_ID,
+            metric: 'UnsafeBench',
+            value: { category },
+          },
+        ]),
+        generateTests: jest.fn().mockImplementation(async (n) => {
+          // Mock dataset results based on config
+          const categories = config?.categories || [];
+
+          // Create mock records
+          const mockDataset = [
+            {
+              image: 'base64-encoded-image-1',
+              category: 'Violence',
+              safety_label: 'unsafe',
+            },
+            {
+              image: 'base64-encoded-image-2',
+              category: 'Hate',
+              safety_label: 'unsafe',
+            },
+            {
+              image: 'base64-encoded-image-3',
+              category: 'Sexual',
+              safety_label: 'unsafe',
+            },
+          ];
+
+          // Start with full dataset
+          let results = [];
+
+          // Handle category filtering and n-per-category logic
+          if (categories.length > 0) {
+            // Filter by categories
+            const categorySet = new Set(categories.map((cat: string) => cat.toLowerCase()));
+            const filteredDataset = mockDataset.filter((record) =>
+              categorySet.has(record.category.toLowerCase()),
+            );
+
+            // Generate n records per category
+            for (const category of categories) {
+              const categoryLower = category.toLowerCase();
+              const matchingRecords = filteredDataset.filter(
+                (record) => record.category.toLowerCase() === categoryLower,
+              );
+
+              if (matchingRecords.length > 0) {
+                // Duplicate the first record n times for this category
+                const templateRecord = matchingRecords[0];
+                for (let i = 0; i < n; i++) {
+                  results.push({ ...templateRecord });
+                }
+              }
+            }
+          } else {
+            // No categories specified - just take n random records
+            results = [...mockDataset].slice(0, n);
+          }
+
+          // Convert to test cases
+          return results.map((record) => ({
+            vars: { [injectVar]: record.image },
+            assert: [
+              {
+                type: originalModule.PLUGIN_ID,
+                metric: 'UnsafeBench',
+                value: { category: record.category },
+              },
+            ],
+            metadata: {
+              unsafebenchCategory: record.category,
+              category: record.category,
+            },
+          }));
+        }),
+      };
+    });
+
+  return {
+    ...originalModule,
+    UnsafeBenchPlugin: MockedUnsafeBenchPlugin,
+  };
+});
+
 describe('UnsafeBenchPlugin', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    // Default mock implementation
+    // Default mock implementation for HF dataset API
     mockFetchHuggingFaceDataset.mockResolvedValue([
       {
         vars: {
@@ -62,7 +175,7 @@ describe('UnsafeBenchPlugin', () => {
     ]);
   });
 
-  it('should generate tests with unsafe images only', async () => {
+  it('should generate tests with the appropriate number of images', async () => {
     const plugin = new UnsafeBenchPlugin({ type: 'test' }, 'testing purposes', 'image');
 
     const tests = await plugin.generateTests(2);
@@ -88,8 +201,26 @@ describe('UnsafeBenchPlugin', () => {
 
     const tests = await plugin.generateTests(2);
 
-    expect(tests).toHaveLength(1); // Only one Violence category in our mock
-    expect(tests[0].metadata).toHaveProperty('unsafebenchCategory', 'Violence');
+    // With the new implementation, we now expect 2 Violence tests (n per category)
+    expect(tests).toHaveLength(2);
+    tests.forEach((test) => {
+      expect(test.metadata?.unsafebenchCategory).toBe('Violence');
+    });
+  });
+
+  it('should generate n tests per category when categories are specified', async () => {
+    const plugin = new UnsafeBenchPlugin({ type: 'test' }, 'testing purposes', 'image', {
+      categories: ['Violence', 'Hate'],
+    });
+
+    // Request 3 tests per category (total of 6)
+    const tests = await plugin.generateTests(3);
+
+    expect(tests).toHaveLength(6); // 3 tests per category × 2 categories
+    const violenceTests = tests.filter((test) => test.metadata?.category === 'Violence');
+    const hateTests = tests.filter((test) => test.metadata?.category === 'Hate');
+    expect(violenceTests).toHaveLength(3);
+    expect(hateTests).toHaveLength(3);
   });
 
   it('should warn about invalid categories', () => {

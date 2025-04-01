@@ -67,234 +67,249 @@ async function fetchImageAsBase64(url: string): Promise<string | null> {
   }
 }
 
-async function fetchDataset(
-  limit: number,
-  config?: UnsafeBenchPluginConfig,
-): Promise<UnsafeBenchInput[]> {
-  try {
-    if (limit <= 0) {
-      logger.warn('[unsafebench] Invalid limit provided, defaulting to 1');
-      limit = 1;
+/**
+ * DatasetManager to handle UnsafeBench dataset caching and filtering
+ */
+class UnsafeBenchDatasetManager {
+  private static instance: UnsafeBenchDatasetManager | null = null;
+  private datasetCache: UnsafeBenchInput[] | null = null;
+
+  private constructor() {}
+
+  /**
+   * Get singleton instance
+   */
+  static getInstance(): UnsafeBenchDatasetManager {
+    if (!UnsafeBenchDatasetManager.instance) {
+      UnsafeBenchDatasetManager.instance = new UnsafeBenchDatasetManager();
+    }
+    return UnsafeBenchDatasetManager.instance;
+  }
+
+  /**
+   * Get records filtered by category, fetching dataset if needed
+   */
+  async getFilteredRecords(
+    limit: number,
+    config?: UnsafeBenchPluginConfig,
+  ): Promise<UnsafeBenchInput[]> {
+    await this.ensureDatasetLoaded();
+
+    if (!this.datasetCache || this.datasetCache.length === 0) {
+      throw new Error('Failed to load UnsafeBench dataset.');
     }
 
-    // Fetch dataset with a consistent multiplier regardless of categories
-    const fetchMultiplier = 5; // Use a consistent multiplier for all cases
-    logger.debug(
-      `[unsafebench] Fetching ${limit * fetchMultiplier} records from UnsafeBench dataset`,
-    );
-    const records = await fetchHuggingFaceDataset(DATASET_PATH, limit * fetchMultiplier);
+    // Find all available categories for logging
+    const availableCategories = Array.from(new Set(this.datasetCache.map((r) => r.category)));
+    logger.debug(`[unsafebench] Available categories: ${availableCategories.join(', ')}`);
 
-    if (!records || records.length === 0) {
-      throw new Error(
-        'No records returned from UnsafeBench dataset. Check your Hugging Face API token.',
-      );
-    }
-
-    // Log first record structure to help with debugging
-    if (records.length > 0) {
-      logger.debug(
-        `[unsafebench] First record structure: ${JSON.stringify(
-          records[0].vars,
-          (key, value) => {
-            // Truncate large values like image data for readability
-            if (typeof value === 'string' && value.length > 100) {
-              return `${value.substring(0, 100)}... (truncated, length: ${value.length})`;
-            }
-            return value;
-          },
-          2,
-        )}`,
-      );
-    }
-
-    // Filter for unsafe images only
-    const unsafeRecords = records
-      .filter((record) => {
-        const safetyLabel = record.vars?.safety_label;
-        return typeof safetyLabel === 'string' && safetyLabel.toLowerCase() === 'unsafe';
-      })
-      .map((record) => {
-        // Validate that image exists and handle both string and object formats
-        if (!record.vars?.image) {
-          logger.warn('[unsafebench] Record is missing image data, skipping');
-          return null;
-        }
-
-        // Function to process the record with a valid image
-        const processRecord = (imageData: string) => {
-          return {
-            image: imageData,
-            category: (record.vars?.category as string) || 'Unknown',
-            safety_label: (record.vars?.safety_label as string) || 'unsafe',
-          };
-        };
-
-        // Handle different image formats
-        if (typeof record.vars.image === 'string') {
-          // Check if the string is already a URL or base64
-          const imageStr = record.vars.image as string;
-          if (imageStr.startsWith('http')) {
-            // It's a URL, so we need to download and convert to base64
-            return { recordToProcess: processRecord, imageUrl: imageStr };
-          } else {
-            // It's already a suitable string (base64 or other format)
-            return processRecord(imageStr);
-          }
-        } else if (
-          typeof record.vars.image === 'object' &&
-          record.vars.image !== null &&
-          'src' in record.vars.image &&
-          typeof record.vars.image.src === 'string'
-        ) {
-          // It's an object with an image URL, we need to download and convert
-          const imageUrl = record.vars.image.src;
-          logger.debug('[unsafebench] Found image URL from src property');
-          return { recordToProcess: processRecord, imageUrl };
-        } else {
-          logger.warn('[unsafebench] Record has invalid image format, skipping');
-          return null;
-        }
-      })
-      .filter(
-        (
-          result,
-        ): result is
-          | { recordToProcess: (imageData: string) => UnsafeBenchInput; imageUrl: string }
-          | UnsafeBenchInput => result !== null,
-      );
-
-    logger.debug(
-      `[unsafebench] Found ${unsafeRecords.length} unsafe records from UnsafeBench dataset`,
-    );
-
-    // Add a step to process any records that need image fetching
-    // We'll use Promise.all to handle all image fetch operations in parallel
-    const processedRecordsPromise = Promise.all(
-      unsafeRecords.map(async (result) => {
-        // If the result is already a UnsafeBenchInput, return it directly
-        if (!('imageUrl' in result)) {
-          return result;
-        }
-
-        // Otherwise, we need to fetch the image
-        const { recordToProcess, imageUrl } = result;
-        const base64Image = await fetchImageAsBase64(imageUrl);
-
-        if (!base64Image) {
-          logger.warn(`[unsafebench] Failed to convert image URL to base64: ${imageUrl}`);
-          return null;
-        }
-
-        return recordToProcess(base64Image);
-      }),
-    );
-
-    // Wait for all image processing to complete
-    const processedRecords = (await processedRecordsPromise).filter(
-      (record): record is UnsafeBenchInput => record !== null,
-    );
-
-    logger.debug(`[unsafebench] Processed ${processedRecords.length} images to base64 format`);
-
-    // Log available categories to help with debugging
-    if (processedRecords.length > 0) {
-      const availableCategories = Array.from(new Set(processedRecords.map((r) => r.category)));
-      logger.debug(
-        `[unsafebench] Available categories before filtering: ${availableCategories.join(', ')}`,
-      );
-
-      if (config?.categories && config.categories.length > 0) {
-        logger.debug(`[unsafebench] Requested categories: ${config.categories.join(', ')}`);
-      }
-    }
-
-    // Continue with category filtering
-    let finalRecords = processedRecords;
+    // Clone the cache to avoid modifying it
+    let filteredRecords = [...this.datasetCache];
 
     // Filter by category if specified
     if (config?.categories && config.categories.length > 0) {
-      // Create a case-insensitive set of categories for more robust matching
-      const normalizedCategories = config.categories.map((cat) => cat.toLowerCase());
+      // Create a set of normalized categories for exact matching
+      const categorySet = new Set(config.categories.map((cat) => cat.toLowerCase()));
 
-      // Log category matching details for debugging
-      logger.debug(
-        `[unsafebench] Attempting to match categories: ${normalizedCategories.join(', ')}`,
-      );
+      logger.debug(`[unsafebench] Filtering by categories: ${config.categories.join(', ')}`);
 
-      // Find all available categories in normalized form
-      const availableNormalizedCategories = Array.from(
-        new Set(finalRecords.map((r) => r.category.toLowerCase())),
-      );
-
-      logger.debug(
-        `[unsafebench] Available normalized categories: ${availableNormalizedCategories.join(', ')}`,
-      );
-
-      // Check for any invalid categories
-      const invalidCategories = normalizedCategories.filter(
-        (cat) =>
-          !availableNormalizedCategories.some(
-            (avail) => avail.includes(cat) || cat.includes(avail),
-          ),
-      );
-
-      if (invalidCategories.length > 0) {
-        logger.warn(
-          `[unsafebench] Some requested categories may not match any available categories: ${invalidCategories.join(', ')}`,
-        );
-      }
-
-      // Use a more flexible matching approach
-      finalRecords = finalRecords.filter((record) => {
+      // Apply exact category matching
+      filteredRecords = filteredRecords.filter((record) => {
         const normalizedCategory = record.category.toLowerCase();
-        // Match if either string includes the other
-        return normalizedCategories.some(
-          (cat) => normalizedCategory.includes(cat) || cat.includes(normalizedCategory),
+
+        // Try exact match first
+        if (categorySet.has(normalizedCategory)) {
+          return true;
+        }
+
+        // Try matching against VALID_CATEGORIES (exact match with case insensitivity)
+        return VALID_CATEGORIES.some(
+          (validCat) =>
+            validCat.toLowerCase() === normalizedCategory &&
+            categorySet.has(validCat.toLowerCase()),
         );
       });
 
       logger.debug(
-        `[unsafebench] Filtered to ${finalRecords.length} records after category filtering for: ${config.categories.join(', ')}`,
+        `[unsafebench] Filtered to ${filteredRecords.length} records after category filtering for: ${config.categories.join(', ')}`,
+      );
+
+      // If we have categories, we need to ensure we have an equal distribution
+      // Group records by category
+      const recordsByCategory: Record<string, UnsafeBenchInput[]> = {};
+      for (const record of filteredRecords) {
+        const normalizedCategory = record.category.toLowerCase();
+        if (!recordsByCategory[normalizedCategory]) {
+          recordsByCategory[normalizedCategory] = [];
+        }
+        recordsByCategory[normalizedCategory].push(record);
+      }
+
+      // Calculate how many records per category
+      const perCategory = Math.floor(limit / config.categories.length);
+      const result: UnsafeBenchInput[] = [];
+
+      // Take an equal number from each category
+      for (const category of config.categories) {
+        const normalizedCategory = category.toLowerCase();
+        const categoryRecords = recordsByCategory[normalizedCategory] || [];
+
+        // Shuffle and take up to perCategory records
+        const shuffled = categoryRecords.sort(() => Math.random() - 0.5);
+        result.push(...shuffled.slice(0, perCategory));
+
+        logger.debug(
+          `[unsafebench] Selected ${Math.min(perCategory, shuffled.length)} records for category ${category}`,
+        );
+      }
+
+      // Return the results, limiting to the requested total
+      return result.slice(0, limit);
+    }
+
+    // If no categories specified, just shuffle and return the requested number
+    const shuffledRecords = filteredRecords.sort(() => Math.random() - 0.5).slice(0, limit);
+    logger.debug(`[unsafebench] Selected ${shuffledRecords.length} random unsafe records`);
+
+    return shuffledRecords;
+  }
+
+  /**
+   * Ensure the dataset is loaded into cache
+   */
+  private async ensureDatasetLoaded(): Promise<void> {
+    if (this.datasetCache !== null) {
+      logger.debug(`[unsafebench] Using cached dataset with ${this.datasetCache.length} records`);
+      return;
+    }
+
+    // Fetch a large dataset - aim to get the entire dataset if reasonable
+    const fetchLimit = 1000; // This should be enough to get most/all of the dataset
+    logger.debug(`[unsafebench] Fetching ${fetchLimit} records from UnsafeBench dataset`);
+
+    try {
+      const records = await fetchHuggingFaceDataset(DATASET_PATH, fetchLimit);
+
+      if (!records || records.length === 0) {
+        throw new Error(
+          'No records returned from UnsafeBench dataset. Check your Hugging Face API token.',
+        );
+      }
+
+      logger.debug(`[unsafebench] Fetched ${records.length} total records`);
+
+      // Filter for unsafe images only
+      const unsafeRecords = records
+        .filter((record) => {
+          const safetyLabel = record.vars?.safety_label;
+          return typeof safetyLabel === 'string' && safetyLabel.toLowerCase() === 'unsafe';
+        })
+        .map((record) => {
+          // Validate that image exists and handle both string and object formats
+          if (!record.vars?.image) {
+            logger.warn('[unsafebench] Record is missing image data, skipping');
+            return null;
+          }
+
+          // Function to process the record with a valid image
+          const processRecord = (imageData: string) => {
+            return {
+              image: imageData,
+              category: (record.vars?.category as string) || 'Unknown',
+              safety_label: (record.vars?.safety_label as string) || 'unsafe',
+            };
+          };
+
+          // Handle different image formats
+          if (typeof record.vars.image === 'string') {
+            // Check if the string is already a URL or base64
+            const imageStr = record.vars.image as string;
+            if (imageStr.startsWith('http')) {
+              // It's a URL, so we need to download and convert to base64
+              return { recordToProcess: processRecord, imageUrl: imageStr };
+            } else {
+              // It's already a suitable string (base64 or other format)
+              return processRecord(imageStr);
+            }
+          } else if (
+            typeof record.vars.image === 'object' &&
+            record.vars.image !== null &&
+            'src' in record.vars.image &&
+            typeof record.vars.image.src === 'string'
+          ) {
+            // It's an object with an image URL, we need to download and convert
+            const imageUrl = record.vars.image.src;
+            logger.debug('[unsafebench] Found image URL from src property');
+            return { recordToProcess: processRecord, imageUrl };
+          } else {
+            logger.warn('[unsafebench] Record has invalid image format, skipping');
+            return null;
+          }
+        })
+        .filter(
+          (
+            result,
+          ): result is
+            | { recordToProcess: (imageData: string) => UnsafeBenchInput; imageUrl: string }
+            | UnsafeBenchInput => result !== null,
+        );
+
+      logger.debug(
+        `[unsafebench] Found ${unsafeRecords.length} unsafe records from UnsafeBench dataset`,
+      );
+
+      // Add a step to process any records that need image fetching
+      // We'll use Promise.all to handle all image fetch operations in parallel
+      const processedRecordsPromise = Promise.all(
+        unsafeRecords.map(async (result) => {
+          // If the result is already a UnsafeBenchInput, return it directly
+          if (!('imageUrl' in result)) {
+            return result;
+          }
+
+          // Otherwise, we need to fetch the image
+          const { recordToProcess, imageUrl } = result;
+          const base64Image = await fetchImageAsBase64(imageUrl);
+
+          if (!base64Image) {
+            logger.warn(`[unsafebench] Failed to convert image URL to base64: ${imageUrl}`);
+            return null;
+          }
+
+          return recordToProcess(base64Image);
+        }),
+      );
+
+      // Wait for all image processing to complete
+      const processedRecords = (await processedRecordsPromise).filter(
+        (record): record is UnsafeBenchInput => record !== null,
+      );
+
+      logger.debug(`[unsafebench] Processed ${processedRecords.length} images to base64 format`);
+
+      // Store in cache
+      this.datasetCache = processedRecords;
+      logger.debug(`[unsafebench] Cached ${processedRecords.length} processed unsafe records`);
+    } catch (error) {
+      logger.error(
+        `[unsafebench] Error fetching dataset: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw new Error(
+        `Failed to fetch UnsafeBench dataset: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
-
-    // Shuffle and limit the records
-    const shuffledRecords = finalRecords.sort(() => Math.random() - 0.5).slice(0, limit);
-
-    if (shuffledRecords.length === 0) {
-      if (config?.categories && config.categories.length > 0) {
-        const categoriesStr = config.categories.join(', ');
-        const availableCategories = Array.from(new Set(processedRecords.map((r) => r.category)));
-        logger.debug(
-          `[unsafebench] Available categories in dataset: ${availableCategories.join(', ')}`,
-        );
-        throw new Error(
-          `No unsafe records found in UnsafeBench dataset for requested categories: ${categoriesStr}`,
-        );
-      } else {
-        throw new Error('No unsafe records found in UnsafeBench dataset');
-      }
-    }
-
-    logger.debug(`[unsafebench] Selected ${shuffledRecords.length} unsafe records`);
-    return shuffledRecords;
-  } catch (error) {
-    logger.error(
-      `[unsafebench] Error fetching dataset: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    throw new Error(
-      `Failed to fetch UnsafeBench dataset: ${error instanceof Error ? error.message : String(error)}`,
-    );
   }
 }
 
 export class UnsafeBenchPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
   private pluginConfig?: UnsafeBenchPluginConfig;
+  private datasetManager: UnsafeBenchDatasetManager;
 
   constructor(provider: any, purpose: string, injectVar: string, config?: UnsafeBenchPluginConfig) {
     super(provider, purpose, injectVar, config || {});
     this.pluginConfig = config;
+    this.datasetManager = UnsafeBenchDatasetManager.getInstance();
 
     // Validate categories if provided
     if (config?.categories) {
@@ -328,12 +343,21 @@ export class UnsafeBenchPlugin extends RedteamPluginBase {
 
   async generateTests(n: number, _delayMs: number = 0): Promise<TestCase[]> {
     try {
-      // Fetch and filter records
-      const records = await fetchDataset(n, this.pluginConfig);
+      // Determine how many images to fetch per category
+      const categories = this.pluginConfig?.categories || [];
 
-      if (records.length < n) {
+      let limit = n;
+      if (categories.length > 0) {
+        // If categories are specified, we want n images per category
+        limit = n * categories.length;
+      }
+
+      // Fetch and filter records
+      const records = await this.datasetManager.getFilteredRecords(limit, this.pluginConfig);
+
+      if (records.length < limit) {
         logger.warn(
-          `[unsafebench] Requested ${n} tests but only ${records.length} records were found`,
+          `[unsafebench] Requested ${limit} tests but only ${records.length} records were found`,
         );
       }
 
