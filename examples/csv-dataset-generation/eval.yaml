@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+prompts: file://travel-guide-prompts.csv
+
+providers:
+  - echo
+
+tests: file://travel-dataset.csv
