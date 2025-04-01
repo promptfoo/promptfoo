@@ -228,7 +228,7 @@ export async function doEval(
     const wantsToShare = cmdObj.share && config.sharing;
 
     const shareableUrl =
-      wantsToShare && cloudConfig.isEnabled() ? await createShareableUrl(evalRecord) : null;
+      wantsToShare && isSharingEnabled(evalRecord) ? await createShareableUrl(evalRecord) : null;
 
     let successes = 0;
     let failures = 0;
