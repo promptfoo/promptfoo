@@ -9,7 +9,7 @@ import RedteamIterativeProvider from '../redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree';
 import RedteamPandamoniumProvider from '../redteam/providers/pandamonium';
-import RedteamToolDiscoveryMultiProvider from '../redteam/providers/toolDiscoveryMulti';
+import { ServerToolDiscoveryMultiProvider } from '../redteam/providers/toolDiscoveryMulti';
 import type { LoadApiProviderContext } from '../types';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 import { isJavascriptFile } from '../util/file';
@@ -1082,7 +1082,7 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      return new RedteamToolDiscoveryMultiProvider(providerOptions.config);
+      return new ServerToolDiscoveryMultiProvider(providerOptions.config);
     },
   },
 ];
