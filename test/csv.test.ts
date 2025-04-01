@@ -162,6 +162,32 @@ describe('testCaseFromCsvRow', () => {
     const result = testCaseFromCsvRow(row);
     expect(result).toEqual(expectedTestCase);
   });
+
+  it('should properly trim whitespace from keys', () => {
+    const row: CsvRow = {
+      '  var1  ': 'value1',
+      ' __expected1 ': 'equals:Expected output',
+      __expected2: 'contains:part of output',
+      '  __metadata:category  ': 'test-category',
+    };
+
+    const expectedTestCase: TestCase = {
+      vars: {
+        var1: 'value1',
+      },
+      assert: [
+        { type: 'equals', value: 'Expected output' },
+        { type: 'contains', value: 'part of output' },
+      ],
+      options: {},
+      metadata: {
+        category: 'test-category',
+      },
+    };
+
+    const result = testCaseFromCsvRow(row);
+    expect(result).toEqual(expectedTestCase);
+  });
 });
 
 describe('assertionFromString', () => {
