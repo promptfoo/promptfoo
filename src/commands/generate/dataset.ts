@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import type { Command } from 'commander';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
+import invariant from 'src/util/invariant';
 import { disableCache } from '../../cache';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
@@ -30,6 +31,8 @@ interface DatasetGenerateOptions {
  * @returns A CSV string.
  */
 function serializeVarMappingAsCSV(vars: VarMapping[]): string {
+  invariant(vars.length > 0, 'No variables to serialize');
+
   const columnNames = Object.keys(vars[0]).join(',');
   const rows = vars.map((result) => Object.values(result).join(',')).join('\n');
   return [columnNames, rows].join('\n') + '\n';
