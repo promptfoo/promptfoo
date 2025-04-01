@@ -337,7 +337,7 @@ const sidebars = {
         {
           type: 'doc',
           label: 'Working with Multi-Modal Models',
-          id: 'guides/multimodal',
+          id: 'guides/multimodal-red-team',
         },
         {
           type: 'doc',
