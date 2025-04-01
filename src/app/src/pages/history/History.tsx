@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
+import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import { alpha, useTheme } from '@mui/material/styles';
@@ -13,10 +14,65 @@ import {
   GridToolbarColumnsButton,
   GridToolbarFilterButton,
   GridToolbarDensitySelector,
-  GridToolbarExport,
+  GridToolbarExportContainer,
+  GridCsvExportMenuItem,
+  GridPrintExportMenuItem,
   GridToolbarQuickFilter,
+  type GridExportMenuItemProps,
+  useGridApiContext,
+  gridFilteredSortedRowIdsSelector,
+  gridVisibleColumnFieldsSelector,
 } from '@mui/x-data-grid';
 import type { StandaloneEval } from '@promptfoo/util';
+
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+function JsonExportMenuItem(props: GridExportMenuItemProps<{}>) {
+  const apiRef = useGridApiContext();
+
+  const json = useMemo(() => {
+    // Select rows and columns
+    const filteredSortedRowIds = gridFilteredSortedRowIdsSelector(apiRef);
+    const visibleColumnsField = gridVisibleColumnFieldsSelector(apiRef);
+
+    // Format the data. Here we only keep the value
+    const data = filteredSortedRowIds.map((id) => {
+      const row: Record<string, any> = {};
+      visibleColumnsField.forEach((field) => {
+        row[field] = apiRef.current.getCellParams(id, field).value;
+      });
+      return row;
+    });
+
+    // Stringify with some indentation
+    return JSON.stringify(data, null, 2);
+  }, [apiRef]);
+
+  const handleClick = () => {
+    const blob = new Blob([json], { type: 'text/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'promptfoo-eval-history.json';
+    a.click();
+
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    });
+
+    // Hide the export menu after the export
+    props.hideMenu?.();
+  };
+
+  return <MenuItem onClick={handleClick}>Export JSON</MenuItem>;
+}
+
+const GridToolbarExport = () => (
+  <GridToolbarExportContainer>
+    <GridCsvExportMenuItem />
+    <JsonExportMenuItem />
+    <GridPrintExportMenuItem />
+  </GridToolbarExportContainer>
+);
 
 // TODO: Maintain exporting as JSON!
 function CustomToolbar() {
@@ -97,12 +153,15 @@ export default function History({
         headerName: 'Prompt',
         flex: 2,
         minWidth: 200,
+        // Ensure proper formatting for export:
+        valueGetter: (value: undefined, row: StandaloneEval) =>
+          `[${row.promptId?.slice(0, 6)}]: ${row.raw}`,
         renderCell: (params: GridRenderCellParams<StandaloneEval>) => (
           <>
             <Link to={`/prompts?id=${params.row.promptId || ''}`}>
               [{params.row.promptId?.slice(0, 6)}]
-            </Link>{' '}
-            {params.row.raw}
+            </Link>
+            <span style={{ marginLeft: 4 }}>{params.row.raw}</span>
           </>
         ),
       },
@@ -117,7 +176,7 @@ export default function History({
           const totalCount = testPassCount + testFailCount;
           return totalCount > 0 ? (testPassCount / totalCount) * 100 : 0;
         },
-        valueFormatter: (value: number) => (value ? value?.toFixed(2) : '-'),
+        valueFormatter: (value: number) => (value ? value?.toFixed(2) : 0),
       },
       {
         field: 'metrics.testPassCount',
