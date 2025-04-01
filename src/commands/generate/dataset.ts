@@ -2,7 +2,6 @@ import chalk from 'chalk';
 import type { Command } from 'commander';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
-import invariant from 'src/util/invariant';
 import { disableCache } from '../../cache';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
@@ -10,6 +9,7 @@ import { synthesizeFromTestSuite } from '../../testCase/synthesis';
 import type { TestSuite, UnifiedConfig, VarMapping } from '../../types';
 import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
 import { resolveConfigs } from '../../util/config/load';
+import invariant from '../../util/invariant';
 
 interface DatasetGenerateOptions {
   cache: boolean;
