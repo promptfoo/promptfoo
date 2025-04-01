@@ -3,8 +3,12 @@ import * as fs from 'fs';
 import yaml from 'js-yaml';
 import * as os from 'os';
 import * as path from 'path';
+
 import { doEval } from '../commands/eval';
-import logger, { setLogCallback, setLogLevel } from '../logger';
+import logger, {
+  setLogCallback,
+  setLogLevel,
+} from '../logger';
 import type Eval from '../models/eval';
 import { createShareableUrl } from '../share';
 import { isRunningUnderNpx } from '../util';
@@ -35,19 +39,31 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     logger.debug(`Live config: ${JSON.stringify(options.liveRedteamConfig, null, 2)}`);
   }
 
-  // Generate new test cases
-  logger.info('Generating test cases...');
-  const redteamConfig = await doGenerateRedteam({
-    ...options,
-    config: configPath,
-    output: redteamPath,
-    force: options.force,
-    verbose: options.verbose,
-    delay: options.delay,
-    inRedteamRun: true,
-    abortSignal: options.abortSignal,
-    progressBar: options.progressBar,
-  });
+  let redteamConfig;
+  
+  if (options.skipGeneration) {
+    logger.info('Skipping test generation phase as requested');
+    
+    if (!fs.existsSync(redteamPath)) {
+      logger.error('Cannot skip generation: no test cases file found');
+      return;
+    }
+    
+    redteamConfig = yaml.load(fs.readFileSync(redteamPath, 'utf8'));
+  } else {
+    logger.info('Generating test cases...');
+    redteamConfig = await doGenerateRedteam({
+      ...options,
+      config: configPath,
+      output: redteamPath,
+      force: options.force,
+      verbose: options.verbose,
+      delay: options.delay,
+      inRedteamRun: true,
+      abortSignal: options.abortSignal,
+      progressBar: options.progressBar,
+    });
+  }
 
   // Check if redteam.yaml exists before running evaluation
   if (!redteamConfig || !fs.existsSync(redteamPath)) {
