@@ -2,7 +2,12 @@ import type EvalResult from 'src/models/evalResult';
 import { getUserEmail } from '../src/globalConfig/accounts';
 import { cloudConfig } from '../src/globalConfig/cloud';
 import type Eval from '../src/models/eval';
-import { stripAuthFromUrl, createShareableUrl, determineShareDomain } from '../src/share';
+import {
+  stripAuthFromUrl,
+  createShareableUrl,
+  determineShareDomain,
+  isSharingEnabled,
+} from '../src/share';
 import { cloudCanAcceptChunkedResults } from '../src/util/cloud';
 
 const mockFetch = jest.fn();
@@ -68,6 +73,75 @@ describe('stripAuthFromUrl', () => {
     const input = 'http://user:pass@192.168.1.1:8080/path';
     const expected = 'http://192.168.1.1:8080/path';
     expect(stripAuthFromUrl(input)).toBe(expected);
+  });
+});
+
+describe('isSharingEnabled', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // Reset cloudConfig mock
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+  });
+
+  it('returns true when sharing config is set in eval record', () => {
+    const mockEval: Partial<Eval> = {
+      config: {
+        sharing: {
+          apiBaseUrl: 'https://custom-api.example.com',
+        },
+      },
+    };
+
+    expect(isSharingEnabled(mockEval as Eval)).toBe(true);
+  });
+
+  it('returns true when sharing env URL is set and not api.promptfoo.app', () => {
+    // Mock SHARE_API_BASE_URL to a custom value
+    jest.mock('../src/constants', () => ({
+      ...jest.requireActual('../src/constants'),
+      SHARE_API_BASE_URL: 'https://custom-api.example.com',
+    }));
+
+    const mockEval: Partial<Eval> = {
+      config: {},
+    };
+
+    expect(isSharingEnabled(mockEval as Eval)).toBe(true);
+  });
+
+  it('returns true when cloud sharing is enabled', () => {
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://cloud-api.example.com');
+
+    const mockEval: Partial<Eval> = {
+      config: {},
+    };
+
+    expect(isSharingEnabled(mockEval as Eval)).toBe(true);
+  });
+
+  it('returns false when no sharing options are enabled', () => {
+    // Mock SHARE_API_BASE_URL to default value
+    jest.mock('../src/constants', () => ({
+      ...jest.requireActual('../src/constants'),
+      SHARE_API_BASE_URL: 'https://api.promptfoo.app',
+    }));
+
+    const mockEval: Partial<Eval> = {
+      config: {},
+    };
+
+    expect(isSharingEnabled(mockEval as Eval)).toBe(false);
+  });
+
+  it('returns false when sharing config is not an object', () => {
+    const mockEval: Partial<Eval> = {
+      config: {
+        sharing: true,
+      },
+    };
+
+    expect(isSharingEnabled(mockEval as Eval)).toBe(false);
   });
 });
 
