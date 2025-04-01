@@ -32,7 +32,7 @@ interface DatasetGenerateOptions {
 function serializeVarMappingAsCSV(vars: VarMapping[]): string {
   const columnNames = Object.keys(vars[0]).join(',');
   const rows = vars.map((result) => Object.values(result).join(',')).join('\n');
-  return [columnNames, rows].join('\n');
+  return [columnNames, rows].join('\n') + '\n';
 }
 
 async function doGenerateDataset(options: DatasetGenerateOptions): Promise<void> {
