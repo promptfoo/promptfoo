@@ -21,7 +21,6 @@ interface ShareModalProps {
 const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, evalId, onShare }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [copied, setCopied] = useState(false);
-  const [showConfirmation, setShowConfirmation] = useState(false);
   const [showNeedsSignup, setShowNeedsSignup] = useState(false);
   const [shareUrl, setShareUrl] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
