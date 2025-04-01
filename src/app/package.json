@@ -22,6 +22,7 @@
     "@mui/material": "^6.1.10",
     "@mui/system": "^6.1.10",
     "@mui/x-charts": "^7.23.1",
+    "@mui/x-data-grid": "^7.28.2",
     "@tanstack/react-table": "^8.20.6",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
