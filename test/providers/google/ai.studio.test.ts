@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as cache from '../../../src/cache';
 import { GoogleChatProvider } from '../../../src/providers/google/ai.studio';
 import * as vertexUtil from '../../../src/providers/google/util';
@@ -8,6 +9,7 @@ jest.mock('../../../src/cache', () => ({
 }));
 
 jest.mock('../../../src/providers/google/util', () => ({
+  ...jest.requireActual('../../../src/providers/google/util'),
   maybeCoerceToGeminiFormat: jest.fn(),
 }));
 
@@ -15,6 +17,17 @@ jest.mock('../../../src/util/templates', () => ({
   getNunjucksEngine: jest.fn(() => ({
     renderString: jest.fn((str) => str),
   })),
+}));
+
+jest.mock('glob', () => ({
+  globSync: jest.fn().mockReturnValue([]),
+}));
+
+jest.mock('fs', () => ({
+  existsSync: jest.fn(),
+  readFileSync: jest.fn(),
+  writeFileSync: jest.fn(),
+  statSync: jest.fn(),
 }));
 
 describe('GoogleChatProvider', () => {
@@ -152,25 +165,37 @@ describe('GoogleChatProvider', () => {
         systemInstruction: undefined,
       });
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-        data: {
-          candidates: [
-            {
-              content: {
-                parts: null,
-              },
+      const mockResponse = {
+        candidates: [
+          {
+            content: {
+              parts: null,
             },
-          ],
-        },
+          },
+        ],
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
         cached: false,
         status: 200,
         statusText: 'OK',
         headers: {},
       });
 
-      await expect(provider.callGemini('test prompt')).rejects.toThrow(
-        "Cannot read properties of null (reading 'map')",
-      );
+      const response = await provider.callGemini('test prompt');
+
+      expect(response).toEqual({
+        output: undefined,
+        tokenUsage: {
+          completion: undefined,
+          numRequests: 1,
+          prompt: undefined,
+          total: undefined,
+        },
+        raw: mockResponse,
+        cached: false,
+      });
     });
   });
 
@@ -657,6 +682,199 @@ describe('GoogleChatProvider', () => {
         expect.stringContaining('v1beta'),
         expect.any(Object),
         expect.any(Number),
+        'json',
+        false,
+      );
+    });
+
+    it('should handle function calling configuration', async () => {
+      const tools = [
+        {
+          functionDeclarations: [
+            {
+              name: 'get_weather',
+              description: 'Get weather information',
+              parameters: {
+                type: 'OBJECT' as const,
+                properties: {
+                  location: {
+                    type: 'STRING' as const,
+                    description: 'City name',
+                  },
+                },
+                required: ['location'],
+              },
+            },
+          ],
+        },
+      ];
+
+      provider = new GoogleChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          toolConfig: {
+            functionCallingConfig: {
+              mode: 'AUTO',
+              allowedFunctionNames: ['get_weather'],
+            },
+          },
+          tools,
+        },
+      });
+
+      const mockResponse = {
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    functionCall: {
+                      name: 'get_weather',
+                      args: { location: 'San Francisco' },
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+          usageMetadata: {
+            totalTokenCount: 15,
+            promptTokenCount: 8,
+            candidatesTokenCount: 7,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      };
+
+      jest.mocked(vertexUtil.maybeCoerceToGeminiFormat).mockReturnValueOnce({
+        contents: [{ role: 'user', parts: [{ text: 'What is the weather in San Francisco?' }] }],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const response = await provider.callGemini('What is the weather in San Francisco?');
+
+      expect(response).toEqual({
+        cached: false,
+        output: JSON.stringify({
+          functionCall: {
+            name: 'get_weather',
+            args: { location: 'San Francisco' },
+          },
+        }),
+        raw: mockResponse.data,
+        tokenUsage: {
+          numRequests: 1,
+          total: 15,
+          prompt: 8,
+          completion: 7,
+        },
+      });
+
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        'https://rendered-generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=rendered-test-key',
+        {
+          body: '{"contents":[{"role":"user","parts":[{"text":"What is the weather in San Francisco?"}]}],"generationConfig":{},"toolConfig":{"functionCallingConfig":{"mode":"AUTO","allowedFunctionNames":["get_weather"]}},"tools":[{"functionDeclarations":[{"name":"get_weather","description":"Get weather information","parameters":{"type":"OBJECT","properties":{"location":{"type":"STRING","description":"City name"}},"required":["location"]}}]}]}',
+          headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+        },
+        300000,
+        'json',
+        false,
+      );
+    });
+
+    it('should load tools from external file and render variables', async () => {
+      const mockExternalTools = [
+        {
+          functionDeclarations: [
+            {
+              name: 'get_weather',
+              description: 'Get weather in San Francisco',
+              parameters: {
+                type: 'OBJECT' as const,
+                properties: {
+                  location: { type: 'STRING' as const },
+                },
+              },
+            },
+          ],
+        },
+      ];
+
+      // Mock file system operations
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockExternalTools));
+
+      provider = new GoogleChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          tools: 'file://tools.json' as any,
+        },
+      });
+
+      const mockResponse = {
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [{ text: 'response with tools' }],
+              },
+            },
+          ],
+          usageMetadata: {
+            totalTokenCount: 10,
+            promptTokenCount: 5,
+            candidatesTokenCount: 5,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      };
+
+      jest.mocked(vertexUtil.maybeCoerceToGeminiFormat).mockReturnValueOnce({
+        contents: [{ role: 'user', parts: [{ text: 'What is the weather in San Francisco?' }] }],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const response = await provider.callGemini('test prompt', {
+        vars: { location: 'San Francisco' },
+        prompt: { raw: 'test prompt', label: 'test' },
+      });
+
+      expect(response).toEqual({
+        cached: false,
+        output: 'response with tools',
+        raw: mockResponse.data,
+        tokenUsage: {
+          numRequests: 1,
+          total: 10,
+          prompt: 5,
+          completion: 5,
+        },
+      });
+
+      expect(fs.existsSync).toHaveBeenCalledWith(expect.stringContaining('tools.json'));
+      expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('tools.json'), 'utf8');
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        'https://rendered-generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=rendered-test-key',
+        {
+          body: '{"contents":[{"role":"user","parts":[{"text":"What is the weather in San Francisco?"}]}],"generationConfig":{},"tools":[{"functionDeclarations":[{"name":"get_weather","description":"Get weather in San Francisco","parameters":{"type":"OBJECT","properties":{"location":{"type":"STRING"}}}}]}]}',
+          headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+        },
+        300000,
         'json',
         false,
       );

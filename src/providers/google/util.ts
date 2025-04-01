@@ -65,6 +65,10 @@ export interface GeminiErrorResponse {
 export interface GeminiResponseData {
   candidates: Candidate[];
   usageMetadata?: GeminiUsageMetadata;
+  promptFeedback?: {
+    safetyRatings: Array<{ category: string; probability: string }>;
+    blockReason: any;
+  };
 }
 
 interface GeminiPromptFeedback {
@@ -252,4 +256,20 @@ export async function hasGoogleDefaultCredentials() {
   } catch {
     return false;
   }
+}
+
+export function stringifyCandidateContents(data: GeminiResponseData) {
+  let output = '';
+  for (const candidate of data.candidates) {
+    if (candidate.content?.parts) {
+      for (const part of candidate.content.parts) {
+        if ('text' in part) {
+          output += part.text;
+        } else {
+          output += JSON.stringify(part);
+        }
+      }
+    }
+  }
+  return output;
 }
