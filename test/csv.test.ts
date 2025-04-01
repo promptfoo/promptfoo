@@ -1,4 +1,4 @@
-import { assertionFromString, testCaseFromCsvRow } from '../src/csv';
+import { assertionFromString, serializeObjectArrayAsCSV, testCaseFromCsvRow } from '../src/csv';
 import logger from '../src/logger';
 import type { Assertion, CsvRow, TestCase } from '../src/types';
 
@@ -525,5 +525,40 @@ describe('assertionFromString', () => {
     expect(result.threshold).toBe(0);
     // This is especially important to test with the nullish coalescing operator (??),
     // since it behaves differently than logical OR (||) for the value 0
+  });
+});
+
+describe('serializeObjectArrayAsCSV', () => {
+  it('should serialize an array of objects as a CSV string', () => {
+    expect(
+      serializeObjectArrayAsCSV([
+        { name: 'John', age: 30 },
+        { name: 'Jane', age: 25 },
+      ]),
+    ).toBe('name,age\n"John","30"\n"Jane","25"\n');
+  });
+
+  it('should escape commas in values', () => {
+    expect(
+      serializeObjectArrayAsCSV([
+        { name: 'John, Smith', age: 30 },
+        { name: 'Jane, Doe', age: 25 },
+      ]),
+    ).toBe('name,age\n"John, Smith","30"\n"Jane, Doe","25"\n');
+  });
+
+  it('should escape double quotes in values', () => {
+    expect(
+      serializeObjectArrayAsCSV([
+        { name: 'John "Smithy" Smith', age: 30 },
+        { name: 'Jane "Doge" Doe', age: 25 },
+      ]),
+    ).toBe('name,age\n"John ""Smithy"" Smith","30"\n"Jane ""Doge"" Doe","25"\n');
+  });
+
+  it('should handle multiline values', () => {
+    expect(serializeObjectArrayAsCSV([{ name: 'John Smith\nSmithy', age: 30 }])).toBe(
+      'name,age\n"John Smith\nSmithy","30"\n',
+    );
   });
 });
