@@ -1,9 +1,8 @@
 import fs from 'fs';
 import yaml from 'js-yaml';
-import {
-  doGenerateDataset,
-  serializeVarMappingAsCSV,
-} from '../../../src/commands/generate/dataset';
+import { disableCache } from '../../../src/cache';
+import { doGenerateDataset } from '../../../src/commands/generate/dataset';
+import telemetry from '../../../src/telemetry';
 import { synthesizeFromTestSuite } from '../../../src/testCase/synthesis';
 import type { TestSuite, VarMapping } from '../../../src/types';
 import { resolveConfigs } from '../../../src/util/config/load';
@@ -12,47 +11,29 @@ jest.mock('fs');
 jest.mock('js-yaml');
 jest.mock('../../../src/testCase/synthesis');
 jest.mock('../../../src/util/config/load');
+jest.mock('../../../src/cache');
+jest.mock('../../../src/logger');
+jest.mock('../../../src/telemetry', () => ({
+  record: jest.fn(),
+  send: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock('../../../src/util', () => ({
+  isRunningUnderNpx: jest.fn().mockReturnValue(false),
+  printBorder: jest.fn(),
+  setupEnv: jest.fn(),
+}));
 
 describe('dataset generation', () => {
+  beforeAll(() => {
+    jest.useFakeTimers();
+  });
+
   beforeEach(() => {
     jest.resetAllMocks();
   });
 
-  describe('serializeVarMappingAsCSV', () => {
-    it('should serialize vars to CSV format', () => {
-      const vars: VarMapping[] = [
-        { name: 'John', age: '30' },
-        { name: 'Jane', age: '25' },
-      ];
-
-      const expected = 'name,age\nJohn,30\nJane,25';
-      expect(serializeVarMappingAsCSV(vars)).toBe(expected);
-    });
-
-    it('should handle empty vars array', () => {
-      const vars: VarMapping[] = [];
-      expect(() => serializeVarMappingAsCSV(vars)).toThrow(
-        'Cannot convert undefined or null to object',
-      );
-    });
-
-    it('should handle single var mapping', () => {
-      const vars: VarMapping[] = [{ name: 'John', age: '30' }];
-      const expected = 'name,age\nJohn,30';
-      expect(serializeVarMappingAsCSV(vars)).toBe(expected);
-    });
-
-    it('should handle vars with different properties', () => {
-      const vars: VarMapping[] = [
-        { name: 'John', age: '30' },
-        { name: 'Jane', age: '25', city: 'NY' },
-      ] as any;
-
-      const columnNames = Object.keys(vars[0]).join(',');
-      const rows = vars.map((result) => Object.values(result).join(',')).join('\n');
-      const expected = [columnNames, rows].join('\n');
-      expect(serializeVarMappingAsCSV(vars)).toBe(expected);
-    });
+  afterAll(() => {
+    jest.useRealTimers();
   });
 
   describe('doGenerateDataset', () => {
@@ -76,6 +57,8 @@ describe('dataset generation', () => {
       jest.mocked(fs.readFileSync).mockReturnValue('mock config content');
       jest.mocked(fs.existsSync).mockReturnValue(true);
       jest.mocked(fs.writeFileSync).mockImplementation(() => undefined);
+      jest.mocked(disableCache).mockImplementation(() => undefined);
+      jest.mocked(telemetry.send).mockResolvedValue(undefined);
 
       jest.mocked(resolveConfigs).mockResolvedValue({
         testSuite: mockTestSuite,
@@ -115,7 +98,7 @@ describe('dataset generation', () => {
         defaultConfigPath: configPath,
       });
 
-      const expectedCsv = 'var1\nvalue1\nvalue2';
+      const expectedCsv = 'var1\n"value1"\n"value2"\n';
       expect(fs.writeFileSync).toHaveBeenCalledWith('output.csv', expectedCsv);
     });
 
