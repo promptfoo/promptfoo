@@ -1,4 +1,4 @@
-import { assertionFromString, testCaseFromCsvRow } from '../src/csv';
+import { assertionFromString, serializeObjectArrayAsCSV, testCaseFromCsvRow } from '../src/csv';
 import logger from '../src/logger';
 import type { Assertion, CsvRow, TestCase } from '../src/types';
 
@@ -525,5 +525,16 @@ describe('assertionFromString', () => {
     expect(result.threshold).toBe(0);
     // This is especially important to test with the nullish coalescing operator (??),
     // since it behaves differently than logical OR (||) for the value 0
+  });
+});
+
+describe('serializeObjectArrayAsCSV', () => {
+  it('should serialize an array of objects as a CSV string', () => {
+    expect(
+      serializeObjectArrayAsCSV([
+        { name: 'John', age: 30 },
+        { name: 'Jane', age: 25 },
+      ]),
+    ).toBe('name,age\nJohn,30\nJane,25\n');
   });
 });
