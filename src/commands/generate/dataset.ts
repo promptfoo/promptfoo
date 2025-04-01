@@ -6,7 +6,7 @@ import { disableCache } from '../../cache';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { synthesizeFromTestSuite } from '../../testCase/synthesis';
-import type { TestSuite, UnifiedConfig } from '../../types';
+import type { TestSuite, UnifiedConfig, VarMapping } from '../../types';
 import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
 import { resolveConfigs } from '../../util/config/load';
 
@@ -22,6 +22,17 @@ interface DatasetGenerateOptions {
   write: boolean;
   defaultConfig: Partial<UnifiedConfig>;
   defaultConfigPath: string | undefined;
+}
+
+/**
+ * Serialize a list of VarMapping objects as a CSV string.
+ * @param vars - The list of VarMapping objects to serialize.
+ * @returns A CSV string.
+ */
+function serializeVarMappingAsCSV(vars: VarMapping[]): string {
+  const columnNames = Object.keys(vars[0]).join(',');
+  const rows = vars.map((result) => Object.values(result).join(',')).join('\n');
+  return [columnNames, rows].join('\n');
 }
 
 async function doGenerateDataset(options: DatasetGenerateOptions): Promise<void> {
@@ -62,7 +73,14 @@ async function doGenerateDataset(options: DatasetGenerateOptions): Promise<void>
   const configAddition = { tests: results.map((result) => ({ vars: result })) };
   const yamlString = yaml.dump(configAddition);
   if (options.output) {
-    fs.writeFileSync(options.output, yamlString);
+    // Should the output be written as a YAML or CSV?
+    if (options.output.endsWith('.csv')) {
+      fs.writeFileSync(options.output, serializeVarMappingAsCSV(results));
+    } else if (options.output.endsWith('.yaml')) {
+      fs.writeFileSync(options.output, yamlString);
+    } else {
+      throw new Error(`Unsupported output file type: ${options.output}`);
+    }
     printBorder();
     logger.info(`Wrote ${results.length} new test cases to ${options.output}`);
     printBorder();
@@ -113,7 +131,7 @@ export function generateDatasetCommand(
       'Additional instructions to follow while generating test cases',
     )
     .option('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
-    .option('-o, --output [path]', 'Path to output file')
+    .option('-o, --output [path]', 'Path to output file. Supports CSV and YAML output.')
     .option('-w, --write', 'Write results to promptfoo configuration file')
     .option(
       '--provider <provider>',
