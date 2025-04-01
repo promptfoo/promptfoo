@@ -25,6 +25,10 @@ import {
 } from '@mui/x-data-grid';
 import type { StandaloneEval } from '@promptfoo/util';
 
+type EvalRun = StandaloneEval & {
+  uuid: string;
+};
+
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 function JsonExportMenuItem(props: GridExportMenuItemProps<{}>) {
   const apiRef = useGridApiContext();
@@ -98,7 +102,7 @@ function CustomToolbar() {
 }
 
 interface HistoryProps {
-  data: StandaloneEval[];
+  data: EvalRun[];
   isLoading: boolean;
   error: string | null;
   showDatasetColumn?: boolean;
@@ -110,7 +114,7 @@ export default function History({
   error,
   showDatasetColumn = true,
 }: HistoryProps) {
-  const columns: GridColDef<StandaloneEval>[] = useMemo(
+  const columns: GridColDef<EvalRun>[] = useMemo(
     () => [
       {
         field: 'createdAt',
@@ -124,7 +128,7 @@ export default function History({
         headerName: 'Eval',
         flex: 1,
         minWidth: 120,
-        renderCell: (params: GridRenderCellParams<StandaloneEval>) => (
+        renderCell: (params: GridRenderCellParams<EvalRun>) => (
           <Link to={`/eval?evalId=${params.value || ''}`}>{params.value}</Link>
         ),
       },
@@ -135,7 +139,7 @@ export default function History({
               headerName: 'Dataset',
               flex: 1,
               minWidth: 100,
-              renderCell: (params: GridRenderCellParams<StandaloneEval>) => (
+              renderCell: (params: GridRenderCellParams<EvalRun>) => (
                 <Link to={`/datasets?id=${params.value || ''}`}>{params.value?.slice(0, 6)}</Link>
               ),
             },
@@ -153,9 +157,9 @@ export default function History({
         flex: 2,
         minWidth: 200,
         // Ensure proper formatting for export:
-        valueGetter: (value: undefined, row: StandaloneEval) =>
+        valueGetter: (value: undefined, row: EvalRun) =>
           `[${row.promptId?.slice(0, 6)}]: ${row.raw}`,
-        renderCell: (params: GridRenderCellParams<StandaloneEval>) => (
+        renderCell: (params: GridRenderCellParams<EvalRun>) => (
           <>
             <Link to={`/prompts?id=${params.row.promptId || ''}`}>
               [{params.row.promptId?.slice(0, 6)}]
@@ -169,7 +173,7 @@ export default function History({
         headerName: 'Pass Rate %',
         flex: 1,
         minWidth: 120,
-        valueGetter: (value: undefined, row: StandaloneEval) => {
+        valueGetter: (value: undefined, row: EvalRun) => {
           const testPassCount = row.metrics?.testPassCount ?? 0;
           const testFailCount = row.metrics?.testFailCount ?? 0;
           const totalCount = testPassCount + testFailCount;
@@ -182,7 +186,7 @@ export default function History({
         headerName: 'Pass Count',
         flex: 1,
         minWidth: 120,
-        valueGetter: (value: undefined, row: StandaloneEval) => row.metrics?.testPassCount,
+        valueGetter: (value: undefined, row: EvalRun) => row.metrics?.testPassCount,
         valueFormatter: (value: number) => value?.toString() ?? '-',
       },
       {
@@ -190,9 +194,9 @@ export default function History({
         headerName: 'Fail Count',
         flex: 1,
         minWidth: 120,
-        valueGetter: (value: undefined, row: StandaloneEval) =>
+        valueGetter: (value: undefined, row: EvalRun) =>
           (row.metrics?.testFailCount ?? 0) + (row.metrics?.testErrorCount ?? 0),
-        renderCell: (params: GridRenderCellParams<StandaloneEval>) => {
+        renderCell: (params: GridRenderCellParams<EvalRun>) => {
           const failCount = params.row.metrics?.testFailCount ?? 0;
           const errorCount = params.row.metrics?.testErrorCount ?? 0;
           return (
@@ -219,6 +223,8 @@ export default function History({
     ],
     [showDatasetColumn],
   );
+
+  console.log({ data });
 
   return (
     <Box
@@ -251,7 +257,7 @@ export default function History({
           rows={data}
           columns={columns}
           loading={isLoading}
-          getRowId={(row) => row.createdAt}
+          getRowId={(row) => row.uuid}
           slots={{
             toolbar: CustomToolbar,
             loadingOverlay: () => (
