@@ -566,6 +566,7 @@ export async function getStandaloneEvals({
     .limit(limit)
     .all();
 
+  // TODO(Performance): Load all necessary data in one go rather than re-requesting each eval!
   const standaloneEvals = (
     await Promise.all(
       results.map(async (result) => {
@@ -618,6 +619,14 @@ export async function getStandaloneEvals({
     )
   ).flat();
 
-  standaloneEvalCache.set(cacheKey, standaloneEvals);
-  return standaloneEvals;
+  // Deduplicate standalone evals on evalId
+  const deduplicatedStandaloneEvals = standaloneEvals.reduce((acc, eval_) => {
+    if (!acc.find((e) => e.evalId === eval_.evalId)) {
+      acc.push(eval_);
+    }
+    return acc;
+  }, [] as StandaloneEval[]);
+
+  standaloneEvalCache.set(cacheKey, deduplicatedStandaloneEvals);
+  return deduplicatedStandaloneEvals;
 }
