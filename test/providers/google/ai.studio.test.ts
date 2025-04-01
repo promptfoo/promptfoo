@@ -186,7 +186,7 @@ describe('GoogleChatProvider', () => {
       const response = await provider.callGemini('test prompt');
 
       expect(response).toEqual({
-        output: '',
+        output: undefined,
         tokenUsage: {
           completion: undefined,
           numRequests: 1,

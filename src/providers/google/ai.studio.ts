@@ -250,7 +250,10 @@ export class GoogleChatProvider extends GoogleGenericProvider {
     }
 
     logger.debug(`\tGoogle API response: ${JSON.stringify(data)}`);
-    const output = stringifyCandidateContents(data);
+    let output;
+    if (data.candidates && data.candidates[0]?.content?.parts) {
+      output = stringifyCandidateContents(data);
+    }
 
     if (!data?.candidates || data.candidates.length === 0) {
       return {

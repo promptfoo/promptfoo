@@ -260,15 +260,13 @@ export async function hasGoogleDefaultCredentials() {
 
 export function stringifyCandidateContents(data: GeminiResponseData) {
   let output = '';
-  if (data.candidates && data.candidates[0]?.content?.parts) {
-    for (const candidate of data.candidates) {
-      if (candidate.content?.parts) {
-        for (const part of candidate.content.parts) {
-          if ('text' in part) {
-            output += part.text;
-          } else {
-            output += JSON.stringify(part);
-          }
+  for (const candidate of data.candidates) {
+    if (candidate.content?.parts) {
+      for (const part of candidate.content.parts) {
+        if ('text' in part) {
+          output += part.text;
+        } else {
+          output += JSON.stringify(part);
         }
       }
     }
