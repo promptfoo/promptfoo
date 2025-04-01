@@ -221,7 +221,6 @@ export default function History({
     [showDatasetColumn],
   );
 
-  console.log({ data });
 
   return (
     <Box
