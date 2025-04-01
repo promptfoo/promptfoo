@@ -60,7 +60,7 @@ You can customize the dataset generation process by providing additional options
 | -------------------------- | ----------------------------------------------------------------------- |
 | `-c, --config`             | Path to the configuration file.                                         |
 | `-i, --instructions`       | Specific instructions for the LLM to follow when generating test cases. |
-| `-o, --output`             | Path to the output file where the dataset will be saved.                |
+| `-o, --output [path]`      | Path to output file. Supports CSV and YAML output.                      |
 | `-w, --write`              | Write the generated test cases directly to the configuration file.      |
 | `--numPersonas`            | Number of personas to generate for the dataset.                         |
 | `--numTestCasesPerPersona` | Number of test cases to generate per persona.                           |
@@ -71,3 +71,7 @@ For example:
 ```sh
 promptfoo generate dataset --config path_to_config.yaml --output path_to_output.yaml --instructions "Consider edge cases related to international travel"
 ```
+
+### Working with CSVs
+
+A full-featured example of dataset generation using CSVs can be found in [examples/csv-dataset-generation](https://github.com/promptfoo/promptfoo/tree/main/examples/csv-dataset-generation).
