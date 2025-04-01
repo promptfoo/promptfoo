@@ -20,6 +20,7 @@ function HistoryPageContent({ showDatasetColumn = true }: HistoryPageProps) {
       try {
         const response = await callApi(`/history`);
         const data = await response.json();
+
         if (data?.data) {
           setCols(data.data);
         }
