@@ -1,30 +1,55 @@
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useSearchParams } from 'react-router-dom';
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import Box from '@mui/material/Box';
-import Pagination from '@mui/material/Pagination';
+import CircularProgress from '@mui/material/CircularProgress';
 import Paper from '@mui/material/Paper';
-import Skeleton from '@mui/material/Skeleton';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import TableSortLabel from '@mui/material/TableSortLabel';
-import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { alpha } from '@mui/material/styles';
+import { alpha, useTheme } from '@mui/material/styles';
+import {
+  DataGrid,
+  type GridColDef,
+  type GridRenderCellParams,
+  GridToolbarContainer,
+  GridToolbarColumnsButton,
+  GridToolbarFilterButton,
+  GridToolbarDensitySelector,
+  GridToolbarExport,
+  GridToolbarQuickFilter,
+} from '@mui/x-data-grid';
 import type { ServerPromptWithMetadata } from '@promptfoo/types';
 import PromptDialog from './PromptDialog';
 
-const ROWS_PER_PAGE = 10;
+// augment the props for the toolbar slot
+declare module '@mui/x-data-grid' {
+  interface ToolbarPropsOverrides {
+    showUtilityButtons: boolean;
+  }
+}
 
-type SortableField = 'id' | 'raw' | 'date' | 'count' | null;
-
-interface SortState {
-  field: SortableField;
-  order: 'asc' | 'desc';
+function CustomToolbar({ showUtilityButtons }: { showUtilityButtons: boolean }) {
+  const theme = useTheme();
+  return (
+    <GridToolbarContainer sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
+      {showUtilityButtons && (
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <GridToolbarColumnsButton />
+          <GridToolbarFilterButton />
+          <GridToolbarDensitySelector />
+          <GridToolbarExport />
+        </Box>
+      )}
+      <Box sx={{ flexGrow: 1 }} />
+      <GridToolbarQuickFilter
+        sx={{
+          '& .MuiInputBase-root': {
+            borderRadius: 2,
+            backgroundColor: theme.palette.background.paper,
+          },
+        }}
+      />
+    </GridToolbarContainer>
+  );
 }
 
 interface PromptsProps {
@@ -34,27 +59,6 @@ interface PromptsProps {
   showDatasetColumn?: boolean;
 }
 
-const LoadingSkeleton = () => (
-  <TableBody>
-    {[...Array(ROWS_PER_PAGE)].map((_, index) => (
-      <TableRow key={index}>
-        <TableCell>
-          <Skeleton width={60} />
-        </TableCell>
-        <TableCell>
-          <Skeleton width="90%" />
-        </TableCell>
-        <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
-          <Skeleton width={100} />
-        </TableCell>
-        <TableCell align="right">
-          <Skeleton width={40} />
-        </TableCell>
-      </TableRow>
-    ))}
-  </TableBody>
-);
-
 export default function Prompts({
   data,
   isLoading,
@@ -62,67 +66,19 @@ export default function Prompts({
   showDatasetColumn = true,
 }: PromptsProps) {
   const [searchParams] = useSearchParams();
-  const [sort, setSort] = useState<SortState>({ field: 'date', order: 'desc' });
-  const [page, setPage] = useState(1);
   const [dialogState, setDialogState] = useState<{ open: boolean; selectedIndex: number }>({
     open: false,
     selectedIndex: 0,
   });
   const hasShownPopup = useRef(false);
 
-  const handleSort = useCallback((field: SortableField) => {
-    setSort((prev) => ({
-      field,
-      order: prev.field === field && prev.order === 'asc' ? 'desc' : 'asc',
-    }));
-  }, []);
-
-  const sortedPrompts = useMemo(() => {
-    if (!sort.field) {
-      return data;
-    }
-
-    return [...data].sort((a, b) => {
-      if (sort.field === null) {
-        return 0;
-      }
-
-      let aValue: any;
-      let bValue: any;
-
-      if (sort.field === 'raw') {
-        aValue = a.prompt.raw;
-        bValue = b.prompt.raw;
-      } else if (sort.field === 'date') {
-        aValue = a.recentEvalDate ? new Date(a.recentEvalDate).getTime() : 0;
-        bValue = b.recentEvalDate ? new Date(b.recentEvalDate).getTime() : 0;
-      } else if (sort.field === 'id') {
-        aValue = a.id;
-        bValue = b.id;
-      } else {
-        aValue = a[sort.field];
-        bValue = b[sort.field];
-      }
-
-      const compareResult = sort.order === 'asc' ? 1 : -1;
-      if (aValue === bValue) {
-        return 0;
-      }
-      return aValue === bValue ? 0 : aValue > bValue ? compareResult : -compareResult;
-    });
-  }, [data, sort]);
-
-  const handleClickOpen = useCallback((index: number) => {
+  const handleClickOpen = (index: number) => {
     setDialogState({ open: true, selectedIndex: index });
-  }, []);
+  };
 
-  const handleClose = useCallback(() => {
+  const handleClose = () => {
     setDialogState((prev) => ({ ...prev, open: false }));
-  }, []);
-
-  const handlePageChange = useCallback((_event: React.ChangeEvent<unknown>, value: number) => {
-    setPage(value);
-  }, []);
+  };
 
   useEffect(() => {
     if (hasShownPopup.current) {
@@ -137,14 +93,69 @@ export default function Prompts({
         hasShownPopup.current = true;
       }
     }
-  }, [data, searchParams, handleClickOpen]);
+  }, [data, searchParams]);
 
-  const paginatedPrompts = useMemo(() => {
-    const startIndex = (page - 1) * ROWS_PER_PAGE;
-    return sortedPrompts.slice(startIndex, startIndex + ROWS_PER_PAGE);
-  }, [sortedPrompts, page]);
+  const columns: GridColDef<ServerPromptWithMetadata>[] = useMemo(
+    () => [
+      {
+        field: 'id',
+        headerName: 'ID',
+        flex: 1,
+        minWidth: 100,
+        valueFormatter: (value: ServerPromptWithMetadata['id']) => value.toString().slice(0, 6),
+      },
+      {
+        field: 'prompt',
+        headerName: 'Prompt',
+        flex: 2,
+        minWidth: 300,
+        valueGetter: (value: ServerPromptWithMetadata['prompt']) => value.raw,
+      },
+      {
+        field: 'recentEvalDate',
+        headerName: 'Most recent eval',
+        flex: 1,
+        minWidth: 150,
+        renderCell: (params: GridRenderCellParams<ServerPromptWithMetadata>) => {
+          if (!params.value) {
+            return (
+              <Typography variant="body2" color="text.secondary">
+                Unknown
+              </Typography>
+            );
+          }
+          return (
+            <Link to={`/eval?evalId=${params.row.recentEvalId}`} style={{ textDecoration: 'none' }}>
+              <Typography
+                variant="body2"
+                color="primary"
+                fontFamily="monospace"
+                sx={{
+                  '&:hover': { textDecoration: 'underline' },
+                }}
+              >
+                {params.value}
+              </Typography>
+            </Link>
+          );
+        },
+      },
+      {
+        field: 'count',
+        headerName: '# Evals',
+        flex: 1,
+        minWidth: 80,
+      },
+    ],
+    [],
+  );
 
-  const pageCount = useMemo(() => Math.ceil(data.length / ROWS_PER_PAGE), [data.length]);
+  const handleRowClick = (params: any) => {
+    const index = data.findIndex((p) => p.id === params.id);
+    if (index !== -1) {
+      handleClickOpen(index);
+    }
+  };
 
   return (
     <Box
@@ -174,223 +185,105 @@ export default function Prompts({
           borderRadius: 1,
         }}
       >
-        {error ? (
-          <Box
-            sx={{
-              m: 3,
-              p: 2,
-              borderRadius: 1,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1,
-              color: 'error.main',
-              bgcolor: (theme) => alpha(theme.palette.error.main, 0.05),
-            }}
-          >
-            <ErrorOutlineIcon fontSize="small" />
-            <Typography variant="body2">{error}</Typography>
-          </Box>
-        ) : data.length === 0 && !isLoading ? (
-          <Box
-            sx={{
-              flex: 1,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 2,
-            }}
-          >
-            <Typography variant="h6" color="text.secondary">
-              No prompts found
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Create a prompt to start evaluating your AI responses
-            </Typography>
-          </Box>
-        ) : (
-          <>
-            <Box sx={{ flex: 1, overflow: 'auto', px: 3, pt: 3 }}>
-              <Table
-                size="medium"
-                stickyHeader
-                sx={{
-                  minWidth: { xs: 350, sm: 650 },
-                  '& th': {
-                    bgcolor: 'background.paper',
-                    fontWeight: 600,
-                    position: 'sticky',
-                    top: 0,
-                    zIndex: 1,
-                  },
-                  '& td, & th': {
-                    p: { xs: 1.5, sm: 2 },
-                  },
-                  '& tr:hover': {
-                    bgcolor: 'action.hover',
-                  },
-                }}
-              >
-                <TableHead>
-                  <TableRow>
-                    <TableCell width="15%" sx={{ minWidth: { xs: 80, sm: 100 } }}>
-                      <TableSortLabel
-                        active={sort.field === 'id'}
-                        direction={sort.field === 'id' ? sort.order : 'asc'}
-                        onClick={() => handleSort('id')}
-                      >
-                        <Typography variant="subtitle2">ID</Typography>
-                      </TableSortLabel>
-                    </TableCell>
-                    <TableCell sx={{ minWidth: { xs: 200, sm: 300 } }}>
-                      <TableSortLabel
-                        active={sort.field === 'raw'}
-                        direction={sort.field === 'raw' ? sort.order : 'asc'}
-                        onClick={() => handleSort('raw')}
-                      >
-                        <Typography variant="subtitle2">Prompt</Typography>
-                      </TableSortLabel>
-                    </TableCell>
-                    <TableCell
-                      width="20%"
-                      sx={{
-                        display: { xs: 'none', sm: 'table-cell' },
-                        minWidth: 150,
-                      }}
-                    >
-                      <Tooltip title="The date of the most recent eval for this prompt">
-                        <TableSortLabel
-                          active={sort.field === 'date'}
-                          direction={sort.field === 'date' ? sort.order : 'asc'}
-                          onClick={() => handleSort('date')}
-                        >
-                          <Typography variant="subtitle2">Most recent eval</Typography>
-                        </TableSortLabel>
-                      </Tooltip>
-                    </TableCell>
-                    <TableCell
-                      width="15%"
-                      align="right"
-                      sx={{
-                        minWidth: 80,
-                      }}
-                    >
-                      <TableSortLabel
-                        active={sort.field === 'count'}
-                        direction={sort.field === 'count' ? sort.order : 'asc'}
-                        onClick={() => handleSort('count')}
-                      >
-                        <Typography variant="subtitle2"># Evals</Typography>
-                      </TableSortLabel>
-                    </TableCell>
-                  </TableRow>
-                </TableHead>
-                {isLoading ? (
-                  <LoadingSkeleton />
-                ) : (
-                  <TableBody>
-                    {paginatedPrompts.map((promptRow, index) => (
-                      <TableRow
-                        key={promptRow.id}
-                        hover
-                        onClick={() => handleClickOpen(index)}
-                        sx={{ cursor: 'pointer' }}
-                      >
-                        <TableCell>
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            fontFamily="monospace"
-                            sx={{
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            {promptRow.id.slice(0, 6)}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Typography
-                            variant="body2"
-                            noWrap
-                            title={promptRow.prompt.raw}
-                            sx={{
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              maxWidth: { xs: '200px', sm: '300px', md: '500px' },
-                            }}
-                          >
-                            {promptRow.prompt.raw}
-                          </Typography>
-                        </TableCell>
-                        <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
-                          {promptRow.recentEvalDate ? (
-                            <Link
-                              to={`/eval?evalId=${promptRow.recentEvalId}`}
-                              style={{ textDecoration: 'none' }}
-                            >
-                              <Typography
-                                variant="body2"
-                                color="primary"
-                                fontFamily="monospace"
-                                sx={{
-                                  '&:hover': { textDecoration: 'underline' },
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap',
-                                }}
-                              >
-                                {promptRow.recentEvalDate}
-                              </Typography>
-                            </Link>
-                          ) : (
-                            <Typography variant="body2" color="text.secondary">
-                              Unknown
-                            </Typography>
-                          )}
-                        </TableCell>
-                        <TableCell align="right">
-                          <Typography variant="body2" fontWeight={500}>
-                            {promptRow.count}
-                          </Typography>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                )}
-              </Table>
-            </Box>
-            {pageCount > 1 && (
+        <DataGrid
+          rows={data}
+          columns={columns}
+          loading={isLoading}
+          getRowId={(row) => row.id}
+          onRowClick={handleRowClick}
+          slots={{
+            toolbar: CustomToolbar,
+            loadingOverlay: () => (
               <Box
                 sx={{
-                  p: 2,
                   display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
                   justifyContent: 'center',
-                  borderTop: 1,
-                  borderColor: 'divider',
+                  height: '100%',
+                  gap: 2,
                 }}
               >
-                <Pagination
-                  count={pageCount}
-                  page={page}
-                  onChange={handlePageChange}
-                  size="small"
-                  shape="rounded"
-                  showFirstButton
-                  showLastButton
-                />
+                <CircularProgress />
+                <Typography variant="body2" color="text.secondary">
+                  Loading prompts...
+                </Typography>
               </Box>
-            )}
-          </>
-        )}
+            ),
+            noRowsOverlay: () => (
+              <Box
+                sx={{
+                  textAlign: 'center',
+                  color: 'text.secondary',
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  p: 3,
+                }}
+              >
+                {error ? (
+                  <>
+                    <Box sx={{ fontSize: '2rem', mb: 2 }}>⚠️</Box>
+                    <Typography variant="h6" gutterBottom color="error">
+                      Error loading prompts
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {error}
+                    </Typography>
+                  </>
+                ) : (
+                  <>
+                    <Box sx={{ fontSize: '2rem', mb: 2 }}>🔍</Box>
+                    <Typography variant="h6" gutterBottom>
+                      No prompts found
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Create a prompt to start evaluating your AI responses
+                    </Typography>
+                  </>
+                )}
+              </Box>
+            ),
+          }}
+          slotProps={{ toolbar: { showUtilityButtons: true } }}
+          sx={{
+            border: 'none',
+            '& .MuiDataGrid-row': {
+              cursor: 'pointer',
+              transition: 'background-color 0.2s ease',
+              '&:hover': {
+                backgroundColor: 'action.hover',
+              },
+            },
+            '& .MuiDataGrid-cell': {
+              borderColor: 'divider',
+              display: 'flex',
+              alignItems: 'center',
+            },
+            '& .MuiDataGrid-columnHeaders': {
+              backgroundColor: 'background.default',
+              borderColor: 'divider',
+            },
+          }}
+          initialState={{
+            sorting: {
+              sortModel: [{ field: 'recentEvalDate', sort: 'desc' }],
+            },
+            pagination: {
+              paginationModel: { pageSize: 25 },
+            },
+          }}
+          pageSizeOptions={[10, 25, 50, 100]}
+        />
       </Paper>
 
       {data[dialogState.selectedIndex] && (
         <PromptDialog
           openDialog={dialogState.open}
           handleClose={handleClose}
-          selectedPrompt={paginatedPrompts[dialogState.selectedIndex]}
+          selectedPrompt={data[dialogState.selectedIndex]}
           showDatasetColumn={showDatasetColumn}
         />
       )}
