@@ -117,16 +117,9 @@ export default function History({
   const columns: GridColDef<EvalRun>[] = useMemo(
     () => [
       {
-        field: 'createdAt',
-        headerName: 'Ran At',
-        flex: 1,
-        minWidth: 120,
-        valueFormatter: (value: number) => new Date(value).toLocaleString(),
-      },
-      {
         field: 'evalId',
         headerName: 'Eval',
-        flex: 1,
+        flex: 2,
         minWidth: 120,
         renderCell: (params: GridRenderCellParams<EvalRun>) => (
           <Link to={`/eval?evalId=${params.value || ''}`}>{params.value}</Link>
@@ -137,7 +130,7 @@ export default function History({
             {
               field: 'datasetId',
               headerName: 'Dataset',
-              flex: 1,
+              flex: 0.5,
               minWidth: 100,
               renderCell: (params: GridRenderCellParams<EvalRun>) => (
                 <Link to={`/datasets?id=${params.value || ''}`}>{params.value?.slice(0, 6)}</Link>
@@ -154,7 +147,7 @@ export default function History({
       {
         field: 'prompt',
         headerName: 'Prompt',
-        flex: 2,
+        flex: 3,
         minWidth: 200,
         // Ensure proper formatting for export:
         valueGetter: (value: undefined, row: EvalRun) =>
@@ -172,6 +165,7 @@ export default function History({
         field: 'passRate',
         headerName: 'Pass Rate %',
         flex: 1,
+        type: 'number',
         minWidth: 120,
         valueGetter: (value: undefined, row: EvalRun) => {
           const testPassCount = row.metrics?.testPassCount ?? 0;
@@ -185,6 +179,7 @@ export default function History({
         field: 'metrics.testPassCount',
         headerName: 'Pass Count',
         flex: 1,
+        type: 'number',
         minWidth: 120,
         valueGetter: (value: undefined, row: EvalRun) => row.metrics?.testPassCount,
         valueFormatter: (value: number) => value?.toString() ?? '-',
@@ -193,6 +188,7 @@ export default function History({
         field: 'metrics.testFailCount',
         headerName: 'Fail Count',
         flex: 1,
+        type: 'number',
         minWidth: 120,
         valueGetter: (value: undefined, row: EvalRun) =>
           (row.metrics?.testFailCount ?? 0) + (row.metrics?.testErrorCount ?? 0),
@@ -216,6 +212,7 @@ export default function History({
         field: 'metrics.score',
         headerName: 'Raw score',
         flex: 1,
+        type: 'number',
         minWidth: 120,
         valueGetter: (value, row) => row.metrics?.score,
         valueFormatter: (value: number) => value?.toFixed(2) ?? '-',
