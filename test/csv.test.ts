@@ -535,6 +535,6 @@ describe('serializeObjectArrayAsCSV', () => {
         { name: 'John', age: 30 },
         { name: 'Jane', age: 25 },
       ]),
-    ).toBe('name,age\nJohn,30\nJane,25\n');
+    ).toBe('name,age\n"John","30"\n"Jane","25"\n');
   });
 });
