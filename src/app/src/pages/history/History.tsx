@@ -74,7 +74,6 @@ const GridToolbarExport = () => (
   </GridToolbarExportContainer>
 );
 
-// TODO: Maintain exporting as JSON!
 function CustomToolbar() {
   const theme = useTheme();
   return (
