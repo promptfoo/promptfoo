@@ -39,7 +39,7 @@ import { calculateAnthropicCost } from './anthropic/util';
 import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureEmbeddingProvider } from './azure/embedding';
 import { calculateAzureCost } from './azure/util';
-import { GoogleChatProvider } from './google/ai.studio';
+import { AIStudioChatProvider } from './google/ai.studio';
 import { getGoogleClient } from './google/util';
 import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
 import { GroqProvider } from './groq';
@@ -456,7 +456,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
         });
       } else if (this.providerName === 'google') {
         const provider = new GatewayGoogle();
-        const parentClass = new GoogleChatProvider(this.modelName, this.providerOptions);
+        const parentClass = new AIStudioChatProvider(this.modelName, this.providerOptions);
         const apiKey = parentClass.getApiKey();
         if (!apiKey) {
           throw new Error(

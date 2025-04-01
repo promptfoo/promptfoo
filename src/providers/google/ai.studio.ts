@@ -21,7 +21,7 @@ import {
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
 
-class GoogleGenericProvider implements ApiProvider {
+class AIStudioGenericProvider implements ApiProvider {
   modelName: string;
 
   config: CompletionOptions;
@@ -79,7 +79,7 @@ class GoogleGenericProvider implements ApiProvider {
   }
 }
 
-export class GoogleChatProvider extends GoogleGenericProvider {
+export class AIStudioChatProvider extends AIStudioGenericProvider {
   constructor(
     modelName: string,
     options: { config?: CompletionOptions; id?: string; env?: EnvOverrides } = {},
