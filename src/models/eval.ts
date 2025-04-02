@@ -502,14 +502,17 @@ export default class Eval {
   }
 }
 
-export async function getSummaryOfLatestEvals(
+/**
+ * Queries all evals for a given organization and team.
+ */
+export function getSummaryOfLatestEvals(
   limit: number = DEFAULT_QUERY_LIMIT,
   filterDescription?: string,
   datasetId?: string,
 ) {
   const db = getDb();
-  const startTime = performance.now();
-  const query = db
+
+  const results = db
     .select({
       evalId: evalsTable.id,
       createdAt: evalsTable.createdAt,
@@ -528,11 +531,13 @@ export async function getSummaryOfLatestEvals(
         eq(evalsTable.results, {}),
       ),
     )
-    .groupBy(evalsTable.id);
+    .groupBy(evalsTable.id)
+    .orderBy(desc(evalsTable.createdAt))
+    // TODO(will): Implement limit (i.e. pagination w/ sorting, filtering, etc.) once we observe performance issues.
+    // .limit(limit)
+    .all();
 
-  const results = query.orderBy(desc(evalsTable.createdAt)).limit(limit).all();
-
-  const mappedResults = results.map((result) => ({
+  const deserializedResults = results.map((result) => ({
     evalId: result.evalId,
     createdAt: result.createdAt,
     description: result.description,
@@ -541,9 +546,5 @@ export async function getSummaryOfLatestEvals(
     isRedteam: result.isRedteam,
   }));
 
-  const endTime = performance.now();
-  const executionTime = endTime - startTime;
-  logger.debug(`listPreviousResults execution time: ${executionTime.toFixed(2)}ms`);
-
-  return mappedResults;
+  return deserializedResults;
 }
