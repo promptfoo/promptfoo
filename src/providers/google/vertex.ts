@@ -17,13 +17,17 @@ import { isValidJson } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import type { ClaudeRequest, ClaudeResponse, CompletionOptions, Content } from './types';
-import type { GeminiErrorResponse, GeminiFormat, Palm2ApiResponse } from './util';
+import type {
+  GeminiApiResponse,
+  GeminiErrorResponse,
+  GeminiFormat,
+  GeminiResponseData,
+  Palm2ApiResponse,
+} from './util';
 import {
   getGoogleClient,
   loadFile,
   maybeCoerceToGeminiFormat,
-  type GeminiApiResponse,
-  type GeminiResponseData,
   stringifyCandidateContents,
 } from './util';
 
@@ -279,6 +283,10 @@ export class VertexChatProvider extends VertexGenericProvider {
           }
         }
       }
+    } else if (this.config.systemInstruction && systemInstruction) {
+      return {
+        error: `Preprocessing error: system instruction defined in prompt and config.`,
+      };
     }
     // https://ai.google.dev/api/rest/v1/models/streamGenerateContent
     const body = {

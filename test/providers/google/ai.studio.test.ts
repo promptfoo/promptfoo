@@ -295,7 +295,7 @@ describe('AIStudioChatProvider', () => {
         expect.objectContaining({
           method: 'POST',
           body: expect.stringContaining(
-            '"contents":[{"role":"user","parts":[{"text":"test prompt"}]}]',
+            '"contents":{"role":"user","parts":{"text":"test prompt"}}',
           ),
         }),
         expect.any(Number),
@@ -382,7 +382,7 @@ describe('AIStudioChatProvider', () => {
           { role: 'system' as any, parts: [{ text: 'system instruction' }] },
           { role: 'user', parts: [{ text: 'user message' }] },
         ],
-        coerced: false,
+        coerced: true,
         systemInstruction: undefined,
       } as any);
 
@@ -780,7 +780,7 @@ describe('AIStudioChatProvider', () => {
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
         'https://rendered-generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=rendered-test-key',
         {
-          body: '{"contents":[{"role":"user","parts":[{"text":"What is the weather in San Francisco?"}]}],"generationConfig":{},"toolConfig":{"functionCallingConfig":{"mode":"AUTO","allowedFunctionNames":["get_weather"]}},"tools":[{"functionDeclarations":[{"name":"get_weather","description":"Get weather information","parameters":{"type":"OBJECT","properties":{"location":{"type":"STRING","description":"City name"}},"required":["location"]}}]}]}',
+          body: '{"contents":{"role":"user","parts":{"text":"What is the weather in San Francisco?"}},"generationConfig":{},"toolConfig":{"functionCallingConfig":{"mode":"AUTO","allowedFunctionNames":["get_weather"]}},"tools":[{"functionDeclarations":[{"name":"get_weather","description":"Get weather information","parameters":{"type":"OBJECT","properties":{"location":{"type":"STRING","description":"City name"}},"required":["location"]}}]}]}',
           headers: { 'Content-Type': 'application/json' },
           method: 'POST',
         },
@@ -848,7 +848,7 @@ describe('AIStudioChatProvider', () => {
 
       jest.mocked(cache.fetchWithCache).mockResolvedValueOnce(mockResponse);
 
-      const response = await provider.callGemini('test prompt', {
+      const response = await provider.callGemini('What is the weather in San Francisco?', {
         vars: { location: 'San Francisco' },
         prompt: { raw: 'test prompt', label: 'test' },
       });
@@ -870,7 +870,7 @@ describe('AIStudioChatProvider', () => {
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
         'https://rendered-generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=rendered-test-key',
         {
-          body: '{"contents":[{"role":"user","parts":[{"text":"What is the weather in San Francisco?"}]}],"generationConfig":{},"tools":[{"functionDeclarations":[{"name":"get_weather","description":"Get weather in San Francisco","parameters":{"type":"OBJECT","properties":{"location":{"type":"STRING"}}}}]}]}',
+          body: '{"contents":{"role":"user","parts":{"text":"What is the weather in San Francisco?"}},"generationConfig":{},"tools":[{"functionDeclarations":[{"name":"get_weather","description":"Get weather in San Francisco","parameters":{"type":"OBJECT","properties":{"location":{"type":"STRING"}}}}]}]}',
           headers: { 'Content-Type': 'application/json' },
           method: 'POST',
         },

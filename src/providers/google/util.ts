@@ -282,7 +282,7 @@ export function loadFile(
 ) {
   // Ensures that files are loaded correctly. Files may be defined in multiple ways:
   // 1. Directly in the provider:
-  //    config_tools will be the file path, which will be loaded here in maybeLoadFromExternalFile.
+  //    config_var will be the file path, which will be loaded here in maybeLoadFromExternalFile.
   // 2. In a test variable that is used in the provider via a nunjucks:
   //    context_vars will contain a string of the contents of the file with whitespace.
   //    This will be inserted into the nunjucks in contfig_tools and the output needs to be parsed.

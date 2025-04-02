@@ -1,3 +1,4 @@
+import Clone from 'rfdc';
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
@@ -12,15 +13,13 @@ import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
 import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { CHAT_MODELS } from './shared';
-import type { CompletionOptions } from './types';
-import {
-  type GeminiResponseData,
-  loadFile,
-  maybeCoerceToGeminiFormat,
-  stringifyCandidateContents,
-} from './util';
+import type { CompletionOptions, Content } from './types';
+import { loadFile, maybeCoerceToGeminiFormat, stringifyCandidateContents } from './util';
+import type { GeminiFormat, GeminiResponseData } from './util';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
+
+const clone = Clone();
 
 class AIStudioGenericProvider implements ApiProvider {
   modelName: string;
@@ -177,10 +176,46 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
   }
 
   async callGemini(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    const { contents, systemInstruction } = maybeCoerceToGeminiFormat(
-      parseChatPrompt(prompt, [{ content: prompt }]),
+    // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
+    let contents: GeminiFormat | { role: string; parts: { text: string } } = parseChatPrompt(
+      prompt,
+      {
+        role: 'user',
+        parts: {
+          text: prompt,
+        },
+      },
     );
+    const {
+      contents: updatedContents,
+      coerced,
+      systemInstruction: parsedSystemInstruction,
+    } = maybeCoerceToGeminiFormat(contents);
+    if (coerced) {
+      logger.debug(`Coerced JSON prompt to Gemini format: ${JSON.stringify(contents)}`);
+      contents = updatedContents;
+    }
+    // contents = updatedContents;
 
+    let systemInstruction: Content | undefined = parsedSystemInstruction;
+    if (this.config.systemInstruction && !systemInstruction) {
+      // Make a copy
+      systemInstruction = clone(this.config.systemInstruction);
+      if (systemInstruction && context?.vars) {
+        const nunjucks = getNunjucksEngine();
+        for (const part of systemInstruction.parts) {
+          if (part.text) {
+            part.text = nunjucks.renderString(part.text, context.vars);
+          }
+        }
+      }
+    } else if (this.config.systemInstruction && systemInstruction) {
+      return {
+        error: `Preprocessing error: system instruction defined in prompt and config.`,
+      };
+    }
+    console.log(contents)
+    console.log(JSON.stringify(systemInstruction))
     // Determine API version based on model
     const apiVersion = this.modelName === 'gemini-2.0-flash-thinking-exp' ? 'v1alpha' : 'v1beta';
 
