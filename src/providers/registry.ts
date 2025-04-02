@@ -265,6 +265,10 @@ export const providerMap: ProviderFactory[] = [
       if (modelType === 'embeddings' || modelType === 'embedding') {
         return new AwsBedrockEmbeddingProvider(modelName, providerOptions);
       }
+      if (modelType === 'kb' || modelType === 'knowledge-base') {
+        const { AwsBedrockKnowledgeBaseProvider } = await import('./bedrockKnowledgeBase');
+        return new AwsBedrockKnowledgeBaseProvider(modelName, providerOptions);
+      }
       return new AwsBedrockCompletionProvider(
         `${modelType}${modelName ? `:${modelName}` : ''}`,
         providerOptions,

@@ -1,53 +1,86 @@
-# amazon-bedrock (Amazon Bedrock Examples)
+# AWS Bedrock Examples
 
-You can run this example with:
+This directory contains examples of using the AWS Bedrock provider with promptfoo.
+
+## Setup
+
+1. Ensure you have installed the required SDK packages:
+
+   ```sh
+   npm install -g @aws-sdk/client-bedrock-runtime
+
+   # For Knowledge Base examples
+   npm install -g @aws-sdk/client-bedrock-agent-runtime
+   ```
+
+2. Configure your AWS credentials for Bedrock access
+
+## Examples
+
+### Claude Model
 
 ```bash
-npx promptfoo@latest init --example amazon-bedrock
+promptfoo eval -c examples/amazon-bedrock/promptfooconfig.claude.yaml
 ```
 
-## Prerequisites
+### Llama Model
 
-1. Set up your AWS credentials:
+```bash
+promptfoo eval -c examples/amazon-bedrock/promptfooconfig.llama.yaml
+```
 
-   ```bash
-   export AWS_ACCESS_KEY_ID="your_access_key"
-   export AWS_SECRET_ACCESS_KEY="your_secret_key"
-   ```
+### Mistral Model
 
-   See [authentication docs](https://www.promptfoo.dev/docs/providers/aws-bedrock/#authentication) for other auth methods, including SSO profiles.
+```bash
+promptfoo eval -c examples/amazon-bedrock/promptfooconfig.mistral.yaml
+```
 
-2. Request model access in your AWS region:
-   - Visit the [AWS Bedrock Model Access page](https://us-west-2.console.aws.amazon.com/bedrock/home?region=us-west-2#/modelaccess)
-   - Switch to your desired region. We recommend us-west-2 and us-east-1 which tend to have the most models available.
-   - Enable the models you want to use.
-3. Install required dependency:
-   ```bash
-   npm install @aws-sdk/client-bedrock-runtime
-   ```
+### AI21 Models (Jamba)
 
-## Available Examples
+```bash
+promptfoo eval -c examples/amazon-bedrock/promptfooconfig.a21.yaml
+```
 
-This directory contains several example configurations for different Bedrock models:
+### Titan Text Model
 
-- [`promptfooconfig.claude.yaml`](promptfooconfig.claude.yaml) - Claude 3.7 Sonnet
-- [`promptfooconfig.llama.yaml`](promptfooconfig.llama.yaml) - Llama3
-- [`promptfooconfig.mistral.yaml`](promptfooconfig.mistral.yaml) - Mistral
-- [`promptfooconfig.nova.yaml`](promptfooconfig.nova.yaml) - Amazon's Nova models
-- [`promptfooconfig.nova.tool.yaml`](promptfooconfig.nova.tool.yaml) - Nova with tool usage examples
-- [`promptfooconfig.titan-text.yaml`](promptfooconfig.titan-text.yaml) - Titan text generation examples
-- [`promptfooconfig.yaml`](promptfooconfig.yaml) - Combined evaluation across multiple providers
+```bash
+promptfoo eval -c examples/amazon-bedrock/promptfooconfig.titan-text.yaml
+```
 
-## Getting Started
+### DeepSeek Model
 
-1. Run the evaluation:
+```bash
+promptfoo eval -c examples/amazon-bedrock/promptfooconfig.deepseek.yaml
+```
 
-   ```bash
-   promptfoo eval -c [path/to/config.yaml]
-   ```
+### Nova Model
 
-2. View the results:
+```bash
+promptfoo eval -c examples/amazon-bedrock/promptfooconfig.nova.yaml
+```
 
-   ```bash
-   promptfoo view
-   ```
+### Nova with Tool Use
+
+```bash
+promptfoo eval -c examples/amazon-bedrock/promptfooconfig.nova.tool.yaml
+```
+
+### Nova with Multimodal Input
+
+```bash
+promptfoo eval -c examples/amazon-bedrock/promptfooconfig.nova.multimodal.yaml
+```
+
+### Knowledge Base (RAG)
+
+```bash
+promptfoo eval -c examples/amazon-bedrock/promptfooconfig.knowledge-base.yaml
+```
+
+_Note: You'll need to create a Knowledge Base in AWS Bedrock and update the `knowledgeBaseId` in the config file before running this example._
+
+## All Models Combined
+
+```bash
+promptfoo eval -c examples/amazon-bedrock/promptfooconfig.yaml
+```

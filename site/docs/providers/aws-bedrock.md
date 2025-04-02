@@ -480,3 +480,63 @@ If you see this error. Make sure you have access to the model in the region you'
 - [Command Line Interface](../usage/command-line.md)
 - [Provider Options](../providers/index.md)
 - [Amazon Bedrock Examples](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock)
+
+## Knowledge Base
+
+AWS Bedrock Knowledge Bases provide Retrieval Augmented Generation (RAG) functionality, allowing you to query a knowledge base with natural language and get responses based on your data.
+
+### Prerequisites
+
+To use the Knowledge Base provider, you need:
+
+1. An existing Knowledge Base created in AWS Bedrock
+2. Install the required SDK:
+
+   ```sh
+   npm install -g @aws-sdk/client-bedrock-agent-runtime
+   ```
+
+### Configuration
+
+Configure the Knowledge Base provider by adding the `kb` or `knowledge-base` identifier and your Knowledge Base ID:
+
+```yaml
+providers:
+  - id: bedrock:kb:anthropic.claude-3-sonnet-20240229-v1:0
+    config:
+      region: 'us-east-1'
+      knowledgeBaseId: 'YOUR_KNOWLEDGE_BASE_ID'
+      # Optional: You can specify your own modelArn if needed
+      # modelArn: 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0'
+```
+
+Configuration options include:
+
+- `knowledgeBaseId` (required): The ID of your AWS Bedrock Knowledge Base
+- `region`: AWS region where your Knowledge Base is deployed
+- `modelArn`: Custom ARN for the foundation model (defaults to the model specified in the provider ID)
+- `accessKeyId`, `secretAccessKey`, `sessionToken`: AWS credentials (if not using environment variables or IAM roles)
+- `profile`: AWS profile name for SSO authentication
+
+### Example
+
+Here's a basic example to test your Knowledge Base with a few questions:
+
+```yaml
+prompts:
+  - 'What is the capital of France?'
+  - 'Tell me about quantum computing.'
+
+providers:
+  - id: bedrock:kb:anthropic.claude-3-sonnet-20240229-v1:0
+    config:
+      region: 'us-east-1'
+      knowledgeBaseId: 'YOUR_KNOWLEDGE_BASE_ID'
+
+tests:
+  - description: 'Basic factual questions from the knowledge base'
+```
+
+### Citations
+
+The Knowledge Base provider returns both the generated response and citations from the source documents. These citations are included in the evaluation results and can be used to verify the accuracy of the responses.
