@@ -223,7 +223,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       plugins: new Set(Object.values(OWASP_LLM_TOP_10_MAPPING).flatMap((v) => v.plugins)),
     },
     {
-      name: 'OWASP LLM Red Team',
+      name: 'OWASP Gen AI Red Team',
       plugins: new Set(Object.values(OWASP_LLM_RED_TEAM_MAPPING).flatMap((v) => v.plugins)),
     },
     {
