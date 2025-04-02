@@ -11,11 +11,12 @@ import cliState from '../cliState';
 import { getEnvFloat, getEnvInt } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
 import { checkEmailStatusOrExit, promptForEmailUnverified } from '../globalConfig/accounts';
+import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel, setLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
 import { loadApiProvider } from '../providers';
-import { createShareableUrl } from '../share';
+import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
 import type {
@@ -35,6 +36,7 @@ import invariant from '../util/invariant';
 import { filterProviders } from './eval/filterProviders';
 import type { FilterOptions } from './eval/filterTests';
 import { filterTests } from './eval/filterTests';
+import { notCloudEnabledShareInstructions } from './share';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
   help: z.boolean().optional(),
@@ -223,8 +225,10 @@ export async function doEval(
       abortSignal: evaluateOptions.abortSignal,
     });
 
+    const wantsToShare = cmdObj.share && config.sharing;
+
     const shareableUrl =
-      cmdObj.share && config.sharing ? await createShareableUrl(evalRecord) : null;
+      wantsToShare && isSharingEnabled(evalRecord) ? await createShareableUrl(evalRecord) : null;
 
     let successes = 0;
     let failures = 0;
@@ -307,12 +311,23 @@ export async function doEval(
     if (cmdObj.write) {
       if (shareableUrl) {
         logger.info(`${chalk.green('✔')} Evaluation complete: ${shareableUrl}`);
+      } else if (wantsToShare && !isSharingEnabled(evalRecord)) {
+        notCloudEnabledShareInstructions();
       } else {
         logger.info(`${chalk.green('✔')} Evaluation complete. ID: ${chalk.cyan(evalRecord.id)}\n`);
         logger.info(
           `» Run ${chalk.greenBright.bold('promptfoo view')} to use the local web viewer`,
         );
-        logger.info(`» Run ${chalk.greenBright.bold('promptfoo share')} to create a shareable URL`);
+        if (cloudConfig.isEnabled()) {
+          logger.info(
+            `» Run ${chalk.greenBright.bold('promptfoo share')} to create a shareable URL`,
+          );
+        } else {
+          logger.info(
+            `» Do you want to share this with your team? Sign up for free at ${chalk.greenBright.bold('https://promptfoo.app')}`,
+          );
+        }
+
         logger.info(
           `» This project needs your feedback. What's one thing we can improve? ${chalk.greenBright.bold(
             'https://forms.gle/YFLgTe1dKJKNSCsU7',
