@@ -15,6 +15,7 @@ import { CHAT_MODELS } from './shared';
 import type { CompletionOptions } from './types';
 import {
   type GeminiResponseData,
+  loadFile,
   maybeCoerceToGeminiFormat,
   stringifyCandidateContents,
 } from './util';
@@ -182,7 +183,6 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
 
     // Determine API version based on model
     const apiVersion = this.modelName === 'gemini-2.0-flash-thinking-exp' ? 'v1alpha' : 'v1beta';
-
     const body: Record<string, any> = {
       contents,
       generationConfig: {
@@ -199,9 +199,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       },
       safetySettings: this.config.safetySettings,
       ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
-      ...(this.config.tools
-        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(this.config.tools, context?.vars)) }
-        : {}),
+      ...(this.config.tools ? { tools: loadFile(this.config.tools, context?.vars) } : {}),
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
     };
 

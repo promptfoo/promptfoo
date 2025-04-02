@@ -61,7 +61,7 @@ interface GoogleSearchRetrieval {
   };
 }
 
-interface Tool {
+export interface Tool {
   functionDeclarations?: FunctionDeclaration[];
   googleSearchRetrieval?: GoogleSearchRetrieval;
   codeExecution?: object;
