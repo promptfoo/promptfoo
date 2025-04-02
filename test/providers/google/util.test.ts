@@ -1,11 +1,25 @@
+import * as fs from 'fs';
 import { GoogleAuth } from 'google-auth-library';
+import * as nunjucks from 'nunjucks';
 import {
   maybeCoerceToGeminiFormat,
   getGoogleClient,
   hasGoogleDefaultCredentials,
+  loadFile,
 } from '../../../src/providers/google/util';
 
 jest.mock('google-auth-library');
+
+jest.mock('glob', () => ({
+  globSync: jest.fn().mockReturnValue([]),
+}));
+
+jest.mock('fs', () => ({
+  existsSync: jest.fn(),
+  readFileSync: jest.fn(),
+  writeFileSync: jest.fn(),
+  statSync: jest.fn(),
+}));
 
 describe('util', () => {
   beforeEach(() => {
@@ -268,6 +282,53 @@ describe('util', () => {
 
       const result = await hasGoogleDefaultCredentials();
       expect(result).toBe(true);
+    });
+  });
+
+  describe('loadFile', () => {
+    it('should load from variable', async () => {
+      // This configuration was required to get the unit test working as in the full script
+      nunjucks.configure({ autoescape: false });
+
+      const config_var = '{{tool_file}}';
+      const context_vars = {
+        tool_file:
+          '[\n' +
+          '  {\n' +
+          '    "functionDeclarations": [\n' +
+          '      {\n' +
+          '        "name": "fakeTool",\n' +
+          '        "description": "fake tool description"\n' +
+          '      }\n' +
+          '    ]\n' +
+          '  }\n' +
+          ']',
+      };
+      const result = loadFile(config_var, context_vars);
+      expect(result).toEqual(JSON.parse(context_vars.tool_file));
+    });
+
+    it('should load directly from provider', async () => {
+      const config_var = 'file://fp.json';
+      const tools =
+        '[\n' +
+        '  {\n' +
+        '    "functionDeclarations": [\n' +
+        '      {\n' +
+        '        "name": "fakeTool",\n' +
+        '        "description": "fake tool description"\n' +
+        '      }\n' +
+        '    ]\n' +
+        '  }\n' +
+        ']';
+      const context_vars = {};
+
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      jest.spyOn(fs, 'readFileSync').mockReturnValue(tools);
+      const result = loadFile(config_var, context_vars);
+      expect(result).toEqual(JSON.parse(tools));
+      expect(fs.existsSync).toHaveBeenCalledWith(expect.stringContaining('fp.json'));
+      expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('fp.json'), 'utf8');
     });
   });
 });

@@ -277,7 +277,7 @@ export function stringifyCandidateContents(data: GeminiResponseData) {
 }
 
 export function loadFile(
-  config_tools: Tool[] | string | undefined,
+  config_var: Tool[] | string | undefined,
   context_vars: Record<string, string | object> | undefined,
 ) {
   // Ensures that files are loaded correctly. Files may be defined in multiple ways:
@@ -286,10 +286,12 @@ export function loadFile(
   // 2. In a test variable that is used in the provider via a nunjunk:
   //    context_vars will contain a string of the contents of the file with whitespace.
   //    This will be inserted into the nunjunk in contfig_tools and the output needs to be parsed.
-
-  const tools = maybeLoadFromExternalFile(renderVarsInObject(config_tools, context_vars));
-  if (typeof tools === 'string') {
-    return JSON.parse(tools);
+  console.log(config_var);
+  console.log(context_vars);
+  const fileContents = maybeLoadFromExternalFile(renderVarsInObject(config_var, context_vars));
+  if (typeof fileContents === 'string') {
+    console.log(fileContents);
+    return JSON.parse(fileContents);
   }
-  return tools;
+  return fileContents;
 }
