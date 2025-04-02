@@ -390,11 +390,15 @@ tests:
         value: output.length < 1000
 ```
 
-## OWASP LLM Red Team Best Practices
+## OWASP Gen AI Red Team Best Practices
 
-In addition to the OWASP LLM Top 10, OWASP has published best practices for red teaming LLM applications. These best practices are organized into four phases, each focusing on different aspects of LLM security testing.
+In addition to the OWASP LLM Top 10, OWASP has published best practices for red teaming Gen AI applications. These best practices are organized into four phases, each focusing on different aspects of Gen AI security testing.
 
-You can use Promptfoo to automate testing across all four phases using the `owasp:llm:redteam` shorthand:
+You can find this option in the list of presets:
+
+![OWASP Gen AI red team preset](/img/docs/owasp-genai-red-team-preset.png)
+
+Or you can use Promptfoo to automate testing across all four phases using the `owasp:llm:redteam` shorthand:
 
 ```yaml
 redteam:
