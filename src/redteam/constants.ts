@@ -1287,7 +1287,7 @@ export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   NIST: 'NIST AI Risk Management Framework',
   'OWASP API': 'OWASP API Top 10',
   'OWASP LLM': 'OWASP LLM Top 10',
-  'OWASP LLM Red Team': 'OWASP LLM Red Teaming Best Practices',
+  'OWASP Gen AI Red Team': 'OWASP Gen AI Red Teaming Best Practices',
   RAG: 'Recommended plugins plus additional tests for RAG specific scenarios like access control',
   Recommended: 'A broad set of plugins recommended by Promptfoo',
 } as const;
