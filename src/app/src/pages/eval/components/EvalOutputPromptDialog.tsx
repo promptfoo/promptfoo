@@ -8,6 +8,7 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
+import Link from '@mui/material/Link';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -161,6 +162,16 @@ interface EvalOutputPromptDialogProps {
   gradingResults?: GradingResult[];
   metadata?: Record<string, any>;
 }
+
+// URL detection function
+const isValidUrl = (str: string): boolean => {
+  try {
+    new URL(str);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 export default function EvalOutputPromptDialog({
   open,
@@ -338,6 +349,7 @@ export default function EvalOutputPromptDialog({
                   {Object.entries(metadata).map(([key, value]) => {
                     const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
                     const truncatedValue = ellipsize(stringValue, 300);
+                    const isUrl = typeof value === 'string' && isValidUrl(value);
 
                     return (
                       <TableRow key={key}>
@@ -345,14 +357,22 @@ export default function EvalOutputPromptDialog({
                         <TableCell
                           style={{
                             whiteSpace: 'pre-wrap',
-                            cursor: 'pointer',
+                            cursor: isUrl ? 'auto' : 'pointer',
                             position: 'relative',
                           }}
-                          onClick={() => handleMetadataClick(key)}
+                          onClick={() => !isUrl && handleMetadataClick(key)}
                           onMouseEnter={() => setHoveredElement(`metadata-${key}`)}
                           onMouseLeave={() => setHoveredElement(null)}
                         >
-                          {expandedMetadata[key]?.expanded ? stringValue : truncatedValue}
+                          {isUrl ? (
+                            <Link href={value} target="_blank" rel="noopener noreferrer">
+                              {expandedMetadata[key]?.expanded ? stringValue : truncatedValue}
+                            </Link>
+                          ) : expandedMetadata[key]?.expanded ? (
+                            stringValue
+                          ) : (
+                            truncatedValue
+                          )}
                           {(hoveredElement === `metadata-${key}` || copiedFields[key]) && (
                             <IconButton
                               size="small"
