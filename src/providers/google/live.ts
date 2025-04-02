@@ -8,11 +8,11 @@ import type {
   ProviderResponse,
 } from '../../types';
 import '../../util';
-import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
+import { maybeLoadFromExternalFile } from '../../util';
 import { parseChatPrompt } from '../shared';
 import type { CompletionOptions, FunctionCall } from './types';
 import type { GeminiFormat } from './util';
-import { maybeCoerceToGeminiFormat } from './util';
+import { maybeCoerceToGeminiFormat, loadFile } from './util';
 
 const formatContentMessage = (contents: GeminiFormat, contentIndex: number) => {
   if (contents[contentIndex].role != 'user') {
@@ -218,13 +218,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
               ...this.config.generationConfig,
             },
             ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
-            ...(this.config.tools
-              ? {
-                  tools: maybeLoadFromExternalFile(
-                    renderVarsInObject(this.config.tools, context?.vars),
-                  ),
-                }
-              : {}),
+            ...(this.config.tools ? { tools: loadFile(this.config.tools, context?.vars) } : {}),
             ...(this.config.systemInstruction
               ? { systemInstruction: maybeLoadFromExternalFile(this.config.systemInstruction) }
               : {}),

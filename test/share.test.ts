@@ -2,7 +2,12 @@ import type EvalResult from 'src/models/evalResult';
 import { getUserEmail } from '../src/globalConfig/accounts';
 import { cloudConfig } from '../src/globalConfig/cloud';
 import type Eval from '../src/models/eval';
-import { stripAuthFromUrl, createShareableUrl, determineShareDomain } from '../src/share';
+import {
+  stripAuthFromUrl,
+  createShareableUrl,
+  determineShareDomain,
+  isSharingEnabled,
+} from '../src/share';
 import { cloudCanAcceptChunkedResults } from '../src/util/cloud';
 
 const mockFetch = jest.fn();
@@ -29,11 +34,15 @@ jest.mock('../src/envars', () => ({
   isCI: jest.fn(),
 }));
 
-jest.mock('../src/constants', () => ({
-  DEFAULT_SHARE_VIEW_BASE_URL: 'https://app.promptfoo.dev',
-  SHARE_API_BASE_URL: 'https://api.promptfoo.dev',
-  SHARE_VIEW_BASE_URL: 'https://app.promptfoo.dev',
-}));
+jest.mock('../src/constants', () => {
+  const actual = jest.requireActual('../src/constants');
+  return {
+    ...actual,
+    SHARE_API_BASE_URL: 'https://api.promptfoo.app',
+    DEFAULT_SHARE_VIEW_BASE_URL: 'https://promptfoo.app',
+    SHARE_VIEW_BASE_URL: 'https://promptfoo.app',
+  };
+});
 
 describe('stripAuthFromUrl', () => {
   it('removes username and password from URL', () => {
@@ -71,6 +80,76 @@ describe('stripAuthFromUrl', () => {
   });
 });
 
+describe('isSharingEnabled', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // Reset cloudConfig mock
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    // Reset constants mock
+    const constants = jest.requireMock('../src/constants');
+    constants.SHARE_API_BASE_URL = 'https://api.promptfoo.app';
+  });
+
+  it('returns true when sharing config is set in eval record', () => {
+    const mockEval: Partial<Eval> = {
+      config: {
+        sharing: {
+          apiBaseUrl: 'https://custom-api.example.com',
+        },
+      },
+    };
+
+    expect(isSharingEnabled(mockEval as Eval)).toBe(true);
+  });
+
+  it('returns true when sharing env URL is set and not api.promptfoo.app', () => {
+    // Set custom API URL
+    const constants = jest.requireMock('../src/constants');
+    constants.SHARE_API_BASE_URL = 'https://custom-api.example.com';
+
+    const mockEval: Partial<Eval> = {
+      config: {},
+    };
+
+    expect(isSharingEnabled(mockEval as Eval)).toBe(true);
+  });
+
+  it('returns true when cloud sharing is enabled', () => {
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://cloud-api.example.com');
+
+    const mockEval: Partial<Eval> = {
+      config: {},
+    };
+
+    expect(isSharingEnabled(mockEval as Eval)).toBe(true);
+  });
+
+  it('returns false when no sharing options are enabled', () => {
+    // Mock SHARE_API_BASE_URL to default value
+    jest.mock('../src/constants', () => ({
+      ...jest.requireActual('../src/constants'),
+      SHARE_API_BASE_URL: 'https://api.promptfoo.app',
+    }));
+
+    const mockEval: Partial<Eval> = {
+      config: {},
+    };
+
+    expect(isSharingEnabled(mockEval as Eval)).toBe(false);
+  });
+
+  it('returns false when sharing config is not an object', () => {
+    const mockEval: Partial<Eval> = {
+      config: {
+        sharing: true,
+      },
+    };
+
+    expect(isSharingEnabled(mockEval as Eval)).toBe(false);
+  });
+});
+
 describe('determineShareDomain', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -87,7 +166,7 @@ describe('determineShareDomain', () => {
     };
 
     const result = determineShareDomain(mockEval as Eval);
-    expect(result.domain).toBe('https://app.promptfoo.dev');
+    expect(result.domain).toBe('https://promptfoo.app');
     expect(result.isPublicShare).toBe(true);
   });
 
@@ -311,7 +390,7 @@ describe('createShareableUrl', () => {
           body: expect.stringContaining('"results":[{"id":"1"},{"id":"2"}]'),
         }),
       );
-      expect(result).toBe('https://app.promptfoo.dev/eval/mock-eval-id');
+      expect(result).toBe('https://promptfoo.app/eval/mock-eval-id');
     });
 
     it('sends chunked eval when open source version is newer than supported', async () => {
@@ -353,7 +432,7 @@ describe('createShareableUrl', () => {
           body: expect.stringContaining('[{"id":"1"},{"id":"2"}]'),
         }),
       );
-      expect(result).toBe('https://app.promptfoo.dev/eval/mock-eval-id');
+      expect(result).toBe('https://promptfoo.app/eval/mock-eval-id');
     });
   });
 
