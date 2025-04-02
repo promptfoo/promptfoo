@@ -141,8 +141,6 @@ export const ADDITIONAL_PLUGINS = [
   'cyberseceval',
   'debug-access',
   'divergent-repetition',
-  'tool-discovery',
-  'tool-discovery:multi-turn',
   'harmbench',
   'imitation',
   'indirect-prompt-injection',
@@ -159,6 +157,7 @@ export const ADDITIONAL_PLUGINS = [
   'ssrf',
   'system-prompt-override',
   'tool-discovery',
+  'tool-discovery:multi-turn',
   'unsafebench',
 ] as const;
 export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
@@ -615,8 +614,6 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'divergent-repetition':
     'Tests for training data leaks through repetitive pattern exploitation that causes model divergence',
   'excessive-agency': 'Tests for unauthorized actions beyond defined system boundaries',
-  'tool-discovery': 'Tests for enumeration of available tools and function calls',
-  'tool-discovery:multi-turn': 'Multi-turn Tool Discovery',
   foundation: 'Tests a collection of plugins designed to run against foundation models',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Dynamic multi-turn attack generation using adversarial techniques',
@@ -688,6 +685,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'sql-injection': 'Tests for SQL injection vulnerabilities',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
+  'tool-discovery': 'Tests for enumeration of available tools and function calls',
+  'tool-discovery:multi-turn': 'Multi-turn Tool Discovery',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
 };
 
