@@ -286,11 +286,8 @@ export function loadFile(
   // 2. In a test variable that is used in the provider via a nunjunk:
   //    context_vars will contain a string of the contents of the file with whitespace.
   //    This will be inserted into the nunjunk in contfig_tools and the output needs to be parsed.
-  console.log(config_var);
-  console.log(context_vars);
   const fileContents = maybeLoadFromExternalFile(renderVarsInObject(config_var, context_vars));
   if (typeof fileContents === 'string') {
-    console.log(fileContents);
     return JSON.parse(fileContents);
   }
   return fileContents;
