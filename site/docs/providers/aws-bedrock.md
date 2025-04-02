@@ -503,29 +503,37 @@ To use the Knowledge Base provider, you need:
 
 ### Configuration
 
-Configure the Knowledge Base provider by adding the `kb` or `knowledge-base` identifier and your Knowledge Base ID:
+Configure the Knowledge Base provider by specifying `kb` in your provider ID. Note that the model ID needs to include the regional prefix (`us.`, `eu.`, or `apac.`):
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: bedrock:kb:anthropic.claude-3-7-sonnet-20250219:0
+  - id: bedrock:kb:us.anthropic.claude-3-7-sonnet-20250219-v1:0
     config:
-      region: 'us-east-1'
+      region: 'us-east-2'
       knowledgeBaseId: 'YOUR_KNOWLEDGE_BASE_ID'
-      # Optional: You can specify your own modelArn if needed
-      # modelArn: 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-7-sonnet-20250219:0'
+      temperature: 0.0
+      max_tokens: 1000
 ```
+
+The provider ID follows this pattern: `bedrock:kb:[REGIONAL_MODEL_ID]`
+
+For example:
+
+- `bedrock:kb:us.anthropic.claude-3-7-sonnet-20250219-v1:0` (US region)
+- `bedrock:kb:eu.anthropic.claude-3-sonnet-20240229-v1:0` (EU region)
 
 Configuration options include:
 
 - `knowledgeBaseId` (required): The ID of your AWS Bedrock Knowledge Base
-- `region`: AWS region where your Knowledge Base is deployed
-- `modelArn`: Custom ARN for the foundation model (defaults to the model specified in the provider ID)
+- `region`: AWS region where your Knowledge Base is deployed (e.g., 'us-east-1', 'us-east-2', 'eu-west-1')
+- `temperature`: Controls randomness in response generation (default: 0.0)
+- `max_tokens`: Maximum number of tokens in the generated response
 - `accessKeyId`, `secretAccessKey`, `sessionToken`: AWS credentials (if not using environment variables or IAM roles)
 - `profile`: AWS profile name for SSO authentication
 
 ### Example
 
-Here's a basic example to test your Knowledge Base with a few questions:
+Here's a complete example to test your Knowledge Base with a few questions:
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
@@ -533,10 +541,20 @@ prompts:
   - 'Tell me about quantum computing.'
 
 providers:
-  - id: bedrock:kb:anthropic.claude-3-7-sonnet-20250219:0
+  # Knowledge Base provider
+  - id: bedrock:kb:us.anthropic.claude-3-7-sonnet-20250219-v1:0
     config:
-      region: 'us-east-1'
+      region: 'us-east-2'
       knowledgeBaseId: 'YOUR_KNOWLEDGE_BASE_ID'
+      temperature: 0.0
+      max_tokens: 1000
+
+  # Regular Claude model for comparison
+  - id: bedrock:us.anthropic.claude-3-7-sonnet-20250219-v1:0
+    config:
+      region: 'us-east-2'
+      temperature: 0.0
+      max_tokens: 1000
 
 tests:
   - description: 'Basic factual questions from the knowledge base'
@@ -560,59 +578,6 @@ When using the Knowledge Base provider, the response will include:
 2. **citations**: An array of citations that includes:
    - `retrievedReferences`: References to source documents that informed the response
    - `generatedResponsePart`: Parts of the response that correspond to specific citations
-
-The citations are useful for:
-
-- Verifying the accuracy of information
-- Tracing back to source documents
-- Understanding which parts of the response are derived from which sources
-
-### Caching
-
-The Knowledge Base provider supports response caching to improve performance and reduce API calls. When caching is enabled, responses for identical queries are stored and retrieved from the cache. This is especially useful during development and testing.
-
-To enable caching, set the `PROMPTFOO_CACHE` environment variable:
-
-```sh
-export PROMPTFOO_CACHE=1
-```
-
-### Error Handling
-
-The provider includes robust error handling for common issues:
-
-- **Missing Knowledge Base ID**: Returns a clear error message if the `knowledgeBaseId` is not provided
-- **Authentication failures**: Propagates AWS authentication errors with helpful messages
-- **API errors**: Captures and returns Bedrock API errors with descriptive messages
-
-If you encounter authentication issues, verify your AWS credentials and ensure your IAM role or user has permissions to access the Bedrock Knowledge Base service.
-
-:::warning
-
-Make sure your IAM user or role has the necessary permissions to access the Bedrock Knowledge Base APIs. At minimum, you'll need the following permissions:
-
-- `bedrock:InvokeModel`
-- `bedrock-agent:RetrieveAndGenerate`
-- `bedrock-agent:Retrieve`
-
-:::
-
-### Related Configuration
-
-The Knowledge Base provider can be used alongside other Bedrock providers in the same evaluation. For example:
-
-```yaml title="promptfooconfig.yaml"
-providers:
-  - id: bedrock:anthropic.claude-3-7-sonnet-20250219:0
-    config:
-      region: 'us-east-1'
-  - id: bedrock:kb:anthropic.claude-3-7-sonnet-20250219:0
-    config:
-      region: 'us-east-1'
-      knowledgeBaseId: 'YOUR_KB_ID'
-```
-
-This allows you to compare responses from the raw model against responses augmented with your knowledge base data.
 
 ## See Also
 
