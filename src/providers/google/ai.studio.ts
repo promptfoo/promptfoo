@@ -183,7 +183,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
 
     // Determine API version based on model
     const apiVersion = this.modelName === 'gemini-2.0-flash-thinking-exp' ? 'v1alpha' : 'v1beta';
-    
+
     const body: Record<string, any> = {
       contents,
       generationConfig: {
