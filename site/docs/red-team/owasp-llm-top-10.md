@@ -390,6 +390,62 @@ tests:
         value: output.length < 1000
 ```
 
+## OWASP LLM Red Team Best Practices
+
+In addition to the OWASP LLM Top 10, OWASP has published best practices for red teaming LLM applications. These best practices are organized into four phases, each focusing on different aspects of LLM security testing.
+
+You can use Promptfoo to automate testing across all four phases using the `owasp:llm:redteam` shorthand:
+
+```yaml
+redteam:
+  plugins:
+    - owasp:llm:redteam
+```
+
+Or target specific phases:
+
+### Phase 1: Model Evaluation
+
+Focus on alignment, robustness, bias, socio-technological harms, and data risk at the base model layer.
+
+```yaml
+redteam:
+  plugins:
+    - owasp:llm:redteam:model
+```
+
+### Phase 2: Implementation Evaluation
+
+Focus on guardrails, knowledge retrieval security (RAG), content filtering bypass, access control tests, and other "middle tier" application-level defenses.
+
+```yaml
+redteam:
+  plugins:
+    - owasp:llm:redteam:implementation
+```
+
+### Phase 3: System Evaluation
+
+Focus on full-application or system-level vulnerabilities, supply chain, sandbox escapes, resource controls, and overall infrastructure.
+
+```yaml
+redteam:
+  plugins:
+    - owasp:llm:redteam:system
+```
+
+### Phase 4: Runtime / Human & Agentic Evaluation
+
+Focus on live environment, human-agent interaction, multi-agent chaining, brand & trust issues, social engineering, and over-reliance.
+
+```yaml
+redteam:
+  plugins:
+    - owasp:llm:redteam:runtime
+```
+
+These red teaming best practices complement the OWASP LLM Top 10 by providing a structured approach to testing LLM applications across different layers of the stack.
+
 ## What's next
 
 The OWASP LLM Top 10 is rapidly evolving, but the above examples should give you a good starting point for testing your LLM applications. Regular testing with Promptfoo can help ensure your LLM applications remain secure and robust against a wide range of potential threats.
