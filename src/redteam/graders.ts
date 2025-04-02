@@ -118,7 +118,6 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:shell-injection': new ShellInjectionGrader(),
   'promptfoo:redteam:sql-injection': new SqlInjectionGrader(),
   'promptfoo:redteam:ssrf': new SsrfGrader(),
-  'promptfoo:redteam:tool-discovery': new ToolDiscoveryGrader(),
   'promptfoo:redteam:unsafebench': new UnsafeBenchGrader(),
 };
 
