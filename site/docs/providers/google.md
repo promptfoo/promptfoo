@@ -73,6 +73,89 @@ providers:
 
 For more details on capabilities and configuration options, see the [Gemini API documentation](https://ai.google.dev/docs).
 
+## Model Examples
+
+### Gemini 2.0 Flash
+
+Best for fast, efficient responses and general tasks:
+
+```yaml
+providers:
+  - id: google:gemini-2.0-flash
+    config:
+      temperature: 0.7
+      maxOutputTokens: 2048
+      topP: 0.9
+      topK: 40
+```
+
+## Advanced Features
+
+### Function Calling
+
+Enable your model to interact with external systems through defined functions:
+
+```yaml
+providers:
+  - id: google:gemini-1.5-pro
+    config:
+      tools:
+        function_declarations:
+          - name: 'get_weather'
+            description: 'Get current weather for a location'
+            parameters:
+              type: 'object'
+              properties:
+                location:
+                  type: 'string'
+                  description: 'City name or coordinates'
+                units:
+                  type: 'string'
+                  enum: ['celsius', 'fahrenheit']
+              required: ['location']
+      tool_config:
+        function_calling_config:
+          mode: 'auto' # or 'none' to disable
+```
+
+### Structured Output
+
+You can constrain the model to output structured JSON responses in two ways:
+
+#### 1. Using Response Schema Configuration
+
+```yaml
+providers:
+  - id: google:gemini-1.5-pro
+    config:
+      generationConfig:
+        response_mime_type: 'application/json'
+        response_schema:
+          type: 'object'
+          properties:
+            title:
+              type: 'string'
+            summary:
+              type: 'string'
+            tags:
+              type: 'array'
+              items:
+                type: 'string'
+          required: ['title', 'summary']
+```
+
+#### 2. Using Response Schema File
+
+```yaml
+providers:
+  - id: google:gemini-1.5-pro
+    config:
+      # Can be inline schema or file path
+      responseSchema: 'file://path/to/schema.json'
+```
+
+For more details, see the [Gemini API documentation](https://ai.google.dev/docs).
+
 ## Google Multimodal Live API
 
 Promptfoo now supports Google's WebSocket-based Multimodal Live API, which enables low-latency bidirectional voice and video interactions with Gemini models. This API provides real-time interactive capabilities beyond what's available in the standard REST API.
@@ -182,86 +265,3 @@ promptfoo init --example google-multimodal-live-tools
 - Maximum of 4M tokens per minute
 
 For more details, see the [Multimodal Live API documentation](https://ai.google.dev/docs/multimodal_live).
-
-## Model Examples
-
-### Gemini 2.0 Flash
-
-Best for fast, efficient responses and general tasks:
-
-```yaml
-providers:
-  - id: google:gemini-2.0-flash
-    config:
-      temperature: 0.7
-      maxOutputTokens: 2048
-      topP: 0.9
-      topK: 40
-```
-
-## Advanced Features
-
-### Function Calling
-
-Enable your model to interact with external systems through defined functions:
-
-```yaml
-providers:
-  - id: google:gemini-1.5-pro
-    config:
-      tools:
-        function_declarations:
-          - name: 'get_weather'
-            description: 'Get current weather for a location'
-            parameters:
-              type: 'object'
-              properties:
-                location:
-                  type: 'string'
-                  description: 'City name or coordinates'
-                units:
-                  type: 'string'
-                  enum: ['celsius', 'fahrenheit']
-              required: ['location']
-      tool_config:
-        function_calling_config:
-          mode: 'auto' # or 'none' to disable
-```
-
-### Structured Output
-
-You can constrain the model to output structured JSON responses in two ways:
-
-#### 1. Using Response Schema Configuration
-
-```yaml
-providers:
-  - id: google:gemini-1.5-pro
-    config:
-      generationConfig:
-        response_mime_type: 'application/json'
-        response_schema:
-          type: 'object'
-          properties:
-            title:
-              type: 'string'
-            summary:
-              type: 'string'
-            tags:
-              type: 'array'
-              items:
-                type: 'string'
-          required: ['title', 'summary']
-```
-
-#### 2. Using Response Schema File
-
-```yaml
-providers:
-  - id: google:gemini-1.5-pro
-    config:
-      # Can be inline schema or file path
-      responseSchema: 'file://path/to/schema.json'
-```
-
-For more details, see the [Gemini API documentation](https://ai.google.dev/docs).
