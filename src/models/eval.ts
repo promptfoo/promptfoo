@@ -520,6 +520,7 @@ export function getSummaryOfLatestEvals(
       numTests: sql`COUNT(DISTINCT ${evalResultsTable.testIdx})`.as('numTests'),
       datasetId: evalsToDatasetsTable.datasetId,
       isRedteam: sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`,
+      passCount: sql<number>`SUM(CASE WHEN ${evalResultsTable.success} = true THEN 1 ELSE 0 END) AS pass_count`,
     })
     .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
@@ -537,14 +538,16 @@ export function getSummaryOfLatestEvals(
     // .limit(limit)
     .all();
 
-  const deserializedResults = results.map((result) => ({
-    evalId: result.evalId,
-    createdAt: result.createdAt,
-    description: result.description,
-    numTests: (result.numTests as number) || 0,
-    datasetId: result.datasetId,
-    isRedteam: result.isRedteam,
-  }));
-
-  return deserializedResults;
+  return results.map((result) => {
+    const testCount = (result.numTests as number) ?? 0;
+    return {
+      evalId: result.evalId,
+      createdAt: result.createdAt,
+      description: result.description,
+      numTests: testCount,
+      datasetId: result.datasetId,
+      isRedteam: result.isRedteam,
+      passRate: testCount > 0 && result.passCount > 0 ? (testCount / result.passCount) * 100 : 0,
+    };
+  });
 }
