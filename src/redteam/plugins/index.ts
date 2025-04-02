@@ -46,7 +46,6 @@ import { ToolDiscoveryPlugin } from './toolDiscovery';
 import { ToolDiscoveryMultiTurnPlugin } from './toolDiscoveryMultiTurn';
 import { UnsafeBenchPlugin } from './unsafebench';
 
-
 export interface PluginFactory {
   key: string;
   validate?: (config: PluginConfig) => void;

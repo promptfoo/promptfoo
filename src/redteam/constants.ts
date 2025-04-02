@@ -172,7 +172,7 @@ export const STRATEGY_EXEMPT_PLUGINS = [
   'pliny',
   'system-prompt-override',
   'tool-discovery:multi-turn',
-  'unsafebench'
+  'unsafebench',
 ] as const;
 
 export type StrategyExemptPlugin = (typeof STRATEGY_EXEMPT_PLUGINS)[number];
