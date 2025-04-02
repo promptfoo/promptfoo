@@ -1,5 +1,4 @@
 import { AwsBedrockKnowledgeBaseProvider } from '../../src/providers/bedrockKnowledgeBase';
-import type { EnvOverrides } from '../../src/types/env';
 
 jest.mock('@aws-sdk/client-bedrock-agent-runtime', () => ({
   BedrockAgentRuntimeClient: jest.fn().mockImplementation(() => ({
@@ -151,7 +150,10 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     };
 
     // Set up the mock response
-    BedrockAgentRuntimeClient.prototype.send = jest.fn().mockResolvedValue(mockResponse);
+    jest
+      .spyOn(BedrockAgentRuntimeClient.prototype, 'send')
+      .mockImplementation()
+      .mockResolvedValue(mockResponse);
 
     const provider = new AwsBedrockKnowledgeBaseProvider('anthropic.claude-v2', {
       config: {
@@ -162,7 +164,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     // Only mock the result, not the entire method
     const originalCallApi = provider.callApi;
-    provider.callApi = jest.fn().mockImplementation(async (prompt) => {
+    jest.spyOn(provider, 'callApi').mockImplementation(async (prompt) => {
       // First call the original to make sure RetrieveAndGenerateCommand gets called
       await originalCallApi.call(provider, prompt);
 
@@ -225,7 +227,10 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
   });
 
   it('should handle API errors gracefully', async () => {
-    BedrockAgentRuntimeClient.prototype.send = jest.fn().mockRejectedValue(new Error('API error'));
+    jest
+      .spyOn(BedrockAgentRuntimeClient.prototype, 'send')
+      .mockImplementation()
+      .mockRejectedValue(new Error('API error'));
 
     const provider = new AwsBedrockKnowledgeBaseProvider('anthropic.claude-v2', {
       config: {
@@ -236,7 +241,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     // Override the callApi method to directly return what we expect
     const originalCallApi = provider.callApi;
-    provider.callApi = jest.fn().mockImplementation(async () => {
+    jest.spyOn(provider, 'callApi').mockImplementation(async () => {
       return {
         error: 'Bedrock Knowledge Base API error: Error: API error',
       };
@@ -261,7 +266,10 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
       },
     };
 
-    BedrockAgentRuntimeClient.prototype.send = jest.fn().mockResolvedValue(mockResponse);
+    jest
+      .spyOn(BedrockAgentRuntimeClient.prototype, 'send')
+      .mockImplementation()
+      .mockResolvedValue(mockResponse);
 
     const provider = new AwsBedrockKnowledgeBaseProvider('claude-v2', {
       config: {
