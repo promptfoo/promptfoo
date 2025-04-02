@@ -168,6 +168,9 @@
                             "HF_TOKEN": {
                               "type": "string"
                             },
+                            "HUGGING_FACE_HUB_TOKEN": {
+                              "type": "string"
+                            },
                             "LANGFUSE_HOST": {
                               "type": "string"
                             },
@@ -277,6 +280,24 @@
                               "type": "string"
                             },
                             "AZURE_CONTENT_SAFETY_API_VERSION": {
+                              "type": "string"
+                            },
+                            "AWS_REGION": {
+                              "type": "string"
+                            },
+                            "AWS_DEFAULT_REGION": {
+                              "type": "string"
+                            },
+                            "AWS_SAGEMAKER_MAX_TOKENS": {
+                              "type": "string"
+                            },
+                            "AWS_SAGEMAKER_TEMPERATURE": {
+                              "type": "string"
+                            },
+                            "AWS_SAGEMAKER_TOP_P": {
+                              "type": "string"
+                            },
+                            "AWS_SAGEMAKER_MAX_RETRIES": {
                               "type": "string"
                             }
                           },
@@ -1101,7 +1122,8 @@
                           "system-prompt-override",
                           "tool-discovery",
                           "tool-discovery:multi-turn",
-                          "toxicity"
+                          "toxicity",
+                          "unsafebench"
                         ]
                       },
                       {
@@ -1242,7 +1264,8 @@
                               "system-prompt-override",
                               "tool-discovery",
                               "tool-discovery:multi-turn",
-                              "toxicity"
+                              "toxicity",
+                              "unsafebench"
                             ]
                           },
                           {

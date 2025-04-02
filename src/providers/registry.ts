@@ -33,8 +33,9 @@ import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
 import { EchoProvider } from './echo';
 import { FalImageGenerationProvider } from './fal';
 import { GolangProvider } from './golangCompletion';
-import { GoogleChatProvider } from './google';
-import { GoogleMMLiveProvider } from './googleMultimodalLive';
+import { AIStudioChatProvider } from './google/ai.studio';
+import { GoogleMMLiveProvider } from './google/live';
+import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
 import { GroqProvider } from './groq';
 import { HttpProvider } from './http';
 import {
@@ -45,6 +46,7 @@ import {
   HuggingfaceTokenExtractionProvider,
 } from './huggingface';
 import { JfrogMlChatCompletionProvider } from './jfrog';
+import { LiteLLMProvider } from './litellm';
 import { LlamaProvider } from './llama';
 import {
   LocalAiChatProvider,
@@ -64,17 +66,17 @@ import { OpenAiRealtimeProvider } from './openai/realtime';
 import { OpenAiResponsesProvider } from './openai/responses';
 import { parsePackageProvider } from './packageParser';
 import { PortkeyChatCompletionProvider } from './portkey';
+import { PromptfooModelProvider } from './promptfooModel';
 import { PythonProvider } from './pythonCompletion';
 import {
-  ReplicateImageProvider,
   ReplicateModerationProvider,
   ReplicateProvider,
+  ReplicateImageProvider,
 } from './replicate';
 import { ScriptCompletionProvider } from './scriptCompletion';
 import { SequenceProvider } from './sequence';
 import { SimulatedUser } from './simulatedUser';
 import { createTogetherAiProvider } from './togetherai';
-import { VertexChatProvider, VertexEmbeddingProvider } from './vertex';
 import { VoyageEmbeddingProvider } from './voyage';
 import { WatsonXProvider } from './watsonx';
 import { WebhookProvider } from './webhook';
@@ -268,6 +270,52 @@ export const providerMap: ProviderFactory[] = [
         `${modelType}${modelName ? `:${modelName}` : ''}`,
         providerOptions,
       );
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('sagemaker:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const modelType = splits[1];
+      const endpointName = splits.slice(2).join(':');
+
+      // Dynamically import SageMaker provider
+      const { SageMakerCompletionProvider, SageMakerEmbeddingProvider } = await import(
+        './sagemaker'
+      );
+
+      if (modelType === 'embedding' || modelType === 'embeddings') {
+        return new SageMakerEmbeddingProvider(endpointName || modelType, providerOptions);
+      }
+
+      // Handle the 'sagemaker:<endpoint>' format (no model type specified)
+      if (splits.length === 2) {
+        return new SageMakerCompletionProvider(modelType, providerOptions);
+      }
+
+      // Handle special case for JumpStart models
+      if (endpointName.includes('jumpstart') || modelType === 'jumpstart') {
+        return new SageMakerCompletionProvider(endpointName, {
+          ...providerOptions,
+          config: {
+            ...providerOptions.config,
+            modelType: 'jumpstart',
+          },
+        });
+      }
+
+      // Handle 'sagemaker:<model-type>:<endpoint>' format for other model types
+      return new SageMakerCompletionProvider(endpointName, {
+        ...providerOptions,
+        config: {
+          ...providerOptions.config,
+          modelType,
+        },
+      });
     },
   },
   {
@@ -519,6 +567,17 @@ export const providerMap: ProviderFactory[] = [
           apiKeyEnvar: 'HYPERBOLIC_API_KEY',
         },
       });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('litellm:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const modelName = providerPath.split(':')[1];
+      return new LiteLLMProvider(modelName, providerOptions);
     },
   },
   {
@@ -849,7 +908,7 @@ export const providerMap: ProviderFactory[] = [
 
       // Default to regular Google API
       const modelName = splits[1];
-      return new GoogleChatProvider(modelName, providerOptions);
+      return new AIStudioChatProvider(modelName, providerOptions);
     },
   },
   {
@@ -997,6 +1056,20 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return new SimulatedUser(providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('promptfoo:model:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const modelName = providerPath.split(':')[2];
+      return new PromptfooModelProvider(modelName, {
+        ...providerOptions,
+        model: modelName,
+      });
     },
   },
   {

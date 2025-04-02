@@ -4,11 +4,13 @@ sidebar_position: 4
 
 # Prompts, tests, and outputs
 
+This document covers how to configure prompts, tests, and output formats in promptfoo evaluations.
+
 ## Prompts
 
 ### Prompts from raw text
 
-By default, the config will accept raw text as prompts:
+By default, the config accepts raw text as prompts:
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
@@ -16,7 +18,7 @@ prompts:
   - 'Translate the following text to German: "{{name}}: {{text}}"'
 ```
 
-YAML supports multiline strings too:
+YAML supports multiline strings for more complex prompts:
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
@@ -35,9 +37,9 @@ Use [Nunjucks](https://mozilla.github.io/nunjucks/) templating syntax to include
 
 Some LLM APIs accept prompts in a JSON chat format like `[{ "role" : "user", "content": "..."}]`.
 
-By default, plaintext prompts are wrapped in a `user`-role message. If you provide JSON, then promptfoo will send the `messages` object exactly as provided.
+By default, plaintext prompts are wrapped in a `user`-role message. If you provide JSON, promptfoo will send the `messages` object exactly as provided.
 
-Here's an example of a chat-formatted prompt:
+Example of a chat-formatted prompt:
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
@@ -63,7 +65,7 @@ Learn more about [chat conversations with OpenAI message format](/docs/providers
 
 ### Prompts from file
 
-Your prompts may be complicated enough that it's difficult to maintain them inline. In that case, reference a file. Filepaths are relative to the configuration file directory:
+For complex prompts that are difficult to maintain inline, reference external files. Filepaths are relative to the configuration file directory:
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
@@ -92,10 +94,10 @@ prompts:
 ```
 
 :::tip
-Check them into version control. This approach helps in tracking changes, collaboration, and ensuring consistency across different environments.
+Check prompt files into version control. This approach helps in tracking changes, collaboration, and ensuring consistency across different environments.
 :::
 
-Example of multiple prompt files:
+Examples of prompt files:
 
 ```txt title="prompt1.txt"
 Translate the following text to French: "{{name}}: {{text}}"
@@ -105,9 +107,9 @@ Translate the following text to French: "{{name}}: {{text}}"
 Translate the following text to German: "{{name}}: {{text}}"
 ```
 
-Prompts can be JSON too. Use this to configure multi-shot prompt formats:
+JSON prompts can configure multi-shot prompt formats:
 
-```json
+```json title="chat_prompt.json"
 [
   {
     "role": "system",
@@ -122,9 +124,9 @@ Prompts can be JSON too. Use this to configure multi-shot prompt formats:
 
 ### Multiple prompts in a single text file
 
-If you have only one text file, you can include multiple prompts in the file, separated by the separator `---`. If you have multiple files, each prompt should be in a separate file.
+With a single text file, include multiple prompts separated by `---`. For multiple files, use separate files for each prompt.
 
-Example of a single prompt file with multiple prompts (`prompts.txt`):
+Example of a single file with multiple prompts:
 
 ```text title="prompts.txt"
 Translate the following text to French: "{{name}}: {{text}}"
@@ -136,9 +138,11 @@ Translate the following text to German: "{{name}}: {{text}}"
 The prompt separator can be overridden with the `PROMPTFOO_PROMPT_SEPARATOR` environment variable.
 :::
 
-### Prompts as Markdown
+### Prompts in different formats
 
-Prompts as markdown are treated similarly to prompts as raw text. You can define a prompt in a markdown file as:
+promptfoo supports several file formats for prompts:
+
+#### Markdown prompts
 
 ```markdown title="prompt.md"
 You are a helpful assistant for Promptfoo. Please answer the following question: {{question}}
@@ -148,20 +152,40 @@ Note that only one prompt per markdown file is supported.
 
 ### Prompts as Jinja2 Templates
 
-Jinja2 template files (`.j2`) are supported. Like Markdown files, each `.j2` file is treated as a single prompt.
-
-Jinja2 uses syntax that's compatible with Nunjucks (which promptfoo uses for templating), including the same variable interpolation with `{{ variable }}` syntax.
+Jinja2 template files (`.j2`) use syntax compatible with Nunjucks:
 
 ```jinja title="prompt.j2"
 You are a helpful assistant for Promptfoo.
 Please answer the following question about {{ topic }}: {{ question }}
 ```
 
+### CSV prompts
+
+CSV files can define multiple prompts in a single file:
+
+**Single-Column Format:**
+
+```csv title="prompts.csv"
+prompt
+"Tell me about {{topic}}"
+"Explain {{topic}} in simple terms"
+"Write a poem about {{topic}}"
+```
+
+#### Two-Column Format
+
+You can include a "label" column to give each prompt a descriptive name:
+
+```csv title="prompts.csv"
+prompt,label
+"Tell me about {{topic}}","Basic Query"
+"Explain {{topic}} in simple terms","Simple Explanation"
+"Write a poem about {{topic}}","Poetry Generator"
+```
+
 ### Different prompts per model
 
-To set separate prompts for different providers, you can specify the prompt files within the `providers` section of your `promptfooconfig.yaml`. Each provider can have its own set of prompts that are tailored to its specific requirements or input format.
-
-Here's an example of how to set separate prompts for llama3.1 and GPT-4o models:
+To use separate prompts for different providers, specify prompt files within the `providers` section:
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -184,15 +208,11 @@ providers:
       - llama_completion_prompt
 ```
 
-In this configuration, the `gpt_chat_prompt` is used for both GPT-4o and GPT-4o-mini models, while the `llama_completion_prompt` is used for the llama3.1 model. The prompts are defined in separate files within the `prompts` directory.
-
-Make sure to create the corresponding prompt files with the content formatted as expected by each model. For example, GPT models might expect a JSON array of messages, while llama might expect a plain text format with a specific prefix.
+In this configuration, the `gpt_chat_prompt` is used for both GPT-4o and GPT-4o-mini models, while the `llama_completion_prompt` is used for the llama3.1 model.
 
 ### Prompt functions
 
-Prompt functions allow you to incorporate custom logic in your prompts. These functions are written in JavaScript or Python and are included in the prompt files with `.js` or `.py` extensions.
-
-To specify a prompt function in `promptfooconfig.yaml`, reference the file directly. For example:
+Prompt functions incorporate custom logic in your prompts through JavaScript or Python files. Reference the file directly in your config:
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
@@ -200,21 +220,17 @@ prompts:
   - file://prompt.py
 ```
 
-In the prompt function, you can access the test case variables and provider information via the context. The function will have access to a `vars` object and `provider` object. Having access to the provider object allows you to dynamically generate prompts for different providers with different formats.
-
-The function should return one of the following:
+The function has access to `vars` and `provider` objects and can return:
 
 1. A string (used directly as the prompt)
-2. An object/array (JSON stringified and used as the prompt)
-3. A structured object with `prompt` (string or object/array) and `config` (provider configuration).
+2. An object/array (JSON stringified as the prompt)
+3. A structured object with `prompt` and `config` (provider configuration)
 
-When a prompt function returns configuration alongside the prompt content, the configuration values will be merged with any existing configuration for that prompt. Values returned by the prompt function will take precedence over existing configuration values with the same keys.
-
-This allows you to set default configuration values in your promptfoo config file, while still enabling prompt functions to override specific settings dynamically when needed.
+Configuration values from prompt functions take precedence over existing configuration values with the same keys.
 
 #### Examples
 
-A Javascript prompt function, `prompt.js`:
+JavaScript prompt function:
 
 ```javascript title="prompt.js"
 module.exports = async function ({ vars, provider }) {
@@ -231,7 +247,7 @@ module.exports = async function ({ vars, provider }) {
 };
 ```
 
-To reference a specific function in your prompt file, use the following syntax: `filename.js:functionName`:
+Reference a specific function using `filename.js:functionName`:
 
 ```javascript title="prompt.js:prompt1"
 // highlight-start
@@ -250,14 +266,13 @@ module.exports.prompt1 = async function ({ vars, provider }) {
 };
 ```
 
-A Python prompt function, `prompt.py:my_prompt_function`:
+Python prompt function:
 
-```python title="prompt.py"
+```python title="prompt.py:my_prompt_function"
 import json
 import sys
 
 def my_prompt_function(context: dict) -> str:
-
     provider: dict = context['provider']
     provider_id: str = provider['id']  # ex. openai:gpt-4o or bedrock:anthropic.claude-3-sonnet-20240229-v1:0
     provider_label: str | None = provider.get('label') # exists if set in promptfoo config.
@@ -270,7 +285,7 @@ def my_prompt_function(context: dict) -> str:
     )
 ```
 
-A JavaScript prompt function that returns both prompt content and dynamic configuration:
+JavaScript function with dynamic configuration:
 
 ```javascript title="prompt_with_config.js"
 module.exports = async function ({ vars, provider }) {
@@ -304,14 +319,6 @@ module.exports = async function ({ vars, provider }) {
 };
 ```
 
-This structured return format allows you to dynamically configure provider settings based on the prompt content or other runtime factors.
-
-To verify that your function is producing the correct prompt:
-
-1. Run `promptfoo view`
-2. Check that the table header contains your function code.
-3. Hover over a particular output that you want to investigate and click the Magnifying Glass (🔎) to view the final prompt in the details pane.
-
 :::info
 By default, promptfoo runs the `python` executable in your shell.
 
@@ -320,19 +327,16 @@ To override the Python executable, set the `PROMPTFOO_PYTHON` environment variab
 
 #### Viewing the final prompt
 
-Prompt functions show source code at the top of the results table because they can return dynamic values that differ between test cases.
+To see the final prompts for each test case:
 
-In order to see the prompts for each test case, toggle `Table Settings` > `Show full prompt in output cell`. This will display the final prompt for each test case/provider combination.
+1. Run `promptfoo view`
+2. Toggle `Table Settings` > `Show full prompt in output cell`
 
 ![final prompt shown for each test case](/img/docs/final-prompt-for-test-case.png)
 
 ### Prompt configs
 
-Prompts can be configured with a `config` object. This object is merged with the provider configuration object and the combined object is used to call the provider API.
-
-A good use case for this is to set the `response_format` for a specific prompt.
-
-#### Example
+Prompts can include a `config` object that merges with the provider configuration:
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
@@ -346,21 +350,17 @@ prompts:
 
 ### Nunjucks filters
 
-Nunjucks is a templating language with many [built-in filters](https://mozilla.github.io/nunjucks/templating.html#builtin-filters) that can be applied to variables. For example: `{{ varName | capitalize }}`.
+Nunjucks provides [built-in filters](https://mozilla.github.io/nunjucks/templating.html#builtin-filters) like `{{ varName | capitalize }}` and supports custom filters.
 
-Nunjucks [custom filters](https://mozilla.github.io/nunjucks/api.html#custom-filters) are Javascript functions that can be applied to variables in your templates.
+To create a custom filter, define a JavaScript function:
 
-To define a Nunjucks filter, create a JavaScript file that exports a function. This function will be used as the filter and it should take the input value as an argument and return the transformed value.
-
-Here's an example of a custom Nunjucks filter that transforms a string to uppercase (`allcaps.js`):
-
-```js
+```js title="allcaps.js"
 module.exports = function (str) {
   return str.toUpperCase();
 };
 ```
 
-To use a custom Nunjucks filter in Promptfoo, add it to your configuration file (`promptfooconfig.yaml`). The `nunjucksFilters` field should contain a mapping of filter names to the paths of the JavaScript files that define them:
+Register it in your configuration:
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
@@ -375,23 +375,19 @@ tests:
   # ...
 ```
 
-Then, use the filter in prompts by appending it to a variable or expression with the pipe (`|`) symbol:
+Use the filter in prompts:
 
 ```txt
 Translate this to {{language}}: {{body | allcaps}}
 ```
 
-In this example, the `body` variable is passed through the `allcaps` filter before it's used in the prompt. This means that the text will be transformed to uppercase.
-
 ### Default prompt
 
-If `prompts` is not defined in the config, then by default Promptfoo will use a "passthrough" prompt: `{{prompt}}`. This prompt simply passes through content of the `prompt` variable.
+If `prompts` is not defined, promptfoo uses a "passthrough" prompt: `{{prompt}}`, which simply passes through the `prompt` variable content.
 
 ## Tests and Vars
 
-If you have a lot of tests, you can optionally keep them separate from the main config file.
-
-The easiest way to do this is by creating a `tests.yaml` file that contains a list of tests. Then, include it in your `promptfooconfig.yaml` like so:
+For large test sets, keep tests separate from the main config file by creating a `tests.yaml`:
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
@@ -403,7 +399,7 @@ providers:
 tests: file://path/to/tests.yaml
 ```
 
-You can even break it into multiple files or globs:
+You can use multiple files or globs:
 
 ```yaml title="promptfooconfig.yaml"
 tests:
@@ -423,7 +419,7 @@ tests:
   - file://path/to/tests.ts:generate_tests
 ```
 
-The file should export an array of test cases:
+Example JavaScript file:
 
 ```js title="tests.js"
 export default [
@@ -431,6 +427,8 @@ export default [
   { vars: { var1: 'value3', var2: 'value4' }, assert: [], description: 'Test #2' },
 ];
 ```
+
+TypeScript with dynamic generation:
 
 ```ts title="tests.ts"
 export async function generate_tests() {
@@ -483,16 +481,16 @@ def generate_tests():
 
 JSON files contain an array of test cases:
 
-```json
+```json title="tests.json"
 [
   { "vars": { "var1": "value1" }, "assert": [], "description": "Test #1" },
   { "vars": { "var1": "value2" }, "assert": [], "description": "Test #2" }
 ]
 ```
 
-JSONL files contain one JSON test case per line:
+JSONL files with one test case per line:
 
-```jsonl
+```jsonl title="tests.jsonl"
 {"vars": {"var1": "value1"}, "assert": [], "description": "Test #1"}
 {"vars": {"var1": "value2"}, "assert": [], "description": "Test #2"}
 ```
@@ -513,27 +511,35 @@ German,"Hello, world!"
 Spanish,Where is the library?
 ```
 
-The tests file optionally supports several special columns:
+Special columns include:
 
-- `__expected`: A column that includes [test assertions](/docs/configuration/expected-outputs). This column lets you automatically mark output according to quality expectations.
-  - For multiple assertions, use `__expected1`, `__expected2`, `__expected3`, etc.
-- `__prefix`: This string is prepended to each prompt before it's sent to the API
-- `__suffix`: This string is appended to each prompt before it's sent to the API
-- `__description`: The test description
-- `__metric`: The metric assigned to every assertion in the test case
-- `__threshold`: The threshold assigned to the test case
-- `__metadata:*`: Add metadata to the test case that can be filtered using `--filter-metadata`. Replace `*` with your metadata key (e.g., `__metadata:topic`).
-  - For array values, use `__metadata:*[]` format (e.g., `__metadata:topic[]`). Array values are comma-separated and support escaping commas with `\,`.
+- `__expected`: For [test assertions](/docs/configuration/expected-outputs)
+  - For multiple assertions: `__expected1`, `__expected2`, etc.
+- `__prefix`: Prepended to each prompt
+- `__suffix`: Appended to each prompt
+- `__description`: Test description
+- `__metric`: Metric for all assertions
+- `__threshold`: Test threshold
+- `__metadata:*`: Filterable metadata (e.g., `__metadata:topic`)
+  - Array values: `__metadata:*[]` (e.g., `__metadata:categories[]`)
 
-Example CSV with metadata columns:
+Example with assertions:
 
-```csv
+```csv title="tests_with_assertions.csv"
+input,__expected1,__expected2,__expected3
+"What's the capital of France?","contains: Paris","llm-rubric: Is the response accurate and factual?","python: file://verify_capitals.py"
+"What is the sum of 15 + 27","equals: 42","contains: sum","javascript: file://check_math.js"
+```
+
+Example with metadata:
+
+```csv title="tests_with_metadata.csv"
 input,__metadata:topic,__metadata:categories[]
 "Hello world","greeting","basic,introduction"
 "What's 2+2?","math","arithmetic,basic\,math"
 ```
 
-You can filter tests by metadata using the `--filter-metadata` option:
+Filter by metadata:
 
 ```bash
 # Filter by single value metadata
@@ -543,26 +549,33 @@ promptfoo eval --filter-metadata topic=greeting
 promptfoo eval --filter-metadata categories=arithmetic
 ```
 
+See a full example on [GitHub](https://github.com/promptfoo/promptfoo/tree/main/examples/csv-metadata).
+
 :::tip
-You can load your tests from [Google Sheets](/docs/configuration/guide#loading-tests-from-csv).
+You can load tests from [Google Sheets](/docs/configuration/guide#loading-tests-from-csv).
 :::
 
-#### CSV Files with JSON Fields
+##### CSV with JSON Fields
 
-CSV files can include JSON fields for structured data. Simple JSON can be unquoted (`{"answer":""}`), while JSON with commas should be escaped (`"{""key"":""value""}"`). By default, promptfoo will try to parse JSON fields in both formats. Set `PROMPTFOO_CSV_STRICT=true` to enforce RFC 4180 compliance. Use the `load` filter to parse JSON in prompts: `{{ (json_field | load).property }}`.
+CSV files can include JSON fields as structured data:
 
-#### Passing Configuration to Custom Assertions
+- Simple JSON: unquoted (`{"answer":""}`)
+- JSON with commas: escaped (`"{""key"":""value""}"`)
 
-Custom assertions (Python, JavaScript, etc.) can receive configuration data through additional CSV columns. These columns become available in the assertion's context under `vars`.
+By default, promptfoo parses both formats. Set `PROMPTFOO_CSV_STRICT=true` for RFC 4180 compliance.
 
-Example CSV with configuration data:
+Parse JSON in prompts with the `load` filter: `{{ (json_field | load).property }}`.
+
+##### Passing Configuration to Custom Assertions
+
+Custom assertions can receive configuration through CSV columns:
 
 ```csv title="tests.csv"
 question,__expected,groundTruthValue,configKey
 What is the difference between supervised and unsupervised learning?,"python: file://custom_assertion.py","reference answer","some value"
 ```
 
-The custom assertion can access these values through the context:
+Access these values in assertions:
 
 ```python title="custom_assertion.py"
 def custom_assertion(output, context):
@@ -581,9 +594,9 @@ module.exports = (output, { vars }) => {
 };
 ```
 
-### Loading images and other file types
+### Loading media files
 
-Promptfoo supports loading various file types as variables in your prompts:
+promptfoo supports loading various file types as variables:
 
 ```yaml title="promptfooconfig.yaml"
 tests:
@@ -595,15 +608,15 @@ tests:
       video: file://path/to/video.mp4
 ```
 
-When loading files as variables:
+File handling:
 
-- **Text files** are loaded as plain text
-- **YAML/YML files** are loaded as JSON strings
-- **PDF files** are parsed to extract text (requires `pdf-parse` package)
-- **Image files** (jpg, jpeg, png, gif, bmp, webp, svg) are loaded as base64 strings
-- **Video files** (mp4, webm, ogg, mov, avi, wmv, mkv, m4v) are loaded as base64 strings
+- **Text files**: Loaded as plain text
+- **YAML/YML files**: Loaded as JSON strings
+- **PDF files**: Parsed to extract text (requires `pdf-parse` package)
+- **Images**: Converted to base64 strings
+- **Videos**: Converted to base64 strings
 
-This is particularly useful for multimodal models that can process text, images, and videos. For example, to include an image in a prompt for a vision model:
+Example with an image for a vision model:
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
@@ -631,7 +644,7 @@ tests:
       image: file://path/to/image.jpg
 ```
 
-Similarly, for video content:
+Example with video content:
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
@@ -665,19 +678,24 @@ To disable this behavior, set the `PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64` envir
 
 ## Output File
 
-The results of the evaluation are written to this file. For example:
+Write evaluation results to a file:
 
-```
+```bash
 promptfoo eval --output filepath.json
 ```
 
-The output file can also be set using the `outputPath` key in the promptfoo configuration.
+The output file can also be configured with the `outputPath` key in `promptfooconfig.yaml`.
 
-Several file formats are supported, including JSON, YAML, CSV, and HTML.
+Supported formats:
 
-Each record in the output file corresponds to a test case and includes the original prompt, the output generated by the LLM, and the values of the variables used in the test case.
+- JSON
+- YAML
+- CSV
+- HTML
 
-For example outputs, see the [examples/](https://github.com/promptfoo/promptfoo/tree/main/examples/simple-cli) directory.
+Each record includes the original prompt, LLM output, and test variables.
+
+See [examples/](https://github.com/promptfoo/promptfoo/tree/main/examples/simple-cli) for sample outputs.
 
 ## Permuting inputs and assertions
 

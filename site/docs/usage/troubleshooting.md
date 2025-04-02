@@ -41,22 +41,44 @@ You can use any combination of these variables to optimize memory usage while pr
 
 ### Increase Node.js memory limit
 
-If you're still encountering memory issues after trying the above options, you can increase the amount of memory available to Promptfoo by setting the `NODE_OPTIONS` environment variable:
+If you're still encountering memory issues after trying the above options, you can increase the amount of memory available to promptfoo by setting the `NODE_OPTIONS` environment variable:
 
 ```bash
 # 8192 MB is 8 GB. Set this to an appropriate value for your machine.
-NODE_OPTIONS="--max-old-space-size=8192" promptfoo eval
+NODE_OPTIONS="--max-old-space-size=8192" npx promptfoo eval
 ```
+
+## Node.js version mismatch error
+
+When running `npx promptfoo@latest`, you might encounter this error:
+
+```
+Error: The module '/path/to/node_modules/better-sqlite3/build/Release/better_sqlite3.node'
+was compiled against a different Node.js version using
+NODE_MODULE_VERSION 115. This version of Node.js requires
+NODE_MODULE_VERSION 127. Please try re-compiling or re-installing
+the module (for instance, using `npm rebuild` or `npm install`).
+```
+
+This happens because promptfoo uses native code modules (like better-sqlite3) that need to be compiled specifically for your Node.js version.
+
+### Solution: Remove npx cache and reinstall
+
+To fix this issue, run this single command:
+
+```bash
+rm -rf ~/.npm/_npx && npx -y promptfoo@latest
+```
+
+This removes any cached npm packages in the npx cache directory and forces a fresh download and installation of promptfoo, ensuring the native modules are compiled correctly for your current Node.js version.
 
 ## OpenAI API key is not set
 
-If you're using OpenAI, you set the `OPENAI_API_KEY` environment variable or add `apiKey` to the provider config.
+If you're using OpenAI, set the `OPENAI_API_KEY` environment variable or add `apiKey` to the provider config.
 
 If you're not using OpenAI but still receiving this message, you probably have some [model-graded metric](/docs/configuration/expected-outputs/model-graded/) such as `llm-rubric` or `similar` that requires you to [override the grader](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader).
 
-Follow the instructions to override the grader, e.g. using the `defaultTest` property.
-
-In this example, we're overriding the text and embedding providers to use Azure OpenAI (gpt-4o for text, and ada-002 for embedding).
+Follow the instructions to override the grader, e.g., using the `defaultTest` property:
 
 ```yaml
 defaultTest:
@@ -78,8 +100,8 @@ When running evals, you may encounter timeout errors, especially when using loca
 
 To resolve timeout issues, try limiting concurrency by using the `-j 1` flag when running `promptfoo eval`. This reduces the number of simultaneous requests:
 
-```
-promptfoo eval -j 1
+```bash
+npx promptfoo eval -j 1
 ```
 
 ## Debugging Python
@@ -91,13 +113,13 @@ When using custom Python providers, prompts, hooks, assertions, etc., you may ne
 To see the output from your Python script, including print statements, set the `LOG_LEVEL` environment variable to `debug` when running your eval:
 
 ```bash
-LOG_LEVEL=debug promptfoo eval
+LOG_LEVEL=debug npx promptfoo eval
 ```
 
 Alternatively, you can use the `--verbose` flag:
 
 ```bash
-promptfoo eval --verbose
+npx promptfoo eval --verbose
 ```
 
 ### Using a debugger
@@ -131,19 +153,19 @@ Remember that promptfoo runs your Python script in a separate process, so some s
 
 1. Set environment variables:
 
-   ```sh
+   ```bash
    export PROMPTFOO_ENABLE_DATABASE_LOGS=true
    export LOG_LEVEL=debug
    ```
 
 2. Run your command:
 
-   ```sh
-   promptfoo eval
+   ```bash
+   npx promptfoo eval
    ```
 
 3. Disable logging when done:
 
-   ```sh
+   ```bash
    unset PROMPTFOO_ENABLE_DATABASE_LOGS
    ```

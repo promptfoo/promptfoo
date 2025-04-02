@@ -3,11 +3,11 @@ import {
   maybeCoerceToGeminiFormat,
   getGoogleClient,
   hasGoogleDefaultCredentials,
-} from '../../src/providers/vertexUtil';
+} from '../../../src/providers/google/util';
 
 jest.mock('google-auth-library');
 
-describe('vertexUtil', () => {
+describe('util', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     (global as any).cachedAuth = undefined;

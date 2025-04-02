@@ -5,6 +5,7 @@ import { HarmfulGrader } from '../../src/redteam/plugins/harmful/graders';
 import { PlinyGrader } from '../../src/redteam/plugins/pliny';
 import { ToolDiscoveryGrader } from '../../src/redteam/plugins/toolDiscovery';
 import { ToolDiscoveryMultiTurnGrader } from '../../src/redteam/plugins/toolDiscoveryMultiTurn';
+import { UnsafeBenchGrader } from '../../src/redteam/plugins/unsafebench';
 
 describe('getGraderById', () => {
   it('should return correct grader for valid ID', () => {
@@ -24,7 +25,8 @@ describe('getGraderById', () => {
       'promptfoo:redteam:tool-discovery:multi-turn',
     );
     expect(toolDiscoveryMultiTurnGrader).toBeInstanceOf(ToolDiscoveryMultiTurnGrader);
-
+    const unsafebenchGrader = getGraderById('promptfoo:redteam:unsafebench');
+    expect(unsafebenchGrader).toBeInstanceOf(UnsafeBenchGrader);
     const plinyGrader = getGraderById('promptfoo:redteam:pliny');
     expect(plinyGrader).toBeInstanceOf(PlinyGrader);
   });

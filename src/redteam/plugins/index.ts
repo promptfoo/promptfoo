@@ -44,6 +44,8 @@ import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
 import { ToolDiscoveryPlugin } from './toolDiscovery';
 import { ToolDiscoveryMultiTurnPlugin } from './toolDiscoveryMultiTurn';
+import { UnsafeBenchPlugin } from './unsafebench';
+
 
 export interface PluginFactory {
   key: string;
@@ -134,11 +136,6 @@ const unalignedHarmCategories = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS) as 
 
 const pluginFactories: PluginFactory[] = [
   createPluginFactory(BeavertailsPlugin, 'beavertails'),
-  createPluginFactory(ContractPlugin, 'contracts'),
-  createPluginFactory(CrossSessionLeakPlugin, 'cross-session-leak'),
-  createPluginFactory(CyberSecEvalPlugin, 'cyberseceval'),
-  createPluginFactory(DebugAccessPlugin, 'debug-access'),
-  createPluginFactory(DivergentRepetitionPlugin, 'divergent-repetition'),
   ...alignedHarmCategories.map((category) =>
     createPluginFactory(
       class extends AlignedHarmfulPlugin {
@@ -158,21 +155,27 @@ const pluginFactories: PluginFactory[] = [
       category,
     ),
   ),
+  createPluginFactory(ContractPlugin, 'contracts'),
+  createPluginFactory(CrossSessionLeakPlugin, 'cross-session-leak'),
+  createPluginFactory(CyberSecEvalPlugin, 'cyberseceval'),
+  createPluginFactory(DebugAccessPlugin, 'debug-access'),
+  createPluginFactory(DivergentRepetitionPlugin, 'divergent-repetition'),
   createPluginFactory(ExcessiveAgencyPlugin, 'excessive-agency'),
   createPluginFactory(ToolDiscoveryPlugin, 'tool-discovery'),
   createPluginFactory(ToolDiscoveryMultiTurnPlugin, 'tool-discovery:multi-turn'),
   createPluginFactory(HarmbenchPlugin, 'harmbench'),
   createPluginFactory(HallucinationPlugin, 'hallucination'),
+  createPluginFactory(HarmbenchPlugin, 'harmbench'),
   createPluginFactory(ImitationPlugin, 'imitation'),
   createPluginFactory<{ intent: string }>(IntentPlugin, 'intent', (config: { intent: string }) =>
     invariant(config.intent, 'Intent plugin requires `config.intent` to be set'),
   ),
   createPluginFactory(OverreliancePlugin, 'overreliance'),
   createPluginFactory(PlinyPlugin, 'pliny'),
-  createPluginFactory(PoliticsPlugin, 'politics'),
   createPluginFactory<{ policy: string }>(PolicyPlugin, 'policy', (config: { policy: string }) =>
     invariant(config.policy, 'Policy plugin requires `config.policy` to be set'),
   ),
+  createPluginFactory(PoliticsPlugin, 'politics'),
   createPluginFactory<{ systemPrompt: string }>(
     PromptExtractionPlugin,
     'prompt-extraction',
@@ -185,6 +188,8 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(RbacPlugin, 'rbac'),
   createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
   createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
+  createPluginFactory(ToolDiscoveryPlugin, 'tool-discovery'),
+  createPluginFactory(UnsafeBenchPlugin, 'unsafebench'),
   ...unalignedHarmCategories.map((category) => ({
     key: category,
     action: async (params: PluginActionParams) => {

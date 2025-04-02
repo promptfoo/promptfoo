@@ -755,8 +755,8 @@ export class HttpProvider implements ApiProvider {
     invariant(typeof method === 'string', 'Expected method to be a string');
     invariant(typeof headers === 'object', 'Expected headers to be an object');
 
-    // Construct URL with query parameters for GET requests
-    let url = this.url;
+    // Template the base URL first, then construct URL with query parameters
+    let url = getNunjucksEngine().renderString(this.url, vars);
     if (renderedConfig.queryParams) {
       const queryString = new URLSearchParams(renderedConfig.queryParams).toString();
       url = `${url}?${queryString}`;

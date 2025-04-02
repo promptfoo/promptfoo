@@ -1,3 +1,4 @@
+import dotenv from 'dotenv';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import * as path from 'path';
@@ -18,6 +19,7 @@ import {
   readFilters,
   readOutput,
   resultIsForTestCase,
+  setupEnv,
   varsMatch,
   writeMultipleOutputs,
   writeOutput,
@@ -652,5 +654,72 @@ describe('util', () => {
         },
       });
     });
+  });
+});
+
+describe('setupEnv', () => {
+  let originalEnv: typeof process.env;
+  let dotenvConfigSpy: jest.SpyInstance<
+    dotenv.DotenvConfigOutput,
+    [options?: dotenv.DotenvConfigOptions]
+  >;
+
+  beforeEach(() => {
+    originalEnv = { ...process.env };
+    // Ensure NODE_ENV is not set at the start of each test
+    delete process.env.NODE_ENV;
+    // Spy on dotenv.config to verify it's called with the right parameters
+    dotenvConfigSpy = jest.spyOn(dotenv, 'config').mockImplementation(() => ({ parsed: {} }));
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    jest.resetAllMocks();
+  });
+
+  it('should call dotenv.config without parameters when envPath is undefined', () => {
+    setupEnv(undefined);
+
+    expect(dotenvConfigSpy).toHaveBeenCalledTimes(1);
+    expect(dotenvConfigSpy).toHaveBeenCalledWith();
+  });
+
+  it('should call dotenv.config with path and override=true when envPath is specified', () => {
+    const testEnvPath = '.env.test';
+
+    setupEnv(testEnvPath);
+
+    expect(dotenvConfigSpy).toHaveBeenCalledTimes(1);
+    expect(dotenvConfigSpy).toHaveBeenCalledWith({
+      path: testEnvPath,
+      override: true,
+    });
+  });
+
+  it('should load environment variables with override when specified env file has conflicting values', () => {
+    // Mock dotenv.config to simulate loading variables
+    dotenvConfigSpy.mockImplementation((options?: dotenv.DotenvConfigOptions) => {
+      if (options?.path === '.env.production') {
+        if (options.override) {
+          process.env.NODE_ENV = 'production';
+        } else if (!process.env.NODE_ENV) {
+          process.env.NODE_ENV = 'production';
+        }
+      } else {
+        // Default .env file
+        if (!process.env.NODE_ENV) {
+          process.env.NODE_ENV = 'development';
+        }
+      }
+      return { parsed: {} };
+    });
+
+    // First load the default .env (setting NODE_ENV to 'development')
+    setupEnv(undefined);
+    expect(process.env.NODE_ENV).toBe('development');
+
+    // Then load .env.production with override (should change NODE_ENV to 'production')
+    setupEnv('.env.production');
+    expect(process.env.NODE_ENV).toBe('production');
   });
 });

@@ -3,6 +3,7 @@ import logger from './logger';
 import type { Assertion, AssertionType, CsvRow, TestCase, BaseAssertionTypes } from './types';
 import { BaseAssertionTypesSchema } from './types';
 import { isJavascriptFile } from './util/file';
+import invariant from './util/invariant';
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 
@@ -149,7 +150,11 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     'metadata',
   ].map((k) => `_${k}`);
 
-  for (const [key, value] of Object.entries(row)) {
+  // Remove leading and trailing whitespace from keys, as leading/trailing whitespace interferes with
+  // meta key parsing.
+  const sanitizedRows = Object.entries(row).map(([key, value]) => [key.trim(), value]);
+
+  for (const [key, value] of sanitizedRows) {
     // Check for single underscore usage with reserved keys
     if (
       !key.startsWith('__') &&
@@ -213,4 +218,23 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     ...(threshold ? { threshold } : {}),
     ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
   };
+}
+
+/**
+ * Serialize a list of VarMapping objects as a CSV string.
+ * @param vars - The list of VarMapping objects to serialize.
+ * @returns A CSV string.
+ */
+export function serializeObjectArrayAsCSV(vars: object[]): string {
+  invariant(vars.length > 0, 'No variables to serialize');
+  const columnNames = Object.keys(vars[0]).join(',');
+  const rows = vars
+    .map(
+      (result) =>
+        `"${Object.values(result)
+          .map((value) => value.toString().replace(/"/g, '""'))
+          .join('","')}"`,
+    )
+    .join('\n');
+  return [columnNames, rows].join('\n') + '\n';
 }
