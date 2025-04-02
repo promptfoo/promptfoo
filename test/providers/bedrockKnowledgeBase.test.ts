@@ -1,9 +1,12 @@
 import { AwsBedrockKnowledgeBaseProvider } from '../../src/providers/bedrockKnowledgeBase';
 
+const mockSend = jest.fn();
+const mockBedrockClient = {
+  send: mockSend,
+};
+
 jest.mock('@aws-sdk/client-bedrock-agent-runtime', () => ({
-  BedrockAgentRuntimeClient: jest.fn().mockImplementation(() => ({
-    send: jest.fn(),
-  })),
+  BedrockAgentRuntimeClient: jest.fn().mockImplementation(() => mockBedrockClient),
   RetrieveAndGenerateCommand: jest.fn().mockImplementation((params) => params),
 }));
 
@@ -149,11 +152,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
       ],
     };
 
-    // Set up the mock response
-    jest
-      .spyOn(BedrockAgentRuntimeClient.prototype, 'send')
-      .mockImplementation()
-      .mockResolvedValue(mockResponse);
+    mockSend.mockResolvedValueOnce(mockResponse);
 
     const provider = new AwsBedrockKnowledgeBaseProvider('anthropic.claude-v2', {
       config: {
@@ -162,75 +161,30 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
       },
     });
 
-    // Only mock the result, not the entire method
-    const originalCallApi = provider.callApi;
-    jest.spyOn(provider, 'callApi').mockImplementation(async (prompt) => {
-      // First call the original to make sure RetrieveAndGenerateCommand gets called
-      await originalCallApi.call(provider, prompt);
+    const result = await provider.callApi('What is the capital of France?');
 
-      // Then return our expected result
-      return {
-        output: 'This is the response from the knowledge base',
-        citations: mockResponse.citations,
-        tokenUsage: {},
-      };
-    });
-
-    try {
-      const result = await provider.callApi('What is the capital of France?');
-
-      expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith({
-        input: { text: 'What is the capital of France?' },
-        retrieveAndGenerateConfiguration: {
-          type: 'KNOWLEDGE_BASE',
-          knowledgeBaseConfiguration: {
-            knowledgeBaseId: 'kb-123',
-            modelArn: 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-v2',
-          },
+    const expectedCommand = {
+      input: { text: 'What is the capital of France?' },
+      retrieveAndGenerateConfiguration: {
+        type: 'KNOWLEDGE_BASE',
+        knowledgeBaseConfiguration: {
+          knowledgeBaseId: 'kb-123',
+          modelArn: 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-v2',
         },
-      });
+      },
+    };
 
-      expect(result).toEqual({
-        output: 'This is the response from the knowledge base',
-        citations: [
-          {
-            retrievedReferences: [
-              {
-                content: {
-                  text: 'This is a citation',
-                },
-                location: {
-                  type: 's3',
-                  s3Location: {
-                    uri: 's3://bucket/key',
-                  },
-                },
-              },
-            ],
-            generatedResponsePart: {
-              textResponsePart: {
-                text: 'part of the response',
-                span: {
-                  start: 0,
-                  end: 10,
-                },
-              },
-            },
-          },
-        ],
-        tokenUsage: {},
-      });
-    } finally {
-      // Restore the original method
-      provider.callApi = originalCallApi;
-    }
+    expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(expectedCommand);
+    expect(mockSend).toHaveBeenCalledWith(expectedCommand);
+    expect(result).toEqual({
+      output: 'This is the response from the knowledge base',
+      citations: mockResponse.citations,
+      tokenUsage: {},
+    });
   });
 
   it('should handle API errors gracefully', async () => {
-    jest
-      .spyOn(BedrockAgentRuntimeClient.prototype, 'send')
-      .mockImplementation()
-      .mockRejectedValue(new Error('API error'));
+    mockSend.mockRejectedValueOnce(new Error('API error'));
 
     const provider = new AwsBedrockKnowledgeBaseProvider('anthropic.claude-v2', {
       config: {
@@ -239,24 +193,11 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
       },
     });
 
-    // Override the callApi method to directly return what we expect
-    const originalCallApi = provider.callApi;
-    jest.spyOn(provider, 'callApi').mockImplementation(async () => {
-      return {
-        error: 'Bedrock Knowledge Base API error: Error: API error',
-      };
+    const result = await provider.callApi('What is the capital of France?');
+
+    expect(result).toEqual({
+      error: 'Bedrock Knowledge Base API error: Error: API error',
     });
-
-    try {
-      const result = await provider.callApi('What is the capital of France?');
-
-      expect(result).toEqual({
-        error: 'Bedrock Knowledge Base API error: Error: API error',
-      });
-    } finally {
-      // Restore the original method
-      provider.callApi = originalCallApi;
-    }
   });
 
   it('should use custom modelArn if provided', async () => {
@@ -264,32 +205,65 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
       output: {
         text: 'This is the response from the knowledge base',
       },
+      citations: [],
     };
 
-    jest
-      .spyOn(BedrockAgentRuntimeClient.prototype, 'send')
-      .mockImplementation()
-      .mockResolvedValue(mockResponse);
+    mockSend.mockResolvedValueOnce(mockResponse);
 
-    const provider = new AwsBedrockKnowledgeBaseProvider('claude-v2', {
+    const provider = new AwsBedrockKnowledgeBaseProvider('anthropic.claude-v2', {
       config: {
         knowledgeBaseId: 'kb-123',
         region: 'us-east-1',
-        modelArn: 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-v3-sonnet',
+        modelArn: 'custom:model:arn',
       },
     });
 
     await provider.callApi('What is the capital of France?');
 
-    expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith({
+    const expectedCommand = {
       input: { text: 'What is the capital of France?' },
       retrieveAndGenerateConfiguration: {
         type: 'KNOWLEDGE_BASE',
         knowledgeBaseConfiguration: {
           knowledgeBaseId: 'kb-123',
-          modelArn: 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-v3-sonnet',
+          modelArn: 'custom:model:arn',
         },
       },
+    };
+
+    expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(expectedCommand);
+  });
+
+  it('should pass along config parameters but not create generationConfiguration', async () => {
+    const mockResponse = {
+      output: {
+        text: 'This is the response from the knowledge base',
+      },
+      citations: [],
+    };
+
+    mockSend.mockResolvedValueOnce(mockResponse);
+
+    const provider = new AwsBedrockKnowledgeBaseProvider('anthropic.claude-v2', {
+      config: {
+        knowledgeBaseId: 'kb-123',
+        region: 'us-east-1',
+      } as any,
     });
+
+    await provider.callApi('What is the capital of France?');
+
+    const expectedCommand = {
+      input: { text: 'What is the capital of France?' },
+      retrieveAndGenerateConfiguration: {
+        type: 'KNOWLEDGE_BASE',
+        knowledgeBaseConfiguration: {
+          knowledgeBaseId: 'kb-123',
+          modelArn: 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-v2',
+        },
+      },
+    };
+
+    expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(expectedCommand);
   });
 });
