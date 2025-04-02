@@ -10,6 +10,7 @@ import { fromError } from 'zod-validation-error';
 import { DEFAULT_PORT, VERSION } from '../constants';
 import { setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
+import { cloudConfig } from '../globalConfig/cloud';
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
@@ -141,7 +142,8 @@ export function createApp() {
     }
 
     const { domain } = determineShareDomain(eval_);
-    res.json({ domain });
+    const isCloudEnabled = cloudConfig.isEnabled();
+    res.json({ domain, isCloudEnabled });
   });
 
   app.post('/api/results/share', async (req: Request, res: Response): Promise<void> => {
