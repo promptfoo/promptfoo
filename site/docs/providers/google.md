@@ -156,13 +156,13 @@ providers:
 
 For more details, see the [Gemini API documentation](https://ai.google.dev/docs).
 
-## Google Multimodal Live API
+## Google Live API
 
-Promptfoo now supports Google's WebSocket-based Multimodal Live API, which enables low-latency bidirectional voice and video interactions with Gemini models. This API provides real-time interactive capabilities beyond what's available in the standard REST API.
+Promptfoo now supports Google's WebSocket-based Live API, which enables low-latency bidirectional voice and video interactions with Gemini models. This API provides real-time interactive capabilities beyond what's available in the standard REST API.
 
-### Using the Multimodal Live Provider
+### Using the Live Provider
 
-Access the Multimodal Live API by specifying the model with the 'live' service type:
+Access the Live API by specifying the model with the 'live' service type:
 
 ```yaml
 providers:
@@ -183,7 +183,7 @@ providers:
 
 ### Function Calling Example
 
-The Multimodal Live API supports function calling, allowing you to define tools that the model can use:
+The Live API supports function calling, allowing you to define tools that the model can use:
 
 ```yaml
 providers:
@@ -228,7 +228,7 @@ Where `tools.json` contains function declarations and built-in tools:
 
 ### Built-in Tools
 
-The Multimodal Live API includes several built-in tools:
+The Live API includes several built-in tools:
 
 1. **Code Execution**: Execute Python code directly in the model's runtime
 
@@ -264,4 +264,4 @@ promptfoo init --example google-multimodal-live-tools
 - Rate limits of 3 concurrent sessions per API key apply
 - Maximum of 4M tokens per minute
 
-For more details, see the [Multimodal Live API documentation](https://ai.google.dev/docs/multimodal_live).
+For more details, see the [Live API documentation](https://ai.google.dev/gemini-api/docs/live).
