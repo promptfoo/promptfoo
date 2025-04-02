@@ -15,6 +15,7 @@ import { CHAT_MODELS } from './shared';
 import type { CompletionOptions } from './types';
 import {
   type GeminiResponseData,
+  loadFile,
   maybeCoerceToGeminiFormat,
   stringifyCandidateContents,
 } from './util';
@@ -199,9 +200,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       },
       safetySettings: this.config.safetySettings,
       ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
-      ...(this.config.tools
-        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(this.config.tools, context?.vars)) }
-        : {}),
+      ...(this.config.tools ? { tools: loadFile(this.config.tools, context?.vars) } : {}),
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
     };
 
