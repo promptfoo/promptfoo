@@ -165,44 +165,7 @@ export async function listPreviousResults(
   filterDescription?: string,
   datasetId?: string,
 ): Promise<ResultLightweight[]> {
-  const db = getDb();
-  const startTime = performance.now();
-
-  const query = db
-    .select({
-      evalId: evalsTable.id,
-      createdAt: evalsTable.createdAt,
-      description: evalsTable.description,
-      numTests: sql<number>`json_array_length(${evalsTable.results}->'table'->'body')`,
-      datasetId: evalsToDatasetsTable.datasetId,
-      isRedteam: sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`,
-    })
-    .from(evalsTable)
-    .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
-    .where(
-      and(
-        datasetId ? eq(evalsToDatasetsTable.datasetId, datasetId) : undefined,
-        filterDescription ? like(evalsTable.description, `%${filterDescription}%`) : undefined,
-        not(eq(evalsTable.results, {})),
-      ),
-    );
-
-  const results = query.orderBy(desc(evalsTable.createdAt)).all();
-  const mappedResults = results.map((result) => ({
-    evalId: result.evalId,
-    createdAt: result.createdAt,
-    description: result.description,
-    numTests: result.numTests,
-    datasetId: result.datasetId,
-    isRedteam: result.isRedteam,
-  }));
-
-  const endTime = performance.now();
-  const executionTime = endTime - startTime;
-  const evalResults = await getSummaryOfLatestEvals(undefined, filterDescription, datasetId);
-  logger.debug(`listPreviousResults execution time: ${executionTime.toFixed(2)}ms`);
-  const combinedResults = [...evalResults, ...mappedResults];
-  return combinedResults;
+  return getSummaryOfLatestEvals(limit, filterDescription, datasetId);
 }
 
 export async function readResult(
