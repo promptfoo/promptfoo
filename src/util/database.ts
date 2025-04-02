@@ -187,7 +187,7 @@ export async function listPreviousResults(
       ),
     );
 
-  const results = query.orderBy(desc(evalsTable.createdAt)).limit(limit).all();
+  const results = query.orderBy(desc(evalsTable.createdAt)).all();
   const mappedResults = results.map((result) => ({
     evalId: result.evalId,
     createdAt: result.createdAt,
