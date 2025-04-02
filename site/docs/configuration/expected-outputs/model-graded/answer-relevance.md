@@ -1,8 +1,12 @@
+---
+description: Evaluate if an LLM's output is relevant to the original query by combining embedding similarity and LLM-based evaluation
+---
+
 # Answer Relevance
 
 The `answer-relevance` assertion evaluates whether an LLM's output is relevant to the original query. It uses a combination of embedding similarity and LLM evaluation to determine relevance.
 
-### How to use it
+## How to use it
 
 To use the `answer-relevance` assertion type, add it to your test configuration like this:
 
@@ -12,7 +16,7 @@ assert:
     threshold: 0.7 # Score between 0 and 1
 ```
 
-### How it works
+## How it works
 
 The answer relevance checker:
 
@@ -22,15 +26,15 @@ The answer relevance checker:
 
 A higher threshold requires the output to be more closely related to the original query.
 
-### Example Configuration
+## Example Configuration
 
 Here's a complete example showing how to use answer relevance:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   - 'Tell me about {{topic}}'
 providers:
-  - openai:gpt-4
+  - openai:gpt-4o
 tests:
   - vars:
       topic: quantum computing
@@ -39,7 +43,7 @@ tests:
         threshold: 0.8
 ```
 
-### Overriding the Providers
+## Overriding the Providers
 
 Answer relevance uses two types of providers:
 
@@ -53,11 +57,11 @@ defaultTest:
   options:
     provider:
       text:
-        id: openai:gpt-4
+        id: openai:gpt-4o
         config:
           temperature: 0
       embedding:
-        id: openai:text-embedding-ada-002
+        id: openai:text-embedding-3-large
 ```
 
 You can also override providers at the assertion level:
@@ -67,11 +71,11 @@ assert:
   - type: answer-relevance
     threshold: 0.8
     provider:
-      text: anthropic:claude-2
+      text: anthropic:messages:claude-3-7-sonnet-20250219
       embedding: cohere:embed-english-v3.0
 ```
 
-### Customizing the Prompt
+## Customizing the Prompt
 
 You can customize the question generation prompt using the `rubricPrompt` property:
 
@@ -85,6 +89,9 @@ defaultTest:
       Make the questions specific and directly related to the content.
 ```
 
-# Further reading
+## See Also
 
-See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options.
+- [Model-graded metrics overview](/docs/configuration/expected-outputs/model-graded)
+- [Context-relevance](/docs/configuration/expected-outputs/model-graded/context-relevance) for evaluating RAG context relevance
+- [Context-faithfulness](/docs/configuration/expected-outputs/model-graded/context-faithfulness) for checking output adherence to context
+- [Guide on RAG evaluation](/docs/guides/rag-evaluation)

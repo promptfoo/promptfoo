@@ -1,5 +1,5 @@
 ---
-sidebar_position: 8
+description: Learn how to use G-Eval to evaluate LLM outputs using chain-of-thought prompting and custom criteria
 ---
 
 # G-Eval
@@ -46,7 +46,7 @@ Like other model-graded assertions, you can override the default GPT-4o evaluato
 assert:
   - type: g-eval
     value: 'Ensure response is factually accurate'
-    provider: openai:gpt-4o-mini
+    provider: anthropic:messages:claude-3-7-sonnet-20250219
 ```
 
 Or globally via test options:
@@ -54,20 +54,20 @@ Or globally via test options:
 ```yaml
 defaultTest:
   options:
-    provider: openai:gpt-4o-mini
+    provider: anthropic:messages:claude-3-7-sonnet-20250219
 ```
 
 ## Example
 
 Here's a complete example showing how to use G-Eval to assess multiple aspects of an LLM response:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   - |
     Write a technical explanation of {{topic}} 
     suitable for a beginner audience.
 providers:
-  - openai:gpt-4
+  - openai:gpt-4o
 tests:
   - vars:
       topic: 'quantum computing'
@@ -81,7 +81,9 @@ tests:
         threshold: 0.8
 ```
 
-## Further reading
+## See Also
 
 - [Model-graded metrics overview](/docs/configuration/expected-outputs/model-graded)
+- [LLM-Rubric evaluation](/docs/configuration/expected-outputs/model-graded/llm-rubric) for another approach to model-based evaluation
+- [Factuality checking](/docs/configuration/expected-outputs/model-graded/factuality) for assessing factual consistency
 - [G-Eval paper](https://arxiv.org/abs/2303.16634)

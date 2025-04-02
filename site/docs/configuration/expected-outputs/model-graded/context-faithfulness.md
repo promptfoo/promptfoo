@@ -1,8 +1,12 @@
+---
+description: Ensure LLM outputs are faithful to the provided context in RAG applications to prevent hallucinations
+---
+
 # Context Faithfulness
 
 The `context-faithfulness` assertion evaluates whether the LLM's output is faithful to the provided context, ensuring that the response doesn't include information or claims that aren't supported by the context. This is essential for RAG (Retrieval-Augmented Generation) applications to prevent hallucination.
 
-### How to use it
+## How to use it
 
 To use the `context-faithfulness` assertion type, add it to your test configuration like this:
 
@@ -12,9 +16,11 @@ assert:
     threshold: 0.9 # Score between 0 and 1
 ```
 
-Note: This assertion requires `query`, `context`, and the LLM's output to evaluate faithfulness.
+:::note
+This assertion requires `query`, `context`, and the LLM's output to evaluate faithfulness.
+:::
 
-### How it works
+## How it works
 
 The context faithfulness checker:
 
@@ -24,18 +30,18 @@ The context faithfulness checker:
 
 A higher threshold requires the output to be more strictly supported by the context.
 
-### Example Configuration
+## Example Configuration
 
 Here's a complete example showing how to use context faithfulness in a RAG system:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   - |
     Answer this question: {{query}}
     Using this context: {{context}}
     Be specific and detailed in your response.
 providers:
-  - openai:gpt-4
+  - openai:gpt-4o
 tests:
   - vars:
       query: 'What is our parental leave policy?'
@@ -48,14 +54,14 @@ tests:
         value: 'Employees get 4 months paid leave'
 ```
 
-### Overriding the Grader
+## Overriding the Grader
 
 Like other model-graded assertions, you can override the default grader:
 
 1. Using the CLI:
 
-   ```sh
-   promptfoo eval --grader openai:gpt-4o-mini
+   ```bash
+   promptfoo eval --grader anthropic:messages:claude-3-7-sonnet-20250219
    ```
 
 2. Using test options:
@@ -63,7 +69,7 @@ Like other model-graded assertions, you can override the default grader:
    ```yaml
    defaultTest:
      options:
-       provider: openai:gpt-4o-mini
+       provider: anthropic:messages:claude-3-7-sonnet-20250219
    ```
 
 3. Using assertion-level override:
@@ -71,10 +77,10 @@ Like other model-graded assertions, you can override the default grader:
    assert:
      - type: context-faithfulness
        threshold: 0.9
-       provider: openai:gpt-4o-mini
+       provider: anthropic:messages:claude-3-7-sonnet-20250219
    ```
 
-### Customizing the Prompt
+## Customizing the Prompt
 
 Context faithfulness uses two prompts: one for extracting claims and another for verifying them. You can customize both using the `rubricPrompt` property:
 
@@ -95,6 +101,11 @@ defaultTest:
         Answer YES if the statement is fully supported, NO if not.
 ```
 
-# Further reading
+## See Also
 
-See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options.
+- [Model-graded metrics overview](/docs/configuration/expected-outputs/model-graded)
+- [Context-relevance](/docs/configuration/expected-outputs/model-graded/context-relevance) for evaluating context quality
+- [Context-recall](/docs/configuration/expected-outputs/model-graded/context-recall) for ensuring ground truth is in the context
+- [Factuality](/docs/configuration/expected-outputs/model-graded/factuality) for general factual consistency checking
+- [Guide on RAG evaluation](/docs/guides/rag-evaluation)
+- [Guide on hallucination prevention](/docs/guides/preventing-hallucinations)

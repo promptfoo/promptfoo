@@ -1,3 +1,7 @@
+---
+description: Evaluate factual consistency between LLM outputs and reference answers using OpenAI's evals-based metrics
+---
+
 # Factuality
 
 The `factuality` assertion evaluates the factual consistency between an LLM output and a reference answer. It uses a structured prompt based on [OpenAI's evals](https://github.com/openai/evals/blob/main/evals/registry/modelgraded/fact.yaml) to determine if the output is factually consistent with the reference.
@@ -34,7 +38,7 @@ prompts:
   - 'What is the capital of {{state}}?'
 providers:
   - openai:gpt-4o
-  - anthropic:claude-3-7-sonnet-20250219
+  - anthropic:messages:claude-3-7-sonnet-20250219
 tests:
   - vars:
       state: California
@@ -69,8 +73,8 @@ Like other model-graded assertions, you can override the default grader:
 
 1. Using the CLI:
 
-   ```sh
-   promptfoo eval --grader openai:gpt-4o-mini
+   ```bash
+   promptfoo eval --grader openai:gpt-4o
    ```
 
 2. Using test options:
@@ -78,7 +82,7 @@ Like other model-graded assertions, you can override the default grader:
    ```yaml
    defaultTest:
      options:
-       provider: anthropic:claude-3-7-sonnet-20250219
+       provider: anthropic:messages:claude-3-7-sonnet-20250219
    ```
 
 3. Using assertion-level override:
@@ -87,7 +91,7 @@ Like other model-graded assertions, you can override the default grader:
    assert:
      - type: factuality
        value: Sacramento is the capital of California
-       provider: openai:gpt-4o-mini
+       provider: anthropic:messages:claude-3-7-sonnet-20250219
    ```
 
 ## Customizing the Prompt
@@ -131,5 +135,7 @@ The factuality checker will parse either format:
 
 ## See Also
 
-- [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options
+- [Model-graded metrics overview](/docs/configuration/expected-outputs/model-graded)
+- [G-Eval](/docs/configuration/expected-outputs/model-graded/g-eval) for chain-of-thought evaluation
+- [LLM-Rubric](/docs/configuration/expected-outputs/model-graded/llm-rubric) for general-purpose model grading
 - [Guide on LLM factuality](/docs/guides/factuality-eval)

@@ -1,8 +1,12 @@
+---
+description: Use language models to grade LLM outputs based on custom criteria with the llm-rubric assertion type
+---
+
 # LLM Rubric
 
 `llm-rubric` is promptfoo's general-purpose grader for "LLM as a judge" evaluation.
 
-It is similar to OpenAI's [model-graded-closedqa](/docs/configuration/expected-outputs) prompt, but can be more effective and robust in certain cases.
+It is similar to OpenAI's [model-graded-closedqa](/docs/configuration/expected-outputs/model-graded/model-graded-closedqa) prompt, but can be more effective and robust in certain cases.
 
 ## How to use it
 
@@ -49,7 +53,7 @@ assert:
 
 You can incorporate test variables into your LLM rubric. This is particularly useful for detecting hallucinations or ensuring the output addresses specific aspects of the input. Here's an example:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - openai:gpt-4o
 prompts:
@@ -72,8 +76,8 @@ By default, `llm-rubric` uses GPT-4o for grading. You can override this in sever
 
 1. Using the `--grader` CLI option:
 
-   ```sh
-   promptfoo eval --grader openai:gpt-4o-mini
+   ```bash
+   promptfoo eval --grader anthropic:messages:claude-3-7-sonnet-20250219
    ```
 
 2. Using `test.options` or `defaultTest.options`:
@@ -82,7 +86,7 @@ By default, `llm-rubric` uses GPT-4o for grading. You can override this in sever
    defaultTest:
      // highlight-start
      options:
-       provider: openai:gpt-4o-mini
+       provider: anthropic:messages:claude-3-7-sonnet-20250219
      // highlight-end
      assert:
        - description: Evaluate output using LLM
@@ -100,7 +104,7 @@ By default, `llm-rubric` uses GPT-4o for grading. You can override this in sever
          - type: llm-rubric
            value: Is written in a professional tone
            // highlight-start
-           provider: openai:gpt-4o-mini
+           provider: anthropic:messages:claude-3-7-sonnet-20250219
            // highlight-end
    ```
 
@@ -111,17 +115,17 @@ For more control over the `llm-rubric` evaluation, you can set a custom prompt u
 ```yaml
 defaultTest:
   options:
-  rubricPrompt: >
-    [
-        {
-            "role": "system",
-            "content": "Evaluate the following output based on these criteria:\n1. Clarity of explanation\n2. Accuracy of information\n3. Relevance to the topic\n\nProvide a score out of 10 for each criterion and an overall assessment."
-        },
-        {
-            "role": "user",
-            "content": "Output to evaluate: {{output}}\n\nRubric: {{rubric}}"
-        }
-    ]
+    rubricPrompt: >
+      [
+          {
+              "role": "system",
+              "content": "Evaluate the following output based on these criteria:\n1. Clarity of explanation\n2. Accuracy of information\n3. Relevance to the topic\n\nProvide a score out of 10 for each criterion and an overall assessment."
+          },
+          {
+              "role": "user",
+              "content": "Output to evaluate: {{output}}\n\nRubric: {{rubric}}"
+          }
+      ]
 ```
 
 ## Threshold Support
@@ -137,6 +141,9 @@ assert:
 
 The threshold is applied to the score returned by the LLM (which ranges from 0.0 to 1.0). If the LLM returns an explicit pass/fail status, the threshold will still be enforced - both conditions must be met for the assertion to pass.
 
-## Further reading
+## See Also
 
-See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options.
+- [Model-graded metrics overview](/docs/configuration/expected-outputs/model-graded)
+- [G-Eval](/docs/configuration/expected-outputs/model-graded/g-eval) for chain-of-thought evaluation
+- [Factuality checking](/docs/configuration/expected-outputs/model-graded/factuality) for assessing factual consistency
+- [Model-graded-closedqa](/docs/configuration/expected-outputs/model-graded/model-graded-closedqa) for simple yes/no evaluation
