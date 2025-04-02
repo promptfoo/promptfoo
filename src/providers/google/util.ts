@@ -283,12 +283,17 @@ export function loadFile(
   // Ensures that files are loaded correctly. Files may be defined in multiple ways:
   // 1. Directly in the provider:
   //    config_tools will be the file path, which will be loaded here in maybeLoadFromExternalFile.
-  // 2. In a test variable that is used in the provider via a nunjunk:
+  // 2. In a test variable that is used in the provider via a nunjucks:
   //    context_vars will contain a string of the contents of the file with whitespace.
-  //    This will be inserted into the nunjunk in contfig_tools and the output needs to be parsed.
+  //    This will be inserted into the nunjucks in contfig_tools and the output needs to be parsed.
   const fileContents = maybeLoadFromExternalFile(renderVarsInObject(config_var, context_vars));
   if (typeof fileContents === 'string') {
-    return JSON.parse(fileContents);
+    try {
+      return JSON.parse(fileContents);
+    } catch (err) {
+      logger.debug(`ERROR: failed to file contents to JSON:\n${JSON.stringify(err)}`);
+      return fileContents;
+    }
   }
   return fileContents;
 }
