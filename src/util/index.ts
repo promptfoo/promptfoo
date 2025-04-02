@@ -341,7 +341,7 @@ export type StandaloneEval = CompletedPrompt & {
   promptId: string | null;
   isRedteam: boolean;
   createdAt: number;
-
+  uuid: string;
   pluginFailCount: Record<string, number>;
   pluginPassCount: Record<string, number>;
 };
