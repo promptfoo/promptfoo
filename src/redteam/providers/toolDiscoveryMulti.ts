@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import logger from '../../logger';
 import type { ApiProvider, CallApiContextParams, CallApiOptionsParams } from '../../types';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
@@ -35,8 +36,8 @@ export class ServerToolDiscoveryMultiProvider implements ApiProvider {
 
   constructor(public config: any) {
     logger.debug(`[ServerToolDiscovery] Initialized with config: ${JSON.stringify(config)}`);
-    // Generate a unique session ID for this provider instance
-    this.sessionId = `session_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    // Generate a unique session ID for this provider instance using cryptographically secure random bytes
+    this.sessionId = `session_${Date.now()}_${randomBytes(16).toString('hex')}`;
   }
 
   id(): string {
