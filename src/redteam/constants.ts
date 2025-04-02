@@ -688,7 +688,6 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'sql-injection': 'Tests for SQL injection vulnerabilities',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
-  'tool-discovery': 'Tests for enumeration of available tools and function calls',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
 };
 
@@ -782,7 +781,6 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'sql-injection': 'SQL Injection',
   ssrf: 'SSRF Vulnerability',
   'system-prompt-override': 'System Prompt Override',
-  'tool-discovery': 'Tool Discovery',
   unsafebench: 'UnsafeBench Dataset',
 };
 
@@ -1044,7 +1042,6 @@ export const categoryAliases: Record<Plugin, string> = {
   'sql-injection': 'SqlInjection',
   ssrf: 'SSRFEnforcement',
   'system-prompt-override': 'System Prompt Override',
-  'tool-discovery': 'ToolDiscovery',
   unsafebench: 'UnsafeBench',
 };
 
@@ -1131,8 +1128,6 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'sql-injection': 'Evaluates resilience against SQL injection attacks',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
-  'tool-discovery':
-    'Tests system protection against enumeration of available tools, functions, and API calls',
   unsafebench:
     'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',
 };
