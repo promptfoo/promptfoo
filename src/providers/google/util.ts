@@ -277,7 +277,7 @@ export function loadFile(
     try {
       return JSON.parse(fileContents);
     } catch (err) {
-      logger.debug(`ERROR: failed to file contents to JSON:\n${JSON.stringify(err)}`);
+      logger.debug(`ERROR: failed to convert file contents to JSON:\n${JSON.stringify(err)}`);
       return fileContents;
     }
   }
@@ -331,12 +331,16 @@ export function geminiFormatAndSystemInstructions(
       const nunjucks = getNunjucksEngine();
       for (const part of systemInstruction.parts) {
         if (part.text) {
-          part.text = nunjucks.renderString(part.text, contextVars);
+          try {
+            part.text = nunjucks.renderString(part.text, contextVars);
+          } catch (err) {
+            throw new Error(`Unable to render nunjunks in systemInstruction: ${err}`);
+          }
         }
       }
     }
   } else if (configSystemInstruction && systemInstruction) {
-    logger.debug(`Preprocessing error: system instruction defined in prompt and config.`);
+    throw new Error(`Template error: system instruction defined in prompt and config.`);
   }
 
   return { contents, systemInstruction };
