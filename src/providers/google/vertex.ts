@@ -13,8 +13,6 @@ import type {
   TokenUsage,
 } from '../../types';
 import type { EnvOverrides } from '../../types/env';
-import { renderVarsInObject } from '../../util';
-import { maybeLoadFromExternalFile } from '../../util';
 import { isValidJson } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
@@ -22,6 +20,7 @@ import type { ClaudeRequest, ClaudeResponse, CompletionOptions, Content } from '
 import type { GeminiErrorResponse, GeminiFormat, Palm2ApiResponse } from './util';
 import {
   getGoogleClient,
+  loadFile,
   maybeCoerceToGeminiFormat,
   type GeminiApiResponse,
   type GeminiResponseData,
@@ -296,9 +295,7 @@ export class VertexChatProvider extends VertexGenericProvider {
       },
       ...(this.config.safetySettings ? { safetySettings: this.config.safetySettings } : {}),
       ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
-      ...(this.config.tools
-        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(this.config.tools, context?.vars)) }
-        : {}),
+      ...(this.config.tools ? { tools: loadFile(this.config.tools, context?.vars) } : {}),
       ...(systemInstruction ? { systemInstruction } : {}),
     };
     logger.debug(`Preparing to call Google Vertex API (Gemini) with body: ${JSON.stringify(body)}`);
