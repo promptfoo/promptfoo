@@ -175,7 +175,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
   async callGemini(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const { contents, systemInstruction } = geminiFormatSystemInstructions(
       prompt,
-      context,
+      context?.vars,
       this.config.systemInstruction,
     );
     // Determine API version based on model

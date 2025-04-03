@@ -1,8 +1,7 @@
 import * as fs from 'fs';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
 import { getCache, isCacheEnabled } from '../../../src/cache';
-import logger from '../../../src/logger';
-import * as util from '../../../src/providers/google/util';
+import * as vertexUtil from '../../../src/providers/google/util';
 import { VertexChatProvider } from '../../../src/providers/google/vertex';
 
 // Mock database
@@ -103,7 +102,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
     const mockRequest = jest.fn().mockResolvedValue(mockResponse);
 
-    jest.spyOn(util, 'getGoogleClient').mockResolvedValue({
+    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
         request: mockRequest,
       } as unknown as JSONClient,
@@ -122,7 +121,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       },
     });
 
-    expect(util.getGoogleClient).toHaveBeenCalledWith();
+    expect(vertexUtil.getGoogleClient).toHaveBeenCalledWith();
     expect(mockRequest).toHaveBeenCalledWith({
       url: expect.any(String),
       method: 'POST',
@@ -159,7 +158,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
   it('should handle API call errors', async () => {
     const mockError = new Error('something went wrong');
-    jest.spyOn(util, 'getGoogleClient').mockResolvedValue({
+    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
         request: jest.fn().mockRejectedValue(mockError),
       } as unknown as JSONClient,
@@ -185,7 +184,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       ],
     };
 
-    jest.spyOn(util, 'getGoogleClient').mockResolvedValue({
+    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
         request: jest.fn().mockResolvedValue(mockResponse),
       } as unknown as JSONClient,
@@ -264,7 +263,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
     const mockRequest = jest.fn().mockResolvedValue(mockResponse);
 
-    jest.spyOn(util, 'getGoogleClient').mockResolvedValue({
+    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
         request: mockRequest,
       } as unknown as JSONClient,
@@ -352,7 +351,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
     const mockRequest = jest.fn().mockResolvedValue(mockResponse);
 
-    jest.spyOn(util, 'getGoogleClient').mockResolvedValue({
+    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
         request: mockRequest,
       } as unknown as JSONClient,
@@ -417,7 +416,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       store: {} as any,
     });
 
-    jest.spyOn(util, 'getGoogleClient').mockResolvedValue({
+    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
         request: mockRequest,
       } as unknown as JSONClient,
@@ -431,194 +430,6 @@ describe('VertexChatProvider.callGeminiApi', () => {
       expect.stringContaining('vertex:gemini-2.0-flash-001:'),
       expect.any(String),
     );
-  });
-});
-
-describe('maybeCoerceToGeminiFormat', () => {
-  it('should return unmodified content if it matches GeminiFormat', () => {
-    const input = [
-      {
-        role: 'user',
-        parts: [{ text: 'Hello, Gemini!' }],
-      },
-    ];
-    const result = util.maybeCoerceToGeminiFormat(input);
-    expect(result).toEqual({
-      contents: input,
-      coerced: false,
-      systemInstruction: undefined,
-    });
-  });
-
-  it('should coerce OpenAI chat format to GeminiFormat', () => {
-    const input = [
-      { role: 'user', content: 'Hello' },
-      { role: 'user', content: ', ' },
-      { role: 'user', content: 'Gemini!' },
-    ];
-    const expected = [
-      {
-        role: 'user',
-        parts: [{ text: 'Hello' }],
-      },
-      {
-        role: 'user',
-        parts: [{ text: ', ' }],
-      },
-      {
-        role: 'user',
-        parts: [{ text: 'Gemini!' }],
-      },
-    ];
-    const result = util.maybeCoerceToGeminiFormat(input);
-    expect(result).toEqual({
-      contents: expected,
-      coerced: true,
-      systemInstruction: undefined,
-    });
-  });
-
-  it('should coerce string input to GeminiFormat', () => {
-    const input = 'Hello, Gemini!';
-    const expected = [
-      {
-        parts: [{ text: 'Hello, Gemini!' }],
-      },
-    ];
-    const result = util.maybeCoerceToGeminiFormat(input);
-    expect(result).toEqual({
-      contents: expected,
-      coerced: true,
-      systemInstruction: undefined,
-    });
-  });
-
-  it('should handle system messages and create systemInstruction', () => {
-    const input = [
-      { role: 'system', content: 'You are a helpful assistant.' },
-      { role: 'user', content: 'Hello!' },
-    ];
-    const result = util.maybeCoerceToGeminiFormat(input);
-    expect(result).toEqual({
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: 'Hello!' }],
-        },
-      ],
-      coerced: true,
-      systemInstruction: {
-        parts: [{ text: 'You are a helpful assistant.' }],
-      },
-    });
-  });
-
-  it('should log a warning and return the input for unknown formats', () => {
-    const loggerSpy = jest.spyOn(logger, 'warn');
-    const input = { unknownFormat: 'test' };
-    const result = util.maybeCoerceToGeminiFormat(input);
-    expect(result).toEqual({
-      contents: input,
-      coerced: false,
-      systemInstruction: undefined,
-    });
-    expect(loggerSpy).toHaveBeenCalledWith(`Unknown format for Gemini: ${JSON.stringify(input)}`);
-  });
-
-  it('should handle OpenAI chat format with content as an array of objects', () => {
-    const input = [
-      {
-        role: 'system',
-        content: 'You are a helpful AI assistant.',
-      },
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: 'What is {{thing}}?',
-          },
-        ],
-      },
-    ];
-
-    const result = util.maybeCoerceToGeminiFormat(input);
-
-    expect(result).toEqual({
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            {
-              text: 'What is {{thing}}?',
-            },
-          ],
-        },
-      ],
-      coerced: true,
-      systemInstruction: {
-        parts: [{ text: 'You are a helpful AI assistant.' }],
-      },
-    });
-  });
-
-  it('should handle string content', () => {
-    // This simulates the parsed YAML format
-    const input = [
-      {
-        role: 'system',
-        content: 'You are a helpful AI assistant.',
-      },
-      {
-        role: 'user',
-        content: 'What is {{thing}}?',
-      },
-    ];
-
-    const result = util.maybeCoerceToGeminiFormat(input);
-
-    expect(result).toEqual({
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: 'What is {{thing}}?' }],
-        },
-      ],
-      coerced: true,
-      systemInstruction: {
-        parts: [{ text: 'You are a helpful AI assistant.' }],
-      },
-    });
-  });
-
-  it('should handle mixed content types', () => {
-    const input = [
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: 'First part' },
-          'Second part as string',
-          { type: 'image', url: 'https://example.com/image.jpg' },
-        ],
-      },
-    ];
-
-    const result = util.maybeCoerceToGeminiFormat(input);
-
-    expect(result).toEqual({
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            { text: 'First part' },
-            { text: 'Second part as string' },
-            { type: 'image', url: 'https://example.com/image.jpg' },
-          ],
-        },
-      ],
-      coerced: true,
-      systemInstruction: undefined,
-    });
   });
 
   it('should handle function tool callbacks correctly', async () => {
@@ -816,7 +627,7 @@ describe('VertexChatProvider.callLlamaApi', () => {
 
     const mockRequest = jest.fn().mockResolvedValue(mockResponse);
 
-    jest.spyOn(util, 'getGoogleClient').mockResolvedValue({
+    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
         request: mockRequest,
       } as unknown as JSONClient,
@@ -886,7 +697,7 @@ describe('VertexChatProvider.callLlamaApi', () => {
 
     const mockRequest = jest.fn().mockResolvedValue(mockResponse);
 
-    jest.spyOn(util, 'getGoogleClient').mockResolvedValue({
+    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
         request: mockRequest,
       } as unknown as JSONClient,
@@ -930,7 +741,7 @@ describe('VertexChatProvider.callLlamaApi', () => {
       },
     };
 
-    jest.spyOn(util, 'getGoogleClient').mockResolvedValue({
+    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
         request: jest.fn().mockRejectedValue(mockError),
       } as unknown as JSONClient,
@@ -992,7 +803,7 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
 
     const mockRequest = jest.fn().mockResolvedValue(mockResponse);
 
-    jest.spyOn(util, 'getGoogleClient').mockResolvedValue({
+    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
         request: mockRequest,
       } as unknown as JSONClient,
@@ -1039,7 +850,7 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
 
     const mockRequest = jest.fn().mockResolvedValue(mockResponse);
 
-    jest.spyOn(util, 'getGoogleClient').mockResolvedValue({
+    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
         request: mockRequest,
       } as unknown as JSONClient,
@@ -1089,7 +900,7 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
 
     const mockRequest = jest.fn().mockResolvedValue(mockResponse);
 
-    jest.spyOn(util, 'getGoogleClient').mockResolvedValue({
+    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
         request: mockRequest,
       } as unknown as JSONClient,

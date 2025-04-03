@@ -2,7 +2,6 @@ import type { GoogleAuth } from 'google-auth-library';
 import Clone from 'rfdc';
 import { z } from 'zod';
 import logger from '../../logger';
-import type { CallApiContextParams } from '../../types';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
 import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt } from '../shared';
@@ -307,7 +306,7 @@ export function loadFile(
 
 export function geminiFormatSystemInstructions(
   prompt: string,
-  context?: CallApiContextParams,
+  contextVars?: Record<string, string | object>,
   configSystemInstruction?: Content,
 ) {
   let contents: GeminiFormat | { role: string; parts: { text: string } } = parseChatPrompt(prompt, {
@@ -330,11 +329,11 @@ export function geminiFormatSystemInstructions(
   if (configSystemInstruction && !systemInstruction) {
     // Make a copy
     systemInstruction = clone(configSystemInstruction);
-    if (systemInstruction && context?.vars) {
+    if (systemInstruction && contextVars) {
       const nunjucks = getNunjucksEngine();
       for (const part of systemInstruction.parts) {
         if (part.text) {
-          part.text = nunjucks.renderString(part.text, context.vars);
+          part.text = nunjucks.renderString(part.text, contextVars);
         }
       }
     }

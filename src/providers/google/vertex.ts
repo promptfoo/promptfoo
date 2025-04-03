@@ -250,7 +250,7 @@ export class VertexChatProvider extends VertexGenericProvider {
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
     const { contents, systemInstruction } = geminiFormatSystemInstructions(
       prompt,
-      context,
+      context?.vars,
       this.config.systemInstruction,
     );
     // https://ai.google.dev/api/rest/v1/models/streamGenerateContent

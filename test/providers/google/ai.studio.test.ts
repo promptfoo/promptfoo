@@ -363,60 +363,6 @@ describe('AIStudioChatProvider', () => {
       );
     });
 
-    it('should handle system messages correctly', async () => {
-      const mockResponse = {
-        data: {
-          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
-          usageMetadata: {
-            promptTokenCount: 10,
-            candidatesTokenCount: 5,
-            totalTokenCount: 15,
-          },
-        },
-        cached: false,
-      };
-
-      jest.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
-        contents: [
-          { role: 'system' as any, parts: [{ text: 'system instruction' }] },
-          { role: 'user', parts: [{ text: 'user message' }] },
-        ],
-        coerced: true,
-        systemInstruction: undefined,
-      } as any);
-
-      const response = await provider.callGemini('test prompt');
-
-      expect(response).toEqual({
-        output: 'response text',
-        tokenUsage: {
-          prompt: 10,
-          completion: 5,
-          total: 15,
-          numRequests: 1,
-        },
-        raw: mockResponse.data,
-        cached: false,
-      });
-
-      expect(cache.fetchWithCache).toHaveBeenCalledWith(
-        expect.stringContaining('v1beta/models/gemini-pro:generateContent'),
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-          }),
-          body: expect.stringContaining(
-            '"contents":[{"role":"system","parts":{"text":"system instruction"}},{"role":"user","parts":{"text":"user message"}}]',
-          ),
-        }),
-        expect.any(Number),
-        'json',
-        false,
-      );
-    });
-
     it('should handle API call errors', async () => {
       const provider = new AIStudioChatProvider('gemini-pro', {
         config: {

@@ -1,8 +1,10 @@
 import * as fs from 'fs';
 import { GoogleAuth } from 'google-auth-library';
 import * as nunjucks from 'nunjucks';
+import logger from '../../../src/logger';
 import {
   maybeCoerceToGeminiFormat,
+  geminiFormatSystemInstructions,
   getGoogleClient,
   hasGoogleDefaultCredentials,
   loadFile,
@@ -233,6 +235,192 @@ describe('util', () => {
         parts: [{ text: 'Sensitive information' }],
       });
     });
+
+    it('should return unmodified content if it matches GeminiFormat', () => {
+      const input = [
+        {
+          role: 'user',
+          parts: [{ text: 'Hello, Gemini!' }],
+        },
+      ];
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: input,
+        coerced: false,
+        systemInstruction: undefined,
+      });
+    });
+
+    it('should coerce OpenAI chat format to GeminiFormat', () => {
+      const input = [
+        { role: 'user', content: 'Hello' },
+        { role: 'user', content: ', ' },
+        { role: 'user', content: 'Gemini!' },
+      ];
+      const expected = [
+        {
+          role: 'user',
+          parts: [{ text: 'Hello' }],
+        },
+        {
+          role: 'user',
+          parts: [{ text: ', ' }],
+        },
+        {
+          role: 'user',
+          parts: [{ text: 'Gemini!' }],
+        },
+      ];
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: expected,
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
+
+    it('should coerce string input to GeminiFormat', () => {
+      const input = 'Hello, Gemini!';
+      const expected = [
+        {
+          parts: [{ text: 'Hello, Gemini!' }],
+        },
+      ];
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: expected,
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
+
+    it('should handle system messages and create systemInstruction', () => {
+      const input = [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'Hello!' },
+      ];
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: 'Hello!' }],
+          },
+        ],
+        coerced: true,
+        systemInstruction: {
+          parts: [{ text: 'You are a helpful assistant.' }],
+        },
+      });
+    });
+
+    it('should log a warning and return the input for unknown formats', () => {
+      const loggerSpy = jest.spyOn(logger, 'warn');
+      const input = { unknownFormat: 'test' };
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: input,
+        coerced: false,
+        systemInstruction: undefined,
+      });
+      expect(loggerSpy).toHaveBeenCalledWith(`Unknown format for Gemini: ${JSON.stringify(input)}`);
+    });
+
+    it('should handle OpenAI chat format with content as an array of objects', () => {
+      const input = [
+        {
+          role: 'system',
+          content: 'You are a helpful AI assistant.',
+        },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: 'What is {{thing}}?',
+            },
+          ],
+        },
+      ];
+
+      const result = maybeCoerceToGeminiFormat(input);
+
+      expect(result).toEqual({
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'What is {{thing}}?',
+              },
+            ],
+          },
+        ],
+        coerced: true,
+        systemInstruction: {
+          parts: [{ text: 'You are a helpful AI assistant.' }],
+        },
+      });
+    });
+
+    it('should handle string content', () => {
+      // This simulates the parsed YAML format
+      const input = [
+        {
+          role: 'system',
+          content: 'You are a helpful AI assistant.',
+        },
+        {
+          role: 'user',
+          content: 'What is {{thing}}?',
+        },
+      ];
+
+      const result = maybeCoerceToGeminiFormat(input);
+
+      expect(result).toEqual({
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: 'What is {{thing}}?' }],
+          },
+        ],
+        coerced: true,
+        systemInstruction: {
+          parts: [{ text: 'You are a helpful AI assistant.' }],
+        },
+      });
+    });
+
+    it('should handle mixed content types', () => {
+      const input = [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'First part' },
+            'Second part as string',
+            { type: 'image', url: 'https://example.com/image.jpg' },
+          ],
+        },
+      ];
+
+      const result = maybeCoerceToGeminiFormat(input);
+
+      expect(result).toEqual({
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { text: 'First part' },
+              { text: 'Second part as string' },
+              { type: 'image', url: 'https://example.com/image.jpg' },
+            ],
+          },
+        ],
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
   });
 
   describe('getGoogleClient', () => {
@@ -329,6 +517,54 @@ describe('util', () => {
       expect(result).toEqual(JSON.parse(tools));
       expect(fs.existsSync).toHaveBeenCalledWith(expect.stringContaining('fp.json'));
       expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('fp.json'), 'utf8');
+    });
+  });
+
+  describe('geminiFormatSystemInstructions', () => {
+    it('should handle system messages in prompt', async () => {
+      const prompt = [
+        { role: 'system', content: [{ text: 'system instruction' }] },
+        { role: 'user', content: [{ text: 'user message' }] },
+      ]
+
+      const { contents, systemInstruction } = geminiFormatSystemInstructions(
+        JSON.stringify(prompt),
+        {},
+        undefined,
+      );
+
+      expect(contents).toEqual([{"parts": [{"text": "user message"}], "role": "user"}]);
+      expect(systemInstruction).toEqual({"parts": [{"text": "system instruction"}]})
+    });
+
+    it('should handle system messages in config', async () => {
+      const prompt = [
+        { role: 'user', parts: [{ text: 'user message' }] },
+      ]
+
+      const { contents, systemInstruction } = geminiFormatSystemInstructions(
+        JSON.stringify(prompt),
+        {},
+        { parts: [{ text: 'system instruction'}] },
+      );
+
+      expect(contents).toEqual([{"parts": [{"text": "user message"}], "role": "user"}]);
+      expect(systemInstruction).toEqual({"parts": [{"text": "system instruction"}]})
+    });
+
+    it('should handle system messages in variables', async () => {
+      const prompt = [
+        { role: 'user', parts: [{ text: 'user message' }] },
+      ]
+
+      const { contents, systemInstruction } = geminiFormatSystemInstructions(
+        JSON.stringify(prompt),
+        { system_instruction: 'system instruction' },
+        { parts: [{ text: '{{system_instruction}}'}] },
+      );
+
+      expect(contents).toEqual([{"parts": [{"text": "user message"}], "role": "user"}]);
+      expect(systemInstruction).toEqual({"parts": [{"text": "system instruction"}]})
     });
   });
 });
