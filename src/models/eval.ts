@@ -512,48 +512,58 @@ export default class Eval {
 export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[]> {
   const db = getDb();
 
-  const resultsCTE = db.$with('results').as(
-    db
-      .select({
-        evalId: evalResultsTable.evalId,
-        testCount: sql<number>`COUNT(${evalResultsTable.success})`.as('testCount'),
-        passCount:
-          sql<number>`SUM(CASE WHEN ${evalResultsTable.success} = true THEN 1 ELSE 0 END)`.as(
-            'passCount',
-          ),
-      })
-      .from(evalResultsTable)
-      .groupBy(evalResultsTable.evalId),
-  );
-
   const results = db
     .with(resultsCTE)
     .select({
-      evalId: resultsCTE.evalId,
-      testCount: resultsCTE.testCount,
-      passCount: resultsCTE.passCount,
+      evalId: evalsTable.id,
       createdAt: evalsTable.createdAt,
       description: evalsTable.description,
       datasetId: evalsToDatasetsTable.datasetId,
       isRedteam: sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`,
+      prompts: evalsTable.prompts,
     })
-    .from(resultsCTE)
-    .innerJoin(evalsTable, eq(resultsCTE.evalId, evalsTable.id))
+    .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
     .where(datasetId ? eq(evalsToDatasetsTable.datasetId, datasetId) : undefined)
     .all();
 
-  return results.map((result) => ({
+  /**
+   * Deserialize the evals. A few things to note:
+   *
+   * - Test statistics are derived from the prompt metircs as this is the only reliable source of truth
+   * that's written to the evals table.
+   */
+  return results.map((result) => {
+    const passCount =
+      result.prompts?.reduce((memo, prompt) => {
+        invariant(!!prompt.metrics, 'Prompt metrics are required');
+        return memo + prompt.metrics!.testPassCount;
+      }, 0) ?? 0;
+
+    const testRunCount =
+      result.prompts?.reduce((memo, prompt) => {
+        return (
+          memo +
+          (prompt.metrics?.testPassCount ?? 0) +
+          (prompt.metrics?.testFailCount ?? 0) +
+          (prompt.metrics?.testErrorCount ?? 0)
+        );
+      }, 0) ?? 0;
+
+    const testCount =
+      (result.prompts?.[0]?.metrics?.testPassCount ?? 0) +
+      (result.prompts?.[0]?.metrics?.testFailCount ?? 0) +
+      (result.prompts?.[0]?.metrics?.testErrorCount ?? 0);
+
+    return {
     evalId: result.evalId,
     createdAt: result.createdAt,
     description: result.description,
-    numTests: result.testCount,
+      numTests: testCount,
     datasetId: result.datasetId,
     isRedteam: result.isRedteam,
-    passRate:
-      result.testCount > 0 && result.passCount > 0
-        ? (result.passCount / result.testCount) * 100
-        : 0,
+      passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
     label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
-  }));
+    };
+  });
 }
