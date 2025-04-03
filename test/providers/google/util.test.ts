@@ -562,5 +562,34 @@ describe('util', () => {
       expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
       expect(systemInstruction).toEqual({ parts: [{ text: 'system instruction' }] });
     });
+
+    it('should handle string system messages in config', async () => {
+      const prompt = [{ role: 'user', parts: [{ text: 'user message' }] }];
+
+      const { contents, systemInstruction } = geminiFormatSystemInstructions(
+        JSON.stringify(prompt),
+        {},
+        'system instruction',
+      );
+
+      expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
+      expect(systemInstruction).toEqual({ parts: [{ text: 'system instruction' }] });
+    });
+
+    it('should handle filepath system messages in variables', async () => {
+      const prompt = [{ role: 'user', parts: [{ text: 'user message' }] }];
+      const system_instruction = JSON.stringify({ parts: [{ text: 'system instruction' }] })
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      jest.spyOn(fs, 'readFileSync').mockReturnValue(system_instruction);
+
+      const { contents, systemInstruction } = geminiFormatSystemInstructions(
+        JSON.stringify(prompt),
+        { system_instruction: 'file://system_instruction.json' },
+        '{{system_instruction}}',
+      );
+
+      expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
+      expect(systemInstruction).toEqual({ parts: [{ text: 'system instruction' }] });
+    });
   });
 });

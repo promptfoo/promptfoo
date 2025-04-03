@@ -307,7 +307,7 @@ export function loadFile(
 export function geminiFormatSystemInstructions(
   prompt: string,
   contextVars?: Record<string, string | object>,
-  configSystemInstruction?: Content,
+  configSystemInstruction?: Content | string,
 ) {
   let contents: GeminiFormat | { role: string; parts: { text: string } } = parseChatPrompt(prompt, {
     role: 'user',
@@ -325,11 +325,22 @@ export function geminiFormatSystemInstructions(
     contents = updatedContents;
   }
 
-  let systemInstruction: Content | undefined = parsedSystemInstruction;
+  let systemInstruction: Content | string | undefined = parsedSystemInstruction;
   if (configSystemInstruction && !systemInstruction) {
     // Make a copy
     systemInstruction = clone(configSystemInstruction);
-    if (systemInstruction && contextVars) {
+
+    // Load SI from file
+    if (typeof configSystemInstruction === 'string') {
+      systemInstruction = loadFile(configSystemInstruction, contextVars)
+    } 
+
+    // Format SI if string was not a filepath above
+    if (typeof systemInstruction === 'string') {
+      systemInstruction = {parts: [{text: systemInstruction}]}
+    } 
+
+    if (contextVars && systemInstruction) {
       const nunjucks = getNunjucksEngine();
       for (const part of systemInstruction.parts) {
         if (part.text) {
