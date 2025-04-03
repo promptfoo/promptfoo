@@ -1,4 +1,5 @@
 import axios from 'axios';
+import dedent from 'dedent';
 import WebSocket from 'ws';
 import { GoogleMMLiveProvider } from '../../../src/providers/google/live';
 
@@ -503,7 +504,15 @@ describe('GoogleMMLiveProvider', () => {
           {
             executableCode: {
               language: 'PYTHON',
-              code: 'while True:\n  count_response = default_api.get_count()\n  if count_response and count_response.counter is not None and count_response.counter \u003e= 5:\n    print(f"Counter reached {count_response.counter}, stopping.")\n    break\n  default_api.add_one()\n  print("Counter incremented.")\n',
+              code: dedent`
+                while True:
+                  count_response = default_api.get_count()
+                  if count_response and count_response.counter is not None and count_response.counter >= 5:
+                    print(f"Counter reached {count_response.counter}, stopping.")
+                    break
+                  default_api.add_one()
+                  print("Counter incremented.")
+              `,
             },
           },
         ]);
