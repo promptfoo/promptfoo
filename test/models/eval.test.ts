@@ -1,7 +1,7 @@
 import { getDb } from '../../src/database';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
-import Eval, { getSummaryOfLatestEvals } from '../../src/models/eval';
+import Eval, { getEvalSummaries } from '../../src/models/eval';
 import type { Prompt } from '../../src/types';
 import EvalFactory from '../factories/evalFactory';
 
@@ -32,22 +32,31 @@ describe('evaluator', () => {
       const eval1 = await EvalFactory.create();
       const eval2 = await EvalFactory.create();
       await EvalFactory.createOldResult();
-      const evaluations = await getSummaryOfLatestEvals();
+      const evaluations = await getEvalSummaries();
 
       expect(evaluations).toHaveLength(2);
+
       expect(evaluations).toContainEqual(
         expect.objectContaining({
           evalId: eval1.id,
           createdAt: eval1.createdAt,
+          description: null,
           numTests: 2,
+          isRedteam: 0,
+          passRate: 50,
+          label: eval1.id,
         }),
       );
+
       expect(evaluations).toContainEqual(
         expect.objectContaining({
           evalId: eval2.id,
           createdAt: eval2.createdAt,
-          description: eval2.description || null,
+          description: null,
           numTests: 2,
+          isRedteam: 0,
+          passRate: 50,
+          label: eval2.id,
         }),
       );
     });

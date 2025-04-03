@@ -1,4 +1,4 @@
-import { desc, eq, like, and, sql, not } from 'drizzle-orm';
+import { desc, eq, and, sql } from 'drizzle-orm';
 import NodeCache from 'node-cache';
 import { getDb } from '../database';
 import {
@@ -13,7 +13,7 @@ import {
 } from '../database/tables';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
-import Eval, { createEvalId, getSummaryOfLatestEvals } from '../models/eval';
+import Eval, { createEvalId } from '../models/eval';
 import { generateIdFromPrompt } from '../models/prompt';
 import {
   type EvalWithMetadata,
@@ -25,7 +25,6 @@ import {
   type TestCasesWithMetadataPrompt,
   type UnifiedConfig,
   type CompletedPrompt,
-  type ResultLightweight,
   type EvaluateSummaryV2,
 } from '../types';
 import invariant from '../util/invariant';
