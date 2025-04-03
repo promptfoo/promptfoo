@@ -1,9 +1,5 @@
 {
     "position": 5,
     "label": "Promptfoo Cloud",
-    "collapsed": false,
-    "link": {
-      "type": "doc",
-      "id": "cloud/index"
-    }
-  }
+    "collapsed": true
+}

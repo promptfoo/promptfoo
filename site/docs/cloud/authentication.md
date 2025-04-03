@@ -30,4 +30,8 @@ You may wish to authenticate into the CLI when using Promptfoo. Follow these ste
 
 4. Once authenticated, you can run `promptfoo eval --share` or `promptfoo share` to share eval results to your Promptfoo Cloud organization. 
 
+:::tip
+    All of your evals are stored locally until you share them. If you were previously an open-source user, you can share your local evals to your Promptfoo Cloud organization through running `promptfoo share`.
+:::
+
 
