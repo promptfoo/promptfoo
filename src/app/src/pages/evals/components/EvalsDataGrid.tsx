@@ -132,7 +132,13 @@ export default function EvalsDataGrid({
             <>
               <Typography
                 variant="body2"
-                color="success.main"
+                color={
+                  params.value >= 90
+                    ? 'success.main'
+                    : params.value >= 60
+                      ? 'warning.main'
+                      : 'error.main'
+                }
                 sx={{
                   height: '100%',
                   display: 'flex',
