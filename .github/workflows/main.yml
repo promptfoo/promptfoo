@@ -14,7 +14,7 @@ env:
 jobs:
   test:
     name: Test on Node ${{ matrix.node }} and ${{ matrix.os }}
-    timeout-minutes: 10
+    timeout-minutes: 8
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -46,7 +46,7 @@ jobs:
           npm ci
 
       - name: Test
-        run: npm run test -- --ci --coverage --maxWorkers=2
+        run: npm run test -- --ci
 
   build:
     name: Build on Node ${{ matrix.node }}
