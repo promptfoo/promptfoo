@@ -50,7 +50,7 @@ jobs:
 
   build:
     name: Build on Node ${{ matrix.node }}
-    timeout-minutes: 8
+    timeout-minutes: 3
     runs-on: ubuntu-latest
     strategy:
       matrix:
