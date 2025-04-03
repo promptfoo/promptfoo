@@ -1125,6 +1125,7 @@
                           "ssrf",
                           "system-prompt-override",
                           "tool-discovery",
+                          "tool-discovery:multi-turn",
                           "toxicity",
                           "unsafebench"
                         ]
@@ -1270,6 +1271,7 @@
                               "ssrf",
                               "system-prompt-override",
                               "tool-discovery",
+                              "tool-discovery:multi-turn",
                               "toxicity",
                               "unsafebench"
                             ]
