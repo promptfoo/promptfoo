@@ -295,7 +295,7 @@ describe('AIStudioChatProvider', () => {
         expect.objectContaining({
           method: 'POST',
           body: expect.stringContaining(
-            '"contents":[{"role":"user","parts":{"text":"test prompt"}}]',
+            '"contents":[{"parts":[{"text":"test prompt"}],"role":"user"}]',
           ),
         }),
         expect.any(Number),
@@ -726,7 +726,7 @@ describe('AIStudioChatProvider', () => {
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
         'https://rendered-generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=rendered-test-key',
         {
-          body: '{"contents":[{"role":"user","parts":{"text":"What is the weather in San Francisco?"}}],"generationConfig":{},"toolConfig":{"functionCallingConfig":{"mode":"AUTO","allowedFunctionNames":["get_weather"]}},"tools":[{"functionDeclarations":[{"name":"get_weather","description":"Get weather information","parameters":{"type":"OBJECT","properties":{"location":{"type":"STRING","description":"City name"}},"required":["location"]}}]}]}',
+          body: '{"contents":[{"parts":[{"text":"What is the weather in San Francisco?"}],"role":"user"}],"generationConfig":{},"toolConfig":{"functionCallingConfig":{"mode":"AUTO","allowedFunctionNames":["get_weather"]}},"tools":[{"functionDeclarations":[{"name":"get_weather","description":"Get weather information","parameters":{"type":"OBJECT","properties":{"location":{"type":"STRING","description":"City name"}},"required":["location"]}}]}]}',
           headers: { 'Content-Type': 'application/json' },
           method: 'POST',
         },
@@ -816,7 +816,7 @@ describe('AIStudioChatProvider', () => {
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
         'https://rendered-generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=rendered-test-key',
         {
-          body: '{"contents":[{"role":"user","parts":{"text":"What is the weather in San Francisco?"}}],"generationConfig":{},"tools":[{"functionDeclarations":[{"name":"get_weather","description":"Get weather in San Francisco","parameters":{"type":"OBJECT","properties":{"location":{"type":"STRING"}}}}]}]}',
+          body: '{"contents":[{"parts":[{"text":"What is the weather in San Francisco?"}],"role":"user"}],"generationConfig":{},"tools":[{"functionDeclarations":[{"name":"get_weather","description":"Get weather in San Francisco","parameters":{"type":"OBJECT","properties":{"location":{"type":"STRING"}}}}]}]}',
           headers: { 'Content-Type': 'application/json' },
           method: 'POST',
         },

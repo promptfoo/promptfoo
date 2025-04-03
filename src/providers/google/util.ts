@@ -6,7 +6,7 @@ import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
 import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt } from '../shared';
 import { type Tool } from './types';
-import type { Content } from './types';
+import type { Content, Part } from './types';
 
 const clone = Clone();
 
@@ -120,7 +120,7 @@ export type GeminiPart = z.infer<typeof PartSchema>;
 export function maybeCoerceToGeminiFormat(contents: any): {
   contents: GeminiFormat;
   coerced: boolean;
-  systemInstruction: { parts: [GeminiPart, ...GeminiPart[]] } | undefined;
+  systemInstruction: { parts: [Part, ...Part[]] } | undefined;
 } {
   let coerced = false;
   const parseResult = GeminiFormatSchema.safeParse(contents);
@@ -212,9 +212,7 @@ export function maybeCoerceToGeminiFormat(contents: any): {
     contents: coercedContents,
     coerced,
     systemInstruction:
-      systemPromptParts.length > 0
-        ? { parts: systemPromptParts as [GeminiPart, ...GeminiPart[]] }
-        : undefined,
+      systemPromptParts.length > 0 ? { parts: systemPromptParts as [Part, ...Part[]] } : undefined,
   };
 }
 
@@ -290,13 +288,20 @@ export function geminiFormatSystemInstructions(
   prompt: string,
   contextVars?: Record<string, string | object>,
   configSystemInstruction?: Content | string,
-) {
-  let contents: GeminiFormat | { role: string; parts: { text: string } } = parseChatPrompt(prompt, {
-    role: 'user',
-    parts: {
-      text: prompt,
+): {
+  contents: GeminiFormat;
+  systemInstruction: Content | { parts: [Part, ...Part[]] } | undefined;
+} {
+  let contents: GeminiFormat = parseChatPrompt(prompt, [
+    {
+      parts: [
+        {
+          text: prompt,
+        },
+      ],
+      role: 'user',
     },
-  });
+  ]);
   const {
     contents: updatedContents,
     coerced,
@@ -331,9 +336,7 @@ export function geminiFormatSystemInstructions(
       }
     }
   } else if (configSystemInstruction && systemInstruction) {
-    return {
-      error: `Preprocessing error: system instruction defined in prompt and config.`,
-    };
+    logger.debug(`Preprocessing error: system instruction defined in prompt and config.`);
   }
 
   return { contents, systemInstruction };

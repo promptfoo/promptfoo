@@ -18,7 +18,7 @@ interface FileData {
   fileUri: string;
 }
 
-interface Part {
+export interface Part {
   text?: string;
   inlineData?: Blob;
   functionCall?: FunctionCall;

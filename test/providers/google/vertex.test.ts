@@ -126,7 +126,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       url: expect.any(String),
       method: 'POST',
       data: expect.objectContaining({
-        contents: [{ parts: { text: 'test prompt' }, role: 'user' }],
+        contents: [{ parts: [{ text: 'test prompt' }], role: 'user' }],
       }),
       timeout: expect.any(Number),
     });
