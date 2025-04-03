@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Container } from '@mui/material';
 import EvalsDataGrid from './components/EvalsDataGrid';
@@ -6,17 +6,19 @@ import EvalsDataGrid from './components/EvalsDataGrid';
 export default function EvalsIndexPage() {
   const navigate = useNavigate();
   const [offsetTop, setOffsetTop] = useState(0);
-  const el = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     document.title = 'Evals | promptfoo';
   }, []);
 
-  useEffect(() => {
-    if (el.current) {
-      setOffsetTop(el.current.offsetTop);
+  /**
+   * Calculate the offset top of the container once it's mounted.
+   */
+  const containerRef = useCallback((node: HTMLDivElement) => {
+    if (node) {
+      setOffsetTop(node.offsetTop);
     }
-  }, [el.current]);
+  }, []);
 
   return (
     <Container
@@ -25,7 +27,7 @@ export default function EvalsIndexPage() {
         height: offsetTop > 0 ? `calc(100vh - ${offsetTop}px)` : '100%',
         paddingBottom: '16px',
       }}
-      ref={el}
+      ref={containerRef}
     >
       <EvalsDataGrid onEvalSelected={(evalId) => navigate(`/eval/${evalId}`)} showUtilityButtons />
     </Container>
