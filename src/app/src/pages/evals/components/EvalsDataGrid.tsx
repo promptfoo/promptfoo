@@ -157,7 +157,7 @@ export default function EvalsDataGrid({
   );
 
   return (
-    <Paper elevation={2} sx={{ height: '100%', overflow: 'hidden' }}>
+    <Paper elevation={2} sx={{ height: '100%' }}>
       <DataGrid
         rows={evals}
         columns={columns}
