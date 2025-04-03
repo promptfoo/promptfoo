@@ -8,8 +8,9 @@ import { clearCache, disableCache, enableCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
 import { loadApiProvider, loadApiProviders } from '../../src/providers';
-import { AnthropicCompletionProvider } from '../../src/providers/anthropic';
-import { AzureChatCompletionProvider, AzureCompletionProvider } from '../../src/providers/azure';
+import { AnthropicCompletionProvider } from '../../src/providers/anthropic/completion';
+import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
+import { AzureCompletionProvider } from '../../src/providers/azure/completion';
 import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock';
 import {
   CloudflareAiChatCompletionProvider,
@@ -20,6 +21,7 @@ import {
   type ICloudflareEmbeddingResponse,
   type ICloudflareProviderConfig,
 } from '../../src/providers/cloudflare-ai';
+import { VertexChatProvider, VertexEmbeddingProvider } from '../../src/providers/google/vertex';
 import {
   HuggingfaceTextGenerationProvider,
   HuggingfaceFeatureExtractionProvider,
@@ -42,7 +44,6 @@ import {
   ReplicateProvider,
 } from '../../src/providers/replicate';
 import { ScriptCompletionProvider } from '../../src/providers/scriptCompletion';
-import { VertexChatProvider, VertexEmbeddingProvider } from '../../src/providers/vertex';
 import { VoyageEmbeddingProvider } from '../../src/providers/voyage';
 import { WebhookProvider } from '../../src/providers/webhook';
 import RedteamGoatProvider from '../../src/redteam/providers/goat';
@@ -1135,14 +1136,54 @@ describe('loadApiProvider', () => {
     delete process.env.MY_PORT;
   });
 
+  it('loadApiProvider with yaml filepath containing multiple providers', async () => {
+    const mockYamlContent = dedent`
+    - id: 'openai:gpt-4o-mini'
+      config:
+        key: 'value1'
+    - id: 'anthropic:messages:claude-3-5-sonnet-20241022'
+      config:
+        key: 'value2'`;
+    const mockReadFileSync = jest.mocked(fs.readFileSync);
+    mockReadFileSync.mockReturnValue(mockYamlContent);
+
+    const providers = await loadApiProviders('file://path/to/mock-providers-file.yaml');
+    expect(providers).toHaveLength(2);
+    expect(providers[0].id()).toBe('openai:gpt-4o-mini');
+    expect(providers[1].id()).toBe('anthropic:messages:claude-3-5-sonnet-20241022');
+    expect(mockReadFileSync).toHaveBeenCalledWith(
+      expect.stringMatching(/path[\\\/]to[\\\/]mock-providers-file\.yaml/),
+      'utf8',
+    );
+  });
+
+  it('loadApiProvider with json filepath containing multiple providers', async () => {
+    const mockJsonContent = JSON.stringify([
+      {
+        id: 'openai:gpt-4o-mini',
+        config: { key: 'value1' },
+      },
+      {
+        id: 'anthropic:messages:claude-3-5-sonnet-20241022',
+        config: { key: 'value2' },
+      },
+    ]);
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(mockJsonContent);
+
+    const providers = await loadApiProviders('file://path/to/mock-providers-file.json');
+    expect(providers).toHaveLength(2);
+    expect(providers[0].id()).toBe('openai:gpt-4o-mini');
+    expect(providers[1].id()).toBe('anthropic:messages:claude-3-5-sonnet-20241022');
+  });
+
   it('throws an error for unidentified providers', async () => {
-    const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
-      throw new Error('process.exit called');
-    });
+    const mockError = jest.spyOn(logger, 'error');
     const unknownProviderPath = 'unknown:provider';
 
-    await expect(loadApiProvider(unknownProviderPath)).rejects.toThrow('process.exit called');
-    expect(logger.error).toHaveBeenCalledWith(
+    await expect(loadApiProvider(unknownProviderPath)).rejects.toThrow(
+      `Could not identify provider: ${chalk.bold(unknownProviderPath)}`,
+    );
+    expect(mockError).toHaveBeenCalledWith(
       dedent`
         Could not identify provider: ${chalk.bold(unknownProviderPath)}.
 
@@ -1152,8 +1193,7 @@ describe('loadApiProvider', () => {
           For more information on supported providers, visit: `)} ${chalk.cyan('https://promptfoo.dev/docs/providers/')}
       `,
     );
-    expect(mockExit).toHaveBeenCalledWith(1);
-    mockExit.mockRestore();
+    mockError.mockRestore();
   });
 
   it('renders label using Nunjucks', async () => {

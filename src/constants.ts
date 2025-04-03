@@ -13,11 +13,11 @@ export const SHARE_API_BASE_URL =
   process.env.NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL ||
   process.env.NEXT_PUBLIC_PROMPTFOO_BASE_URL ||
   process.env.PROMPTFOO_REMOTE_API_BASE_URL ||
-  `https://api.promptfoo.dev`;
+  `https://api.promptfoo.app`;
 
 export const DEFAULT_SHARE_VIEW_BASE_URL = getEnvString(
   'PROMPTFOO_SHARING_APP_BASE_URL',
-  `https://app.promptfoo.dev`,
+  `https://promptfoo.app`,
 );
 
 // This is used for creating shared eval links.
@@ -33,3 +33,5 @@ export const TERMINAL_MAX_WIDTH =
   process?.stdout?.isTTY && process?.stdout?.columns && process?.stdout?.columns > 10
     ? process?.stdout?.columns - 10
     : 120;
+
+export const CLOUD_PROVIDER_PREFIX = 'promptfoo://provider/';

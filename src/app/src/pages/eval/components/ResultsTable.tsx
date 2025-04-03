@@ -34,10 +34,10 @@ import invariant from '@promptfoo/util/invariant';
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
 import yaml from 'js-yaml';
 import remarkGfm from 'remark-gfm';
+import { useDebounce } from 'use-debounce';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
-import GenerateTestCases from './GenerateTestCases';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import type { TruncatedTextProps } from './TruncatedText';
 import TruncatedText from './TruncatedText';
@@ -117,6 +117,7 @@ interface ResultsTableProps {
   filterMode: FilterMode;
   failureFilter: { [key: string]: boolean };
   searchText: string;
+  debouncedSearchText?: string;
   showStats: boolean;
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
   onSearchTextChange: (text: string) => void;
@@ -158,6 +159,36 @@ function useScrollHandler() {
   return { isCollapsed };
 }
 
+function stringifyMetadataValue(value: any): string {
+  try {
+    if (value === null || value === undefined) {
+      return '';
+    }
+    return typeof value === 'object' ? JSON.stringify(value) : String(value);
+  } catch (err) {
+    console.error('Error stringifying metadata value:', err);
+    return '';
+  }
+}
+
+function generateMetadataSearchString(metadata: Record<string, any> | undefined): string {
+  if (!metadata) {
+    return '';
+  }
+
+  return Object.entries(metadata)
+    .map(([key, value]) => {
+      try {
+        const valueStr = stringifyMetadataValue(value);
+        return `metadata=${key}:${valueStr}`;
+      } catch (err) {
+        console.error('Error processing metadata entry:', err);
+        return '';
+      }
+    })
+    .join(' ');
+}
+
 function ResultsTable({
   maxTextLength,
   columnVisibility,
@@ -165,6 +196,7 @@ function ResultsTable({
   filterMode,
   failureFilter,
   searchText,
+  debouncedSearchText: externalDebouncedSearchText,
   showStats,
   onFailureFilterToggle,
   onSearchTextChange,
@@ -203,7 +235,6 @@ function ResultsTable({
 
       const componentResults = updatedOutputs[promptIndex].gradingResult?.componentResults || [];
       if (typeof isPass !== 'undefined') {
-        // Add component result for manual grading
         const humanResultIndex = componentResults.findIndex(
           (result) => result.assertion?.type === 'human',
         );
@@ -275,14 +306,27 @@ function ResultsTable({
   );
 
   const columnVisibilityIsSet = Object.keys(columnVisibility).length > 0;
+
+  const [localDebouncedSearchText] = useDebounce(searchText, 200);
+  const debouncedSearchText = externalDebouncedSearchText || localDebouncedSearchText;
+  const [isSearching, setIsSearching] = useState(false);
+
+  React.useEffect(() => {
+    setIsSearching(searchText !== debouncedSearchText && searchText !== '');
+  }, [searchText, debouncedSearchText]);
+
   const searchRegex = React.useMemo(() => {
+    if (!debouncedSearchText) {
+      return null;
+    }
     try {
-      return new RegExp(searchText, 'i');
+      return new RegExp(debouncedSearchText, 'i');
     } catch (err) {
       console.error('Invalid regular expression:', (err as Error).message);
       return null;
     }
-  }, [searchText]);
+  }, [debouncedSearchText]);
+
   const filteredBody = React.useMemo(() => {
     try {
       return body
@@ -322,16 +366,24 @@ function ResultsTable({
             return false;
           }
 
-          return searchText && searchRegex
+          return debouncedSearchText && searchRegex
             ? row.outputs.some((output) => {
                 const vars = row.vars.map((v) => `var=${v}`).join(' ');
-                const stringifiedOutput = `${output.text} ${Object.keys(output.namedScores)
-                  .map((k) => `metric=${k}:${output.namedScores[k]}`)
+                const stringifiedOutput = `${output.text} ${Object.keys(output.namedScores || {})
+                  .map((k) => {
+                    const namedScores = output.namedScores || {};
+                    const score = namedScores[k as keyof typeof namedScores];
+                    return `metric=${k}:${score}`;
+                  })
                   .join(' ')} ${
                   output.gradingResult?.reason || ''
                 } ${output.gradingResult?.comment || ''}`;
 
-                const searchString = `${vars} ${stringifiedOutput}`;
+                const outputMetadataString = generateMetadataSearchString(output.metadata);
+                const testCaseMetadataString = generateMetadataSearchString(
+                  output.testCase?.metadata,
+                );
+                const searchString = `${vars} ${stringifiedOutput} ${outputMetadataString} ${testCaseMetadataString}`;
                 return searchRegex.test(searchString);
               })
             : true;
@@ -344,7 +396,7 @@ function ResultsTable({
     body,
     failureFilter,
     filterMode,
-    searchText,
+    debouncedSearchText,
     columnVisibility,
     columnVisibilityIsSet,
     searchRegex,
@@ -354,7 +406,7 @@ function ResultsTable({
 
   React.useEffect(() => {
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-  }, [failureFilter, filterMode, searchText]);
+  }, [failureFilter, filterMode, debouncedSearchText]);
 
   // TODO(ian): Switch this to use prompt.metrics field once most clients have updated.
   const numGoodTests = React.useMemo(
@@ -653,7 +705,7 @@ function ResultsTable({
                   )}
                   firstOutput={getFirstOutput(info.row.index)}
                   showDiffs={filterMode === 'different'}
-                  searchText={searchText}
+                  searchText={debouncedSearchText}
                   showStats={showStats}
                 />
               ) : (
@@ -682,7 +734,7 @@ function ResultsTable({
     numGoodTests,
     onFailureFilterToggle,
     onSearchTextChange,
-    searchText,
+    debouncedSearchText,
     showStats,
   ]);
 
@@ -730,6 +782,26 @@ function ResultsTable({
 
   return (
     <div>
+      {isSearching && searchText && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: '60px',
+            right: '20px',
+            zIndex: 1000,
+            backgroundColor: 'rgba(25, 118, 210, 0.1)',
+            padding: '5px 10px',
+            borderRadius: '4px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <Typography variant="body2" color="primary">
+            Searching...
+          </Typography>
+        </Box>
+      )}
       <table
         className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
         style={{
@@ -910,7 +982,6 @@ function ResultsTable({
           </Typography>
         </Box>
       )}
-      <GenerateTestCases />
     </div>
   );
 }

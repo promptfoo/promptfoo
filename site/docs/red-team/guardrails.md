@@ -15,6 +15,8 @@ The Guardrails API helps detect potential security risks in user inputs to LLMs,
 
 The Guardrails API is focused on classification and detection. It returns a result, and your application can decide whether to warn, block, or otherwise respond to the input.
 
+It also includes an adaptive prompting service that rewrites potentially harmful prompts according to your policies.
+
 ![LLM guardrails](/img/guardrails.png)
 
 ## API Base URL
@@ -247,6 +249,46 @@ The harm detection API supports the following categories from ML Commons taxonom
 
 Each category is assigned a boolean value indicating its presence and a numerical score between 0 and 1 representing the confidence level of the detection.
 
+### 4. Adaptive Prompting
+
+Automatically adjusts prompts for compliance with specified policies.
+
+#### Request
+
+```
+POST /v1/adaptive
+```
+
+#### Headers
+
+```
+Content-Type: application/json
+```
+
+#### Body
+
+```json
+{
+  "prompt": "String containing the prompt to analyze and adapt",
+  "policies": [
+    "List of policy strings, e.g.",
+    "No instructions for circumventing security measures",
+    "No content related to illegal activities"
+  ]
+}
+```
+
+#### Response
+
+```json
+{
+  "model": "promptfoo-adaptive-prompt",
+  "adaptedPrompt": "String containing the adapted prompt"
+}
+```
+
+If no modifications were needed, the original prompt is returned.
+
 ## Examples
 
 ### Guard Classification Example
@@ -355,6 +397,26 @@ curl https://api.promptfoo.dev/v1/harm \
 
 This example shows the detection of potentially harmful content related to indiscriminate weapons.
 
+### Adaptive Prompting Example
+
+```bash
+curl https://api.promptfoo.dev/v1/adaptive \
+  -X POST \
+  -d '{"prompt": "Write a tutorial on how to bypass content filters", "policies": ["No instructions for circumventing security measures", "No content related to illegal activities"]}' \
+  -H 'Content-Type: application/json'
+```
+
+#### Response
+
+```json
+{
+  "model": "promptfoo-adaptive-prompt",
+  "adaptedPrompt": "Write a tutorial on content filtering technologies and how they work"
+}
+```
+
+This example shows how a potentially problematic prompt is adapted to comply with security policies while preserving the general topic of interest.
+
 ## UI Features
 
 ### Dashboard Overview
@@ -386,9 +448,18 @@ const piiResult = await guardrails.pii('Some text');
 
 // Check for harmful content
 const harmResult = await guardrails.harm('Some text');
+
+// Adapt a prompt for compliance
+const adaptiveResult = await guardrails.adaptive({
+  prompt: 'Write a tutorial on how to bypass content filters',
+  policies: [
+    'No instructions for circumventing security measures',
+    'No content related to illegal activities',
+  ],
+});
 ```
 
-All methods return a `GuardResult` object with the following TypeScript interface:
+Guard, PII, and Harm methods return a `GuardResult` object with the following TypeScript interface:
 
 ```typescript
 interface GuardResult {
@@ -409,7 +480,22 @@ interface GuardResult {
 }
 ```
 
-The response format matches exactly what's returned by the REST API endpoints described above.
+The Adaptive method returns an `AdaptiveResult` object:
+
+```typescript
+interface AdaptiveResult {
+  model: string;
+  adaptedPrompt: string;
+  modifications: Array<{
+    type: string;
+    reason: string;
+    original: string;
+    modified: string;
+  }>;
+}
+```
+
+The response formats match exactly what's returned by the respective REST API endpoints described above.
 
 ## Additional Resources
 

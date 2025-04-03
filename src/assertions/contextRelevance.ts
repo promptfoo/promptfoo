@@ -21,7 +21,7 @@ export const handleContextRelevance = async ({
     ...(await matchesContextRelevance(
       test.vars.query,
       test.vars.context,
-      assertion.threshold || 0,
+      assertion.threshold ?? 0,
       test.options,
     )),
   };

@@ -4,6 +4,7 @@ export const ProviderEnvOverridesSchema = z.object({
   AI21_API_BASE_URL: z.string().optional(),
   AI21_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
+  ANTHROPIC_BASE_URL: z.string().optional(),
   AWS_BEDROCK_REGION: z.string().optional(),
   AZURE_API_BASE_URL: z.string().optional(),
   AZURE_API_HOST: z.string().optional(),
@@ -36,6 +37,7 @@ export const ProviderEnvOverridesSchema = z.object({
   HELICONE_API_KEY: z.string().optional(),
   HF_API_TOKEN: z.string().optional(),
   HF_TOKEN: z.string().optional(),
+  HUGGING_FACE_HUB_TOKEN: z.string().optional(),
   LANGFUSE_HOST: z.string().optional(),
   LANGFUSE_PUBLIC_KEY: z.string().optional(),
   LANGFUSE_SECRET_KEY: z.string().optional(),
@@ -70,6 +72,15 @@ export const ProviderEnvOverridesSchema = z.object({
   WATSONX_AI_AUTH_TYPE: z.string().optional(),
   WATSONX_AI_BEARER_TOKEN: z.string().optional(),
   WATSONX_AI_PROJECT_ID: z.string().optional(),
+  AZURE_CONTENT_SAFETY_ENDPOINT: z.string().optional(),
+  AZURE_CONTENT_SAFETY_API_KEY: z.string().optional(),
+  AZURE_CONTENT_SAFETY_API_VERSION: z.string().optional(),
+  AWS_REGION: z.string().optional(),
+  AWS_DEFAULT_REGION: z.string().optional(),
+  AWS_SAGEMAKER_MAX_TOKENS: z.string().optional(),
+  AWS_SAGEMAKER_TEMPERATURE: z.string().optional(),
+  AWS_SAGEMAKER_TOP_P: z.string().optional(),
+  AWS_SAGEMAKER_MAX_RETRIES: z.string().optional(),
 });
 
 export type EnvOverrides = z.infer<typeof ProviderEnvOverridesSchema>;

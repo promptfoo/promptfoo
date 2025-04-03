@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenAI Responses API with Different Response Formats
+prompts:
+  - 'Extract information about the event: {{event}}'
+
+providers:
+  - id: openai:responses:gpt-4.5-preview
+    label: text-format
+    config:
+      temperature: 0.7
+      instructions: 'You are a helpful AI assistant. Extract key details about the event.'
+
+  - id: openai:responses:gpt-4.5-preview
+    label: json-object
+    config:
+      temperature: 0.7
+      instructions: 'You are a helpful AI assistant. Extract key details about the event.'
+      response_format:
+        type: 'json_object'
+
+  - id: openai:responses:gpt-4.5-preview
+    label: json-schema
+    config:
+      temperature: 0.7
+      instructions: 'You are a helpful AI assistant. Extract key details about the event.'
+      response_format:
+        type: 'json_schema'
+        name: 'event_information'
+        schema:
+          type: 'object'
+          properties:
+            event_name:
+              type: 'string'
+              description: 'The name of the event'
+            date:
+              type: 'string'
+              description: 'When the event takes place'
+            location:
+              type: 'string'
+              description: 'Where the event takes place'
+            participants:
+              type: 'array'
+              items:
+                type: 'string'
+              description: 'People attending the event'
+          required: ['event_name', 'date', 'location', 'participants']
+          additionalProperties: false
+
+tests:
+  - vars:
+      event: 'Alice and Bob are attending a JSON schema conference in New York on September 15th, 2025.'
+  - vars:
+      event: 'The annual music festival will take place in Central Park this weekend, featuring local artists and food vendors.'

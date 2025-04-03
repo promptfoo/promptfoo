@@ -13,7 +13,6 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { categoryAliasesReverse, type categoryAliases } from '@promptfoo/redteam/constants';
 import {
   type EvaluateResult,
   type ResultsFile,
@@ -22,7 +21,6 @@ import {
   type ResultLightweightWithLabel,
   type EvaluateSummaryV2,
   isProviderOptions,
-  ResultFailureReason,
 } from '@promptfoo/types';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import FrameworkCompliance from './FrameworkCompliance';
@@ -33,7 +31,7 @@ import RiskCategories from './RiskCategories';
 import StrategyStats from './StrategyStats';
 import TestSuites from './TestSuites';
 import ToolsDialog from './ToolsDialog';
-import { getPluginIdFromResult, getStrategyIdFromMetric } from './shared';
+import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import './Report.css';
 
 const App: React.FC = () => {
@@ -86,6 +84,10 @@ const App: React.FC = () => {
   }, []);
 
   const failuresByPlugin = React.useMemo(() => {
+    if (!evalData) {
+      return {};
+    }
+
     const failures: Record<
       string,
       { prompt: string; output: string; gradingResult?: GradingResult; result?: EvaluateResult }[]
@@ -96,11 +98,8 @@ const App: React.FC = () => {
         console.warn(`Could not get failures for plugin ${pluginId}`);
         return;
       }
-      if (
-        pluginId &&
-        !result.gradingResult?.pass &&
-        result.failureReason !== ResultFailureReason.ERROR
-      ) {
+
+      if (!result.success || !result.gradingResult?.pass) {
         if (!failures[pluginId]) {
           failures[pluginId] = [];
         }
@@ -120,6 +119,10 @@ const App: React.FC = () => {
   }, [evalData]);
 
   const passesByPlugin = React.useMemo(() => {
+    if (!evalData) {
+      return {};
+    }
+
     const passes: Record<
       string,
       { prompt: string; output: string; gradingResult?: GradingResult; result?: EvaluateResult }[]
@@ -130,7 +133,8 @@ const App: React.FC = () => {
         console.warn(`Could not get passes for plugin ${pluginId}`);
         return;
       }
-      if (pluginId && result.gradingResult?.pass) {
+
+      if (result.success && result.gradingResult?.pass) {
         if (!passes[pluginId]) {
           passes[pluginId] = [];
         }
@@ -145,6 +149,76 @@ const App: React.FC = () => {
     });
     return passes;
   }, [evalData]);
+
+  const categoryStats = React.useMemo(() => {
+    if (!evalData) {
+      return {};
+    }
+
+    return evalData.results.results.reduce(
+      (acc, row) => {
+        const pluginId = getPluginIdFromResult(row);
+        if (!pluginId) {
+          return acc;
+        }
+
+        acc[pluginId] = acc[pluginId] || { pass: 0, total: 0, passWithFilter: 0 };
+        acc[pluginId].total++;
+
+        // Check if moderation tests failed but other tests passed - this indicates content was
+        // flagged by moderation but would have passed otherwise
+        const moderationPassed = row.gradingResult?.componentResults?.some(
+          (result) => result.assertion?.type === 'moderation' && !result.pass,
+        );
+
+        if (row.success) {
+          acc[pluginId].pass++;
+          acc[pluginId].passWithFilter++; // Both regular and filtered pass counts increment
+        } else if (moderationPassed) {
+          acc[pluginId].passWithFilter++; // Only filtered pass count increments (partial success under moderation)
+        }
+        return acc;
+      },
+      {} as Record<string, { pass: number; total: number; passWithFilter: number }>,
+    );
+  }, [evalData]);
+
+  const strategyStats = React.useMemo(() => {
+    if (!failuresByPlugin || !passesByPlugin) {
+      return {};
+    }
+
+    const stats: Record<string, { pass: number; total: number }> = {};
+
+    // Process tests in failuresByPlugin (attack successes)
+    Object.values(failuresByPlugin).forEach((tests) => {
+      tests.forEach((test) => {
+        const strategyId = getStrategyIdFromTest(test);
+
+        if (!stats[strategyId]) {
+          stats[strategyId] = { pass: 0, total: 0 };
+        }
+
+        stats[strategyId].pass += 1;
+        stats[strategyId].total += 1;
+      });
+    });
+
+    // Process tests in passesByPlugin (attack failures)
+    Object.values(passesByPlugin).forEach((tests) => {
+      tests.forEach((test) => {
+        const strategyId = getStrategyIdFromTest(test);
+
+        if (!stats[strategyId]) {
+          stats[strategyId] = { pass: 0, total: 0 };
+        }
+
+        stats[strategyId].total += 1;
+      });
+    });
+
+    return stats;
+  }, [failuresByPlugin, passesByPlugin]);
 
   React.useEffect(() => {
     document.title = `Report: ${evalData?.config.description || evalId || 'Red Team'} | promptfoo`;
@@ -194,94 +268,10 @@ const App: React.FC = () => {
   let tools = [];
   if (Array.isArray(evalData.config.providers) && isProviderOptions(evalData.config.providers[0])) {
     const providerTools = evalData.config.providers[0].config?.tools;
-    tools = Array.isArray(providerTools) ? providerTools : [providerTools];
+    // If providerTools exists, convert it to an array (if it's not already)
+    // Otherwise, use an empty array
+    tools = providerTools ? (Array.isArray(providerTools) ? providerTools : [providerTools]) : [];
   }
-
-  const categoryStats = evalData.results.results.reduce(
-    (acc, row) => {
-      const harm = row.vars['harmCategory'];
-      const metricNames =
-        row.gradingResult?.componentResults?.map((result) => result.assertion?.metric) || [];
-
-      const categoriesToCount = [harm, ...metricNames].filter((c) => c);
-      for (const category of categoriesToCount) {
-        if (typeof category !== 'string') {
-          continue;
-        }
-        const pluginName =
-          categoryAliasesReverse[category.split('/')[0] as keyof typeof categoryAliases];
-        if (!pluginName) {
-          console.log('Unknown harm category:', category);
-          return acc;
-        }
-
-        const rowPassedModeration = row.gradingResult?.componentResults?.some((result) => {
-          const isModeration = result.assertion?.type === 'moderation';
-          const isPass = result.pass;
-          return isModeration && isPass;
-        });
-        const rowPassedLlmRubric = row.gradingResult?.componentResults?.some((result) => {
-          const isLlmRubric =
-            result.assertion?.type === 'llm-rubric' ||
-            result.assertion?.type.startsWith('promptfoo:redteam');
-          const isPass = result.pass;
-          return isLlmRubric && isPass;
-        });
-        const rowPassedHuman = row.gradingResult?.componentResults?.some((result) => {
-          const isHuman = result.assertion?.type === 'human';
-          const isPass = result.pass;
-          return isHuman && isPass;
-        });
-
-        acc[pluginName] = acc[pluginName] || { pass: 0, total: 0, passWithFilter: 0 };
-        acc[pluginName].total++;
-        if (rowPassedLlmRubric || rowPassedHuman) {
-          // Note: We count the row as passed if it passed the LLM rubric or human, even if it failed moderation
-          acc[pluginName].pass++;
-          acc[pluginName].passWithFilter++;
-        } else if (!rowPassedModeration) {
-          acc[pluginName].passWithFilter++;
-        }
-      }
-      return acc;
-    },
-    {} as Record<string, { pass: number; total: number; passWithFilter: number }>,
-  );
-
-  const strategyStats = evalData.results.results.reduce(
-    (acc, row) => {
-      const metricNames =
-        row.gradingResult?.componentResults?.map((result) => result.assertion?.metric) || [];
-
-      for (const metric of metricNames) {
-        if (typeof metric !== 'string') {
-          continue;
-        }
-
-        let strategyId = getStrategyIdFromMetric(metric);
-        if (!strategyId) {
-          strategyId = 'basic';
-        }
-
-        if (!acc[strategyId]) {
-          acc[strategyId] = { pass: 0, total: 0 };
-        }
-
-        acc[strategyId].total++;
-
-        const passed = row.gradingResult?.componentResults?.some(
-          (result) => result.assertion?.metric === metric && result.pass,
-        );
-
-        if (passed) {
-          acc[strategyId].pass++;
-        }
-      }
-
-      return acc;
-    },
-    {} as Record<string, { pass: number; total: number }>,
-  );
 
   const handlePromptChipClick = () => {
     setIsPromptModalOpen(true);
@@ -363,7 +353,7 @@ const App: React.FC = () => {
                 style={{ cursor: prompts.length > 1 ? 'pointer' : 'default' }}
               />
             )}
-            {tools.length > -1 && (
+            {tools.length > 0 && (
               <Chip
                 size="small"
                 label={

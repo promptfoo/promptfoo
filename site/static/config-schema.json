@@ -69,6 +69,9 @@
                             "ANTHROPIC_API_KEY": {
                               "type": "string"
                             },
+                            "ANTHROPIC_BASE_URL": {
+                              "type": "string"
+                            },
                             "AWS_BEDROCK_REGION": {
                               "type": "string"
                             },
@@ -163,6 +166,9 @@
                               "type": "string"
                             },
                             "HF_TOKEN": {
+                              "type": "string"
+                            },
+                            "HUGGING_FACE_HUB_TOKEN": {
                               "type": "string"
                             },
                             "LANGFUSE_HOST": {
@@ -265,6 +271,33 @@
                               "type": "string"
                             },
                             "WATSONX_AI_PROJECT_ID": {
+                              "type": "string"
+                            },
+                            "AZURE_CONTENT_SAFETY_ENDPOINT": {
+                              "type": "string"
+                            },
+                            "AZURE_CONTENT_SAFETY_API_KEY": {
+                              "type": "string"
+                            },
+                            "AZURE_CONTENT_SAFETY_API_VERSION": {
+                              "type": "string"
+                            },
+                            "AWS_REGION": {
+                              "type": "string"
+                            },
+                            "AWS_DEFAULT_REGION": {
+                              "type": "string"
+                            },
+                            "AWS_SAGEMAKER_MAX_TOKENS": {
+                              "type": "string"
+                            },
+                            "AWS_SAGEMAKER_TEMPERATURE": {
+                              "type": "string"
+                            },
+                            "AWS_SAGEMAKER_TOP_P": {
+                              "type": "string"
+                            },
+                            "AWS_SAGEMAKER_MAX_RETRIES": {
                               "type": "string"
                             }
                           },
@@ -563,6 +596,15 @@
                           ]
                         }
                       },
+                      "assertScoringFunction": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^file:\\/\\/.*\\.(js|cjs|mjs|ts|cts|mts|py)(?::[\\w.]+)?$"
+                          },
+                          {}
+                        ]
+                      },
                       "options": {
                         "allOf": [
                           {
@@ -752,6 +794,9 @@
                         "assert": {
                           "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assert"
                         },
+                        "assertScoringFunction": {
+                          "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assertScoringFunction"
+                        },
                         "options": {
                           "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/options"
                         },
@@ -795,6 +840,9 @@
             },
             "assert": {
               "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assert"
+            },
+            "assertScoringFunction": {
+              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assertScoringFunction"
             },
             "options": {
               "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/options"
@@ -854,7 +902,17 @@
             {
               "type": "object",
               "additionalProperties": {
-                "type": "string"
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  }
+                ]
               }
             }
           ]
@@ -1043,6 +1101,10 @@
                           "owasp:llm:08",
                           "owasp:llm:09",
                           "owasp:llm:10",
+                          "owasp:llm:redteam:implementation",
+                          "owasp:llm:redteam:model",
+                          "owasp:llm:redteam:runtime",
+                          "owasp:llm:redteam:system",
                           "personal-safety",
                           "pii",
                           "pii:api-db",
@@ -1054,6 +1116,7 @@
                           "politics",
                           "prompt-extraction",
                           "rag-document-exfiltration",
+                          "rag-poisoning",
                           "rbac",
                           "reasoning-dos",
                           "religion",
@@ -1061,7 +1124,9 @@
                           "sql-injection",
                           "ssrf",
                           "system-prompt-override",
-                          "toxicity"
+                          "tool-discovery",
+                          "toxicity",
+                          "unsafebench"
                         ]
                       },
                       {
@@ -1181,6 +1246,10 @@
                               "owasp:llm:08",
                               "owasp:llm:09",
                               "owasp:llm:10",
+                              "owasp:llm:redteam:implementation",
+                              "owasp:llm:redteam:model",
+                              "owasp:llm:redteam:runtime",
+                              "owasp:llm:redteam:system",
                               "personal-safety",
                               "pii",
                               "pii:api-db",
@@ -1192,6 +1261,7 @@
                               "politics",
                               "prompt-extraction",
                               "rag-document-exfiltration",
+                              "rag-poisoning",
                               "rbac",
                               "reasoning-dos",
                               "religion",
@@ -1199,7 +1269,9 @@
                               "sql-injection",
                               "ssrf",
                               "system-prompt-override",
-                              "toxicity"
+                              "tool-discovery",
+                              "toxicity",
+                              "unsafebench"
                             ]
                           },
                           {
@@ -1242,6 +1314,7 @@
                       {
                         "type": "string",
                         "enum": [
+                          "audio",
                           "base64",
                           "basic",
                           "best-of-n",
@@ -1251,6 +1324,7 @@
                           "gcg",
                           "goat",
                           "hex",
+                          "image",
                           "jailbreak",
                           "jailbreak:composite",
                           "jailbreak:likert",
@@ -1289,7 +1363,7 @@
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports base64, basic, best-of-n, citation, crescendo, default, gcg, goat, hex, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, multilingual, pandamonium, prompt-injection, retry, rot13",
+              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, base64, basic, best-of-n, citation, crescendo, default, gcg, goat, hex, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, multilingual, pandamonium, prompt-injection, retry, rot13",
               "default": [
                 "default"
               ]
@@ -1422,6 +1496,9 @@
             },
             "watch": {
               "type": "boolean"
+            },
+            "filterErrorsOnly": {
+              "type": "string"
             },
             "filterFailing": {
               "type": "string"

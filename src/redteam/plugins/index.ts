@@ -17,6 +17,7 @@ import {
   neverGenerateRemote,
   shouldGenerateRemote,
 } from '../remoteGeneration';
+import { getShortPluginId } from '../util';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
 import { ContractPlugin } from './contracts';
@@ -41,6 +42,8 @@ import { PromptExtractionPlugin } from './promptExtraction';
 import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
+import { ToolDiscoveryPlugin } from './toolDiscovery';
+import { UnsafeBenchPlugin } from './unsafebench';
 
 export interface PluginFactory {
   key: string;
@@ -107,7 +110,14 @@ function createPluginFactory<T extends PluginConfig>(
     validate: validate as ((config: PluginConfig) => void) | undefined,
     action: async ({ provider, purpose, injectVar, n, delayMs, config }: PluginActionParams) => {
       if (shouldGenerateRemote()) {
-        return fetchRemoteTestCases(key, purpose, injectVar, n, config);
+        const testCases = await fetchRemoteTestCases(key, purpose, injectVar, n, config);
+        return testCases.map((testCase) => ({
+          ...testCase,
+          metadata: {
+            ...testCase.metadata,
+            pluginId: getShortPluginId(key),
+          },
+        }));
       }
       logger.debug(`Using local redteam generation for ${key}`);
       return new PluginClass(provider, purpose, injectVar, config as T).generateTests(n, delayMs);
@@ -124,14 +134,13 @@ const unalignedHarmCategories = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS) as 
 
 const pluginFactories: PluginFactory[] = [
   createPluginFactory(BeavertailsPlugin, 'beavertails'),
-  createPluginFactory(ContractPlugin, 'contracts'),
-  createPluginFactory(CrossSessionLeakPlugin, 'cross-session-leak'),
-  createPluginFactory(CyberSecEvalPlugin, 'cyberseceval'),
-  createPluginFactory(DebugAccessPlugin, 'debug-access'),
-  createPluginFactory(DivergentRepetitionPlugin, 'divergent-repetition'),
   ...alignedHarmCategories.map((category) =>
     createPluginFactory(
       class extends AlignedHarmfulPlugin {
+        get id(): string {
+          return category;
+        }
+
         constructor(
           provider: ApiProvider,
           purpose: string,
@@ -144,19 +153,24 @@ const pluginFactories: PluginFactory[] = [
       category,
     ),
   ),
+  createPluginFactory(ContractPlugin, 'contracts'),
+  createPluginFactory(CrossSessionLeakPlugin, 'cross-session-leak'),
+  createPluginFactory(CyberSecEvalPlugin, 'cyberseceval'),
+  createPluginFactory(DebugAccessPlugin, 'debug-access'),
+  createPluginFactory(DivergentRepetitionPlugin, 'divergent-repetition'),
   createPluginFactory(ExcessiveAgencyPlugin, 'excessive-agency'),
-  createPluginFactory(HarmbenchPlugin, 'harmbench'),
   createPluginFactory(HallucinationPlugin, 'hallucination'),
+  createPluginFactory(HarmbenchPlugin, 'harmbench'),
   createPluginFactory(ImitationPlugin, 'imitation'),
   createPluginFactory<{ intent: string }>(IntentPlugin, 'intent', (config: { intent: string }) =>
     invariant(config.intent, 'Intent plugin requires `config.intent` to be set'),
   ),
   createPluginFactory(OverreliancePlugin, 'overreliance'),
   createPluginFactory(PlinyPlugin, 'pliny'),
-  createPluginFactory(PoliticsPlugin, 'politics'),
   createPluginFactory<{ policy: string }>(PolicyPlugin, 'policy', (config: { policy: string }) =>
     invariant(config.policy, 'Policy plugin requires `config.policy` to be set'),
   ),
+  createPluginFactory(PoliticsPlugin, 'politics'),
   createPluginFactory<{ systemPrompt: string }>(
     PromptExtractionPlugin,
     'prompt-extraction',
@@ -169,13 +183,23 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(RbacPlugin, 'rbac'),
   createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
   createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
+  createPluginFactory(ToolDiscoveryPlugin, 'tool-discovery'),
+  createPluginFactory(UnsafeBenchPlugin, 'unsafebench'),
   ...unalignedHarmCategories.map((category) => ({
     key: category,
     action: async (params: PluginActionParams) => {
       if (neverGenerateRemote()) {
         throw new Error(`${category} plugin requires remote generation to be enabled`);
       }
-      return getHarmfulTests(params, category);
+
+      const testCases = await getHarmfulTests(params, category);
+      return testCases.map((testCase) => ({
+        ...testCase,
+        metadata: {
+          ...testCase.metadata,
+          pluginId: getShortPluginId(category),
+        },
+      }));
     },
   })),
 ];
@@ -184,10 +208,29 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
   key: category,
   action: async (params: PluginActionParams) => {
     if (shouldGenerateRemote()) {
-      return fetchRemoteTestCases(category, params.purpose, params.injectVar, params.n);
+      const testCases = await fetchRemoteTestCases(
+        category,
+        params.purpose,
+        params.injectVar,
+        params.n,
+      );
+      return testCases.map((testCase) => ({
+        ...testCase,
+        metadata: {
+          ...testCase.metadata,
+          pluginId: getShortPluginId(category),
+        },
+      }));
     }
     logger.debug(`Using local redteam generation for ${category}`);
-    return getPiiLeakTestsForCategory(params, category);
+    const testCases = await getPiiLeakTestsForCategory(params, category);
+    return testCases.map((testCase) => ({
+      ...testCase,
+      metadata: {
+        ...testCase.metadata,
+        pluginId: getShortPluginId(category),
+      },
+    }));
   },
 }));
 
@@ -203,13 +246,21 @@ function createRemotePlugin<T extends PluginConfig>(
         throw new Error(`${key} plugin requires remote generation to be enabled`);
       }
       const testCases: TestCase[] = await fetchRemoteTestCases(key, purpose, injectVar, n, config);
+      const testsWithMetadata = testCases.map((testCase) => ({
+        ...testCase,
+        metadata: {
+          ...testCase.metadata,
+          pluginId: getShortPluginId(key),
+        },
+      }));
+
       if (key.startsWith('harmful:')) {
-        return testCases.map((testCase) => ({
+        return testsWithMetadata.map((testCase) => ({
           ...testCase,
           assert: getHarmfulAssertions(key as HarmPlugin),
         }));
       }
-      return testCases;
+      return testsWithMetadata;
     },
   };
 }
@@ -222,6 +273,7 @@ const remotePlugins: PluginFactory[] = [
   'harmful:specialized-advice',
   'hijacking',
   'rag-document-exfiltration',
+  'rag-poisoning',
   'reasoning-dos',
   'religion',
   'ssrf',

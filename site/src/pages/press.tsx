@@ -47,9 +47,9 @@ const PressContent = () => {
             security industries.
           </Typography>
           <Typography variant="body1" paragraph>
-            Our core product is an open-source pentesting and evaluation framework used by tens of
-            thousands of developers. Promptfoo is among the most popular evaluation frameworks and
-            is the first product to adapt AI-specific pentesting techniques to your application.
+            Our core product is an open-source pentesting and evaluation framework used by 70,000+
+            developers. Promptfoo is among the most popular evaluation frameworks and is the first
+            product to adapt AI-specific pentesting techniques to your application.
           </Typography>
         </Box>
 
@@ -153,6 +153,34 @@ const PressContent = () => {
             Featured Podcasts
           </Typography>
           <Grid container spacing={4} mb={6}>
+            <Grid item xs={12} md={6}>
+              <Box
+                className={styles.coverageItem}
+                p={3}
+                sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+              >
+                <Typography variant="h6" component="h4" gutterBottom>
+                  What DeepSeek Means for Cybersecurity
+                </Typography>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  AI + a16z • February 28, 2025
+                </Typography>
+                <Typography variant="body2" paragraph sx={{ flex: 1 }}>
+                  In this episode, a16z partner Joel de la Garza speaks with a trio of security
+                  experts, including Promptfoo founder Ian Webster, about the security implications
+                  of the DeepSeek reasoning model. Ian's segment focuses on vulnerabilities within
+                  DeepSeek itself, and how users can protect themselves against backdoors,
+                  jailbreaks, and censorship.
+                </Typography>
+                <Link
+                  href="https://open.spotify.com/episode/6dgcEOdie8Mtl5COJjjHFy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Listen on Spotify →
+                </Link>
+              </Box>
+            </Grid>
             <Grid item xs={12} md={6}>
               <Box
                 className={styles.coverageItem}

@@ -24,7 +24,7 @@ import type {
 } from '../types';
 import { isJavascriptFile } from './file';
 
-export async function readVarsFiles(
+export async function readTestFiles(
   pathOrGlobs: string | string[],
   basePath: string = '',
 ): Promise<Record<string, string | string[] | object>> {
@@ -172,12 +172,33 @@ export async function readStandaloneTestsFile(
       feature: 'json tests file',
     });
     rows = yaml.load(fs.readFileSync(resolvedVarsPath, 'utf-8')) as unknown as any;
+  }
+  // Handle .jsonl files
+  else if (fileExtension === 'jsonl') {
+    telemetry.recordAndSendOnce('feature_used', {
+      feature: 'jsonl tests file',
+    });
+
+    const fileContent = fs.readFileSync(resolvedVarsPath, 'utf-8');
+
+    return fileContent
+      .split('\n')
+      .filter((line) => line.trim())
+      .map((line, idx) => {
+        const row = JSON.parse(line);
+        return {
+          ...row,
+          options: row.options ?? {},
+          description: `Row #${idx + 1}`,
+        };
+      });
   } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
     telemetry.recordAndSendOnce('feature_used', {
       feature: 'yaml tests file',
     });
     rows = yaml.load(fs.readFileSync(resolvedVarsPath, 'utf-8')) as unknown as any;
   }
+
   return rows.map((row, idx) => {
     const test = testCaseFromCsvRow(row);
     test.description ||= `Row #${idx + 1}`;
@@ -191,7 +212,7 @@ async function loadTestWithVars(
 ): Promise<TestCase> {
   const ret: TestCase = { ...testCase, vars: undefined };
   if (typeof testCase.vars === 'string' || Array.isArray(testCase.vars)) {
-    ret.vars = await readVarsFiles(testCase.vars, testBasePath);
+    ret.vars = await readTestFiles(testCase.vars, testBasePath);
   } else {
     ret.vars = testCase.vars;
   }

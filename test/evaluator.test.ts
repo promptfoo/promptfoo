@@ -25,6 +25,21 @@ jest.mock('../src/util/time', () => ({
   sleep: jest.fn(),
 }));
 
+jest.mock('../src/util/functions/loadFunction', () => ({
+  ...jest.requireActual('../src/util/functions/loadFunction'),
+  loadFunction: jest.fn().mockImplementation((options) => {
+    if (options.filePath.includes('scoring')) {
+      return Promise.resolve((metrics: Record<string, number>) => ({
+        pass: true,
+        score: 0.75,
+        reason: 'Custom scoring reason',
+      }));
+    }
+    return Promise.resolve(() => {});
+  }),
+  parseFileUrl: jest.requireActual('../src/util/functions/loadFunction').parseFileUrl,
+}));
+
 const mockApiProvider: ApiProvider = {
   id: jest.fn().mockReturnValue('test-provider'),
   callApi: jest.fn().mockResolvedValue({
@@ -116,7 +131,6 @@ describe('evaluator', () => {
         fetchWithCache: expect.any(Function),
         getCache: expect.any(Function),
       }),
-      expect.anything(),
     );
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
@@ -1156,6 +1170,36 @@ describe('evaluator', () => {
     });
   });
 
+  it('merges response metadata with test metadata', async () => {
+    const mockProviderWithMetadata: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-with-metadata'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+        metadata: { responseKey: 'responseValue' },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockProviderWithMetadata],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          metadata: { testKey: 'testValue' },
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const results = await evalRecord.getResults();
+
+    // Check that both test metadata and response metadata are present in the result
+    expect(results[0].metadata).toEqual({
+      testKey: 'testValue',
+      responseKey: 'responseValue',
+    });
+  });
+
   it('evaluate with _conversation variable', async () => {
     const mockApiProvider: ApiProvider = {
       id: jest.fn().mockReturnValue('test-provider'),
@@ -1534,7 +1578,6 @@ describe('evaluator', () => {
           },
         }),
       }),
-      expect.anything(),
     );
   });
 
@@ -1737,14 +1780,12 @@ describe('evaluator', () => {
       1,
       expect.stringContaining('User: Question 1A'),
       expect.anything(),
-      expect.anything(),
     );
 
     // First conversation, second question (should include history)
     expect(mockApiProvider.callApi).toHaveBeenNthCalledWith(
       2,
       expect.stringContaining('User: Question 1A\nAssistant: Test output\nUser: Question 1B'),
-      expect.anything(),
       expect.anything(),
     );
 
@@ -1753,14 +1794,12 @@ describe('evaluator', () => {
       3,
       expect.stringContaining('User: Question 2A'),
       expect.anything(),
-      expect.anything(),
     );
 
     // Second conversation, second question (should only include second conversation history)
     expect(mockApiProvider.callApi).toHaveBeenNthCalledWith(
       4,
       expect.stringContaining('User: Question 2A\nAssistant: Test output\nUser: Question 2B'),
-      expect.anything(),
       expect.anything(),
     );
   });
@@ -1873,6 +1912,78 @@ describe('evaluator', () => {
     );
     Eval.prototype.addResult = originalAddResult;
     errorSpy.mockRestore();
+  });
+
+  it('evaluate with assertScoringFunction', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          assertScoringFunction: 'file://path/to/scoring.js:customScore',
+          assert: [
+            {
+              type: 'equals',
+              value: 'Test output',
+              metric: 'accuracy',
+            },
+            {
+              type: 'contains',
+              value: 'output',
+              metric: 'relevance',
+            },
+          ],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].score).toBe(0.75);
+  });
+
+  it('evaluate with provider error response', async () => {
+    const mockApiProviderWithError: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-error'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Some output',
+        error: 'API error occurred',
+        tokenUsage: { total: 5, prompt: 5, completion: 0, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderWithError],
+      prompts: [toPrompt('Test prompt')],
+      tests: [],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary).toEqual(
+      expect.objectContaining({
+        stats: expect.objectContaining({
+          successes: 0,
+          errors: 1,
+          failures: 0,
+        }),
+        results: expect.arrayContaining([
+          expect.objectContaining({
+            error: 'API error occurred',
+            failureReason: ResultFailureReason.ERROR,
+            success: false,
+            score: 0,
+          }),
+        ]),
+      }),
+    );
+    expect(mockApiProviderWithError.callApi).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -1997,11 +2108,7 @@ describe('runEval', () => {
     expect(result.success).toBe(true);
     expect(result.response?.output).toBe('Test output');
     expect(result.prompt.label).toBe('test-label');
-    expect(mockProvider.callApi).toHaveBeenCalledWith(
-      'Test prompt',
-      expect.anything(),
-      expect.anything(),
-    );
+    expect(mockProvider.callApi).toHaveBeenCalledWith('Test prompt', expect.anything());
   });
 
   it('should handle conversation history', async () => {
@@ -2055,11 +2162,7 @@ describe('runEval', () => {
     });
     const result = results[0];
     expect(result.success).toBe(true);
-    expect(mockProvider.callApi).toHaveBeenCalledWith(
-      'Using stored data',
-      expect.anything(),
-      expect.anything(),
-    );
+    expect(mockProvider.callApi).toHaveBeenCalledWith('Using stored data', expect.anything());
   });
 
   it('should store output in register when specified', async () => {

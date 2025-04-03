@@ -39,6 +39,10 @@ module.exports = {
 };
 ```
 
+:::note
+Note that the strategy adds `strategyId` to the metadata while preserving the original `pluginId` using the spread operator (`...testCase.metadata`). Both identifiers are important for tracking and analysis purposes.
+:::
+
 ## Configuration
 
 The strategy action function receives:

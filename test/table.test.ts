@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import Table from 'cli-table3';
+import { TERMINAL_MAX_WIDTH } from '../src/constants';
 import { generateTable, wrapTable } from '../src/table';
 import { ResultFailureReason, type EvaluateTable } from '../src/types';
 
@@ -192,6 +193,55 @@ describe('table', () => {
 
       expect(table.push).toHaveBeenCalledWith(['value1', 'value2']);
       expect(table.push).toHaveBeenCalledWith(['value3', 'value4']);
+    });
+
+    it('should create table with custom column widths', () => {
+      const rows = [
+        { col1: 'value1', col2: 'value2', col3: 'value3' },
+        { col1: 'value4', col2: 'value5', col3: 'value6' },
+      ];
+      const columnWidths = {
+        col1: 10,
+        col2: 20,
+        col3: 15,
+      };
+
+      const table = new Table({});
+      jest.mocked(Table).mockReturnValue(table);
+
+      wrapTable(rows, columnWidths);
+
+      expect(Table).toHaveBeenCalledWith({
+        head: ['col1', 'col2', 'col3'],
+        colWidths: [10, 20, 15],
+        wordWrap: true,
+        wrapOnWordBoundary: true,
+      });
+
+      expect(table.push).toHaveBeenCalledWith(['value1', 'value2', 'value3']);
+      expect(table.push).toHaveBeenCalledWith(['value4', 'value5', 'value6']);
+    });
+
+    it('should use default width for columns not specified in columnWidths', () => {
+      const rows = [{ col1: 'value1', col2: 'value2', col3: 'value3' }];
+      const columnWidths = {
+        col1: 10,
+        // col2 not specified
+        col3: 15,
+      };
+
+      const table = new Table({});
+      jest.mocked(Table).mockReturnValue(table);
+
+      wrapTable(rows, columnWidths);
+
+      const defaultWidth = Math.floor(TERMINAL_MAX_WIDTH / 3); // 3 columns
+      expect(Table).toHaveBeenCalledWith({
+        head: ['col1', 'col2', 'col3'],
+        colWidths: [10, defaultWidth, 15],
+        wordWrap: true,
+        wrapOnWordBoundary: true,
+      });
     });
   });
 });

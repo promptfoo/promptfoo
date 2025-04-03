@@ -1,10 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { callApi } from '@app/utils/api';
-import type { PromptWithMetadata } from '@promptfoo/types';
+import type { ServerPromptWithMetadata } from '@promptfoo/types';
+import ErrorBoundary from '../../components/ErrorBoundary';
 import Prompts from './Prompts';
 
-export default function PromptsPage() {
-  const [prompts, setPrompts] = useState<(PromptWithMetadata & { recentEvalDate: string })[]>([]);
+interface PromptsPageProps {
+  showDatasetColumn?: boolean;
+}
+
+function PromptsPageContent({ showDatasetColumn = true }: PromptsPageProps) {
+  const [prompts, setPrompts] = useState<ServerPromptWithMetadata[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,5 +34,20 @@ export default function PromptsPage() {
     fetchPrompts();
   }, []);
 
-  return <Prompts data={prompts} isLoading={isLoading} error={error} />;
+  return (
+    <Prompts
+      data={prompts}
+      isLoading={isLoading}
+      error={error}
+      showDatasetColumn={showDatasetColumn}
+    />
+  );
+}
+
+export default function PromptsPage({ showDatasetColumn = true }: PromptsPageProps) {
+  return (
+    <ErrorBoundary name="Prompts Page">
+      <PromptsPageContent showDatasetColumn={showDatasetColumn} />
+    </ErrorBoundary>
+  );
 }

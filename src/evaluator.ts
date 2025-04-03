@@ -15,13 +15,12 @@ import { renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
-import { maybeEmitAzureOpenAiWarning } from './providers/azureUtil';
-import type RedteamPandamoniumProvider from './redteam/providers/pandamonium';
+import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
+import { isPandamoniumProvider } from './redteam/providers/pandamonium';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
-import type { EvalConversations, EvalRegisters, TokenUsage, Vars } from './types';
+import type { EvalConversations, EvalRegisters, ScoringFunction, TokenUsage, Vars } from './types';
 import {
-  type ApiProvider,
   type Assertion,
   type CompletedPrompt,
   type EvaluateOptions,
@@ -33,7 +32,9 @@ import {
   type RunEvalOptions,
   type TestSuite,
 } from './types';
+import { isApiProvider } from './types/providers';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
+import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify } from './util/json';
 import { sleep } from './util/time';
@@ -175,34 +176,33 @@ export async function runEval({
       typeof test.provider.id === 'function' &&
       test.provider.id() === 'promptfoo:redteam:pandamonium'
     ) {
-      return await (test.provider as RedteamPandamoniumProvider).runPandamonium(
-        provider,
-        test,
-        allTests || [],
-        concurrency,
-      );
+      if (!isPandamoniumProvider(test.provider)) {
+        throw new Error('Provider identified as pandamonium but does not have required methods');
+      }
+
+      return await test.provider.runPandamonium(provider, test, allTests || [], concurrency);
     } else {
-      response = await ((test.provider as ApiProvider) || provider).callApi(
-        renderedPrompt,
-        {
-          // Always included
-          vars,
+      const activeProvider = isApiProvider(test.provider) ? test.provider : provider;
+      logger.debug(`Provider type: ${activeProvider.id()}`);
 
-          // Part of these may be removed in python and script providers, but every Javascript provider gets them
-          prompt,
-          filters,
-          originalProvider: provider,
-          test,
+      response = await activeProvider.callApi(renderedPrompt, {
+        // Always included
+        vars,
 
-          // All of these are removed in python and script providers, but every Javascript provider gets them
-          logger: logger as winston.Logger,
-          fetchWithCache,
-          getCache,
-        },
-        {
-          includeLogProbs: test.assert?.some((a) => a.type === 'perplexity'),
-        },
-      );
+        // Part of these may be removed in python and script providers, but every Javascript provider gets them
+        prompt,
+        filters,
+        originalProvider: provider,
+        test,
+
+        // All of these are removed in python and script providers, but every Javascript provider gets them
+        logger: logger as unknown as winston.Logger,
+        fetchWithCache,
+        getCache,
+      });
+
+      logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
+      logger.debug(`Provider response cached property explicitly: ${response.cached}`);
     }
     const endTime = Date.now();
     latencyMs = endTime - startTime;
@@ -222,9 +222,16 @@ export async function runEval({
       });
     }
 
+    logger.debug(`Evaluator response = ${JSON.stringify(response).substring(0, 100)}...`);
+    logger.debug(
+      `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
+    );
+
     if (!response.cached && provider.delay > 0) {
       logger.debug(`Sleeping for ${provider.delay}ms`);
       await sleep(provider.delay);
+    } else if (response.cached) {
+      logger.debug(`Skipping delay because response is cached`);
     }
 
     const ret: EvaluateResult = {
@@ -236,7 +243,10 @@ export async function runEval({
       namedScores: {},
       latencyMs,
       cost: response.cost,
-      metadata: response.metadata,
+      metadata: {
+        ...test.metadata,
+        ...response.metadata,
+      },
       promptIdx,
       testIdx,
       testCase: test,
@@ -248,6 +258,8 @@ export async function runEval({
 
     // First check if this is a guardrail response
     if (response.guardrails?.flagged) {
+      // For redteam tests, we want guardrail responses to be a success
+      // This is consistent with how we handle null/undefined outputs for redteam below
       ret.success = true;
       ret.score = 1;
       ret.failureReason = ResultFailureReason.NONE;
@@ -256,10 +268,20 @@ export async function runEval({
 
     // Then check for errors
     if (response.error) {
+      ret.error = response.error;
+      ret.failureReason = ResultFailureReason.ERROR;
       ret.success = false;
       ret.score = 0;
-      ret.failureReason = ResultFailureReason.ERROR;
-      ret.error = response.error;
+      return [ret];
+    } else if (response.output === null || response.output === undefined) {
+      // NOTE: empty output often indicative of guardrails, so behavior differs for red teams.
+      if (isRedteam) {
+        ret.success = true;
+      } else {
+        ret.success = false;
+        ret.score = 0;
+        ret.error = 'No output';
+      }
       return [ret];
     }
 
@@ -593,6 +615,7 @@ class Evaluator {
     const inputTransformDefault = testSuite?.defaultTest?.options?.transformVars;
     for (const testCase of tests) {
       testCase.vars = { ...testSuite.defaultTest?.vars, ...testCase?.vars };
+
       if (testCase.vars) {
         const varWithSpecialColsRemoved: Vars = {};
         const inputTransformForIndividualTest = testCase.options?.transformVars;
@@ -643,7 +666,18 @@ class Evaluator {
       testCase.options = { ...testSuite.defaultTest?.options, ...testCase.options };
       testCase.metadata = { ...testSuite.defaultTest?.metadata, ...testCase.metadata };
       testCase.provider = testCase.provider || testSuite.defaultTest?.provider;
+      testCase.assertScoringFunction =
+        testCase.assertScoringFunction || testSuite.defaultTest?.assertScoringFunction;
 
+      if (typeof testCase.assertScoringFunction === 'string') {
+        const { filePath: resolvedPath, functionName } = parseFileUrl(
+          testCase.assertScoringFunction,
+        );
+        testCase.assertScoringFunction = await loadFunction<ScoringFunction>({
+          filePath: resolvedPath,
+          functionName,
+        });
+      }
       const prependToPrompt =
         testCase.options?.prefix || testSuite.defaultTest?.options?.prefix || '';
       const appendToPrompt =
@@ -778,7 +812,7 @@ class Evaluator {
         }
 
         if (testSuite.derivedMetrics) {
-          const math = await import('mathjs'); // TODO: move this
+          const math = await import('mathjs');
           for (const metric of testSuite.derivedMetrics) {
             if (metrics.namedScores[metric.name] === undefined) {
               metrics.namedScores[metric.name] = 0;

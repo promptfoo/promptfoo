@@ -40,7 +40,7 @@ describe('index.ts exports', () => {
     'isApiProvider',
     'isGradingResult',
     'isProviderOptions',
-    'providers',
+    'loadApiProvider',
     'redteam',
   ];
 
@@ -111,7 +111,7 @@ describe('index.ts exports', () => {
       cache: index.cache,
       evaluate: index.evaluate,
       guardrails: index.guardrails,
-      providers: index.providers,
+      loadApiProvider: index.loadApiProvider,
       redteam: index.redteam,
     });
   });

@@ -8,10 +8,10 @@ import logger from '../logger';
 import type {
   ApiProvider,
   CallApiContextParams,
+  ProviderClassificationResponse,
+  ProviderEmbeddingResponse,
   ProviderOptions,
   ProviderResponse,
-  ProviderEmbeddingResponse,
-  ProviderClassificationResponse,
 } from '../types/providers';
 import { parsePathOrGlob } from '../util';
 import { sha256 } from '../util/createHash';
@@ -134,6 +134,7 @@ export class GolangProvider implements ApiProvider {
 
         // Build from the script directory
         const compileCommand = `cd ${scriptDir} && ${this.config.goExecutable || 'go'} build -o ${executablePath} wrapper.go ${path.basename(relativeScriptPath)}`;
+
         await execAsync(compileCommand);
 
         const jsonArgs = safeJsonStringify(args) || '[]';

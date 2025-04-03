@@ -79,7 +79,8 @@ The provider will automatically use AWS SSO credentials when a profile is specif
 
 See [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) for full examples of Claude, Nova, AI21, Llama 3.3, and Titan model usage.
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Write a tweet about {{topic}}'
 
@@ -175,7 +176,27 @@ config:
   anthropic_version: 'bedrock-2023-05-31'
   tools: [...] # Optional: Specify available tools
   tool_choice: { ... } # Optional: Specify tool choice
+  thinking: { ... } # Optional: Enable Claude's extended thinking capability
+  showThinking: true # Optional: Control whether thinking content is included in output
 ```
+
+When using Claude's extended thinking capability, you can configure it like this:
+
+```yaml
+config:
+  max_tokens: 20000
+  thinking:
+    type: 'enabled'
+    budget_tokens: 16000 # Must be ≥1024 and less than max_tokens
+  showThinking: true # Whether to include thinking content in the output (default: true)
+```
+
+The `showThinking` parameter controls whether thinking content is included in the response output:
+
+- When set to `true` (default), thinking content will be included in the output
+- When set to `false`, thinking content will be excluded from the output
+
+This is useful when you want to use thinking for better reasoning but don't want to expose the thinking process to end users.
 
 ### Titan Models
 
@@ -224,6 +245,28 @@ config:
   top_p: 0.9
   top_k: 50
 ```
+
+### DeepSeek Models
+
+For DeepSeek models, you can use the following configuration options:
+
+```yaml
+config:
+  # Deepseek params
+  max_tokens: 256
+  temperature: 0.7
+  top_p: 0.9
+
+  # Promptfoo control params
+  showThinking: true # Optional: Control whether thinking content is included in output
+```
+
+DeepSeek models support an extended thinking capability. The `showThinking` parameter controls whether thinking content is included in the response output:
+
+- When set to `true` (default), thinking content will be included in the output
+- When set to `false`, thinking content will be excluded from the output
+
+This allows you to access the model's reasoning process during generation while having the option to present only the final response to end users.
 
 ## Model-graded tests
 
@@ -276,6 +319,71 @@ tests:
       - type: llm-rubric
         value: Do not mention that you are an AI or chat assistant
 ```
+
+## Multimodal Capabilities
+
+Some Bedrock models, like Amazon Nova, support multimodal inputs including images and text. To use these capabilities, you'll need to structure your prompts to include both the image data and text content.
+
+### Nova Vision Capabilities
+
+Amazon Nova supports comprehensive vision understanding for both images and videos:
+
+- **Images**: Supports PNG, JPG, JPEG, GIF, WebP formats via Base-64 encoding. Multiple images allowed per payload (up to 25MB total).
+- **Videos**: Supports various formats (MP4, MKV, MOV, WEBM, etc.) via Base-64 (less than 25MB) or Amazon S3 URI (up to 1GB).
+
+Here's an example configuration for running multimodal evaluations:
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Bedrock Nova Eval with Images'
+
+prompts:
+  - file://nova_multimodal_prompt.json
+
+providers:
+  - id: bedrock:amazon.nova-pro-v1:0
+    config:
+      region: 'us-east-1'
+      inferenceConfig:
+        temperature: 0.7
+        max_new_tokens: 256
+
+tests:
+  - vars:
+      image: file://path/to/image.jpg
+```
+
+The prompt file (`nova_multimodal_prompt.json`) should be structured to include both image and text content. This format will depend on the specific model you're using:
+
+```json title="nova_multimodal_prompt.json"
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "image": {
+          "format": "jpg",
+          "source": { "bytes": "{{image}}" }
+        }
+      },
+      {
+        "text": "What is this a picture of?"
+      }
+    ]
+  }
+]
+```
+
+See [Github](https://github.com/promptfoo/promptfoo/blob/main/examples/amazon-bedrock/promptfooconfig.nova.multimodal.yaml) for a runnable example.
+
+When loading image files as variables, Promptfoo automatically converts them to the appropriate format for the model. The supported image formats include:
+
+- jpg/jpeg
+- png
+- gif
+- bmp
+- webp
+- svg
 
 ## Embeddings
 
@@ -364,3 +472,11 @@ If you see this error. Make sure you have access to the model in the region you'
    - Navigate to "Model access"
    - Enable access for the specific model
 2. Check your region configuration matches the model's region.
+
+## See Also
+
+- [Amazon SageMaker Provider](./sagemaker.md) - For custom-deployed or fine-tuned models on AWS
+- [Configuration Reference](../configuration/reference.md)
+- [Command Line Interface](../usage/command-line.md)
+- [Provider Options](../providers/index.md)
+- [Amazon Bedrock Examples](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock)
