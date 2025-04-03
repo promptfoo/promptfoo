@@ -87,6 +87,7 @@
     "@adaline/together-ai": "0.8.0",
     "@adaline/types": "0.15.0",
     "@adaline/vertex": "0.9.0",
+    "@aws-sdk/client-bedrock-agent-runtime": "^3.777.0",
     "@aws-sdk/client-bedrock-runtime": "^3.602.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.758.0",
     "@aws-sdk/credential-provider-sso": "^3.686.0",
