@@ -940,6 +940,8 @@ export interface ResultLightweight {
 
 export type ResultLightweightWithLabel = ResultLightweight & { label: string };
 
+export type EvalSummary = ResultLightweightWithLabel & { passRate: number };
+
 // File exported as --output option
 export interface OutputFile {
   evalId: string | null;

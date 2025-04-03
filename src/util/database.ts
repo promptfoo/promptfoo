@@ -156,18 +156,6 @@ export async function writeResultsToDatabase(
   return evalId;
 }
 
-/**
- *
- * @returns Last n evals in descending order.
- */
-export async function listPreviousResults(
-  limit: number = DEFAULT_QUERY_LIMIT,
-  filterDescription?: string,
-  datasetId?: string,
-): Promise<ResultLightweight[]> {
-  return getSummaryOfLatestEvals(limit, filterDescription, datasetId);
-}
-
 export async function readResult(
   id: string,
 ): Promise<{ id: string; result: ResultsFile; createdAt: Date } | undefined> {

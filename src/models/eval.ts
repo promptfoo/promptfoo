@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { and, desc, eq, like, sql } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { getDb } from '../database';
 import {
@@ -26,6 +26,7 @@ import type {
   Prompt,
   ResultsFile,
   UnifiedConfig,
+  EvalSummary,
 } from '../types';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
@@ -503,51 +504,57 @@ export default class Eval {
 }
 
 /**
- * Queries all evals for a given organization and team.
+ * Queries summaries of all evals, optionally for a given dataset.
+ *
+ * @param datasetId - An optional dataset ID to filter by.
+ * @returns A list of eval summaries.
  */
-export function getSummaryOfLatestEvals(
-  limit: number = DEFAULT_QUERY_LIMIT,
-  filterDescription?: string,
-  datasetId?: string,
-) {
+export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[]> {
   const db = getDb();
 
+  const resultsCTE = db.$with('results').as(
+    db
+      .select({
+        evalId: evalResultsTable.evalId,
+        testCount: sql<number>`COUNT(${evalResultsTable.success})`.as('testCount'),
+        passCount:
+          sql<number>`SUM(CASE WHEN ${evalResultsTable.success} = true THEN 1 ELSE 0 END)`.as(
+            'passCount',
+          ),
+      })
+      .from(evalResultsTable)
+      .groupBy(evalResultsTable.evalId),
+  );
+
   const results = db
+    .with(resultsCTE)
     .select({
-      evalId: evalsTable.id,
+      evalId: resultsCTE.evalId,
+      testCount: resultsCTE.testCount,
+      passCount: resultsCTE.passCount,
       createdAt: evalsTable.createdAt,
       description: evalsTable.description,
-      numTests: sql`COUNT(DISTINCT ${evalResultsTable.testIdx})`.as('numTests'),
       datasetId: evalsToDatasetsTable.datasetId,
       isRedteam: sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`,
-      passCount: sql<number>`SUM(CASE WHEN ${evalResultsTable.success} = true THEN 1 ELSE 0 END) AS pass_count`,
     })
-    .from(evalsTable)
+    .from(resultsCTE)
+    .leftJoin(evalsTable, eq(resultsCTE.evalId, evalsTable.id))
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
-    .leftJoin(evalResultsTable, eq(evalsTable.id, evalResultsTable.evalId))
-    .where(
-      and(
-        datasetId ? eq(evalsToDatasetsTable.datasetId, datasetId) : undefined,
-        filterDescription ? like(evalsTable.description, `%${filterDescription}%`) : undefined,
-        eq(evalsTable.results, {}),
-      ),
-    )
-    .groupBy(evalsTable.id)
-    .orderBy(desc(evalsTable.createdAt))
-    // TODO(will): Implement limit (i.e. pagination w/ sorting, filtering, etc.) once we observe performance issues.
-    // .limit(limit)
+
+    .where(datasetId ? eq(evalsToDatasetsTable.datasetId, datasetId) : undefined)
     .all();
 
-  return results.map((result) => {
-    const testCount = (result.numTests as number) ?? 0;
-    return {
-      evalId: result.evalId,
-      createdAt: result.createdAt,
-      description: result.description,
-      numTests: testCount,
-      datasetId: result.datasetId,
-      isRedteam: result.isRedteam,
-      passRate: testCount > 0 && result.passCount > 0 ? (testCount / result.passCount) * 100 : 0,
-    };
-  });
+  return results.map((result) => ({
+    evalId: result.evalId,
+    createdAt: result.createdAt!,
+    description: result.description,
+    numTests: result.testCount,
+    datasetId: result.datasetId,
+    isRedteam: result.isRedteam,
+    passRate:
+      result.testCount > 0 && result.passCount > 0
+        ? (result.passCount / result.testCount) * 100
+        : 0,
+    label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
+  }));
 }
