@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { createAndDisplayShareableUrl, shareCommand } from '../../src/commands/share';
 import * as envars from '../../src/envars';
 import logger from '../../src/logger';
-import { createShareableUrl } from '../../src/share';
+import { createShareableUrl, isSharingEnabled } from '../../src/share';
 
 jest.mock('../../src/share');
 jest.mock('../../src/logger');
@@ -21,6 +21,7 @@ describe('Share Command', () => {
     });
 
     it('should return a URL and log it when successful', async () => {
+      jest.mocked(isSharingEnabled).mockReturnValue(true);
       const mockEval = { id: 'test-eval-id' } as any;
       const mockUrl = 'https://app.promptfoo.dev/eval/test-eval-id';
 
@@ -74,22 +75,21 @@ describe('Share Command', () => {
       expect(cmd?.description()).toContain('Create a shareable URL');
 
       const options = cmd?.options;
-      expect(options?.find((o) => o.short === '-y')).toBeDefined();
       expect(options?.find((o) => o.long === '--show-auth')).toBeDefined();
       expect(options?.find((o) => o.long === '--env-path')).toBeDefined();
     });
 
     // Test just the hostname determination logic directly
-    it('should use app.promptfoo.dev by default if no environment variables are set', () => {
+    it('should use promptfoo.app by default if no environment variables are set', () => {
       // Mock environment variables to return undefined
       jest.mocked(envars.getEnvString).mockImplementation(() => '');
 
       const baseUrl =
         envars.getEnvString('PROMPTFOO_SHARING_APP_BASE_URL') ||
         envars.getEnvString('PROMPTFOO_REMOTE_APP_BASE_URL');
-      const hostname = baseUrl ? new URL(baseUrl).hostname : 'app.promptfoo.dev';
+      const hostname = baseUrl ? new URL(baseUrl).hostname : 'promptfoo.app';
 
-      expect(hostname).toBe('app.promptfoo.dev');
+      expect(hostname).toBe('promptfoo.app');
     });
 
     it('should use PROMPTFOO_SHARING_APP_BASE_URL for hostname when set', () => {

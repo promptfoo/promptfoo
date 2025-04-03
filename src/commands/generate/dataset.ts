@@ -24,7 +24,8 @@ interface DatasetGenerateOptions {
   defaultConfig: Partial<UnifiedConfig>;
   defaultConfigPath: string | undefined;
 }
-async function doGenerateDataset(options: DatasetGenerateOptions): Promise<void> {
+
+export async function doGenerateDataset(options: DatasetGenerateOptions): Promise<void> {
   setupEnv(options.envFile);
   if (!options.cache) {
     logger.info('Cache is disabled.');

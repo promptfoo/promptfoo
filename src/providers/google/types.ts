@@ -18,7 +18,7 @@ interface FileData {
   fileUri: string;
 }
 
-interface Part {
+export interface Part {
   text?: string;
   inlineData?: Blob;
   functionCall?: FunctionCall;
@@ -61,7 +61,7 @@ interface GoogleSearchRetrieval {
   };
 }
 
-interface Tool {
+export interface Tool {
   functionDeclarations?: FunctionDeclaration[];
   googleSearchRetrieval?: GoogleSearchRetrieval;
   codeExecution?: object;
@@ -127,6 +127,16 @@ export interface CompletionOptions {
    * these function tools.
    */
   functionToolCallbacks?: Record<string, (arg: string) => Promise<any>>;
+
+  /**
+   * If set, spawn a python process with the file and connect to its API
+   * for function tool calls at the specified URL.
+   */
+  functionToolStatefulApi?: {
+    url: string;
+    file?: string;
+    pythonExecutable?: string;
+  };
 
   systemInstruction?: Content;
 

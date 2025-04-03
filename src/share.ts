@@ -17,6 +17,28 @@ export interface ShareDomainResult {
   isPublicShare: boolean;
 }
 
+export function isSharingEnabled(evalRecord: Eval): boolean {
+  const sharingConfigOnEval =
+    typeof evalRecord.config.sharing === 'object' ? evalRecord.config.sharing.apiBaseUrl : null;
+  const sharingEnvUrl = SHARE_API_BASE_URL;
+
+  const cloudSharingUrl = cloudConfig.isEnabled() ? cloudConfig.getApiHost() : null;
+
+  if (sharingConfigOnEval) {
+    return true;
+  }
+
+  if (sharingEnvUrl && !sharingEnvUrl.includes('api.promptfoo.app')) {
+    return true;
+  }
+
+  if (cloudSharingUrl) {
+    return true;
+  }
+
+  return false;
+}
+
 export function determineShareDomain(eval_: Eval): ShareDomainResult {
   const sharing = eval_.config.sharing;
   logger.debug(
