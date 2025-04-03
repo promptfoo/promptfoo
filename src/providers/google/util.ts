@@ -284,7 +284,7 @@ export function loadFile(
   return fileContents;
 }
 
-export function geminiFormatSystemInstructions(
+export function geminiFormatAndSystemInstructions(
   prompt: string,
   contextVars?: Record<string, string | object>,
   configSystemInstruction?: Content | string,

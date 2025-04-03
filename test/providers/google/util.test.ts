@@ -4,7 +4,7 @@ import * as nunjucks from 'nunjucks';
 import logger from '../../../src/logger';
 import {
   maybeCoerceToGeminiFormat,
-  geminiFormatSystemInstructions,
+  geminiFormatAndSystemInstructions,
   getGoogleClient,
   hasGoogleDefaultCredentials,
   loadFile,
@@ -527,7 +527,7 @@ describe('util', () => {
         { role: 'user', content: [{ text: 'user message' }] },
       ];
 
-      const { contents, systemInstruction } = geminiFormatSystemInstructions(
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
         JSON.stringify(prompt),
         {},
         undefined,
@@ -540,7 +540,7 @@ describe('util', () => {
     it('should handle system messages in config', async () => {
       const prompt = [{ role: 'user', parts: [{ text: 'user message' }] }];
 
-      const { contents, systemInstruction } = geminiFormatSystemInstructions(
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
         JSON.stringify(prompt),
         {},
         { parts: [{ text: 'system instruction' }] },
@@ -553,7 +553,7 @@ describe('util', () => {
     it('should handle system messages in variables', async () => {
       const prompt = [{ role: 'user', parts: [{ text: 'user message' }] }];
 
-      const { contents, systemInstruction } = geminiFormatSystemInstructions(
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
         JSON.stringify(prompt),
         { system_instruction: 'system instruction' },
         { parts: [{ text: '{{system_instruction}}' }] },
@@ -566,7 +566,7 @@ describe('util', () => {
     it('should handle string system messages in config', async () => {
       const prompt = [{ role: 'user', parts: [{ text: 'user message' }] }];
 
-      const { contents, systemInstruction } = geminiFormatSystemInstructions(
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
         JSON.stringify(prompt),
         {},
         'system instruction',
@@ -582,7 +582,7 @@ describe('util', () => {
       jest.spyOn(fs, 'existsSync').mockReturnValue(true);
       jest.spyOn(fs, 'readFileSync').mockReturnValue(system_instruction);
 
-      const { contents, systemInstruction } = geminiFormatSystemInstructions(
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
         JSON.stringify(prompt),
         { system_instruction: 'file://system_instruction.json' },
         '{{system_instruction}}',

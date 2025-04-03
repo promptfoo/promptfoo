@@ -23,7 +23,7 @@ import type {
   Palm2ApiResponse,
 } from './util';
 import {
-  geminiFormatSystemInstructions,
+  geminiFormatAndSystemInstructions,
   getGoogleClient,
   loadFile,
   stringifyCandidateContents,
@@ -248,7 +248,7 @@ export class VertexChatProvider extends VertexGenericProvider {
 
   async callGeminiApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
-    const { contents, systemInstruction } = geminiFormatSystemInstructions(
+    const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,
       context?.vars,
       this.config.systemInstruction,

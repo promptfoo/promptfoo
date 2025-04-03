@@ -10,7 +10,7 @@ import type {
 import '../../util';
 import type { CompletionOptions, FunctionCall } from './types';
 import type { GeminiFormat } from './util';
-import { geminiFormatSystemInstructions, loadFile } from './util';
+import { geminiFormatAndSystemInstructions, loadFile } from './util';
 
 const formatContentMessage = (contents: GeminiFormat, contentIndex: number) => {
   if (contents[contentIndex].role != 'user') {
@@ -65,7 +65,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
       );
     }
 
-    const { contents, systemInstruction } = geminiFormatSystemInstructions(
+    const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,
       context?.vars,
       this.config.systemInstruction,
