@@ -513,7 +513,6 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
   const db = getDb();
 
   const results = db
-    .with(resultsCTE)
     .select({
       evalId: evalsTable.id,
       createdAt: evalsTable.createdAt,
@@ -556,14 +555,14 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
       (result.prompts?.[0]?.metrics?.testErrorCount ?? 0);
 
     return {
-    evalId: result.evalId,
-    createdAt: result.createdAt,
-    description: result.description,
+      evalId: result.evalId,
+      createdAt: result.createdAt,
+      description: result.description,
       numTests: testCount,
-    datasetId: result.datasetId,
-    isRedteam: result.isRedteam,
+      datasetId: result.datasetId,
+      isRedteam: result.isRedteam,
       passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
-    label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
+      label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
     };
   });
 }
