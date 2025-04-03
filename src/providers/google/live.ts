@@ -4,6 +4,7 @@ import type { ChildProcess } from 'child_process';
 import WebSocket from 'ws';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { validatePythonPath } from '../../python/pythonUtils';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -90,8 +91,35 @@ export class GoogleMMLiveProvider implements ApiProvider {
 
     let statefulApi: ChildProcess | undefined;
     if (this.config.functionToolStatefulApi?.file) {
-      logger.debug('Api is spawning...');
-      statefulApi = spawn('python3', [this.config.functionToolStatefulApi.file]);
+      try {
+        // Use the validatePythonPath function to get the correct Python executable
+        const pythonPath = await validatePythonPath(
+          this.config.functionToolStatefulApi.pythonExecutable ||
+            getEnvString('PROMPTFOO_PYTHON') ||
+            'python3',
+          !!this.config.functionToolStatefulApi.pythonExecutable ||
+            !!getEnvString('PROMPTFOO_PYTHON'),
+        );
+
+        logger.debug(`Spawning API with Python executable: ${pythonPath}`);
+        statefulApi = spawn(pythonPath, [this.config.functionToolStatefulApi.file]);
+
+        // Add error handling for the Python process
+        statefulApi.on('error', (err) => {
+          logger.error(`Error spawning Python process: ${JSON.stringify(err)}`);
+        });
+
+        // Log output from the Python process for debugging
+        statefulApi.stdout?.on('data', (data) => {
+          logger.debug(`Python API stdout: ${data.toString()}`);
+        });
+
+        statefulApi.stderr?.on('data', (data) => {
+          logger.error(`Python API stderr: ${data.toString()}`);
+        });
+      } catch (err) {
+        logger.error(`Failed to spawn Python API: ${JSON.stringify(err)}`);
+      }
     }
 
     return new Promise<ProviderResponse>((resolve) => {

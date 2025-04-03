@@ -63,6 +63,8 @@ which python3
 
 it returns a python3 version.
 
+You can also specify a custom Python executable path using the `pythonExecutable` option in the configuration, or by setting the `PROMPTFOO_PYTHON` environment variable.
+
 Additionally ensure required python packages are installed e.g. flask
 
 ```bash

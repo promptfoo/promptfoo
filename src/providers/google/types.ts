@@ -135,6 +135,7 @@ export interface CompletionOptions {
   functionToolStatefulApi?: {
     url: string;
     file?: string;
+    pythonExecutable?: string;
   };
 
   systemInstruction?: Content;

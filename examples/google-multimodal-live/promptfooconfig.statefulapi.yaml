@@ -9,7 +9,9 @@ providers:
       tools: file://tools.json
       functionToolStatefulApi:
         file: examples/google-multimodal-live/counter_api.py
-        url: http://127.0.0.1:5000
+        url: http://127.0.0.1:8765
+        # Optionally specify a custom Python executable path
+        # pythonExecutable: '/usr/local/bin/python3'
       generationConfig:
         response_modalities: ['text']
       timeoutMs: 10000
