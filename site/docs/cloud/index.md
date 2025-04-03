@@ -18,17 +18,18 @@ Once you have access, you can log in to Promptfoo Cloud and start sharing your e
 
     [&raquo; Read getting started for help installing the CLI](/docs/getting-started)
 
-2.  **Log in to Promptfoo Cloud**
+2.  **Get your API key from the cloud**
+
+    Your API key is available at:
+    https://www.promptfoo.app/welcome
+
+3.  **Run the command from the previous step in your CLI**
 
     ```bash
-    promptfoo auth login
+    promptfoo auth login --host https://......
     ```
 
-    :::tip
-    If you're hosting an on-premise Promptfoo Cloud instance, you need to pass the `--host <host api url>` flag to the login command. By default, the cloud host is https://www.promptfoo.app.
-    :::
-
-3.  **Share your evals**
+4.  **Share your evals**
 
         ```bash
         promptfoo eval --share
@@ -44,7 +45,7 @@ Once you have access, you can log in to Promptfoo Cloud and start sharing your e
     All of your evals are stored locally until you share them.
     :::
 
-4.  **View your evals**
+5.  **View your evals**
 
     View your organization's evals at [https://www.promptfoo.app](https://www.promptfoo.app)
 

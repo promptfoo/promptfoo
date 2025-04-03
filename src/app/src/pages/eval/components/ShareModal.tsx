@@ -21,7 +21,7 @@ interface ShareModalProps {
 const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, evalId, onShare }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [copied, setCopied] = useState(false);
-  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [showNeedsSignup, setShowNeedsSignup] = useState(false);
   const [shareUrl, setShareUrl] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,14 +34,21 @@ const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, evalId, onShare 
 
       try {
         const response = await callApi(`/results/share/check-domain?id=${evalId}`);
-        const data = await response.json();
+        const data = (await response.json()) as {
+          domain: string;
+          isCloudEnabled: boolean;
+          error?: string;
+        };
 
         if (response.ok) {
-          const isPublicDomain = data.domain.includes('app.promptfoo.dev');
-          setShowConfirmation(isPublicDomain);
+          const isPublicDomain = data.domain.includes('promptfoo.app');
+          if (isPublicDomain && !data.isCloudEnabled) {
+            setShowNeedsSignup(true);
+            return;
+          }
 
           // If it's not a public domain or we already have a URL, no need to generate
-          if (!isPublicDomain && !shareUrl && !error) {
+          if (!shareUrl && !error) {
             setIsLoading(true);
             try {
               const url = await onShare(evalId);
@@ -81,18 +88,7 @@ const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, evalId, onShare 
   };
 
   const handleConfirm = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const url = await onShare(evalId);
-      setShareUrl(url);
-      setShowConfirmation(false);
-    } catch (error) {
-      console.error('Failed to generate share URL:', error);
-      setError('Failed to generate share URL');
-    } finally {
-      setIsLoading(false);
-    }
+    window.open('https://www.promptfoo.app', '_blank');
   };
 
   if (error) {
@@ -117,21 +113,23 @@ const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, evalId, onShare 
       onClose={handleClose}
       PaperProps={{ style: { minWidth: 'min(660px, 100%)' } }}
     >
-      {showConfirmation ? (
+      {showNeedsSignup ? (
         <>
           <DialogTitle>Share Evaluation</DialogTitle>
           <DialogContent>
             <DialogContentText>
-              You are about to generate a publicly accessible link for this evaluation. Anyone with
-              this link will be able to view your evaluation results.
+              You need to be logged in to your Promptfoo cloud account to share your evaluation.
               <br />
               <br />
-              Would you like to proceed?
+              Sign up for free or login to your existing account at{' '}
+              <a href="https://promptfoo.app" target="_blank" rel="noopener noreferrer">
+                https://www.promptfoo.app
+              </a>
             </DialogContentText>
           </DialogContent>
           <DialogActions>
             <Button onClick={handleClose} color="primary">
-              Cancel
+              Close
             </Button>
             <Button
               onClick={handleConfirm}
@@ -139,7 +137,7 @@ const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, evalId, onShare 
               variant="contained"
               disabled={isLoading}
             >
-              {isLoading ? 'Generating...' : 'Generate Share Link'}
+              Take me there
             </Button>
           </DialogActions>
         </>

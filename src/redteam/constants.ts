@@ -335,6 +335,109 @@ export const OWASP_API_TOP_10_MAPPING: Record<
   },
 };
 
+/**
+ * Maps each major phase of the OWASP GenAI Red Teaming Blueprint
+ * to relevant Promptfoo plugins and strategies for automated testing.
+ */
+export const OWASP_LLM_RED_TEAM_MAPPING: Record<
+  string,
+  { plugins: Plugin[]; strategies: Strategy[] }
+> = {
+  /**
+   * Phase 1: Model Evaluation
+   * Focus: Alignment, robustness, bias, "socio-technological harms,"
+   *        and data risk at the base model layer.
+   */
+  'owasp:llm:redteam:model': {
+    plugins: [...FOUNDATION_PLUGINS],
+    strategies: [
+      'jailbreak',
+      'jailbreak:tree',
+      'jailbreak:composite',
+      'crescendo',
+      'goat',
+      'prompt-injection',
+      'best-of-n',
+      'multilingual',
+    ],
+  },
+
+  /**
+   * Phase 2: Implementation Evaluation
+   * Focus: Guardrails, knowledge retrieval security (RAG), content filtering bypass,
+   *        access control tests, and other "middle tier" application-level defenses.
+   */
+  'owasp:llm:redteam:implementation': {
+    plugins: [
+      ...PII_PLUGINS,
+      'prompt-extraction',
+      'harmful:privacy',
+      'rbac',
+      'bfla',
+      'bola',
+      'ascii-smuggling',
+    ],
+    strategies: [
+      'jailbreak',
+      'jailbreak:tree',
+      'jailbreak:composite',
+      'prompt-injection',
+      'hex',
+      'base64',
+      'leetspeak',
+      'rot13',
+    ],
+  },
+
+  /**
+   * Phase 3: System Evaluation
+   * Focus: Full-application or system-level vulnerabilities, supply chain,
+   *        sandbox escapes, resource controls, and overall infrastructure.
+   */
+  'owasp:llm:redteam:system': {
+    plugins: [
+      'shell-injection',
+      'sql-injection',
+      'ssrf',
+      'debug-access',
+      'tool-discovery',
+      'indirect-prompt-injection',
+      'hijacking',
+    ],
+    strategies: [
+      'jailbreak',
+      'jailbreak:tree',
+      'jailbreak:composite',
+      'crescendo',
+      'goat',
+      'multilingual',
+      'pandamonium',
+      'gcg',
+    ],
+  },
+
+  /**
+   * Phase 4: Runtime / Human & Agentic Evaluation
+   * Focus: Live environment, human-agent interaction, multi-agent chaining,
+   *        brand & trust issues, social engineering, and over-reliance.
+   */
+  'owasp:llm:redteam:runtime': {
+    plugins: [
+      'excessive-agency',
+      'overreliance',
+      'pliny',
+      'competitors',
+      'imitation',
+      'politics',
+      'religion',
+      'harmful:radicalization',
+      'harmful:self-harm',
+      'harmful:hate',
+    ],
+    strategies: ['crescendo', 'goat', 'jailbreak:tree', 'jailbreak:composite', 'prompt-injection'],
+  },
+};
+
 export const NIST_AI_RMF_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strategy[] }> = {
   'nist:ai:measure:1.1': {
     plugins: ['excessive-agency', 'harmful:misinformation-disinformation'],
@@ -469,6 +572,10 @@ export const ALIASED_PLUGINS = [
   'nist:ai:measure',
   'owasp:api',
   'owasp:llm',
+  'owasp:llm:redteam:model',
+  'owasp:llm:redteam:implementation',
+  'owasp:llm:redteam:system',
+  'owasp:llm:redteam:runtime',
   'toxicity',
   'bias',
   'misinformation',
@@ -488,6 +595,7 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
   'nist:ai:measure': NIST_AI_RMF_MAPPING,
   'owasp:api': OWASP_API_TOP_10_MAPPING,
   'owasp:llm': OWASP_LLM_TOP_10_MAPPING,
+  'owasp:llm:redteam': OWASP_LLM_RED_TEAM_MAPPING,
   toxicity: {
     toxicity: {
       plugins: [
@@ -1179,6 +1287,7 @@ export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   NIST: 'NIST AI Risk Management Framework',
   'OWASP API': 'OWASP API Top 10',
   'OWASP LLM': 'OWASP LLM Top 10',
+  'OWASP Gen AI Red Team': 'OWASP Gen AI Red Teaming Best Practices',
   RAG: 'Recommended plugins plus additional tests for RAG specific scenarios like access control',
   Recommended: 'A broad set of plugins recommended by Promptfoo',
 } as const;
