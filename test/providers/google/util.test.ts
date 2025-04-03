@@ -525,7 +525,7 @@ describe('util', () => {
       const prompt = [
         { role: 'system', content: [{ text: 'system instruction' }] },
         { role: 'user', content: [{ text: 'user message' }] },
-      ]
+      ];
 
       const { contents, systemInstruction } = geminiFormatSystemInstructions(
         JSON.stringify(prompt),
@@ -533,38 +533,34 @@ describe('util', () => {
         undefined,
       );
 
-      expect(contents).toEqual([{"parts": [{"text": "user message"}], "role": "user"}]);
-      expect(systemInstruction).toEqual({"parts": [{"text": "system instruction"}]})
+      expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
+      expect(systemInstruction).toEqual({ parts: [{ text: 'system instruction' }] });
     });
 
     it('should handle system messages in config', async () => {
-      const prompt = [
-        { role: 'user', parts: [{ text: 'user message' }] },
-      ]
+      const prompt = [{ role: 'user', parts: [{ text: 'user message' }] }];
 
       const { contents, systemInstruction } = geminiFormatSystemInstructions(
         JSON.stringify(prompt),
         {},
-        { parts: [{ text: 'system instruction'}] },
+        { parts: [{ text: 'system instruction' }] },
       );
 
-      expect(contents).toEqual([{"parts": [{"text": "user message"}], "role": "user"}]);
-      expect(systemInstruction).toEqual({"parts": [{"text": "system instruction"}]})
+      expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
+      expect(systemInstruction).toEqual({ parts: [{ text: 'system instruction' }] });
     });
 
     it('should handle system messages in variables', async () => {
-      const prompt = [
-        { role: 'user', parts: [{ text: 'user message' }] },
-      ]
+      const prompt = [{ role: 'user', parts: [{ text: 'user message' }] }];
 
       const { contents, systemInstruction } = geminiFormatSystemInstructions(
         JSON.stringify(prompt),
         { system_instruction: 'system instruction' },
-        { parts: [{ text: '{{system_instruction}}'}] },
+        { parts: [{ text: '{{system_instruction}}' }] },
       );
 
-      expect(contents).toEqual([{"parts": [{"text": "user message"}], "role": "user"}]);
-      expect(systemInstruction).toEqual({"parts": [{"text": "system instruction"}]})
+      expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
+      expect(systemInstruction).toEqual({ parts: [{ text: 'system instruction' }] });
     });
   });
 });
