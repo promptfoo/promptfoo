@@ -578,7 +578,7 @@ describe('util', () => {
 
     it('should handle filepath system messages in variables', async () => {
       const prompt = [{ role: 'user', parts: [{ text: 'user message' }] }];
-      const system_instruction = JSON.stringify({ parts: [{ text: 'system instruction' }] })
+      const system_instruction = JSON.stringify({ parts: [{ text: 'system instruction' }] });
       jest.spyOn(fs, 'existsSync').mockReturnValue(true);
       jest.spyOn(fs, 'readFileSync').mockReturnValue(system_instruction);
 

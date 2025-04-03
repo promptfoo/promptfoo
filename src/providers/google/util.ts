@@ -22,24 +22,6 @@ interface SafetyRating {
   blocked: boolean;
 }
 
-// interface PartText {
-//   text: string;
-// }
-
-// interface PartFunctionCall {
-//   functionCall: {
-//     name: string;
-//     args: Record<string, string>;
-//   };
-// }
-
-// type Part = PartText | PartFunctionCall;
-
-// interface Content {
-//   parts: Part[];
-//   role?: 'model';
-// }
-
 interface Candidate {
   content: Content;
   finishReason?:
@@ -332,13 +314,13 @@ export function geminiFormatSystemInstructions(
 
     // Load SI from file
     if (typeof configSystemInstruction === 'string') {
-      systemInstruction = loadFile(configSystemInstruction, contextVars)
-    } 
+      systemInstruction = loadFile(configSystemInstruction, contextVars);
+    }
 
     // Format SI if string was not a filepath above
     if (typeof systemInstruction === 'string') {
-      systemInstruction = {parts: [{text: systemInstruction}]}
-    } 
+      systemInstruction = { parts: [{ text: systemInstruction }] };
+    }
 
     if (contextVars && systemInstruction) {
       const nunjucks = getNunjucksEngine();
