@@ -12,11 +12,9 @@ import type {
   ProviderResponse,
 } from '../../types';
 import '../../util';
-import { maybeLoadFromExternalFile } from '../../util';
-import { parseChatPrompt } from '../shared';
 import type { CompletionOptions, FunctionCall } from './types';
 import type { GeminiFormat } from './util';
-import { maybeCoerceToGeminiFormat, loadFile } from './util';
+import { geminiFormatAndSystemInstructions, loadFile } from './util';
 
 const formatContentMessage = (contents: GeminiFormat, contentIndex: number) => {
   if (contents[contentIndex].role != 'user') {
@@ -71,22 +69,11 @@ export class GoogleMMLiveProvider implements ApiProvider {
       );
     }
 
-    let contents: GeminiFormat = parseChatPrompt(prompt, [
-      {
-        role: 'user',
-        parts: [
-          {
-            text: prompt,
-          },
-        ],
-      },
-    ]);
-    const { contents: updatedContents, coerced } = maybeCoerceToGeminiFormat(contents);
-    if (coerced) {
-      logger.debug(`Coerced JSON prompt to Gemini format: ${JSON.stringify(contents)}`);
-      logger.debug(`Coerced JSON prompt to Gemini format: ${JSON.stringify(updatedContents)}`);
-      contents = updatedContents;
-    }
+    const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+      prompt,
+      context?.vars,
+      this.config.systemInstruction,
+    );
     let contentIndex = 0;
 
     let statefulApi: ChildProcess | undefined;
@@ -284,9 +271,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
             },
             ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
             ...(this.config.tools ? { tools: loadFile(this.config.tools, context?.vars) } : {}),
-            ...(this.config.systemInstruction
-              ? { systemInstruction: maybeLoadFromExternalFile(this.config.systemInstruction) }
-              : {}),
+            ...(systemInstruction ? { systemInstruction } : {}),
           },
         };
         logger.debug(`WebSocket sent: ${JSON.stringify(setupMessage)}`);
