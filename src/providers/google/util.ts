@@ -1,6 +1,8 @@
 import type { GoogleAuth } from 'google-auth-library';
 import { z } from 'zod';
-import logger from '../logger';
+import logger from '../../logger';
+import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
+import { type Tool } from './types';
 
 type Probability = 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
 
@@ -65,6 +67,10 @@ export interface GeminiErrorResponse {
 export interface GeminiResponseData {
   candidates: Candidate[];
   usageMetadata?: GeminiUsageMetadata;
+  promptFeedback?: {
+    safetyRatings: Array<{ category: string; probability: string }>;
+    blockReason: any;
+  };
 }
 
 interface GeminiPromptFeedback {
@@ -252,4 +258,42 @@ export async function hasGoogleDefaultCredentials() {
   } catch {
     return false;
   }
+}
+
+export function stringifyCandidateContents(data: GeminiResponseData) {
+  let output = '';
+  for (const candidate of data.candidates) {
+    if (candidate.content?.parts) {
+      for (const part of candidate.content.parts) {
+        if ('text' in part) {
+          output += part.text;
+        } else {
+          output += JSON.stringify(part);
+        }
+      }
+    }
+  }
+  return output;
+}
+
+export function loadFile(
+  config_var: Tool[] | string | undefined,
+  context_vars: Record<string, string | object> | undefined,
+) {
+  // Ensures that files are loaded correctly. Files may be defined in multiple ways:
+  // 1. Directly in the provider:
+  //    config_tools will be the file path, which will be loaded here in maybeLoadFromExternalFile.
+  // 2. In a test variable that is used in the provider via a nunjucks:
+  //    context_vars will contain a string of the contents of the file with whitespace.
+  //    This will be inserted into the nunjucks in contfig_tools and the output needs to be parsed.
+  const fileContents = maybeLoadFromExternalFile(renderVarsInObject(config_var, context_vars));
+  if (typeof fileContents === 'string') {
+    try {
+      return JSON.parse(fileContents);
+    } catch (err) {
+      logger.debug(`ERROR: failed to file contents to JSON:\n${JSON.stringify(err)}`);
+      return fileContents;
+    }
+  }
+  return fileContents;
 }

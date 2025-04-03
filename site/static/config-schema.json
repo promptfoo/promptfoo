@@ -168,6 +168,9 @@
                             "HF_TOKEN": {
                               "type": "string"
                             },
+                            "HUGGING_FACE_HUB_TOKEN": {
+                              "type": "string"
+                            },
                             "LANGFUSE_HOST": {
                               "type": "string"
                             },
@@ -1098,6 +1101,10 @@
                           "owasp:llm:08",
                           "owasp:llm:09",
                           "owasp:llm:10",
+                          "owasp:llm:redteam:implementation",
+                          "owasp:llm:redteam:model",
+                          "owasp:llm:redteam:runtime",
+                          "owasp:llm:redteam:system",
                           "personal-safety",
                           "pii",
                           "pii:api-db",
@@ -1118,7 +1125,8 @@
                           "ssrf",
                           "system-prompt-override",
                           "tool-discovery",
-                          "toxicity"
+                          "toxicity",
+                          "unsafebench"
                         ]
                       },
                       {
@@ -1238,6 +1246,10 @@
                               "owasp:llm:08",
                               "owasp:llm:09",
                               "owasp:llm:10",
+                              "owasp:llm:redteam:implementation",
+                              "owasp:llm:redteam:model",
+                              "owasp:llm:redteam:runtime",
+                              "owasp:llm:redteam:system",
                               "personal-safety",
                               "pii",
                               "pii:api-db",
@@ -1258,7 +1270,8 @@
                               "ssrf",
                               "system-prompt-override",
                               "tool-discovery",
-                              "toxicity"
+                              "toxicity",
+                              "unsafebench"
                             ]
                           },
                           {

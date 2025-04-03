@@ -1,6 +1,6 @@
-# google-multimodal-live (Google Multimodal Live API with Gemini)
+# google-multimodal-live (Google Live API with Gemini)
 
-This example demonstrates how to use promptfoo with Google's WebSocket-based Multimodal Live API, which enables low-latency bidirectional interactions with Gemini models. The example includes three different configurations:
+This example demonstrates how to use promptfoo with Google's WebSocket-based Live API, which enables low-latency bidirectional interactions with Gemini models. The example includes three different configurations:
 
 1. Basic query demonstration
 2. Multiline conversation demonstration
@@ -79,7 +79,7 @@ promptfoo eval -c promptfooconfig.statefulapi.yaml -j 3
 
 ### 1. Basic Query
 
-- Simple interaction with the Multimodal Live API
+- Simple interaction with the Live API
 - Basic assertion testing on model responses
 
 ### 2. Multiline Conversation
@@ -123,4 +123,4 @@ The tools example uses a `tools.json` file that defines:
 2. The built-in code execution capability
 3. The built-in Google Search capability
 
-For more information about the Google Multimodal Live API and other Google AI models, see the [Google AI documentation](/docs/providers/google).
+For more information about the Google Live API and other Google AI models, see the [Google AI documentation](/docs/providers/google).

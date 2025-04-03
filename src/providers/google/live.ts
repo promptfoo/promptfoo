@@ -2,134 +2,20 @@ import axios from 'axios';
 import { spawn } from 'child_process';
 import type { ChildProcess } from 'child_process';
 import WebSocket from 'ws';
-import { getEnvString } from '../envars';
-import logger from '../logger';
+import { getEnvString } from '../../envars';
+import logger from '../../logger';
 import type {
   ApiProvider,
   CallApiContextParams,
   ProviderOptions,
   ProviderResponse,
-} from '../types';
-import '../util';
-import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
-import { parseChatPrompt } from './shared';
-import type { GeminiFormat } from './vertexUtil';
-import { maybeCoerceToGeminiFormat } from './vertexUtil';
-
-interface Blob {
-  mimeType: string;
-  data: string; // base64-encoded string
-}
-
-interface FunctionCall {
-  name: string;
-  args?: { [key: string]: any };
-}
-
-interface FunctionResponse {
-  name: string;
-  response: { [key: string]: any };
-}
-
-interface FileData {
-  mimeType?: string;
-  fileUri: string;
-}
-
-interface Part {
-  text?: string;
-  inlineData?: Blob;
-  functionCall?: FunctionCall;
-  functionResponse?: FunctionResponse;
-  fileData?: FileData;
-}
-
-interface Content {
-  parts: Part[];
-  role?: string;
-}
-
-interface Schema {
-  type: 'TYPE_UNSPECIFIED' | 'STRING' | 'NUMBER' | 'INTEGER' | 'BOOLEAN' | 'ARRAY' | 'OBJECT';
-  format?: string;
-  description?: string;
-  nullable?: boolean;
-  enum?: string[];
-  maxItems?: string;
-  minItems?: string;
-  properties?: { [key: string]: Schema };
-  required?: string[];
-  propertyOrdering?: string[];
-  items?: Schema;
-}
-
-interface FunctionDeclaration {
-  name: string;
-  description: string;
-  parameters?: Schema;
-  response?: Schema;
-}
-
-interface GoogleSearchRetrieval {
-  dynamicRetrievalConfig: {
-    mode?: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
-    dynamicThreshold?: number;
-  };
-}
-
-interface Tool {
-  functionDeclarations?: FunctionDeclaration[];
-  googleSearchRetrieval?: GoogleSearchRetrieval;
-  codeExecution?: object;
-  googleSearch?: object;
-}
-
-interface CompletionOptions {
-  apiKey: string;
-  timeoutMs?: number;
-  transformResponse?: string | Function;
-
-  // https://ai.google.dev/api/rest/v1beta/models/streamGenerateContent#request-body
-  context?: string;
-  examples?: { input: string; output: string }[];
-  stopSequence?: string[];
-  temperature?: number;
-  maxOutputTokens?: number;
-  topP?: number;
-  topK?: number;
-
-  generationConfig?: {
-    response_modalities?: string[];
-    context?: string;
-    examples?: { input: string; output: string }[];
-    stopSequence?: string[];
-    temperature?: number;
-    maxOutputTokens?: number;
-    topP?: number;
-    topK?: number;
-  };
-
-  toolConfig?: {
-    functionCallingConfig?: {
-      mode?: 'MODE_UNSPECIFIED' | 'AUTO' | 'ANY' | 'NONE';
-      allowedFunctionNames?: string[];
-    };
-  };
-
-  tools?: Tool[];
-
-  /**
-   * If set, automatically call these functions when the assistant activates
-   * these function tools.
-   */
-  functionToolCallbacks?: Record<string, (arg: string) => Promise<any>>;
-  functionToolStatefulApi?: {
-    url: string;
-    file?: string;
-  };
-
-  systemInstruction?: Content;
-}
+} from '../../types';
+import '../../util';
+import { maybeLoadFromExternalFile } from '../../util';
+import { parseChatPrompt } from '../shared';
+import type { CompletionOptions, FunctionCall } from './types';
+import type { GeminiFormat } from './util';
+import { maybeCoerceToGeminiFormat, loadFile } from './util';
 
 const formatContentMessage = (contents: GeminiFormat, contentIndex: number) => {
   if (contents[contentIndex].role != 'user') {
@@ -361,7 +247,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
             generation_config: {
               context: this.config.context,
               examples: this.config.examples,
-              stopSequence: this.config.stopSequence,
+              stopSequences: this.config.stopSequences,
               temperature: this.config.temperature,
               maxOutputTokens: this.config.maxOutputTokens,
               topP: this.config.topP,
@@ -369,13 +255,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
               ...this.config.generationConfig,
             },
             ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
-            ...(this.config.tools
-              ? {
-                  tools: maybeLoadFromExternalFile(
-                    renderVarsInObject(this.config.tools, context?.vars),
-                  ),
-                }
-              : {}),
+            ...(this.config.tools ? { tools: loadFile(this.config.tools, context?.vars) } : {}),
             ...(this.config.systemInstruction
               ? { systemInstruction: maybeLoadFromExternalFile(this.config.systemInstruction) }
               : {}),

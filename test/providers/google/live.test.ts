@@ -1,6 +1,6 @@
 import axios from 'axios';
 import WebSocket from 'ws';
-import { GoogleMMLiveProvider } from '../../src/providers/googleMultimodalLive';
+import { GoogleMMLiveProvider } from '../../../src/providers/google/live';
 
 jest.mock('ws');
 jest.mock('axios');

@@ -34,6 +34,7 @@ import {
   categoryAliases,
   type Plugin,
   riskCategories,
+  OWASP_LLM_RED_TEAM_MAPPING,
 } from '@promptfoo/redteam/constants';
 import { useDebounce } from 'use-debounce';
 import { useRedTeamConfig, useRecentlyUsedPlugins } from '../hooks/useRedTeamConfig';
@@ -220,6 +221,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     {
       name: 'OWASP LLM',
       plugins: new Set(Object.values(OWASP_LLM_TOP_10_MAPPING).flatMap((v) => v.plugins)),
+    },
+    {
+      name: 'OWASP Gen AI Red Team',
+      plugins: new Set(Object.values(OWASP_LLM_RED_TEAM_MAPPING).flatMap((v) => v.plugins)),
     },
     {
       name: 'OWASP API',

@@ -1,6 +1,6 @@
 ## CSV Metadata Example
 
-This example demonstrates how to use metadata columns in CSV test files to organize and filter your test cases.
+This example demonstrates how to use metadata columns in CSV test files to organize and filter your test cases. You can see more details on how to build a test cases CSV in the [Promptfoo docs](https://www.promptfoo.dev/docs/configuration/parameters/#import-from-csv)
 
 ### Files
 

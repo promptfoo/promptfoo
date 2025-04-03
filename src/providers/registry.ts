@@ -32,8 +32,9 @@ import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
 import { EchoProvider } from './echo';
 import { FalImageGenerationProvider } from './fal';
 import { GolangProvider } from './golangCompletion';
-import { GoogleChatProvider } from './google';
-import { GoogleMMLiveProvider } from './googleMultimodalLive';
+import { AIStudioChatProvider } from './google/ai.studio';
+import { GoogleMMLiveProvider } from './google/live';
+import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
 import { GroqProvider } from './groq';
 import { HttpProvider } from './http';
 import {
@@ -64,6 +65,7 @@ import { OpenAiRealtimeProvider } from './openai/realtime';
 import { OpenAiResponsesProvider } from './openai/responses';
 import { parsePackageProvider } from './packageParser';
 import { PortkeyChatCompletionProvider } from './portkey';
+import { PromptfooModelProvider } from './promptfooModel';
 import { PythonProvider } from './pythonCompletion';
 import {
   ReplicateModerationProvider,
@@ -74,7 +76,6 @@ import { ScriptCompletionProvider } from './scriptCompletion';
 import { SequenceProvider } from './sequence';
 import { SimulatedUser } from './simulatedUser';
 import { createTogetherAiProvider } from './togetherai';
-import { VertexChatProvider, VertexEmbeddingProvider } from './vertex';
 import { VoyageEmbeddingProvider } from './voyage';
 import { WatsonXProvider } from './watsonx';
 import { WebhookProvider } from './webhook';
@@ -906,7 +907,7 @@ export const providerMap: ProviderFactory[] = [
 
       // Default to regular Google API
       const modelName = splits[1];
-      return new GoogleChatProvider(modelName, providerOptions);
+      return new AIStudioChatProvider(modelName, providerOptions);
     },
   },
   {
@@ -1054,6 +1055,20 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return new SimulatedUser(providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('promptfoo:model:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const modelName = providerPath.split(':')[2];
+      return new PromptfooModelProvider(modelName, {
+        ...providerOptions,
+        model: modelName,
+      });
     },
   },
   {

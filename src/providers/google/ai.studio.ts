@@ -1,43 +1,36 @@
-import { fetchWithCache } from '../cache';
-import { getEnvString } from '../envars';
-import logger from '../logger';
+import { fetchWithCache } from '../../cache';
+import { getEnvString } from '../../envars';
+import logger from '../../logger';
 import type {
   ApiProvider,
   ProviderResponse,
   CallApiContextParams,
   GuardrailResponse,
-} from '../types';
-import type { EnvOverrides } from '../types/env';
-import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
-import { getNunjucksEngine } from '../util/templates';
-import { CHAT_MODELS } from './googleShared';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
-import { maybeCoerceToGeminiFormat } from './vertexUtil';
+} from '../../types';
+import type { EnvOverrides } from '../../types/env';
+import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
+import { getNunjucksEngine } from '../../util/templates';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import { CHAT_MODELS } from './shared';
+import type { CompletionOptions } from './types';
+import {
+  type GeminiResponseData,
+  loadFile,
+  maybeCoerceToGeminiFormat,
+  stringifyCandidateContents,
+} from './util';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
 
-interface GoogleCompletionOptions {
-  apiKey?: string;
-  apiHost?: string;
-  safetySettings?: { category: string; probability: string }[];
-  stopSequences?: string[];
-  temperature?: number;
-  maxOutputTokens?: number;
-  topP?: number;
-  topK?: number;
-  generationConfig?: Record<string, any>;
-  responseSchema?: string;
-}
-
-class GoogleGenericProvider implements ApiProvider {
+class AIStudioGenericProvider implements ApiProvider {
   modelName: string;
 
-  config: GoogleCompletionOptions;
+  config: CompletionOptions;
   env?: EnvOverrides;
 
   constructor(
     modelName: string,
-    options: { config?: GoogleCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: { config?: CompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     const { config, id, env } = options;
     this.env = env;
@@ -87,10 +80,10 @@ class GoogleGenericProvider implements ApiProvider {
   }
 }
 
-export class GoogleChatProvider extends GoogleGenericProvider {
+export class AIStudioChatProvider extends AIStudioGenericProvider {
   constructor(
     modelName: string,
-    options: { config?: GoogleCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: { config?: CompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     if (!CHAT_MODELS.includes(modelName)) {
       logger.debug(`Using unknown Google chat model: ${modelName}`);
@@ -206,6 +199,8 @@ export class GoogleChatProvider extends GoogleGenericProvider {
         ...this.config.generationConfig,
       },
       safetySettings: this.config.safetySettings,
+      ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
+      ...(this.config.tools ? { tools: loadFile(this.config.tools, context?.vars) } : {}),
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
     };
 
@@ -244,18 +239,7 @@ export class GoogleChatProvider extends GoogleGenericProvider {
         'json',
         false,
       )) as {
-        data: {
-          candidates: Array<{
-            content: { parts: Array<{ text: string }> };
-            safetyRatings: Array<{ category: string; probability: string }>;
-          }>;
-          promptFeedback?: { safetyRatings: Array<{ category: string; probability: string }> };
-          usageMetadata?: {
-            promptTokenCount: number;
-            candidatesTokenCount: number;
-            totalTokenCount: number;
-          };
-        };
+        data: GeminiResponseData;
         cached: boolean;
       });
     } catch (err) {
@@ -265,6 +249,10 @@ export class GoogleChatProvider extends GoogleGenericProvider {
     }
 
     logger.debug(`\tGoogle API response: ${JSON.stringify(data)}`);
+    let output;
+    if (data.candidates && data.candidates[0]?.content?.parts) {
+      output = stringifyCandidateContents(data);
+    }
 
     if (!data?.candidates || data.candidates.length === 0) {
       return {
@@ -273,7 +261,6 @@ export class GoogleChatProvider extends GoogleGenericProvider {
     }
 
     const candidate = data.candidates[0];
-    const parts = candidate.content.parts.map((part) => part.text).join('');
 
     try {
       let guardrails: GuardrailResponse | undefined;
@@ -293,7 +280,7 @@ export class GoogleChatProvider extends GoogleGenericProvider {
       }
 
       return {
-        output: parts,
+        output,
         tokenUsage: cached
           ? {
               cached: data.usageMetadata?.totalTokenCount,
