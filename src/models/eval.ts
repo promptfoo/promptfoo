@@ -538,15 +538,14 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
       isRedteam: sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`,
     })
     .from(resultsCTE)
-    .leftJoin(evalsTable, eq(resultsCTE.evalId, evalsTable.id))
+    .innerJoin(evalsTable, eq(resultsCTE.evalId, evalsTable.id))
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
-
     .where(datasetId ? eq(evalsToDatasetsTable.datasetId, datasetId) : undefined)
     .all();
 
   return results.map((result) => ({
     evalId: result.evalId,
-    createdAt: result.createdAt!,
+    createdAt: result.createdAt,
     description: result.description,
     numTests: result.testCount,
     datasetId: result.datasetId,
