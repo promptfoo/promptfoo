@@ -1002,7 +1002,7 @@ export const PLUGINS = [
     description:
       'Simulates Context Compliance Attacks to test whether an AI system can be tricked into generating restricted content using manipulated chat history.',
     label: 'security',
-    link: '/docs/red-team/plugins/cca/',
+    link: '/docs/red-team/plugins/context-compliance-attack/',
     name: 'CCA',
     pluginId: 'cca',
     applicationTypes: {

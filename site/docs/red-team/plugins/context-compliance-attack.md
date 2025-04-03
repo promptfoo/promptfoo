@@ -25,7 +25,7 @@ When this fabricated thread hits the API, the AI sees what looks like its own pr
 CCAs span two categories in the OWASP LLM Top 10:
 
 - **[LLM01: Prompt Injection](/docs/red-team/owasp-llm-top-10#1-prompt-injection-llm01)** - Unlike direct injections that give commands, CCAs manipulate the AI by exploiting its tendency to maintain conversation consistency.
-- **[LLM02: Insecure Output Handling](/docs/red-team/owasp-llm-top-10#2-insecure-output-handling)** - The core vulnerability is treating user-provided "AI responses" as authentic without verification.
+- **[LLM02: Sensitive Information Disclosure](/docs/red-team/owasp-llm-top-10#2-sensitive-information-disclosure-llm02)** - The core vulnerability is treating user-provided "AI responses" as authentic without verification.
 
 ## Plugin Usage
 
