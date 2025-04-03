@@ -1,8 +1,15 @@
 import type { GoogleAuth } from 'google-auth-library';
+import Clone from 'rfdc';
 import { z } from 'zod';
 import logger from '../../logger';
+import type { CallApiContextParams } from '../../types';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
+import { getNunjucksEngine } from '../../util/templates';
+import { parseChatPrompt } from '../shared';
 import { type Tool } from './types';
+import type { Content } from './types';
+
+const clone = Clone();
 
 type Probability = 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
 
@@ -16,23 +23,23 @@ interface SafetyRating {
   blocked: boolean;
 }
 
-interface PartText {
-  text: string;
-}
+// interface PartText {
+//   text: string;
+// }
 
-interface PartFunctionCall {
-  functionCall: {
-    name: string;
-    args: Record<string, string>;
-  };
-}
+// interface PartFunctionCall {
+//   functionCall: {
+//     name: string;
+//     args: Record<string, string>;
+//   };
+// }
 
-type Part = PartText | PartFunctionCall;
+// type Part = PartText | PartFunctionCall;
 
-interface Content {
-  parts: Part[];
-  role?: 'model';
-}
+// interface Content {
+//   parts: Part[];
+//   role?: 'model';
+// }
 
 interface Candidate {
   content: Content;
@@ -296,4 +303,46 @@ export function loadFile(
     }
   }
   return fileContents;
+}
+
+export function geminiFormatSystemInstructions(
+  prompt: string,
+  context?: CallApiContextParams,
+  configSystemInstruction?: Content,
+) {
+  let contents: GeminiFormat | { role: string; parts: { text: string } } = parseChatPrompt(prompt, {
+    role: 'user',
+    parts: {
+      text: prompt,
+    },
+  });
+  const {
+    contents: updatedContents,
+    coerced,
+    systemInstruction: parsedSystemInstruction,
+  } = maybeCoerceToGeminiFormat(contents);
+  if (coerced) {
+    logger.debug(`Coerced JSON prompt to Gemini format: ${JSON.stringify(contents)}`);
+    contents = updatedContents;
+  }
+
+  let systemInstruction: Content | undefined = parsedSystemInstruction;
+  if (configSystemInstruction && !systemInstruction) {
+    // Make a copy
+    systemInstruction = clone(configSystemInstruction);
+    if (systemInstruction && context?.vars) {
+      const nunjucks = getNunjucksEngine();
+      for (const part of systemInstruction.parts) {
+        if (part.text) {
+          part.text = nunjucks.renderString(part.text, context.vars);
+        }
+      }
+    }
+  } else if (configSystemInstruction && systemInstruction) {
+    return {
+      error: `Preprocessing error: system instruction defined in prompt and config.`,
+    };
+  }
+
+  return { contents, systemInstruction };
 }

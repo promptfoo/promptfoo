@@ -1,5 +1,4 @@
 import type { GaxiosError } from 'gaxios';
-import Clone from 'rfdc';
 import { getCache, isCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
@@ -14,9 +13,8 @@ import type {
 } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import { isValidJson } from '../../util/json';
-import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
-import type { ClaudeRequest, ClaudeResponse, CompletionOptions, Content } from './types';
+import type { ClaudeRequest, ClaudeResponse, CompletionOptions } from './types';
 import type {
   GeminiApiResponse,
   GeminiErrorResponse,
@@ -25,13 +23,11 @@ import type {
   Palm2ApiResponse,
 } from './util';
 import {
+  geminiFormatSystemInstructions,
   getGoogleClient,
   loadFile,
-  maybeCoerceToGeminiFormat,
   stringifyCandidateContents,
 } from './util';
-
-const clone = Clone();
 
 class VertexGenericProvider implements ApiProvider {
   modelName: string;
@@ -252,42 +248,11 @@ export class VertexChatProvider extends VertexGenericProvider {
 
   async callGeminiApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
-    let contents: GeminiFormat | { role: string; parts: { text: string } } = parseChatPrompt(
+    const { contents, systemInstruction } = geminiFormatSystemInstructions(
       prompt,
-      {
-        role: 'user',
-        parts: {
-          text: prompt,
-        },
-      },
+      context,
+      this.config.systemInstruction,
     );
-    const {
-      contents: updatedContents,
-      coerced,
-      systemInstruction: parsedSystemInstruction,
-    } = maybeCoerceToGeminiFormat(contents);
-    if (coerced) {
-      logger.debug(`Coerced JSON prompt to Gemini format: ${JSON.stringify(contents)}`);
-      contents = updatedContents;
-    }
-
-    let systemInstruction: Content | undefined = parsedSystemInstruction;
-    if (this.config.systemInstruction && !systemInstruction) {
-      // Make a copy
-      systemInstruction = clone(this.config.systemInstruction);
-      if (systemInstruction && context?.vars) {
-        const nunjucks = getNunjucksEngine();
-        for (const part of systemInstruction.parts) {
-          if (part.text) {
-            part.text = nunjucks.renderString(part.text, context.vars);
-          }
-        }
-      }
-    } else if (this.config.systemInstruction && systemInstruction) {
-      return {
-        error: `Preprocessing error: system instruction defined in prompt and config.`,
-      };
-    }
     // https://ai.google.dev/api/rest/v1/models/streamGenerateContent
     const body = {
       contents: contents as GeminiFormat,
