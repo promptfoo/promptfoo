@@ -51,6 +51,7 @@ function updateAssertionMetrics(
 ): void {
   // Initialize assertions if it doesn't exist
   if (!metrics.tokenUsage.assertions) {
+    // Create assertions object with required fields
     metrics.tokenUsage.assertions = {
       total: 0,
       prompt: 0,
@@ -65,6 +66,34 @@ function updateAssertionMetrics(
   assertions.prompt = (assertions.prompt ?? 0) + (assertionTokens.prompt ?? 0);
   assertions.completion = (assertions.completion ?? 0) + (assertionTokens.completion ?? 0);
   assertions.cached = (assertions.cached ?? 0) + (assertionTokens.cached ?? 0);
+
+  // Optional fields
+  if (assertionTokens.numRequests) {
+    assertions.numRequests = (assertions.numRequests ?? 0) + assertionTokens.numRequests;
+  }
+
+  // Handle completion details if present
+  if (assertionTokens.completionDetails) {
+    if (!assertions.completionDetails) {
+      assertions.completionDetails = {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      };
+    }
+
+    assertions.completionDetails.reasoning =
+      (assertions.completionDetails.reasoning ?? 0) +
+      (assertionTokens.completionDetails.reasoning ?? 0);
+
+    assertions.completionDetails.acceptedPrediction =
+      (assertions.completionDetails.acceptedPrediction ?? 0) +
+      (assertionTokens.completionDetails.acceptedPrediction ?? 0);
+
+    assertions.completionDetails.rejectedPrediction =
+      (assertions.completionDetails.rejectedPrediction ?? 0) +
+      (assertionTokens.completionDetails.rejectedPrediction ?? 0);
+  }
 }
 
 /**
