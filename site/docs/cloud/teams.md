@@ -3,7 +3,7 @@ sidebar_label: Managing Roles and Teams
 sidebar_position: 20
 title: Managing Roles and Teams in Promptfoo Cloud
 description: Learn how to create and manage roles and teams in Promptfoo Cloud
-keywords: [roles, teams, permissions, users, organizations, organizations, teams, roles, permissions, users]
+keywords: [roles, teams, permissions, users, organizations]
 ---
 
 # Managing Roles and Teams 
