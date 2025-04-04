@@ -8,10 +8,11 @@ import {
   GridToolbarColumnsButton,
   GridToolbarFilterButton,
   GridToolbarDensitySelector,
-  GridToolbarExport,
   GridToolbarQuickFilter,
   type GridRowSelectionModel,
   type GridRenderCellParams,
+  GridToolbarExportContainer,
+  GridCsvExportMenuItem,
 } from '@mui/x-data-grid';
 
 type Eval = {
@@ -31,6 +32,12 @@ declare module '@mui/x-data-grid' {
     showUtilityButtons: boolean;
   }
 }
+
+const GridToolbarExport = () => (
+  <GridToolbarExportContainer>
+    <GridCsvExportMenuItem />
+  </GridToolbarExportContainer>
+);
 
 function CustomToolbar({ showUtilityButtons }: { showUtilityButtons: boolean }) {
   const theme = useTheme();
