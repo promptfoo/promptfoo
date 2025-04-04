@@ -31,10 +31,11 @@ describe('evaluator', () => {
     it('should return all evaluations', async () => {
       const eval1 = await EvalFactory.create();
       const eval2 = await EvalFactory.create();
-      await EvalFactory.createOldResult();
+      const eval3 = await EvalFactory.createOldResult();
+
       const evaluations = await getEvalSummaries();
 
-      expect(evaluations).toHaveLength(2);
+      expect(evaluations).toHaveLength(3);
 
       expect(evaluations).toContainEqual(
         expect.objectContaining({
@@ -59,6 +60,8 @@ describe('evaluator', () => {
           label: eval2.id,
         }),
       );
+
+      expect(evaluations).toContainEqual(expect.objectContaining({ evalId: eval3.id }));
     });
   });
 
