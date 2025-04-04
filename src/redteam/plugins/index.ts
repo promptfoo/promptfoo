@@ -270,6 +270,7 @@ const remotePlugins: PluginFactory[] = [
   'ascii-smuggling',
   'bfla',
   'bola',
+  'cca',
   'competitors',
   'harmful:misinformation-disinformation',
   'harmful:specialized-advice',

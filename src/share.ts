@@ -76,6 +76,7 @@ async function getTargetOpenSourceServerVersion(apiHost: string): Promise<string
     },
   });
   if (!response.ok) {
+    logger.debug(`Failed to get server version from ${apiHost}/health: ${response.statusText}`);
     return;
   }
   const { version } = await response.json();
@@ -124,6 +125,7 @@ function createChunks(results: any[], targetChunkSize: number): any[][] {
 
 async function sendInitialEvalData(evalRecord: Eval, url: string, headers: Record<string, string>) {
   const evalDataWithoutResults = { ...evalRecord, results: [] };
+  logger.debug(`Sending initial eval data to ${url}`);
   const response = await fetchWithProxy(url, {
     method: 'POST',
     headers,
@@ -131,7 +133,7 @@ async function sendInitialEvalData(evalRecord: Eval, url: string, headers: Recor
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to send initial eval data: ${response.statusText}`);
+    throw new Error(`Failed to send initial eval data to ${url}: ${response.statusText}`);
   }
 
   return (await response.json()).id;
@@ -143,7 +145,9 @@ async function sendChunkOfResults(
   evalId: string,
   headers: Record<string, string>,
 ) {
-  const response = await fetchWithProxy(`${url}/${evalId}/results`, {
+  const targetUrl = `${url}/${evalId}/results`;
+  logger.debug(`Sending chunk of ${chunk.length} results to ${targetUrl}`);
+  const response = await fetchWithProxy(targetUrl, {
     method: 'POST',
     headers,
     body: JSON.stringify(chunk),
@@ -152,13 +156,26 @@ async function sendChunkOfResults(
   if (!response.ok) {
     const responseBody = await response.json();
     throw new Error(
-      `Failed to send results chunk: ${response.statusText} = ${JSON.stringify(responseBody)}`,
+      `Failed to send results chunk to ${targetUrl}: ${response.statusText} = ${JSON.stringify(responseBody)}`,
     );
   }
 }
 
 async function rollbackEval(url: string, evalId: string, headers: Record<string, string>) {
-  await fetchWithProxy(`${url}/${evalId}`, { method: 'DELETE', headers });
+  const targetUrl = `${url}/${evalId}`;
+  logger.debug(`Attempting to roll back eval ${evalId} at ${targetUrl}`);
+  try {
+    const response = await fetchWithProxy(targetUrl, { method: 'DELETE', headers });
+    if (response.ok) {
+      logger.debug(`Successfully rolled back eval ${evalId}`);
+    } else {
+      logger.warn(`Rollback request returned non-OK status: ${response.statusText}`);
+    }
+  } catch (e) {
+    logger.warn(
+      `Failed to roll back eval ${evalId}: ${e}. You may need to manually delete this eval.`,
+    );
+  }
 }
 
 async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string | null> {
@@ -220,6 +237,8 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
 
 async function sendEvalResults(evalRecord: Eval, url: string): Promise<string | null> {
   await evalRecord.loadResults();
+  logger.debug(`Sending eval results to ${url} with ${evalRecord.results.length} results`);
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
@@ -234,7 +253,7 @@ async function sendEvalResults(evalRecord: Eval, url: string): Promise<string | 
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to send eval results: ${response.statusText}`);
+    throw new Error(`Failed to send eval results to ${url}: ${response.statusText}`);
   }
 
   const evalId = (await response.json()).id;
@@ -309,6 +328,7 @@ async function getApiConfig(evalRecord: Eval): Promise<{
 }
 
 async function handleLegacyResults(evalRecord: Eval, url: string): Promise<string | null> {
+  logger.debug(`Using legacy results format for sharing to ${url}`);
   const summary = await evalRecord.toEvaluateSummary();
   const table = await evalRecord.getTable();
 
@@ -334,13 +354,17 @@ async function handleLegacyResults(evalRecord: Eval, url: string): Promise<strin
   });
 
   if (!response.ok) {
-    logger.error(`Failed to create shareable URL: ${response.statusText}`);
+    logger.error(
+      `Failed to create shareable URL (${url}): ${response.statusText}. Check your API endpoint configuration.`,
+    );
     return null;
   }
 
   const responseJson = (await response.json()) as { id?: string; error?: string };
   if (responseJson.error) {
-    logger.error(`Failed to create shareable URL: ${responseJson.error}`);
+    logger.error(
+      `Failed to create shareable URL (${url}): ${responseJson.error}. Check your API endpoint configuration.`,
+    );
     return null;
   }
 
