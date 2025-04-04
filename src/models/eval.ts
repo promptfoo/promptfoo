@@ -529,7 +529,7 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
   /**
    * Deserialize the evals. A few things to note:
    *
-   * - Test statistics are derived from the prompt metircs as this is the only reliable source of truth
+   * - Test statistics are derived from the prompt metrics as this is the only reliable source of truth
    * that's written to the evals table.
    */
   return results.map((result) => {
