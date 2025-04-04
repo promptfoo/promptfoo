@@ -1,5 +1,4 @@
 import type { GaxiosError } from 'gaxios';
-import Clone from 'rfdc';
 import { getCache, isCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
@@ -13,22 +12,22 @@ import type {
   TokenUsage,
 } from '../../types';
 import type { EnvOverrides } from '../../types/env';
-import { renderVarsInObject } from '../../util';
-import { maybeLoadFromExternalFile } from '../../util';
 import { isValidJson } from '../../util/json';
-import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
-import type { ClaudeRequest, ClaudeResponse, CompletionOptions, Content } from './types';
-import type { GeminiErrorResponse, GeminiFormat, Palm2ApiResponse } from './util';
+import type { ClaudeRequest, ClaudeResponse, CompletionOptions } from './types';
+import type {
+  GeminiApiResponse,
+  GeminiErrorResponse,
+  GeminiFormat,
+  GeminiResponseData,
+  Palm2ApiResponse,
+} from './util';
 import {
+  geminiFormatAndSystemInstructions,
   getGoogleClient,
-  maybeCoerceToGeminiFormat,
-  type GeminiApiResponse,
-  type GeminiResponseData,
+  loadFile,
   stringifyCandidateContents,
 } from './util';
-
-const clone = Clone();
 
 class VertexGenericProvider implements ApiProvider {
   modelName: string;
@@ -249,38 +248,11 @@ export class VertexChatProvider extends VertexGenericProvider {
 
   async callGeminiApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
-    let contents: GeminiFormat | { role: string; parts: { text: string } } = parseChatPrompt(
+    const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,
-      {
-        role: 'user',
-        parts: {
-          text: prompt,
-        },
-      },
+      context?.vars,
+      this.config.systemInstruction,
     );
-    const {
-      contents: updatedContents,
-      coerced,
-      systemInstruction: parsedSystemInstruction,
-    } = maybeCoerceToGeminiFormat(contents);
-    if (coerced) {
-      logger.debug(`Coerced JSON prompt to Gemini format: ${JSON.stringify(contents)}`);
-      contents = updatedContents;
-    }
-
-    let systemInstruction: Content | undefined = parsedSystemInstruction;
-    if (this.config.systemInstruction && !systemInstruction) {
-      // Make a copy
-      systemInstruction = clone(this.config.systemInstruction);
-      if (systemInstruction && context?.vars) {
-        const nunjucks = getNunjucksEngine();
-        for (const part of systemInstruction.parts) {
-          if (part.text) {
-            part.text = nunjucks.renderString(part.text, context.vars);
-          }
-        }
-      }
-    }
     // https://ai.google.dev/api/rest/v1/models/streamGenerateContent
     const body = {
       contents: contents as GeminiFormat,
@@ -296,9 +268,7 @@ export class VertexChatProvider extends VertexGenericProvider {
       },
       ...(this.config.safetySettings ? { safetySettings: this.config.safetySettings } : {}),
       ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
-      ...(this.config.tools
-        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(this.config.tools, context?.vars)) }
-        : {}),
+      ...(this.config.tools ? { tools: loadFile(this.config.tools, context?.vars) } : {}),
       ...(systemInstruction ? { systemInstruction } : {}),
     };
     logger.debug(`Preparing to call Google Vertex API (Gemini) with body: ${JSON.stringify(body)}`);

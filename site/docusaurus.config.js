@@ -175,7 +175,11 @@ const config = {
                 label: 'Docs',
               },
               {
-                href: 'https://www.promptfoo.dev/models/',
+                to: 'https://www.promptfoo.dev/docs/api-reference/',
+                label: 'API Reference',
+              },
+              {
+                to: 'https://www.promptfoo.dev/models/',
                 label: 'Foundation Model Reports',
               },
               {

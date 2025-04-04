@@ -311,7 +311,6 @@ export async function redteamInit(directory: string | undefined) {
       { name: `I'll choose later`, value: 'Other' },
       { name: 'openai:gpt-4o-mini', value: 'openai:gpt-4o-mini' },
       { name: 'openai:gpt-4o', value: 'openai:gpt-4o' },
-      { name: 'openai:gpt-3.5-turbo', value: 'openai:gpt-3.5-turbo' },
       {
         name: 'anthropic:claude-3-7-sonnet-20250219',
         value: 'anthropic:messages:claude-3-7-sonnet-20250219',

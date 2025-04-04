@@ -1,7 +1,26 @@
+import axios from 'axios';
+import dedent from 'dedent';
 import WebSocket from 'ws';
 import { GoogleMMLiveProvider } from '../../../src/providers/google/live';
 
 jest.mock('ws');
+jest.mock('axios');
+jest.mock('../../../src/python/pythonUtils', () => ({
+  validatePythonPath: jest.fn().mockImplementation(async (path) => path),
+}));
+jest.mock('child_process', () => ({
+  spawn: jest.fn(() => ({
+    stdout: { on: jest.fn() },
+    stderr: { on: jest.fn() },
+    on: jest.fn((event, callback) => {
+      if (event === 'close') {
+        setTimeout(callback, 100);
+      }
+    }),
+    kill: jest.fn(),
+    killed: false,
+  })),
+}));
 
 const simulateMessage = (mockWs: jest.Mocked<WebSocket>, simulated_data: any) => {
   setTimeout(() => {
@@ -33,6 +52,7 @@ const simulateCompletionMessage = (mockWs: jest.Mocked<WebSocket>) => {
 
 describe('GoogleMMLiveProvider', () => {
   let mockWs: jest.Mocked<WebSocket>;
+  const mockedAxios = axios as jest.Mocked<typeof axios>;
   let provider: GoogleMMLiveProvider;
 
   beforeEach(() => {
@@ -47,6 +67,11 @@ describe('GoogleMMLiveProvider', () => {
 
     jest.mocked(WebSocket).mockImplementation(() => mockWs);
 
+    // Reset validatePythonPath mock for each test
+    jest
+      .mocked(jest.requireMock('../../../src/python/pythonUtils').validatePythonPath)
+      .mockImplementation(async (path: string) => path);
+
     provider = new GoogleMMLiveProvider('gemini-2.0-flash-exp', {
       config: {
         generationConfig: {
@@ -56,6 +81,10 @@ describe('GoogleMMLiveProvider', () => {
         apiKey: 'test-api-key',
       },
     });
+
+    // Reset mocks before each test
+    mockedAxios.get.mockClear();
+    mockedAxios.post.mockClear();
   });
 
   afterEach(() => {
@@ -471,6 +500,350 @@ describe('GoogleMMLiveProvider', () => {
           ],
         },
       }),
+    });
+  });
+
+  it('should handle function tool calls to a spawned stateful api', async () => {
+    jest.mocked(WebSocket).mockImplementation(() => {
+      setTimeout(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulatePartsMessage(mockWs, [
+          {
+            executableCode: {
+              language: 'PYTHON',
+              code: dedent`
+                while True:
+                  count_response = default_api.get_count()
+                  if count_response and count_response.counter is not None and count_response.counter >= 5:
+                    print(f"Counter reached {count_response.counter}, stopping.")
+                    break
+                  default_api.add_one()
+                  print("Counter incremented.")
+              `,
+            },
+          },
+        ]);
+        simulateFunctionCallMessage(mockWs, [
+          { name: 'get_count', args: {}, id: 'function-call-809368982256348430' },
+        ]);
+        simulateFunctionCallMessage(mockWs, [
+          { name: 'add_one', args: {}, id: 'function-call-7991972082416923583' },
+        ]);
+        simulateFunctionCallMessage(mockWs, [
+          { name: 'get_count', args: {}, id: 'function-call-2287351185126351207' },
+        ]);
+        simulateFunctionCallMessage(mockWs, [
+          { name: 'add_one', args: {}, id: 'function-call-4023509897900237366' },
+        ]);
+        simulateFunctionCallMessage(mockWs, [
+          { name: 'get_count', args: {}, id: 'function-call-2287351185126351304' },
+        ]);
+        simulatePartsMessage(mockWs, [
+          {
+            codeExecutionResult: {
+              outcome: 'OUTCOME_OK',
+              output: 'Counter incremented.\nCounter incremented.\nCounter reached 5, stopping.\n',
+            },
+          },
+        ]);
+        simulateTextMessage(mockWs, 'The counter has been incremented until it reached 5.\n');
+        simulateCompletionMessage(mockWs);
+      }, 60);
+      return mockWs;
+    });
+
+    provider = new GoogleMMLiveProvider('gemini-2.0-flash-exp', {
+      config: {
+        generationConfig: {
+          response_modalities: ['text'],
+        },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+        functionToolStatefulApi: {
+          file: 'examples/google-multimodal-live/counter_api.py',
+          url: 'http://127.0.0.1:5000',
+        },
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: 'add_one',
+                description: 'add one to counter',
+              },
+              {
+                name: 'get_count',
+                description: 'return the current value of the counter',
+                response: {
+                  type: 'OBJECT',
+                  properties: {
+                    counter: {
+                      type: 'INTEGER',
+                      description: 'value of counter',
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    mockedAxios.get.mockResolvedValue({ data: { counter: 5 } });
+
+    const response = await provider.callApi('Add to the counter until it reaches 5');
+    expect(response).toEqual({
+      output: JSON.stringify({
+        text: 'The counter has been incremented until it reached 5.\n',
+        toolCall: {
+          functionCalls: [
+            { name: 'get_count', args: {}, id: 'function-call-809368982256348430' },
+            { name: 'add_one', args: {}, id: 'function-call-7991972082416923583' },
+            { name: 'get_count', args: {}, id: 'function-call-2287351185126351207' },
+            { name: 'add_one', args: {}, id: 'function-call-4023509897900237366' },
+            { name: 'get_count', args: {}, id: 'function-call-2287351185126351304' },
+          ],
+        },
+        statefulApiState: { counter: 5 },
+      }),
+    });
+    expect(mockedAxios.get).toHaveBeenCalledTimes(6);
+  });
+  describe('Python executable integration', () => {
+    it('should handle Python executable validation correctly', async () => {
+      const mockSpawn = jest.requireMock('child_process').spawn;
+      const validatePythonPathMock = jest.requireMock(
+        '../../../src/python/pythonUtils',
+      ).validatePythonPath;
+
+      validatePythonPathMock.mockResolvedValueOnce('/custom/python/bin');
+
+      const providerWithCustomPython = new GoogleMMLiveProvider('gemini-2.0-flash-exp', {
+        config: {
+          generationConfig: {
+            response_modalities: ['text'],
+          },
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+          functionToolStatefulApi: {
+            file: 'examples/google-multimodal-live/counter_api.py',
+            url: 'http://127.0.0.1:8765',
+            pythonExecutable: '/custom/python/path',
+          },
+        },
+      });
+
+      jest.mocked(WebSocket).mockImplementation(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          simulateSetupMessage(mockWs);
+          simulateTextMessage(mockWs, 'Test response');
+          simulateCompletionMessage(mockWs);
+        }, 10);
+        return mockWs;
+      });
+
+      await providerWithCustomPython.callApi('Test prompt');
+
+      expect(validatePythonPathMock).toHaveBeenCalledWith('/custom/python/path', true);
+
+      expect(mockSpawn).toHaveBeenCalledWith('/custom/python/bin', [
+        'examples/google-multimodal-live/counter_api.py',
+      ]);
+    });
+
+    it('should handle errors when spawning Python process', async () => {
+      const mockSpawn = jest.requireMock('child_process').spawn;
+      const validatePythonPathMock = jest.requireMock(
+        '../../../src/python/pythonUtils',
+      ).validatePythonPath;
+
+      validatePythonPathMock.mockRejectedValueOnce(new Error('Python not found'));
+
+      const originalError = console.error;
+      const mockError = jest.fn();
+      console.error = mockError;
+
+      try {
+        const providerWithPythonError = new GoogleMMLiveProvider('gemini-2.0-flash-exp', {
+          config: {
+            generationConfig: {
+              response_modalities: ['text'],
+            },
+            timeoutMs: 500,
+            apiKey: 'test-api-key',
+            functionToolStatefulApi: {
+              file: 'examples/google-multimodal-live/counter_api.py',
+              url: 'http://127.0.0.1:8765',
+            },
+          },
+        });
+
+        jest.mocked(WebSocket).mockImplementation(() => {
+          setTimeout(() => {
+            mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+            simulateSetupMessage(mockWs);
+            simulateTextMessage(mockWs, 'Test response');
+            simulateCompletionMessage(mockWs);
+          }, 10);
+          return mockWs;
+        });
+
+        await providerWithPythonError.callApi('Test prompt');
+
+        expect(mockSpawn).not.toHaveBeenCalled();
+      } finally {
+        console.error = originalError;
+      }
+    });
+
+    it('should handle stdout and stderr from the Python process', async () => {
+      const mockSpawn = jest.requireMock('child_process').spawn;
+
+      const mockStdout = { on: jest.fn() };
+      const mockStderr = { on: jest.fn() };
+
+      mockSpawn.mockReturnValueOnce({
+        stdout: mockStdout,
+        stderr: mockStderr,
+        on: jest.fn(),
+        kill: jest.fn(),
+        killed: false,
+      });
+
+      const validatePythonPathMock = jest.requireMock(
+        '../../../src/python/pythonUtils',
+      ).validatePythonPath;
+      validatePythonPathMock.mockResolvedValueOnce('python3');
+
+      const providerWithStatefulApi = new GoogleMMLiveProvider('gemini-2.0-flash-exp', {
+        config: {
+          generationConfig: {
+            response_modalities: ['text'],
+          },
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+          functionToolStatefulApi: {
+            file: 'examples/google-multimodal-live/counter_api.py',
+            url: 'http://127.0.0.1:8765',
+          },
+        },
+      });
+
+      jest.mocked(WebSocket).mockImplementation(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          simulateSetupMessage(mockWs);
+          simulateTextMessage(mockWs, 'Test response');
+          simulateCompletionMessage(mockWs);
+        }, 10);
+        return mockWs;
+      });
+
+      await providerWithStatefulApi.callApi('Test prompt');
+
+      expect(mockStdout.on).toHaveBeenCalledWith('data', expect.any(Function));
+      expect(mockStderr.on).toHaveBeenCalledWith('data', expect.any(Function));
+    });
+
+    it('should use the PROMPTFOO_PYTHON env variable when available', async () => {
+      const originalEnv = process.env.PROMPTFOO_PYTHON;
+      process.env.PROMPTFOO_PYTHON = '/env/python3';
+
+      const mockSpawn = jest.requireMock('child_process').spawn;
+      const validatePythonPathMock = jest.requireMock(
+        '../../../src/python/pythonUtils',
+      ).validatePythonPath;
+      validatePythonPathMock.mockResolvedValueOnce('/env/python3');
+
+      try {
+        const providerWithEnvPython = new GoogleMMLiveProvider('gemini-2.0-flash-exp', {
+          config: {
+            generationConfig: {
+              response_modalities: ['text'],
+            },
+            timeoutMs: 500,
+            apiKey: 'test-api-key',
+            functionToolStatefulApi: {
+              file: 'examples/google-multimodal-live/counter_api.py',
+              url: 'http://127.0.0.1:8765',
+            },
+          },
+        });
+
+        jest.mocked(WebSocket).mockImplementation(() => {
+          setTimeout(() => {
+            mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+            simulateSetupMessage(mockWs);
+            simulateTextMessage(mockWs, 'Test response');
+            simulateCompletionMessage(mockWs);
+          }, 10);
+          return mockWs;
+        });
+
+        await providerWithEnvPython.callApi('Test prompt');
+
+        expect(validatePythonPathMock).toHaveBeenCalledWith('/env/python3', true);
+
+        expect(mockSpawn).toHaveBeenCalledWith('/env/python3', [
+          'examples/google-multimodal-live/counter_api.py',
+        ]);
+      } finally {
+        if (originalEnv) {
+          process.env.PROMPTFOO_PYTHON = originalEnv;
+        } else {
+          delete process.env.PROMPTFOO_PYTHON;
+        }
+      }
+    });
+
+    it('should properly clean up Python process on WebSocket close', async () => {
+      const mockProcess = {
+        stdout: { on: jest.fn() },
+        stderr: { on: jest.fn() },
+        on: jest.fn(),
+        kill: jest.fn(),
+        killed: false,
+      };
+
+      const mockSpawn = jest.requireMock('child_process').spawn;
+      mockSpawn.mockReturnValueOnce(mockProcess);
+
+      const validatePythonPathMock = jest.requireMock(
+        '../../../src/python/pythonUtils',
+      ).validatePythonPath;
+      validatePythonPathMock.mockResolvedValueOnce('python3');
+
+      const providerWithCleanup = new GoogleMMLiveProvider('gemini-2.0-flash-exp', {
+        config: {
+          generationConfig: {
+            response_modalities: ['text'],
+          },
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+          functionToolStatefulApi: {
+            file: 'examples/google-multimodal-live/counter_api.py',
+            url: 'http://127.0.0.1:8765',
+          },
+        },
+      });
+
+      jest.mocked(WebSocket).mockImplementation(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          simulateSetupMessage(mockWs);
+          simulateTextMessage(mockWs, 'Test response');
+          simulateCompletionMessage(mockWs);
+
+          mockWs.onclose?.({ wasClean: true, code: 1000 } as WebSocket.CloseEvent);
+        }, 10);
+        return mockWs;
+      });
+
+      await providerWithCleanup.callApi('Test prompt');
+
+      expect(mockProcess.kill).toHaveBeenCalledWith('SIGTERM');
     });
   });
 });

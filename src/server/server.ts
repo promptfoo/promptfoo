@@ -10,14 +10,16 @@ import { fromError } from 'zod-validation-error';
 import { DEFAULT_PORT, VERSION } from '../constants';
 import { setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
+import { cloudConfig } from '../globalConfig/cloud';
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
-import Eval from '../models/eval';
+import Eval, { getEvalSummaries } from '../models/eval';
 import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
 import { createShareableUrl, determineShareDomain } from '../share';
 import telemetry, { TelemetryEventSchema } from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCase/synthesis';
+import type { EvalSummary } from '../types';
 import { checkRemoteHealth } from '../util/apiHealth';
 import {
   getLatestEval,
@@ -25,7 +27,6 @@ import {
   getPromptsForTestCasesHash,
   getStandaloneEvals,
   getTestCases,
-  listPreviousResults,
   readResult,
 } from '../util/database';
 import invariant from '../util/invariant';
@@ -69,22 +70,20 @@ export function createApp() {
     res.json(result);
   });
 
-  app.get('/api/results', async (req: Request, res: Response): Promise<void> => {
-    const datasetId = req.query.datasetId as string | undefined;
-    const previousResults = await listPreviousResults(
-      undefined /* limit */,
-      undefined /* offset */,
-      datasetId,
-    );
-    res.json({
-      data: previousResults.map((meta) => {
-        return {
-          ...meta,
-          label: meta.description ? `${meta.description} (${meta.evalId})` : meta.evalId,
-        };
-      }),
-    });
-  });
+  /**
+   * Fetches summaries of all evals, optionally for a given dataset.
+   */
+  app.get(
+    '/api/results',
+    async (
+      // eslint-disable-next-line @typescript-eslint/no-empty-object-type
+      req: Request<{}, {}, {}, { datasetId?: string }>,
+      res: Response<{ data: EvalSummary[] }>,
+    ): Promise<void> => {
+      const previousResults = await getEvalSummaries(req.query.datasetId);
+      res.json({ data: previousResults });
+    },
+  );
 
   app.get('/api/results/:id', async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
@@ -141,7 +140,8 @@ export function createApp() {
     }
 
     const { domain } = determineShareDomain(eval_);
-    res.json({ domain });
+    const isCloudEnabled = cloudConfig.isEnabled();
+    res.json({ domain, isCloudEnabled });
   });
 
   app.post('/api/results/share', async (req: Request, res: Response): Promise<void> => {
