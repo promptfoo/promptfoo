@@ -34,6 +34,12 @@ export class PromptMetrics {
       prompt: 0,
       completion: 0,
       cached: 0,
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+      },
     };
     this.namedScores = {};
     this.namedScoresCount = {};

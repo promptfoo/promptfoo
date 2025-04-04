@@ -418,6 +418,12 @@ export default class Eval {
           acceptedPrediction: 0,
           rejectedPrediction: 0,
         },
+        assertions: {
+          total: 0,
+          prompt: 0,
+          completion: 0,
+          cached: 0,
+        },
       },
     };
 
@@ -437,6 +443,15 @@ export default class Eval {
         prompt.metrics?.tokenUsage.completionDetails?.acceptedPrediction || 0;
       stats.tokenUsage.completionDetails.rejectedPrediction! +=
         prompt.metrics?.tokenUsage.completionDetails?.rejectedPrediction || 0;
+
+      // Add assertion token usage from prompt metrics
+      if (prompt.metrics?.tokenUsage.assertions) {
+        stats.tokenUsage.assertions.total! += prompt.metrics.tokenUsage.assertions.total || 0;
+        stats.tokenUsage.assertions.prompt! += prompt.metrics.tokenUsage.assertions.prompt || 0;
+        stats.tokenUsage.assertions.completion! +=
+          prompt.metrics.tokenUsage.assertions.completion || 0;
+        stats.tokenUsage.assertions.cached! += prompt.metrics.tokenUsage.assertions.cached || 0;
+      }
     }
 
     return stats;

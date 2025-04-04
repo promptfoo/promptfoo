@@ -3,13 +3,13 @@ import CompareIcon from '@mui/icons-material/Compare';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import MenuItem from '@mui/material/MenuItem';
-import Tooltip from '@mui/material/Tooltip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import { useStore } from './store';
-import type { ResultLightweightWithLabel } from './types';
 
+/**
+ * Menu item that opens a dialog to select an eval to compare with the current eval
+ */
 interface CompareEvalMenuItemProps {
-  initialEvals: ResultLightweightWithLabel[];
   onComparisonEvalSelected: (evalId: string) => void;
 }
 
@@ -32,20 +32,16 @@ function CompareEvalMenuItem({ onComparisonEvalSelected }: CompareEvalMenuItemPr
 
   return (
     <>
-      <Tooltip title="Combine this eval with another eval run" placement="left">
-        <MenuItem onClick={handleOpenDialog}>
-          <ListItemIcon>
-            <CompareIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Compare with another eval</ListItemText>
-        </MenuItem>
-      </Tooltip>
+      <MenuItem onClick={handleOpenDialog}>
+        <ListItemIcon>
+          <CompareIcon fontSize="small" />
+        </ListItemIcon>
+        <ListItemText primary="Compare with..." />
+      </MenuItem>
       <EvalSelectorDialog
         open={dialogOpen}
         onClose={handleCloseDialog}
-        onEvalSelected={(evalId) => {
-          handleEvalSelected(evalId);
-        }}
+        onEvalSelected={handleEvalSelected}
         title="Select an eval to compare"
         description="Only evals with the same dataset can be compared."
         focusedEvalId={currentEvalId ?? undefined}
