@@ -1,14 +1,13 @@
 import { useMemo, useEffect, useState } from 'react';
 import { callApi } from '@app/utils/api';
 import { Box, Typography, Paper, CircularProgress, useTheme } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import {
   DataGrid,
   type GridColDef,
   GridToolbarContainer,
   GridToolbarColumnsButton,
   GridToolbarFilterButton,
-  GridToolbarDensitySelector,
-  GridToolbarExport,
   GridToolbarQuickFilter,
   type GridRowSelectionModel,
   type GridRenderCellParams,
@@ -40,8 +39,6 @@ function CustomToolbar({ showUtilityButtons }: { showUtilityButtons: boolean }) 
         <Box sx={{ display: 'flex', gap: 1 }}>
           <GridToolbarColumnsButton />
           <GridToolbarFilterButton />
-          <GridToolbarDensitySelector />
-          <GridToolbarExport />
         </Box>
       )}
       <Box sx={{ flexGrow: 1 }} />
@@ -110,17 +107,22 @@ export default function EvalsDataGrid({
           field: 'evalId',
           headerName: 'ID',
           flex: 1,
+          headerAlign: 'left',
+          align: 'left',
+          sx: {
+            paddingLeft: 2,
+          },
         },
         {
           field: 'createdAt',
           headerName: 'Created',
-          flex: 1,
+          flex: 0.7,
           valueFormatter: (value: Eval['createdAt']) => new Date(value).toLocaleString(),
         },
         {
           field: 'description',
           headerName: 'Description',
-          flex: 1,
+          flex: 2,
           valueGetter: (value: Eval['description'], row: Eval) => value ?? row.label,
         },
         {
@@ -143,7 +145,6 @@ export default function EvalsDataGrid({
                   height: '100%',
                   display: 'flex',
                   alignItems: 'center',
-                  // `type: number` gets overwritten by flex; manually justify content.
                   justifyContent: 'end',
                 }}
               >
@@ -157,18 +158,36 @@ export default function EvalsDataGrid({
           headerName: '# Tests',
           type: 'number',
           flex: 0.5,
+          headerAlign: 'right',
+          align: 'right',
+          sx: {
+            paddingRight: 2,
+          },
         },
       ].filter(Boolean) as GridColDef<Eval>[],
     [],
   );
 
   return (
-    <Paper elevation={2} sx={{ height: '100%' }}>
+    <Paper
+      elevation={0}
+      sx={{
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        borderTop: 1,
+        borderColor: (theme) => alpha(theme.palette.divider, 0.1),
+        boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.common.black, 0.05)}`,
+        bgcolor: 'background.paper',
+        borderRadius: 1,
+      }}
+    >
       <DataGrid
         rows={evals}
         columns={columns}
         loading={isLoading}
         getRowId={(row) => row.evalId}
+        pageSizeOptions={[25, 50, 100]}
         slots={{
           toolbar: CustomToolbar,
           loadingOverlay: () => (
@@ -238,10 +257,24 @@ export default function EvalsDataGrid({
           },
           '& .MuiDataGrid-cell': {
             borderColor: 'divider',
+            display: 'flex',
+            alignItems: 'center',
+          },
+          '& .MuiDataGrid-cell:first-of-type': {
+            paddingLeft: '16px',
+          },
+          '& .MuiDataGrid-cell:last-child': {
+            paddingRight: '16px',
           },
           '& .MuiDataGrid-columnHeaders': {
             backgroundColor: 'background.default',
             borderColor: 'divider',
+          },
+          '& .MuiDataGrid-columnHeader:first-of-type .MuiDataGrid-columnHeaderTitleContainer': {
+            paddingLeft: '16px',
+          },
+          '& .MuiDataGrid-columnHeader:last-child .MuiDataGrid-columnHeaderTitleContainer': {
+            paddingRight: '16px',
           },
           '& .MuiDataGrid-selectedRow': {
             backgroundColor: 'action.selected',
@@ -254,10 +287,9 @@ export default function EvalsDataGrid({
             sortModel: [{ field: 'createdAt', sort: 'desc' }],
           },
           pagination: {
-            paginationModel: { pageSize: 25 },
+            paginationModel: { pageSize: 100, page: 0 },
           },
         }}
-        pageSizeOptions={[10, 25, 50, 100]}
       />
     </Paper>
   );

@@ -13,8 +13,6 @@ import {
   GridToolbarContainer,
   GridToolbarColumnsButton,
   GridToolbarFilterButton,
-  GridToolbarDensitySelector,
-  GridToolbarExport,
   GridToolbarQuickFilter,
 } from '@mui/x-data-grid';
 import type { TestCase, TestCasesWithMetadata } from '@promptfoo/types';
@@ -35,8 +33,6 @@ function CustomToolbar({ showUtilityButtons }: { showUtilityButtons: boolean }) 
         <Box sx={{ display: 'flex', gap: 1 }}>
           <GridToolbarColumnsButton />
           <GridToolbarFilterButton />
-          <GridToolbarDensitySelector />
-          <GridToolbarExport />
         </Box>
       )}
       <Box sx={{ flexGrow: 1 }} />

@@ -13,10 +13,6 @@ import {
   GridToolbarContainer,
   GridToolbarColumnsButton,
   GridToolbarFilterButton,
-  GridToolbarDensitySelector,
-  GridToolbarExportContainer,
-  GridCsvExportMenuItem,
-  GridPrintExportMenuItem,
   GridToolbarQuickFilter,
   type GridExportMenuItemProps,
   useGridApiContext,
@@ -66,24 +62,16 @@ function JsonExportMenuItem(props: GridExportMenuItemProps<{}>) {
   return <MenuItem onClick={handleClick}>Export JSON</MenuItem>;
 }
 
-const GridToolbarExport = () => (
-  <GridToolbarExportContainer>
-    <GridCsvExportMenuItem />
-    <JsonExportMenuItem />
-    <GridPrintExportMenuItem />
-  </GridToolbarExportContainer>
-);
-
-function CustomToolbar() {
+function CustomToolbar({ showUtilityButtons }: { showUtilityButtons: boolean }) {
   const theme = useTheme();
   return (
     <GridToolbarContainer sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
-      <Box sx={{ display: 'flex', gap: 1 }}>
-        <GridToolbarColumnsButton />
-        <GridToolbarFilterButton />
-        <GridToolbarDensitySelector />
-        <GridToolbarExport />
-      </Box>
+      {showUtilityButtons && (
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <GridToolbarColumnsButton />
+          <GridToolbarFilterButton />
+        </Box>
+      )}
       <Box sx={{ flexGrow: 1 }} />
       <GridToolbarQuickFilter
         sx={{
