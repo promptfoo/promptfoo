@@ -116,6 +116,24 @@ sharing:
   appBaseUrl: http://localhost:3000
 ```
 
+### Configuration Priority
+
+When using a self-hosted instance, promptfoo resolves sharing URLs in this order:
+
+1. Config file (`sharing.apiBaseUrl` and `sharing.appBaseUrl` in promptfooconfig.yaml)
+2. Environment variables (`PROMPTFOO_REMOTE_API_BASE_URL` and `PROMPTFOO_REMOTE_APP_BASE_URL`)
+3. Cloud configuration (if you've logged in with `promptfoo auth login`)
+4. Default values (api.promptfoo.app and promptfoo.app)
+
+If your shared URLs don't point to your self-hosted instance, ensure you're not logged into the cloud service or try setting the configuration directly in your config file.
+
+### URL Format
+
+When configured correctly, your self-hosted server will:
+
+- Receive data at: `http://your-server:3000/api/eval`
+- Generate links like: `http://your-server:3000/eval/{evalId}`
+
 ## Specifications
 
 Promptfoo comes in two parts:
