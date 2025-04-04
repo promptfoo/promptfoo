@@ -1,5 +1,9 @@
 ---
 sidebar_label: Running Red Teams 
+sidebar_position: 40
+title: Running Red Teams in Promptfoo Cloud
+description: Learn how to run red teams in Promptfoo Cloud
+keywords: [red teams, red team, red teaming, red teaming in promptfoo, red teaming in promptfoo cloud, red teaming in promptfoo app, red teaming in promptfoo dev]
 ---
 
 # Running Red Teams 
@@ -72,5 +76,4 @@ When you enter the command into your terminal, Promptfoo will generate the adver
 
 Once generated, Promptfoo will execute the test cases against your target and upload the results to Promptfoo Cloud. You can review the results by clicking on the evaluation link that is generated in the terminal or by navigating to Promptfoo Cloud. 
 
-For more information on how to view and analyze the results, please refer to the [findings](/docs/cloud/findings.md/) documentation. 
 

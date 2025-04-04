@@ -1,5 +1,9 @@
 ---
 sidebar_label: Service Accounts 
+sidebar_position: 30
+title: Creating and Managing Service Accounts in Promptfoo Cloud
+description: Learn how to create and manage service accounts in Promptfoo Cloud
+keywords: [service accounts, api keys, api, keys, api key, api keys, service account, service accounts, api key, api keys, service account, service accounts, api key, api keys]
 ---
 
 # Service Accounts

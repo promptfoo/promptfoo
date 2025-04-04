@@ -1,5 +1,9 @@
 ---
-sidebar_label: Findings and Reports 
+sidebar_label: Findings and Reports
+sidebar_position: 50
+title: Findings and Reports in Promptfoo Cloud
+description: Learn how to view and manage findings and reports in Promptfoo Cloud
+keywords: [findings, reports, vulnerabilities, red team, red teaming, red teaming in promptfoo, red teaming in promptfoo cloud, red teaming in promptfoo app, red teaming in promptfoo dev]
 ---
 
 # Findings and Reports 

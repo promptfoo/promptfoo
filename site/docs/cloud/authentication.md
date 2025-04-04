@@ -1,5 +1,9 @@
 ---
 sidebar_label: Authentication 
+sidebar_position: 10
+title: Authenticating into Promptfoo Cloud
+description: Learn how to authenticate into Promptfoo Cloud
+keywords: [authentication, login, logout, promptfoo cloud, promptfoo app]
 ---
 
 # Authentication
