@@ -293,7 +293,7 @@ describe('guardrails', () => {
 
       const result = await guardrails.adaptive(request);
       expect(fetchWithCache).toHaveBeenCalledWith(
-        'https://api.promptfoo.dev/v1/adaptive',
+        'https://api.promptfoo.app/v1/adaptive',
         {
           method: 'POST',
           headers: {
@@ -329,7 +329,7 @@ describe('guardrails', () => {
 
       const result = await guardrails.adaptive(request);
       expect(fetchWithCache).toHaveBeenCalledWith(
-        'https://api.promptfoo.dev/v1/adaptive',
+        'https://api.promptfoo.app/v1/adaptive',
         {
           method: 'POST',
           headers: {

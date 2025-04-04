@@ -9,7 +9,7 @@ jest.mock('../../../src/cache', () => ({
 }));
 jest.mock('../../../src/redteam/remoteGeneration', () => ({
   ...jest.requireActual('../../../src/redteam/remoteGeneration'),
-  getRemoteGenerationUrl: jest.fn().mockReturnValue('https://api.promptfoo.app/task'),
+  getRemoteGenerationUrl: jest.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task'),
 }));
 
 describe('System Purpose Extractor', () => {
@@ -30,7 +30,7 @@ describe('System Purpose Extractor', () => {
       id: jest.fn().mockReturnValue('test-provider'),
     };
     jest.clearAllMocks();
-    jest.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.app/task');
+    jest.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.app/api/v1/task');
   });
 
   afterEach(() => {
@@ -51,7 +51,7 @@ describe('System Purpose Extractor', () => {
 
     expect(result).toBe('Remote extracted purpose');
     expect(fetchWithCache).toHaveBeenCalledWith(
-      'https://api.promptfoo.app/task',
+      'https://api.promptfoo.app/api/v1/task',
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({

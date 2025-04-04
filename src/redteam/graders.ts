@@ -4,6 +4,7 @@ import { BeavertailsGrader } from './plugins/beavertails';
 import { BflaGrader } from './plugins/bfla';
 import { BolaGrader } from './plugins/bola';
 import { CompetitorsGrader } from './plugins/competitors';
+import { CcaGrader } from './plugins/contextComplianceAttack';
 import { ContractsGrader } from './plugins/contracts';
 import { CrossSessionLeakGrader } from './plugins/crossSessionLeak';
 import { DebugAccessGrader } from './plugins/debugAccess';
@@ -51,6 +52,7 @@ import { ShellInjectionGrader } from './plugins/shellInjection';
 import { SqlInjectionGrader } from './plugins/sqlInjection';
 import { SsrfGrader } from './plugins/ssrf';
 import { ToolDiscoveryGrader } from './plugins/toolDiscovery';
+import { ToolDiscoveryMultiTurnGrader } from './plugins/toolDiscoveryMultiTurn';
 import { UnsafeBenchGrader } from './plugins/unsafebench';
 import type { RedteamAssertionTypes } from './types';
 
@@ -59,12 +61,15 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:beavertails': new BeavertailsGrader(),
   'promptfoo:redteam:bfla': new BflaGrader(),
   'promptfoo:redteam:bola': new BolaGrader(),
+  'promptfoo:redteam:cca': new CcaGrader(),
   'promptfoo:redteam:competitors': new CompetitorsGrader(),
   'promptfoo:redteam:contracts': new ContractsGrader(),
   'promptfoo:redteam:cross-session-leak': new CrossSessionLeakGrader(),
   'promptfoo:redteam:debug-access': new DebugAccessGrader(),
   'promptfoo:redteam:divergent-repetition': new DivergentRepetitionGrader(),
   'promptfoo:redteam:excessive-agency': new ExcessiveAgencyGrader(),
+  'promptfoo:redteam:tool-discovery': new ToolDiscoveryGrader(),
+  'promptfoo:redteam:tool-discovery:multi-turn': new ToolDiscoveryMultiTurnGrader(),
   'promptfoo:redteam:hallucination': new HallucinationGrader(),
   'promptfoo:redteam:harmbench': new HarmbenchGrader(),
   'promptfoo:redteam:harmful': new HarmfulGrader(),
@@ -115,7 +120,6 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:shell-injection': new ShellInjectionGrader(),
   'promptfoo:redteam:sql-injection': new SqlInjectionGrader(),
   'promptfoo:redteam:ssrf': new SsrfGrader(),
-  'promptfoo:redteam:tool-discovery': new ToolDiscoveryGrader(),
   'promptfoo:redteam:unsafebench': new UnsafeBenchGrader(),
 };
 

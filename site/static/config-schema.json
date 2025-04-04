@@ -1004,6 +1004,7 @@
                           "bfla",
                           "bias",
                           "bola",
+                          "cca",
                           "competitors",
                           "contracts",
                           "cross-session-leak",
@@ -1125,6 +1126,7 @@
                           "ssrf",
                           "system-prompt-override",
                           "tool-discovery",
+                          "tool-discovery:multi-turn",
                           "toxicity",
                           "unsafebench"
                         ]
@@ -1149,6 +1151,7 @@
                               "bfla",
                               "bias",
                               "bola",
+                              "cca",
                               "competitors",
                               "contracts",
                               "cross-session-leak",
@@ -1270,6 +1273,7 @@
                               "ssrf",
                               "system-prompt-override",
                               "tool-discovery",
+                              "tool-discovery:multi-turn",
                               "toxicity",
                               "unsafebench"
                             ]

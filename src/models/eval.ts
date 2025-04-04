@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { and, desc, eq, like, sql } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { getDb } from '../database';
 import {
@@ -26,6 +26,7 @@ import type {
   Prompt,
   ResultsFile,
   UnifiedConfig,
+  EvalSummary,
 } from '../types';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
@@ -517,48 +518,72 @@ export default class Eval {
   }
 }
 
-export async function getSummaryOfLatestEvals(
-  limit: number = DEFAULT_QUERY_LIMIT,
-  filterDescription?: string,
-  datasetId?: string,
-) {
+/**
+ * Queries summaries of all evals, optionally for a given dataset.
+ *
+ * @param datasetId - An optional dataset ID to filter by.
+ * @returns A list of eval summaries.
+ */
+export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[]> {
   const db = getDb();
-  const startTime = performance.now();
-  const query = db
+
+  const results = db
     .select({
       evalId: evalsTable.id,
       createdAt: evalsTable.createdAt,
       description: evalsTable.description,
-      numTests: sql`COUNT(DISTINCT ${evalResultsTable.testIdx})`.as('numTests'),
       datasetId: evalsToDatasetsTable.datasetId,
       isRedteam: sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`,
+      prompts: evalsTable.prompts,
     })
     .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
-    .leftJoin(evalResultsTable, eq(evalsTable.id, evalResultsTable.evalId))
-    .where(
-      and(
-        datasetId ? eq(evalsToDatasetsTable.datasetId, datasetId) : undefined,
-        filterDescription ? like(evalsTable.description, `%${filterDescription}%`) : undefined,
-        eq(evalsTable.results, {}),
-      ),
-    )
-    .groupBy(evalsTable.id);
+    .where(datasetId ? eq(evalsToDatasetsTable.datasetId, datasetId) : undefined)
+    .all();
 
-  const results = query.orderBy(desc(evalsTable.createdAt)).limit(limit).all();
+  /**
+   * Deserialize the evals. A few things to note:
+   *
+   * - Test statistics are derived from the prompt metrics as this is the only reliable source of truth
+   * that's written to the evals table.
+   */
+  return results.map((result) => {
+    const passCount =
+      result.prompts?.reduce((memo, prompt) => {
+        // TODO(will): Verify whether prompt.metrics *should* be required.
+        invariant(!!prompt.metrics, 'Prompt metrics are required');
+        return memo + prompt.metrics!.testPassCount;
+      }, 0) ?? 0;
 
-  const mappedResults = results.map((result) => ({
-    evalId: result.evalId,
-    createdAt: result.createdAt,
-    description: result.description,
-    numTests: (result.numTests as number) || 0,
-    datasetId: result.datasetId,
-    isRedteam: result.isRedteam,
-  }));
+    // All prompts should have the same number of test cases:
+    const testCounts = result.prompts?.map((p) => {
+      return (
+        (p.metrics?.testPassCount ?? 0) +
+        (p.metrics?.testFailCount ?? 0) +
+        (p.metrics?.testErrorCount ?? 0)
+      );
+    }) ?? [0];
 
-  const endTime = performance.now();
-  const executionTime = endTime - startTime;
-  logger.debug(`listPreviousResults execution time: ${executionTime.toFixed(2)}ms`);
+    invariant(
+      testCounts.every((t) => t === testCounts[0]),
+      'All prompts must have the same number of test cases',
+    );
 
-  return mappedResults;
+    // Derive the number of tests from the first prompt.
+    const testCount = testCounts.length > 0 ? testCounts[0] : 0;
+
+    // Test count * prompt count
+    const testRunCount = testCount * (result.prompts?.length ?? 0);
+
+    return {
+      evalId: result.evalId,
+      createdAt: result.createdAt,
+      description: result.description,
+      numTests: testCount,
+      datasetId: result.datasetId,
+      isRedteam: result.isRedteam,
+      passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
+      label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
+    };
+  });
 }

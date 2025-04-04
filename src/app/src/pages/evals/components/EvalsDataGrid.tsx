@@ -9,9 +9,11 @@ import {
   GridToolbarColumnsButton,
   GridToolbarFilterButton,
   GridToolbarDensitySelector,
-  GridToolbarExport,
   GridToolbarQuickFilter,
   type GridRowSelectionModel,
+  type GridRenderCellParams,
+  GridToolbarExportContainer,
+  GridCsvExportMenuItem,
 } from '@mui/x-data-grid';
 
 type Eval = {
@@ -22,6 +24,7 @@ type Eval = {
   isRedteam: number;
   label: string;
   numTests: number;
+  passRate: number;
 };
 
 // augment the props for the toolbar slot
@@ -30,6 +33,12 @@ declare module '@mui/x-data-grid' {
     showUtilityButtons: boolean;
   }
 }
+
+const GridToolbarExport = () => (
+  <GridToolbarExportContainer>
+    <GridCsvExportMenuItem />
+  </GridToolbarExportContainer>
+);
 
 function CustomToolbar({ showUtilityButtons }: { showUtilityButtons: boolean }) {
   const theme = useTheme();
@@ -131,9 +140,39 @@ export default function EvalsDataGrid({
           valueGetter: (value: Eval['description'], row: Eval) => value ?? row.label,
         },
         {
+          field: 'passRate',
+          headerName: 'Pass Rate',
+          flex: 0.5,
+          type: 'number',
+          renderCell: (params: GridRenderCellParams<Eval>) => (
+            <>
+              <Typography
+                variant="body2"
+                color={
+                  params.value >= 90
+                    ? 'success.main'
+                    : params.value >= 60
+                      ? 'warning.main'
+                      : 'error.main'
+                }
+                sx={{
+                  height: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  // `type: number` gets overwritten by flex; manually justify content.
+                  justifyContent: 'end',
+                }}
+              >
+                {params.value.toFixed(2)}%
+              </Typography>
+            </>
+          ),
+        },
+        {
           field: 'numTests',
           headerName: '# Tests',
-          flex: 1,
+          type: 'number',
+          flex: 0.5,
         },
       ].filter(Boolean) as GridColDef<Eval>[],
     [],
@@ -205,7 +244,7 @@ export default function EvalsDataGrid({
   );
 
   return (
-    <Paper elevation={2} sx={{ height: '100%', overflow: 'hidden' }}>
+    <Paper elevation={2} sx={{ height: '100%' }}>
       <DataGrid
         rows={evals}
         columns={columns}

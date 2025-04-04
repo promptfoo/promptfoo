@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import dedent from 'dedent';
+import { DEFAULT_SHARE_VIEW_BASE_URL } from '../constants';
 import logger from '../logger';
 import Eval from '../models/eval';
 import { createShareableUrl, isSharingEnabled } from '../share';
@@ -8,14 +9,16 @@ import telemetry from '../telemetry';
 import { setupEnv } from '../util';
 
 export async function notCloudEnabledShareInstructions() {
-  logger.info(`» You need to have a cloud account to securely share your results. \n`);
+  logger.info(`» You need to have a cloud account to securely share your results.`);
+  logger.info('');
+
+  const cloudUrl = DEFAULT_SHARE_VIEW_BASE_URL;
+  const welcomeUrl = `${cloudUrl}/welcome`;
+
+  logger.info(`1. Please go to ${chalk.greenBright.bold(cloudUrl)} to sign up or login.`);
 
   logger.info(
-    `1. Please go to ${chalk.greenBright.bold('https://promptfoo.app')} to sign up or login.`,
-  );
-
-  logger.info(
-    `2. Follow the instructions at ${chalk.greenBright.bold('https://promptfoo.app/welcome')} to login to the command line.`,
+    `2. Follow the instructions at ${chalk.greenBright.bold(welcomeUrl)} to login to the command line.`,
   );
   logger.info(`3. Run ${chalk.greenBright.bold('promptfoo share')}`);
 }
@@ -65,14 +68,20 @@ export function shareCommand(program: Command) {
         let eval_: Eval | undefined | null = null;
         if (evalId) {
           eval_ = await Eval.findById(evalId);
+          if (!eval_) {
+            logger.error(`Could not find eval with ID ${chalk.bold(evalId)}.`);
+            process.exitCode = 1;
+            return;
+          }
         } else {
           eval_ = await Eval.latest();
+          if (!eval_) {
+            logger.error('Could not load results. Do you need to run `promptfoo eval` first?');
+            process.exitCode = 1;
+            return;
+          }
         }
-        if (!eval_) {
-          logger.error('Could not load results. Do you need to run `promptfoo eval` first?');
-          process.exitCode = 1;
-          return;
-        }
+
         if (eval_.prompts.length === 0) {
           // FIXME(ian): Handle this on the server side.
           logger.error(
