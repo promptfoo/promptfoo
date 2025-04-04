@@ -1,7 +1,6 @@
 import { fetchWithCache } from '../src/cache';
 import guardrails, { type AdaptiveRequest } from '../src/guardrails';
 
-// Mock the cache module
 jest.mock('../src/cache', () => ({
   fetchWithCache: jest.fn(),
 }));

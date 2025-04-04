@@ -25,7 +25,6 @@ describe('getGraderById', () => {
       'promptfoo:redteam:tool-discovery:multi-turn',
     );
     expect(toolDiscoveryMultiTurnGrader).toBeInstanceOf(ToolDiscoveryMultiTurnGrader);
-
     const unsafebenchGrader = getGraderById('promptfoo:redteam:unsafebench');
     expect(unsafebenchGrader).toBeInstanceOf(UnsafeBenchGrader);
     const plinyGrader = getGraderById('promptfoo:redteam:pliny');
