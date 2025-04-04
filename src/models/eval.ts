@@ -535,24 +535,30 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
   return results.map((result) => {
     const passCount =
       result.prompts?.reduce((memo, prompt) => {
+        // TODO(will): Verify whether prompt.metrics *should* be required.
         invariant(!!prompt.metrics, 'Prompt metrics are required');
         return memo + prompt.metrics!.testPassCount;
       }, 0) ?? 0;
 
-    const testRunCount =
-      result.prompts?.reduce((memo, prompt) => {
-        return (
-          memo +
-          (prompt.metrics?.testPassCount ?? 0) +
-          (prompt.metrics?.testFailCount ?? 0) +
-          (prompt.metrics?.testErrorCount ?? 0)
-        );
-      }, 0) ?? 0;
+    // All prompts should have the same number of test cases:
+    const testCounts = result.prompts?.map((p) => {
+      return (
+        (p.metrics?.testPassCount ?? 0) +
+        (p.metrics?.testFailCount ?? 0) +
+        (p.metrics?.testErrorCount ?? 0)
+      );
+    }) ?? [0];
 
-    const testCount =
-      (result.prompts?.[0]?.metrics?.testPassCount ?? 0) +
-      (result.prompts?.[0]?.metrics?.testFailCount ?? 0) +
-      (result.prompts?.[0]?.metrics?.testErrorCount ?? 0);
+    invariant(
+      testCounts.every((t) => t === testCounts[0]),
+      'All prompts must have the same number of test cases',
+    );
+
+    // Derive the number of tests from the first prompt.
+    const testCount = testCounts.length > 0 ? testCounts[0] : 0;
+
+    // Test count * prompt count
+    const testRunCount = testCount * (result.prompts?.length ?? 0);
 
     return {
       evalId: result.evalId,
