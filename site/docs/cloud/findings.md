@@ -44,6 +44,17 @@ The evals section will display all the test cases that were run during the scan,
 
 You can modify the status of the finding as either a pass or failure, provide comments on the finding, view the vulnerability report associated with the eval result, and copy the eval result to your clipboard. 
 
+When reviewing an eval, there are also multiple ways that you can export the results, including: 
+
+- **Export to CSV**: You can export the eval results as a CSV file. 
+- **Export to JSON**: You can export the eval results as a JSON file. 
+- **Download Burp Suite Payloads**: Download the adversarial probes as payloads that can be imported into Burp Suite. 
+- **Download DPO JSON**: Download the eval results as a DPO JSON file. 
+- **Download Human Eval Test YAML**: Evaluate the eval results for performance in code-related tasks. 
+- **Download the failed test config**: Download a configuration file containing only the failed tests to focus on fixing just the tests that need attention.
+
+![Eval Actions](/img/enterprise-docs/export-results.gif)
+
 ## Filtering and Sorting Findings 
 
 The "Evals" section will display all of the evaluations and let you filter and sort through them based on the eval ID, date the scan was created, author, description, plugin, strategy, pass rate, or number of tests. You can then download the evals as a CSV file. 
@@ -51,6 +62,14 @@ The "Evals" section will display all of the evaluations and let you filter and s
 ![Filter Evals](/img/enterprise-docs/filter-evals.png)
 
 You can also search for findings [using Promptfoo's API](https://www.promptfoo.dev/docs/api-reference/#tag/default/GET/api/v1/results). 
+
+## Sharing Findings 
+
+There are several ways to share findings outside of the Promptfoo application. 
+
+- **Export to CSV**: You can export eval results as a CSV file in the "Evals" section or in the "Vulnerabilities" section. 
+- **Download Vulnerability Reports**: You can download point in time vulnerability reports for each scan in the "Reports" section. These reports will be exported as a PDF. 
+- **Use the Promptfoo API**: You can use the [Promptfoo API](https://www.promptfoo.dev/docs/api-reference/) to export findings, reports, and eval results. 
 
 
 
