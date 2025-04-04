@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import JsonTextField from '@app/components/JsonTextField';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -7,42 +8,80 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import TextField from '@mui/material/TextField';
-import type { ProviderOptions } from '@promptfoo/types';
+import Typography from '@mui/material/Typography';
 
 interface ProviderConfigDialogProps {
   open: boolean;
   providerId: string;
-  config: ProviderOptions['config'];
+  config?: Record<string, any>;
   onClose: () => void;
-  onSave: (providerId: string, config: ProviderOptions['config']) => void;
+  onSave: (providerId: string, config: Record<string, any>) => void;
 }
 
 const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
   open,
   providerId,
-  config,
+  config = {},
   onClose,
   onSave,
 }) => {
-  const [localConfig, setLocalConfig] = React.useState(config);
+  const [localConfig, setLocalConfig] = useState<Record<string, any>>(config);
+  const isAzureProvider = providerId.startsWith('azure:');
 
-  React.useEffect(() => {
+  // Helper function to check if a value has content
+  const hasContent = (val: any): boolean => {
+    return val !== undefined && val !== null && val !== '';
+  };
+
+  const isDeploymentIdValid = !isAzureProvider || hasContent(localConfig.deployment_id);
+
+  // Reset local config when the dialog opens or providerId changes
+  useEffect(() => {
     setLocalConfig(config);
-  }, [config]);
+  }, [open, providerId, config]);
 
   const handleSave = () => {
     onSave(providerId, localConfig);
   };
 
+  // Create an ordered list of keys with deployment_id first for Azure providers
+  const configKeys = React.useMemo(() => {
+    const keys = Object.keys(localConfig);
+    if (isAzureProvider) {
+      return ['deployment_id', ...keys.filter((key) => key !== 'deployment_id')];
+    }
+    return keys;
+  }, [localConfig, isAzureProvider]);
+
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
       <DialogTitle>
-        Edit {providerId.length > 50 ? providerId.slice(0, 50) + '...' : providerId}
+        Provider Configuration
+        <Typography
+          variant="subtitle1"
+          color="text.secondary"
+          sx={{ mt: 1, fontSize: '0.9rem', fontFamily: 'monospace' }}
+        >
+          {providerId}
+        </Typography>
       </DialogTitle>
       <DialogContent>
-        {Object.keys(localConfig).map((key) => {
+        {isAzureProvider && (
+          <Box mb={2}>
+            <Alert severity={isDeploymentIdValid ? 'info' : 'warning'}>
+              {isDeploymentIdValid
+                ? 'Azure OpenAI requires a deployment ID that matches your deployment name in the Azure portal.'
+                : 'You must specify a deployment ID for Azure OpenAI models. This is the name you gave your model deployment in the Azure portal.'}
+            </Alert>
+          </Box>
+        )}
+
+        {configKeys.map((key) => {
           const value = localConfig[key];
           let handleChange;
+          const isDeploymentId = isAzureProvider && key === 'deployment_id';
+          const isRequired = isDeploymentId;
+          const isValid = !isRequired || hasContent(value);
 
           if (
             typeof value === 'number' ||
@@ -77,12 +116,20 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
             return (
               <Box key={key} my={2}>
                 <TextField
-                  label={key}
-                  value={value}
+                  label={isRequired ? `${key} (Required)` : key}
+                  value={value === undefined ? '' : value}
                   onChange={handleChange}
                   fullWidth
+                  required={isRequired}
+                  error={isRequired && !isValid}
+                  helperText={
+                    isRequired && !isValid ? 'This field is required for Azure OpenAI' : ''
+                  }
                   InputLabelProps={{ shrink: true }}
                   type={typeof value === 'number' ? 'number' : 'text'}
+                  variant={isRequired ? 'outlined' : undefined}
+                  color={isRequired ? 'primary' : undefined}
+                  focused={isRequired && !isValid}
                 />
               </Box>
             );
@@ -107,7 +154,9 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button onClick={handleSave}>Save</Button>
+        <Button onClick={handleSave} disabled={!isDeploymentIdValid}>
+          Save
+        </Button>
       </DialogActions>
     </Dialog>
   );
