@@ -50,10 +50,6 @@ const sidebars = {
     },
     */
     {
-      type: 'doc',
-      id: 'cloud/index',
-    },
-    {
       type: 'category',
       label: 'Configuration',
       link: {

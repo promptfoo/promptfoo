@@ -2,8 +2,8 @@
 sidebar_label: Managing Roles and Teams
 sidebar_position: 20
 title: Managing Roles and Teams in Promptfoo Cloud
-description: Learn how to create and manage roles and teams in Promptfoo Cloud
-keywords: [roles, teams, permissions, users, organizations]
+description: Learn how to create teams, assign roles, and implement role-based access control (RBAC) in Promptfoo Cloud
+keywords: [roles, teams, permissions, users, organizations, rbac, access control]
 ---
 
 # Managing Roles and Teams
@@ -22,9 +22,9 @@ You can add users to a team by editing the team and clicking the "Add team membe
 
 You can also create service accounts at the team level, which will allow you to create API keys for programmatic access to Promptfoo Cloud. These are useful for CI/CD pipelines and automated testing.
 
-    :::note
-    Only system admins can create service accounts.
-    :::
+:::note
+Only system admins can create service accounts.
+:::
 
 ## Creating Roles
 
@@ -43,3 +43,8 @@ Promptfoo Cloud supports the following permissions:
 - **Manage Targets**: Create, edit, and delete targets
 - **View Results**: View issues and evaluations
 - **Manage Results**: Edit and delete evaluations and issues
+
+## See Also
+
+- [Authentication](./authentication.md)
+- [Service Accounts](./service_accounts.md)

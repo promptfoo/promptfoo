@@ -2,17 +2,9 @@
 sidebar_label: Running Red Teams
 sidebar_position: 40
 title: Running Red Teams in Promptfoo Cloud
-description: Learn how to run red teams in Promptfoo Cloud
+description: Learn how to configure and run red team security assessments for your LLM applications in Promptfoo Cloud
 keywords:
-  [
-    red teams,
-    red team,
-    red teaming,
-    red teaming in promptfoo,
-    red teaming in promptfoo cloud,
-    red teaming in promptfoo app,
-    red teaming in promptfoo dev,
-  ]
+  [red teams, red teaming, llm security testing, adversarial attacks, llm vulnerability scanning]
 ---
 
 # Running Red Teams
@@ -49,38 +41,44 @@ You can create plugin collections to share among your team. These plugin collect
 
 To create a plugin collection, navigate to the "Plugin Collections" tab under the "Redteam" navigation header and click "Create Plugin Collection".
 
-![Create Plugin Collection](/img/enterprise-docs/create-plugin-collection.gif)
+![Creating a new plugin collection](/img/enterprise-docs/create-plugin-collection.gif)
 
 ## Configuring Scans
 
 When you want to run a new red team scan, navigate to the "Redteam" navigation header and click on "Scan Configurations". You will see a list of all the scan configurations that your team has created. Click on "New Scan" to create a new scan.
 
-![Create Scan Configuration](/img/enterprise-docs/create-scan.png)
+![Create Scan Configuration interface](/img/enterprise-docs/create-scan.png)
 
 If you have already created a scan configuration from the open-source version of Promptfoo or local usage, you can import the YAML file to use it in Promptfoo Cloud.
 
 Click on "Create Scan" to configure a new scan. You will then be prompted to select a target. Alternatively, you can create a new target.
 
-![Select Target](/img/enterprise-docs/select-target.png)
+![Select Target screen](/img/enterprise-docs/select-target.png)
 
 Once you have selected a target, you will be prompted to select a plugin collection. If you do not have a plugin collection, you can create a new one.
 
-![Select Plugin Collection](/img/enterprise-docs/choose-plugins.png)
+![Select Plugin Collection screen](/img/enterprise-docs/choose-plugins.png)
 
 Once you have selected a plugin collection, you will be prompted to select the strategies. [Promptfoo strategies](https://www.promptfoo.dev/docs/red-team/strategies/) are the ways in which adversarial probes are delivered to maximize attack success rates.
 
-![Select Strategies](/img/enterprise-docs/select-strategies.png)
+![Select Strategies screen](/img/enterprise-docs/select-strategies.png)
 
 ## Running a Scan
 
-Once you have configured a scan by selecting a target, plugin collection, and strategies, you can generate a red team scan by navigating to the "Review" section. Click on "Save Configuration" for Promptfoo to generate a CLI command. You will need to [authenticate](/docs/cloud/authentication.md) into the CLI to run the scan and share the results.
+Once you have configured a scan by selecting a target, plugin collection, and strategies, you can generate a red team scan by navigating to the "Review" section. Click on "Save Configuration" for Promptfoo to generate a CLI command. You will need to [authenticate](./authentication.md) into the CLI to run the scan and share the results.
 
-![Run Scan](/img/enterprise-docs/run-scan.png)
+![Run Scan configuration screen](/img/enterprise-docs/run-scan.png)
 
 Alternatively, you can download the Promptfoo YAML file and run the scan locally.
 
 When you enter the command into your terminal, Promptfoo will generate the adversarial probes and write the test cases locally.
 
-![Run Scan Locally](/img/enterprise-docs/run-scan-cli.png)
+![Running scan in CLI](/img/enterprise-docs/run-scan-cli.png)
 
 Once generated, Promptfoo will execute the test cases against your target and upload the results to Promptfoo Cloud. You can review the results by clicking on the evaluation link that is generated in the terminal or by navigating to Promptfoo Cloud.
+
+## See Also
+
+- [Findings and Reports](./findings.md)
+- [Authentication](./authentication.md)
+- [Service Accounts](./service_accounts.md)
