@@ -29,16 +29,26 @@ const sidebars = {
       type: 'doc',
       id: 'getting-started',
     },
+    {
+      type: 'category',
+      label: 'Promptfoo Cloud',
+      link: {
+        type: 'doc',
+        id: 'cloud/index',
+      },
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'cloud/authentication' },
+        { type: 'doc', id: 'cloud/service_accounts' },
+        { type: 'doc', id: 'cloud/teams' },
+      ],
+    },
     /*
     {
       type: 'doc',
       id: 'key-concepts',
     },
     */
-    {
-      type: 'doc',
-      id: 'cloud/index',
-    },
     {
       type: 'category',
       label: 'Configuration',

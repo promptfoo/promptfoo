@@ -1,82 +1,59 @@
 ---
-sidebar_label: Promptfoo Cloud
+sidebar_label: Promptfoo Cloud & Enterprise
+title: Promptfoo Cloud & Enterprise - Secure LLM Application Testing
+description: Learn about Promptfoo's hosted cloud service and enterprise on-premises solutions for LLM security testing
+keywords:
+  [promptfoo cloud, promptfoo enterprise, llm security, llm testing, llm red teaming, llm scanning]
 ---
 
-# Promptfoo Cloud
+# Promptfoo Cloud & Enterprise
 
-Promptfoo's Cloud offering is a hosted version of Promptfoo that lets you securely and privately share evals with your team.
+Promptfoo offers two deployment options to meet your security needs:
 
-Once you create an organization, you will be able to invite other team members. Team members can configure their `promptfoo` clients to share evals with your organization.
+**Promptfoo Cloud** is our hosted SaaS solution that lets you securely scan your LLM applications without managing infrastructure.
 
-To learn more or request access contact us at [sales@promptfoo.dev](mailto:sales@promptfoo.dev).
+**Promptfoo Enterprise** is our on-premises solution that includes a dedicated runner for deployments behind your firewall.
 
-## Getting Started
+Both solutions offer a suite of tools to help you secure your LLM applications, including:
 
-Once you have access, you can log in to Promptfoo Cloud and start sharing your evals.
+- Robust RBAC controls to manage multiple users and teams
+- Teams-based configurability for customizing targets, plugins, and scan configurations
+- Detailed reporting and analytics to monitor the security of your LLM applications
+- Remediation suggestions to help you fix vulnerabilities
+- Advanced filtering to find and sort through evals
+- Sharing and exporting functions to integrate Promptfoo with your existing tools
 
-1.  **Install the Promptfoo CLI**
+Our platform works with any LLM application, agent, or foundation model that is live and ready for inference.
 
-    [&raquo; Read getting started for help installing the CLI](/docs/getting-started)
+![Promptfoo Dashboard (Cloud interface shown)](/img/enterprise-docs/promptfoo-dashboard.png)
 
-2.  **Get your API key from the cloud**
+## Deployment Options
 
-    Your API key is available at:
-    https://www.promptfoo.app/welcome
+We offer two deployment models:
 
-3.  **Run the command from the previous step in your CLI**
+- **Promptfoo Cloud**: Our fully-managed SaaS solution maintained by Promptfoo, allowing you to get started immediately with no infrastructure requirements.
 
-    ```bash
-    promptfoo auth login --host https://......
-    ```
+- **Promptfoo Enterprise**: Our self-hosted solution that can be deployed on any cloud provider, including AWS, Azure, and GCP. Includes a dedicated runner component for executing scans within your network perimeter.
 
-4.  **Share your evals**
+## Product Comparison
 
-        ```bash
-        promptfoo eval --share
-        ```
+| Feature                 | Promptfoo Cloud      | Promptfoo Enterprise     |
+| ----------------------- | -------------------- | ------------------------ |
+| Deployment              | Fully-managed SaaS   | Self-hosted, on-premises |
+| Infrastructure          | Managed by Promptfoo | Managed by your team     |
+| Dedicated Runner        | ❌                   | ✅                       |
+| Network Isolation       | ❌                   | ✅                       |
+| Red Teaming             | ✅                   | ✅                       |
+| Team Management         | ✅                   | ✅                       |
+| Vulnerability Detection | ✅                   | ✅                       |
+| Result Sharing          | ✅                   | ✅                       |
 
-            or
+Both products support [sharing evaluation results](https://www.promptfoo.dev/docs/usage/sharing) through shareable URLs, with privacy controls that match your deployment model. Cloud users can share within their organization, while Enterprise users can configure self-hosted sharing for complete control over data.
 
-        ```bash
-        promptfoo share
-        ```
+## Connection with Open-Source
 
-    :::tip
-    All of your evals are stored locally until you share them.
-    :::
+Both Promptfoo Cloud and Promptfoo Enterprise are fully compatible with the open-source version of Promptfoo. This means that you can use your existing open-source Promptfoo evals with either solution.
 
-5.  **View your evals**
+## Contacting Sales
 
-    View your organization's evals at [https://www.promptfoo.app](https://www.promptfoo.app)
-
-## Adding users
-
-To add users to your organization, open the menu in the top right corner of the page and click your Organization name. Then invite the user using the form at the bottom of the page.
-
-![Invite a user](/img/docs/cloud/invite-user.png)
-
-## Service Accounts
-
-Service accounts allow you to create API keys for programmatic access to Promptfoo Cloud. These are useful for CI/CD pipelines and automated testing.
-
-To create a service account:
-
-1. Navigate to your Organization page
-2. Scroll down to the Service Accounts section
-3. Click **Create Service Account**
-4. Enter a name for your service account
-5. Copy the API key that is generated.
-
-:::warning
-Make sure to copy your API key when it's first created. For security reasons, you won't be able to view it again after closing the dialog.
-:::
-
-![Create a service account](/img/docs/cloud/service-account-creation.gif)
-
-You can manage your service accounts from the Organization page, including creating new ones or deleting existing ones as needed.
-
-## Domains and Whitelisting
-
-Promptfoo requires access to [promptfoo.app](https://promptfoo.app), [api.promptfoo.app](https://api.promptfoo.app), and [api.promptfoo.dev](https://api.promptfoo.dev) to function.
-
-If you are using a proxy or VPN, you may need to add these domains to your whitelist.
+If you are interested in learning more about Promptfoo Cloud or Promptfoo Enterprise, please contact us at [sales@promptfoo.com](mailto:sales@promptfoo.com).

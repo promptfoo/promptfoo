@@ -15,7 +15,7 @@ We're now expanding to support developers in larger teams. We've developed new c
 
 Enterprise customers have unique needs beyond individual developers and small teams - they require additional oversight, reporting, and compliance measures.
 
-To meet the needs of larger teams, Promptfoo Enterprise offers:
+To meet the needs of larger teams, Promptfoo Cloud offers:
 
 ### Reports & Continuous Monitoring
 
@@ -58,4 +58,4 @@ To meet the needs of larger teams, Promptfoo Enterprise offers:
 - Priority support with a 24-hour SLA
 - Named account manager
 
-If your company is interested in signing up for Promptfoo Enterprise **[contact us](mailto:inquiries@promptfoo.dev)** so we can get you up and running with a proof of concept.
+If your company is interested in signing up for Promptfoo Cloud **[contact us](mailto:inquiries@promptfoo.dev)** so we can get you up and running with a proof of concept.
