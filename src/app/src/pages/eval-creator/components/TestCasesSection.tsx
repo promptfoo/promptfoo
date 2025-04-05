@@ -5,6 +5,11 @@ import Delete from '@mui/icons-material/Delete';
 import Edit from '@mui/icons-material/Edit';
 import Publish from '@mui/icons-material/Publish';
 import Button from '@mui/material/Button';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogContentText from '@mui/material/DialogContentText';
+import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
 import Stack from '@mui/material/Stack';
 import Table from '@mui/material/Table';
@@ -27,6 +32,8 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
   const { testCases, setTestCases } = useStore();
   const [editingTestCaseIndex, setEditingTestCaseIndex] = React.useState<number | null>(null);
   const [testCaseDialogOpen, setTestCaseDialogOpen] = React.useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
+  const [testCaseToDelete, setTestCaseToDelete] = React.useState<number | null>(null);
 
   const handleAddTestCase = (testCase: TestCase, shouldClose: boolean) => {
     if (editingTestCaseIndex === null) {
@@ -66,10 +73,21 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
 
   const handleRemoveTestCase = (event: React.MouseEvent, index: number) => {
     event.stopPropagation();
+    setTestCaseToDelete(index);
+    setDeleteDialogOpen(true);
+  };
 
-    if (confirm('Are you sure you want to delete this test case?')) {
-      setTestCases(testCases.filter((_, i) => i !== index));
+  const confirmDeleteTestCase = () => {
+    if (testCaseToDelete !== null) {
+      setTestCases(testCases.filter((_, i) => i !== testCaseToDelete));
+      setTestCaseToDelete(null);
     }
+    setDeleteDialogOpen(false);
+  };
+
+  const cancelDeleteTestCase = () => {
+    setTestCaseToDelete(null);
+    setDeleteDialogOpen(false);
   };
 
   const handleDuplicateTestCase = (event: React.MouseEvent, index: number) => {
@@ -99,6 +117,35 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
               </span>
             </Tooltip>
           </label>
+          {testCases.length === 0 && (
+            <Button
+              color="secondary"
+              onClick={() => {
+                const exampleTestCase: TestCase = {
+                  description: 'Fun animal adventure story',
+                  vars: {
+                    animal: 'penguin',
+                    location: 'tropical island',
+                  },
+                  assert: [
+                    {
+                      type: 'contains-any',
+                      value: ['penguin', 'adventure', 'tropical', 'island'],
+                    },
+                    {
+                      type: 'llm-rubric',
+                      value:
+                        'Is this a fun, child-friendly story featuring a penguin on a tropical island adventure?\n\nCriteria:\n1. Does it mention a penguin as the main character?\n2. Does the story take place on a tropical island?\n3. Is it entertaining and appropriate for children?\n4. Does it have a sense of adventure?',
+                    },
+                  ],
+                };
+                setTestCases([...testCases, exampleTestCase]);
+              }}
+              sx={{ mr: 1 }}
+            >
+              Add Example
+            </Button>
+          )}
           <Button color="primary" onClick={() => setTestCaseDialogOpen(true)} variant="contained">
             Add Test Case
           </Button>
@@ -186,6 +233,28 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
           setTestCaseDialogOpen(false);
         }}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={cancelDeleteTestCase}
+        aria-labelledby="delete-test-case-dialog-title"
+      >
+        <DialogTitle id="delete-test-case-dialog-title">Delete Test Case</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete this test case? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={cancelDeleteTestCase} color="primary">
+            Cancel
+          </Button>
+          <Button onClick={confirmDeleteTestCase} color="error" autoFocus>
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 };

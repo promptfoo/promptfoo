@@ -99,7 +99,7 @@ const RunTestSuiteButton: React.FC = () => {
           {progressPercent.toFixed(0)}% complete
         </>
       ) : (
-        'Run Evaluation'
+        'Run Eval'
       )}
     </Button>
   );

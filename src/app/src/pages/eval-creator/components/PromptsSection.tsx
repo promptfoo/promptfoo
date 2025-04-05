@@ -5,6 +5,11 @@ import Delete from '@mui/icons-material/Delete';
 import Edit from '@mui/icons-material/Edit';
 import Publish from '@mui/icons-material/Publish';
 import Button from '@mui/material/Button';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogContentText from '@mui/material/DialogContentText';
+import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
 import Stack from '@mui/material/Stack';
 import Table from '@mui/material/Table';
@@ -20,6 +25,8 @@ import './PromptsSection.css';
 const PromptsSection: React.FC = () => {
   const [promptDialogOpen, setPromptDialogOpen] = useState(false);
   const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [promptToDelete, setPromptToDelete] = useState<number | null>(null);
 
   const { prompts, setPrompts } = useStore();
   const newPromptInputRef = useRef<HTMLInputElement>(null);
@@ -64,10 +71,21 @@ const PromptsSection: React.FC = () => {
 
   const handleRemovePrompt = (event: React.MouseEvent, indexToRemove: number) => {
     event.stopPropagation();
+    setPromptToDelete(indexToRemove);
+    setDeleteDialogOpen(true);
+  };
 
-    if (confirm('Are you sure you want to remove this prompt?')) {
-      setPrompts(prompts.filter((_, index) => index !== indexToRemove));
+  const confirmDeletePrompt = () => {
+    if (promptToDelete !== null) {
+      setPrompts(prompts.filter((_, index) => index !== promptToDelete));
+      setPromptToDelete(null);
     }
+    setDeleteDialogOpen(false);
+  };
+
+  const cancelDeletePrompt = () => {
+    setPromptToDelete(null);
+    setDeleteDialogOpen(false);
   };
 
   return (
@@ -91,6 +109,19 @@ const PromptsSection: React.FC = () => {
               </span>
             </Tooltip>
           </label>
+          {prompts.length === 0 && (
+            <Button
+              color="secondary"
+              onClick={() => {
+                const examplePrompt =
+                  'Write a short, fun story about a {{animal}} going on an adventure in {{location}}. Make it entertaining and suitable for children.';
+                setPrompts([...prompts, examplePrompt]);
+              }}
+              sx={{ mr: 1 }}
+            >
+              Add Example
+            </Button>
+          )}
           <Button
             color="primary"
             onClick={() => {
@@ -176,6 +207,28 @@ const PromptsSection: React.FC = () => {
           setPromptDialogOpen(false);
         }}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={cancelDeletePrompt}
+        aria-labelledby="delete-prompt-dialog-title"
+      >
+        <DialogTitle id="delete-prompt-dialog-title">Delete Prompt</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete this prompt? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={cancelDeletePrompt} color="primary">
+            Cancel
+          </Button>
+          <Button onClick={confirmDeletePrompt} color="error" autoFocus>
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </div>
   );
 };
