@@ -71,6 +71,7 @@ There are several ways to share findings outside of the Promptfoo application:
 - **Export to CSV**: You can export eval results as a CSV file in the "Evals" section or in the "Vulnerabilities" section.
 - **Download Vulnerability Reports**: You can download point-in-time vulnerability reports for each scan in the "Reports" section. These reports will be exported as a PDF.
 - **Use the Promptfoo API**: You can use the [Promptfoo API](https://www.promptfoo.dev/docs/api-reference/) to export findings, reports, and eval results.
+- **Share via URL**: You can generate shareable URLs for your evaluation results using the `promptfoo share` command. [Learn more about sharing options](docs/usage/sharing.md).
 
 ## See Also
 
