@@ -6,7 +6,8 @@ import dedent from 'dedent';
  *
  * @module prompts
  */
-export * from './external/ragas';
+export * from '../external/prompts/ragas';
+
 export const DEFAULT_GRADING_PROMPT = JSON.stringify([
   {
     role: 'system',
