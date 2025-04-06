@@ -13,6 +13,7 @@ import Snackbar from '@mui/material/Snackbar';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import { styled } from '@mui/system';
 import yaml from 'js-yaml';
 // @ts-expect-error: No types available
 import { highlight, languages } from 'prismjs/components/prism-core';
@@ -43,6 +44,11 @@ const formatYamlWithSchema = (config: any): string => {
   const yamlContent = yaml.dump(config);
   return ensureSchemaComment(yamlContent);
 };
+
+const StyledLink = styled(Link)({
+  fontWeight: 'medium',
+  textDecoration: 'none',
+});
 
 const YamlEditorComponent: React.FC<YamlEditorProps> = ({
   initialConfig,
@@ -207,13 +213,9 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
             the promptfoo CLI.
           </Typography>
           <Typography variant="body2" sx={{ mt: 1 }}>
-            <Link
-              target="_blank"
-              to="https://promptfoo.dev/docs/configuration/guide"
-              sx={{ fontWeight: 'medium', textDecoration: 'none' }}
-            >
+            <StyledLink target="_blank" to="https://promptfoo.dev/docs/configuration/guide">
               View documentation →
-            </Link>
+            </StyledLink>
           </Typography>
         </Box>
         {!readOnly && (
