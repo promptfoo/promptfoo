@@ -1,11 +1,13 @@
 import { getEnvBool } from '../envars';
 import type { AssertionSet, GradingResult, ScoringFunction } from '../types';
-import type { BaseTokenUsage } from '../types/shared';
 import { isGradingResult } from '../types';
-import { validateTokenUsage } from '../validators/shared';
+import type { BaseTokenUsage } from '../types/shared';
+import { validateTokenUsage, accumulateTokenUsage } from '../validators/shared';
 
 // Define a non-optional version of the token usage for internal use
-export const DEFAULT_TOKENS_USED: Required<BaseTokenUsage> & { assertions: Required<BaseTokenUsage> } = {
+export const DEFAULT_TOKENS_USED: Required<BaseTokenUsage> & {
+  assertions: Required<BaseTokenUsage>;
+} = {
   total: 0,
   prompt: 0,
   completion: 0,
@@ -96,6 +98,25 @@ export class AssertionsResult {
       this.failedContentSafetyChecks = true;
     }
 
+    if (result.tokensUsed) {
+      // Validate token usage using the utility function
+      const validTokenUsage = validateTokenUsage(result.tokensUsed);
+
+      // Use the accumulateTokenUsage helper for main token usage
+      accumulateTokenUsage(this.tokensUsed, validTokenUsage);
+
+      // Process the assertions field if it exists
+      if (validTokenUsage.assertions) {
+        // Initialize assertions object if it doesn't exist (should already exist from DEFAULT_TOKENS_USED)
+        if (!this.tokensUsed.assertions) {
+          this.tokensUsed.assertions = { ...DEFAULT_TOKENS_USED.assertions };
+        }
+
+        // Use the accumulateTokenUsage helper for assertions token usage
+        accumulateTokenUsage(this.tokensUsed.assertions, validTokenUsage.assertions);
+      }
+    }
+
     if (metric) {
       this.namedScores[metric] = (this.namedScores[metric] || 0) + result.score;
     }
@@ -106,25 +127,6 @@ export class AssertionsResult {
           this.namedScores[metricName] = (this.namedScores[metricName] || 0) + score;
         }
       });
-    }
-
-    if (result.tokensUsed) {
-      // Validate token usage using the utility function
-      const validTokenUsage = validateTokenUsage(result.tokensUsed);
-      
-      this.tokensUsed.total += validTokenUsage.total || 0;
-      this.tokensUsed.prompt += validTokenUsage.prompt || 0;
-      this.tokensUsed.completion += validTokenUsage.completion || 0;
-      this.tokensUsed.cached += validTokenUsage.cached || 0;
-      
-      // Process the assertions field if it exists
-      if (validTokenUsage.assertions) {
-        // We know assertions exists in our DEFAULT_TOKENS_USED
-        this.tokensUsed.assertions.total += validTokenUsage.assertions.total || 0;
-        this.tokensUsed.assertions.prompt += validTokenUsage.assertions.prompt || 0;
-        this.tokensUsed.assertions.completion += validTokenUsage.assertions.completion || 0;
-        this.tokensUsed.assertions.cached += validTokenUsage.assertions.cached || 0;
-      }
     }
 
     if (result.pass) {

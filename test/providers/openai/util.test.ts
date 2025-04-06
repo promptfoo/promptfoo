@@ -101,6 +101,7 @@ describe('getTokenUsage', () => {
       total: 100,
       prompt: 40,
       completion: 60,
+      numRequests: 1,
       completionDetails: {
         reasoning: 20,
         acceptedPrediction: 30,

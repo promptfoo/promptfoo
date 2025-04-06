@@ -39,7 +39,7 @@ import invariant from './util/invariant';
 import { safeJsonStringify } from './util/json';
 import { sleep } from './util/time';
 import { transform, type TransformContext, TransformInputType } from './util/transform';
-import { validateTokenUsage } from './validators/shared';
+import { validateTokenUsage, accumulateTokenUsage } from './validators/shared';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
@@ -93,10 +93,10 @@ export function newTokenUsage(): Required<TokenUsage> {
     prompt: 0,
     total: 0,
   };
-  
+
   // Validate using our utility function
   validateTokenUsage(tokenUsage, true);
-  
+
   return tokenUsage as Required<TokenUsage>;
 }
 
@@ -321,12 +321,14 @@ export async function runEval({
       ret.success = checkResult.pass;
       ret.score = checkResult.score;
       ret.namedScores = checkResult.namedScores || {};
-      if (checkResult.tokensUsed) {
+      if (checkResult?.tokensUsed) {
+        // Also add assertion tokens to the main token counts for backward compatibility with tests
         ret.tokenUsage.total += checkResult.tokensUsed.total || 0;
         ret.tokenUsage.prompt += checkResult.tokensUsed.prompt || 0;
         ret.tokenUsage.completion += checkResult.tokensUsed.completion || 0;
         ret.tokenUsage.cached += checkResult.tokensUsed.cached || 0;
         ret.tokenUsage.numRequests += checkResult.tokensUsed.numRequests || 1;
+
         if (checkResult.tokensUsed.completionDetails) {
           ret.tokenUsage.completionDetails.reasoning! +=
             checkResult.tokensUsed.completionDetails.reasoning || 0;
@@ -335,23 +337,25 @@ export async function runEval({
           ret.tokenUsage.completionDetails.rejectedPrediction! +=
             checkResult.tokensUsed.completionDetails.rejectedPrediction || 0;
         }
-        
-        // Add token usage to assertions tracking - use non-null assertion for TypeScript
-        const assertions = ret.tokenUsage.assertions!;
-        assertions.total! += checkResult.tokensUsed.total || 0;
-        assertions.prompt! += checkResult.tokensUsed.prompt || 0;
-        assertions.completion! += checkResult.tokensUsed.completion || 0;
-        assertions.cached! += checkResult.tokensUsed.cached || 0;
-        assertions.numRequests! += checkResult.tokensUsed.numRequests || 1;
-        
-        if (checkResult.tokensUsed.completionDetails && assertions.completionDetails) {
-          assertions.completionDetails.reasoning! +=
-            checkResult.tokensUsed.completionDetails.reasoning || 0;
-          assertions.completionDetails.acceptedPrediction! +=
-            checkResult.tokensUsed.completionDetails.acceptedPrediction || 0;
-          assertions.completionDetails.rejectedPrediction! +=
-            checkResult.tokensUsed.completionDetails.rejectedPrediction || 0;
+
+        // Ensure assertions field exists
+        if (!ret.tokenUsage.assertions) {
+          ret.tokenUsage.assertions = {
+            cached: 0,
+            completion: 0,
+            prompt: 0,
+            total: 0,
+            numRequests: 0,
+            completionDetails: {
+              acceptedPrediction: 0,
+              reasoning: 0,
+              rejectedPrediction: 0,
+            },
+          };
         }
+
+        // Use the accumulateTokenUsage helper to add assertion tokens
+        accumulateTokenUsage(ret.tokenUsage.assertions, checkResult.tokensUsed);
       }
       ret.response = processedResponse;
       ret.gradingResult = checkResult;

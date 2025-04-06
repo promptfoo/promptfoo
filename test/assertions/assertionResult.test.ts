@@ -89,7 +89,7 @@ describe('AssertionsResult', () => {
     await expect(assertionsResult.testResult()).resolves.toMatchObject({
       namedScores: {
         [metric]: 1,
-      }
+      },
     });
   });
 
@@ -105,7 +105,7 @@ describe('AssertionsResult', () => {
     });
 
     await expect(assertionsResult.testResult()).resolves.toMatchObject({
-      componentResults: [resultWithoutTokensUsed]
+      componentResults: [resultWithoutTokensUsed],
     });
   });
 
