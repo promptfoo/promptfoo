@@ -68,7 +68,8 @@ For a complete list of 300+ models and detailed pricing, visit [OpenRouter Model
 
 ## Basic Configuration
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: openrouter:meta-llama/llama-4-scout:free
     config:
