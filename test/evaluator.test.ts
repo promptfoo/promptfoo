@@ -2404,7 +2404,7 @@ describe('runEval', () => {
     });
 
     expect(results[0].tokenUsage).toEqual({
-      total: 20, // 10 from provider + 5 from assertion
+      total: 20, // 10 from provider + 10 from assertion
       prompt: 10, // 5 from provider + 5 from assertion
       completion: 10, // 5 from provider + 5 from assertion
       cached: 0,
@@ -2416,9 +2416,15 @@ describe('runEval', () => {
       },
       assertions: {
         cached: 0,
-        completion: 0,
-        prompt: 0,
-        total: 0,
+        completion: 5,
+        prompt: 5,
+        total: 10,
+        numRequests: 1,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     });
   });

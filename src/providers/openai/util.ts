@@ -5,6 +5,7 @@ import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
 import { safeJsonStringify } from '../../util/json';
 import type { ProviderConfig } from '../shared';
 import { calculateCost } from '../shared';
+import { TokenUsageSchema, validateTokenUsage } from '../../validators/shared';
 
 const ajv = new Ajv();
 
@@ -308,11 +309,13 @@ export function failApiCall(err: any) {
 }
 
 export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
+  let tokenUsage: Partial<TokenUsage> = {};
+  
   if (data.usage) {
     if (cached) {
-      return { cached: data.usage.total_tokens, total: data.usage.total_tokens };
+      tokenUsage = { cached: data.usage.total_tokens, total: data.usage.total_tokens };
     } else {
-      return {
+      tokenUsage = {
         total: data.usage.total_tokens,
         prompt: data.usage.prompt_tokens || 0,
         completion: data.usage.completion_tokens || 0,
@@ -328,7 +331,9 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
       };
     }
   }
-  return {};
+  
+  // Use the new validation utility
+  return validateTokenUsage(tokenUsage, true);
 }
 
 export interface OpenAiFunction {

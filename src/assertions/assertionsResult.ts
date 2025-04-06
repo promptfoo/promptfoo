@@ -1,12 +1,33 @@
 import { getEnvBool } from '../envars';
 import type { AssertionSet, GradingResult, ScoringFunction } from '../types';
+import type { BaseTokenUsage } from '../types/shared';
 import { isGradingResult } from '../types';
+import { validateTokenUsage } from '../validators/shared';
 
-export const DEFAULT_TOKENS_USED = {
+// Define a non-optional version of the token usage for internal use
+export const DEFAULT_TOKENS_USED: Required<BaseTokenUsage> & { assertions: Required<BaseTokenUsage> } = {
   total: 0,
   prompt: 0,
   completion: 0,
   cached: 0,
+  numRequests: 0,
+  completionDetails: {
+    reasoning: 0,
+    acceptedPrediction: 0,
+    rejectedPrediction: 0,
+  },
+  assertions: {
+    total: 0,
+    prompt: 0,
+    completion: 0,
+    cached: 0,
+    numRequests: 0,
+    completionDetails: {
+      reasoning: 0,
+      acceptedPrediction: 0,
+      rejectedPrediction: 0,
+    },
+  },
 };
 
 interface ParentAssertionSet {
@@ -25,7 +46,7 @@ export class AssertionsResult {
     };
   }
 
-  private tokensUsed = {
+  private tokensUsed: typeof DEFAULT_TOKENS_USED = {
     ...DEFAULT_TOKENS_USED,
   };
   private threshold: number | undefined;
@@ -88,10 +109,22 @@ export class AssertionsResult {
     }
 
     if (result.tokensUsed) {
-      this.tokensUsed.total += result.tokensUsed.total || 0;
-      this.tokensUsed.prompt += result.tokensUsed.prompt || 0;
-      this.tokensUsed.completion += result.tokensUsed.completion || 0;
-      this.tokensUsed.cached += result.tokensUsed.cached || 0;
+      // Validate token usage using the utility function
+      const validTokenUsage = validateTokenUsage(result.tokensUsed);
+      
+      this.tokensUsed.total += validTokenUsage.total || 0;
+      this.tokensUsed.prompt += validTokenUsage.prompt || 0;
+      this.tokensUsed.completion += validTokenUsage.completion || 0;
+      this.tokensUsed.cached += validTokenUsage.cached || 0;
+      
+      // Process the assertions field if it exists
+      if (validTokenUsage.assertions) {
+        // We know assertions exists in our DEFAULT_TOKENS_USED
+        this.tokensUsed.assertions.total += validTokenUsage.assertions.total || 0;
+        this.tokensUsed.assertions.prompt += validTokenUsage.assertions.prompt || 0;
+        this.tokensUsed.assertions.completion += validTokenUsage.assertions.completion || 0;
+        this.tokensUsed.assertions.cached += validTokenUsage.assertions.cached || 0;
+      }
     }
 
     if (result.pass) {
@@ -146,12 +179,15 @@ export class AssertionsResult {
       }
     });
 
+    // Validate the final token usage before creating the result
+    const finalTokenUsage = validateTokenUsage(this.tokensUsed);
+
     this.result = {
       pass,
       score,
       reason,
       namedScores: this.namedScores,
-      tokensUsed: this.tokensUsed,
+      tokensUsed: finalTokenUsage,
       componentResults: flattenedComponentResults,
       assertion: null,
     };

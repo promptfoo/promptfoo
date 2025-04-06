@@ -39,6 +39,7 @@ import invariant from './util/invariant';
 import { safeJsonStringify } from './util/json';
 import { sleep } from './util/time';
 import { transform, type TransformContext, TransformInputType } from './util/transform';
+import { validateTokenUsage } from './validators/shared';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
@@ -68,12 +69,18 @@ export function isAllowedPrompt(prompt: Prompt, allowedPrompts: string[] | undef
 }
 
 export function newTokenUsage(): Required<TokenUsage> {
-  return {
+  const tokenUsage = {
     assertions: {
       cached: 0,
       completion: 0,
       prompt: 0,
       total: 0,
+      numRequests: 0,
+      completionDetails: {
+        acceptedPrediction: 0,
+        reasoning: 0,
+        rejectedPrediction: 0,
+      },
     },
     cached: 0,
     completion: 0,
@@ -86,6 +93,11 @@ export function newTokenUsage(): Required<TokenUsage> {
     prompt: 0,
     total: 0,
   };
+  
+  // Validate using our utility function
+  validateTokenUsage(tokenUsage, true);
+  
+  return tokenUsage as Required<TokenUsage>;
 }
 
 /**
@@ -321,6 +333,23 @@ export async function runEval({
           ret.tokenUsage.completionDetails.acceptedPrediction! +=
             checkResult.tokensUsed.completionDetails.acceptedPrediction || 0;
           ret.tokenUsage.completionDetails.rejectedPrediction! +=
+            checkResult.tokensUsed.completionDetails.rejectedPrediction || 0;
+        }
+        
+        // Add token usage to assertions tracking - use non-null assertion for TypeScript
+        const assertions = ret.tokenUsage.assertions!;
+        assertions.total! += checkResult.tokensUsed.total || 0;
+        assertions.prompt! += checkResult.tokensUsed.prompt || 0;
+        assertions.completion! += checkResult.tokensUsed.completion || 0;
+        assertions.cached! += checkResult.tokensUsed.cached || 0;
+        assertions.numRequests! += checkResult.tokensUsed.numRequests || 1;
+        
+        if (checkResult.tokensUsed.completionDetails && assertions.completionDetails) {
+          assertions.completionDetails.reasoning! +=
+            checkResult.tokensUsed.completionDetails.reasoning || 0;
+          assertions.completionDetails.acceptedPrediction! +=
+            checkResult.tokensUsed.completionDetails.acceptedPrediction || 0;
+          assertions.completionDetails.rejectedPrediction! +=
             checkResult.tokensUsed.completionDetails.rejectedPrediction || 0;
         }
       }

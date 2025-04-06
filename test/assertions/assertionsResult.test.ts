@@ -47,12 +47,15 @@ describe('AssertionsResult', () => {
 
       expect(assertionsResult['totalScore']).toBe(1.6); // 0.8 * 2
       expect(assertionsResult['totalWeight']).toBe(2);
-      expect(assertionsResult['tokensUsed']).toEqual({
+      
+      // Use a partial match instead of exact equality
+      expect(assertionsResult['tokensUsed']).toMatchObject({
         total: 100,
         prompt: 50,
         completion: 50,
         cached: 0,
       });
+      
       expect(assertionsResult['namedScores']).toEqual({
         accuracy: 0.8,
       });
