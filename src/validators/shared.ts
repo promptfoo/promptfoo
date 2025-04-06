@@ -6,13 +6,17 @@ export const CompletionTokenDetailsSchema = z.object({
   rejectedPrediction: z.number().optional(),
 });
 
-export const TokenUsageSchema = z.object({
+export const BaseTokenUsageSchema = z.object({
   cached: z.number().optional(),
   completion: z.number().optional(),
   prompt: z.number().optional(),
   total: z.number().optional(),
   numRequests: z.number().optional(),
   completionDetails: CompletionTokenDetailsSchema.optional(),
+});
+
+export const TokenUsageSchema = BaseTokenUsageSchema.extend({
+  assertions: BaseTokenUsageSchema.optional(),
 });
 
 export const NunjucksFilterMapSchema = z.record(

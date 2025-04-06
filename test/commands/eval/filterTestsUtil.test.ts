@@ -122,6 +122,18 @@ describe('filterTestsUtil', () => {
                 completion: 0,
                 cached: 0,
                 numRequests: 0,
+                assertions: {
+                  cached: 0,
+                  completion: 0,
+                  prompt: 0,
+                  total: 0,
+                  numRequests: 0,
+                  completionDetails: {
+                    reasoning: 0,
+                    acceptedPrediction: 0,
+                    rejectedPrediction: 0,
+                  },
+                },
                 completionDetails: {
                   reasoning: 0,
                   acceptedPrediction: 0,
@@ -178,6 +190,18 @@ describe('filterTestsUtil', () => {
                 completion: 0,
                 cached: 0,
                 numRequests: 0,
+                assertions: {
+                  cached: 0,
+                  completion: 0,
+                  prompt: 0,
+                  total: 0,
+                  numRequests: 0,
+                  completionDetails: {
+                    reasoning: 0,
+                    acceptedPrediction: 0,
+                    rejectedPrediction: 0,
+                  },
+                },
                 completionDetails: {
                   reasoning: 0,
                   acceptedPrediction: 0,
@@ -217,6 +241,18 @@ describe('filterTestsUtil', () => {
                 completion: 0,
                 cached: 0,
                 numRequests: 0,
+                assertions: {
+                  cached: 0,
+                  completion: 0,
+                  prompt: 0,
+                  total: 0,
+                  numRequests: 0,
+                  completionDetails: {
+                    reasoning: 0,
+                    acceptedPrediction: 0,
+                    rejectedPrediction: 0,
+                  },
+                },
                 completionDetails: {
                   reasoning: 0,
                   acceptedPrediction: 0,
@@ -321,6 +357,18 @@ describe('filterTestsUtil', () => {
                 completion: 0,
                 cached: 0,
                 numRequests: 0,
+                assertions: {
+                  cached: 0,
+                  completion: 0,
+                  prompt: 0,
+                  total: 0,
+                  numRequests: 0,
+                  completionDetails: {
+                    reasoning: 0,
+                    acceptedPrediction: 0,
+                    rejectedPrediction: 0,
+                  },
+                },
                 completionDetails: {
                   reasoning: 0,
                   acceptedPrediction: 0,
@@ -369,6 +417,18 @@ describe('filterTestsUtil', () => {
                 completion: 0,
                 cached: 0,
                 numRequests: 0,
+                assertions: {
+                  cached: 0,
+                  completion: 0,
+                  prompt: 0,
+                  total: 0,
+                  numRequests: 0,
+                  completionDetails: {
+                    reasoning: 0,
+                    acceptedPrediction: 0,
+                    rejectedPrediction: 0,
+                  },
+                },
                 completionDetails: {
                   reasoning: 0,
                   acceptedPrediction: 0,
@@ -431,6 +491,18 @@ describe('filterTestsUtil', () => {
                 completion: 0,
                 cached: 0,
                 numRequests: 0,
+                assertions: {
+                  cached: 0,
+                  completion: 0,
+                  prompt: 0,
+                  total: 0,
+                  numRequests: 0,
+                  completionDetails: {
+                    reasoning: 0,
+                    acceptedPrediction: 0,
+                    rejectedPrediction: 0,
+                  },
+                },
                 completionDetails: {
                   reasoning: 0,
                   acceptedPrediction: 0,
@@ -468,6 +540,18 @@ describe('filterTestsUtil', () => {
                 completion: 0,
                 cached: 0,
                 numRequests: 0,
+                assertions: {
+                  cached: 0,
+                  completion: 0,
+                  prompt: 0,
+                  total: 0,
+                  numRequests: 0,
+                  completionDetails: {
+                    reasoning: 0,
+                    acceptedPrediction: 0,
+                    rejectedPrediction: 0,
+                  },
+                },
                 completionDetails: {
                   reasoning: 0,
                   acceptedPrediction: 0,

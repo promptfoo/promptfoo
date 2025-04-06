@@ -404,20 +404,32 @@ export default class Eval {
 
   getStats(): EvaluateStats {
     const stats: EvaluateStats = {
-      successes: 0,
-      failures: 0,
       errors: 0,
+      failures: 0,
+      successes: 0,
       tokenUsage: {
+        assertions: {
+          cached: 0,
+          completion: 0,
+          prompt: 0,
+          total: 0,
+          numRequests: 0,
+          completionDetails: {
+            acceptedPrediction: 0,
+            reasoning: 0,
+            rejectedPrediction: 0,
+          },
+        },
         cached: 0,
         completion: 0,
-        prompt: 0,
-        total: 0,
-        numRequests: 0,
         completionDetails: {
-          reasoning: 0,
           acceptedPrediction: 0,
+          reasoning: 0,
           rejectedPrediction: 0,
         },
+        numRequests: 0,
+        prompt: 0,
+        total: 0,
       },
     };
 

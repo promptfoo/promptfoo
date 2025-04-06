@@ -145,6 +145,18 @@ describe('evaluator', () => {
         acceptedPrediction: 0,
         rejectedPrediction: 0,
       },
+      assertions: {
+        cached: 0,
+        completion: 0,
+        prompt: 0,
+        total: 0,
+        numRequests: 0,
+        completionDetails: {
+          acceptedPrediction: 0,
+          reasoning: 0,
+          rejectedPrediction: 0,
+        },
+      },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
@@ -178,6 +190,18 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+      },
+      assertions: {
+        cached: 0,
+        completion: 0,
+        prompt: 0,
+        total: 0,
+        numRequests: 0,
+        completionDetails: {
+          acceptedPrediction: 0,
+          reasoning: 0,
+          rejectedPrediction: 0,
+        },
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt 1 < 2 he said "hello world"...');
@@ -213,6 +237,18 @@ describe('evaluator', () => {
         acceptedPrediction: 0,
         rejectedPrediction: 0,
       },
+      assertions: {
+        cached: 0,
+        completion: 0,
+        prompt: 0,
+        total: 0,
+        numRequests: 0,
+        completionDetails: {
+          acceptedPrediction: 0,
+          reasoning: 0,
+          rejectedPrediction: 0,
+        },
+      },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1.prop1 }} {{ var2 }}');
@@ -246,6 +282,18 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+      },
+      assertions: {
+        cached: 0,
+        completion: 0,
+        prompt: 0,
+        total: 0,
+        numRequests: 0,
+        completionDetails: {
+          acceptedPrediction: 0,
+          reasoning: 0,
+          rejectedPrediction: 0,
+        },
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
@@ -281,6 +329,18 @@ describe('evaluator', () => {
         acceptedPrediction: 0,
         rejectedPrediction: 0,
       },
+      assertions: {
+        cached: 0,
+        completion: 0,
+        prompt: 0,
+        total: 0,
+        numRequests: 0,
+        completionDetails: {
+          acceptedPrediction: 0,
+          reasoning: 0,
+          rejectedPrediction: 0,
+        },
+      },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
@@ -315,6 +375,18 @@ describe('evaluator', () => {
         acceptedPrediction: 0,
         rejectedPrediction: 0,
       },
+      assertions: {
+        cached: 0,
+        completion: 0,
+        prompt: 0,
+        total: 0,
+        numRequests: 0,
+        completionDetails: {
+          acceptedPrediction: 0,
+          reasoning: 0,
+          rejectedPrediction: 0,
+        },
+      },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
@@ -343,6 +415,18 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+      },
+      assertions: {
+        cached: 0,
+        completion: 0,
+        prompt: 0,
+        total: 0,
+        numRequests: 0,
+        completionDetails: {
+          acceptedPrediction: 0,
+          reasoning: 0,
+          rejectedPrediction: 0,
+        },
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt');
@@ -373,6 +457,18 @@ describe('evaluator', () => {
         acceptedPrediction: 0,
         rejectedPrediction: 0,
       },
+      assertions: {
+        cached: 0,
+        completion: 0,
+        prompt: 0,
+        total: 0,
+        numRequests: 0,
+        completionDetails: {
+          acceptedPrediction: 0,
+          reasoning: 0,
+          rejectedPrediction: 0,
+        },
+      },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt');
     expect(summary.results[0].prompt.label).toBe('Test prompt');
@@ -401,6 +497,18 @@ describe('evaluator', () => {
         reasoning: 11,
         acceptedPrediction: 12,
         rejectedPrediction: 13,
+      },
+      assertions: {
+        cached: 0,
+        completion: 0,
+        prompt: 0,
+        total: 0,
+        numRequests: 0,
+        completionDetails: {
+          acceptedPrediction: 0,
+          reasoning: 0,
+          rejectedPrediction: 0,
+        },
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt');
@@ -898,6 +1006,18 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+      },
+      assertions: {
+        cached: 0,
+        completion: 0,
+        prompt: 0,
+        total: 0,
+        numRequests: 0,
+        completionDetails: {
+          acceptedPrediction: 0,
+          reasoning: 0,
+          rejectedPrediction: 0,
+        },
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt 1');
@@ -2293,6 +2413,12 @@ describe('runEval', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+      },
+      assertions: {
+        cached: 0,
+        completion: 0,
+        prompt: 0,
+        total: 0,
       },
     });
   });

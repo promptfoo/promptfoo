@@ -69,16 +69,22 @@ export function isAllowedPrompt(prompt: Prompt, allowedPrompts: string[] | undef
 
 export function newTokenUsage(): Required<TokenUsage> {
   return {
-    total: 0,
-    prompt: 0,
-    completion: 0,
+    assertions: {
+      cached: 0,
+      completion: 0,
+      prompt: 0,
+      total: 0,
+    },
     cached: 0,
-    numRequests: 0,
+    completion: 0,
     completionDetails: {
-      reasoning: 0,
       acceptedPrediction: 0,
+      reasoning: 0,
       rejectedPrediction: 0,
     },
+    numRequests: 0,
+    prompt: 0,
+    total: 0,
   };
 }
 
