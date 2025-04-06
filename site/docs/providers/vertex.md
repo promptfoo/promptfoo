@@ -36,13 +36,15 @@ Note: Claude models support up to 200,000 tokens context length and include buil
 
 Meta's Llama models are available through Vertex AI with the following versions:
 
+- `vertex:llama4-scout-instruct-maas` - Llama 4 Scout 17B (16 experts) with 10M context
+- `vertex:llama4-maverick-instruct-maas` - Llama 4 Maverick 17B (128 experts) with 1M context
 - `vertex:llama-3.3-70b-instruct-maas` - Latest Llama 3.3 70B model (Preview)
 - `vertex:llama-3.2-90b-vision-instruct-maas` - Vision-capable Llama 3.2 90B (Preview)
 - `vertex:llama-3.1-405b-instruct-maas` - Llama 3.1 405B (GA)
 - `vertex:llama-3.1-70b-instruct-maas` - Llama 3.1 70B (Preview)
 - `vertex:llama-3.1-8b-instruct-maas` - Llama 3.1 8B (Preview)
 
-Note: Llama models support up to 128,000 tokens context length and include built-in safety features through Llama Guard.
+Note: Llama models support built-in safety features through Llama Guard. Llama 4 models support up to 10M tokens context length (Scout) and 1M tokens (Maverick) and are natively multimodal, supporting both text and image inputs.
 
 #### Llama Configuration Example
 
@@ -57,6 +59,15 @@ providers:
         safetySettings:
           enabled: true # Llama Guard is enabled by default
           llama_guard_settings: {} # Optional custom settings
+
+  - id: vertex:llama4-scout-instruct-maas
+    config:
+      region: us-central1
+      temperature: 0.7
+      maxOutputTokens: 2048
+      llamaConfig:
+        safetySettings:
+          enabled: true
 ```
 
 By default, Llama models use Llama Guard for content safety. You can disable it by setting `enabled: false`, but this is not recommended for production use.
@@ -113,6 +124,7 @@ npm install google-auth-library
    - Searching for "Claude"
    - Clicking "Enable" on the models you want to use
 3. Set your project in gcloud CLI:
+
    ```sh
    gcloud config set project PROJECT_ID
    ```
@@ -205,11 +217,10 @@ See [Google's SafetySetting API documentation](https://ai.google.dev/api/generat
 
 ### Llama Model Features
 
-- Support for text and vision tasks (Llama 3.2)
+- Support for text and vision tasks (Llama 3.2 and all Llama 4 models)
 - Built-in safety with Llama Guard (enabled by default)
 - Available in `us-central1` region
-- Quota limits vary by model version (30-60 QPM)
-- Maximum context length of 128,000 tokens
+- Quota limits vary by model version
 - Requires specific endpoint format for API calls
 - Only supports unary (non-streaming) responses in promptfoo
 
@@ -219,7 +230,7 @@ See [Google's SafetySetting API documentation](https://ai.google.dev/api/generat
 - **Guard Integration**: All Llama models use Llama Guard for content safety by default
 - **Specific Endpoint**: Uses a different API endpoint than other Vertex models
 - **Model Status**: Most models are in Preview state, with Llama 3.1 405B being Generally Available (GA)
-- **Vision Support**: Only Llama 3.2 90B supports image input
+- **Vision Support**: Llama 3.2 90B and all Llama 4 models support image input
 
 ### Claude Model Features
 
