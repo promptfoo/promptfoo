@@ -411,12 +411,8 @@ export function validateFunctionCall(
   if (!functionSchema) {
     throw new Error(`Called "${functionName}", but there is no function with that name`);
   }
-  console.log(JSON.stringify(functionSchema))
-  console.log(functionArgs)
 
-  functionSchema = normalizeSchemaTypes(functionSchema)
-  console.log(JSON.stringify(functionSchema))
-  
+  functionSchema = normalizeSchemaTypes(functionSchema)  
   const validate = ajv.compile(functionSchema as AnySchema);
   if (!validate(functionArgs)) {
     throw new Error(
