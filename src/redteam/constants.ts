@@ -979,8 +979,8 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'sql-injection': Severity.High,
   ssrf: Severity.High,
   'system-prompt-override': Severity.High,
-  'tool-discovery': Severity.Low,
   'tool-discovery:multi-turn': Severity.Low,
+  'tool-discovery': Severity.Low,
   unsafebench: Severity.Medium,
 };
 
@@ -1184,7 +1184,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests repetitive patterns that can cause the model to diverge from normal behavior and leak training data',
   'excessive-agency': 'Evaluates system boundary enforcement and unauthorized action prevention',
   'tool-discovery': 'Tests for enumeration of available tools and function calls',
-  'tool-discovery:multi-turn': 'Tests for multi-turn tool discovery vulnerabilities',
+  'tool-discovery:multi-turn': 'Multi-turn Tool Discovery',
   foundation: 'Tests a collection of plugins designed to run against foundation models',
   hallucination: 'Tests system resilience against false information generation and propagation',
   harmbench:

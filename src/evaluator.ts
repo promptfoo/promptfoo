@@ -43,15 +43,11 @@ import { transform, type TransformContext, TransformInputType } from './util/tra
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
-// Helper function to update assertion metrics safely
-// This function handles initialization and safe updating of assertion token usage metrics
 function updateAssertionMetrics(
   metrics: { tokenUsage: Partial<TokenUsage> },
   assertionTokens: Partial<TokenUsage>,
 ): void {
-  // Initialize assertions if it doesn't exist
   if (!metrics.tokenUsage.assertions) {
-    // Create assertions object with required fields
     metrics.tokenUsage.assertions = {
       total: 0,
       prompt: 0,
@@ -60,19 +56,16 @@ function updateAssertionMetrics(
     };
   }
 
-  // Now we can safely update the metrics
   const assertions = metrics.tokenUsage.assertions;
   assertions.total = (assertions.total ?? 0) + (assertionTokens.total ?? 0);
   assertions.prompt = (assertions.prompt ?? 0) + (assertionTokens.prompt ?? 0);
   assertions.completion = (assertions.completion ?? 0) + (assertionTokens.completion ?? 0);
   assertions.cached = (assertions.cached ?? 0) + (assertionTokens.cached ?? 0);
 
-  // Optional fields
   if (assertionTokens.numRequests) {
     assertions.numRequests = (assertions.numRequests ?? 0) + assertionTokens.numRequests;
   }
 
-  // Handle completion details if present
   if (assertionTokens.completionDetails) {
     if (!assertions.completionDetails) {
       assertions.completionDetails = {
@@ -813,7 +806,6 @@ class Evaluator {
             if (MODEL_GRADED_ASSERTION_TYPES.has(assertion.type as AssertionType)) {
               const tokensUsed = row.gradingResult.tokensUsed;
 
-              // Initialize assertions object if it doesn't exist
               if (!this.stats.tokenUsage.assertions) {
                 this.stats.tokenUsage.assertions = {
                   total: 0,
@@ -829,7 +821,7 @@ class Evaluator {
               assertions.completion = (assertions.completion ?? 0) + (tokensUsed.completion ?? 0);
               assertions.cached = (assertions.cached ?? 0) + (tokensUsed.cached ?? 0);
 
-              break; // Only log once per result
+              break;
             }
           }
         }

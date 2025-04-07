@@ -65,10 +65,9 @@ function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
 /**
  * Format token usage for display in CLI output
  */
-function formatTokenUsage(type: string, usage: Partial<TokenUsage>) {
+function formatTokenUsage(type: string, usage: Partial<TokenUsage>): string {
   const parts = [];
 
-  // Add token counts
   if (usage.total !== undefined) {
     parts.push(`${type} tokens: ${usage.total.toLocaleString()}`);
   }
@@ -85,7 +84,6 @@ function formatTokenUsage(type: string, usage: Partial<TokenUsage>) {
     parts.push(`Cached tokens: ${usage.cached.toLocaleString()}`);
   }
 
-  // Add reasoning tokens if present
   if (usage.completionDetails?.reasoning !== undefined) {
     parts.push(`Reasoning tokens: ${usage.completionDetails.reasoning.toLocaleString()}`);
   }
@@ -319,7 +317,6 @@ export async function doEval(
         tokenUsage.assertions.completion += prompt.metrics.tokenUsage.assertions.completion || 0;
         tokenUsage.assertions.cached += prompt.metrics.tokenUsage.assertions.cached || 0;
 
-        // Track assertion reasoning tokens
         if (prompt.metrics.tokenUsage.assertions.completionDetails) {
           tokenUsage.assertions.completionDetails.reasoning +=
             prompt.metrics.tokenUsage.assertions.completionDetails.reasoning || 0;
@@ -410,13 +407,6 @@ export async function doEval(
       logger.info(chalk.blue.bold(`Pass Rate: ${passRate.toFixed(2)}%`));
     }
     if (tokenUsage.total > 0) {
-      // We want to display:
-      // 1. Evaluation tokens (the original token usage from the model responses)
-      // 2. Grading tokens (from assertions like llm-rubric)
-      // 3. Combined total (sum of both)
-
-      // Line 1: Model evaluation tokens (the actual model responses)
-      // The tokenUsage.total already represents evaluation tokens
       const evalTokens = {
         total: tokenUsage.total,
         prompt: tokenUsage.prompt,
@@ -425,21 +415,18 @@ export async function doEval(
         completionDetails: tokenUsage.completionDetails,
       };
 
-      // Line 1: Display evaluation tokens
       if (isRedteam) {
         logger.info(
           `Model probes: ${tokenUsage.numRequests.toLocaleString()} / ${formatTokenUsage('eval', evalTokens)}`,
         );
       } else {
-        logger.info(formatTokenUsage('eval', evalTokens));
+        logger.info(formatTokenUsage('Eval', evalTokens));
       }
 
-      // Line 2: Assertion/grading tokens (from metrics like llm-rubric)
       if (tokenUsage.assertions.total > 0) {
         logger.info(formatTokenUsage('Grading', tokenUsage.assertions));
       }
 
-      // Line 3: Calculate the real total (sum of evaluation and grading)
       const combinedTotal = evalTokens.total + tokenUsage.assertions.total;
       logger.info(
         `Total tokens: ${combinedTotal.toLocaleString()} (eval: ${evalTokens.total.toLocaleString()} + Grading: ${tokenUsage.assertions.total.toLocaleString()})`,

@@ -162,8 +162,8 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(ExcessiveAgencyPlugin, 'excessive-agency'),
   createPluginFactory(ToolDiscoveryPlugin, 'tool-discovery'),
   createPluginFactory(ToolDiscoveryMultiTurnPlugin, 'tool-discovery:multi-turn'),
-  createPluginFactory(HallucinationPlugin, 'hallucination'),
   createPluginFactory(HarmbenchPlugin, 'harmbench'),
+  createPluginFactory(HallucinationPlugin, 'hallucination'),
   createPluginFactory(ImitationPlugin, 'imitation'),
   createPluginFactory<{ intent: string }>(IntentPlugin, 'intent', (config: { intent: string }) =>
     invariant(config.intent, 'Intent plugin requires `config.intent` to be set'),

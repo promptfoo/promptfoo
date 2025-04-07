@@ -4,13 +4,11 @@ prompts:
   - 'Please answer: {{prompt}}'
 
 providers:
-  # Main provider for generating responses
   - id: openai:o3-mini
     config:
       reasoning_effort: 'medium'
       max_completion_tokens: 2000
 
-  # Provider for model-graded evaluations (default)
   - id: openai:gpt-4o-mini
     config:
       temperature: 0.1
