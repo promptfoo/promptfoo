@@ -4,7 +4,7 @@ import dedent from 'dedent';
 import { DEFAULT_SHARE_VIEW_BASE_URL } from '../constants';
 import logger from '../logger';
 import Eval from '../models/eval';
-import { createShareableUrl, isSharingEnabled } from '../share';
+import { createShareableUrl, getShareableUrl, hasEvalBeenShared, isSharingEnabled } from '../share';
 import telemetry from '../telemetry';
 import { setupEnv } from '../util';
 
@@ -74,6 +74,7 @@ export function shareCommand(program: Command) {
             return;
           }
         } else {
+          logger.info('Sharing latest eval');
           eval_ = await Eval.latest();
           if (!eval_) {
             logger.error('Could not load results. Do you need to run `promptfoo eval` first?');
@@ -95,7 +96,13 @@ export function shareCommand(program: Command) {
           return;
         }
 
-        await createAndDisplayShareableUrl(eval_, cmdObj.showAuth);
+        // Sharing is idempotent; has this eval already been shared?
+        if (await hasEvalBeenShared(eval_)) {
+          const url = await getShareableUrl(eval_, cmdObj.showAuth);
+          logger.info(`View results: ${chalk.greenBright.bold(url)}`);
+        } else {
+          await createAndDisplayShareableUrl(eval_, cmdObj.showAuth);
+        }
       },
     );
 }
