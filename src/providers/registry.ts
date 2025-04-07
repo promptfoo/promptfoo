@@ -46,6 +46,7 @@ import {
   HuggingfaceTokenExtractionProvider,
 } from './huggingface';
 import { JfrogMlChatCompletionProvider } from './jfrog';
+import { createLambdaLabsProvider } from './lambdalabs';
 import { LiteLLMProvider } from './litellm';
 import { LlamaProvider } from './llama';
 import {
@@ -1156,6 +1157,19 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return new ServerToolDiscoveryMultiProvider(providerOptions.config);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('lambdalabs:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createLambdaLabsProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
     },
   },
 ];

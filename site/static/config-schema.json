@@ -171,6 +171,12 @@
                             "HUGGING_FACE_HUB_TOKEN": {
                               "type": "string"
                             },
+                            "JFROG_API_KEY": {
+                              "type": "string"
+                            },
+                            "LAMBDA_API_KEY": {
+                              "type": "string"
+                            },
                             "LANGFUSE_HOST": {
                               "type": "string"
                             },
@@ -178,6 +184,9 @@
                               "type": "string"
                             },
                             "LANGFUSE_SECRET_KEY": {
+                              "type": "string"
+                            },
+                            "LITELLM_API_BASE": {
                               "type": "string"
                             },
                             "LLAMA_BASE_URL": {
