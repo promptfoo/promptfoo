@@ -4,7 +4,13 @@ import dedent from 'dedent';
 import { DEFAULT_SHARE_VIEW_BASE_URL } from '../constants';
 import logger from '../logger';
 import Eval from '../models/eval';
-import { createShareableUrl, getShareableUrl, hasEvalBeenShared, isSharingEnabled } from '../share';
+import {
+  createShareableUrl,
+  getShareableUrl,
+  hasEvalBeenShared,
+  isSharingEnabled,
+  updateSharedEval,
+} from '../share';
 import telemetry from '../telemetry';
 import { setupEnv } from '../util';
 
@@ -98,6 +104,8 @@ export function shareCommand(program: Command) {
 
         // Sharing is idempotent; has this eval already been shared?
         if (await hasEvalBeenShared(eval_)) {
+          logger.info('Eval has already been shared. Updating...');
+          await updateSharedEval(eval_);
           const url = await getShareableUrl(eval_, cmdObj.showAuth);
           logger.info(`View results: ${chalk.greenBright.bold(url)}`);
         } else {

@@ -463,3 +463,12 @@ export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Updates a shared eval by syncing the latest annotated-grades with the remote
+ * instance.
+ * @param eval_ The eval to update.
+ */
+export async function updateSharedEval(eval_: Eval): Promise<void> {
+  throw new Error('Not implemented');
+}
