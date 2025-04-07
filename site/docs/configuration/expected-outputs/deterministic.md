@@ -459,7 +459,6 @@ assert:
 
 This ensures that any JSON LLM output adheres to the schema specified in the `functions` configuration of the provider. Learn more about the [Google Vertex provider](/docs/providers/vertex/#function-calling-and-tools), [Google AIStudio provider](/docs/providers/google/#function-calling) and [Google Live provider](/docs/providers/google#function-calling-example).
 
-
 ### is-valid-openai-function-call
 
 This ensures that any JSON LLM output adheres to the schema specified in the `functions` configuration of the provider. Learn more about the [OpenAI provider](/docs/providers/openai/#using-tools-and-functions).

@@ -381,7 +381,7 @@ function normalizeSchemaTypes(schemaNode: any): any {
           newNode[key] = value.toLowerCase();
         } else if (Array.isArray(value)) {
           // Handle type arrays like ["STRING", "NULL"]
-          newNode[key] = value.map(t => (typeof t === 'string' ? t.toLowerCase() : t));
+          newNode[key] = value.map((t) => (typeof t === 'string' ? t.toLowerCase() : t));
         } else {
           throw new Error(
             `Schema types must be string or array of string. Recieved: ${JSON.stringify(value)}`,
@@ -406,13 +406,15 @@ export function validateFunctionCall(
   const interpolatedFunctions = loadFile(functions, vars) as Tool[];
   const functionArgs = JSON.parse(functionCall.args);
   const functionName = functionCall.name;
-  const functionDeclarations = interpolatedFunctions?.find((f) => "functionDeclarations" in f)
-  let functionSchema = functionDeclarations?.functionDeclarations?.find((f) => f.name === functionName)?.parameters;
+  const functionDeclarations = interpolatedFunctions?.find((f) => 'functionDeclarations' in f);
+  let functionSchema = functionDeclarations?.functionDeclarations?.find(
+    (f) => f.name === functionName,
+  )?.parameters;
   if (!functionSchema) {
     throw new Error(`Called "${functionName}", but there is no function with that name`);
   }
 
-  functionSchema = normalizeSchemaTypes(functionSchema)  
+  functionSchema = normalizeSchemaTypes(functionSchema);
   const validate = ajv.compile(functionSchema as AnySchema);
   if (!validate(functionArgs)) {
     throw new Error(
