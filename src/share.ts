@@ -11,6 +11,7 @@ import logger from './logger';
 import type Eval from './models/eval';
 import type { SharedResults } from './types';
 import { cloudCanAcceptChunkedResults } from './util/cloud';
+import invariant from './util/invariant';
 
 export interface ShareDomainResult {
   domain: string;
@@ -480,6 +481,7 @@ export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
 export async function updateSharedEval(eval_: Eval): Promise<void> {
   // Load the results from the local database
   await eval_.loadResults();
+  invariant(eval_.results.length > 0, 'Eval has no results to share');
 
   // Send the payload to the server:
   const { url } = await getApiConfig(eval_);
@@ -506,6 +508,6 @@ export async function updateSharedEval(eval_: Eval): Promise<void> {
   });
 
   if (!res.ok || res.status !== 204) {
-    throw new Error('Failed to sync eval');
+    throw new Error(`Failed to sync eval: ${res.status} ${res.statusText}`);
   }
 }
