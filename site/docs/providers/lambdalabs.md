@@ -35,7 +35,13 @@ Lambda Labs Inference API officially supports these models:
 
 ### Llama Models
 
-- `llama-4-maverick-17b-128e-instruct-fp8` - Llama 4 Maverick 17B model with 128 expert MoE (recommended)
+- `deepseek-llama3.3-70b` - DeepSeek Llama 3.3 70B model
+- `deepseek-r1-671b` - DeepSeek R1 671B model
+- `hermes3-405b` - Hermes 3 405B model
+- `hermes3-70b` - Hermes 3 70B model
+- `hermes3-8b` - Hermes 3 8B model
+- `lfm-40b` - Liquid Foundation Model 40B
+- `llama-4-maverick-17b-128e-instruct-fp8` - Llama 4 Maverick 17B model with 128 expert MoE
 - `llama-4-scout-17b-16e-instruct` - Llama 4 Scout 17B model with 16 expert MoE
 - `llama3.1-405b-instruct-fp8` - Llama 3.1 405B Instruct model
 - `llama3.1-70b-instruct-fp8` - Llama 3.1 70B Instruct model
@@ -44,15 +50,6 @@ Lambda Labs Inference API officially supports these models:
 - `llama3.2-11b-vision-instruct` - Llama 3.2 11B Vision model (supports images)
 - `llama3.2-3b-instruct` - Llama 3.2 3B Instruct model
 - `llama3.3-70b-instruct-fp8` - Llama 3.3 70B Instruct model
-
-### Other Models
-
-- `deepseek-llama3.3-70b` - DeepSeek Llama 3.3 70B model
-- `deepseek-r1-671b` - DeepSeek R1 671B model (extremely large model)
-- `hermes3-405b` - Hermes 3 405B model
-- `hermes3-70b` - Hermes 3 70B model
-- `hermes3-8b` - Hermes 3 8B model
-- `lfm-40b` - LFM 40B model
 - `qwen25-coder-32b-instruct` - Qwen 2.5 Coder 32B Instruct model
 
 Get the current list of available models using the `/models` endpoint:
@@ -77,6 +74,8 @@ The provider accepts all standard OpenAI parameters:
 ```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Lambda Labs model evaluation
+prompts:
+  - You are an expert in {{topic}}. Explain {{question}} in simple terms.
 providers:
   - id: lambdalabs:chat:llama-4-maverick-17b-128e-instruct-fp8
     config:
@@ -86,10 +85,6 @@ providers:
     config:
       temperature: 0.7
       max_tokens: 1024
-
-prompts:
-  - You are an expert in {{topic}}. Explain {{question}} in simple terms.
-
 tests:
   - vars:
       topic: quantum computing
@@ -107,8 +102,8 @@ tests:
 
 ## See Also
 
-- [Provider Configuration](../reference/configuration.md#providers)
-- [OpenAI Provider](/docs/providers/openai/) (compatible format)
-- [LLM Rubric Evaluation](../configuration/expected-outputs/model-graded.md)
-- [Example Configurations](../examples-and-templates.md)
-- [Lambda Labs API Documentation](https://docs.lambda.ai/public-cloud/lambda-inference-api/)
+- [OpenAI Provider](/docs/providers/openai) - Compatible API format used by Lambda Labs
+- [Configuration Reference](/docs/configuration/reference.md) - Full configuration options for providers
+- [Lambda Labs Examples](https://github.com/promptfoo/promptfoo/tree/main/examples/lambdalabs) - Example configurations using Lambda Labs models
+- [Model Graded Evaluations](/docs/configuration/expected-outputs/model-graded) - Using models to evaluate other models
+- [Lambda Labs API Documentation](https://docs.lambda.ai/public-cloud/lambda-inference-api/) - Official API reference
