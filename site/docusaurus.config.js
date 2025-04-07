@@ -4,6 +4,7 @@
 const { themes } = require('prism-react-renderer');
 const lightCodeTheme = themes.github;
 const darkCodeTheme = themes.duotoneDark;
+const path = require('path');
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
@@ -373,6 +374,7 @@ const config = {
         ],
       },
     ],
+    path.resolve(__dirname, 'plugins/llms-txt-plugin'),
   ],
 
   // Mermaid diagram support

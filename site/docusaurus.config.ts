@@ -1,8 +1,8 @@
-import type { Config } from '@docusaurus/types';
-import type * as Preset from '@docusaurus/preset-classic';
 import { themes } from 'prism-react-renderer';
-import * as path from 'path';
+import type * as Preset from '@docusaurus/preset-classic';
+import type { Config } from '@docusaurus/types';
 import * as fs from 'fs';
+import * as path from 'path';
 
 const lightCodeTheme = themes.github;
 const darkCodeTheme = themes.duotoneDark;
@@ -346,7 +346,7 @@ const config: Config = {
       indexName: 'promptfoo',
     },
   } satisfies Preset.ThemeConfig,
-  
+
   plugins: [
     require.resolve('docusaurus-plugin-image-zoom'),
     [
@@ -411,9 +411,9 @@ const config: Config = {
               const lastPart = pathParts[pathParts.length - 1];
               const title = lastPart
                 .split('-')
-                .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+                .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
                 .join(' ');
-              
+
               docsRoutes.push(`- [${title}](${routePath})`);
             }
           }
@@ -442,4 +442,4 @@ const config: Config = {
   themes: ['@docusaurus/theme-mermaid'],
 };
 
-export default config; 
+export default config;
