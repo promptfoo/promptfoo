@@ -1,27 +1,18 @@
 import fs from 'fs';
 import path from 'path';
 import { runAssertion } from '../../src/assertions';
-import { handleIsValidGoogleFunctionCall } from '../../src/assertions/google';
+import type { Tool } from '../../src/providers/google//types';
 import { AIStudioChatProvider } from '../../src/providers/google/ai.studio';
 import { GoogleMMLiveProvider } from '../../src/providers/google/live';
+import { validateFunctionCall } from '../../src/providers/google/util';
 import { VertexChatProvider } from '../../src/providers/google/vertex';
-import type {
-  Assertion,
-  ApiProvider,
-  AssertionValueFunctionContext,
-  AtomicTestCase,
-  GradingResult,
-} from '../../src/types';
+import type { ApiProvider, AtomicTestCase, GradingResult } from '../../src/types';
 
 jest.mock('fs');
 jest.mock('path');
 
 const mockedFs = jest.mocked(fs);
 const mockedPath = jest.mocked(path);
-
-const functionAssertion: Assertion = {
-  type: 'is-valid-google-function-call',
-};
 
 const mockProvider = {
   id: () => 'test-provider',
@@ -50,15 +41,6 @@ const mockProvider = {
   callApi: async () => ({ output: '' }),
 } as ApiProvider;
 
-const mockContext: AssertionValueFunctionContext = {
-  prompt: '',
-  vars: {},
-  test: { vars: {} },
-  logProbs: [],
-  provider: mockProvider,
-  providerResponse: { output: '' },
-};
-
 describe('Google assertions', () => {
   beforeEach(() => {
     jest.resetAllMocks();
@@ -66,31 +48,16 @@ describe('Google assertions', () => {
     mockedFs.existsSync.mockReturnValue(true);
   });
 
-  describe('API agnostic handleIsValidGoogleFunctionCall assertions', () => {
+  describe('API agnostic handleIsValidFunctionCall assertions', () => {
     it('should pass when function call matches schema', () => {
       const functionOutput = {
         name: 'getCurrentTemperature',
         args: '{"location": "San Francisco, CA", "unit": "Fahrenheit"}',
       };
 
-      const result = handleIsValidGoogleFunctionCall({
-        assertion: functionAssertion,
-        output: functionOutput,
-        provider: mockProvider,
-        test: { vars: {} },
-        baseType: functionAssertion.type,
-        context: mockContext,
-        inverse: false,
-        outputString: JSON.stringify(functionOutput),
-        providerResponse: { output: functionOutput },
-      });
-
-      expect(result).toEqual({
-        pass: true,
-        score: 1,
-        reason: 'Assertion passed',
-        assertion: functionAssertion,
-      });
+      expect(() => {
+        validateFunctionCall(functionOutput, mockProvider.config.tools, {});
+      }).not.toThrow();
     });
 
     it('should load functions from external file', () => {
@@ -132,24 +99,9 @@ describe('Google assertions', () => {
         },
       };
 
-      const result = handleIsValidGoogleFunctionCall({
-        assertion: functionAssertion,
-        output: functionOutput,
-        provider: fileProvider,
-        test: { vars: {} },
-        baseType: functionAssertion.type,
-        context: mockContext,
-        inverse: false,
-        outputString: JSON.stringify(functionOutput),
-        providerResponse: { output: functionOutput },
-      });
-
-      expect(result).toEqual({
-        pass: true,
-        score: 1,
-        reason: 'Assertion passed',
-        assertion: functionAssertion,
-      });
+      expect(() => {
+        validateFunctionCall(functionOutput, fileProvider.config.tools, {});
+      }).not.toThrow();
 
       expect(mockedFs.existsSync).toHaveBeenCalledWith('./test/fixtures/weather_functions.json');
       expect(mockedFs.readFileSync).toHaveBeenCalledWith(
@@ -187,24 +139,11 @@ describe('Google assertions', () => {
         },
       };
 
-      const result = handleIsValidGoogleFunctionCall({
-        assertion: functionAssertion,
-        output: functionOutput,
-        provider: varProvider,
-        test: { vars: { unit: 'custom_unit' } },
-        baseType: functionAssertion.type,
-        context: mockContext,
-        inverse: false,
-        outputString: JSON.stringify(functionOutput),
-        providerResponse: { output: functionOutput },
-      });
-
-      expect(result).toEqual({
-        pass: true,
-        score: 1,
-        reason: 'Assertion passed',
-        assertion: functionAssertion,
-      });
+      expect(() => {
+        validateFunctionCall(functionOutput, varProvider.config.tools as Tool[], {
+          unit: 'custom_unit',
+        });
+      }).not.toThrow();
     });
 
     it('should fail when functions are not defined', () => {
@@ -215,50 +154,20 @@ describe('Google assertions', () => {
 
       const emptyProvider = {
         ...mockProvider,
-        config: {},
+        config: {
+          tools: [],
+        },
       };
-
-      const result = handleIsValidGoogleFunctionCall({
-        assertion: functionAssertion,
-        output: functionOutput,
-        provider: emptyProvider,
-        test: { vars: {} },
-        baseType: functionAssertion.type,
-        context: mockContext,
-        inverse: false,
-        outputString: JSON.stringify(functionOutput),
-        providerResponse: { output: functionOutput },
-      });
-
-      expect(result).toEqual({
-        pass: false,
-        score: 0,
-        reason: 'Called "getCurrentTemperature", but there is no function with that name',
-        assertion: functionAssertion,
-      });
+      expect(() => {
+        validateFunctionCall(functionOutput, emptyProvider.config.tools, {});
+      }).toThrow('Called "getCurrentTemperature", but there is no function with that name');
     });
 
     it('should fail when function output is not an object', () => {
       const functionOutput = 'not an object';
-
-      const result = handleIsValidGoogleFunctionCall({
-        assertion: functionAssertion,
-        output: functionOutput,
-        provider: mockProvider,
-        test: { vars: {} },
-        baseType: functionAssertion.type,
-        context: mockContext,
-        inverse: false,
-        outputString: JSON.stringify(functionOutput),
-        providerResponse: { output: functionOutput },
-      });
-
-      expect(result).toEqual({
-        pass: false,
-        score: 0,
-        reason: expect.stringContaining('Google did not return a valid-looking function call'),
-        assertion: functionAssertion,
-      });
+      expect(() => {
+        validateFunctionCall(functionOutput, mockProvider.config.tools, {});
+      }).toThrow('Google did not return a valid-looking function call');
     });
 
     it('should fail when function call does not match schema', () => {
@@ -266,25 +175,11 @@ describe('Google assertions', () => {
         name: 'getCurrentTemperature',
         args: '{"location": "San Francisco, CA"}', // missing required 'unit'
       };
-
-      const result = handleIsValidGoogleFunctionCall({
-        assertion: functionAssertion,
-        output: functionOutput,
-        provider: mockProvider,
-        test: { vars: {} },
-        baseType: functionAssertion.type,
-        context: mockContext,
-        inverse: false,
-        outputString: JSON.stringify(functionOutput),
-        providerResponse: { output: functionOutput },
-      });
-
-      expect(result).toEqual({
-        pass: false,
-        score: 0,
-        reason: expect.stringContaining('must have required property'),
-        assertion: functionAssertion,
-      });
+      expect(() => {
+        validateFunctionCall(functionOutput, mockProvider.config.tools, {});
+      }).toThrow(
+        'Call to "getCurrentTemperature" does not match schema: [{"instancePath":"","schemaPath":"#/required","keyword":"required","params":{"missingProperty":"unit"},"message":"must have required property \'unit\'"}]',
+      );
     });
   });
 

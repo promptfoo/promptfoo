@@ -1,11 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 import { runAssertion } from '../../src/assertions';
-import {
-  handleIsValidOpenAiToolsCall,
-  handleIsValidOpenAiFunctionCall,
-} from '../../src/assertions/openai';
+import { handleIsValidFunctionCall } from '../../src/assertions/functionToolCall';
+import { handleIsValidOpenAiToolsCall } from '../../src/assertions/openai';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { validateFunctionCall } from '../../src/providers/openai/util';
 import type {
   Assertion,
   ApiProvider,
@@ -28,8 +27,7 @@ const functionAssertion: Assertion = {
   type: 'is-valid-openai-function-call',
 };
 
-const mockProvider = {
-  id: () => 'test-provider',
+const mockProvider = new OpenAiChatCompletionProvider('test-provider', {
   config: {
     tools: [
       {
@@ -61,8 +59,7 @@ const mockProvider = {
       },
     ],
   },
-  callApi: async () => ({ output: '' }),
-} as ApiProvider;
+});
 
 const mockContext: AssertionValueFunctionContext = {
   prompt: '',
@@ -193,14 +190,14 @@ describe('OpenAI assertions', () => {
     });
   });
 
-  describe('handleIsValidOpenAiFunctionCall', () => {
+  describe('handleIsValidFunctionCall', () => {
     it('should pass when function call matches schema', () => {
       const functionOutput = {
         name: 'getCurrentTemperature',
         arguments: '{"location": "San Francisco, CA", "unit": "Fahrenheit"}',
       };
 
-      const result = handleIsValidOpenAiFunctionCall({
+      const result = handleIsValidFunctionCall({
         assertion: functionAssertion,
         output: functionOutput,
         provider: mockProvider,
@@ -227,45 +224,31 @@ describe('OpenAI assertions', () => {
       };
 
       const mockYamlContent = `
-- name: getCurrentTemperature
-  parameters:
-    type: object
-    properties:
-      location:
-        type: string
-      unit:
-        type: string
-        enum: [Celsius, Fahrenheit]
-    required: [location, unit]
-`;
+      - name: getCurrentTemperature
+        parameters:
+          type: object
+          properties:
+            location:
+              type: string
+            unit:
+              type: string
+              enum: [Celsius, Fahrenheit]
+          required: [location, unit]
+      `;
 
       mockedFs.readFileSync.mockReturnValue(mockYamlContent);
 
       const fileProvider = {
-        ...mockProvider,
+        id: () => 'test-provider',
         config: {
           functions: 'file://./test/fixtures/weather_functions.yaml',
         },
-      };
+        callApi: async () => ({ output: '' }),
+      } as ApiProvider;
 
-      const result = handleIsValidOpenAiFunctionCall({
-        assertion: functionAssertion,
-        output: functionOutput,
-        provider: fileProvider,
-        test: { vars: {} },
-        baseType: functionAssertion.type,
-        context: mockContext,
-        inverse: false,
-        outputString: JSON.stringify(functionOutput),
-        providerResponse: { output: functionOutput },
-      });
-
-      expect(result).toEqual({
-        pass: true,
-        score: 1,
-        reason: 'Assertion passed',
-        assertion: functionAssertion,
-      });
+      expect(() => {
+        validateFunctionCall(functionOutput, fileProvider.config.functions, {});
+      }).not.toThrow();
 
       expect(mockedFs.existsSync).toHaveBeenCalledWith('./test/fixtures/weather_functions.yaml');
       expect(mockedFs.readFileSync).toHaveBeenCalledWith(
@@ -280,8 +263,7 @@ describe('OpenAI assertions', () => {
         arguments: '{"location": "San Francisco, CA", "unit": "custom_unit"}',
       };
 
-      const varProvider = {
-        ...mockProvider,
+      const mockProvider = new OpenAiChatCompletionProvider('test-provider', {
         config: {
           functions: [
             {
@@ -297,12 +279,12 @@ describe('OpenAI assertions', () => {
             },
           ],
         },
-      };
+      });
 
-      const result = handleIsValidOpenAiFunctionCall({
+      const result = handleIsValidFunctionCall({
         assertion: functionAssertion,
         output: functionOutput,
-        provider: varProvider,
+        provider: mockProvider,
         test: { vars: { unit: 'custom_unit' } },
         baseType: functionAssertion.type,
         context: mockContext,
@@ -325,15 +307,14 @@ describe('OpenAI assertions', () => {
         arguments: '{"location": "San Francisco, CA"}',
       };
 
-      const emptyProvider = {
-        ...mockProvider,
+      const mockProvider = new OpenAiChatCompletionProvider('test-provider', {
         config: {},
-      };
+      });
 
-      const result = handleIsValidOpenAiFunctionCall({
+      const result = handleIsValidFunctionCall({
         assertion: functionAssertion,
         output: functionOutput,
-        provider: emptyProvider,
+        provider: mockProvider,
         test: { vars: {} },
         baseType: functionAssertion.type,
         context: mockContext,
@@ -353,7 +334,7 @@ describe('OpenAI assertions', () => {
     it('should fail when function output is not an object', () => {
       const functionOutput = 'not an object';
 
-      const result = handleIsValidOpenAiFunctionCall({
+      const result = handleIsValidFunctionCall({
         assertion: functionAssertion,
         output: functionOutput,
         provider: mockProvider,
@@ -379,7 +360,7 @@ describe('OpenAI assertions', () => {
         arguments: '{"location": "San Francisco, CA"}', // missing required 'unit'
       };
 
-      const result = handleIsValidOpenAiFunctionCall({
+      const result = handleIsValidFunctionCall({
         assertion: functionAssertion,
         output: functionOutput,
         provider: mockProvider,

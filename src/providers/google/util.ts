@@ -397,10 +397,24 @@ function normalizeSchemaTypes(schemaNode: any): any {
 }
 
 export function validateFunctionCall(
-  functionCall: { args: string; name: string },
-  functions?: Tool[],
+  output: string | object,
+  functions?: Tool[] | string,
   vars?: Record<string, string | object>,
 ) {
+  if (typeof output === 'object' && 'functionCall' in output) {
+    output = (output as { functionCall: any }).functionCall;
+  }
+  const functionCall = output as { args: string; name: string };
+  if (
+    typeof functionCall !== 'object' ||
+    typeof functionCall.name !== 'string' ||
+    typeof functionCall.args !== 'string'
+  ) {
+    throw new Error(
+      `Google did not return a valid-looking function call: ${JSON.stringify(functionCall)}`,
+    );
+  }
+
   // Parse function call and validate it against schema
   const interpolatedFunctions = loadFile(functions, vars) as Tool[];
   const functionArgs = JSON.parse(functionCall.args);
