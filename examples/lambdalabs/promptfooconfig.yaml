@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Silly Lambda Labs Model Showdown
+description: Lambda Labs
 
 # To use this example:
 # 1. Set your LAMBDA_API_KEY environment variable
@@ -7,78 +7,59 @@ description: Silly Lambda Labs Model Showdown
 
 prompts:
   - |
-    You are a slightly unhinged AI assistant with expertise in {{topic}}. 
-    Provide a FUN and QUIRKY explanation of {{concept}} that would make a 5-year-old giggle.
-    
-    Don't be boring! Explain {{concept}} using at least one ridiculous analogy involving {{silly_thing}}.
-    End with an absurd joke about {{concept}}.
+    You are a creative AI assistant who loves making absurd but somewhat plausible estimations.
+
+    Please answer the following ridiculous question with step-by-step reasoning:
+    {{question}}
+
+    Make your answer entertaining but try to use reasonable assumptions and calculations.
 
 providers:
   - id: lambdalabs:chat:llama-4-maverick-17b-128e-instruct-fp8
     config:
-      temperature: 0.9
+      temperature: 0.7
       max_tokens: 1024
   - id: lambdalabs:chat:llama3.3-70b-instruct-fp8
     config:
-      temperature: 0.9
+      temperature: 0.7
       max_tokens: 1024
 
 defaultTest:
   options:
     # Use Lambda Labs' Llama 4 model for grading too!
-    provider: 
+    provider:
       id: lambdalabs:chat:llama-4-maverick-17b-128e-instruct-fp8
       config:
-        temperature: 0.2  # Lower temperature for more consistent grading
+        temperature: 0.2 # Lower temperature for more consistent grading
         max_tokens: 1024
-    # Custom grading prompt that will be applied to all llm-rubric assertions
-    rubricPrompt: >
-      [
-        {
-          "role": "system",
-          "content": "You are Captain Giggles, a professional comedy evaluator who speaks like a pirate. Grade the output by how well it meets this rubric: {{rubric}}. Award points on a scale of 1-10 for:\n1. Silliness (how absurd and fun is it?)\n2. Kid-friendliness (would a 5-year-old understand and laugh?)\n3. Creativity of the analogy\n4. How ridiculous the joke is\n\nALWAYS refer to yourself as 'Cap'n Giggles' and end your review with 'YARRR!'. Be as silly as possible in your grading."
-        },
-        {
-          "role": "user",
-          "content": "Output: {{ output }}"
-        }
-      ]
   assert:
     - type: javascript
-      value: "return output.length > 100 ? 'pass' : 'fail'; // Ensure we get substantial responses"
+      value: output.length > 100
+    - type: llm-rubric
+      value: 'Does this response attempt to answer the absurd question with step-by-step reasoning and plausible calculations, while remaining entertaining?'
 
 tests:
   - vars:
-      topic: time travel
-      concept: wormholes
-      silly_thing: dancing flamingos
-    assert:
-      - type: llm-rubric
-        value: "Is this explanation absolutely RIDICULOUS and would it make a 5-year-old laugh uncontrollably?"
-      - type: contains-any
-        value: ["flamingo", "silly", "funny", "joke", "giggle", "laugh"]
+      question: How many people would it take typing simultaneously to recreate Wikipedia from scratch within one hour?
   - vars:
-      topic: dinosaurs
-      concept: extinction
-      silly_thing: singing toasters
-    assert:
-      - type: llm-rubric
-        value: "Does this explanation make extinction sound hilarious while still being educational?"
-      - type: contains-any
-        value: ["toaster", "silly", "funny", "joke", "giggle", "laugh"]
+      question: What's the total length of toothpaste squeezed out worldwide each morning? Could it circle Earth?
   - vars:
-      topic: outer space
-      concept: black holes
-      silly_thing: confused bananas
-    assert:
-      - type: llm-rubric
-        value: "Does this explanation of black holes include at least one absurd analogy with confused bananas?"
-      - type: contains-any
-        value: ["banana", "silly", "funny", "joke", "giggle", "laugh"]
+      question: If everyone jumped at exactly the same time, would global internet latency noticeably spike due to social media posting?
   - vars:
-      topic: computers
-      concept: the internet
-      silly_thing: tap-dancing squirrels
-    assert:
-      - type: llm-rubric
-        value: "Is the explanation of the internet completely bonkers and does it involve tap-dancing squirrels in a way that's both ridiculous and somewhat informative?" 
+      question: How long would it take to fill the Grand Canyon if everyone in the U.S. poured a cup of coffee into it every day?
+  - vars:
+      question: If all humans suddenly started walking west at once, how long would it take Earth's rotation to noticeably slow down?
+  - vars:
+      question: How tall would a pile of all receipts printed globally each year be? Would it reach the moon?
+  - vars:
+      question: How many miles of spaghetti does humanity eat per second, and how quickly could that spaghetti stretch from New York to Los Angeles?
+  - vars:
+      question: Could every microwave on Earth simultaneously popping popcorn affect weather patterns?
+  - vars:
+      question: If you could somehow assemble all lost keys in history into a single pile, how high would the mountain of keys rise?
+  - vars:
+      question: If all the world's smartphones were stacked on top of each other, how many times could they reach the International Space Station?
+  - vars:
+      question: How many balloons would it take to lift an average-sized house like in the movie "Up", and how much helium would that require?
+  - vars:
+      question: If all the data stored in cloud servers was printed on paper, would the resulting paper stack reach Mars?

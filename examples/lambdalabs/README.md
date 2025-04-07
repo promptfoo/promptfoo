@@ -66,7 +66,7 @@ Lambda Labs offers many other models that you can try by changing the model name
 
 This example showcases how to use custom grading with a pirate-themed "Captain Giggles" LLM evaluator that assesses:
 
-1. Silliness and absurdity 
+1. Silliness and absurdity
 2. Kid-friendliness
 3. Creativity of analogies
 4. Quality of jokes
@@ -88,4 +88,4 @@ You can modify this example to:
 - [Lambda Labs API Documentation](https://docs.lambdalabs.com/api)
 - [promptfoo Lambda Labs Provider Documentation](https://promptfoo.dev/docs/providers/lambdalabs)
 - [Model-graded Metrics Documentation](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded/)
-- [More promptfoo Examples](https://promptfoo.dev/docs/examples) 
+- [More promptfoo Examples](https://promptfoo.dev/docs/examples)

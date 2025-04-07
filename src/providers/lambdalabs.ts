@@ -6,9 +6,9 @@ import { OpenAiEmbeddingProvider } from './openai/embedding';
 
 /**
  * Creates a Lambda Labs provider using OpenAI-compatible endpoints
- * 
+ *
  * Documentation: https://docs.lambdalabs.com/api
- * 
+ *
  * Lambda Labs API supports the OpenAI API format and can be used as a drop-in replacement.
  * All parameters are automatically passed through to the Lambda Labs API.
  */
@@ -48,4 +48,4 @@ export function createLambdaLabsProvider(
     const modelName = splits.slice(1).join(':');
     return new OpenAiChatCompletionProvider(modelName, lambdaLabsConfig);
   }
-} 
+}

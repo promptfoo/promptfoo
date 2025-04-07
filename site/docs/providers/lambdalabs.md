@@ -80,13 +80,13 @@ tests:
       question: Explain quantum entanglement and why it matters for quantum computing
     assert:
       - type: contains
-        value: "entangled particles"
+        value: 'entangled particles'
   - vars:
       topic: machine learning
       question: What are the key differences between supervised and unsupervised learning?
     assert:
       - type: contains
-        value: "labeled data"
+        value: 'labeled data'
 ```
 
 ## Parameters
@@ -111,15 +111,15 @@ providers:
 prompts:
   - messages:
       - role: system
-        content: "You are an expert conversationalist who responds to the best of your ability."
+        content: 'You are an expert conversationalist who responds to the best of your ability.'
       - role: user
-        content: "{{question}}"
+        content: '{{question}}'
 
 tests:
   - vars:
-      question: "Who won the world series in 2020?"
+      question: 'Who won the world series in 2020?'
   - vars:
-      question: "What is the capital of France?"
+      question: 'What is the capital of France?'
 ```
 
 ## Complete Example
@@ -135,7 +135,7 @@ prompts:
   - |
     You are an AI assistant with expertise in {{topic}}. Provide a concise explanation 
     of {{concept}} and its importance in the field.
-    
+
     Please explain {{concept}} in the context of {{topic}} in simple terms.
 
 tests:
@@ -144,19 +144,19 @@ tests:
       concept: quantum entanglement
     assert:
       - type: llm-rubric
-        value: "Does the response explain quantum entanglement clearly? Rate from 1-10."
+        value: 'Does the response explain quantum entanglement clearly? Rate from 1-10.'
       - type: contains-any
-        value: ["entangled", "correlated", "quantum state"]
+        value: ['entangled', 'correlated', 'quantum state']
   - vars:
       topic: machine learning
       concept: neural networks
     assert:
       - type: llm-rubric
-        value: "Does the response explain neural networks clearly? Rate from 1-10."
+        value: 'Does the response explain neural networks clearly? Rate from 1-10.'
   - vars:
       topic: astronomy
       concept: dark matter
     assert:
       - type: llm-rubric
-        value: "Does the response explain dark matter clearly? Rate from 1-10."
-``` 
+        value: 'Does the response explain dark matter clearly? Rate from 1-10.'
+```

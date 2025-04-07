@@ -46,6 +46,7 @@ import {
   HuggingfaceTokenExtractionProvider,
 } from './huggingface';
 import { JfrogMlChatCompletionProvider } from './jfrog';
+import { createLambdaLabsProvider } from './lambdalabs';
 import { LiteLLMProvider } from './litellm';
 import { LlamaProvider } from './llama';
 import {
@@ -82,7 +83,6 @@ import { WatsonXProvider } from './watsonx';
 import { WebhookProvider } from './webhook';
 import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai';
-import { createLambdaLabsProvider } from './lambdalabs';
 
 interface ProviderFactory {
   test: (providerPath: string) => boolean;
