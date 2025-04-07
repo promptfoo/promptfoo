@@ -105,5 +105,4 @@ tests:
 - [OpenAI Provider](/docs/providers/openai) - Compatible API format used by Lambda Labs
 - [Configuration Reference](/docs/configuration/reference.md) - Full configuration options for providers
 - [Lambda Labs Examples](https://github.com/promptfoo/promptfoo/tree/main/examples/lambdalabs) - Example configurations using Lambda Labs models
-- [Model Graded Evaluations](/docs/configuration/expected-outputs/model-graded) - Using models to evaluate other models
 - [Lambda Labs API Documentation](https://docs.lambda.ai/public-cloud/lambda-inference-api/) - Official API reference
