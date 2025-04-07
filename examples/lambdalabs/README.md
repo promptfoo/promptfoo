@@ -1,16 +1,12 @@
-# lambdalabs (Silly Lambda Labs Provider Example)
+# lambdalabs
 
-This example demonstrates how to use the Lambda Labs Inference API with promptfoo to evaluate various Lambda Labs models on their ability to generate kid-friendly, silly explanations of complex concepts.
+This example demonstrates how to use the Lambda Labs Inference API with promptfoo.
 
 You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example lambdalabs
 ```
-
-## Overview
-
-The Lambda Inference API provides access to cutting-edge large language models like Llama 4, DeepSeek, and Hermes without needing to set up your own infrastructure. This fun example compares how these powerful models handle silly requests and generate child-friendly explanations.
 
 ## Prerequisites
 
@@ -19,11 +15,9 @@ The Lambda Inference API provides access to cutting-edge large language models l
 
 ## Environment Variables
 
-This example requires the following environment variables:
+This example requires:
 
 - `LAMBDA_API_KEY` - Your Lambda Labs Cloud API key
-
-You can set this in a `.env` file or directly in your environment:
 
 ```bash
 export LAMBDA_API_KEY=your_lambda_key_here
@@ -31,61 +25,32 @@ export LAMBDA_API_KEY=your_lambda_key_here
 
 ## Running the Example
 
-1. Set the required environment variable
-2. Run the evaluation:
+1. Set your Lambda API key
+2. Run the evaluation: `promptfoo eval`
+3. View results: `promptfoo view`
 
-```bash
-promptfoo eval
-```
+## What This Example Tests
 
-3. View the results in the web UI:
+This example evaluates how well Lambda models can:
 
-```bash
-promptfoo view
-```
+- Perform step-by-step reasoning for absurd estimation questions
+- Make plausible calculations based on reasonable assumptions
+- Provide entertaining yet mathematically sound responses
+- Break down complex estimation problems
 
-## What This Example Demonstrates
-
-- How to configure the Lambda Labs provider
-- How to use language models for generating kid-friendly, fun content
-- How to compare multiple models from Lambda Labs on creativity metrics
-- How to use the same model (Llama 4) for both generation and evaluation
-- How to set up custom grading prompts that evaluate outputs based on humor and creativity
-- How to create more engaging and fun evaluations for LLM outputs
+The evaluation compares Llama 4 Maverick (17B) with Llama 3.3 (70B) to see which performs better on these types of reasoning tasks.
 
 ## Model Information
 
-This example uses the following Lambda Labs models:
+- `llama-4-maverick-17b-128e-instruct-fp8` - Used for both generation and evaluation
+- `llama3.3-70b-instruct-fp8` - Used for generation only
 
-- `llama-4-maverick-17b-128e-instruct-fp8` - Meta's Llama 4 Maverick model with 128 expert MoE architecture (used for generation AND evaluation)
-- `llama3.3-70b-instruct-fp8` - Meta's Llama 3.3 70B parameter model (used for generation only)
+## Self-Evaluation
 
-Lambda Labs offers many other models that you can try by changing the model name in the configuration file.
-
-## Custom Grading
-
-This example showcases how to use custom grading with a pirate-themed "Captain Giggles" LLM evaluator that assesses:
-
-1. Silliness and absurdity
-2. Kid-friendliness
-3. Creativity of analogies
-4. Quality of jokes
-
-Unlike many examples that use OpenAI's models for evaluation, this example is unique because it uses Lambda Labs' Llama 4 model for both generating content and evaluating it, creating an all-Lambda Labs evaluation workflow.
-
-## Customization
-
-You can modify this example to:
-
-- Test different Lambda Labs models
-- Change the silly themes and topics
-- Adjust the grading criteria and rubric prompts
-- Experiment with different temperature settings to control randomness
-- Try different models for generation vs. evaluation
+This example demonstrates self-evaluation by using the same Lambda Labs Llama 4 model to both generate answers and evaluate them against our rubric. This creates an end-to-end Lambda Labs workflow without needing external models for evaluation.
 
 ## Additional Resources
 
-- [Lambda Labs API Documentation](https://docs.lambdalabs.com/api)
-- [promptfoo Lambda Labs Provider Documentation](https://promptfoo.dev/docs/providers/lambdalabs)
-- [Model-graded Metrics Documentation](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded/)
-- [More promptfoo Examples](https://promptfoo.dev/docs/examples)
+- [Lambda Labs API Documentation](https://docs.lambda.ai/public-cloud/lambda-inference-api/)
+- [Lambda Labs Promptfoo Documentation](https://promptfoo.dev/docs/providers/lambdalabs)
+- [Model-graded Metrics](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded/)
