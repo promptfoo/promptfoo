@@ -47,11 +47,9 @@ promptfoo view
 ## What This Example Demonstrates
 
 - How to configure the Lambda Labs provider
-- How to use the chat completion interface
-- How to create chat-based prompts with system and user messages
+- How to use the chat completion interface with text prompts
 - How to compare multiple models from Lambda Labs
 - How to set up assertions for evaluating model responses
-- How to use scenarios for organizing test cases
 
 ## Model Information
 

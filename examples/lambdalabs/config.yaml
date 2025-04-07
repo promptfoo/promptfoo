@@ -6,11 +6,11 @@ description: Comparing Lambda Labs models
 # 2. Run: promptfoo eval --config examples/lambdalabs/config.yaml
 
 prompts:
-  - messages:
-      - role: system
-        content: "You are an AI assistant with expertise in {{topic}}. Provide a concise explanation of {{concept}} and its importance in the field."
-      - role: user
-        content: "Please explain {{concept}} in the context of {{topic}} in simple terms."
+  - |
+    You are an AI assistant with expertise in {{topic}}. Provide a concise explanation 
+    of {{concept}} and its importance in the field.
+    
+    Please explain {{concept}} in the context of {{topic}} in simple terms.
 
 providers:
   - id: lambdalabs:chat:llama-4-maverick-17b-128e-instruct-fp8
@@ -26,11 +26,6 @@ defaultTest:
   assert:
     - type: javascript
       value: "return output.length > 100 ? 'pass' : 'fail'; // Ensure we get substantial responses"
-
-scenarios:
-  quantum-physics:
-    vars:
-      topic: quantum physics
 
 tests:
   - vars:
@@ -57,8 +52,8 @@ tests:
         value: "Does the response explain dark matter clearly? Rate from 1-10."
       - type: contains-any
         value: ["gravity", "mass", "invisible", "galaxy"]
-  - scenario: quantum-physics
-    vars:
+  - vars:
+      topic: quantum physics
       concept: wave-particle duality
     assert:
       - type: llm-rubric
