@@ -895,10 +895,6 @@ export const UnifiedConfigSchema = TestSuiteConfigSchema.extend({
 
 export type UnifiedConfig = z.infer<typeof UnifiedConfigSchema>;
 
-export enum ConfigType {
-  DatasetGeneration,
-}
-
 export interface EvalWithMetadata {
   id: string;
   date: Date;

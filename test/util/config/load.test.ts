@@ -1038,7 +1038,7 @@ describe('resolveConfigs', () => {
     jest.mocked(fs.readFileSync).mockReturnValueOnce(JSON.stringify(promptfooConfig));
 
     expect(
-      async () => await resolveConfigs(cmdObj, defaultConfig, ConfigType.DatasetGeneration),
+      async () => await resolveConfigs(cmdObj, defaultConfig, 'DatasetGeneration'),
     ).not.toThrow();
   });
 });
