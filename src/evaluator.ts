@@ -138,6 +138,11 @@ export function newTokenUsage(): Required<TokenUsage> {
       prompt: 0,
       completion: 0,
       cached: 0,
+      completionDetails: {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
     },
   };
 }
@@ -807,9 +812,6 @@ class Evaluator {
           for (const assertion of row.testCase.assert) {
             if (MODEL_GRADED_ASSERTION_TYPES.has(assertion.type as AssertionType)) {
               const tokensUsed = row.gradingResult.tokensUsed;
-              logger.info(
-                `Model-graded assertion [${assertion.type}] token usage: ${JSON.stringify(tokensUsed)}`,
-              );
 
               // Initialize assertions object if it doesn't exist
               if (!this.stats.tokenUsage.assertions) {

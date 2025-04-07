@@ -5,7 +5,7 @@ prompts:
 
 providers:
   # Main provider for generating responses
-  - openai:gpt-4o
+  - openai:o3-mini
 
   # Provider for model-graded evaluations (default)
   - id: openai:gpt-4o-mini
@@ -29,7 +29,7 @@ tests:
 
   - description: Test with 2 model-graded metrics
     vars:
-      prompt: 'Compare and contrast the benefits of meditation and yoga for mental health.'
+      prompt: 'Write a short comparison contrasting the benefits of meditation and yoga for mental health.'
     options:
       provider: openai:o3-mini
     assert:

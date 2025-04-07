@@ -281,6 +281,11 @@ export async function doEval(
         prompt: 0,
         completion: 0,
         cached: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     };
 
@@ -313,6 +318,16 @@ export async function doEval(
         tokenUsage.assertions.prompt += prompt.metrics.tokenUsage.assertions.prompt || 0;
         tokenUsage.assertions.completion += prompt.metrics.tokenUsage.assertions.completion || 0;
         tokenUsage.assertions.cached += prompt.metrics.tokenUsage.assertions.cached || 0;
+
+        // Track assertion reasoning tokens
+        if (prompt.metrics.tokenUsage.assertions.completionDetails) {
+          tokenUsage.assertions.completionDetails.reasoning +=
+            prompt.metrics.tokenUsage.assertions.completionDetails.reasoning || 0;
+          tokenUsage.assertions.completionDetails.acceptedPrediction +=
+            prompt.metrics.tokenUsage.assertions.completionDetails.acceptedPrediction || 0;
+          tokenUsage.assertions.completionDetails.rejectedPrediction +=
+            prompt.metrics.tokenUsage.assertions.completionDetails.rejectedPrediction || 0;
+        }
       }
     }
     const totalTests = successes + failures + errors;
@@ -413,10 +428,10 @@ export async function doEval(
       // Line 1: Display evaluation tokens
       if (isRedteam) {
         logger.info(
-          `Model probes: ${tokenUsage.numRequests.toLocaleString()} / ${formatTokenUsage('Evaluation', evalTokens)}`,
+          `Model probes: ${tokenUsage.numRequests.toLocaleString()} / ${formatTokenUsage('eval', evalTokens)}`,
         );
       } else {
-        logger.info(formatTokenUsage('Evaluation', evalTokens));
+        logger.info(formatTokenUsage('eval', evalTokens));
       }
 
       // Line 2: Assertion/grading tokens (from metrics like llm-rubric)
@@ -427,7 +442,7 @@ export async function doEval(
       // Line 3: Calculate the real total (sum of evaluation and grading)
       const combinedTotal = evalTokens.total + tokenUsage.assertions.total;
       logger.info(
-        `Total tokens: ${combinedTotal.toLocaleString()} (Evaluation: ${evalTokens.total.toLocaleString()} + Grading: ${tokenUsage.assertions.total.toLocaleString()})`,
+        `Total tokens: ${combinedTotal.toLocaleString()} (eval: ${evalTokens.total.toLocaleString()} + Grading: ${tokenUsage.assertions.total.toLocaleString()})`,
       );
     }
 
