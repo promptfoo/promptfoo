@@ -1,0 +1,26 @@
+# Example configuration for Lambda Labs provider
+# To use this example:
+# 1. Set your LAMBDA_API_KEY environment variable
+# 2. Run: promptfoo eval --config examples/lambdalabs/config.yaml
+
+providers:
+  - id: lambdalabs:chat:llama-4-maverick-17b-128e-instruct-fp8
+    config:
+      temperature: 0.7
+      max_tokens: 2048
+
+prompts:
+  - |
+    You are an AI assistant with expertise in {{topic}}. Provide a concise explanation
+    of {{concept}} and its importance in the field.
+
+tests:
+  - vars:
+      topic: quantum computing
+      concept: quantum entanglement
+  - vars:
+      topic: machine learning
+      concept: neural networks
+  - vars:
+      topic: astronomy
+      concept: dark matter 

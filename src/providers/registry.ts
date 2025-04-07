@@ -82,6 +82,7 @@ import { WatsonXProvider } from './watsonx';
 import { WebhookProvider } from './webhook';
 import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai';
+import { createLambdaLabsProvider } from './lambdalabs';
 
 interface ProviderFactory {
   test: (providerPath: string) => boolean;
@@ -1156,6 +1157,19 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return new ServerToolDiscoveryMultiProvider(providerOptions.config);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('lambdalabs:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createLambdaLabsProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
     },
   },
 ];

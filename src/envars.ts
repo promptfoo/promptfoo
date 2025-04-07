@@ -165,6 +165,11 @@ export type EnvVars = {
   AZURE_CONTENT_SAFETY_ENDPOINT?: string;
   AZURE_CONTENT_SAFETY_API_VERSION?: string;
   AZURE_CONTENT_SAFETY_API_KEY?: string;
+
+  // New environment variables
+  JFROG_API_KEY?: string;
+  LAMBDA_API_KEY?: string;
+  LITELLM_API_BASE?: string;
 } & EnvOverrides;
 
 type EnvVarKey = keyof EnvVars;
@@ -263,3 +268,11 @@ export function isCI() {
     getEnvBool('TEAMCITY_VERSION')
   );
 }
+
+export const EnvKeyNames = [
+  // ... existing code ...
+  'JFROG_API_KEY',
+  'LAMBDA_API_KEY',
+  'LITELLM_API_BASE',
+  // ... existing code ...
+] as const;
