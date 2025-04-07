@@ -30,13 +30,15 @@ import { ClouderaAiChatCompletionProvider } from './cloudera';
 import * as CloudflareAiProviders from './cloudflare-ai';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere';
 import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
+import { createDeepSeekProvider } from './deepseek';
 import { EchoProvider } from './echo';
 import { FalImageGenerationProvider } from './fal';
-import { GolangProvider } from './golangCompletion';
+import { createFireworksProvider } from './fireworks';
+import { GolangProvider } from './golang';
 import { AIStudioChatProvider } from './google/ai.studio';
 import { GoogleMMLiveProvider } from './google/live';
 import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
-import { GroqProvider } from './groq';
+import { createGroqProvider } from './groq';
 import { HttpProvider } from './http';
 import {
   HuggingfaceFeatureExtractionProvider,
@@ -45,7 +47,8 @@ import {
   HuggingfaceTextGenerationProvider,
   HuggingfaceTokenExtractionProvider,
 } from './huggingface';
-import { JfrogMlChatCompletionProvider } from './jfrog';
+import { createHyperbolicProvider } from './hyperbolic';
+import { JfrogMlChatCompletionProvider, createJfrogMlProvider } from './jfrog';
 import { createLambdaLabsProvider } from './lambdalabs';
 import { LiteLLMProvider } from './litellm';
 import { LlamaProvider } from './llama';
@@ -65,7 +68,9 @@ import { OpenAiImageProvider } from './openai/image';
 import { OpenAiModerationProvider } from './openai/moderation';
 import { OpenAiRealtimeProvider } from './openai/realtime';
 import { OpenAiResponsesProvider } from './openai/responses';
+import { createOpenRouterProvider } from './openrouter';
 import { parsePackageProvider } from './packageParser';
+import { createPerplexityProvider } from './perplexity';
 import { PortkeyChatCompletionProvider } from './portkey';
 import { PromptfooModelProvider } from './promptfooModel';
 import { PythonProvider } from './pythonCompletion';
@@ -414,15 +419,9 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      const splits = providerPath.split(':');
-      const modelName = splits.slice(1).join(':') || 'deepseek-chat';
-      return new OpenAiChatCompletionProvider(modelName, {
-        ...providerOptions,
-        config: {
-          ...providerOptions.config,
-          apiBaseUrl: 'https://api.deepseek.com/v1',
-          apiKeyEnvar: 'DEEPSEEK_API_KEY',
-        },
+      return createDeepSeekProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
       });
     },
   },
@@ -493,15 +492,9 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      const splits = providerPath.split(':');
-      const modelName = splits.slice(1).join(':');
-      return new OpenAiChatCompletionProvider(modelName, {
-        ...providerOptions,
-        config: {
-          ...providerOptions.config,
-          apiBaseUrl: 'https://api.fireworks.ai/inference/v1',
-          apiKeyEnvar: 'FIREWORKS_API_KEY',
-        },
+      return createFireworksProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
       });
     },
   },
@@ -547,8 +540,10 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      const modelName = providerPath.split(':')[1];
-      return new GroqProvider(modelName, providerOptions);
+      return createGroqProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
     },
   },
   {
@@ -558,15 +553,9 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      const splits = providerPath.split(':');
-      const modelName = splits.slice(1).join(':');
-      return new OpenAiChatCompletionProvider(modelName, {
-        ...providerOptions,
-        config: {
-          ...providerOptions.config,
-          apiBaseUrl: 'https://api.hyperbolic.xyz/v1',
-          apiKeyEnvar: 'HYPERBOLIC_API_KEY',
-        },
+      return createHyperbolicProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
       });
     },
   },
@@ -710,28 +699,9 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      const splits = providerPath.split(':');
-      const modelName = splits.slice(1).join(':');
-      return new OpenAiChatCompletionProvider(modelName, {
-        ...providerOptions,
-        config: {
-          ...providerOptions.config,
-          apiBaseUrl: 'https://openrouter.ai/api/v1',
-          apiKeyEnvar: 'OPENROUTER_API_KEY',
-          passthrough: {
-            // Pass through OpenRouter-specific options
-            // https://openrouter.ai/docs/requests
-            ...(providerOptions.config.transforms && {
-              transforms: providerOptions.config.transforms,
-            }),
-            ...(providerOptions.config.models && { models: providerOptions.config.models }),
-            ...(providerOptions.config.route && { route: providerOptions.config.route }),
-            ...(providerOptions.config.provider && { provider: providerOptions.config.provider }),
-            ...(providerOptions.config.passthrough && {
-              passthrough: providerOptions.config.passthrough,
-            }),
-          },
-        },
+      return createOpenRouterProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
       });
     },
   },
@@ -752,15 +722,9 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      const splits = providerPath.split(':');
-      const modelName = splits.slice(1).join(':');
-      return new OpenAiChatCompletionProvider(modelName, {
-        ...providerOptions,
-        config: {
-          ...providerOptions.config,
-          apiBaseUrl: 'https://api.perplexity.ai',
-          apiKeyEnvar: 'PERPLEXITY_API_KEY',
-        },
+      return createPerplexityProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
       });
     },
   },
@@ -953,9 +917,10 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      const splits = providerPath.split(':');
-      const modelName = splits.slice(1).join(':');
-      return new JfrogMlChatCompletionProvider(modelName, providerOptions);
+      return createJfrogMlProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
     },
   },
   {

@@ -1,62 +1,29 @@
-import type { ProviderOptions } from '../types/providers';
-import { OpenAiChatCompletionProvider } from './openai/chat';
-import type { OpenAiCompletionOptions } from './openai/types';
+import type { ApiProvider, ProviderOptions } from '../types';
+import type { EnvOverrides } from '../types/env';
+import { createOpenAICompatibleProvider } from './shared/openaiCompatible';
 
-type GroqCompletionOptions = OpenAiCompletionOptions & {
-  systemPrompt?: string;
-  parallel_tool_calls?: boolean | null;
-  reasoning_format?: string | null;
-};
-
-type GroqProviderOptions = ProviderOptions & {
-  config?: GroqCompletionOptions;
-};
-
-export class GroqProvider extends OpenAiChatCompletionProvider {
-  protected get apiKey(): string | undefined {
-    return this.config?.apiKey;
-  }
-
-  protected isReasoningModel(): boolean {
-    // Groq's reasoning models include deepseek-r1 models and any others they may add
-    return this.modelName.includes('deepseek-r1') || super.isReasoningModel();
-  }
-
-  protected supportsTemperature(): boolean {
-    // Groq's deepseek models support temperature, even though they're reasoning models
-    if (this.modelName.includes('deepseek-r1')) {
-      return true;
-    }
-    return super.supportsTemperature();
-  }
-
-  constructor(modelName: string, providerOptions: GroqProviderOptions) {
-    super(modelName, {
-      ...providerOptions,
-      config: {
-        ...providerOptions.config,
-        apiKeyEnvar: 'GROQ_API_KEY',
-        apiBaseUrl: 'https://api.groq.com/openai/v1',
-      },
-    });
-  }
-
-  id(): string {
-    return `groq:${this.modelName}`;
-  }
-
-  toString(): string {
-    return `[Groq Provider ${this.modelName}]`;
-  }
-
-  toJSON() {
-    return {
-      provider: 'groq',
-      model: this.modelName,
-      config: {
-        ...this.config,
-        ...(this.apiKey && { apiKey: undefined }),
-      },
-    };
-  }
+/**
+ * Creates a Groq provider using OpenAI-compatible endpoints
+ *
+ * Documentation: https://console.groq.com/docs/quickstart
+ *
+ * Groq API supports the OpenAI API format and can be used as a drop-in replacement.
+ * All parameters are automatically passed through to the Groq API.
+ */
+export function createGroqProvider(
+  providerPath: string,
+  options: {
+    config?: ProviderOptions;
+    id?: string;
+    env?: EnvOverrides;
+  } = {},
+): ApiProvider {
+  return createOpenAICompatibleProvider(
+    providerPath,
+    {
+      apiBaseUrl: 'https://api.groq.com/openai/v1',
+      apiKeyEnvar: 'GROQ_API_KEY',
+    },
+    options,
+  );
 }

@@ -1,8 +1,6 @@
 import type { ApiProvider, ProviderOptions } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { OpenAiChatCompletionProvider } from './openai/chat';
-import { OpenAiCompletionProvider } from './openai/completion';
-import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { createOpenAICompatibleProvider } from './shared/openaiCompatible';
 
 /**
  * Creates a TogetherAI provider using OpenAI-compatible endpoints
@@ -18,32 +16,12 @@ export function createTogetherAiProvider(
     env?: EnvOverrides;
   } = {},
 ): ApiProvider {
-  const splits = providerPath.split(':');
-
-  const config = options.config?.config || {};
-  const togetherAiConfig = {
-    ...options,
-    config: {
+  return createOpenAICompatibleProvider(
+    providerPath,
+    {
       apiBaseUrl: 'https://api.together.xyz/v1',
       apiKeyEnvar: 'TOGETHER_API_KEY',
-      passthrough: {
-        ...config,
-      },
     },
-  };
-
-  if (splits[1] === 'chat') {
-    const modelName = splits.slice(2).join(':');
-    return new OpenAiChatCompletionProvider(modelName, togetherAiConfig);
-  } else if (splits[1] === 'completion') {
-    const modelName = splits.slice(2).join(':');
-    return new OpenAiCompletionProvider(modelName, togetherAiConfig);
-  } else if (splits[1] === 'embedding' || splits[1] === 'embeddings') {
-    const modelName = splits.slice(2).join(':');
-    return new OpenAiEmbeddingProvider(modelName, togetherAiConfig);
-  } else {
-    // If no specific type is provided, default to chat
-    const modelName = splits.slice(1).join(':');
-    return new OpenAiChatCompletionProvider(modelName, togetherAiConfig);
-  }
+    options,
+  );
 }
