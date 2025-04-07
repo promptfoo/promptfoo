@@ -3,6 +3,7 @@ import {
   TestCaseSchema,
   CommandLineOptionsSchema,
   TestSuiteConfigSchema,
+  ConfigType,
 } from '../../src/types';
 
 describe('isGradingResult', () => {
@@ -292,5 +293,19 @@ describe('TestSuiteConfigSchema env property', () => {
       prompts: ['prompt1'],
     };
     expect(() => TestSuiteConfigSchema.parse(config)).not.toThrow();
+  });
+});
+
+describe('ConfigType', () => {
+  it('should have DatasetGeneration value', () => {
+    expect(ConfigType.DatasetGeneration).toBeDefined();
+    expect(typeof ConfigType.DatasetGeneration).toBe('number');
+  });
+
+  it('should be an enum with single value', () => {
+    // Get only the numeric enum values
+    const numericKeys = Object.keys(ConfigType).filter((key) => !Number.isNaN(Number(key)));
+    expect(numericKeys).toHaveLength(1);
+    expect(ConfigType.DatasetGeneration).toBe(0);
   });
 });
