@@ -280,7 +280,6 @@ export function loadFile(
       return JSON.parse(fileContents);
     } catch (err) {
       logger.debug(`ERROR: failed to convert file contents to JSON:\n${JSON.stringify(err)}`);
-      logger.debug(`ERROR: failed to convert file contents to JSON:\n${JSON.stringify(err)}`);
       return fileContents;
     }
   }
