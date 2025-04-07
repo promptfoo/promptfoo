@@ -440,7 +440,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
 }
 
 /**
- * @param type - The type of configuration file. Currently supports `ConfigType.DatasetGeneration`.
+ * @param type - The type of configuration file. Incrementally implemented; currently supports `DatasetGeneration`.
  *  TODO(Optimization): Perform type-specific validation e.g. using Zod schemas for data model variants.
  */
 export async function resolveConfigs(
