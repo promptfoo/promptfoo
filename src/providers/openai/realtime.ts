@@ -8,7 +8,11 @@ import type {
   TokenUsage,
 } from '../../types';
 import type { EnvOverrides } from '../../types/env';
-import { renderVarsInObject } from '../../util';
+import {
+  maybeLoadFromExternalFile,
+  maybeLoadToolsFromExternalFile,
+  renderVarsInObject,
+} from '../../util';
 import type { OpenAiCompletionOptions } from './types';
 import { OPENAI_REALTIME_MODELS } from './util';
 
@@ -105,7 +109,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     }
 
     if (this.config.tools && this.config.tools.length > 0) {
-      body.tools = renderVarsInObject(this.config.tools);
+      body.tools = maybeLoadToolsFromExternalFile(this.config.tools);
       // If tools are provided but no tool_choice, default to auto
       if (this.config.tool_choice === undefined) {
         body.tool_choice = 'auto';
@@ -257,7 +261,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
                 // Add tools if configured
                 if (this.config.tools && this.config.tools.length > 0) {
-                  responseEvent.response.tools = this.config.tools;
+                  responseEvent.response.tools = maybeLoadToolsFromExternalFile(this.config.tools);
                   if (Object.prototype.hasOwnProperty.call(this.config, 'tool_choice')) {
                     responseEvent.response.tool_choice = this.config.tool_choice;
                   } else {
@@ -831,7 +835,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
                 // Add tools if configured
                 if (this.config.tools && this.config.tools.length > 0) {
-                  responseEvent.response.tools = this.config.tools;
+                  responseEvent.response.tools = maybeLoadToolsFromExternalFile(this.config.tools);
                   if (Object.prototype.hasOwnProperty.call(this.config, 'tool_choice')) {
                     responseEvent.response.tool_choice = this.config.tool_choice;
                   } else {

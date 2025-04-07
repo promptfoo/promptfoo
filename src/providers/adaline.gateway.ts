@@ -49,6 +49,8 @@ import type { OpenAiCompletionOptions } from './openai/types';
 import { calculateOpenAICost } from './openai/util';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 import { VoyageEmbeddingProvider } from './voyage';
+import { renderVarsInObject } from '../util';
+import { maybeLoadToolsFromExternalFile } from '../util';
 
 // Allows Adaline Gateway to R/W Promptfoo's cache
 class AdalineGatewayCachePlugin<T> implements GatewayCache<T> {
@@ -412,7 +414,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
         gatewayMessages = parseChatPrompt(prompt, [
           { role: 'user', content: [{ modality: 'text', value: prompt }] },
         ]);
-        gatewayTools = _config.tools as GatewayToolType[];
+        gatewayTools = _config.tools ? maybeLoadToolsFromExternalFile(_config.tools) as GatewayToolType[] : undefined;
       }
 
       if (this.providerName === 'openai') {

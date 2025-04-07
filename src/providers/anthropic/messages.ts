@@ -5,7 +5,10 @@ import { getEnvInt, getEnvFloat } from '../../envars';
 import logger from '../../logger';
 import type { ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
-import { maybeLoadFromExternalFile } from '../../util';
+import {
+  maybeLoadFromExternalFile,
+  maybeLoadToolsFromExternalFile,
+} from '../../util';
 import { AnthropicGenericProvider } from './generic';
 import type { AnthropicMessageOptions } from './types';
 import {
@@ -67,7 +70,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         this.config.thinking || thinking
           ? this.config.temperature
           : this.config.temperature || getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
-      ...(this.config.tools ? { tools: maybeLoadFromExternalFile(this.config.tools) } : {}),
+      ...(this.config.tools ? { tools: maybeLoadToolsFromExternalFile(this.config.tools) } : {}),
       ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
       ...(this.config.thinking || thinking ? { thinking: this.config.thinking || thinking } : {}),
       ...(typeof this.config?.extra_body === 'object' && this.config.extra_body

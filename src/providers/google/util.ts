@@ -2,11 +2,14 @@ import type { GoogleAuth } from 'google-auth-library';
 import Clone from 'rfdc';
 import { z } from 'zod';
 import logger from '../../logger';
-import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
+import { maybeLoadFromExternalFile, maybeLoadToolsFromExternalFile } from '../../util';
 import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt } from '../shared';
 import { type Tool } from './types';
 import type { Content, Part } from './types';
+
+// Re-export utility functions needed by other Google provider files
+export { maybeLoadToolsFromExternalFile } from '../../util';
 
 const clone = Clone();
 
@@ -272,7 +275,7 @@ export function loadFile(
   // 2. In a test variable that is used in the provider via a nunjucks:
   //    context_vars will contain a string of the contents of the file with whitespace.
   //    This will be inserted into the nunjucks in contfig_tools and the output needs to be parsed.
-  const fileContents = maybeLoadFromExternalFile(renderVarsInObject(config_var, context_vars));
+  const fileContents = maybeLoadToolsFromExternalFile(config_var, context_vars);
   if (typeof fileContents === 'string') {
     try {
       return JSON.parse(fileContents);
@@ -319,7 +322,22 @@ export function geminiFormatAndSystemInstructions(
 
     // Load SI from file
     if (typeof configSystemInstruction === 'string') {
-      systemInstruction = loadFile(configSystemInstruction, contextVars);
+      // Check if this is a file path and load it
+      if (configSystemInstruction.startsWith('file://')) {
+        systemInstruction = maybeLoadFromExternalFile(configSystemInstruction);
+      } else {
+        // Handle variables in the string 
+        const nunjucks = getNunjucksEngine();
+        if (contextVars) {
+          systemInstruction = nunjucks.renderString(configSystemInstruction, contextVars);
+          // Check if the rendered string is a file path
+          if (typeof systemInstruction === 'string' && systemInstruction.startsWith('file://')) {
+            systemInstruction = maybeLoadFromExternalFile(systemInstruction);
+          }
+        } else {
+          systemInstruction = configSystemInstruction;
+        }
+      }
     }
 
     // Format SI if string was not a filepath above

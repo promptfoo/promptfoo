@@ -5,7 +5,11 @@ import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
-import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
+import { 
+  maybeLoadFromExternalFile, 
+  maybeLoadToolsFromExternalFile,
+  renderVarsInObject 
+} from '../../util';
 import { isJavascriptFile } from '../../util/file';
 import { sleep } from '../../util/time';
 import { REQUEST_TIMEOUT_MS, toTitleCase } from '../shared';
@@ -277,7 +281,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       tool_choice: this.assistantConfig.tool_choice,
       tool_resources: this.assistantConfig.tool_resources,
       tools: JSON.stringify(
-        maybeLoadFromExternalFile(renderVarsInObject(this.assistantConfig.tools, context?.vars)),
+        maybeLoadToolsFromExternalFile(this.assistantConfig.tools, context?.vars),
       ),
       top_p: this.assistantConfig.top_p,
     })}`;
@@ -344,8 +348,9 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         runOptions.tool_choice = this.assistantConfig.tool_choice;
       }
       if (this.assistantConfig.tools) {
-        runOptions.tools = maybeLoadFromExternalFile(
-          renderVarsInObject(this.assistantConfig.tools, context?.vars),
+        runOptions.tools = maybeLoadToolsFromExternalFile(
+          this.assistantConfig.tools,
+          context?.vars,
         );
       }
       if (this.assistantConfig.modelName) {

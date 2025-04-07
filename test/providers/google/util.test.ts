@@ -17,8 +17,18 @@ jest.mock('glob', () => ({
 }));
 
 jest.mock('fs', () => ({
-  existsSync: jest.fn(),
-  readFileSync: jest.fn(),
+  existsSync: jest.fn().mockImplementation((path) => {
+    if (path === 'file://system_instruction.json') {
+      return true;
+    }
+    return false;
+  }),
+  readFileSync: jest.fn().mockImplementation((path) => {
+    if (path === 'file://system_instruction.json') {
+      return 'system instruction';
+    }
+    throw new Error(`Mock file not found: ${path}`);
+  }),
   writeFileSync: jest.fn(),
   statSync: jest.fn(),
 }));
