@@ -145,6 +145,12 @@ describe('evaluator', () => {
         acceptedPrediction: 0,
         rejectedPrediction: 0,
       },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+      },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
@@ -178,6 +184,12 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+      },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt 1 < 2 he said "hello world"...');
@@ -213,6 +225,12 @@ describe('evaluator', () => {
         acceptedPrediction: 0,
         rejectedPrediction: 0,
       },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+      },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1.prop1 }} {{ var2 }}');
@@ -246,6 +264,12 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+      },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
@@ -281,6 +305,12 @@ describe('evaluator', () => {
         acceptedPrediction: 0,
         rejectedPrediction: 0,
       },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+      },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
@@ -315,6 +345,12 @@ describe('evaluator', () => {
         acceptedPrediction: 0,
         rejectedPrediction: 0,
       },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+      },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
@@ -343,6 +379,12 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+      },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt');
@@ -373,6 +415,12 @@ describe('evaluator', () => {
         acceptedPrediction: 0,
         rejectedPrediction: 0,
       },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+      },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt');
     expect(summary.results[0].prompt.label).toBe('Test prompt');
@@ -401,6 +449,12 @@ describe('evaluator', () => {
         reasoning: 11,
         acceptedPrediction: 12,
         rejectedPrediction: 13,
+      },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt');
@@ -898,6 +952,12 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+      },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt 1');
@@ -2284,15 +2344,26 @@ describe('runEval', () => {
     });
 
     expect(results[0].tokenUsage).toEqual({
-      total: 20, // 10 from provider + 5 from assertion
+      total: 20, // 10 from provider + 10 from assertion
       prompt: 10, // 5 from provider + 5 from assertion
       completion: 10, // 5 from provider + 5 from assertion
       cached: 0,
-      numRequests: 2, // 1 from provider + 1 from assertion
+      numRequests: 2, // 1 for provider + 1 for assertion
       completionDetails: {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+      },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+        completionDetails: {
+          acceptedPrediction: 0,
+          reasoning: 0,
+          rejectedPrediction: 0,
+        },
       },
     });
   });
