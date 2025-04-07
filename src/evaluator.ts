@@ -827,16 +827,6 @@ class Evaluator {
               assertions.completion = (assertions.completion ?? 0) + (tokensUsed.completion ?? 0);
               assertions.cached = (assertions.cached ?? 0) + (tokensUsed.cached ?? 0);
 
-              // Also add to the overall totals
-              this.stats.tokenUsage.total =
-                (this.stats.tokenUsage.total ?? 0) + (tokensUsed.total ?? 0);
-              this.stats.tokenUsage.prompt =
-                (this.stats.tokenUsage.prompt ?? 0) + (tokensUsed.prompt ?? 0);
-              this.stats.tokenUsage.completion =
-                (this.stats.tokenUsage.completion ?? 0) + (tokensUsed.completion ?? 0);
-              this.stats.tokenUsage.cached =
-                (this.stats.tokenUsage.cached ?? 0) + (tokensUsed.cached ?? 0);
-
               break; // Only log once per result
             }
           }
@@ -1134,19 +1124,37 @@ class Evaluator {
               prompt: 0,
               completion: 0,
             };
-            result.gradingResult.tokensUsed = result.gradingResult.tokensUsed || {
-              total: 0,
-              prompt: 0,
-              completion: 0,
-            };
-            result.gradingResult.tokensUsed.total =
-              (result.gradingResult.tokensUsed.total || 0) + (gradingResult.tokensUsed?.total || 0);
-            result.gradingResult.tokensUsed.prompt =
-              (result.gradingResult.tokensUsed.prompt || 0) +
-              (gradingResult.tokensUsed?.prompt || 0);
-            result.gradingResult.tokensUsed.completion =
-              (result.gradingResult.tokensUsed.completion || 0) +
-              (gradingResult.tokensUsed?.completion || 0);
+
+            // Use the helper function instead of direct updates
+            if (gradingResult.tokensUsed) {
+              if (!result.gradingResult.tokensUsed) {
+                result.gradingResult.tokensUsed = {
+                  total: 0,
+                  prompt: 0,
+                  completion: 0,
+                };
+              }
+
+              // Update the metrics using the helper function
+              updateAssertionMetrics(
+                { tokenUsage: { assertions: result.gradingResult.tokensUsed } },
+                gradingResult.tokensUsed,
+              );
+
+              // Also update the metrics for the eval
+              if (gradingResult.tokensUsed && result.testCase?.assert) {
+                for (const assertion of result.testCase.assert) {
+                  if (MODEL_GRADED_ASSERTION_TYPES.has(assertion.type as AssertionType)) {
+                    updateAssertionMetrics(
+                      { tokenUsage: this.stats.tokenUsage },
+                      gradingResult.tokensUsed,
+                    );
+                    break;
+                  }
+                }
+              }
+            }
+
             result.success = result.gradingResult.pass =
               result.gradingResult.pass && gradingResult.pass;
             if (!gradingResult.pass) {

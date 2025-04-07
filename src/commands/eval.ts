@@ -24,6 +24,7 @@ import type {
   EvaluateOptions,
   Scenario,
   TestSuite,
+  TokenUsage,
   UnifiedConfig,
 } from '../types';
 import { OutputFileExtension, TestSuiteSchema } from '../types';
@@ -64,7 +65,7 @@ function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
 /**
  * Format token usage for display in CLI output
  */
-function formatTokenUsage(type: string, usage: any) {
+function formatTokenUsage(type: string, usage: Partial<TokenUsage>) {
   const parts = [];
 
   // Add token counts

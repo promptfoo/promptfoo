@@ -25,6 +25,14 @@ type Eval = {
   label: string;
   numTests: number;
   passRate: number;
+  stats?: {
+    tokenUsage?: {
+      total: number;
+      assertions?: {
+        total: number;
+      };
+    };
+  };
 };
 
 // augment the props for the toolbar slot
@@ -173,6 +181,32 @@ export default function EvalsDataGrid({
           headerName: '# Tests',
           type: 'number',
           flex: 0.5,
+        },
+        {
+          field: 'tokenUsage',
+          headerName: 'Token Usage',
+          flex: 1,
+          renderCell: (params: GridRenderCellParams<Eval>) => {
+            const tokenUsage = params.row.stats?.tokenUsage;
+            if (!tokenUsage?.total) return null;
+
+            const formattedTotal = Intl.NumberFormat(undefined, {
+              maximumFractionDigits: 0,
+            }).format(tokenUsage.total);
+
+            let displayText = `${formattedTotal}`;
+
+            // Add assertion tokens if they exist
+            if (tokenUsage.assertions?.total) {
+              const assertionTokens = Intl.NumberFormat(undefined, {
+                maximumFractionDigits: 0,
+              }).format(tokenUsage.assertions.total);
+
+              displayText += ` (+ ${assertionTokens} assertion)`;
+            }
+
+            return <Typography variant="body2">{displayText}</Typography>;
+          },
         },
       ].filter(Boolean) as GridColDef<Eval>[],
     [],

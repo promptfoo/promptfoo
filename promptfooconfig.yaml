@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenAI Model Testing with Model-Graded Metrics
+prompts:
+  - 'Please answer: {{prompt}}'
+
+providers:
+  # Main provider for generating responses
+  - openai:gpt-4o
+
+  # Provider for model-graded evaluations (default)
+  - id: openai:gpt-4o-mini
+    config:
+      temperature: 0.1
+
+tests:
+  - description: Test with 0 model-graded metrics
+    vars:
+      prompt: 'Write a short paragraph about the benefits of regular exercise.'
+    assert:
+      - type: contains
+        value: 'benefits'
+
+  - description: Test with 1 model-graded metric
+    vars:
+      prompt: 'Write a short paragraph explaining the importance of a balanced diet.'
+    assert:
+      - type: llm-rubric
+        value: 'Does the response clearly explain at least 3 health benefits of a balanced diet?'
+
+  - description: Test with 2 model-graded metrics
+    vars:
+      prompt: 'Compare and contrast the benefits of meditation and yoga for mental health.'
+    options:
+      provider: openai:o3-mini
+    assert:
+      - type: llm-rubric
+        value: 'Does the response clearly compare meditation and yoga in terms of their mental health benefits?'
+      - type: llm-rubric
+        value: 'Is the writing style clear, concise, and suitable for a general audience?'
