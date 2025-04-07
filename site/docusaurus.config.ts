@@ -2,6 +2,7 @@ import type { Config } from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 import { themes } from 'prism-react-renderer';
 import * as path from 'path';
+import * as fs from 'fs';
 
 const lightCodeTheme = themes.github;
 const darkCodeTheme = themes.duotoneDark;
@@ -363,7 +364,75 @@ const config: Config = {
         ],
       },
     ],
-    path.resolve(__dirname, 'plugins/llms-txt-plugin/index.ts'),
+    // Define the llms.txt plugin inline similar to the Prisma example
+    async function llmsTxtPlugin(context) {
+      return {
+        name: 'llms-txt-plugin',
+        loadContent: async () => {
+          const { siteDir } = context;
+          const docsDir = path.join(siteDir, 'docs');
+          const allMdx: string[] = [];
+
+          // Recursive function to get all mdx/md files
+          const getMdFiles = async (dir: string): Promise<void> => {
+            const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+
+            for (const entry of entries) {
+              const fullPath = path.join(dir, entry.name);
+              if (entry.isDirectory()) {
+                await getMdFiles(fullPath);
+              } else if (entry.name.endsWith('.md') || entry.name.endsWith('.mdx')) {
+                const content = await fs.promises.readFile(fullPath, 'utf8');
+                allMdx.push(content);
+              }
+            }
+          };
+
+          await getMdFiles(docsDir);
+          return { allMdx };
+        },
+        postBuild: async ({ content, routesPaths, outDir }) => {
+          // Type assertion to handle TypeScript type checking
+          const pluginContent = content as { allMdx: string[] };
+          const { allMdx } = pluginContent;
+
+          // Write concatenated MDX content
+          const concatenatedPath = path.join(outDir, 'llms-full.txt');
+          await fs.promises.writeFile(concatenatedPath, allMdx.join('\n\n---\n\n'));
+
+          // Process routes - use routesPaths which is a string[] of all routes
+          const docsRoutes: string[] = [];
+
+          // Filter for docs paths and generate entries
+          for (const routePath of routesPaths) {
+            if (routePath.startsWith('/docs/')) {
+              // Extract a title from the route path as fallback
+              const pathParts = routePath.split('/').filter(Boolean);
+              const lastPart = pathParts[pathParts.length - 1];
+              const title = lastPart
+                .split('-')
+                .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+                .join(' ');
+              
+              docsRoutes.push(`- [${title}](${routePath})`);
+            }
+          }
+
+          // Build up llms.txt file
+          const llmsTxt = `# ${context.siteConfig.title}\n\n## Docs\n\n${docsRoutes.join('\n')}`;
+
+          // Write llms.txt file
+          const llmsTxtPath = path.join(outDir, 'llms.txt');
+          try {
+            fs.writeFileSync(llmsTxtPath, llmsTxt);
+            console.log('Successfully created llms.txt and llms-full.txt files.');
+          } catch (err) {
+            console.error('Error writing llms.txt file:', err);
+            throw err;
+          }
+        },
+      };
+    },
   ],
 
   // Mermaid diagram support
