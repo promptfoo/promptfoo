@@ -22,18 +22,16 @@ The Lambda Inference API provides access to cutting-edge large language models l
 This example requires the following environment variables:
 
 - `LAMBDA_API_KEY` - Your Lambda Labs Cloud API key
-- `OPENAI_API_KEY` - Required for the custom grading model (uses GPT-4o-mini)
 
-You can set these in a `.env` file or directly in your environment:
+You can set this in a `.env` file or directly in your environment:
 
 ```bash
 export LAMBDA_API_KEY=your_lambda_key_here
-export OPENAI_API_KEY=your_openai_key_here
 ```
 
 ## Running the Example
 
-1. Set the required environment variables
+1. Set the required environment variable
 2. Run the evaluation:
 
 ```bash
@@ -51,15 +49,16 @@ promptfoo view
 - How to configure the Lambda Labs provider
 - How to use language models for generating kid-friendly, fun content
 - How to compare multiple models from Lambda Labs on creativity metrics
+- How to use the same model (Llama 4) for both generation and evaluation
 - How to set up custom grading prompts that evaluate outputs based on humor and creativity
 - How to create more engaging and fun evaluations for LLM outputs
 
 ## Model Information
 
-This example uses the following models:
+This example uses the following Lambda Labs models:
 
-- `llama-4-maverick-17b-128e-instruct-fp8` - Meta's Llama 4 Maverick model with 128 expert MoE architecture
-- `llama3.3-70b-instruct-fp8` - Meta's Llama 3.3 70B parameter model
+- `llama-4-maverick-17b-128e-instruct-fp8` - Meta's Llama 4 Maverick model with 128 expert MoE architecture (used for generation AND evaluation)
+- `llama3.3-70b-instruct-fp8` - Meta's Llama 3.3 70B parameter model (used for generation only)
 
 Lambda Labs offers many other models that you can try by changing the model name in the configuration file.
 
@@ -72,6 +71,8 @@ This example showcases how to use custom grading with a pirate-themed "Captain G
 3. Creativity of analogies
 4. Quality of jokes
 
+Unlike many examples that use OpenAI's models for evaluation, this example is unique because it uses Lambda Labs' Llama 4 model for both generating content and evaluating it, creating an all-Lambda Labs evaluation workflow.
+
 ## Customization
 
 You can modify this example to:
@@ -80,6 +81,7 @@ You can modify this example to:
 - Change the silly themes and topics
 - Adjust the grading criteria and rubric prompts
 - Experiment with different temperature settings to control randomness
+- Try different models for generation vs. evaluation
 
 ## Additional Resources
 

@@ -25,8 +25,12 @@ providers:
 
 defaultTest:
   options:
-    # Override the default grading LLM (optional)
-    provider: openai:gpt-4o-mini
+    # Use Lambda Labs' Llama 4 model for grading too!
+    provider: 
+      id: lambdalabs:chat:llama-4-maverick-17b-128e-instruct-fp8
+      config:
+        temperature: 0.2  # Lower temperature for more consistent grading
+        max_tokens: 1024
     # Custom grading prompt that will be applied to all llm-rubric assertions
     rubricPrompt: >
       [
