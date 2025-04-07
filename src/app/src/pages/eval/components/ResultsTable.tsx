@@ -580,15 +580,6 @@ function ResultsTable({
                     </div>
                   ) : null}
 
-                  {prompt.metrics?.tokenUsage?.assertions?.total ? (
-                    <div>
-                      <strong>Total Assertion Tokens:</strong>{' '}
-                      {Intl.NumberFormat(undefined, {
-                        maximumFractionDigits: 0,
-                      }).format(prompt.metrics.tokenUsage.assertions.total)}
-                    </div>
-                  ) : null}
-
                   {prompt.metrics?.tokenUsage?.total ? (
                     <div>
                       <strong>Avg Tokens:</strong>{' '}
@@ -597,16 +588,6 @@ function ResultsTable({
                       }).format(prompt.metrics.tokenUsage.total / body.length)}
                     </div>
                   ) : null}
-
-                  {prompt.metrics?.tokenUsage?.assertions?.total ? (
-                    <div>
-                      <strong>Avg Assertion Tokens:</strong>{' '}
-                      {Intl.NumberFormat(undefined, {
-                        maximumFractionDigits: 0,
-                      }).format(prompt.metrics.tokenUsage.assertions.total / body.length)}
-                    </div>
-                  ) : null}
-
                   {prompt.metrics?.totalLatencyMs ? (
                     <div>
                       <strong>Avg Latency:</strong>{' '}

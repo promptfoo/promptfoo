@@ -1,7 +1,6 @@
-import { useMemo, useEffect, useState, useCallback } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { callApi } from '@app/utils/api';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import { Box, Typography, Paper, CircularProgress, useTheme, Button } from '@mui/material';
+import { Box, Typography, Paper, CircularProgress, useTheme } from '@mui/material';
 import {
   DataGrid,
   type GridColDef,
@@ -25,14 +24,6 @@ type Eval = {
   label: string;
   numTests: number;
   passRate: number;
-  stats?: {
-    tokenUsage?: {
-      total: number;
-      assertions?: {
-        total: number;
-      };
-    };
-  };
 };
 
 // augment the props for the toolbar slot
@@ -99,33 +90,25 @@ export default function EvalsDataGrid({
   /**
    * Fetch evals from the API.
    */
-  const fetchEvals = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const response = await callApi('/results', { cache: 'no-store' });
-      if (!response.ok) {
-        throw new Error(`Failed to fetch evals: ${response.status} ${response.statusText}`);
+  useEffect(() => {
+    const fetchEvals = async () => {
+      try {
+        const response = await callApi('/results', { cache: 'no-store' });
+        if (!response.ok) {
+          throw new Error('Failed to fetch evals');
+        }
+        const body = (await response.json()) as { data: Eval[] };
+        setEvals(body.data);
+      } catch (error) {
+        setError(error as Error);
+      } finally {
+        setIsLoading(false);
       }
-      const body = (await response.json()) as { data: Eval[] };
-      setEvals(body.data);
-    } catch (error) {
-      setError(error as Error);
-      console.error('Error fetching evals:', error);
-    } finally {
-      setIsLoading(false);
-    }
+    };
+    fetchEvals();
   }, []);
 
-  useEffect(() => {
-    fetchEvals();
-  }, [fetchEvals]);
-
   const handleCellClick = (params: any) => onEvalSelected(params.row.evalId);
-
-  const handleRetry = () => {
-    fetchEvals();
-  };
 
   const columns: GridColDef<Eval>[] = useMemo(
     () =>
@@ -182,101 +165,8 @@ export default function EvalsDataGrid({
           type: 'number',
           flex: 0.5,
         },
-        {
-          field: 'tokenUsage',
-          headerName: 'Token Usage',
-          flex: 1,
-          renderCell: (params: GridRenderCellParams<Eval>) => {
-            const tokenUsage = params.row.stats?.tokenUsage;
-            if (!tokenUsage?.total) {
-              return null;
-            }
-
-            const formattedTotal = Intl.NumberFormat(undefined, {
-              maximumFractionDigits: 0,
-            }).format(tokenUsage.total);
-
-            let displayText = `${formattedTotal}`;
-
-            // Add assertion tokens if they exist
-            if (tokenUsage.assertions?.total) {
-              const assertionTokens = Intl.NumberFormat(undefined, {
-                maximumFractionDigits: 0,
-              }).format(tokenUsage.assertions.total);
-
-              displayText += ` (+ ${assertionTokens} assertion)`;
-            }
-
-            return <Typography variant="body2">{displayText}</Typography>;
-          },
-        },
       ].filter(Boolean) as GridColDef<Eval>[],
     [],
-  );
-
-  // Custom loading overlay component
-  const LoadingOverlay = () => (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '100%',
-        gap: 2,
-      }}
-    >
-      <CircularProgress />
-      <Typography variant="body2" color="text.secondary">
-        Loading evaluations...
-      </Typography>
-    </Box>
-  );
-
-  // Custom no rows overlay with error handling and retry button
-  const NoRowsOverlay = () => (
-    <Box
-      sx={{
-        textAlign: 'center',
-        color: 'text.secondary',
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center',
-        p: 3,
-      }}
-    >
-      {error ? (
-        <>
-          <Box sx={{ fontSize: '2rem', mb: 2 }}>⚠️</Box>
-          <Typography variant="h6" gutterBottom color="error">
-            Error loading evals
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            {error.message}
-          </Typography>
-          <Button
-            variant="contained"
-            startIcon={<RefreshIcon />}
-            onClick={handleRetry}
-            color="primary"
-          >
-            Retry
-          </Button>
-        </>
-      ) : (
-        <>
-          <Box sx={{ fontSize: '2rem', mb: 2 }}>🔍</Box>
-          <Typography variant="h6" gutterBottom>
-            No evals found
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Try adjusting your search or create a new evaluation
-          </Typography>
-        </>
-      )}
-    </Box>
   );
 
   return (
@@ -288,8 +178,59 @@ export default function EvalsDataGrid({
         getRowId={(row) => row.evalId}
         slots={{
           toolbar: CustomToolbar,
-          loadingOverlay: LoadingOverlay,
-          noRowsOverlay: NoRowsOverlay,
+          loadingOverlay: () => (
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%',
+                gap: 2,
+              }}
+            >
+              <CircularProgress />
+              <Typography variant="body2" color="text.secondary">
+                Loading evaluations...
+              </Typography>
+            </Box>
+          ),
+          noRowsOverlay: () => (
+            <Box
+              sx={{
+                textAlign: 'center',
+                color: 'text.secondary',
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
+                p: 3,
+              }}
+            >
+              {error ? (
+                <>
+                  <Box sx={{ fontSize: '2rem', mb: 2 }}>⚠️</Box>
+                  <Typography variant="h6" gutterBottom color="error">
+                    Error loading evals
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {error.message}
+                  </Typography>
+                </>
+              ) : (
+                <>
+                  <Box sx={{ fontSize: '2rem', mb: 2 }}>🔍</Box>
+                  <Typography variant="h6" gutterBottom>
+                    No evals found
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Try adjusting your search or create a new evaluation
+                  </Typography>
+                </>
+              )}
+            </Box>
+          ),
         }}
         slotProps={{ toolbar: { showUtilityButtons } }}
         onCellClick={handleCellClick}
