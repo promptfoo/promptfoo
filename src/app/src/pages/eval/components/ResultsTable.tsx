@@ -634,7 +634,24 @@ function ResultsTable({
               const providerConfig = Array.isArray(config?.providers)
                 ? config.providers[idx]
                 : undefined;
-              const providerParts = prompt.provider ? prompt.provider.split(':') : [];
+
+              let providerParts: string[] = [];
+              try {
+                if (prompt.provider && typeof prompt.provider === 'string') {
+                  providerParts = prompt.provider.split(':');
+                } else if (prompt.provider) {
+                  const providerObj = prompt.provider as any; // Use any for flexible typing
+                  const providerId =
+                    typeof providerObj === 'object' && providerObj !== null
+                      ? providerObj.id || JSON.stringify(providerObj)
+                      : String(providerObj);
+                  providerParts = [providerId];
+                }
+              } catch (error) {
+                console.error('Error parsing provider:', error);
+                providerParts = ['Error parsing provider'];
+              }
+
               const providerDisplay = (
                 <Tooltip title={providerConfig ? <pre>{yaml.dump(providerConfig)}</pre> : ''}>
                   {providerParts.length > 1 ? (
@@ -642,7 +659,7 @@ function ResultsTable({
                       {providerParts[0]}:<strong>{providerParts.slice(1).join(':')}</strong>
                     </>
                   ) : (
-                    <strong>{prompt.provider}</strong>
+                    <strong>{providerParts[0] || 'Unknown provider'}</strong>
                   )}
                 </Tooltip>
               );
