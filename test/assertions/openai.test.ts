@@ -263,7 +263,7 @@ describe('OpenAI assertions', () => {
         arguments: '{"location": "San Francisco, CA", "unit": "custom_unit"}',
       };
 
-      const mockProvider = new OpenAiChatCompletionProvider('test-provider', {
+      const varProvider = new OpenAiChatCompletionProvider('test-provider', {
         config: {
           functions: [
             {
@@ -284,7 +284,7 @@ describe('OpenAI assertions', () => {
       const result = handleIsValidFunctionCall({
         assertion: functionAssertion,
         output: functionOutput,
-        provider: mockProvider,
+        provider: varProvider,
         test: { vars: { unit: 'custom_unit' } },
         baseType: functionAssertion.type,
         context: mockContext,
@@ -307,14 +307,14 @@ describe('OpenAI assertions', () => {
         arguments: '{"location": "San Francisco, CA"}',
       };
 
-      const mockProvider = new OpenAiChatCompletionProvider('test-provider', {
+      const emptyProvider = new OpenAiChatCompletionProvider('test-provider', {
         config: {},
       });
 
       const result = handleIsValidFunctionCall({
         assertion: functionAssertion,
         output: functionOutput,
-        provider: mockProvider,
+        provider: emptyProvider,
         test: { vars: {} },
         baseType: functionAssertion.type,
         context: mockContext,
