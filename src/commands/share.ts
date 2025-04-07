@@ -80,13 +80,13 @@ export function shareCommand(program: Command) {
             return;
           }
         } else {
-          logger.info('Sharing latest eval');
           eval_ = await Eval.latest();
           if (!eval_) {
             logger.error('Could not load results. Do you need to run `promptfoo eval` first?');
             process.exitCode = 1;
             return;
           }
+          logger.info(`Sharing latest eval (${eval_.id})`);
         }
 
         if (eval_.prompts.length === 0) {

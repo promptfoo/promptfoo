@@ -438,26 +438,34 @@ export async function createShareableUrl(
 }
 
 /**
+ * Fetches a remote eval from the API.
+ * @param eval_ The eval to fetch.
+ * @returns The remote eval.
+ */
+async function fetchRemoteEval(eval_: Eval) {
+  const { url } = await getApiConfig(eval_);
+
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+  if (cloudConfig.isEnabled()) {
+    headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
+  }
+
+  return await fetchWithProxy(`${url}/${eval_.id}`, {
+    method: 'GET',
+    headers,
+  });
+}
+
+/**
  * Checks whether an eval has been shared.
  * @param eval_ The eval to check.
  * @returns True if the eval has been shared, false otherwise.
  */
 export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
   try {
-    const { url } = await getApiConfig(eval_);
-
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-
-    if (cloudConfig.isEnabled()) {
-      headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
-    }
-
-    const response = await fetchWithProxy(`${url}/${eval_.id}`, {
-      method: 'GET',
-      headers,
-    });
-
-    return response.status !== 404;
+    const res = await fetchRemoteEval(eval_);
+    return res.status !== 404;
   } catch (e) {
     logger.error(`Error checking if eval has been shared: ${e}`);
     return false;
@@ -465,10 +473,39 @@ export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
 }
 
 /**
- * Updates a shared eval by syncing the latest annotated-grades with the remote
- * instance.
+ * Updates a shared eval by syncing the following fields:
+ * - Eval Results -> Grading Results
  * @param eval_ The eval to update.
  */
 export async function updateSharedEval(eval_: Eval): Promise<void> {
-  throw new Error('Not implemented');
+  // Load the results from the local database
+  await eval_.loadResults();
+
+  // Send the payload to the server:
+  const { url } = await getApiConfig(eval_);
+
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+  if (cloudConfig.isEnabled()) {
+    headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
+  }
+
+  const res = await fetchWithProxy(`${url}/${eval_.id}/share`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({
+      // TODO(Optimization): Only send the results that have changed!
+      gradingResults: eval_.results.reduce(
+        (acc, result) => ({
+          ...acc,
+          [result.id]: result.gradingResult,
+        }),
+        {} as Record<string, Eval['results'][number]['gradingResult']>,
+      ),
+    }),
+  });
+
+  if (!res.ok || res.status !== 204) {
+    throw new Error('Failed to sync eval');
+  }
 }
