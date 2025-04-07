@@ -383,7 +383,7 @@ function normalizeSchemaTypes(schemaNode: any): any {
           newNode[key] = value.map((t) => (typeof t === 'string' ? t.toLowerCase() : t));
         } else {
           throw new Error(
-            `Schema types must be string or array of string. Recieved: ${JSON.stringify(value)}`,
+            `Schema types must be string or array of string. Received: ${JSON.stringify(value)}`,
           );
         }
       } else {
