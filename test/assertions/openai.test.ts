@@ -59,7 +59,7 @@ const mockProvider = new OpenAiChatCompletionProvider('test-provider', {
       },
     ],
   },
-});
+})
 
 const mockContext: AssertionValueFunctionContext = {
   prompt: '',
@@ -224,17 +224,17 @@ describe('OpenAI assertions', () => {
       };
 
       const mockYamlContent = `
-      - name: getCurrentTemperature
-        parameters:
-          type: object
-          properties:
-            location:
-              type: string
-            unit:
-              type: string
-              enum: [Celsius, Fahrenheit]
-          required: [location, unit]
-      `;
+- name: getCurrentTemperature
+  parameters:
+    type: object
+    properties:
+      location:
+        type: string
+      unit:
+        type: string
+        enum: [Celsius, Fahrenheit]
+    required: [location, unit]
+`;
 
       mockedFs.readFileSync.mockReturnValue(mockYamlContent);
 
@@ -279,7 +279,7 @@ describe('OpenAI assertions', () => {
             },
           ],
         },
-      });
+      })
 
       const result = handleIsValidFunctionCall({
         assertion: functionAssertion,
@@ -309,7 +309,7 @@ describe('OpenAI assertions', () => {
 
       const mockProvider = new OpenAiChatCompletionProvider('test-provider', {
         config: {},
-      });
+      })
 
       const result = handleIsValidFunctionCall({
         assertion: functionAssertion,
@@ -649,11 +649,12 @@ describe('OpenAI assertions', () => {
       mockedFs.readFileSync.mockReturnValue(mockYamlContent);
 
       const fileProvider = {
-        ...mockProvider,
+        id: () => 'test-provider',
         config: {
           tools: 'file://./test/fixtures/weather_tools.yaml',
         },
-      };
+        callApi: async () => ({ output: '' }),
+      } as ApiProvider;
 
       const result = handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
@@ -694,8 +695,7 @@ describe('OpenAI assertions', () => {
         },
       ];
 
-      const varProvider = {
-        ...mockProvider,
+      const varProvider = new OpenAiChatCompletionProvider('test-provider', {
         config: {
           tools: [
             {
@@ -714,7 +714,7 @@ describe('OpenAI assertions', () => {
             },
           ],
         },
-      };
+      })
 
       const result = handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
@@ -749,10 +749,9 @@ describe('OpenAI assertions', () => {
         },
       ];
 
-      const emptyProvider = {
-        ...mockProvider,
+      const emptyProvider = new OpenAiChatCompletionProvider('test-provider', {
         config: {},
-      };
+      })
 
       expect(() =>
         handleIsValidOpenAiToolsCall({
@@ -779,12 +778,11 @@ describe('OpenAI assertions', () => {
         },
       };
 
-      const emptyToolsProvider = {
-        ...mockProvider,
+      const emptyToolsProvider = new OpenAiChatCompletionProvider('test-provider', {
         config: {
           tools: [],
         },
-      };
+      })
 
       const result = handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,

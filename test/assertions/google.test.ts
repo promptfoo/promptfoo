@@ -183,7 +183,7 @@ describe('Google assertions', () => {
     });
   });
 
-  describe('AI Studio api is-valid-google-function-call assertion', () => {
+  describe('AI Studio api is-valid-function-call assertion', () => {
     it('should pass for a valid function call with correct arguments', async () => {
       const output = { args: '{"x": 10, "y": 20}', name: 'add' };
 
@@ -217,7 +217,7 @@ describe('Google assertions', () => {
         prompt: 'Some prompt',
         provider,
         assertion: {
-          type: 'is-valid-google-function-call',
+          type: 'is-valid-function-call',
         },
         test: {} as AtomicTestCase,
         providerResponse,
@@ -260,7 +260,7 @@ describe('Google assertions', () => {
         prompt: 'Some prompt',
         provider,
         assertion: {
-          type: 'is-valid-google-function-call',
+          type: 'is-valid-function-call',
         },
         test: {} as AtomicTestCase,
         providerResponse,
@@ -299,7 +299,7 @@ describe('Google assertions', () => {
           },
         }),
         assertion: {
-          type: 'is-valid-google-function-call',
+          type: 'is-valid-function-call',
         },
         test: {} as AtomicTestCase,
         providerResponse: { output },
@@ -312,7 +312,7 @@ describe('Google assertions', () => {
     });
   });
 
-  describe('Vertex api is-valid-google-function-call assertion', () => {
+  describe('Vertex api is-valid-function-call assertion', () => {
     it('should pass for a valid function call with correct arguments', async () => {
       const output = { args: '{"x": 10, "y": 20}', name: 'add' };
 
@@ -346,7 +346,7 @@ describe('Google assertions', () => {
         prompt: 'Some prompt',
         provider,
         assertion: {
-          type: 'is-valid-google-function-call',
+          type: 'is-valid-function-call',
         },
         test: {} as AtomicTestCase,
         providerResponse,
@@ -389,7 +389,7 @@ describe('Google assertions', () => {
         prompt: 'Some prompt',
         provider,
         assertion: {
-          type: 'is-valid-google-function-call',
+          type: 'is-valid-function-call',
         },
         test: {} as AtomicTestCase,
         providerResponse,
@@ -428,7 +428,7 @@ describe('Google assertions', () => {
           },
         }),
         assertion: {
-          type: 'is-valid-google-function-call',
+          type: 'is-valid-function-call',
         },
         test: {} as AtomicTestCase,
         providerResponse: { output },
@@ -441,7 +441,7 @@ describe('Google assertions', () => {
     });
   });
 
-  describe('Live api is-valid-google-function-call assertion', () => {
+  describe('Live api is-valid-function-call assertion', () => {
     it('should pass for a valid function call with correct arguments', async () => {
       const output = { args: '{"x": 10, "y": 20}', name: 'add' };
 
@@ -475,7 +475,7 @@ describe('Google assertions', () => {
         prompt: 'Some prompt',
         provider,
         assertion: {
-          type: 'is-valid-google-function-call',
+          type: 'is-valid-function-call',
         },
         test: {} as AtomicTestCase,
         providerResponse,
@@ -518,7 +518,7 @@ describe('Google assertions', () => {
         prompt: 'Some prompt',
         provider,
         assertion: {
-          type: 'is-valid-google-function-call',
+          type: 'is-valid-function-call',
         },
         test: {} as AtomicTestCase,
         providerResponse,
@@ -557,7 +557,7 @@ describe('Google assertions', () => {
           },
         }),
         assertion: {
-          type: 'is-valid-google-function-call',
+          type: 'is-valid-function-call',
         },
         test: {} as AtomicTestCase,
         providerResponse: { output },
