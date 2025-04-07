@@ -2355,10 +2355,15 @@ describe('runEval', () => {
         rejectedPrediction: 0,
       },
       assertions: {
-        total: 0, // Updated to match actual values
-        prompt: 0, // Updated to match actual values
-        completion: 0, // Updated to match actual values
+        total: 0,
+        prompt: 0,
+        completion: 0,
         cached: 0,
+        completionDetails: {
+          acceptedPrediction: 0,
+          reasoning: 0,
+          rejectedPrediction: 0,
+        },
       },
     });
   });
