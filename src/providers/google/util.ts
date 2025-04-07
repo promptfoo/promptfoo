@@ -435,3 +435,13 @@ export function validateFunctionCall(
     );
   }
 }
+
+export {
+  ajv,
+  clone,
+  PartSchema,
+  ContentSchema,
+  GeminiFormatSchema,
+  cachedAuth,
+  normalizeSchemaTypes,
+};
