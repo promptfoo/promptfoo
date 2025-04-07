@@ -7,7 +7,7 @@ import cliState from '../../../src/cliState';
 import { isCI } from '../../../src/envars';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
-import { type UnifiedConfig, ConfigType } from '../../../src/types';
+import { type UnifiedConfig } from '../../../src/types';
 import { maybeLoadFromExternalFile } from '../../../src/util';
 import { isRunningUnderNpx } from '../../../src/util';
 import {
