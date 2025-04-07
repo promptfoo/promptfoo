@@ -222,6 +222,54 @@ tests:
       - type: new-assertion-type
 ```
 
+## MCP Server
+
+promptfoo includes a Model Context Protocol (MCP) server implementation in `src/commands/mcp.ts`. This enables AI coding assistants like Cursor to better understand promptfoo projects and provide more contextual assistance.
+
+### Working with the MCP Server Code
+
+If you're working on the MCP server:
+
+1. The server uses the official MCP TypeScript SDK from `@modelcontextprotocol/sdk`
+2. The main implementation is in `src/commands/mcp.ts`
+3. Tools are defined as `server.tool()` declarations in the `startMcpServer` function
+4. Both stdio and SSE transport options are supported
+
+### Running and Testing
+
+You can run the MCP server in development with:
+
+```bash
+npm run local -- mcp start
+```
+
+For testing with Cursor:
+
+1. Configure Cursor to use the MCP server as described in the [MCP Integration documentation](/docs/integrations/mcp)
+2. Run the server with verbose logging: `npm run local -- mcp start --verbose`
+3. Interact with the AI in Cursor to test your changes
+
+### Adding New MCP Tools
+
+When adding new tools to the MCP server:
+
+1. Follow the same pattern as existing tools
+2. Use Zod for parameter validation
+3. Ensure proper error handling
+4. Return structured data as JSON inside text content blocks
+5. Update the documentation in `/docs/integrations/mcp.md`
+
+### Testing the run-eval Command
+
+The `run-eval` tool allows running evaluations directly through the MCP server. To test it:
+
+```bash
+# Start the server
+npm run local -- mcp start --verbose
+
+# In another terminal, you can trigger evaluation via Cursor or manually
+```
+
 ## Adding a New Provider
 
 Providers are defined in TypeScript. We also provide language bindings for Python and Go. To contribute a new provider:
