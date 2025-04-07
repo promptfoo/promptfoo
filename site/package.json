@@ -13,8 +13,7 @@
     "write-translations": "docusaurus write-translations",
     "write-heading-ids": "docusaurus write-heading-ids",
     "typecheck": "tsc",
-    "format": "prettier --ignore-path .gitignore -w .",
-    "compile-plugins": "tsc -p plugins/llms-txt-plugin --outDir plugins/llms-txt-plugin/dist"
+    "format": "prettier --ignore-path .gitignore -w ."
   },
   "devDependencies": {
     "@calcom/embed-react": "^1.5.2",
