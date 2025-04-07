@@ -188,7 +188,9 @@ export default function EvalsDataGrid({
           flex: 1,
           renderCell: (params: GridRenderCellParams<Eval>) => {
             const tokenUsage = params.row.stats?.tokenUsage;
-            if (!tokenUsage?.total) return null;
+            if (!tokenUsage?.total) {
+              return null;
+            }
 
             const formattedTotal = Intl.NumberFormat(undefined, {
               maximumFractionDigits: 0,

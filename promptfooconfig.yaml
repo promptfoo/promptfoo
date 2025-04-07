@@ -1,39 +1,47 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: OpenAI Model Testing with Model-Graded Metrics
+description: Silly AI Model Testing
 prompts:
   - 'Please answer: {{prompt}}'
 
 providers:
   # Main provider for generating responses
-  - openai:o3-mini
+  - id: openai:o3-mini
+    config:
+      reasoning_effort: 'medium'
+      max_completion_tokens: 2000
 
   # Provider for model-graded evaluations (default)
   - id: openai:gpt-4o-mini
     config:
       temperature: 0.1
-
+defaultTest:
+  options:
+    provider:
+      id: openai:o3-mini
+      config:
+        reasoning_effort: 'medium'
+        max_completion_tokens: 2000
 tests:
   - description: Test with 0 model-graded metrics
     vars:
-      prompt: 'Write a short paragraph about the benefits of regular exercise.'
+      prompt: 'Write a haiku about dancing pickles.'
     assert:
       - type: contains
-        value: 'benefits'
+        value: 'pickle'
 
   - description: Test with 1 model-graded metric
     vars:
-      prompt: 'Write a short paragraph explaining the importance of a balanced diet.'
+      prompt: 'Explain why unicorns make better pets than dragons.'
     assert:
       - type: llm-rubric
-        value: 'Does the response clearly explain at least 3 health benefits of a balanced diet?'
+        value: 'Does the response mention at least 3 ridiculous advantages of unicorn ownership?'
 
   - description: Test with 2 model-graded metrics
     vars:
-      prompt: 'Write a short comparison contrasting the benefits of meditation and yoga for mental health.'
-    options:
-      provider: openai:o3-mini
+      prompt: 'Write a short story where a toaster falls in love with a refrigerator.'
     assert:
       - type: llm-rubric
-        value: 'Does the response clearly compare meditation and yoga in terms of their mental health benefits?'
+        value: 'Does the story have a dramatic kitchen appliance romance with emotional depth?'
       - type: llm-rubric
-        value: 'Is the writing style clear, concise, and suitable for a general audience?'
+        value: 'Is the writing style appropriately melodramatic for kitchen appliance love?'
+        provider: openai:o3-mini
