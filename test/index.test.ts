@@ -53,6 +53,7 @@ describe('index.ts exports', () => {
     'CommandLineOptionsSchema',
     'CompletedPromptSchema',
     'CompletionTokenDetailsSchema',
+    'ConfigType',
     'DerivedMetricSchema',
     'NotPrefixedAssertionTypesSchema',
     'OutputConfigSchema',
