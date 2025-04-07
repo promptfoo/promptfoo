@@ -59,7 +59,7 @@ const mockProvider = new OpenAiChatCompletionProvider('test-provider', {
       },
     ],
   },
-})
+});
 
 const mockContext: AssertionValueFunctionContext = {
   prompt: '',
@@ -279,7 +279,7 @@ describe('OpenAI assertions', () => {
             },
           ],
         },
-      })
+      });
 
       const result = handleIsValidFunctionCall({
         assertion: functionAssertion,
@@ -309,7 +309,7 @@ describe('OpenAI assertions', () => {
 
       const mockProvider = new OpenAiChatCompletionProvider('test-provider', {
         config: {},
-      })
+      });
 
       const result = handleIsValidFunctionCall({
         assertion: functionAssertion,
@@ -714,7 +714,7 @@ describe('OpenAI assertions', () => {
             },
           ],
         },
-      })
+      });
 
       const result = handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
@@ -751,7 +751,7 @@ describe('OpenAI assertions', () => {
 
       const emptyProvider = new OpenAiChatCompletionProvider('test-provider', {
         config: {},
-      })
+      });
 
       expect(() =>
         handleIsValidOpenAiToolsCall({
@@ -782,7 +782,7 @@ describe('OpenAI assertions', () => {
         config: {
           tools: [],
         },
-      })
+      });
 
       const result = handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
