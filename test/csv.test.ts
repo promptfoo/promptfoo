@@ -412,6 +412,13 @@ describe('assertionFromString', () => {
     expect(result.threshold).toBe(0.001);
   });
 
+  it('should create an google function call assertion', () => {
+    const expected = 'is-valid-google-function-call';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('is-valid-google-function-call');
+  });
+
   it('should create an openai function call assertion', () => {
     const expected = 'is-valid-openai-function-call';
 

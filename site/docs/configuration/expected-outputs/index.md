@@ -126,6 +126,7 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [perplexity](/docs/configuration/expected-outputs/deterministic/#perplexity)                                       | Perplexity is below a threshold                                   |
 | [perplexity-score](/docs/configuration/expected-outputs/deterministic/#perplexity-score)                           | Normalized perplexity                                             |
 | [cost](/docs/configuration/expected-outputs/deterministic/#cost)                                                   | Cost is below a threshold (for models with cost info such as GPT) |
+| [is-valid-google-function-call](/docs/configuration/expected-outputs/deterministic/#is-valid-google-function-call) | Ensure that the function call matches the function's JSON schema  |
 | [is-valid-openai-function-call](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema  |
 | [is-valid-openai-tools-call](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                 |
 | [guardrails](/docs/configuration/expected-outputs/guardrails)                                                      | Ensure that the output does not contain harmful content           |

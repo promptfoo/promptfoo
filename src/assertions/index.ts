@@ -66,6 +66,7 @@ import { handleLevenshtein } from './levenshtein';
 import { handleLlmRubric } from './llmRubric';
 import { handleModelGradedClosedQa } from './modelGradedClosedQa';
 import { handleModeration } from './moderation';
+import { handleIsValidGoogleFunctionCall } from './google';
 import { handleIsValidOpenAiFunctionCall, handleIsValidOpenAiToolsCall } from './openai';
 import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePython } from './python';
@@ -255,6 +256,7 @@ export async function runAssertion({
     'is-json': handleIsJson,
     'is-refusal': handleIsRefusal,
     'is-sql': handleIsSql,
+    'is-valid-google-function-call': handleIsValidGoogleFunctionCall,
     'is-valid-openai-function-call': handleIsValidOpenAiFunctionCall,
     'is-valid-openai-tools-call': handleIsValidOpenAiToolsCall,
     'is-xml': handleIsXml,

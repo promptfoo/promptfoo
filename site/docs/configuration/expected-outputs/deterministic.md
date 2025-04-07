@@ -25,6 +25,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [icontains-any](#contains-any)                                  | output contains any of the listed substrings, case insensitive     |
 | [is-json](#is-json)                                             | output is valid json (optional json schema validation)             |
 | [is-sql](#is-sql)                                               | output is valid SQL statement (optional authority list validation) |
+| [is-valid-google-function-call](#is-valid-google-function-call) | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-tools-call](#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                  |
 | [is-xml](#is-xml)                                               | output is valid xml                                                |
@@ -453,6 +454,11 @@ assert:
         - 'select::null::name'
         - 'update::null::id'
 ```
+
+### is-valid-google-function-call
+
+This ensures that any JSON LLM output adheres to the schema specified in the `functions` configuration of the provider. Learn more about the [Google Vertex provider](/docs/providers/vertex/#function-calling-and-tools), [Google AIStudio provider](/docs/providers/google/#function-calling) and [Google Live provider](/docs/providers/google#function-calling-example).
+
 
 ### is-valid-openai-function-call
 

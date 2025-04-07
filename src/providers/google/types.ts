@@ -45,9 +45,9 @@ interface Schema {
   items?: Schema;
 }
 
-interface FunctionDeclaration {
+export interface FunctionDeclaration {
   name: string;
-  description: string;
+  description?: string;
   parameters?: Schema;
   response?: Schema;
 }

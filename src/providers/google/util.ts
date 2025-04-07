@@ -1,3 +1,5 @@
+import Ajv from 'ajv';
+import type { AnySchema } from 'ajv';
 import type { GoogleAuth } from 'google-auth-library';
 import Clone from 'rfdc';
 import { z } from 'zod';
@@ -5,9 +7,9 @@ import logger from '../../logger';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
 import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt } from '../shared';
-import { type Tool } from './types';
-import type { Content, Part } from './types';
+import type { Content, Part, Tool } from './types';
 
+const ajv = new Ajv();
 const clone = Clone();
 
 type Probability = 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
@@ -344,4 +346,81 @@ export function geminiFormatAndSystemInstructions(
   }
 
   return { contents, systemInstruction };
+}
+
+/**
+ * Recursively traverses a JSON schema object and converts
+ * uppercase type keywords (string values) to lowercase.
+ * Handles nested objects and arrays within the schema.
+ * Creates a deep copy to avoid modifying the original schema.
+ *
+ * @param {object | any} schemaNode - The current node (object or value) being processed.
+ * @returns {object | any} - The processed node with type keywords lowercased.
+ */
+function normalizeSchemaTypes(schemaNode: any): any {
+  // Handle non-objects (including null) and arrays directly by iterating/returning
+  if (typeof schemaNode !== 'object' || schemaNode === null) {
+    return schemaNode;
+  }
+
+  if (Array.isArray(schemaNode)) {
+    return schemaNode.map(normalizeSchemaTypes); // Recurse for array elements
+  }
+
+  // Create a new object to avoid modifying the original
+  const newNode: { [key: string]: any } = {};
+
+  for (const key in schemaNode) {
+    if (Object.prototype.hasOwnProperty.call(schemaNode, key)) {
+      const value = schemaNode[key];
+
+      if (key === 'type') {
+        // Convert type value(s) to lowercase
+        if (typeof value === 'string') {
+          newNode[key] = value.toLowerCase();
+        } else if (Array.isArray(value)) {
+          // Handle type arrays like ["STRING", "NULL"]
+          newNode[key] = value.map(t => (typeof t === 'string' ? t.toLowerCase() : t));
+        } else {
+          throw new Error(
+            `Schema types must be string or array of string. Recieved: ${JSON.stringify(value)}`,
+          );
+        }
+      } else {
+        // Recursively process nested objects/arrays
+        newNode[key] = normalizeSchemaTypes(value);
+      }
+    }
+  }
+
+  return newNode;
+}
+
+
+export function validateFunctionCall(
+  functionCall: { args: string; name: string },
+  functions?: Tool[],
+  vars?: Record<string, string | object>,
+) {
+  // Parse function call and validate it against schema
+  const interpolatedFunctions = loadFile(functions, vars) as Tool[];
+  const functionArgs = JSON.parse(functionCall.args);
+  const functionName = functionCall.name;
+  const functionDeclarations = interpolatedFunctions?.find((f) => "functionDeclarations" in f)
+  let functionSchema = functionDeclarations?.functionDeclarations?.find((f) => f.name === functionName)?.parameters;
+  if (!functionSchema) {
+    throw new Error(`Called "${functionName}", but there is no function with that name`);
+  }
+  console.log(JSON.stringify(functionSchema))
+  console.log(functionArgs)
+
+  functionSchema = normalizeSchemaTypes(functionSchema)
+  console.log(JSON.stringify(functionSchema))
+  
+  const validate = ajv.compile(functionSchema as AnySchema);
+  if (!validate(functionArgs)) {
+    throw new Error(
+      `Call to "${functionName}" does not match schema: ${JSON.stringify(validate.errors)}`,
+    );
+  }
 }
