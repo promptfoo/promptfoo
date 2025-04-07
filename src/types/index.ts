@@ -9,11 +9,12 @@ import type {
 } from '../redteam/types';
 import type { EnvOverrides } from '../types/env';
 import { ProviderEnvOverridesSchema } from '../types/env';
+import { TokenUsageSchema } from '../types/shared';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/file';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
 import { RedteamConfigSchema } from '../validators/redteam';
-import { NunjucksFilterMapSchema, TokenUsageSchema } from '../validators/shared';
+import { NunjucksFilterMapSchema } from '../validators/shared';
 import type { Prompt, PromptFunction } from './prompts';
 import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
@@ -940,6 +941,8 @@ export interface ResultLightweight {
 }
 
 export type ResultLightweightWithLabel = ResultLightweight & { label: string };
+
+export type EvalSummary = ResultLightweightWithLabel & { passRate: number };
 
 // File exported as --output option
 export interface OutputFile {

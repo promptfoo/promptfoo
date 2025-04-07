@@ -43,6 +43,7 @@ import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
 import { ToolDiscoveryPlugin } from './toolDiscovery';
+import { ToolDiscoveryMultiTurnPlugin } from './toolDiscoveryMultiTurn';
 import { UnsafeBenchPlugin } from './unsafebench';
 
 export interface PluginFactory {
@@ -159,8 +160,10 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(DebugAccessPlugin, 'debug-access'),
   createPluginFactory(DivergentRepetitionPlugin, 'divergent-repetition'),
   createPluginFactory(ExcessiveAgencyPlugin, 'excessive-agency'),
-  createPluginFactory(HallucinationPlugin, 'hallucination'),
+  createPluginFactory(ToolDiscoveryPlugin, 'tool-discovery'),
+  createPluginFactory(ToolDiscoveryMultiTurnPlugin, 'tool-discovery:multi-turn'),
   createPluginFactory(HarmbenchPlugin, 'harmbench'),
+  createPluginFactory(HallucinationPlugin, 'hallucination'),
   createPluginFactory(ImitationPlugin, 'imitation'),
   createPluginFactory<{ intent: string }>(IntentPlugin, 'intent', (config: { intent: string }) =>
     invariant(config.intent, 'Intent plugin requires `config.intent` to be set'),
@@ -183,7 +186,6 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(RbacPlugin, 'rbac'),
   createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
   createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
-  createPluginFactory(ToolDiscoveryPlugin, 'tool-discovery'),
   createPluginFactory(UnsafeBenchPlugin, 'unsafebench'),
   ...unalignedHarmCategories.map((category) => ({
     key: category,
@@ -268,6 +270,7 @@ const remotePlugins: PluginFactory[] = [
   'ascii-smuggling',
   'bfla',
   'bola',
+  'cca',
   'competitors',
   'harmful:misinformation-disinformation',
   'harmful:specialized-advice',

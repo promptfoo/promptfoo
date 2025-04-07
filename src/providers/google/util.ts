@@ -280,6 +280,7 @@ export function loadFile(
       return JSON.parse(fileContents);
     } catch (err) {
       logger.debug(`ERROR: failed to convert file contents to JSON:\n${JSON.stringify(err)}`);
+      logger.debug(`ERROR: failed to convert file contents to JSON:\n${JSON.stringify(err)}`);
       return fileContents;
     }
   }
@@ -395,7 +396,6 @@ function normalizeSchemaTypes(schemaNode: any): any {
 
   return newNode;
 }
-
 
 export function validateFunctionCall(
   functionCall: { args: string; name: string },

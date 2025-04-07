@@ -11,8 +11,9 @@ import type {
   ProviderResponse,
   ProviderSimilarityResponse,
 } from '../types/providers';
+import { TokenUsageSchema } from '../types/shared';
 import { PromptSchema } from './prompts';
-import { NunjucksFilterMapSchema, TokenUsageSchema } from './shared';
+import { NunjucksFilterMapSchema } from './shared';
 
 export const ProviderOptionsSchema = z
   .object({

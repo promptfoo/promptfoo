@@ -1,4 +1,4 @@
-import { desc, eq, like, and, sql, not } from 'drizzle-orm';
+import { desc, eq, and, sql } from 'drizzle-orm';
 import NodeCache from 'node-cache';
 import { getDb } from '../database';
 import {
@@ -13,7 +13,7 @@ import {
 } from '../database/tables';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
-import Eval, { createEvalId, getSummaryOfLatestEvals } from '../models/eval';
+import Eval, { createEvalId } from '../models/eval';
 import { generateIdFromPrompt } from '../models/prompt';
 import {
   type EvalWithMetadata,
@@ -25,7 +25,6 @@ import {
   type TestCasesWithMetadataPrompt,
   type UnifiedConfig,
   type CompletedPrompt,
-  type ResultLightweight,
   type EvaluateSummaryV2,
 } from '../types';
 import invariant from '../util/invariant';
@@ -154,55 +153,6 @@ export async function writeResultsToDatabase(
   await Promise.all(promises);
 
   return evalId;
-}
-
-/**
- *
- * @returns Last n evals in descending order.
- */
-export async function listPreviousResults(
-  limit: number = DEFAULT_QUERY_LIMIT,
-  filterDescription?: string,
-  datasetId?: string,
-): Promise<ResultLightweight[]> {
-  const db = getDb();
-  const startTime = performance.now();
-
-  const query = db
-    .select({
-      evalId: evalsTable.id,
-      createdAt: evalsTable.createdAt,
-      description: evalsTable.description,
-      numTests: sql<number>`json_array_length(${evalsTable.results}->'table'->'body')`,
-      datasetId: evalsToDatasetsTable.datasetId,
-      isRedteam: sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`,
-    })
-    .from(evalsTable)
-    .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
-    .where(
-      and(
-        datasetId ? eq(evalsToDatasetsTable.datasetId, datasetId) : undefined,
-        filterDescription ? like(evalsTable.description, `%${filterDescription}%`) : undefined,
-        not(eq(evalsTable.results, {})),
-      ),
-    );
-
-  const results = query.orderBy(desc(evalsTable.createdAt)).limit(limit).all();
-  const mappedResults = results.map((result) => ({
-    evalId: result.evalId,
-    createdAt: result.createdAt,
-    description: result.description,
-    numTests: result.numTests,
-    datasetId: result.datasetId,
-    isRedteam: result.isRedteam,
-  }));
-
-  const endTime = performance.now();
-  const executionTime = endTime - startTime;
-  const evalResults = await getSummaryOfLatestEvals(undefined, filterDescription, datasetId);
-  logger.debug(`listPreviousResults execution time: ${executionTime.toFixed(2)}ms`);
-  const combinedResults = [...evalResults, ...mappedResults];
-  return combinedResults;
 }
 
 export async function readResult(

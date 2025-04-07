@@ -1,0 +1,67 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Lambda Labs
+
+# To use this example:
+# 1. Set your LAMBDA_API_KEY environment variable
+# 2. Run: promptfoo eval
+
+prompts:
+  - |
+    You are a creative AI assistant who loves making absurd but somewhat plausible estimations.
+
+    Please answer the following ridiculous question with step-by-step reasoning:
+    {{question}}
+
+    Make your answer entertaining but try to use reasonable assumptions and calculations.
+
+    Your response should be at least 100 words and state the final answer at the end.
+
+providers:
+  - id: lambdalabs:chat:llama-4-maverick-17b-128e-instruct-fp8
+    config:
+      temperature: 0.7
+      max_tokens: 2048
+  - id: lambdalabs:chat:llama3.3-70b-instruct-fp8
+    config:
+      temperature: 0.7
+      max_tokens: 2048
+
+defaultTest:
+  options:
+    # Use Lambda Labs' Llama 4 model for grading too!
+    provider:
+      id: lambdalabs:chat:llama-4-maverick-17b-128e-instruct-fp8
+      config:
+        temperature: 0.2 # Lower temperature for more consistent grading
+        max_tokens: 2048
+  assert:
+    - type: javascript
+      value: output.length > 100
+    - type: llm-rubric
+      value: Does this response attempt to answer the question with step-by-step reasoning and plausible calculations?
+
+tests:
+  - vars:
+      question: How many people would it take typing simultaneously to recreate Wikipedia from scratch within one hour?
+  - vars:
+      question: What's the total length of toothpaste squeezed out worldwide each morning? Could it circle Earth?
+  - vars:
+      question: If everyone jumped at exactly the same time, would global internet latency noticeably spike due to social media posting?
+  - vars:
+      question: How long would it take to fill the Grand Canyon if everyone in the U.S. poured a cup of coffee into it every day?
+  - vars:
+      question: If all humans suddenly started walking west at once, how long would it take Earth's rotation to noticeably slow down?
+  - vars:
+      question: How tall would a pile of all receipts printed globally each year be? Would it reach the moon?
+  - vars:
+      question: How many miles of spaghetti does humanity eat per second, and how quickly could that spaghetti stretch from New York to Los Angeles?
+  - vars:
+      question: Could every microwave on Earth simultaneously popping popcorn affect weather patterns?
+  - vars:
+      question: If you could somehow assemble all lost keys in history into a single pile, how high would the mountain of keys rise?
+  - vars:
+      question: If all the world's smartphones were stacked on top of each other, how many times could they reach the International Space Station?
+  - vars:
+      question: How many balloons would it take to lift an average-sized house like in the movie "Up", and how much helium would that require?
+  - vars:
+      question: If all the data stored in cloud servers was printed on paper, would the resulting paper stack reach Mars?
