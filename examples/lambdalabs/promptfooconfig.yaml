@@ -1,0 +1,80 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Silly Lambda Labs Model Showdown
+
+# To use this example:
+# 1. Set your LAMBDA_API_KEY environment variable
+# 2. Run: promptfoo eval
+
+prompts:
+  - |
+    You are a slightly unhinged AI assistant with expertise in {{topic}}. 
+    Provide a FUN and QUIRKY explanation of {{concept}} that would make a 5-year-old giggle.
+    
+    Don't be boring! Explain {{concept}} using at least one ridiculous analogy involving {{silly_thing}}.
+    End with an absurd joke about {{concept}}.
+
+providers:
+  - id: lambdalabs:chat:llama-4-maverick-17b-128e-instruct-fp8
+    config:
+      temperature: 0.9
+      max_tokens: 1024
+  - id: lambdalabs:chat:llama3.3-70b-instruct-fp8
+    config:
+      temperature: 0.9
+      max_tokens: 1024
+
+defaultTest:
+  options:
+    # Override the default grading LLM (optional)
+    provider: openai:gpt-4o-mini
+    # Custom grading prompt that will be applied to all llm-rubric assertions
+    rubricPrompt: >
+      [
+        {
+          "role": "system",
+          "content": "You are Captain Giggles, a professional comedy evaluator who speaks like a pirate. Grade the output by how well it meets this rubric: {{rubric}}. Award points on a scale of 1-10 for:\n1. Silliness (how absurd and fun is it?)\n2. Kid-friendliness (would a 5-year-old understand and laugh?)\n3. Creativity of the analogy\n4. How ridiculous the joke is\n\nALWAYS refer to yourself as 'Cap'n Giggles' and end your review with 'YARRR!'. Be as silly as possible in your grading."
+        },
+        {
+          "role": "user",
+          "content": "Output: {{ output }}"
+        }
+      ]
+  assert:
+    - type: javascript
+      value: "return output.length > 100 ? 'pass' : 'fail'; // Ensure we get substantial responses"
+
+tests:
+  - vars:
+      topic: time travel
+      concept: wormholes
+      silly_thing: dancing flamingos
+    assert:
+      - type: llm-rubric
+        value: "Is this explanation absolutely RIDICULOUS and would it make a 5-year-old laugh uncontrollably?"
+      - type: contains-any
+        value: ["flamingo", "silly", "funny", "joke", "giggle", "laugh"]
+  - vars:
+      topic: dinosaurs
+      concept: extinction
+      silly_thing: singing toasters
+    assert:
+      - type: llm-rubric
+        value: "Does this explanation make extinction sound hilarious while still being educational?"
+      - type: contains-any
+        value: ["toaster", "silly", "funny", "joke", "giggle", "laugh"]
+  - vars:
+      topic: outer space
+      concept: black holes
+      silly_thing: confused bananas
+    assert:
+      - type: llm-rubric
+        value: "Does this explanation of black holes include at least one absurd analogy with confused bananas?"
+      - type: contains-any
+        value: ["banana", "silly", "funny", "joke", "giggle", "laugh"]
+  - vars:
+      topic: computers
+      concept: the internet
+      silly_thing: tap-dancing squirrels
+    assert:
+      - type: llm-rubric
+        value: "Is the explanation of the internet completely bonkers and does it involve tap-dancing squirrels in a way that's both ridiculous and somewhat informative?" 
