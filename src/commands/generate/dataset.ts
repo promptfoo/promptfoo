@@ -7,7 +7,7 @@ import { serializeObjectArrayAsCSV } from '../../csv';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { synthesizeFromTestSuite } from '../../testCase/synthesis';
-import type { TestSuite, UnifiedConfig } from '../../types';
+import { type TestSuite, type UnifiedConfig, ConfigType } from '../../types';
 import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
 import { resolveConfigs } from '../../util/config/load';
 
@@ -40,6 +40,7 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
         config: [configPath],
       },
       options.defaultConfig,
+      ConfigType.DatasetGeneration,
     );
     testSuite = resolved.testSuite;
   } else {

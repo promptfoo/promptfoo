@@ -20,6 +20,7 @@ import telemetry from '../../telemetry';
 import {
   UnifiedConfigSchema,
   type CommandLineOptions,
+  ConfigType,
   type Prompt,
   type ProviderOptions,
   type RedteamPluginObject,
@@ -439,9 +440,14 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   return combinedConfig;
 }
 
+/**
+ * @param type - The type of configuration file. Currently supports `ConfigType.DatasetGeneration`.
+ *  TODO(Optimization): Perform type-specific validation e.g. using Zod schemas for data model variants.
+ */
 export async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
   _defaultConfig: Partial<UnifiedConfig>,
+  type?: ConfigType,
 ): Promise<{ testSuite: TestSuite; config: Partial<UnifiedConfig>; basePath: string }> {
   let fileConfig: Partial<UnifiedConfig> = {};
   let defaultConfig = _defaultConfig;
@@ -536,7 +542,11 @@ export async function resolveConfigs(
     process.exit(1);
   }
 
-  if (!hasProviders) {
+  if (
+    // Dataset configs don't require providers
+    type !== ConfigType.DatasetGeneration &&
+    !hasProviders
+  ) {
     logger.error('You must specify at least 1 provider (for example, openai:gpt-4o)');
     process.exit(1);
   }
