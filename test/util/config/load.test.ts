@@ -7,7 +7,7 @@ import cliState from '../../../src/cliState';
 import { isCI } from '../../../src/envars';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
-import type { UnifiedConfig } from '../../../src/types';
+import { type UnifiedConfig, ConfigType } from '../../../src/types';
 import { maybeLoadFromExternalFile } from '../../../src/util';
 import { isRunningUnderNpx } from '../../../src/util';
 import {
@@ -1008,6 +1008,38 @@ describe('resolveConfigs', () => {
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No promptfooconfig found'));
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo eval -c'));
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo init'));
+  });
+
+  it('should throw an error if no providers are provided', async () => {
+    const cmdObj = { config: ['config.json'] };
+    const defaultConfig = {};
+    const promptfooConfig = {
+      prompts: ['Act as a travel guide for {{location}}'],
+    };
+
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(JSON.stringify(promptfooConfig));
+
+    await expect(resolveConfigs(cmdObj, defaultConfig)).rejects.toThrow(
+      'Process exited with code 1',
+    );
+
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('You must specify at least 1 provider (for example, openai:gpt-4o)'),
+    );
+  });
+
+  it('should allow dataset generation configs to omit providers', async () => {
+    const cmdObj = { config: ['config.json'] };
+    const defaultConfig = {};
+    const promptfooConfig = {
+      prompts: ['Act as a travel guide for {{location}}'],
+    };
+
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(JSON.stringify(promptfooConfig));
+
+    expect(
+      async () => await resolveConfigs(cmdObj, defaultConfig, ConfigType.DatasetGeneration),
+    ).not.toThrow();
   });
 });
 
