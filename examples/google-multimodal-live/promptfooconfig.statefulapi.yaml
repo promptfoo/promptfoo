@@ -20,6 +20,7 @@ tests:
   - vars:
       query: Add to the counter until it reaches 5
     assert:
+      - type: is-valid-function-call
       - type: equals
         value: { 'counter': 5 }
         transform: JSON.parse(output).statefulApiState

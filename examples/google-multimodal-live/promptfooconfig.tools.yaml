@@ -17,6 +17,7 @@ tests:
       query: What is the weather in {{location}}?
       location: San Francisco
     assert:
+      - type: is-valid-function-call
       - type: equals
         value: get_weather
         transform: JSON.parse(output).toolCall.functionCalls[0].name
