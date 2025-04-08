@@ -23,7 +23,7 @@ providers:
 
 ## Provider Format
 
-Lambda Labs provider supports the following formats:
+The Lambda Labs provider supports the following formats:
 
 - `lambdalabs:chat:<model name>` - Uses any model with the chat completion interface
 - `lambdalabs:completion:<model name>` - Uses any model with the completion interface
@@ -31,9 +31,7 @@ Lambda Labs provider supports the following formats:
 
 ## Available Models
 
-Lambda Labs Inference API officially supports these models:
-
-### Llama Models
+The Lambda Labs Inference API officially supports these models:
 
 - `deepseek-llama3.3-70b` - DeepSeek Llama 3.3 70B model
 - `deepseek-r1-671b` - DeepSeek R1 671B model
@@ -52,7 +50,7 @@ Lambda Labs Inference API officially supports these models:
 - `llama3.3-70b-instruct-fp8` - Llama 3.3 70B Instruct model
 - `qwen25-coder-32b-instruct` - Qwen 2.5 Coder 32B Instruct model
 
-Get the current list of available models using the `/models` endpoint:
+To get the current list of available models, use the `/models` endpoint:
 
 ```bash
 curl https://api.lambda.ai/v1/models -H "Authorization: Bearer your_api_key_here"

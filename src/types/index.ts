@@ -408,6 +408,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'is-json',
   'is-refusal',
   'is-sql',
+  'is-valid-function-call',
   'is-valid-openai-function-call',
   'is-valid-openai-tools-call',
   'is-xml',
@@ -775,6 +776,7 @@ export const TestSuiteSchema = z.object({
           },
         ),
     )
+    .nullable()
     .optional(),
 
   // Redteam configuration - used only when generating redteam tests
@@ -856,7 +858,7 @@ export const TestSuiteConfigSchema = z.object({
   derivedMetrics: z.array(DerivedMetricSchema).optional(),
 
   // Extension that is called at various plugin points
-  extensions: z.array(z.string()).optional(),
+  extensions: z.array(z.string()).nullable().optional(),
 
   // Any other information about this configuration.
   metadata: MetadataSchema.optional(),
@@ -869,6 +871,7 @@ export const TestSuiteConfigSchema = z.object({
 });
 
 export type TestSuiteConfig = z.infer<typeof TestSuiteConfigSchema>;
+
 export const UnifiedConfigSchema = TestSuiteConfigSchema.extend({
   evaluateOptions: EvaluateOptionsSchema.optional(),
   commandLineOptions: CommandLineOptionsSchema.partial().optional(),
@@ -890,6 +893,16 @@ export const UnifiedConfigSchema = TestSuiteConfigSchema.extend({
       data.providers = data.targets;
       delete data.targets;
     }
+
+    // Handle null extensions, undefined extensions, or empty arrays by deleting the field
+    if (
+      data.extensions === null ||
+      data.extensions === undefined ||
+      (Array.isArray(data.extensions) && data.extensions.length === 0)
+    ) {
+      delete data.extensions;
+    }
+
     return data;
   });
 

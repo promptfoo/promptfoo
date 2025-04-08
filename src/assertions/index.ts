@@ -57,6 +57,7 @@ import { handleContextRelevance } from './contextRelevance';
 import { handleCost } from './cost';
 import { handleEquals } from './equals';
 import { handleFactuality } from './factuality';
+import { handleIsValidFunctionCall } from './functionToolCall';
 import { handleGEval } from './geval';
 import { handleGuardrails } from './guardrails';
 import { handleJavascript } from './javascript';
@@ -66,7 +67,7 @@ import { handleLevenshtein } from './levenshtein';
 import { handleLlmRubric } from './llmRubric';
 import { handleModelGradedClosedQa } from './modelGradedClosedQa';
 import { handleModeration } from './moderation';
-import { handleIsValidOpenAiFunctionCall, handleIsValidOpenAiToolsCall } from './openai';
+import { handleIsValidOpenAiToolsCall } from './openai';
 import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePython } from './python';
 import { handleRedteam } from './redteam';
@@ -255,7 +256,8 @@ export async function runAssertion({
     'is-json': handleIsJson,
     'is-refusal': handleIsRefusal,
     'is-sql': handleIsSql,
-    'is-valid-openai-function-call': handleIsValidOpenAiFunctionCall,
+    'is-valid-function-call': handleIsValidFunctionCall,
+    'is-valid-openai-function-call': handleIsValidFunctionCall,
     'is-valid-openai-tools-call': handleIsValidOpenAiToolsCall,
     'is-xml': handleIsXml,
     javascript: handleJavascript,

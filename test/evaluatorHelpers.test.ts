@@ -395,6 +395,11 @@ describe('runExtensionHook', () => {
     expect(transform).not.toHaveBeenCalled();
   });
 
+  it('should not call transform if extensions is null', async () => {
+    await runExtensionHook(null, 'testHook', { data: 'test' });
+    expect(transform).not.toHaveBeenCalled();
+  });
+
   it('should call transform for each extension', async () => {
     const extensions = ['ext1', 'ext2', 'ext3'];
     const hookName = 'testHook';

@@ -52,6 +52,7 @@ const assertTypes: AssertionType[] = [
   'not-similar',
   'not-webhook',
   'not-rouge-n',
+  'is-valid-function-call',
   'is-valid-openai-function-call',
   'is-valid-openai-tools-call',
   'latency',
