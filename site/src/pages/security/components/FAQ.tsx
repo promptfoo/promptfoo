@@ -5,11 +5,11 @@ import styles from '../styles.module.css';
 
 const faqs = [
   {
-    question: `What's the difference between Promptfoo Open Source and Promptfoo Cloud?`,
+    question: `What's the difference between Promptfoo Open Source and Promptfoo Enterprise?`,
     answer: dedent`
       Promptfoo Open Source is a free, open-source version of our platform that focuses specifically on local testing and one-off scans.
 
-      Promptfoo Cloud is our commercial version that offers additional capabilities such as team collaboration, continuous monitoring, a centralized security dashboard, customized plugins, SSO, access control, cloud deployment options, and priority support with SLA guarantees.
+      Promptfoo Enterprise is our commercial version that offers additional capabilities such as team collaboration, continuous monitoring, a centralized security dashboard, customized plugins, SSO, access control, cloud deployment options, and priority support with SLA guarantees.
     `,
   },
   {
