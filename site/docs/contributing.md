@@ -279,7 +279,7 @@ Assertions define different ways to compare and validate the output of an LLM ag
      const score = /* your scoring logic */;
 
      // Determine if test passes
-     const pass = score >= threshold !== inverse;
+     const pass = (score >= threshold) !== inverse;
 
      return {
        pass,
