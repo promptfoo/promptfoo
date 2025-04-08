@@ -19,6 +19,8 @@ interface EvalOptions {
   fetchId: EvalId | null;
 }
 
+const DEFAULT_COLUMN_VISIBILITY_COUNT = 5;
+
 export default function Eval({ fetchId }: EvalOptions) {
   const navigate = useNavigate();
   const { apiBaseUrl } = useApiConfig();
@@ -130,9 +132,11 @@ export default function Eval({ fetchId }: EvalOptions) {
       if (evalId) {
         const vars = Object.keys(data.results.results[0].testCase.vars);
         setColumnState(evalId, {
-          selectedColumns: vars.map((v: any, index: number) => `Variable ${index + 1}`),
+          selectedColumns: vars
+            .slice(0, DEFAULT_COLUMN_VISIBILITY_COUNT)
+            .map((v: any, index: number) => `Variable ${index + 1}`),
           columnVisibility: vars.reduce((acc: any, v: any, index: number) => {
-            acc[`Variable ${index + 1}`] = true;
+            acc[`Variable ${index + 1}`] = index < DEFAULT_COLUMN_VISIBILITY_COUNT ? true : false;
             return acc;
           }, {}),
         });
