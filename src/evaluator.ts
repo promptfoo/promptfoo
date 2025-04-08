@@ -314,10 +314,23 @@ export async function runEval({
 
     invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
 
+    // First check if this is a guardrail response
+    if (response.guardrails?.flagged) {
+      // For redteam tests, we want guardrail responses to be a success
+      // This is consistent with how we handle null/undefined outputs for redteam below
+      ret.success = true;
+      ret.score = 1;
+      ret.failureReason = ResultFailureReason.NONE;
+      return [ret];
+    }
+
+    // Then check for errors
     if (response.error) {
       ret.error = response.error;
       ret.failureReason = ResultFailureReason.ERROR;
       ret.success = false;
+      ret.score = 0;
+      return [ret];
     } else if (response.output === null || response.output === undefined) {
       // NOTE: empty output often indicative of guardrails, so behavior differs for red teams.
       if (isRedteam) {
@@ -327,58 +340,59 @@ export async function runEval({
         ret.score = 0;
         ret.error = 'No output';
       }
-    } else {
-      // Create a copy of response so we can potentially mutate it.
-      const processedResponse = { ...response };
-      const transforms: string[] = [
-        provider.transform, // Apply provider transform first
-        // NOTE: postprocess is deprecated. Use the first defined transform.
-        [test.options?.transform, test.options?.postprocess].find((s) => s),
-      ]
-        .flat()
-        .filter((s): s is string => typeof s === 'string');
-      for (const t of transforms) {
-        processedResponse.output = await transform(t, processedResponse.output, {
-          vars,
-          prompt,
-        });
-      }
-
-      invariant(processedResponse.output != null, 'Response output should not be null');
-      const checkResult = await runAssertions({
-        prompt: renderedPrompt,
-        provider,
-        providerResponse: processedResponse,
-        test,
-        latencyMs: response.cached ? undefined : latencyMs,
-        assertScoringFunction: test.assertScoringFunction as ScoringFunction,
-      });
-
-      if (!checkResult.pass) {
-        ret.error = checkResult.reason;
-        ret.failureReason = ResultFailureReason.ASSERT;
-      }
-      ret.success = checkResult.pass;
-      ret.score = checkResult.score;
-      ret.namedScores = checkResult.namedScores || {};
-      if (checkResult.tokensUsed) {
-        ret.tokenUsage.total += checkResult.tokensUsed.total || 0;
-        ret.tokenUsage.prompt += checkResult.tokensUsed.prompt || 0;
-        ret.tokenUsage.completion += checkResult.tokensUsed.completion || 0;
-        ret.tokenUsage.cached += checkResult.tokensUsed.cached || 0;
-        ret.tokenUsage.numRequests += checkResult.tokensUsed.numRequests || 1;
-        if (checkResult.tokensUsed.completionDetails) {
-          ret.tokenUsage.completionDetails.reasoning! +=
-            checkResult.tokensUsed.completionDetails.reasoning || 0;
-          ret.tokenUsage.completionDetails.acceptedPrediction! +=
-            checkResult.tokensUsed.completionDetails.acceptedPrediction || 0;
-          ret.tokenUsage.completionDetails.rejectedPrediction! +=
-            checkResult.tokensUsed.completionDetails.rejectedPrediction || 0;
-        }
-      }
-      ret.response = processedResponse;
-      ret.gradingResult = checkResult;
+      return [ret];
     }
+
+    // Create a copy of response so we can potentially mutate it.
+    const processedResponse = { ...response };
+
+    const transforms: string[] = [
+      provider.transform, // Apply provider transform first
+      // NOTE: postprocess is deprecated. Use the first defined transform.
+      [test.options?.transform, test.options?.postprocess].find((s) => s),
+    ]
+      .flat()
+      .filter((s): s is string => typeof s === 'string');
+    for (const t of transforms) {
+      processedResponse.output = await transform(t, processedResponse.output, {
+        vars,
+        prompt,
+      });
+    }
+
+    invariant(processedResponse.output != null, 'Response output should not be null');
+    const checkResult = await runAssertions({
+      prompt: renderedPrompt,
+      provider,
+      providerResponse: processedResponse,
+      test,
+      latencyMs: response.cached ? undefined : latencyMs,
+    });
+
+    if (!checkResult.pass) {
+      ret.error = checkResult.reason;
+      ret.failureReason = ResultFailureReason.ASSERT;
+    }
+    ret.success = checkResult.pass;
+    ret.score = checkResult.score;
+    ret.namedScores = checkResult.namedScores || {};
+    if (checkResult.tokensUsed) {
+      ret.tokenUsage.total += checkResult.tokensUsed.total || 0;
+      ret.tokenUsage.prompt += checkResult.tokensUsed.prompt || 0;
+      ret.tokenUsage.completion += checkResult.tokensUsed.completion || 0;
+      ret.tokenUsage.cached += checkResult.tokensUsed.cached || 0;
+      ret.tokenUsage.numRequests += checkResult.tokensUsed.numRequests || 1;
+      if (checkResult.tokensUsed.completionDetails) {
+        ret.tokenUsage.completionDetails.reasoning! +=
+          checkResult.tokensUsed.completionDetails.reasoning || 0;
+        ret.tokenUsage.completionDetails.acceptedPrediction! +=
+          checkResult.tokensUsed.completionDetails.acceptedPrediction || 0;
+        ret.tokenUsage.completionDetails.rejectedPrediction! +=
+          checkResult.tokensUsed.completionDetails.rejectedPrediction || 0;
+      }
+    }
+    ret.response = processedResponse;
+    ret.gradingResult = checkResult;
 
     // Update token usage stats
     if (response.tokenUsage) {
