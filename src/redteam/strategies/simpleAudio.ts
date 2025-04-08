@@ -1,7 +1,12 @@
 import { SingleBar, Presets } from 'cli-progress';
+import { fetchWithCache } from '../../cache';
+import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
+import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { TestCase } from '../../types';
 import invariant from '../../util/invariant';
+import { getRemoteGenerationUrl, neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
+import { VERSION } from '../../constants';
 
 // Types for the node-gtts module
 type GttsInstance = {
@@ -27,10 +32,48 @@ async function importGtts(): Promise<GttsModule | null> {
 }
 
 /**
- * Converts text to an audio stream and then to base64 encoded string
- * using the node-gtts library which provides text-to-speech functionality
+ * Converts text to audio using remote API, with fallback to local node-gtts
  */
-export async function textToAudio(text: string): Promise<string> {
+export async function textToAudio(text: string, language: string = 'en'): Promise<string> {
+  // Check if we should use remote generation
+  if (shouldGenerateRemote()) {
+    try {
+      logger.debug(`Using remote generation for audio task`);
+      
+      const payload = {
+        task: 'audio',
+        text,
+        language,
+        version: VERSION,
+        email: getUserEmail(),
+      };
+
+      const { data } = await fetchWithCache(
+        getRemoteGenerationUrl(),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        },
+        REQUEST_TIMEOUT_MS,
+      );
+
+      if (data.error) {
+        logger.error(`Error in remote audio generation: ${data.error}`);
+        // Fall back to local generation
+        logger.info('Falling back to local audio generation');
+      } else {
+        logger.debug(`Received audio base64 from remote API (${data.audioBase64.length} chars)`);
+        return data.audioBase64;
+      }
+    } catch (error) {
+      logger.warn(`Error using remote generation for audio task: ${error}`);
+      // Fall back to local generation
+      logger.info('Falling back to local audio generation due to error');
+    }
+  }
+
+  // Local fallback implementation
   try {
     // Dynamically import gtts
     const gttsModule = await importGtts();
@@ -41,8 +84,8 @@ export async function textToAudio(text: string): Promise<string> {
       );
     }
 
-    // Initialize gtts with English language
-    const gtts = gttsModule.default('en');
+    // Initialize gtts with specified language
+    const gtts = gttsModule.default(language);
 
     // Get audio stream
     const audioStream = gtts.stream(text);
@@ -72,8 +115,10 @@ export async function textToAudio(text: string): Promise<string> {
 export async function addAudioToBase64(
   testCases: TestCase[],
   injectVar: string,
+  config: Record<string, any> = {},
 ): Promise<TestCase[]> {
   const audioTestCases: TestCase[] = [];
+  const language = config.language || 'en';
 
   let progressBar: SingleBar | undefined;
   if (logger.level !== 'debug') {
@@ -96,7 +141,7 @@ export async function addAudioToBase64(
     const originalText = String(testCase.vars[injectVar]);
 
     // Convert text to audio and then to base64
-    const base64Audio = await textToAudio(originalText);
+    const base64Audio = await textToAudio(originalText, language);
 
     audioTestCases.push({
       ...testCase,
@@ -134,12 +179,13 @@ export async function addAudioToBase64(
 async function main() {
   // Get text from command line arguments or use default
   const textToConvert = process.argv[2] || 'This is a test of the audio encoding strategy.';
+  const language = process.argv[3] || 'en';
 
-  logger.info(`Converting text to audio: "${textToConvert}"`);
+  logger.info(`Converting text to audio: "${textToConvert}" [language: ${language}]`);
 
   try {
     // Convert text to audio
-    const base64Audio = await textToAudio(textToConvert);
+    const base64Audio = await textToAudio(textToConvert, language);
 
     // Log the first 100 characters of the base64 audio to avoid terminal clutter
     logger.info(`Base64 audio (first 100 chars): ${base64Audio.substring(0, 100)}...`);
@@ -153,7 +199,7 @@ async function main() {
     };
 
     // Process the test case
-    const processedTestCases = await addAudioToBase64([testCase], 'prompt');
+    const processedTestCases = await addAudioToBase64([testCase], 'prompt', { language });
 
     logger.info('Test case processed successfully.');
     logger.info(`Original prompt length: ${textToConvert.length} characters`);

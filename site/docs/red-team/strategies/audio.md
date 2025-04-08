@@ -21,13 +21,23 @@ strategies:
   - audio
 ```
 
-:::tip
-This strategy requires you to install `node-gtts` for text-to-speech conversion:
+Or with additional configuration:
+
+```yaml
+strategies:
+  - id: audio
+    config:
+      language: fr # Use French audio (ISO 639-1 code)
+```
+
+:::note
+When using Promptfoo Cloud or when `OPENAI_API_KEY` is not set, audio generation is performed remotely. 
+
+For local-only execution, you'll need to install `node-gtts`:
 
 ```
 npm i node-gtts
 ```
-
 :::
 
 ## How It Works
@@ -40,6 +50,10 @@ The strategy performs the following operations:
 4. Replaces the original text in your test case with the base64-encoded audio
 
 The resulting test case contains the same semantic content as the original but in a different format that may be processed differently by AI systems.
+
+## Configuration Options
+
+- `language`: An ISO 639-1 language code (e.g., 'en', 'fr', 'es') to specify which language the text-to-speech system should use. Defaults to 'en' (English).
 
 ## Importance
 
