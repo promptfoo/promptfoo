@@ -62,24 +62,6 @@ export default function Eval({ fetchId }: EvalOptions) {
   const [loaded, setLoaded] = useState<boolean>(false);
 
   // ==================================================================================================
-  // Data Fetching: Websocket
-  // ==================================================================================================
-
-  /**
-   * On mount, subscribe to the websocket and receive updates.
-   */
-  const { data: socketData, error: socketError } = useSWRSubscription(
-    IS_RUNNING_LOCALLY ? socketEndpoint : null,
-    (key, { next }) => {
-      const socket = SocketIOClient(key);
-      socket.on('init', (data: ResultsFile) => next(null, data));
-      socket.on('update', (data: ResultsFile) => next(null, data));
-      socket.on('error', (error: Error) => next(error));
-      return () => socket.disconnect();
-    },
-  );
-
-  // ==================================================================================================
   // Data Fetching: Recent Evals
   // ==================================================================================================
 
@@ -92,6 +74,32 @@ export default function Eval({ fetchId }: EvalOptions) {
 
   const recentEvalsError = recentEvalsRes.error;
   const recentEvalsData = recentEvalsRes.data?.data;
+
+  // ==================================================================================================
+  // Data Fetching: Websocket
+  // ==================================================================================================
+
+  /**
+   * On mount, subscribe to the websocket and receive updates.
+   */
+  const { data: socketData, error: socketError } = useSWRSubscription(
+    IS_RUNNING_LOCALLY ? socketEndpoint : null,
+    (key, { next }) => {
+      const socket = SocketIOClient(key);
+
+      const handleMessage = (data: ResultsFile) => {
+        // Pass the data to `socketData`
+        next(null, data);
+        // Revalidate the recent evals:
+        recentEvalsRes.mutate();
+      };
+
+      socket.on('init', handleMessage);
+      socket.on('update', handleMessage);
+      socket.on('error', (error: Error) => next(error));
+      return () => socket.disconnect();
+    },
+  );
 
   // ==================================================================================================
   // Data Fetching: Eval by ID
