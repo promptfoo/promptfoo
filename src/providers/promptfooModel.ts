@@ -100,7 +100,7 @@ export class PromptfooModelProvider implements ApiProvider {
       };
 
       const baseUrl = cloudConfig.getApiHost();
-      const url = `${baseUrl}/task`; // Use the standard task endpoint (auth is handled conditionally on the server)
+      const url = `${baseUrl}/api/v1/task`; // Use the standard task endpoint (auth is handled conditionally on the server)
 
       const token = cloudConfig.getApiKey();
       if (!token) {

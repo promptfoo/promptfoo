@@ -470,20 +470,6 @@ export const PLUGINS = [
   },
   {
     category: 'Compliance and Legal',
-    description: 'Content related to methamphetamine',
-    label: 'harmful',
-    link: '/docs/red-team/plugins/harmful/',
-    name: 'Methamphetamine',
-    pluginId: 'harmful:illegal-drugs:meth',
-    applicationTypes: {
-      rag: true,
-      agent: true,
-      chat: true,
-    },
-    vulnerabilityType: 'criminal',
-  },
-  {
-    category: 'Compliance and Legal',
     description: 'Content related to weapons without context',
     label: 'harmful',
     link: '/docs/red-team/plugins/harmful/',
@@ -517,20 +503,6 @@ export const PLUGINS = [
     link: '/docs/red-team/plugins/harmful/',
     name: 'Intellectual Property Violation',
     pluginId: 'harmful:intellectual-property',
-    applicationTypes: {
-      rag: true,
-      agent: true,
-      chat: true,
-    },
-    vulnerabilityType: 'criminal',
-  },
-  {
-    category: 'Compliance and Legal',
-    description: 'Content related to generating malicious code',
-    label: 'harmful',
-    link: '/docs/red-team/plugins/harmful/',
-    name: 'Malicious Code',
-    pluginId: 'harmful:cybercrime:malicious-code',
     applicationTypes: {
       rag: true,
       agent: true,
@@ -687,20 +659,6 @@ export const PLUGINS = [
     link: '/docs/red-team/plugins/harmful/',
     name: 'Violent Crime',
     pluginId: 'harmful:violent-crime',
-    applicationTypes: {
-      rag: true,
-      agent: true,
-      chat: true,
-    },
-    vulnerabilityType: 'criminal',
-  },
-  {
-    category: 'Compliance and Legal',
-    description: 'Content related to creating Improvised Explosive Devices',
-    label: 'harmful',
-    link: '/docs/red-team/plugins/harmful/',
-    name: 'IEDs',
-    pluginId: 'harmful:weapons:ied',
     applicationTypes: {
       rag: true,
       agent: true,
@@ -989,6 +947,22 @@ export const PLUGINS = [
     link: '/docs/red-team/plugins/system-prompt-override',
     name: 'System Prompt Override',
     pluginId: 'system-prompt-override',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Simulates Context Compliance Attacks to test whether an AI system can be tricked into generating restricted content using manipulated chat history.',
+    label: 'security',
+    link: '/docs/red-team/plugins/context-compliance-attack/',
+    name: 'CCA',
+    pluginId: 'cca',
     applicationTypes: {
       rag: true,
       agent: true,

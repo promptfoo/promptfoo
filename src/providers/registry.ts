@@ -9,6 +9,7 @@ import RedteamIterativeProvider from '../redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree';
 import RedteamPandamoniumProvider from '../redteam/providers/pandamonium';
+import { ServerToolDiscoveryMultiProvider } from '../redteam/providers/toolDiscoveryMulti';
 import type { LoadApiProviderContext } from '../types';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 import { isJavascriptFile } from '../util/file';
@@ -45,6 +46,7 @@ import {
   HuggingfaceTokenExtractionProvider,
 } from './huggingface';
 import { JfrogMlChatCompletionProvider } from './jfrog';
+import { createLambdaLabsProvider } from './lambdalabs';
 import { LiteLLMProvider } from './litellm';
 import { LlamaProvider } from './llama';
 import {
@@ -1149,6 +1151,29 @@ export const providerMap: ProviderFactory[] = [
         ? providerPath.slice('file://'.length)
         : providerPath.split(':').slice(1).join(':');
       return new PythonProvider(scriptPath, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'promptfoo:redteam:tool-discovery:multi-turn',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return new ServerToolDiscoveryMultiProvider(providerOptions.config);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('lambdalabs:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createLambdaLabsProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
     },
   },
 ];

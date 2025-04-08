@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.107.7",
+  "version": "0.109.0",
   "license": "MIT",
   "type": "commonjs",
   "repository": {
@@ -56,7 +56,7 @@
     "lint": "eslint . --max-warnings=0",
     "local:web": "npm run dev --prefix src/app",
     "local": "ts-node --cwdMode --transpileOnly src/main.ts",
-    "preversion": "[ \"$(git rev-parse --abbrev-ref HEAD)\" = \"main\" ] || (echo \"Error: Must be on main branch to version\" && exit 1) && git pull origin main && git checkout -b \"chore/bump-version-$(date +%s)\"",
+    "preversion": "command -v gh >/dev/null 2>&1 || (echo \"Error: GitHub CLI required.\" && exit 1) && [ \"$(git rev-parse --abbrev-ref HEAD)\" = \"main\" ] || (echo \"Error: Must be on main branch to version\" && exit 1) && git pull origin main && git checkout -b \"chore/bump-version-$(date +%s)\"",
     "postversion": "npm run citation:generate && git add CITATION.cff && git commit --amend --no-edit && gh pr create --repo promptfoo/promptfoo --title \"chore: bump version $npm_package_version\" --body \"\"",
     "prepublishOnly": "npm run build:clean && npm run build",
     "test:app": "npm run test --prefix src/app",
@@ -110,8 +110,8 @@
     "sharp": "^0.33.5"
   },
   "devDependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.778.0",
-    "@aws-sdk/credential-provider-sso": "^3.777.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.785.0",
+    "@aws-sdk/credential-provider-sso": "^3.782.0",
     "@azure/identity": "^4.8.0",
     "@eslint/js": "^9.23.0",
     "@libsql/client": "^0.14.0",

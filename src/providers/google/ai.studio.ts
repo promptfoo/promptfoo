@@ -13,12 +13,8 @@ import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { CHAT_MODELS } from './shared';
 import type { CompletionOptions } from './types';
-import {
-  type GeminiResponseData,
-  loadFile,
-  maybeCoerceToGeminiFormat,
-  stringifyCandidateContents,
-} from './util';
+import { loadFile, stringifyCandidateContents, geminiFormatAndSystemInstructions } from './util';
+import type { GeminiResponseData } from './util';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
 
@@ -177,8 +173,10 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
   }
 
   async callGemini(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    const { contents, systemInstruction } = maybeCoerceToGeminiFormat(
-      parseChatPrompt(prompt, [{ content: prompt }]),
+    const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+      prompt,
+      context?.vars,
+      this.config.systemInstruction,
     );
 
     // Determine API version based on model

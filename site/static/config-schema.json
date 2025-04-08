@@ -171,6 +171,12 @@
                             "HUGGING_FACE_HUB_TOKEN": {
                               "type": "string"
                             },
+                            "JFROG_API_KEY": {
+                              "type": "string"
+                            },
+                            "LAMBDA_API_KEY": {
+                              "type": "string"
+                            },
                             "LANGFUSE_HOST": {
                               "type": "string"
                             },
@@ -178,6 +184,9 @@
                               "type": "string"
                             },
                             "LANGFUSE_SECRET_KEY": {
+                              "type": "string"
+                            },
+                            "LITELLM_API_BASE": {
                               "type": "string"
                             },
                             "LLAMA_BASE_URL": {
@@ -514,6 +523,7 @@
                                               "is-json",
                                               "is-refusal",
                                               "is-sql",
+                                              "is-valid-function-call",
                                               "is-valid-openai-function-call",
                                               "is-valid-openai-tools-call",
                                               "is-xml",
@@ -941,10 +951,17 @@
           }
         },
         "extensions": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "metadata": {
           "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/metadata/allOf/0"
@@ -1004,6 +1021,7 @@
                           "bfla",
                           "bias",
                           "bola",
+                          "cca",
                           "competitors",
                           "contracts",
                           "cross-session-leak",
@@ -1125,6 +1143,7 @@
                           "ssrf",
                           "system-prompt-override",
                           "tool-discovery",
+                          "tool-discovery:multi-turn",
                           "toxicity",
                           "unsafebench"
                         ]
@@ -1149,6 +1168,7 @@
                               "bfla",
                               "bias",
                               "bola",
+                              "cca",
                               "competitors",
                               "contracts",
                               "cross-session-leak",
@@ -1270,6 +1290,7 @@
                               "ssrf",
                               "system-prompt-override",
                               "tool-discovery",
+                              "tool-discovery:multi-turn",
                               "toxicity",
                               "unsafebench"
                             ]

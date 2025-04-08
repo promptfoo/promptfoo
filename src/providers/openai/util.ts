@@ -347,10 +347,24 @@ export interface OpenAiTool {
 }
 
 export function validateFunctionCall(
-  functionCall: { arguments: string; name: string },
+  output: string | object,
   functions?: OpenAiFunction[],
   vars?: Record<string, string | object>,
 ) {
+  if (typeof output === 'object' && 'function_call' in output) {
+    output = (output as { function_call: any }).function_call;
+  }
+  const functionCall = output as { arguments: string; name: string };
+  if (
+    typeof functionCall !== 'object' ||
+    typeof functionCall.name !== 'string' ||
+    typeof functionCall.arguments !== 'string'
+  ) {
+    throw new Error(
+      `OpenAI did not return a valid-looking function call: ${JSON.stringify(functionCall)}`,
+    );
+  }
+
   // Parse function call and validate it against schema
   const interpolatedFunctions = maybeLoadFromExternalFile(
     renderVarsInObject(functions, vars),
