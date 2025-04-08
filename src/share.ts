@@ -439,33 +439,25 @@ export async function createShareableUrl(
 }
 
 /**
- * Fetches a remote eval from the API.
- * @param eval_ The eval to fetch.
- * @returns The remote eval.
- */
-async function fetchRemoteEval(eval_: Eval) {
-  const { url } = await getApiConfig(eval_);
-
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-
-  if (cloudConfig.isEnabled()) {
-    headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
-  }
-
-  return await fetchWithProxy(`${url}/${eval_.id}`, {
-    method: 'GET',
-    headers,
-  });
-}
-
-/**
  * Checks whether an eval has been shared.
  * @param eval_ The eval to check.
  * @returns True if the eval has been shared, false otherwise.
  */
 export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
   try {
-    const res = await fetchRemoteEval(eval_);
+    const { url } = await getApiConfig(eval_);
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+    if (cloudConfig.isEnabled()) {
+      headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
+    }
+
+    const res = await fetchWithProxy(`${url}/${eval_.id}`, {
+      method: 'GET',
+      headers,
+    });
+
     return res.status !== 404;
   } catch (e) {
     logger.error(`Error checking if eval has been shared: ${e}`);
@@ -479,10 +471,6 @@ export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
  * @param eval_ The eval to update.
  */
 export async function updateSharedEval(eval_: Eval): Promise<void> {
-  // Load the results from the local database
-  await eval_.loadResults();
-  invariant(eval_.results.length > 0, 'Eval has no results to share');
-
   // Send the payload to the server:
   const { url } = await getApiConfig(eval_);
 
