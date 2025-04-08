@@ -50,6 +50,28 @@ describe('isApiProvider', () => {
       expect(isApiProvider(provider)).toBe(false);
     });
   });
+
+  // Additional tests to cover lines 159-165
+  it('should return false for non-object values', () => {
+    expect(isApiProvider('string')).toBe(false);
+    expect(isApiProvider(123)).toBe(false);
+    expect(isApiProvider(true)).toBe(false);
+    expect(isApiProvider(undefined)).toBe(false);
+    expect(isApiProvider(null)).toBe(false);
+  });
+
+  it('should return false for objects without id property', () => {
+    expect(isApiProvider({})).toBe(false);
+    expect(isApiProvider({ callApi: () => {} })).toBe(false);
+  });
+
+  it('should return false when id exists but is not a function', () => {
+    expect(isApiProvider({ id: 'string' })).toBe(false);
+    expect(isApiProvider({ id: 123 })).toBe(false);
+    expect(isApiProvider({ id: true })).toBe(false);
+    expect(isApiProvider({ id: {} })).toBe(false);
+    expect(isApiProvider({ id: [] })).toBe(false);
+  });
 });
 
 describe('isProviderOptions', () => {
@@ -111,5 +133,27 @@ describe('isProviderOptions', () => {
     edgeCases.forEach((options) => {
       expect(isProviderOptions(options)).toBe(true);
     });
+  });
+
+  // Additional tests to cover lines 168-174
+  it('should return false for non-object values', () => {
+    expect(isProviderOptions('string')).toBe(false);
+    expect(isProviderOptions(123)).toBe(false);
+    expect(isProviderOptions(true)).toBe(false);
+    expect(isProviderOptions(undefined)).toBe(false);
+    expect(isProviderOptions(null)).toBe(false);
+  });
+
+  it('should return false for objects without id property', () => {
+    expect(isProviderOptions({})).toBe(false);
+    expect(isProviderOptions({ label: 'Test' })).toBe(false);
+  });
+
+  it('should return false when id exists but is not a string', () => {
+    expect(isProviderOptions({ id: () => 'function' })).toBe(false);
+    expect(isProviderOptions({ id: 123 })).toBe(false);
+    expect(isProviderOptions({ id: true })).toBe(false);
+    expect(isProviderOptions({ id: {} })).toBe(false);
+    expect(isProviderOptions({ id: [] })).toBe(false);
   });
 });
