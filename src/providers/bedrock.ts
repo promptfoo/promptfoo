@@ -1306,6 +1306,7 @@ export abstract class AwsBedrockGenericProvider {
     AwsCredentialIdentity | AwsCredentialIdentityProvider | undefined
   > {
     if (this.config.accessKeyId && this.config.secretAccessKey) {
+      logger.debug(`Using credentials from config file`);
       return {
         accessKeyId: this.config.accessKeyId,
         secretAccessKey: this.config.secretAccessKey,
@@ -1313,9 +1314,12 @@ export abstract class AwsBedrockGenericProvider {
       };
     }
     if (this.config.profile) {
+      logger.debug(`Using SSO profile: ${this.config.profile}`);
       const { fromSSO } = await import('@aws-sdk/credential-provider-sso');
       return fromSSO({ profile: this.config.profile });
     }
+
+    logger.debug(`No explicit credentials in config, falling back to AWS default chain`);
     return undefined;
   }
 
@@ -1339,6 +1343,7 @@ export abstract class AwsBedrockGenericProvider {
       try {
         const { BedrockRuntime } = await import('@aws-sdk/client-bedrock-runtime');
         const credentials = await this.getCredentials();
+
         const bedrock = new BedrockRuntime({
           region: this.getRegion(),
           maxAttempts: Number(process.env.AWS_BEDROCK_MAX_RETRIES || '10'),
@@ -1346,8 +1351,10 @@ export abstract class AwsBedrockGenericProvider {
           ...(credentials ? { credentials } : {}),
           ...(handler ? { requestHandler: handler } : {}),
         });
+
         this.bedrock = bedrock;
-      } catch {
+      } catch (err) {
+        logger.error(`Error creating BedrockRuntime: ${err}`);
         throw new Error(
           'The @aws-sdk/client-bedrock-runtime package is required as a peer dependency. Please install it in your project or globally.',
         );
@@ -1406,6 +1413,20 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
     let response;
     try {
       const bedrockInstance = await this.getBedrockInstance();
+
+      try {
+        const testCredentials = await bedrockInstance.config.credentials?.();
+        logger.debug(
+          `Actual credentials being used: ${
+            testCredentials?.accessKeyId
+              ? `accessKeyId starts with: ${testCredentials.accessKeyId.substring(0, 4)}...`
+              : 'no explicit credentials (using instance metadata)'
+          }`,
+        );
+      } catch (credErr) {
+        logger.debug(`Error getting credentials: ${credErr}`);
+      }
+
       response = await bedrockInstance.invokeModel({
         modelId: this.modelName,
         ...(this.config.guardrailIdentifier
