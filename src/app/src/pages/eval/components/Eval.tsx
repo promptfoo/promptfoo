@@ -1,4 +1,4 @@
-import * as React from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { ShiftKeyProvider } from '@app/contexts/ShiftKeyContext';
@@ -27,6 +27,8 @@ interface EvalOptions {
 export default function Eval({ fetchId }: EvalOptions) {
   const navigate = useNavigate();
   const { apiBaseUrl } = useApiConfig();
+  const [searchParams] = useSearchParams();
+  const searchEvalId = searchParams.get('evalId');
 
   const {
     table,
@@ -39,9 +41,19 @@ export default function Eval({ fetchId }: EvalOptions) {
     setAuthor,
     setInComparisonMode,
   } = useStore();
-  const [loaded, setLoaded] = React.useState(false);
-  const [failed, setFailed] = React.useState(false);
-  const [recentEvals, setRecentEvals] = React.useState<ResultLightweightWithLabel[]>([]);
+
+  // ==================================================================================================
+  // State
+  // ==================================================================================================
+
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [recentEvals, setRecentEvals] = useState<ResultLightweightWithLabel[]>([]);
+  const [defaultEvalId, setDefaultEvalId] = useState<string>(recentEvals[0]?.evalId);
+
+  // ==================================================================================================
+  // Methods
+  // ==================================================================================================
 
   const fetchRecentFileEvals = async () => {
     const resp = await callApi(`/results`, { cache: 'no-store' });
@@ -54,7 +66,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     return body.data;
   };
 
-  const fetchEvalById = React.useCallback(
+  const fetchEvalById = useCallback(
     async (id: string) => {
       const resp = await callApi(`/results/${id}`, { cache: 'no-store' });
       if (!resp.ok) {
@@ -75,12 +87,14 @@ export default function Eval({ fetchId }: EvalOptions) {
     navigate(`/eval/?evalId=${encodeURIComponent(id)}`);
   };
 
-  const [defaultEvalId, setDefaultEvalId] = React.useState<string>(recentEvals[0]?.evalId);
+  // ==================================================================================================
+  // Effects
+  // ==================================================================================================
 
-  const [searchParams] = useSearchParams();
-  const searchEvalId = searchParams.get('evalId');
-
-  React.useEffect(() => {
+  /**
+   * Load the eval data.
+   */
+  useEffect(() => {
     const evalId = searchEvalId || fetchId;
     if (evalId) {
       console.log('Eval init: Fetching eval by id', { searchEvalId, fetchId });
@@ -170,9 +184,16 @@ export default function Eval({ fetchId }: EvalOptions) {
     setInComparisonMode,
   ]);
 
-  React.useEffect(() => {
+  /**
+   * Set document title.
+   */
+  useEffect(() => {
     document.title = `${config?.description || evalId || 'Eval'} | promptfoo`;
   }, [config, evalId]);
+
+  // ==================================================================================================
+  // Render
+  // ==================================================================================================
 
   if (failed) {
     return <div className="notice">404 Eval not found</div>;
