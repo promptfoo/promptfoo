@@ -49,7 +49,27 @@ The resulting test case contains the same semantic content as the original but i
 
 ## Configuration Options
 
-- `language`: An ISO 639-1 language code (e.g., 'en', 'fr', 'es') to specify which language the text-to-speech system should use. Defaults to 'en' (English).
+- `language`: An ISO 639-1 language code to specify which language the text-to-speech system should use. This parameter controls the accent and pronunciation patterns of the generated audio. **Defaults to 'en' (English)** if not specified.
+
+### Supported Languages
+
+The audio strategy uses Google's Text-to-Speech technology and supports numerous languages, including but not limited to:
+
+| Language Code | Language          |
+| ------------- | ----------------- |
+| `en`          | English (default) |
+| `fr`          | French            |
+| `es`          | Spanish           |
+| `de`          | German            |
+| `it`          | Italian           |
+| `ja`          | Japanese          |
+| `ko`          | Korean            |
+| `zh`          | Chinese           |
+| `ru`          | Russian           |
+| `ar`          | Arabic            |
+| `hi`          | Hindi             |
+
+Using different languages can help test how models respond to audio in non-English languages, which may have different detection and processing characteristics.
 
 ## Importance
 
