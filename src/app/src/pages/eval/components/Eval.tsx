@@ -5,26 +5,26 @@ import { ShiftKeyProvider } from '@app/contexts/ShiftKeyContext';
 import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import CircularProgress from '@mui/material/CircularProgress';
-import type { SharedResults, ResultLightweightWithLabel, ResultsFile } from '@promptfoo/types';
+import type { ResultLightweightWithLabel, ResultsFile } from '@promptfoo/types';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
 import { useStore } from './store';
 import './Eval.css';
 
+// setColumnState(evalId, {
+//   selectedColumns: vars.map((v: any, index: number) => `Variable ${index + 1}`),
+//   columnVisibility: vars.reduce((acc: any, v: any, index: number) => {
+//     acc[`Variable ${index + 1}`] = true;
+//     return acc;
+//   }, {}),
+// });
+
 interface EvalOptions {
   fetchId?: string;
-  preloadedData?: SharedResults;
-  recentEvals?: ResultLightweightWithLabel[];
-  defaultEvalId?: string;
 }
 
-export default function Eval({
-  fetchId,
-  preloadedData,
-  recentEvals: recentEvalsProp,
-  defaultEvalId: defaultEvalIdProp,
-}: EvalOptions) {
+export default function Eval({ fetchId }: EvalOptions) {
   const navigate = useNavigate();
   const { apiBaseUrl } = useApiConfig();
 
@@ -41,9 +41,7 @@ export default function Eval({
   } = useStore();
   const [loaded, setLoaded] = React.useState(false);
   const [failed, setFailed] = React.useState(false);
-  const [recentEvals, setRecentEvals] = React.useState<ResultLightweightWithLabel[]>(
-    recentEvalsProp || [],
-  );
+  const [recentEvals, setRecentEvals] = React.useState<ResultLightweightWithLabel[]>([]);
 
   const fetchRecentFileEvals = async () => {
     const resp = await callApi(`/results`, { cache: 'no-store' });
@@ -77,9 +75,7 @@ export default function Eval({
     navigate(`/eval/?evalId=${encodeURIComponent(id)}`);
   };
 
-  const [defaultEvalId, setDefaultEvalId] = React.useState<string>(
-    defaultEvalIdProp || recentEvals[0]?.evalId,
-  );
+  const [defaultEvalId, setDefaultEvalId] = React.useState<string>(recentEvals[0]?.evalId);
 
   const [searchParams] = useSearchParams();
   const searchEvalId = searchParams.get('evalId');
@@ -96,12 +92,6 @@ export default function Eval({
         fetchRecentFileEvals();
       };
       run();
-    } else if (preloadedData) {
-      console.log('Eval init: Using preloaded data');
-      setTableFromResultsFile(preloadedData.data);
-      setConfig(preloadedData.data.config);
-      setAuthor(preloadedData.data.author || null);
-      setLoaded(true);
     } else if (IS_RUNNING_LOCALLY) {
       console.log('Eval init: Using local server websocket');
 
@@ -175,7 +165,6 @@ export default function Eval({
     setAuthor,
     setEvalId,
     fetchEvalById,
-    preloadedData,
     setDefaultEvalId,
     searchEvalId,
     setInComparisonMode,
