@@ -31,13 +31,7 @@ strategies:
 ```
 
 :::note
-When using Promptfoo Cloud or when `OPENAI_API_KEY` is not set, audio generation is performed remotely. 
-
-For local-only execution, you'll need to install `node-gtts`:
-
-```
-npm i node-gtts
-```
+This strategy uses Promptfoo Cloud to perform the text-to-speech conversion. It requires an active internet connection and works automatically when using the hosted version or with Cloud credentials.
 :::
 
 ## How It Works
@@ -45,8 +39,8 @@ npm i node-gtts
 The strategy performs the following operations:
 
 1. Takes the original text from your test case
-2. Converts the text into speech using Google's Text-to-Speech service
-3. Encodes the MP3 audio as a base64 string
+2. Sends the text to a remote service for conversion to speech audio
+3. Receives the base64-encoded audio data
 4. Replaces the original text in your test case with the base64-encoded audio
 
 The resulting test case contains the same semantic content as the original but in a different format that may be processed differently by AI systems.

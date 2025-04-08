@@ -1,7 +1,7 @@
 import { expect, it, describe } from '@jest/globals';
 import { fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
-import { shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
+import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { addAudioToBase64, textToAudio } from '../../../src/redteam/strategies/simpleAudio';
 import type { TestCase } from '../../../src/types';
 import { SingleBar } from 'cli-progress';
@@ -9,27 +9,12 @@ import { SingleBar } from 'cli-progress';
 // Mock the remoteGeneration module
 jest.mock('../../../src/redteam/remoteGeneration', () => ({
   getRemoteGenerationUrl: jest.fn().mockReturnValue('http://test.url'),
-  shouldGenerateRemote: jest.fn(),
   neverGenerateRemote: jest.fn().mockReturnValue(false),
 }));
 
 // Mock the cache module
 jest.mock('../../../src/cache', () => ({
   fetchWithCache: jest.fn(),
-}));
-
-// Mock the node-gtts module
-jest.mock('node-gtts', () => ({
-  __esModule: true,
-  default: jest.fn().mockImplementation(() => ({
-    stream: jest.fn().mockImplementation(() => {
-      const { Readable } = require('stream');
-      const readable = new Readable();
-      readable.push(Buffer.from('mocked-audio-data'));
-      readable.push(null); // End the stream
-      return readable;
-    }),
-  })),
 }));
 
 // Mock cli-progress
@@ -45,81 +30,96 @@ jest.mock('cli-progress', () => ({
 }));
 
 const originalConsoleLog = console.log;
+const mockFetchWithCache = fetchWithCache as jest.Mock;
+const mockNeverGenerateRemote = neverGenerateRemote as jest.Mock;
 
 describe('audio strategy', () => {
   beforeAll(() => {
     jest.spyOn(console, 'log').mockImplementation();
+  });
+  
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockFetchWithCache.mockResolvedValue({
+      data: { audioBase64: 'bW9ja2VkLWF1ZGlvLWJhc2U2NC1kYXRh' },
+    });
+    mockNeverGenerateRemote.mockReturnValue(false);
   });
 
   afterAll(() => {
     console.log = originalConsoleLog;
   });
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-    (shouldGenerateRemote as jest.Mock).mockReturnValue(false);
-    (fetchWithCache as jest.Mock).mockResolvedValue({
-      data: { audioBase64: 'bW9ja2VkLWF1ZGlvLWJhc2U2NC1kYXRh' },
-    });
-  });
-
   describe('textToAudio', () => {
-    it('should convert text to base64 string using remote API when shouldGenerateRemote is true', async () => {
-      (shouldGenerateRemote as jest.Mock).mockReturnValue(true);
-      
-      const text = 'Hello, remote world!';
+    it('should convert text to base64 string using remote API', async () => {
+      const text = 'Hello, world!';
       const base64 = await textToAudio(text, 'en');
 
-      expect(fetchWithCache).toHaveBeenCalled();
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: expect.any(String),
+        }),
+        expect.any(Number)
+      );
       expect(base64).toBe('bW9ja2VkLWF1ZGlvLWJhc2U2NC1kYXRh');
     });
 
-    it('should convert text to base64 string locally when shouldGenerateRemote is false', async () => {
-      (shouldGenerateRemote as jest.Mock).mockReturnValue(false);
+    it('should handle remote generation being disabled', async () => {
+      mockNeverGenerateRemote.mockReturnValue(true);
       
-      const text = 'Hello, local world!';
+      const text = 'This should fail';
+      await expect(textToAudio(text, 'en')).resolves.not.toThrow();
+      
+      // Should still return base64 encoded text as a fallback
       const base64 = await textToAudio(text, 'en');
-
-      expect(fetchWithCache).not.toHaveBeenCalled();
-      // Check that the result is a base64 string (not the remote mocked value)
-      expect(base64).toBeTruthy();
       expect(typeof base64).toBe('string');
-      expect(base64).not.toBe('bW9ja2VkLWF1ZGlvLWJhc2U2NC1kYXRh');
-      
-      // Should be valid base64
       expect(() => Buffer.from(base64, 'base64')).not.toThrow();
+      expect(Buffer.from(base64, 'base64').toString()).toBe(text);
     });
 
-    it('should fall back to local processing if remote API fails', async () => {
-      (shouldGenerateRemote as jest.Mock).mockReturnValue(true);
-      (fetchWithCache as jest.Mock).mockRejectedValueOnce(new Error('Remote API error'));
+    it('should fall back to simple base64 encoding if remote API fails', async () => {
+      mockFetchWithCache.mockRejectedValueOnce(new Error('Remote API error'));
       
       const text = 'Hello, fallback world!';
       const base64 = await textToAudio(text, 'en');
 
-      expect(fetchWithCache).toHaveBeenCalled();
-      expect(base64).toBeTruthy();
+      expect(mockFetchWithCache).toHaveBeenCalled();
       expect(typeof base64).toBe('string');
       expect(base64).not.toBe('bW9ja2VkLWF1ZGlvLWJhc2U2NC1kYXRh');
       
-      // Should be valid base64
+      // Should be valid base64 and encode the original text
       expect(() => Buffer.from(base64, 'base64')).not.toThrow();
+      expect(Buffer.from(base64, 'base64').toString()).toBe(text);
     });
 
-    it('should handle different languages', async () => {
-      (shouldGenerateRemote as jest.Mock).mockReturnValue(false);
-      
+    it('should pass language parameter to API', async () => {
       const text = 'Bonjour, monde!';
       await textToAudio(text, 'fr');
 
-      // Check if node-gtts was called with the correct language
-      const nodeGtts = require('node-gtts').default;
-      expect(nodeGtts).toHaveBeenCalledWith('fr');
+      // Verify the correct call was made
+      expect(mockFetchWithCache).toHaveBeenCalled();
+      
+      // Check the first argument set to fetchWithCache
+      const callArgs = mockFetchWithCache.mock.calls[0][1]; // This is the options object
+      
+      // The body should be a stringified JSON object
+      const body = JSON.parse(callArgs.body);
+      expect(body.task).toBe('audio');
+      expect(body.text).toBe(text);
+      expect(body.language).toBe('fr');
     });
   });
 
   describe('addAudioToBase64', () => {
     it('should convert test cases with the specified variable', async () => {
+      // Setup mock to return a predictable response
+      mockFetchWithCache.mockResolvedValue({
+        data: { audioBase64: 'bW9ja2VkLWF1ZGlv' },
+      });
+      
       const testCases: TestCase[] = [
         {
           vars: {
@@ -132,13 +132,8 @@ describe('audio strategy', () => {
       const result = await addAudioToBase64(testCases, 'prompt');
 
       expect(result).toHaveLength(1);
-      expect(result[0].vars?.prompt).toBeTruthy();
-      expect(typeof result[0].vars?.prompt).toBe('string');
-      expect(result[0].vars?.prompt).not.toBe('This is a test prompt'); // Should be changed
-      expect(result[0].vars?.other).toBe('This should not be changed'); // Should not be changed
-
-      // Should be valid base64
-      expect(() => Buffer.from(result[0].vars?.prompt as string, 'base64')).not.toThrow();
+      expect(result[0].vars?.prompt).toBe('bW9ja2VkLWF1ZGlv');
+      expect(result[0].vars?.other).toBe('This should not be changed');
     });
 
     it('should preserve harmCategory and modify assertion metrics', async () => {
@@ -181,9 +176,6 @@ describe('audio strategy', () => {
         strategyId: 'audio',
       });
       expect(result[0].assert).toBeUndefined();
-
-      // Just check it's a valid base64 string
-      expect(() => Buffer.from(result[0].vars?.prompt as string, 'base64')).not.toThrow();
     });
 
     it('should use language from config if provided', async () => {
@@ -195,12 +187,18 @@ describe('audio strategy', () => {
 
       await addAudioToBase64([testCase], 'prompt', { language: 'es' });
       
-      // Check if node-gtts was called with the correct language
-      const nodeGtts = require('node-gtts').default;
-      expect(nodeGtts).toHaveBeenCalledWith('es');
+      // Verify a call was made
+      expect(mockFetchWithCache).toHaveBeenCalled();
+      
+      // Check the first argument set to fetchWithCache
+      const callArgs = mockFetchWithCache.mock.calls[0][1]; // This is the options object
+      
+      // The body should be a stringified JSON object
+      const body = JSON.parse(callArgs.body);
+      expect(body.language).toBe('es');
     });
 
-    it('should increment progress bar when provided', async () => {
+    it('should use progress bar when logger level is not debug', async () => {
       const testCase: TestCase = {
         vars: {
           prompt: 'Test progress bar',
@@ -212,21 +210,25 @@ describe('audio strategy', () => {
       // Set level to info to enable progress bar
       logger.level = 'info';
 
-      // Create a spy for SingleBar
-      const mockIncrement = jest.fn();
-      const mockStop = jest.fn();
-      (SingleBar as jest.Mock).mockImplementation(() => ({
-        increment: mockIncrement,
+      // Create mock for SingleBar
+      const mockBarInstance = {
+        increment: jest.fn(),
         start: jest.fn(),
-        stop: mockStop,
-      }));
+        stop: jest.fn(),
+      };
+      
+      // Cast SingleBar to any to avoid TypeScript errors with mocking
+      const mockSingleBar = SingleBar as any;
+      const originalImplementation = mockSingleBar.mockImplementation;
+      mockSingleBar.mockImplementation(() => mockBarInstance);
       
       await addAudioToBase64([testCase], 'prompt');
 
-      expect(mockIncrement).toHaveBeenCalled();
-      expect(mockStop).toHaveBeenCalled();
+      expect(mockBarInstance.increment).toHaveBeenCalled();
+      expect(mockBarInstance.stop).toHaveBeenCalled();
       
-      // Restore original logger level
+      // Restore original implementation and logger level
+      mockSingleBar.mockImplementation = originalImplementation;
       logger.level = originalLevel;
     });
   });
