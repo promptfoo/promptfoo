@@ -10,15 +10,16 @@ import { VERSION } from '../../constants';
 
 /**
  * Converts text to audio using the remote API
+ * @throws Error if remote generation is disabled or if the API call fails
  */
 export async function textToAudio(text: string, language: string = 'en'): Promise<string> {
+  // Check if remote generation is disabled
+  if (neverGenerateRemote()) {
+    throw new Error('Remote generation is disabled but required for audio strategy. Please enable remote generation to use this strategy.');
+  }
+
   try {
     logger.debug(`Using remote generation for audio task`);
-    
-    // Check if remote generation is disabled
-    if (neverGenerateRemote()) {
-      throw new Error('Remote generation is disabled but required for audio strategy');
-    }
     
     const payload = {
       task: 'audio',
@@ -46,14 +47,13 @@ export async function textToAudio(text: string, language: string = 'en'): Promis
     return data.audioBase64;
   } catch (error) {
     logger.error(`Error generating audio from text: ${error}`);
-    // For backward compatibility, convert text to base64 if audio generation fails
-    logger.warn('Falling back to simple base64 encoding of the text (not actual audio)');
-    return Buffer.from(text).toString('base64');
+    throw new Error(`Failed to generate audio: ${error instanceof Error ? error.message : String(error)}. This strategy requires an active internet connection and access to the remote API.`);
   }
 }
 
 /**
  * Adds audio encoding to test cases
+ * @throws Error if the remote API for audio conversion is unavailable
  */
 export async function addAudioToBase64(
   testCases: TestCase[],
@@ -83,7 +83,7 @@ export async function addAudioToBase64(
 
     const originalText = String(testCase.vars[injectVar]);
 
-    // Convert text to audio and then to base64
+    // Convert text to audio using the remote API
     const base64Audio = await textToAudio(originalText, language);
 
     audioTestCases.push({

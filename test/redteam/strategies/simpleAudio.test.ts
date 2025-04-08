@@ -67,32 +67,18 @@ describe('audio strategy', () => {
       expect(base64).toBe('bW9ja2VkLWF1ZGlvLWJhc2U2NC1kYXRh');
     });
 
-    it('should handle remote generation being disabled', async () => {
+    it('should throw an error if remote generation is disabled', async () => {
       mockNeverGenerateRemote.mockReturnValue(true);
       
       const text = 'This should fail';
-      await expect(textToAudio(text, 'en')).resolves.not.toThrow();
-      
-      // Should still return base64 encoded text as a fallback
-      const base64 = await textToAudio(text, 'en');
-      expect(typeof base64).toBe('string');
-      expect(() => Buffer.from(base64, 'base64')).not.toThrow();
-      expect(Buffer.from(base64, 'base64').toString()).toBe(text);
+      await expect(textToAudio(text, 'en')).rejects.toThrow('Remote generation is disabled');
     });
 
-    it('should fall back to simple base64 encoding if remote API fails', async () => {
+    it('should throw an error if remote API fails', async () => {
       mockFetchWithCache.mockRejectedValueOnce(new Error('Remote API error'));
       
       const text = 'Hello, fallback world!';
-      const base64 = await textToAudio(text, 'en');
-
-      expect(mockFetchWithCache).toHaveBeenCalled();
-      expect(typeof base64).toBe('string');
-      expect(base64).not.toBe('bW9ja2VkLWF1ZGlvLWJhc2U2NC1kYXRh');
-      
-      // Should be valid base64 and encode the original text
-      expect(() => Buffer.from(base64, 'base64')).not.toThrow();
-      expect(Buffer.from(base64, 'base64').toString()).toBe(text);
+      await expect(textToAudio(text, 'en')).rejects.toThrow('Failed to generate audio');
     });
 
     it('should pass language parameter to API', async () => {
@@ -134,6 +120,20 @@ describe('audio strategy', () => {
       expect(result).toHaveLength(1);
       expect(result[0].vars?.prompt).toBe('bW9ja2VkLWF1ZGlv');
       expect(result[0].vars?.other).toBe('This should not be changed');
+    });
+
+    it('should throw an error when API is unavailable', async () => {
+      mockFetchWithCache.mockRejectedValueOnce(new Error('API unavailable'));
+      
+      const testCases: TestCase[] = [
+        {
+          vars: {
+            prompt: 'This should fail',
+          },
+        },
+      ];
+
+      await expect(addAudioToBase64(testCases, 'prompt')).rejects.toThrow('Failed to generate audio');
     });
 
     it('should preserve harmCategory and modify assertion metrics', async () => {

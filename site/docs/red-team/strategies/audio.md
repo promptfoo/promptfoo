@@ -30,8 +30,10 @@ strategies:
       language: fr # Use French audio (ISO 639-1 code)
 ```
 
-:::note
-This strategy uses Promptfoo Cloud to perform the text-to-speech conversion. It requires an active internet connection and works automatically when using the hosted version or with Cloud credentials.
+:::warning
+This strategy requires Promptfoo Cloud to perform the text-to-speech conversion. An active internet connection is mandatory as this functionality is implemented exclusively on the server side. 
+
+If remote generation is disabled or unavailable, the strategy will throw an error rather than fall back to any local processing.
 :::
 
 ## How It Works
@@ -39,7 +41,7 @@ This strategy uses Promptfoo Cloud to perform the text-to-speech conversion. It 
 The strategy performs the following operations:
 
 1. Takes the original text from your test case
-2. Sends the text to a remote service for conversion to speech audio
+2. Sends the text to the remote service for conversion to speech audio
 3. Receives the base64-encoded audio data
 4. Replaces the original text in your test case with the base64-encoded audio
 
