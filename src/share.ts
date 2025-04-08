@@ -11,7 +11,6 @@ import logger from './logger';
 import type Eval from './models/eval';
 import type { SharedResults } from './types';
 import { cloudCanAcceptChunkedResults } from './util/cloud';
-import invariant from './util/invariant';
 
 export interface ShareDomainResult {
   domain: string;
