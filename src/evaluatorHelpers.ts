@@ -257,13 +257,13 @@ export async function renderPrompt(
 
 /**
  * Runs extension hooks for the given hook name and context.
- * @param extensions - An array of extension paths.
+ * @param extensions - An array of extension paths, or null.
  * @param hookName - The name of the hook to run.
  * @param context - The context object to pass to the hook.
  * @returns A Promise that resolves when all hooks have been run.
  */
 export async function runExtensionHook(
-  extensions: string[] | undefined,
+  extensions: string[] | null | undefined,
   hookName: string,
   context: any,
 ) {

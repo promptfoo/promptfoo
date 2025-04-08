@@ -13,6 +13,7 @@ import Snackbar from '@mui/material/Snackbar';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import { styled } from '@mui/system';
 import yaml from 'js-yaml';
 // @ts-expect-error: No types available
 import { highlight, languages } from 'prismjs/components/prism-core';
@@ -25,6 +26,29 @@ interface YamlEditorProps {
   readOnly?: boolean;
   initialYaml?: string;
 }
+
+// Schema comment that should always be at the top of the YAML file
+const YAML_SCHEMA_COMMENT =
+  '# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json';
+
+// Ensure the schema comment is at the top of YAML content
+const ensureSchemaComment = (yamlContent: string): string => {
+  if (!yamlContent.trim().startsWith(YAML_SCHEMA_COMMENT)) {
+    return `${YAML_SCHEMA_COMMENT}\n${yamlContent}`;
+  }
+  return yamlContent;
+};
+
+// Format YAML with schema comment
+const formatYamlWithSchema = (config: any): string => {
+  const yamlContent = yaml.dump(config);
+  return ensureSchemaComment(yamlContent);
+};
+
+const StyledLink = styled(Link)({
+  fontWeight: 'medium',
+  textDecoration: 'none',
+});
 
 const YamlEditorComponent: React.FC<YamlEditorProps> = ({
   initialConfig,
@@ -46,7 +70,10 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
 
   const parseAndUpdateStore = (yamlContent: string) => {
     try {
-      const parsedConfig = yaml.load(yamlContent) as Record<string, any>;
+      // Remove the schema comment for parsing if it exists
+      const contentForParsing = yamlContent.replace(YAML_SCHEMA_COMMENT, '').trim();
+      const parsedConfig = yaml.load(contentForParsing) as Record<string, any>;
+
       if (parsedConfig && typeof parsedConfig === 'object') {
         useStore.setState((state) => {
           const newState = {
@@ -116,11 +143,13 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
       const reader = new FileReader();
       reader.onload = (e) => {
         const content = e.target?.result as string;
-        setCode(content);
+        // Ensure the schema comment is at the top
+        const contentWithSchema = ensureSchemaComment(content);
+        setCode(contentWithSchema);
         if (isReadOnly) {
           setIsReadOnly(false);
         }
-        parseAndUpdateStore(content);
+        parseAndUpdateStore(contentWithSchema);
       };
       reader.onerror = () => {
         const errorMsg = 'Failed to read the uploaded file';
@@ -150,68 +179,89 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
 
   React.useEffect(() => {
     if (initialYaml) {
-      setCode(initialYaml);
+      setCode(ensureSchemaComment(initialYaml));
     } else if (initialConfig) {
-      setCode(yaml.dump(initialConfig));
+      setCode(formatYamlWithSchema(initialConfig));
     } else {
       const currentConfig = getTestSuite();
-      setCode(yaml.dump(currentConfig));
+      setCode(formatYamlWithSchema(currentConfig));
     }
     // Deliberately omitting getTestSuite from dependencies to avoid potential re-render loops
   }, [initialYaml, initialConfig]);
 
   return (
     <Box>
-      <Typography variant="body1" gutterBottom>
-        This is the YAML config that defines the evaluation and is processed by promptfoo. See{' '}
-        <Link target="_blank" to="https://promptfoo.dev/docs/configuration/guide">
-          configuration docs
-        </Link>{' '}
-        to learn more.
-      </Typography>
-      {!readOnly && (
+      <Box
+        sx={{
+          mb: 3,
+          p: 2,
+          bgcolor: darkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)',
+          borderRadius: 1,
+          borderLeft: '4px solid',
+          borderColor: 'primary.main',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <Box>
+          <Typography variant="subtitle1" fontWeight="bold" color="primary.main" gutterBottom>
+            YAML Configuration
+          </Typography>
+          <Typography variant="body2">
+            This configuration defines your evaluation parameters and can be exported for use with
+            the promptfoo CLI.
+          </Typography>
+          <Typography variant="body2" sx={{ mt: 1 }}>
+            <StyledLink target="_blank" to="https://promptfoo.dev/docs/configuration/guide">
+              View documentation →
+            </StyledLink>
+          </Typography>
+        </Box>
+        {!readOnly && (
+          <Button
+            variant={isReadOnly ? 'outlined' : 'contained'}
+            color="primary"
+            size="small"
+            startIcon={isReadOnly ? <EditIcon /> : <SaveIcon />}
+            onClick={() => {
+              if (isReadOnly) {
+                setIsReadOnly(false);
+              } else {
+                const parseSuccess = parseAndUpdateStore(code);
+                if (parseSuccess) {
+                  setIsReadOnly(true);
+                }
+              }
+            }}
+            sx={{ ml: 2, whiteSpace: 'nowrap' }}
+          >
+            {isReadOnly ? 'Edit YAML' : 'Save Changes'}
+          </Button>
+        )}
+      </Box>
+      {!readOnly && !isReadOnly && (
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <Box display="flex" gap={2}>
-            <Button
-              variant={isReadOnly ? 'outlined' : 'contained'}
-              color="primary"
-              startIcon={isReadOnly ? <EditIcon /> : <SaveIcon />}
-              onClick={() => {
-                if (isReadOnly) {
-                  setIsReadOnly(false);
-                } else {
-                  const parseSuccess = parseAndUpdateStore(code);
-                  if (parseSuccess) {
-                    setIsReadOnly(true);
-                  }
-                }
-              }}
-            >
-              {isReadOnly ? 'Edit YAML' : 'Save Changes'}
-            </Button>
             <Button variant="text" color="primary" startIcon={<UploadIcon />} component="label">
               Upload YAML
               <input type="file" hidden accept=".yaml,.yml" onChange={handleFileUpload} />
             </Button>
-            {!isReadOnly && (
-              <Button
-                variant="text"
-                color="warning"
-                onClick={() => {
-                  const currentConfig = getTestSuite();
-                  setCode(yaml.dump(currentConfig));
-                  setNotification({ show: true, message: 'Reset to last saved configuration' });
-                }}
-              >
-                Reset
-              </Button>
-            )}
+            <Button
+              variant="text"
+              color="warning"
+              onClick={() => {
+                const currentConfig = getTestSuite();
+                setCode(formatYamlWithSchema(currentConfig));
+                setNotification({ show: true, message: 'Reset to last saved configuration' });
+              }}
+            >
+              Reset
+            </Button>
           </Box>
-          {!isReadOnly && (
-            <Typography variant="caption" color="text.secondary">
-              Editing mode active - changes will be applied when you save
-            </Typography>
-          )}
+          <Typography variant="caption" color="text.secondary">
+            Editing mode active - changes will be applied when you save
+          </Typography>
         </Box>
       )}
       <Box position="relative">

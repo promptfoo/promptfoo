@@ -47,7 +47,7 @@ interface Schema {
 
 interface FunctionDeclaration {
   name: string;
-  description: string;
+  description?: string;
   parameters?: Schema;
   response?: Schema;
 }

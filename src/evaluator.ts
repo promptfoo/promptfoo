@@ -6,7 +6,7 @@ import { globSync } from 'glob';
 import * as path from 'path';
 import readline from 'readline';
 import type winston from 'winston';
-import { runAssertions, runCompareAssertion } from './assertions';
+import { MODEL_GRADED_ASSERTION_TYPES, runAssertions, runCompareAssertion } from './assertions';
 import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';
 import { updateSignalFile } from './database/signal';
@@ -22,6 +22,7 @@ import telemetry from './telemetry';
 import type { EvalConversations, EvalRegisters, ScoringFunction, TokenUsage, Vars } from './types';
 import {
   type Assertion,
+  type AssertionType,
   type CompletedPrompt,
   type EvaluateOptions,
   type EvaluateResult,
@@ -41,6 +42,52 @@ import { sleep } from './util/time';
 import { transform, type TransformContext, TransformInputType } from './util/transform';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
+
+function updateAssertionMetrics(
+  metrics: { tokenUsage: Partial<TokenUsage> },
+  assertionTokens: Partial<TokenUsage>,
+): void {
+  if (!metrics.tokenUsage.assertions) {
+    metrics.tokenUsage.assertions = {
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      cached: 0,
+    };
+  }
+
+  const assertions = metrics.tokenUsage.assertions;
+  assertions.total = (assertions.total ?? 0) + (assertionTokens.total ?? 0);
+  assertions.prompt = (assertions.prompt ?? 0) + (assertionTokens.prompt ?? 0);
+  assertions.completion = (assertions.completion ?? 0) + (assertionTokens.completion ?? 0);
+  assertions.cached = (assertions.cached ?? 0) + (assertionTokens.cached ?? 0);
+
+  if (assertionTokens.numRequests) {
+    assertions.numRequests = (assertions.numRequests ?? 0) + assertionTokens.numRequests;
+  }
+
+  if (assertionTokens.completionDetails) {
+    if (!assertions.completionDetails) {
+      assertions.completionDetails = {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      };
+    }
+
+    assertions.completionDetails.reasoning =
+      (assertions.completionDetails.reasoning ?? 0) +
+      (assertionTokens.completionDetails.reasoning ?? 0);
+
+    assertions.completionDetails.acceptedPrediction =
+      (assertions.completionDetails.acceptedPrediction ?? 0) +
+      (assertionTokens.completionDetails.acceptedPrediction ?? 0);
+
+    assertions.completionDetails.rejectedPrediction =
+      (assertions.completionDetails.rejectedPrediction ?? 0) +
+      (assertionTokens.completionDetails.rejectedPrediction ?? 0);
+  }
+}
 
 /**
  * Validates if a given prompt is allowed based on the provided list of allowed
@@ -78,6 +125,17 @@ export function newTokenUsage(): Required<TokenUsage> {
       reasoning: 0,
       acceptedPrediction: 0,
       rejectedPrediction: 0,
+    },
+    assertions: {
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      cached: 0,
+      completionDetails: {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
     },
   };
 }
@@ -742,6 +800,32 @@ class Evaluator {
 
       const rows = await runEval(evalStep);
       for (const row of rows) {
+        // Print token usage for model-graded assertions and add to stats
+        if (row.gradingResult?.tokensUsed && row.testCase?.assert) {
+          for (const assertion of row.testCase.assert) {
+            if (MODEL_GRADED_ASSERTION_TYPES.has(assertion.type as AssertionType)) {
+              const tokensUsed = row.gradingResult.tokensUsed;
+
+              if (!this.stats.tokenUsage.assertions) {
+                this.stats.tokenUsage.assertions = {
+                  total: 0,
+                  prompt: 0,
+                  completion: 0,
+                  cached: 0,
+                };
+              }
+
+              const assertions = this.stats.tokenUsage.assertions;
+              assertions.total = (assertions.total ?? 0) + (tokensUsed.total ?? 0);
+              assertions.prompt = (assertions.prompt ?? 0) + (tokensUsed.prompt ?? 0);
+              assertions.completion = (assertions.completion ?? 0) + (tokensUsed.completion ?? 0);
+              assertions.cached = (assertions.cached ?? 0) + (tokensUsed.cached ?? 0);
+
+              break;
+            }
+          }
+        }
+
         // capture metrics
         if (row.success) {
           this.stats.successes++;
@@ -851,6 +935,12 @@ class Evaluator {
             (metrics.tokenUsage.completionDetails?.rejectedPrediction || 0) +
             (row.response?.tokenUsage?.completionDetails?.rejectedPrediction || 0),
         };
+
+        // Add assertion token usage to the metrics
+        if (row.gradingResult?.tokensUsed) {
+          updateAssertionMetrics(metrics, row.gradingResult.tokensUsed);
+        }
+
         metrics.cost += row.cost || 0;
 
         await runExtensionHook(testSuite.extensions, 'afterEach', {
@@ -1028,19 +1118,37 @@ class Evaluator {
               prompt: 0,
               completion: 0,
             };
-            result.gradingResult.tokensUsed = result.gradingResult.tokensUsed || {
-              total: 0,
-              prompt: 0,
-              completion: 0,
-            };
-            result.gradingResult.tokensUsed.total =
-              (result.gradingResult.tokensUsed.total || 0) + (gradingResult.tokensUsed?.total || 0);
-            result.gradingResult.tokensUsed.prompt =
-              (result.gradingResult.tokensUsed.prompt || 0) +
-              (gradingResult.tokensUsed?.prompt || 0);
-            result.gradingResult.tokensUsed.completion =
-              (result.gradingResult.tokensUsed.completion || 0) +
-              (gradingResult.tokensUsed?.completion || 0);
+
+            // Use the helper function instead of direct updates
+            if (gradingResult.tokensUsed) {
+              if (!result.gradingResult.tokensUsed) {
+                result.gradingResult.tokensUsed = {
+                  total: 0,
+                  prompt: 0,
+                  completion: 0,
+                };
+              }
+
+              // Update the metrics using the helper function
+              updateAssertionMetrics(
+                { tokenUsage: { assertions: result.gradingResult.tokensUsed } },
+                gradingResult.tokensUsed,
+              );
+
+              // Also update the metrics for the eval
+              if (gradingResult.tokensUsed && result.testCase?.assert) {
+                for (const assertion of result.testCase.assert) {
+                  if (MODEL_GRADED_ASSERTION_TYPES.has(assertion.type as AssertionType)) {
+                    updateAssertionMetrics(
+                      { tokenUsage: this.stats.tokenUsage },
+                      gradingResult.tokensUsed,
+                    );
+                    break;
+                  }
+                }
+              }
+            }
+
             result.success = result.gradingResult.pass =
               result.gradingResult.pass && gradingResult.pass;
             if (!gradingResult.pass) {
