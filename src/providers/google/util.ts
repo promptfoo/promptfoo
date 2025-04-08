@@ -425,9 +425,10 @@ export function validateFunctionCall(
     throw new Error(`Google did not return a valid-looking function call: ${output}`);
   }
 
+  const interpolatedFunctions = loadFile(functions, vars) as Tool[];
+
   for (const functionCall of functionCalls) {
     // Parse function call and validate it against schema
-    const interpolatedFunctions = loadFile(functions, vars) as Tool[];
     const functionName = functionCall.name;
     const functionArgs = parseStringObject(functionCall.args);
     const functionDeclarations = interpolatedFunctions?.find((f) => 'functionDeclarations' in f);
@@ -437,7 +438,7 @@ export function validateFunctionCall(
     if (!functionSchema) {
       throw new Error(`Called "${functionName}", but there is no function with that name`);
     }
-    if (JSON.stringify(functionArgs) !== '{}' && functionSchema?.parameters) {
+    if (Object.keys(functionArgs).length !== 0 && functionSchema?.parameters) {
       const parameterSchema = normalizeSchemaTypes(functionSchema.parameters);
       const validate = ajv.compile(parameterSchema as AnySchema);
       if (!validate(functionArgs)) {
@@ -452,13 +453,3 @@ export function validateFunctionCall(
     }
   }
 }
-
-export {
-  ajv,
-  clone,
-  PartSchema,
-  ContentSchema,
-  GeminiFormatSchema,
-  cachedAuth,
-  normalizeSchemaTypes,
-};
