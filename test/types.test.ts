@@ -11,6 +11,7 @@ import {
   VarsSchema,
   TestSuiteConfigSchema,
   TestSuiteSchema,
+  UnifiedConfigSchema,
 } from '../src/types';
 
 describe('AssertionSchema', () => {
@@ -219,6 +220,88 @@ describe('TestSuiteConfigSchema', () => {
       : { id: 'test-provider', config: { someConfig: true } };
 
     expect(Object.keys(testProvider)).toContain('env');
+  });
+
+  describe('extensions field', () => {
+    const minimalConfig = {
+      providers: ['provider1'],
+      prompts: ['prompt1'],
+    };
+
+    it('should accept null extensions', () => {
+      const config = {
+        ...minimalConfig,
+        extensions: null,
+      };
+      const result = TestSuiteConfigSchema.safeParse(config);
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept undefined extensions (optional field)', () => {
+      const config = { ...minimalConfig };
+      // Explicitly not setting extensions
+      const result = TestSuiteConfigSchema.safeParse(config);
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept empty array extensions', () => {
+      const config = {
+        ...minimalConfig,
+        extensions: [],
+      };
+      const result = TestSuiteConfigSchema.safeParse(config);
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept array of extension strings', () => {
+      const config = {
+        ...minimalConfig,
+        extensions: ['file://path/to/extension.js:functionName'],
+      };
+      const result = TestSuiteConfigSchema.safeParse(config);
+      expect(result.success).toBe(true);
+    });
+
+    it('should transform and remove null, undefined, and empty array extensions', () => {
+      // We need to use UnifiedConfigSchema for transformation tests
+      // since the transform is applied there
+      const configs = [
+        { ...minimalConfig, extensions: null },
+        { ...minimalConfig }, // undefined extensions
+        { ...minimalConfig, extensions: [] },
+      ];
+
+      configs.forEach((config) => {
+        const result = UnifiedConfigSchema.safeParse(config);
+        expect(result.success).toBe(true);
+        // Only access data properties if we're sure parsing succeeded
+        expect(result).toEqual(
+          expect.objectContaining({
+            success: true,
+            data: expect.not.objectContaining({ extensions: expect.anything() }),
+          }),
+        );
+      });
+    });
+
+    it('should keep non-empty extensions arrays', () => {
+      const config = {
+        ...minimalConfig,
+        extensions: ['file://path/to/extension.js:functionName'],
+      };
+
+      const result = UnifiedConfigSchema.safeParse(config);
+      expect(result.success).toBe(true);
+      // Only access data properties if we're sure parsing succeeded
+      expect(result).toEqual(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            extensions: ['file://path/to/extension.js:functionName'],
+          }),
+        }),
+      );
+    });
   });
 
   for (const file of configFiles) {
