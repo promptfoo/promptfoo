@@ -210,8 +210,7 @@ export const CompletedPromptSchema = PromptSchema.extend({
 
 export type CompletedPrompt = z.infer<typeof CompletedPromptSchema>;
 
-// TODO: Use the EvalId schema!
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+// TODO(will): Use this everywhere
 const EvalIdSchema = z.string();
 export type EvalId = z.infer<typeof EvalIdSchema>;
 
@@ -988,3 +987,13 @@ export interface LoadApiProviderContext {
   basePath?: string;
   env?: EnvOverrides;
 }
+
+export {
+  GradingConfigSchema,
+  EvaluateOptionsSchema,
+  PromptMetricsSchema,
+  EvalIdSchema,
+  AssertionSetSchema,
+  ProviderPromptMapSchema,
+  MetadataSchema,
+};

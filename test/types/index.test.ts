@@ -14,6 +14,7 @@ import {
   TestSuiteConfigSchema,
   UnifiedConfigSchema,
   TestSuiteSchema,
+  EvalIdSchema,
 } from '../../src/types';
 
 describe('AssertionSchema', () => {
@@ -412,6 +413,35 @@ describe('TestSuiteConfigSchema', () => {
     expect(configFiles.length).toBeGreaterThan(0);
   });
 
+  for (const file of configFiles) {
+    it(`should validate ${path.relative(rootDir, file)}`, async () => {
+      const configContent = fs.readFileSync(file, 'utf8');
+      const config = yaml.load(configContent) as Record<string, unknown>;
+      const extendedSchema = TestSuiteConfigSchema.extend({
+        targets: z.union([TestSuiteConfigSchema.shape.providers, z.undefined()]),
+        providers: z.union([TestSuiteConfigSchema.shape.providers, z.undefined()]),
+        ...(typeof config.redteam !== 'undefined' && {
+          prompts: z.optional(TestSuiteConfigSchema.shape.prompts),
+        }),
+      }).refine(
+        (data) => {
+          const hasTargets = Boolean(data.targets);
+          const hasProviders = Boolean(data.providers);
+          return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
+        },
+        {
+          message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
+        },
+      );
+
+      const result = extendedSchema.safeParse(config);
+      if (!result.success) {
+        console.error(`Validation failed for ${file}:`, result.error);
+      }
+      expect(result.success).toBe(true);
+    });
+  }
+
   describe('env property', () => {
     it('should validate config with string env values', () => {
       const config = {
@@ -583,35 +613,6 @@ describe('TestSuiteConfigSchema', () => {
       );
     });
   });
-
-  for (const file of configFiles) {
-    it(`should validate ${path.relative(rootDir, file)}`, async () => {
-      const configContent = fs.readFileSync(file, 'utf8');
-      const config = yaml.load(configContent) as Record<string, unknown>;
-      const extendedSchema = TestSuiteConfigSchema.extend({
-        targets: z.union([TestSuiteConfigSchema.shape.providers, z.undefined()]),
-        providers: z.union([TestSuiteConfigSchema.shape.providers, z.undefined()]),
-        ...(typeof config.redteam !== 'undefined' && {
-          prompts: z.optional(TestSuiteConfigSchema.shape.prompts),
-        }),
-      }).refine(
-        (data) => {
-          const hasTargets = Boolean(data.targets);
-          const hasProviders = Boolean(data.providers);
-          return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
-        },
-        {
-          message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
-        },
-      );
-
-      const result = extendedSchema.safeParse(config);
-      if (!result.success) {
-        console.error(`Validation failed for ${file}:`, result.error);
-      }
-      expect(result.success).toBe(true);
-    });
-  }
 });
 
 describe('UnifiedConfigSchema extensions handling', () => {
@@ -749,6 +750,36 @@ describe('TestSuiteSchema', () => {
     it('should allow an empty array of extensions', () => {
       const result = TestSuiteSchema.safeParse({ ...baseTestSuite, extensions: [] });
       expect(result.success).toBe(true);
+    });
+  });
+});
+
+describe('EvalIdSchema', () => {
+  it('should validate valid string values', () => {
+    const validIds = [
+      'eval-123',
+      'test-eval',
+      '12345',
+      'abc123',
+      'eval_with_underscores',
+      'EVAL-UPPERCASE',
+      '',
+      ' ',
+      'very-long-evaluation-id-with-many-characters',
+    ];
+
+    validIds.forEach((id) => {
+      const result = EvalIdSchema.safeParse(id);
+      expect(result.success).toBe(true);
+    });
+  });
+
+  it('should reject non-string values', () => {
+    const invalidValues = [123, true, false, null, undefined, {}, [], () => {}, Symbol('test')];
+
+    invalidValues.forEach((value) => {
+      const result = EvalIdSchema.safeParse(value);
+      expect(result.success).toBe(false);
     });
   });
 });
