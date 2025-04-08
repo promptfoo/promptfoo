@@ -1,5 +1,7 @@
 ---
 sidebar_label: Audio Inputs
+title: Audio Jailbreaking Strategy
+description: Test how AI systems handle audio-encoded text inputs that may bypass content filters
 ---
 
 # Audio Jailbreaking
@@ -16,7 +18,7 @@ This strategy is useful for:
 
 Use it like so in your promptfooconfig.yaml:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 strategies:
   - audio
 ```
@@ -31,9 +33,11 @@ strategies:
 ```
 
 :::warning
-This strategy requires Promptfoo Cloud to perform the text-to-speech conversion. An active internet connection is mandatory as this functionality is implemented exclusively on the server side.
+
+This strategy requires remote generation to perform the text-to-speech conversion. An active internet connection is mandatory as this functionality is implemented exclusively on the server side.
 
 If remote generation is disabled or unavailable, the strategy will throw an error rather than fall back to any local processing.
+
 :::
 
 ## How It Works
@@ -80,4 +84,8 @@ This strategy is worth implementing because:
 3. It can reveal inconsistencies in how models handle the same content presented in different formats
 4. Audio modalities may have different thresholds or processing pipelines for harmful content
 
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+## See Also
+
+- [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)
+- [Red Teaming Strategies](/docs/red-team/strategies)
+- [Multi-Modal Red Teaming Guide](/docs/guides/multimodal-red-team)
