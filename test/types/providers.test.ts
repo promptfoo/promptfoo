@@ -51,7 +51,6 @@ describe('isApiProvider', () => {
     });
   });
 
-  // Additional tests to cover lines 159-165
   it('should return false for non-object values', () => {
     expect(isApiProvider('string')).toBe(false);
     expect(isApiProvider(123)).toBe(false);
@@ -135,7 +134,6 @@ describe('isProviderOptions', () => {
     });
   });
 
-  // Additional tests to cover lines 168-174
   it('should return false for non-object values', () => {
     expect(isProviderOptions('string')).toBe(false);
     expect(isProviderOptions(123)).toBe(false);
