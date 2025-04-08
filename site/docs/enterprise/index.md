@@ -1,5 +1,5 @@
 ---
-sidebar_label: Enterprise
+sidebar_label: Overview
 title: Promptfoo Enterprise - Secure LLM Application Testing
 description: Learn about Promptfoo's hosted cloud service and on-premises solutions for LLM security testing
 keywords:
