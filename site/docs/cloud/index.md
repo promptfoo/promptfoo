@@ -41,12 +41,12 @@ We offer two deployment models:
 | ----------------------- | -------------------- | ------------------------ |
 | Deployment              | Fully-managed SaaS   | Self-hosted, on-premises |
 | Infrastructure          | Managed by Promptfoo | Managed by your team     |
-| Dedicated Runner        | ❌                    | ✅                        |
-| Network Isolation       | ❌                    | ✅                        |
-| Red Teaming             | ✅                    | ✅                        |
-| Team Management         | ✅                    | ✅                        |
-| Vulnerability Detection | ✅                    | ✅                        |
-| Result Sharing          | ✅                    | ✅                        |
+| Dedicated Runner        | ❌                   | ✅                       |
+| Network Isolation       | ❌                   | ✅                       |
+| Red Teaming             | ✅                   | ✅                       |
+| Team Management         | ✅                   | ✅                       |
+| Vulnerability Detection | ✅                   | ✅                       |
+| Result Sharing          | ✅                   | ✅                       |
 
 Both products support [sharing evaluation results](https://www.promptfoo.dev/docs/usage/sharing) through shareable URLs, with privacy controls that match your deployment model. Cloud users can share within their organization, while Enterprise users can configure self-hosted sharing for complete control over data.
 

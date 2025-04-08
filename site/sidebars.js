@@ -60,9 +60,9 @@ const sidebars = {
         { type: 'doc', id: 'enterprise/teams' },
         { type: 'doc', id: 'enterprise/red-teams' },
         { type: 'doc', id: 'enterprise/findings' },
-        { 
+        {
           type: 'link',
-          label: 'API Reference', 
+          label: 'API Reference',
           href: '/docs/api-reference',
         },
       ],

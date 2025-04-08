@@ -1,0 +1,73 @@
+---
+sidebar_label: Enterprise
+title: Promptfoo Enterprise - Secure LLM Application Testing
+description: Learn about Promptfoo's hosted cloud service and on-premises solutions for LLM security testing
+keywords:
+  [
+    promptfoo enterprise,
+    promptfoo enterprise on-prem,
+    llm security,
+    llm testing,
+    llm red teaming,
+    llm scanning,
+  ]
+---
+
+# Promptfoo Enterprise
+
+Promptfoo offers two deployment options to meet your security needs:
+
+**Promptfoo Enterprise** is our hosted SaaS solution that lets you securely scan your LLM applications without managing infrastructure.
+
+**Promptfoo Enterprise On-Prem** is our on-premises solution that includes a dedicated runner for deployments behind your firewall.
+
+Both solutions offer a suite of tools to help you secure your LLM applications, including:
+
+- Robust RBAC controls to manage multiple users and teams
+- Teams-based configurability for customizing targets, plugins, and scan configurations
+- Detailed reporting and analytics to monitor the security of your LLM applications
+- Remediation suggestions to help you fix vulnerabilities
+- Advanced filtering to find and sort through evals
+- Sharing and exporting functions to integrate Promptfoo with your existing tools
+
+Our platform works with any LLM application, agent, or foundation model that is live and ready for inference.
+
+![Promptfoo Dashboard (Enterprise interface shown)](/img/enterprise-docs/promptfoo-dashboard.png)
+
+## Deployment Options
+
+We offer two deployment models:
+
+- **Promptfoo Enterprise**: Our fully-managed SaaS solution maintained by Promptfoo, allowing you to get started immediately with no infrastructure requirements.
+
+- **Promptfoo Enterprise On-Prem**: Our self-hosted solution that can be deployed on any cloud provider, including AWS, Azure, and GCP. Includes a dedicated runner component for executing scans within your network perimeter.
+
+## Product Comparison
+
+| Feature                 | Community                       | Promptfoo Enterprise                               | Promptfoo Enterprise On-Prem                       |
+| ----------------------- | ------------------------------- | -------------------------------------------------- | -------------------------------------------------- |
+| Deployment              | Command line tool               | Fully-managed SaaS                                 | Self-hosted, on-premises                           |
+| Infrastructure          | Local                           | Managed by Promptfoo                               | Managed by your team                               |
+| Dedicated Runner        | ❌                              | ❌                                                 | ✅                                                 |
+| Network Isolation       | ❌                              | ❌                                                 | ✅                                                 |
+| API Access              | <span title="Limited">⚠️</span> | [✅](https://www.promptfoo.dev/docs/api-reference) | [✅](https://www.promptfoo.dev/docs/api-reference) |
+| RBAC                    | ❌                              | ✅                                                 | ✅                                                 |
+| Red Teaming             | <span title="Limited">⚠️</span> | ✅                                                 | ✅                                                 |
+| Team Management         | ❌                              | ✅                                                 | ✅                                                 |
+| Vulnerability Detection | ✅                              | ✅                                                 | ✅                                                 |
+| Result Sharing          | <span title="Limited">⚠️</span> | ✅                                                 | ✅                                                 |
+| Support                 | Community                       | Dedicated Slack + Email                            | Dedicated Slack + Email                            |
+| Support SLA             | ❌                              | ✅                                                 | ✅                                                 |
+| Professional Services   | ❌                              | ✅                                                 | ✅                                                 |
+
+<small>⚠️ indicates limited quantity in Community version. Contact [sales@promptfoo.dev](mailto:sales@promptfoo.dev) for more information.</small>
+
+Both Enterprise products support [sharing evaluation results](https://www.promptfoo.dev/docs/usage/sharing) through shareable URLs, with privacy controls that match your deployment model. Enterprise users can share within their organization, while Enterprise On-Prem users can configure self-hosted sharing for complete control over data.
+
+## Connection with Open-Source
+
+Both Promptfoo Enterprise and Promptfoo Enterprise On-Prem are fully compatible with the open-source version of Promptfoo. This means that you can use your existing open-source Promptfoo evals with either solution.
+
+## Contacting Sales
+
+If you are interested in learning more about Promptfoo Enterprise or Promptfoo Enterprise On-Prem, please contact us at [sales@promptfoo.dev](mailto:sales@promptfoo.dev).
