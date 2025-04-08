@@ -22,7 +22,7 @@ You can also authenticate into the application using a magic link. To do this, n
 
 You may wish to authenticate into the CLI when using Promptfoo. Follow these steps to connect Promptfoo Enterprise to the CLI.
 
-1. Install the Promptfoo CLI. Read [getting started](https://www.promptfoo.dev/docs/getting-started/) for help installing the CLI.
+1. Install the Promptfoo CLI. Read [getting started](/docs/getting-started/) for help installing the CLI.
 
 2. In the Promptfoo Enterprise app, select the "CLI Login Information" underneath your profile.
 
@@ -38,4 +38,4 @@ You may wish to authenticate into the CLI when using Promptfoo. Follow these ste
 All of your evals are stored locally until you share them. If you were previously an open-source user, you can share your local evals to your Promptfoo Enterprise organization by running `promptfoo share`.
 :::
 
-Authenticating with your organization's account enables [team-based sharing](https://www.promptfoo.dev/docs/usage/sharing#team-cloud-sharing-private), ensuring your evaluation results are only visible to members of your organization rather than being publicly accessible.
+Authenticating with your organization's account enables [team-based sharing](/docs/usage/sharing#team-cloud-sharing-private), ensuring your evaluation results are only visible to members of your organization rather than being publicly accessible.

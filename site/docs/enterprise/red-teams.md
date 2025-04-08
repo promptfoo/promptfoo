@@ -33,7 +33,7 @@ The more information you provide, the better the red team attacks and grading wi
 
 If your target has RAG orchestration or is an agent, you can select the "Accessing External Systems" option to provide additional details about the target's connection to external systems. Providing additional context about the target's access to external systems will help Promptfoo generate more accurate red team attacks and grading.
 
-If your target is an agent, you can provide additional context about the agent's access to tools and functions in the question "What external systems are connected to this application?" This will help Promptfoo ascertain whether it was able to successfully enumerate tools and functions when running the [tool discovery plugin](https://www.promptfoo.dev/docs/red-team/plugins/tool-discovery/).
+If your target is an agent, you can provide additional context about the agent's access to tools and functions in the question "What external systems are connected to this application?" This will help Promptfoo ascertain whether it was able to successfully enumerate tools and functions when running the [tool discovery plugin](/docs/red-team/plugins/tool-discovery/).
 
 ## Creating Plugin Collections
 
@@ -59,7 +59,7 @@ Once you have selected a target, you will be prompted to select a plugin collect
 
 ![Select Plugin Collection screen](/img/enterprise-docs/choose-plugins.png)
 
-Once you have selected a plugin collection, you will be prompted to select the strategies. [Promptfoo strategies](https://www.promptfoo.dev/docs/red-team/strategies/) are the ways in which adversarial probes are delivered to maximize attack success rates.
+Once you have selected a plugin collection, you will be prompted to select the strategies. [Promptfoo strategies](/docs/red-team/strategies/) are the ways in which adversarial probes are delivered to maximize attack success rates.
 
 ![Select Strategies screen](/img/enterprise-docs/select-strategies.png)
 

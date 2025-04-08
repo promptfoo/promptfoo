@@ -44,25 +44,29 @@ We offer two deployment models:
 
 ## Product Comparison
 
-| Feature                 | Community                       | Promptfoo Enterprise                               | Promptfoo Enterprise On-Prem                       |
-| ----------------------- | ------------------------------- | -------------------------------------------------- | -------------------------------------------------- |
-| Deployment              | Command line tool               | Fully-managed SaaS                                 | Self-hosted, on-premises                           |
-| Infrastructure          | Local                           | Managed by Promptfoo                               | Managed by your team                               |
-| Dedicated Runner        | ❌                              | ❌                                                 | ✅                                                 |
-| Network Isolation       | ❌                              | ❌                                                 | ✅                                                 |
-| API Access              | <span title="Limited">⚠️</span> | [✅](https://www.promptfoo.dev/docs/api-reference) | [✅](https://www.promptfoo.dev/docs/api-reference) |
-| RBAC                    | ❌                              | ✅                                                 | ✅                                                 |
-| Red Teaming             | <span title="Limited">⚠️</span> | ✅                                                 | ✅                                                 |
-| Team Management         | ❌                              | ✅                                                 | ✅                                                 |
-| Vulnerability Detection | ✅                              | ✅                                                 | ✅                                                 |
-| Result Sharing          | <span title="Limited">⚠️</span> | ✅                                                 | ✅                                                 |
-| Support                 | Community                       | Dedicated Slack + Email                            | Dedicated Slack + Email                            |
-| Support SLA             | ❌                              | ✅                                                 | ✅                                                 |
-| Professional Services   | ❌                              | ✅                                                 | ✅                                                 |
+| Feature                                             | Community                       | Promptfoo Enterprise                               | Promptfoo Enterprise On-Prem                       |
+| --------------------------------------------------- | ------------------------------- | -------------------------------------------------- | -------------------------------------------------- |
+| Deployment                                          | Command line tool               | Fully-managed SaaS                                 | Self-hosted, on-premises                           |
+| Infrastructure                                      | Local                           | Managed by Promptfoo                               | Managed by your team                               |
+| Dedicated Runner                                    | ❌                              | ❌                                                 | ✅                                                 |
+| Network Isolation                                   | ❌                              | ❌                                                 | ✅                                                 |
+| Model & Application Evals                           | ✅                              | ✅                                                 | ✅                                                 |
+| Vulnerability Detection                             | ✅                              | ✅                                                 | ✅                                                 |
+| Red Teaming                                         | <span title="Limited">⚠️</span> | ✅                                                 | ✅                                                 |
+| Remediations                                        | <span title="Limited">⚠️</span> | ✅                                                 | ✅                                                 |
+| Result Sharing                                      | <span title="Limited">⚠️</span> | ✅                                                 | ✅                                                 |
+| API Access                                          | <span title="Limited">⚠️</span> | [✅](https://www.promptfoo.dev/docs/api-reference) | [✅](https://www.promptfoo.dev/docs/api-reference) |
+| Team Management                                     | ❌                              | ✅                                                 | ✅                                                 |
+| RBAC                                                | ❌                              | ✅                                                 | ✅                                                 |
+| External Integrations (SIEMs, Issue trackers, etc.) | ❌                              | ✅                                                 | ✅                                                 |
+| SLA                                                 | ❌                              | ✅                                                 | ✅                                                 |
+| Support                                             | Community Chat + Github Issues  | Full Professional Services + Dedicated Slack       | Full Professional Services + Dedicated Slack       |
 
-<small>⚠️ indicates limited quantity in Community version. Contact [sales@promptfoo.dev](mailto:sales@promptfoo.dev) for more information.</small>
+<p>
+<small>⚠️ indicates limited quantity in Community version. [Contact us](https://www.promptfoo.dev/contact/) for more information.</small>
+</p>
 
-Both Enterprise products support [sharing evaluation results](https://www.promptfoo.dev/docs/usage/sharing) through shareable URLs, with privacy controls that match your deployment model. Enterprise users can share within their organization, while Enterprise On-Prem users can configure self-hosted sharing for complete control over data.
+Both Enterprise products support [sharing evaluation results](/docs/usage/sharing) through shareable URLs, with privacy controls that match your deployment model. Enterprise users can share within their organization, while Enterprise On-Prem users can configure self-hosted sharing for complete control over data.
 
 ## Connection with Open-Source
 
@@ -70,4 +74,4 @@ Both Promptfoo Enterprise and Promptfoo Enterprise On-Prem are fully compatible 
 
 ## Contacting Sales
 
-If you are interested in learning more about Promptfoo Enterprise or Promptfoo Enterprise On-Prem, please contact us at [sales@promptfoo.dev](mailto:sales@promptfoo.dev).
+If you are interested in learning more about Promptfoo Enterprise, please [contact us](https://www.promptfoo.dev/contact/).
