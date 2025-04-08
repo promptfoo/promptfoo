@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { ShiftKeyProvider } from '@app/contexts/ShiftKeyContext';
 import useApiConfig from '@app/stores/apiConfig';
@@ -21,14 +21,12 @@ import './Eval.css';
 // });
 
 interface EvalOptions {
-  fetchId?: string;
+  fetchId: string | null;
 }
 
 export default function Eval({ fetchId }: EvalOptions) {
   const navigate = useNavigate();
   const { apiBaseUrl } = useApiConfig();
-  const [searchParams] = useSearchParams();
-  const searchEvalId = searchParams.get('evalId');
 
   const {
     table,
@@ -95,9 +93,9 @@ export default function Eval({ fetchId }: EvalOptions) {
    * Load the eval data.
    */
   useEffect(() => {
-    const evalId = searchEvalId || fetchId;
+    const evalId = fetchId;
     if (evalId) {
-      console.log('Eval init: Fetching eval by id', { searchEvalId, fetchId });
+      console.log('Eval init: Fetching eval by id', { fetchId });
       const run = async () => {
         await fetchEvalById(evalId);
         setLoaded(true);
@@ -180,7 +178,6 @@ export default function Eval({ fetchId }: EvalOptions) {
     setEvalId,
     fetchEvalById,
     setDefaultEvalId,
-    searchEvalId,
     setInComparisonMode,
   ]);
 
