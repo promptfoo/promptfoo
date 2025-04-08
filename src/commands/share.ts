@@ -16,7 +16,7 @@ export function notCloudEnabledShareInstructions(): void {
     
     » You need to have a cloud account to securely share your results.
     
-    1. Please go to ${chalk.greenBright.bold(cloudUrl)} to sign up or login.
+    1. Please go to ${chalk.greenBright.bold(cloudUrl)} to sign up or log in.
     2. Follow the instructions at ${chalk.greenBright.bold(welcomeUrl)} to login to the command line.
     3. Run ${chalk.greenBright.bold('promptfoo share')}
   `);
