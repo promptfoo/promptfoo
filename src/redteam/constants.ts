@@ -796,7 +796,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
   'tool-discovery': 'Tests for enumeration of available tools and function calls',
-  'tool-discovery:multi-turn': 'Multi-turn Tool Discovery',
+  'tool-discovery:multi-turn':
+    'Uses conversational approach to discover available tools, functions, and capabilities through multi-step interactions',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
 };
 
@@ -998,6 +999,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'sql-injection',
     'ssrf',
     'tool-discovery',
+    'tool-discovery:multi-turn',
 
     // Data protection
     'cross-session-leak',
