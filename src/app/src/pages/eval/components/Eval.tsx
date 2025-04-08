@@ -38,6 +38,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     setEvalId,
     setAuthor,
     setInComparisonMode,
+    setColumnState,
   } = useStore();
 
   // ==================================================================================================
@@ -122,18 +123,25 @@ export default function Eval({ fetchId }: EvalOptions) {
       setTableFromResultsFile(data);
       setConfig(data?.config);
       setAuthor(data?.author || null);
+
+      /**
+       * Populate the default column visibility state:
+       */
+      if (evalId) {
+        const vars = Object.keys(data.results.results[0].testCase.vars);
+        setColumnState(evalId, {
+          selectedColumns: vars.map((v: any, index: number) => `Variable ${index + 1}`),
+          columnVisibility: vars.reduce((acc: any, v: any, index: number) => {
+            acc[`Variable ${index + 1}`] = true;
+            return acc;
+          }, {}),
+        });
+      }
+
       setLoaded(true);
     }
 
     setInComparisonMode(false);
-
-    // setColumnState(evalId, {
-    //   selectedColumns: vars.map((v: any, index: number) => `Variable ${index + 1}`),
-    //   columnVisibility: vars.reduce((acc: any, v: any, index: number) => {
-    //     acc[`Variable ${index + 1}`] = true;
-    //     return acc;
-    //   }, {}),
-    // });
   }, [socketData, fetchId, recentEvalsData, evalByIdData]);
 
   /**

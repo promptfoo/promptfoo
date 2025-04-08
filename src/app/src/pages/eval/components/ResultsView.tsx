@@ -356,14 +356,8 @@ export default function ResultsView({ recentEvals, onRecentEvalSelected }: Resul
     [hasAnyDescriptions, head.vars, head.prompts],
   );
 
-  // TODO: Enforce the invariant!!!!!
-  // const currentColumnState = columnStates[currentEvalId];
-  // invariant(currentColumnState, 'Column state must be initialized before rendering ResultsView');
-
-  const currentColumnState = columnStates[evalId] || {
-    selectedColumns: allColumns,
-    columnVisibility: allColumns.reduce((acc, col) => ({ ...acc, [col]: true }), {}),
-  };
+  const currentColumnState = columnStates[evalId];
+  invariant(currentColumnState, 'Column state must be initialized before rendering ResultsView');
 
   const updateColumnVisibility = React.useCallback(
     (columns: string[]) => {
