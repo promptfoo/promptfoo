@@ -30,8 +30,8 @@ jest.mock('cli-progress', () => ({
 }));
 
 const originalConsoleLog = console.log;
-const mockFetchWithCache = fetchWithCache as jest.Mock;
-const mockNeverGenerateRemote = neverGenerateRemote as jest.Mock;
+const mockFetchWithCache = jest.mocked(fetchWithCache);
+const mockNeverGenerateRemote = jest.mocked(neverGenerateRemote);
 
 describe('audio strategy', () => {
   beforeAll(() => {
@@ -42,6 +42,9 @@ describe('audio strategy', () => {
     jest.clearAllMocks();
     mockFetchWithCache.mockResolvedValue({
       data: { audioBase64: 'bW9ja2VkLWF1ZGlvLWJhc2U2NC1kYXRh' },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
     });
     mockNeverGenerateRemote.mockReturnValue(false);
   });
@@ -86,16 +89,15 @@ describe('audio strategy', () => {
       await textToAudio(text, 'fr');
 
       // Verify the correct call was made
-      expect(mockFetchWithCache).toHaveBeenCalled();
-
-      // Check the first argument set to fetchWithCache
-      const callArgs = mockFetchWithCache.mock.calls[0][1]; // This is the options object
-
-      // The body should be a stringified JSON object
-      const body = JSON.parse(callArgs.body);
-      expect(body.task).toBe('audio');
-      expect(body.text).toBe(text);
-      expect(body.language).toBe('fr');
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: expect.stringContaining('"language":"fr"'),
+        }),
+        expect.any(Number),
+      );
     });
   });
 
@@ -104,6 +106,9 @@ describe('audio strategy', () => {
       // Setup mock to return a predictable response
       mockFetchWithCache.mockResolvedValue({
         data: { audioBase64: 'bW9ja2VkLWF1ZGlv' },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
       });
 
       const testCases: TestCase[] = [
@@ -189,15 +194,15 @@ describe('audio strategy', () => {
 
       await addAudioToBase64([testCase], 'prompt', { language: 'es' });
 
-      // Verify a call was made
-      expect(mockFetchWithCache).toHaveBeenCalled();
-
-      // Check the first argument set to fetchWithCache
-      const callArgs = mockFetchWithCache.mock.calls[0][1]; // This is the options object
-
-      // The body should be a stringified JSON object
-      const body = JSON.parse(callArgs.body);
-      expect(body.language).toBe('es');
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: expect.stringContaining('"language":"es"'),
+        }),
+        expect.any(Number),
+      );
     });
 
     it('should use progress bar when logger level is not debug', async () => {
@@ -226,8 +231,8 @@ describe('audio strategy', () => {
 
       await addAudioToBase64([testCase], 'prompt');
 
-      expect(mockBarInstance.increment).toHaveBeenCalled();
-      expect(mockBarInstance.stop).toHaveBeenCalled();
+      expect(mockBarInstance.increment).toHaveBeenCalledWith(1);
+      expect(mockBarInstance.stop).toHaveBeenCalledWith();
 
       // Restore original implementation and logger level
       mockSingleBar.mockImplementation = originalImplementation;
