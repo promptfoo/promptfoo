@@ -49,7 +49,7 @@ The resulting test case contains the same semantic content as the original but i
 
 ## Configuration Options
 
-- `language`: An ISO 639-1 language code to specify which language the text-to-speech system should use. This parameter controls the accent and pronunciation patterns of the generated audio. **Defaults to 'en' (English)** if not specified.
+- `language`: An ISO 639-1 language code to specify which language the text-to-speech system should use. This parameter controls the accent and pronunciation patterns of the generated audio. **Defaults to 'en' (English)** if not specified. Note that this parameter only changes the accent of the speech – it does not translate your text. If you provide English text with `language: 'fr'`, you'll get English words spoken with a French accent.
 
 ### Supported Languages
 
