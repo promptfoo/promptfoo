@@ -74,9 +74,22 @@ type StrictLogger = Omit<winston.Logger, keyof typeof LOG_LEVELS> & {
   [K in keyof typeof LOG_LEVELS]: StrictLogMethod;
 };
 
+/**
+ * Extracts the actual message string from potentially nested info objects
+ */
+function extractMessage(info: any): string {
+  if (typeof info.message === 'object' && info.message !== null && 'message' in info.message) {
+    return typeof info.message.message === 'string'
+      ? info.message.message
+      : String(info.message.message);
+  }
+
+  return typeof info.message === 'string' ? info.message : String(info.message);
+}
+
 export const consoleFormatter = winston.format.printf(
   (info: winston.Logform.TransformableInfo): string => {
-    const message = info.message as string;
+    const message = extractMessage(info);
 
     // Call the callback if it exists
     if (globalLogCallback) {
@@ -102,7 +115,9 @@ export const fileFormatter = winston.format.printf(
   (info: winston.Logform.TransformableInfo): string => {
     const timestamp = new Date().toISOString();
     const location = info.location ? ` ${info.location}` : '';
-    return `${timestamp} [${info.level.toUpperCase()}]${location}: ${info.message}`;
+    const message = extractMessage(info);
+
+    return `${timestamp} [${info.level.toUpperCase()}]${location}: ${message}`;
   },
 );
 
@@ -156,25 +171,28 @@ export function isDebugEnabled(): boolean {
   return getLogLevel() === 'debug';
 }
 
+/**
+ * Creates a logger method for the specified log level
+ */
+function createLogMethod(level: keyof typeof LOG_LEVELS): StrictLogMethod {
+  return (message: string) => {
+    const location =
+      level === 'debug' ? getCallerLocation() : isDebugEnabled() ? getCallerLocation() : '';
+
+    if (level === 'debug') {
+      initializeSourceMapSupport();
+    }
+
+    return winstonLogger[level]({ message, location });
+  };
+}
+
 // Wrapper enforces strict single-string argument logging
 export const logger: StrictLogger = Object.assign({}, winstonLogger, {
-  error: (message: string) => {
-    const location = isDebugEnabled() ? getCallerLocation() : '';
-    return winstonLogger.error({ message, location });
-  },
-  warn: (message: string) => {
-    const location = isDebugEnabled() ? getCallerLocation() : '';
-    return winstonLogger.warn({ message, location });
-  },
-  info: (message: string) => {
-    const location = isDebugEnabled() ? getCallerLocation() : '';
-    return winstonLogger.info({ message, location });
-  },
-  debug: (message: string) => {
-    initializeSourceMapSupport();
-    const location = getCallerLocation();
-    return winstonLogger.debug({ message, location });
-  },
+  error: createLogMethod('error'),
+  warn: createLogMethod('warn'),
+  info: createLogMethod('info'),
+  debug: createLogMethod('debug'),
   add: winstonLogger.add.bind(winstonLogger),
   remove: winstonLogger.remove.bind(winstonLogger),
   transports: winstonLogger.transports,
