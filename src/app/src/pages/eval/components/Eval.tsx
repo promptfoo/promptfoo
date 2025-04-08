@@ -31,7 +31,6 @@ export default function Eval({ fetchId }: EvalOptions) {
 
   const {
     table,
-    setTable,
     setTableFromResultsFile,
     config,
     setConfig,
@@ -58,9 +57,9 @@ export default function Eval({ fetchId }: EvalOptions) {
     IS_RUNNING_LOCALLY ? socketEndpoint : null,
     (key, { next }) => {
       const socket = SocketIOClient(key);
-      socket.on('init', (data) => next(null, data));
-      socket.on('update', (data) => next(null, data));
-      socket.on('error', (error) => next(error));
+      socket.on('init', (data: ResultsFile) => next(null, data));
+      socket.on('update', (data: ResultsFile) => next(null, data));
+      socket.on('error', (error: Error) => next(error));
       return () => socket.disconnect();
     },
   );
@@ -79,25 +78,21 @@ export default function Eval({ fetchId }: EvalOptions) {
   const recentEvals = recentEvalsData?.data;
 
   // ==================================================================================================
-  // Event Handlers
+  // Data Fetching: Eval by ID
   // ==================================================================================================
 
-  const fetchEvalById = useCallback(
-    async (id: string) => {
-      const resp = await callApi(`/results/${id}`, { cache: 'no-store' });
-      if (!resp.ok) {
-        //setFailed(true);
-        return;
-      }
-      const body = (await resp.json()) as { data: ResultsFile };
-
-      setTableFromResultsFile(body.data);
-      setConfig(body.data.config);
-      setAuthor(body.data.author);
-      setEvalId(id);
-    },
-    [setTable, setConfig, setEvalId, setAuthor],
+  /**
+   * When an eval id is set, fetch the eval data.
+   */
+  const { data: evalByIdData, error: evalByIdError } = useSWR<{
+    data: ResultsFile;
+  }>(evalId ? `/results/${evalId}` : null, (key: string) =>
+    callApi(key, { cache: 'no-store' }).then((res) => res.json()),
   );
+
+  // ==================================================================================================
+  // Event Handlers
+  // ==================================================================================================
 
   const handleRecentEvalSelection = async (id: string) => {
     navigate(`/eval/?evalId=${encodeURIComponent(id)}`);
@@ -122,12 +117,15 @@ export default function Eval({ fetchId }: EvalOptions) {
     }
 
     // Populate data:
-    if (socketData) {
-      setTableFromResultsFile(socketData);
-      setConfig(socketData?.config);
-      setAuthor(socketData?.author || null);
+    const data = socketData ?? evalByIdData;
+    if (data) {
+      setTableFromResultsFile(data);
+      setConfig(data?.config);
+      setAuthor(data?.author || null);
       setLoaded(true);
     }
+
+    setInComparisonMode(false);
 
     // setColumnState(evalId, {
     //   selectedColumns: vars.map((v: any, index: number) => `Variable ${index + 1}`),
@@ -136,91 +134,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     //     return acc;
     //   }, {}),
     // });
-  }, [socketData, fetchId, recentEvalsData]);
-
-  /**
-   * Load the eval data.
-   */
-  useEffect(() => {
-    const evalId = fetchId;
-    if (evalId) {
-      console.log('Eval init: Fetching eval by id', { fetchId });
-      const run = async () => {
-        await fetchEvalById(evalId);
-        setLoaded(true);
-        //setDefaultEvalId(evalId);
-        // Load other recent eval runs
-        //fetchRecentFileEvals();
-      };
-      run();
-    } else if (IS_RUNNING_LOCALLY) {
-      console.log('Eval init: Using local server websocket');
-      // socket.on('init', (data) => {
-      //   console.log('Initialized socket connection', data);
-      //   setLoaded(true);
-      //   setTableFromResultsFile(data);
-      //   setConfig(data?.config);
-      //   setAuthor(data?.author || null);
-      //   fetchRecentFileEvals().then((newRecentEvals) => {
-      //     if (newRecentEvals && newRecentEvals.length > 0) {
-      //       setDefaultEvalId(newRecentEvals[0]?.evalId);
-      //       setEvalId(newRecentEvals[0]?.evalId);
-      //       console.log('setting default eval id', newRecentEvals[0]?.evalId);
-      //     }
-      //   });
-      // });
-
-      // socket.on('update', (data) => {
-      //   console.log('Received data update', data);
-      //   setTableFromResultsFile(data);
-      //   setConfig(data.config);
-      //   setAuthor(data.author || null);
-      //   fetchRecentFileEvals().then((newRecentEvals) => {
-      //     if (newRecentEvals && newRecentEvals.length > 0) {
-      //       const newId = newRecentEvals[0]?.evalId;
-      //       if (newId) {
-      //         setDefaultEvalId(newId);
-      //         setEvalId(newId);
-      //       }
-      //     }
-      //   });
-      // });
-    } else {
-      console.log('Eval init: Fetching eval via recent');
-      // Fetch from server
-      const run = async () => {
-        const evals = await fetchRecentFileEvals();
-        if (evals && evals.length > 0) {
-          const defaultEvalId = evals[0].evalId;
-          const resp = await callApi(`/results/${defaultEvalId}`);
-          const body = await resp.json();
-          setTableFromResultsFile(body.data);
-          setConfig(body.data.config);
-          setAuthor(body.data.author || null);
-          setLoaded(true);
-          setDefaultEvalId(defaultEvalId);
-          setEvalId(defaultEvalId);
-        } else {
-          return (
-            <div className="notice">
-              No evals yet. Share some evals to this server and they will appear here.
-            </div>
-          );
-        }
-      };
-      run();
-    }
-    setInComparisonMode(false);
-  }, [
-    apiBaseUrl,
-    fetchId,
-    setTable,
-    setConfig,
-    setAuthor,
-    setEvalId,
-    fetchEvalById,
-    setInComparisonMode,
-  ]);
+  }, [socketData, fetchId, recentEvalsData, evalByIdData]);
 
   /**
    * Set document title.
@@ -233,7 +147,7 @@ export default function Eval({ fetchId }: EvalOptions) {
   // Render
   // ==================================================================================================
 
-  const failed = socketError || recentEvalsError;
+  const failed = socketError || recentEvalsError || evalByIdError;
 
   if (failed) {
     return <div className="notice">404 Eval not found</div>;
