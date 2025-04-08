@@ -1414,7 +1414,6 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
     try {
       const bedrockInstance = await this.getBedrockInstance();
 
-      // Add this one critical check for actual credentials being used
       try {
         const testCredentials = await bedrockInstance.config.credentials?.();
         logger.debug(
