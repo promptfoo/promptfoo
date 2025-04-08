@@ -125,8 +125,6 @@ describe('Google assertions', () => {
       );
     });
 
-    //TODO: make test for empty args/empty params
-
     it('should load functions from external file', () => {
       const functionOutput = {
         functionCall: {
