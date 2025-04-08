@@ -1,0 +1,435 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 600px;
+  background-color: #1e1e1e;
+  color: #d4d4d4;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Fira Sans',
+    'Droid Sans', 'Helvetica Neue', sans-serif;
+  margin-bottom: 2rem;
+  border: 1px solid #252525;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #323233;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid #252525;
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.75rem;
+}
+
+.filename {
+  color: #cccccc;
+}
+
+.indicator {
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.toggleContainer {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.toggle input[type='checkbox'] {
+  width: 1rem;
+  height: 1rem;
+  accent-color: #0e639c;
+}
+
+.toggleLabel {
+  font-size: 0.75rem;
+  color: #cccccc;
+  cursor: pointer;
+}
+
+.workspace {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* File explorer sidebar */
+.sidebar {
+  width: 220px;
+  background-color: #252526;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #1e1e1e;
+}
+
+.sidebarHeader {
+  padding: 0.5rem 1rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #969696;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.fileList {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.fileItem {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 1rem;
+  cursor: pointer;
+  font-size: 0.8125rem;
+  user-select: none;
+  position: relative;
+}
+
+.fileItem:hover {
+  background-color: #2a2d2e;
+}
+
+.fileItem.active {
+  background-color: #37373d;
+}
+
+.fileItem.malicious {
+  position: relative;
+}
+
+.fileItem.malicious::after {
+  content: '⚠️';
+  position: absolute;
+  right: 0.5rem;
+  font-size: 0.625rem;
+  opacity: 0.8;
+}
+
+.fileIcon {
+  font-size: 0.875rem;
+  color: #e6e6e6;
+  opacity: 0.8;
+}
+
+.fileName {
+  color: #cccccc;
+}
+
+/* Main content area */
+.content {
+  flex: 1;
+  background-color: #1e1e1e;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.editorHeader {
+  background-color: #252526;
+  padding: 0.25rem 1rem;
+  border-bottom: 1px solid #1e1e1e;
+  display: flex;
+  align-items: center;
+}
+
+.tabTitle {
+  font-size: 0.75rem;
+  color: #cccccc;
+  padding: 0.25rem 0;
+}
+
+.codeArea {
+  flex: 1;
+  margin: 0;
+  padding: 1rem;
+  overflow-y: auto;
+  max-height: 400px;
+  background-color: #1e1e1e;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: #d4d4d4;
+  tab-size: 2;
+  position: relative;
+  white-space: pre-wrap;
+  height: 100%;
+}
+
+.hiddenInstruction {
+  display: inline-block;
+  background-color: rgba(255, 0, 0, 0.15);
+  color: #ff6b6b;
+  border-radius: 2px;
+  padding: 0 4px;
+  margin: 0 2px;
+  font-weight: bold;
+  border-left: 2px solid #ff6b6b;
+}
+
+.hiddenContent {
+  color: #ff6b6b;
+  opacity: 0.85;
+  font-style: italic;
+  padding: 0 2px;
+  border-radius: 2px;
+  background-color: rgba(255, 0, 0, 0.1);
+}
+
+.maliciousCode {
+  display: inline-block;
+  background-color: rgba(255, 50, 50, 0.2);
+  color: #ff8c8c;
+  padding: 0 4px;
+  position: relative;
+  border-left: 3px solid #ff5252;
+  margin: 2px 0;
+  font-weight: bold;
+  transition: all 0.2s ease;
+  border-radius: 2px;
+}
+
+.codeArea.editing::after {
+  content: 'AI is updating...';
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background-color: #0e639c;
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+}
+
+.maliciousIndicator {
+  background-color: #ff525233;
+  color: #ff8c8c;
+  padding: 8px;
+  margin-top: 10px;
+  border-radius: 4px;
+  border-left: 4px solid #ff5252;
+  font-weight: bold;
+}
+
+.welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  height: 100%;
+  padding: 2rem;
+}
+
+.welcome h3 {
+  margin-bottom: 1rem;
+  color: #cccccc;
+  font-weight: 500;
+}
+
+.welcome p {
+  margin: 0.5rem 0;
+  color: #969696;
+  font-size: 0.875rem;
+}
+
+/* Chat panel */
+.chatPanel {
+  width: 280px;
+  background-color: #252526;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid #1e1e1e;
+}
+
+.chatHeader {
+  padding: 0.5rem 1rem;
+  background-color: #323233;
+  border-bottom: 1px solid #1e1e1e;
+}
+
+.chatTitle {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #cccccc;
+}
+
+.chatMessages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.emptyChat {
+  color: #969696;
+  font-size: 0.75rem;
+  text-align: center;
+  margin-top: 2rem;
+}
+
+.message {
+  display: flex;
+  flex-direction: column;
+  max-width: 100%;
+  border-radius: 0.25rem;
+  overflow: hidden;
+}
+
+.messageHeader {
+  font-size: 0.6875rem;
+  padding: 0.25rem 0.5rem;
+  background-color: #323233;
+  color: #cccccc;
+}
+
+.messageContent {
+  padding: 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  word-break: break-word;
+  color: #d4d4d4;
+}
+
+.message.user {
+  background-color: #2d3748;
+  border: 1px solid #37414f;
+}
+
+.message.assistant {
+  background-color: #103c5b;
+  border: 1px solid #14496e;
+}
+
+.chatInput {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  border-top: 1px solid #1e1e1e;
+  background-color: #323233;
+}
+
+.promptSelect {
+  width: 100%;
+  padding: 0.5rem;
+  background-color: #252526;
+  color: #d4d4d4;
+  border: 1px solid #3c3c3c;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23cccccc'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.5rem center;
+  background-size: 1rem;
+  padding-right: 2rem;
+  cursor: pointer;
+}
+
+.promptSelect:focus {
+  outline: none;
+  border-color: #0e639c;
+}
+
+.inputField {
+  flex: 1;
+  padding: 0.5rem;
+  border: 1px solid #3c3c3c;
+  border-radius: 0.25rem;
+  background-color: #252526;
+  color: #d4d4d4;
+  font-size: 0.75rem;
+}
+
+.inputField:focus {
+  outline: none;
+  border-color: #0e639c;
+}
+
+.sendButton {
+  background-color: #0e639c;
+  color: white;
+  border: none;
+  border-radius: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background-color 0.15s;
+  width: 100%;
+}
+
+.sendButton:hover:not(:disabled) {
+  background-color: #1177bb;
+}
+
+.sendButton:disabled {
+  background-color: #3d5566;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* Add mobile banner styles at the end of the file */
+
+.mobileBanner {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .mobileBanner {
+    display: flex;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    background-color: rgba(239, 68, 68, 0.9);
+    color: white;
+    padding: 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+    text-align: center;
+    border-radius: 0.5rem 0.5rem 0 0;
+  }
+
+  html[data-theme='dark'] .mobileBanner {
+    background-color: rgba(185, 28, 28, 0.9);
+  }
+
+  .container {
+    position: relative;
+    padding-top: 3rem;
+  }
+}
