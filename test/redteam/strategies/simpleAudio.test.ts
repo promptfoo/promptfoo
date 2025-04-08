@@ -1,10 +1,10 @@
 import { expect, it, describe } from '@jest/globals';
+import { SingleBar } from 'cli-progress';
 import { fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { addAudioToBase64, textToAudio } from '../../../src/redteam/strategies/simpleAudio';
 import type { TestCase } from '../../../src/types';
-import { SingleBar } from 'cli-progress';
 
 // Mock the remoteGeneration module
 jest.mock('../../../src/redteam/remoteGeneration', () => ({
@@ -37,7 +37,7 @@ describe('audio strategy', () => {
   beforeAll(() => {
     jest.spyOn(console, 'log').mockImplementation();
   });
-  
+
   beforeEach(() => {
     jest.clearAllMocks();
     mockFetchWithCache.mockResolvedValue({
@@ -62,21 +62,21 @@ describe('audio strategy', () => {
           headers: { 'Content-Type': 'application/json' },
           body: expect.any(String),
         }),
-        expect.any(Number)
+        expect.any(Number),
       );
       expect(base64).toBe('bW9ja2VkLWF1ZGlvLWJhc2U2NC1kYXRh');
     });
 
     it('should throw an error if remote generation is disabled', async () => {
       mockNeverGenerateRemote.mockReturnValue(true);
-      
+
       const text = 'This should fail';
       await expect(textToAudio(text, 'en')).rejects.toThrow('Remote generation is disabled');
     });
 
     it('should throw an error if remote API fails', async () => {
       mockFetchWithCache.mockRejectedValueOnce(new Error('Remote API error'));
-      
+
       const text = 'Hello, fallback world!';
       await expect(textToAudio(text, 'en')).rejects.toThrow('Failed to generate audio');
     });
@@ -87,10 +87,10 @@ describe('audio strategy', () => {
 
       // Verify the correct call was made
       expect(mockFetchWithCache).toHaveBeenCalled();
-      
+
       // Check the first argument set to fetchWithCache
       const callArgs = mockFetchWithCache.mock.calls[0][1]; // This is the options object
-      
+
       // The body should be a stringified JSON object
       const body = JSON.parse(callArgs.body);
       expect(body.task).toBe('audio');
@@ -105,7 +105,7 @@ describe('audio strategy', () => {
       mockFetchWithCache.mockResolvedValue({
         data: { audioBase64: 'bW9ja2VkLWF1ZGlv' },
       });
-      
+
       const testCases: TestCase[] = [
         {
           vars: {
@@ -124,7 +124,7 @@ describe('audio strategy', () => {
 
     it('should throw an error when API is unavailable', async () => {
       mockFetchWithCache.mockRejectedValueOnce(new Error('API unavailable'));
-      
+
       const testCases: TestCase[] = [
         {
           vars: {
@@ -133,7 +133,9 @@ describe('audio strategy', () => {
         },
       ];
 
-      await expect(addAudioToBase64(testCases, 'prompt')).rejects.toThrow('Failed to generate audio');
+      await expect(addAudioToBase64(testCases, 'prompt')).rejects.toThrow(
+        'Failed to generate audio',
+      );
     });
 
     it('should preserve harmCategory and modify assertion metrics', async () => {
@@ -186,13 +188,13 @@ describe('audio strategy', () => {
       };
 
       await addAudioToBase64([testCase], 'prompt', { language: 'es' });
-      
+
       // Verify a call was made
       expect(mockFetchWithCache).toHaveBeenCalled();
-      
+
       // Check the first argument set to fetchWithCache
       const callArgs = mockFetchWithCache.mock.calls[0][1]; // This is the options object
-      
+
       // The body should be a stringified JSON object
       const body = JSON.parse(callArgs.body);
       expect(body.language).toBe('es');
@@ -216,17 +218,17 @@ describe('audio strategy', () => {
         start: jest.fn(),
         stop: jest.fn(),
       };
-      
+
       // Cast SingleBar to any to avoid TypeScript errors with mocking
       const mockSingleBar = SingleBar as any;
       const originalImplementation = mockSingleBar.mockImplementation;
       mockSingleBar.mockImplementation(() => mockBarInstance);
-      
+
       await addAudioToBase64([testCase], 'prompt');
 
       expect(mockBarInstance.increment).toHaveBeenCalled();
       expect(mockBarInstance.stop).toHaveBeenCalled();
-      
+
       // Restore original implementation and logger level
       mockSingleBar.mockImplementation = originalImplementation;
       logger.level = originalLevel;

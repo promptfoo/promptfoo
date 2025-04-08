@@ -1,12 +1,12 @@
 import { SingleBar, Presets } from 'cli-progress';
 import { fetchWithCache } from '../../cache';
+import { VERSION } from '../../constants';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { TestCase } from '../../types';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
-import { VERSION } from '../../constants';
 
 /**
  * Converts text to audio using the remote API
@@ -15,12 +15,14 @@ import { VERSION } from '../../constants';
 export async function textToAudio(text: string, language: string = 'en'): Promise<string> {
   // Check if remote generation is disabled
   if (neverGenerateRemote()) {
-    throw new Error('Remote generation is disabled but required for audio strategy. Please enable remote generation to use this strategy.');
+    throw new Error(
+      'Remote generation is disabled but required for audio strategy. Please enable remote generation to use this strategy.',
+    );
   }
 
   try {
     logger.debug(`Using remote generation for audio task`);
-    
+
     const payload = {
       task: 'audio',
       text,
@@ -47,7 +49,9 @@ export async function textToAudio(text: string, language: string = 'en'): Promis
     return data.audioBase64;
   } catch (error) {
     logger.error(`Error generating audio from text: ${error}`);
-    throw new Error(`Failed to generate audio: ${error instanceof Error ? error.message : String(error)}. This strategy requires an active internet connection and access to the remote API.`);
+    throw new Error(
+      `Failed to generate audio: ${error instanceof Error ? error.message : String(error)}. This strategy requires an active internet connection and access to the remote API.`,
+    );
   }
 }
 

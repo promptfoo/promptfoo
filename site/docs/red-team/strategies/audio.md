@@ -31,7 +31,7 @@ strategies:
 ```
 
 :::warning
-This strategy requires Promptfoo Cloud to perform the text-to-speech conversion. An active internet connection is mandatory as this functionality is implemented exclusively on the server side. 
+This strategy requires Promptfoo Cloud to perform the text-to-speech conversion. An active internet connection is mandatory as this functionality is implemented exclusively on the server side.
 
 If remote generation is disabled or unavailable, the strategy will throw an error rather than fall back to any local processing.
 :::
