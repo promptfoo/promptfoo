@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { ShiftKeyProvider } from '@app/contexts/ShiftKeyContext';
@@ -15,11 +15,23 @@ import { useStore } from './store';
 import type { EvalId } from './types';
 import './Eval.css';
 
+// ==================================================================================================
+// Types
+// ==================================================================================================
+
 interface EvalOptions {
   fetchId: EvalId | null;
 }
 
+// ==================================================================================================
+// Constants
+// ==================================================================================================
+
 const DEFAULT_COLUMN_VISIBILITY_COUNT = 5;
+
+// ==================================================================================================
+// Default Component
+// ==================================================================================================
 
 export default function Eval({ fetchId }: EvalOptions) {
   const navigate = useNavigate();
@@ -106,7 +118,7 @@ export default function Eval({ fetchId }: EvalOptions) {
   // ==================================================================================================
 
   /**
-   * Store-mutation effects:
+   * Populate store values in response to data changes.
    */
   useEffect(() => {
     // Populate the ID from the URL or the most recent eval:
