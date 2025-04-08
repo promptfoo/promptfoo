@@ -32,8 +32,6 @@ strategies:
 
 :::warning
 This strategy requires Promptfoo Cloud to perform the text-to-speech conversion. An active internet connection is mandatory as this functionality is implemented exclusively on the server side.
-
-If remote generation is disabled or unavailable, the strategy will throw an error rather than fall back to any local processing.
 :::
 
 ## How It Works
@@ -50,26 +48,6 @@ The resulting test case contains the same semantic content as the original but i
 ## Configuration Options
 
 - `language`: An ISO 639-1 language code to specify which language the text-to-speech system should use. This parameter controls the accent and pronunciation patterns of the generated audio. **Defaults to 'en' (English)** if not specified. Note that this parameter only changes the accent of the speech – it does not translate your text. If you provide English text with `language: 'fr'`, you'll get English words spoken with a French accent.
-
-### Supported Languages
-
-The audio strategy uses Google's Text-to-Speech technology and supports numerous languages, including but not limited to:
-
-| Language Code | Language          |
-| ------------- | ----------------- |
-| `en`          | English (default) |
-| `fr`          | French            |
-| `es`          | Spanish           |
-| `de`          | German            |
-| `it`          | Italian           |
-| `ja`          | Japanese          |
-| `ko`          | Korean            |
-| `zh`          | Chinese           |
-| `ru`          | Russian           |
-| `ar`          | Arabic            |
-| `hi`          | Hindi             |
-
-Using different languages can help test how models respond to audio in non-English languages, which may have different detection and processing characteristics.
 
 ## Importance
 
