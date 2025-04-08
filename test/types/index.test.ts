@@ -3,6 +3,8 @@ import {
   TestCaseSchema,
   CommandLineOptionsSchema,
   TestSuiteConfigSchema,
+  UnifiedConfigSchema,
+  TestSuiteSchema,
 } from '../../src/types';
 
 describe('isGradingResult', () => {
@@ -292,5 +294,66 @@ describe('TestSuiteConfigSchema env property', () => {
       prompts: ['prompt1'],
     };
     expect(() => TestSuiteConfigSchema.parse(config)).not.toThrow();
+  });
+});
+
+describe('UnifiedConfigSchema extensions handling', () => {
+  it('should remove null extensions', () => {
+    const config = {
+      providers: ['provider1'],
+      prompts: ['prompt1'],
+      extensions: null,
+    };
+    const parsed = UnifiedConfigSchema.parse(config);
+    expect(parsed.extensions).toBeUndefined();
+  });
+
+  it('should remove undefined extensions', () => {
+    const config = {
+      providers: ['provider1'],
+      prompts: ['prompt1'],
+      extensions: undefined,
+    };
+    const parsed = UnifiedConfigSchema.parse(config);
+    expect(parsed.extensions).toBeUndefined();
+  });
+
+  it('should remove empty array extensions', () => {
+    const config = {
+      providers: ['provider1'],
+      prompts: ['prompt1'],
+      extensions: [],
+    };
+    const parsed = UnifiedConfigSchema.parse(config);
+    expect(parsed.extensions).toBeUndefined();
+  });
+
+  it('should preserve valid extensions array', () => {
+    const config = {
+      providers: ['provider1'],
+      prompts: ['prompt1'],
+      extensions: ['ext1', 'ext2'],
+    };
+    const parsed = UnifiedConfigSchema.parse(config);
+    expect(parsed.extensions).toEqual(['ext1', 'ext2']);
+  });
+});
+
+describe('TestSuiteSchema extensions field', () => {
+  it('should allow null extensions', () => {
+    const suite = {
+      providers: [{ id: () => 'provider1' }],
+      prompts: [{ raw: 'prompt1', label: 'test' }],
+      extensions: null,
+    };
+    expect(() => TestSuiteSchema.parse(suite)).not.toThrow();
+  });
+
+  it('should allow undefined extensions', () => {
+    const suite = {
+      providers: [{ id: () => 'provider1' }],
+      prompts: [{ raw: 'prompt1', label: 'test' }],
+    };
+    expect(() => TestSuiteSchema.parse(suite)).not.toThrow();
   });
 });
