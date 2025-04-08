@@ -371,37 +371,6 @@ async function handleLegacyResults(evalRecord: Eval, url: string): Promise<strin
   return responseJson.id ?? null;
 }
 
-/**
- * Constructs the shareable URL for an eval.
- * @param eval_ The eval to get the shareable URL for.
- * @param showAuth Whether to show the authentication information in the URL.
- * @returns The shareable URL for the eval.
- */
-export async function getShareableUrl(
-  eval_: Eval,
-  showAuth: boolean = false,
-): Promise<string | null> {
-  const { domain } = determineShareDomain(eval_);
-
-  // For custom self-hosted setups, ensure we're using the same domain as the API
-  const customDomain = getEnvString('PROMPTFOO_REMOTE_APP_BASE_URL');
-  const finalDomain = customDomain || domain;
-
-  const fullUrl = cloudConfig.isEnabled()
-    ? `${finalDomain}/eval/${eval_.id}`
-    : SHARE_VIEW_BASE_URL === DEFAULT_SHARE_VIEW_BASE_URL && !customDomain
-      ? `${finalDomain}/eval/${eval_.id}`
-      : `${finalDomain}/eval/?evalId=${eval_.id}`;
-
-  return showAuth ? fullUrl : stripAuthFromUrl(fullUrl);
-}
-
-/**
- * Shares an eval and returns the shareable URL.
- * @param evalRecord The eval to share.
- * @param showAuth Whether to show the authentication information in the URL.
- * @returns The shareable URL for the eval.
- */
 export async function createShareableUrl(
   evalRecord: Eval,
   showAuth: boolean = false,
@@ -434,67 +403,17 @@ export async function createShareableUrl(
   }
   logger.debug(`New eval ID on remote instance: ${evalId}`);
 
-  return getShareableUrl(evalRecord, showAuth);
-}
+  const { domain } = determineShareDomain(evalRecord);
 
-/**
- * Checks whether an eval has been shared.
- * @param eval_ The eval to check.
- * @returns True if the eval has been shared, false otherwise.
- */
-export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
-  try {
-    const { url } = await getApiConfig(eval_);
+  // For custom self-hosted setups, ensure we're using the same domain as the API
+  const customDomain = getEnvString('PROMPTFOO_REMOTE_APP_BASE_URL');
+  const finalDomain = customDomain || domain;
 
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const fullUrl = cloudConfig.isEnabled()
+    ? `${finalDomain}/eval/${evalId}`
+    : SHARE_VIEW_BASE_URL === DEFAULT_SHARE_VIEW_BASE_URL && !customDomain
+      ? `${finalDomain}/eval/${evalId}`
+      : `${finalDomain}/eval/?evalId=${evalId}`;
 
-    if (cloudConfig.isEnabled()) {
-      headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
-    }
-
-    const res = await fetchWithProxy(`${url}/${eval_.id}`, {
-      method: 'GET',
-      headers,
-    });
-
-    return res.status !== 404;
-  } catch (e) {
-    logger.error(`Error checking if eval has been shared: ${e}`);
-    return false;
-  }
-}
-
-/**
- * Updates a shared eval by syncing the following fields:
- * - Eval Results -> Grading Results
- * @param eval_ The eval to update.
- */
-export async function updateSharedEval(eval_: Eval): Promise<void> {
-  // Send the payload to the server:
-  const { url } = await getApiConfig(eval_);
-
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-
-  if (cloudConfig.isEnabled()) {
-    headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
-  }
-
-  const res = await fetchWithProxy(`${url}/${eval_.id}/share`, {
-    method: 'PATCH',
-    headers,
-    body: JSON.stringify({
-      // TODO(Optimization): Only send the results that have changed!
-      gradingResults: eval_.results.reduce(
-        (acc, result) => ({
-          ...acc,
-          [result.id]: result.gradingResult,
-        }),
-        {} as Record<string, Eval['results'][number]['gradingResult']>,
-      ),
-    }),
-  });
-
-  if (!res.ok || res.status !== 204) {
-    throw new Error(`Failed to sync eval: ${res.status} ${res.statusText}`);
-  }
+  return showAuth ? fullUrl : stripAuthFromUrl(fullUrl);
 }
