@@ -31,26 +31,6 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Promptfoo Cloud',
-      link: {
-        type: 'doc',
-        id: 'cloud/index',
-      },
-      collapsed: true,
-      items: [
-        { type: 'doc', id: 'cloud/authentication' },
-        { type: 'doc', id: 'cloud/service_accounts' },
-        { type: 'doc', id: 'cloud/teams' },
-      ],
-    },
-    /*
-    {
-      type: 'doc',
-      id: 'key-concepts',
-    },
-    */
-    {
-      type: 'category',
       label: 'Configuration',
       link: {
         type: 'generated-index',
@@ -64,6 +44,27 @@ const sidebars = {
         { type: 'doc', id: 'configuration/scenarios' },
         { type: 'doc', id: 'configuration/caching' },
         { type: 'doc', id: 'configuration/telemetry' },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Enterprise',
+      link: {
+        type: 'doc',
+        id: 'enterprise/index',
+      },
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'enterprise/authentication' },
+        { type: 'doc', id: 'enterprise/service-accounts' },
+        { type: 'doc', id: 'enterprise/teams' },
+        { type: 'doc', id: 'enterprise/red-teams' },
+        { type: 'doc', id: 'enterprise/findings' },
+        { 
+          type: 'link',
+          label: 'API Reference', 
+          href: '/docs/api-reference',
+        },
       ],
     },
     {
