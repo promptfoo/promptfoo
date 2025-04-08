@@ -7,26 +7,27 @@ import { callApi } from '@app/utils/api';
 import CircularProgress from '@mui/material/CircularProgress';
 import type { ResultLightweightWithLabel, ResultsFile } from '@promptfoo/types';
 import { io as SocketIOClient } from 'socket.io-client';
+import useSWR from 'swr';
+import useSWRSubscription from 'swr/subscription';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
 import { useStore } from './store';
+import type { EvalId } from './types';
 import './Eval.css';
 
-// setColumnState(evalId, {
-//   selectedColumns: vars.map((v: any, index: number) => `Variable ${index + 1}`),
-//   columnVisibility: vars.reduce((acc: any, v: any, index: number) => {
-//     acc[`Variable ${index + 1}`] = true;
-//     return acc;
-//   }, {}),
-// });
-
 interface EvalOptions {
-  fetchId: string | null;
+  fetchId: EvalId | null;
 }
 
 export default function Eval({ fetchId }: EvalOptions) {
   const navigate = useNavigate();
   const { apiBaseUrl } = useApiConfig();
+
+  const socketEndpoint = apiBaseUrl ?? '';
+
+  // ==================================================================================================
+  // Store
+  // ==================================================================================================
 
   const {
     table,
@@ -44,31 +45,48 @@ export default function Eval({ fetchId }: EvalOptions) {
   // State
   // ==================================================================================================
 
-  const [loaded, setLoaded] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const [recentEvals, setRecentEvals] = useState<ResultLightweightWithLabel[]>([]);
-  const [defaultEvalId, setDefaultEvalId] = useState<string>(recentEvals[0]?.evalId);
+  const [loaded, setLoaded] = useState<boolean>(false);
 
   // ==================================================================================================
-  // Methods
+  // Data Fetching: Websocket
   // ==================================================================================================
 
-  const fetchRecentFileEvals = async () => {
-    const resp = await callApi(`/results`, { cache: 'no-store' });
-    if (!resp.ok) {
-      setFailed(true);
-      return;
-    }
-    const body = (await resp.json()) as { data: ResultLightweightWithLabel[] };
-    setRecentEvals(body.data);
-    return body.data;
-  };
+  /**
+   * On mount, subscribe to the websocket and receive updates.
+   */
+  const { data: socketData, error: socketError } = useSWRSubscription(
+    IS_RUNNING_LOCALLY ? socketEndpoint : null,
+    (key, { next }) => {
+      const socket = SocketIOClient(key);
+      socket.on('init', (data) => next(null, data));
+      socket.on('update', (data) => next(null, data));
+      socket.on('error', (error) => next(error));
+      return () => socket.disconnect();
+    },
+  );
+
+  // ==================================================================================================
+  // Data Fetching: Recent Evals
+  // ==================================================================================================
+
+  /**
+   * On mount, fetch the most recent evals.
+   */
+  const { data: recentEvalsData, error: recentEvalsError } = useSWR<{
+    data: ResultLightweightWithLabel[];
+  }>('/results', (key: string) => callApi(key, { cache: 'no-store' }).then((res) => res.json()));
+
+  const recentEvals = recentEvalsData?.data;
+
+  // ==================================================================================================
+  // Event Handlers
+  // ==================================================================================================
 
   const fetchEvalById = useCallback(
     async (id: string) => {
       const resp = await callApi(`/results/${id}`, { cache: 'no-store' });
       if (!resp.ok) {
-        setFailed(true);
+        //setFailed(true);
         return;
       }
       const body = (await resp.json()) as { data: ResultsFile };
@@ -90,6 +108,37 @@ export default function Eval({ fetchId }: EvalOptions) {
   // ==================================================================================================
 
   /**
+   * Store-mutation effects:
+   */
+  useEffect(() => {
+    // Populate the ID from the URL or the most recent eval:
+    const _evalId =
+      fetchId ??
+      (recentEvalsData && recentEvalsData.data.length > 0 ? recentEvalsData.data[0].evalId : null);
+
+    // Populate the eval id:
+    if (_evalId) {
+      setEvalId(_evalId);
+    }
+
+    // Populate data:
+    if (socketData) {
+      setTableFromResultsFile(socketData);
+      setConfig(socketData?.config);
+      setAuthor(socketData?.author || null);
+      setLoaded(true);
+    }
+
+    // setColumnState(evalId, {
+    //   selectedColumns: vars.map((v: any, index: number) => `Variable ${index + 1}`),
+    //   columnVisibility: vars.reduce((acc: any, v: any, index: number) => {
+    //     acc[`Variable ${index + 1}`] = true;
+    //     return acc;
+    //   }, {}),
+    // });
+  }, [socketData, fetchId, recentEvalsData]);
+
+  /**
    * Load the eval data.
    */
   useEffect(() => {
@@ -99,50 +148,43 @@ export default function Eval({ fetchId }: EvalOptions) {
       const run = async () => {
         await fetchEvalById(evalId);
         setLoaded(true);
-        setDefaultEvalId(evalId);
+        //setDefaultEvalId(evalId);
         // Load other recent eval runs
-        fetchRecentFileEvals();
+        //fetchRecentFileEvals();
       };
       run();
     } else if (IS_RUNNING_LOCALLY) {
       console.log('Eval init: Using local server websocket');
+      // socket.on('init', (data) => {
+      //   console.log('Initialized socket connection', data);
+      //   setLoaded(true);
+      //   setTableFromResultsFile(data);
+      //   setConfig(data?.config);
+      //   setAuthor(data?.author || null);
+      //   fetchRecentFileEvals().then((newRecentEvals) => {
+      //     if (newRecentEvals && newRecentEvals.length > 0) {
+      //       setDefaultEvalId(newRecentEvals[0]?.evalId);
+      //       setEvalId(newRecentEvals[0]?.evalId);
+      //       console.log('setting default eval id', newRecentEvals[0]?.evalId);
+      //     }
+      //   });
+      // });
 
-      const socket = SocketIOClient(apiBaseUrl || '');
-
-      socket.on('init', (data) => {
-        console.log('Initialized socket connection', data);
-        setLoaded(true);
-        setTableFromResultsFile(data);
-        setConfig(data?.config);
-        setAuthor(data?.author || null);
-        fetchRecentFileEvals().then((newRecentEvals) => {
-          if (newRecentEvals && newRecentEvals.length > 0) {
-            setDefaultEvalId(newRecentEvals[0]?.evalId);
-            setEvalId(newRecentEvals[0]?.evalId);
-            console.log('setting default eval id', newRecentEvals[0]?.evalId);
-          }
-        });
-      });
-
-      socket.on('update', (data) => {
-        console.log('Received data update', data);
-        setTableFromResultsFile(data);
-        setConfig(data.config);
-        setAuthor(data.author || null);
-        fetchRecentFileEvals().then((newRecentEvals) => {
-          if (newRecentEvals && newRecentEvals.length > 0) {
-            const newId = newRecentEvals[0]?.evalId;
-            if (newId) {
-              setDefaultEvalId(newId);
-              setEvalId(newId);
-            }
-          }
-        });
-      });
-
-      return () => {
-        socket.disconnect();
-      };
+      // socket.on('update', (data) => {
+      //   console.log('Received data update', data);
+      //   setTableFromResultsFile(data);
+      //   setConfig(data.config);
+      //   setAuthor(data.author || null);
+      //   fetchRecentFileEvals().then((newRecentEvals) => {
+      //     if (newRecentEvals && newRecentEvals.length > 0) {
+      //       const newId = newRecentEvals[0]?.evalId;
+      //       if (newId) {
+      //         setDefaultEvalId(newId);
+      //         setEvalId(newId);
+      //       }
+      //     }
+      //   });
+      // });
     } else {
       console.log('Eval init: Fetching eval via recent');
       // Fetch from server
@@ -177,7 +219,6 @@ export default function Eval({ fetchId }: EvalOptions) {
     setAuthor,
     setEvalId,
     fetchEvalById,
-    setDefaultEvalId,
     setInComparisonMode,
   ]);
 
@@ -191,6 +232,8 @@ export default function Eval({ fetchId }: EvalOptions) {
   // ==================================================================================================
   // Render
   // ==================================================================================================
+
+  const failed = socketError || recentEvalsError;
 
   if (failed) {
     return <div className="notice">404 Eval not found</div>;
@@ -213,11 +256,15 @@ export default function Eval({ fetchId }: EvalOptions) {
 
   return (
     <ShiftKeyProvider>
-      <ResultsView
-        defaultEvalId={defaultEvalId}
-        recentEvals={recentEvals}
-        onRecentEvalSelected={handleRecentEvalSelection}
-      />
+      {
+        // TODO(Will): Can we enter a state where the results view should be displayed but there is no eval id? e.g. when websockets are issuing updates?
+        evalId && (
+          <ResultsView
+            recentEvals={recentEvals ?? []}
+            onRecentEvalSelected={handleRecentEvalSelection}
+          />
+        )
+      }
     </ShiftKeyProvider>
   );
 }

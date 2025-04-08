@@ -1,11 +1,15 @@
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
-import type { VisibilityState } from '@tanstack/table-core';
 import { create } from 'zustand';
-import type { EvaluateSummaryV2, EvaluateTable, ResultsFile, UnifiedConfig } from './types';
+import type { EvaluateSummaryV2, EvaluateTable, ResultsFile, UnifiedConfig, EvalId } from './types';
+
+type ColumnId = string;
 
 interface ColumnState {
-  selectedColumns: string[];
-  columnVisibility: VisibilityState;
+  selectedColumns: ColumnId[];
+  // @tanstack/table-core#VisibilityState
+  columnVisibility: {
+    [x: ColumnId]: boolean;
+  };
 }
 
 interface TableState {
@@ -45,8 +49,8 @@ interface TableState {
   stickyHeader: boolean;
   setStickyHeader: (stickyHeader: boolean) => void;
 
-  columnStates: Record<string, ColumnState>;
-  setColumnState: (evalId: string, state: ColumnState) => void;
+  columnStates: Record<EvalId, ColumnState>;
+  setColumnState: (evalId: EvalId, state: ColumnState) => void;
 
   maxImageWidth: number;
   setMaxImageWidth: (maxImageWidth: number) => void;
@@ -97,9 +101,9 @@ export const useStore = create<TableState>()((set, get) => ({
   stickyHeader: true,
   setStickyHeader: (stickyHeader: boolean) => set(() => ({ stickyHeader })),
 
+  // TODO(will): Why does this support >=1 evalId?
   columnStates: {},
   setColumnState: (evalId: string, state: ColumnState) => {
-    console.log('setColumnState', evalId, state);
     return set((prevState) => ({
       columnStates: {
         ...prevState.columnStates,

@@ -210,6 +210,10 @@ export const CompletedPromptSchema = PromptSchema.extend({
 
 export type CompletedPrompt = z.infer<typeof CompletedPromptSchema>;
 
+// TODO(will): Use this everywhere
+const EvalIdSchema = z.string();
+export type EvalId = z.infer<typeof EvalIdSchema>;
+
 // Used when building prompts index from files.
 export interface PromptWithMetadata {
   id: string;

@@ -60,8 +60,7 @@ const ResponsiveStack = styled(Stack)(({ theme }) => ({
 
 interface ResultsViewProps {
   recentEvals: ResultLightweightWithLabel[];
-  onRecentEvalSelected: (file: string) => void;
-  defaultEvalId?: string;
+  onRecentEvalSelected: (evalId: string) => void;
 }
 
 const SearchInputField = React.memo(
@@ -152,11 +151,7 @@ const SearchInputField = React.memo(
   },
 );
 
-export default function ResultsView({
-  recentEvals,
-  onRecentEvalSelected,
-  defaultEvalId,
-}: ResultsViewProps) {
+export default function ResultsView({ recentEvals, onRecentEvalSelected }: ResultsViewProps) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const {
@@ -174,6 +169,11 @@ export default function ResultsView({
     setColumnState,
     setAuthor,
   } = useResultsViewStore();
+
+  // ResultsView can only render when there is an eval selected.
+  invariant(typeof evalId === 'string', 'evalId must be a string');
+  evalId! as string;
+
   const { setStateFromConfig } = useMainStore();
   const { showToast } = useToast();
   const [searchText, setSearchText] = React.useState(searchParams.get('search') || '');
@@ -211,8 +211,6 @@ export default function ResultsView({
 
   // State for anchor element
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
-
-  const currentEvalId = evalId || defaultEvalId || 'default';
 
   // Handle menu close
   const handleMenuClose = () => {
@@ -279,7 +277,7 @@ export default function ResultsView({
           prompts: [
             ...table.head.prompts.map((prompt) => ({
               ...prompt,
-              label: `[${evalId || defaultEvalId || 'Eval A'}] ${prompt.label || ''}`,
+              label: `[${evalId ?? 'Eval A'}] ${prompt.label || ''}`,
             })),
             ...comparisonTable.head.prompts.map((prompt) => ({
               ...prompt,
@@ -358,7 +356,11 @@ export default function ResultsView({
     [hasAnyDescriptions, head.vars, head.prompts],
   );
 
-  const currentColumnState = columnStates[currentEvalId] || {
+  // TODO: Enforce the invariant!!!!!
+  // const currentColumnState = columnStates[currentEvalId];
+  // invariant(currentColumnState, 'Column state must be initialized before rendering ResultsView');
+
+  const currentColumnState = columnStates[evalId] || {
     selectedColumns: allColumns,
     columnVisibility: allColumns.reduce((acc, col) => ({ ...acc, [col]: true }), {}),
   };
@@ -369,12 +371,12 @@ export default function ResultsView({
       allColumns.forEach((col) => {
         newColumnVisibility[col] = columns.includes(col);
       });
-      setColumnState(currentEvalId, {
+      setColumnState(evalId, {
         selectedColumns: columns,
         columnVisibility: newColumnVisibility,
       });
     },
-    [allColumns, setColumnState, currentEvalId],
+    [allColumns, setColumnState, evalId],
   );
 
   const handleChange = React.useCallback(
@@ -638,7 +640,7 @@ export default function ResultsView({
                   color="primary"
                   variant="contained"
                   startIcon={<EyeIcon />}
-                  onClick={() => navigate(`/report/?evalId=${evalId || defaultEvalId}`)}
+                  onClick={() => navigate(`/report/?evalId=${evalId}`)}
                 >
                   Vulnerability Report
                 </Button>
@@ -668,7 +670,7 @@ export default function ResultsView({
       <ShareModal
         open={shareModalOpen}
         onClose={() => setShareModalOpen(false)}
-        evalId={currentEvalId}
+        evalId={evalId}
         onShare={handleShare}
       />
       <SettingsModal open={viewSettingsModalOpen} onClose={() => setViewSettingsModalOpen(false)} />
