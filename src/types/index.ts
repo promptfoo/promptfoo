@@ -210,7 +210,8 @@ export const CompletedPromptSchema = PromptSchema.extend({
 
 export type CompletedPrompt = z.infer<typeof CompletedPromptSchema>;
 
-// TODO(will): Use this everywhere
+// TODO: Use the EvalId schema!
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const EvalIdSchema = z.string();
 export type EvalId = z.infer<typeof EvalIdSchema>;
 
