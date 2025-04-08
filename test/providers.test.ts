@@ -561,22 +561,19 @@ describe('loadApiProviders', () => {
       'anthropic:claude-3-5-sonnet-20241022',
       'file://./providers.yaml', // This should expand to the two providers above
     ];
-    
+
     const providers = await loadApiProviders(providerArray);
-    
+
     // We should get 3 providers: 1 direct + 2 from file
     expect(providers).toHaveLength(3);
-    
+
     // Just verify that all providers are defined
-    providers.forEach(provider => {
+    providers.forEach((provider) => {
       expect(provider).toBeDefined();
     });
-    
+
     // Verify file was read correctly
-    expect(fs.readFileSync).toHaveBeenCalledWith(
-      expect.stringContaining('providers.yaml'),
-      'utf8'
-    );
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('providers.yaml'), 'utf8');
     expect(yaml.load).toHaveBeenCalledWith('yaml content');
   });
 
@@ -588,8 +585,8 @@ describe('loadApiProviders', () => {
         config: { prefix: 'First file: ' },
       },
     ];
-    
-    // Second file 
+
+    // Second file
     const secondFileContent = [
       {
         id: 'openai:gpt-4o-mini',
@@ -600,7 +597,7 @@ describe('loadApiProviders', () => {
         config: { temperature: 0.7 },
       },
     ];
-    
+
     // Mock the file system read for different paths
     jest.mocked(fs.readFileSync).mockImplementation((filePath) => {
       if (filePath.toString().includes('first.yaml')) {
@@ -610,7 +607,7 @@ describe('loadApiProviders', () => {
       }
       return '';
     });
-    
+
     // Mock yaml loading based on different file contents
     jest.mocked(yaml.load).mockImplementation((content) => {
       if (content === 'first file content') {
@@ -620,32 +617,23 @@ describe('loadApiProviders', () => {
       }
       return null;
     });
-    
+
     // Provider array with multiple file references
-    const providerArray = [
-      'file://./first.yaml',
-      'file://./second.yaml',
-    ];
-    
+    const providerArray = ['file://./first.yaml', 'file://./second.yaml'];
+
     const providers = await loadApiProviders(providerArray);
-    
+
     // We should get 3 providers total: 1 from first file + 2 from second file
     expect(providers).toHaveLength(3);
-    
+
     // Just verify all providers are defined
-    providers.forEach(provider => {
+    providers.forEach((provider) => {
       expect(provider).toBeDefined();
     });
-    
+
     // Verify both files were read
-    expect(fs.readFileSync).toHaveBeenCalledWith(
-      expect.stringContaining('first.yaml'),
-      'utf8'
-    );
-    expect(fs.readFileSync).toHaveBeenCalledWith(
-      expect.stringContaining('second.yaml'),
-      'utf8'
-    );
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('first.yaml'), 'utf8');
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('second.yaml'), 'utf8');
   });
 
   it('should use env values from cliState.config', async () => {

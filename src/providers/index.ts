@@ -107,12 +107,12 @@ async function loadProvidersFromFile(
   const modulePath = path.isAbsolute(relativePath)
     ? relativePath
     : path.join(basePath || process.cwd(), relativePath);
-  
+
   const fileContent = yaml.load(fs.readFileSync(modulePath, 'utf8')) as
     | ProviderOptions
     | ProviderOptions[];
   invariant(fileContent, `Provider config ${relativePath} is undefined`);
-  
+
   const configs = [fileContent].flat() as ProviderOptions[];
   return Promise.all(
     configs.map((config) => {
@@ -155,18 +155,13 @@ export async function loadApiProviders(
       },
     ];
   } else if (Array.isArray(providerPaths)) {
-    // Process each provider in the array and flatten the results
     const providersArrays = await Promise.all(
       providerPaths.map(async (provider, idx) => {
         if (typeof provider === 'string') {
-          // Check if it's a file path
           if (
             provider.startsWith('file://') &&
-            (provider.endsWith('.yaml') ||
-              provider.endsWith('.yml') ||
-              provider.endsWith('.json'))
+            (provider.endsWith('.yaml') || provider.endsWith('.yml') || provider.endsWith('.json'))
           ) {
-            // Use our helper function to handle file paths
             return loadProvidersFromFile(provider, { basePath, env });
           }
           return [await loadApiProvider(provider, { basePath, env })];
@@ -196,7 +191,6 @@ export async function loadApiProviders(
         return [await loadApiProvider(id, { options: context, basePath, env })];
       }),
     );
-    // Flatten the array of arrays
     return providersArrays.flat();
   }
   throw new Error('Invalid providers list');
