@@ -86,11 +86,12 @@ export default function Eval({ fetchId }: EvalOptions) {
   /**
    * On mount, fetch the most recent evals.
    */
-  const { data: recentEvalsData, error: recentEvalsError } = useSWR<{
+  const recentEvalsRes = useSWR<{
     data: ResultLightweightWithLabel[];
   }>('/results', (key: string) => callApi(key, { cache: 'no-store' }).then((res) => res.json()));
 
-  const recentEvals = recentEvalsData?.data;
+  const recentEvalsError = recentEvalsRes.error;
+  const recentEvalsData = recentEvalsRes.data?.data;
 
   // ==================================================================================================
   // Data Fetching: Eval by ID
@@ -99,11 +100,13 @@ export default function Eval({ fetchId }: EvalOptions) {
   /**
    * When an eval id is set, fetch the eval data.
    */
-  const { data: evalByIdData, error: evalByIdError } = useSWR<{
+  const evalByIdRes = useSWR<{
     data: ResultsFile;
   }>(evalId ? `/results/${evalId}` : null, (key: string) =>
     callApi(key, { cache: 'no-store' }).then((res) => res.json()),
   );
+  const evalByIdError = evalByIdRes.error;
+  const evalByIdData = evalByIdRes.data?.data;
 
   // ==================================================================================================
   // Event Handlers
@@ -123,8 +126,7 @@ export default function Eval({ fetchId }: EvalOptions) {
   useEffect(() => {
     // Populate the ID from the URL or the most recent eval:
     const _evalId =
-      fetchId ??
-      (recentEvalsData && recentEvalsData.data.length > 0 ? recentEvalsData.data[0].evalId : null);
+      fetchId ?? (recentEvalsData && recentEvalsData.length > 0 ? recentEvalsData[0].evalId : null);
 
     // Populate the eval id:
     if (_evalId) {
@@ -198,7 +200,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         // TODO(Will): Can we enter a state where the results view should be displayed but there is no eval id? e.g. when websockets are issuing updates?
         evalId && (
           <ResultsView
-            recentEvals={recentEvals ?? []}
+            recentEvals={recentEvalsData ?? []}
             onRecentEvalSelected={handleRecentEvalSelection}
           />
         )
