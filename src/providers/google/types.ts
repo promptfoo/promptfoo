@@ -31,7 +31,17 @@ export interface Content {
   role?: string;
 }
 
-interface Schema {
+export const VALID_SCHEMA_TYPES: ReadonlySet<Schema['type']> = new Set([
+  'TYPE_UNSPECIFIED',
+  'STRING',
+  'NUMBER',
+  'INTEGER',
+  'BOOLEAN',
+  'ARRAY',
+  'OBJECT',
+]);
+
+export interface Schema {
   type: 'TYPE_UNSPECIFIED' | 'STRING' | 'NUMBER' | 'INTEGER' | 'BOOLEAN' | 'ARRAY' | 'OBJECT';
   format?: string;
   description?: string;
