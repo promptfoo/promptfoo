@@ -154,10 +154,11 @@ async function sendChunkOfResults(
   });
 
   if (!response.ok) {
-    const responseBody = await response.json();
-    throw new Error(
-      `Failed to send results chunk to ${targetUrl}: ${response.statusText} = ${JSON.stringify(responseBody)}`,
+    const responseBody = await response.text();
+    logger.error(
+      `Failed to send results chunk to ${targetUrl}: status code: ${response.status}, status text: ${response.statusText}, body: ${responseBody}`,
     );
+    throw new Error(`Failed to send results chunk`);
   }
 }
 
