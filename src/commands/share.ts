@@ -96,7 +96,6 @@ export function shareCommand(program: Command) {
           return;
         }
 
-        // Sharing is idempotent; has this eval already been shared?
         if (await hasEvalBeenShared(eval_)) {
           const url = await getShareableUrl(eval_, cmdObj.showAuth);
           const shouldContinue = await confirm({
