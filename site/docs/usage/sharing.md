@@ -102,5 +102,5 @@ sharing: false
 
 ## See Also
 
-- [Self-hosting](./self-hosting.md)
-- [Command Line Usage](./command-line.md)
+- [Self-hosting](/docs/usage/self-hosting.md)
+- [Command Line Usage](/docs/usage/command-line.md)
