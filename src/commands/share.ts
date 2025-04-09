@@ -98,7 +98,7 @@ export function shareCommand(program: Command) {
 
         // Sharing is idempotent; has this eval already been shared?
         if (await hasEvalBeenShared(eval_)) {
-          const url = await getShareableUrl(eval_);
+          const url = await getShareableUrl(eval_, cmdObj.showAuth);
           const shouldContinue = await confirm({
             message: `This eval is already shared at ${url}. Sharing it again will overwrite the existing data. Continue?`,
           });
