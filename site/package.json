@@ -35,8 +35,8 @@
     "framer-motion": "^11.13.3",
     "lucide-react": "^0.468.0",
     "prism-react-renderer": "^2.4.1",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
     "@docusaurus/module-type-aliases": "^3.7.0",
     "@tsconfig/docusaurus": "^2.0.3",
     "typescript": "^5.8.2"
