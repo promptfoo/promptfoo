@@ -12,7 +12,7 @@ This policy covers vulnerabilities discovered in:
 
 ### Reporting Vulnerabilities
 
-If you discover a potential vulnerability, please responsibly disclose it to us by emailing `security@promptfoo.com`. Include the following details:
+If you discover a potential vulnerability, please responsibly disclose it to us by emailing `security@promptfoo.dev`. Include the following details:
 
 - Description and detailed steps to reproduce the vulnerability.
 - Software version and/or cloud environment where the issue was discovered.

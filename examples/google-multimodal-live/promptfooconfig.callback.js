@@ -42,6 +42,9 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
       vars: { a: 5, b: 6 },
       assert: [
         {
+          type: 'is-valid-function-call',
+        },
+        {
           type: 'contains',
           value: '11',
           transform: 'JSON.parse(output).text',
@@ -51,6 +54,9 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
     {
       vars: { a: 10, b: 20 },
       assert: [
+        {
+          type: 'is-valid-function-call',
+        },
         {
           type: 'javascript',
           value: "JSON.parse(output).text.includes('30')",
