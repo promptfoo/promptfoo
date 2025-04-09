@@ -7,6 +7,9 @@ import logger from '../../src/logger';
 import * as cliUtils from '../../src/util/cli';
 import { createMockResponse } from '../util/utils';
 
+// Import opener directly at the top level
+import opener from 'opener';
+
 // Mock modules first
 jest.mock('opener', () => jest.fn().mockImplementation(() => Promise.resolve()));
 jest.mock('../../src/globalConfig/accounts');
@@ -17,10 +20,13 @@ jest.mock('../../src/fetch');
 jest.mock('../../src/util/cli');
 jest.mock('readline', () => ({
   createInterface: jest.fn().mockReturnValue({
-    question: jest.fn((query, cb) => cb('test@example.com')),
+    question: jest.fn((query, cb) => cb('test-token')),
     close: jest.fn(),
   }),
 }));
+
+// Get access to the mocked readline interface
+const readlineInterface = jest.requireMock('readline').createInterface();
 
 const mockCloudUser = {
   id: '1',
@@ -50,21 +56,21 @@ global.fetch = mockFetch;
 
 describe('auth command', () => {
   let program: Command;
-  let opener: jest.Mock;
 
   beforeEach(() => {
     jest.clearAllMocks();
     program = new Command();
     authCommand(program);
-    
-    // Get the mocked opener function
-    opener = require('opener');
 
     // Mock the cli utils
     jest.mocked(cliUtils.isInteractiveSession).mockReturnValue(true);
     jest.mocked(cliUtils.promptYesNo).mockResolvedValue(true);
+    jest.mocked(cliUtils.promptForInput).mockResolvedValue('test-token');
 
-    // Mock validateAndSetApiToken to emit the success message
+    // Reset readline mocks
+    readlineInterface.question.mockImplementation((_question: string, cb: (answer: string) => void) => cb('test-token'));
+
+    // Mock validateAndSetApiToken to emit the success message and return
     jest.mocked(cloudConfig.validateAndSetApiToken).mockImplementation(async () => {
       logger.info(expect.stringContaining('Successfully logged in'));
       logger.info(expect.any(String)); // 'Logged in as:'
@@ -81,32 +87,31 @@ describe('auth command', () => {
 
   describe('login', () => {
     it('should set email in config after successful login with API key', async () => {
-      mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          ok: true,
-          body: { user: mockCloudUser },
-        }),
-      );
-
+      // Setup mocks
       jest.mocked(cloudConfig.validateAndSetApiToken).mockResolvedValueOnce({
         user: mockCloudUser,
         organization: mockOrganization,
         app: mockApp,
       });
 
+      jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+
+      // Run command
       const loginCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
         ?.commands.find((cmd) => cmd.name() === 'login');
       await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
 
+      // Verify
       expect(setUserEmail).toHaveBeenCalledWith('test@example.com');
       expect(cloudConfig.validateAndSetApiToken).toHaveBeenCalledWith(
-        expect.any(String),
-        undefined,
+        'test-key',
+        'https://api.example.com',
       );
     });
 
     it('should handle interactive login flow successfully', async () => {
+      // Setup mocks
       jest.mocked(fetchWithProxy).mockResolvedValueOnce(
         createMockResponse({
           ok: true,
@@ -120,71 +125,59 @@ describe('auth command', () => {
         app: mockApp,
       });
 
-      const loginCmd = program.commands
-        .find((cmd) => cmd.name() === 'auth')
-        ?.commands.find((cmd) => cmd.name() === 'login');
-      await loginCmd?.parseAsync(['node', 'test']);
+      jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+      
+      // Set up specific response for this test
+      readlineInterface.question.mockImplementationOnce((_question: string, cb: (answer: string) => void) => cb('test-token'));
 
-      expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('A login link has been sent'),
-      );
-      expect(setUserEmail).toHaveBeenCalledWith('test@example.com');
-      expect(cloudConfig.validateAndSetApiToken).toHaveBeenCalledWith(
-        expect.any(String),
-        undefined,
-      );
-    });
-
-    it('should handle browser-based authentication when explicitly enabled', async () => {
-      jest.mocked(cloudConfig.validateAndSetApiToken).mockResolvedValueOnce({
-        user: mockCloudUser,
-        organization: mockOrganization,
-        app: mockApp,
-      });
-
-      const loginCmd = program.commands
-        .find((cmd) => cmd.name() === 'auth')
-        ?.commands.find((cmd) => cmd.name() === 'login');
-      await loginCmd?.parseAsync(['node', 'test', '--browser']);
-
-      expect(opener).toHaveBeenCalledWith(expect.stringContaining('/welcome'));
-      expect(setUserEmail).toHaveBeenCalledWith('test@example.com');
-      expect(cloudConfig.validateAndSetApiToken).toHaveBeenCalledWith(
-        expect.any(String),
-        undefined,
-      );
-    });
-
-    it('should not use browser-based auth when explicitly disabled', async () => {
-      jest.mocked(fetchWithProxy).mockResolvedValueOnce(
-        createMockResponse({
-          ok: true,
-          body: {},
-        }),
-      );
-
-      jest.mocked(cloudConfig.validateAndSetApiToken).mockResolvedValueOnce({
-        user: mockCloudUser,
-        organization: mockOrganization,
-        app: mockApp,
-      });
-
+      // Run command with --no-browser to ensure email flow
       const loginCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
         ?.commands.find((cmd) => cmd.name() === 'login');
       await loginCmd?.parseAsync(['node', 'test', '--no-browser']);
 
-      expect(opener).not.toHaveBeenCalled();
-      expect(fetchWithProxy).toHaveBeenCalledWith(expect.any(String), expect.any(Object));
+      // Verify
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('A login link has been sent'),
+      );
+      expect(cloudConfig.validateAndSetApiToken).toHaveBeenCalledWith(
+        'test-token',
+        'https://api.example.com',
+      );
       expect(setUserEmail).toHaveBeenCalledWith('test@example.com');
     });
 
-    it('should fall back to email flow if opening browser fails', async () => {
-      // Mock opener to throw an error for this test only
-      opener.mockImplementationOnce(() => {
-        throw new Error('Failed to open browser');
+    it('should handle browser-based authentication when explicitly enabled', async () => {
+      // Setup mocks
+      jest.mocked(cloudConfig.validateAndSetApiToken).mockResolvedValueOnce({
+        user: mockCloudUser,
+        organization: mockOrganization,
+        app: mockApp,
       });
+
+      jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+      jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
       
+      // Set up specific response for this test
+      readlineInterface.question.mockImplementationOnce((_question: string, cb: (answer: string) => void) => cb('test-token'));
+
+      // Run command
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd?.parseAsync(['node', 'test', '--browser']);
+
+      // Verify
+      expect(opener).toHaveBeenCalledWith('https://app.example.com/welcome');
+      expect(cloudConfig.validateAndSetApiToken).toHaveBeenCalledWith(
+        'test-token',
+        'https://api.example.com',
+      );
+      expect(setUserEmail).toHaveBeenCalledWith('test@example.com');
+    });
+
+    it('should not use browser-based auth when explicitly disabled', async () => {
+      // Setup mocks
       jest.mocked(fetchWithProxy).mockResolvedValueOnce(
         createMockResponse({
           ok: true,
@@ -198,13 +191,63 @@ describe('auth command', () => {
         app: mockApp,
       });
 
+      jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+
+      // Run command
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd?.parseAsync(['node', 'test', '--no-browser']);
+
+      // Verify
+      expect(opener).not.toHaveBeenCalled();
+      expect(fetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/users/login?fromCLI=true',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+          }),
+        }),
+      );
+      expect(setUserEmail).toHaveBeenCalledWith('test@example.com');
+    });
+
+    it('should fall back to email flow if opening browser fails', async () => {
+      // Mock opener to throw an error for this test only
+      jest.mocked(opener).mockImplementationOnce(() => {
+        throw new Error('Failed to open browser');
+      });
+      
+      // Setup mocks
+      jest.mocked(fetchWithProxy).mockResolvedValueOnce(
+        createMockResponse({
+          ok: true,
+          body: {},
+        }),
+      );
+
+      jest.mocked(cloudConfig.validateAndSetApiToken).mockResolvedValueOnce({
+        user: mockCloudUser,
+        organization: mockOrganization,
+        app: mockApp,
+      });
+
+      jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+      jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+
+      // Run command
       const loginCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
         ?.commands.find((cmd) => cmd.name() === 'login');
       await loginCmd?.parseAsync(['node', 'test']);
 
-      expect(opener).toHaveBeenCalledWith(expect.stringContaining('/welcome'));
-      expect(fetchWithProxy).toHaveBeenCalledWith(expect.any(String), expect.any(Object));
+      // Verify
+      expect(opener).toHaveBeenCalledWith('https://app.example.com/welcome');
+      expect(fetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/users/login?fromCLI=true',
+        expect.any(Object),
+      );
       expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to open browser'));
       expect(setUserEmail).toHaveBeenCalledWith('test@example.com');
     });
