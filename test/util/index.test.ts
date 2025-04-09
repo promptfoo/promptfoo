@@ -242,7 +242,7 @@ describe('maybeLoadToolsFromExternalFile', () => {
 
     // Should resolve the file path with variables first
     expect(fs.existsSync).toHaveBeenCalledWith(expect.stringContaining('tools.json'));
-    expect(fs.readFileSync).toHaveBeenCalled();
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('tools.json'), 'utf8');
   });
 
   it('should handle array of file paths', () => {

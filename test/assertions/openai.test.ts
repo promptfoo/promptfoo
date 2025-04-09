@@ -5,6 +5,7 @@ import { handleIsValidFunctionCall } from '../../src/assertions/functionToolCall
 import { handleIsValidOpenAiToolsCall } from '../../src/assertions/openai';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { validateFunctionCall } from '../../src/providers/openai/util';
+import type { OpenAiTool } from '../../src/providers/openai/util';
 import type {
   Assertion,
   ApiProvider,
@@ -660,7 +661,7 @@ describe('OpenAI assertions', () => {
       const fileProvider = {
         id: () => 'test-provider',
         config: {
-          tools: 'file://./test/fixtures/weather_tools.yaml',
+          tools: 'file://./test/fixtures/weather_tools.json' as unknown as OpenAiTool[],
         },
         callApi: async () => ({ output: '' }),
       } as ApiProvider;
@@ -686,7 +687,7 @@ describe('OpenAI assertions', () => {
 
       // Verify mockMaybeLoadToolsFromExternalFile was called with the file path
       expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
-        'file://./test/fixtures/weather_tools.yaml',
+        'file://./test/fixtures/weather_tools.json',
         {},
       );
     });
@@ -916,7 +917,7 @@ describe('OpenAI assertions', () => {
       // Mock a provider with tools from a file reference
       const fileProvider = new OpenAiChatCompletionProvider('test-provider', {
         config: {
-          tools: 'file://./test/fixtures/weather_tools.json',
+          tools: 'file://./test/fixtures/weather_tools.json' as unknown as OpenAiTool[],
         },
       });
 
