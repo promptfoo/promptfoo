@@ -1,16 +1,11 @@
+import confirm from '@inquirer/confirm';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import dedent from 'dedent';
 import { DEFAULT_SHARE_VIEW_BASE_URL } from '../constants';
 import logger from '../logger';
 import Eval from '../models/eval';
-import {
-  createShareableUrl,
-  getShareableUrl,
-  hasEvalBeenShared,
-  isSharingEnabled,
-  updateSharedEval,
-} from '../share';
+import { createShareableUrl, hasEvalBeenShared, isSharingEnabled, getShareableUrl } from '../share';
 import telemetry from '../telemetry';
 import { setupEnv } from '../util';
 
@@ -103,13 +98,17 @@ export function shareCommand(program: Command) {
 
         // Sharing is idempotent; has this eval already been shared?
         if (await hasEvalBeenShared(eval_)) {
-          logger.info('Eval has already been shared. Updating...');
-          await updateSharedEval(eval_);
-          const url = await getShareableUrl(eval_, cmdObj.showAuth);
-          logger.info(`View results: ${chalk.greenBright.bold(url)}`);
-        } else {
-          await createAndDisplayShareableUrl(eval_, cmdObj.showAuth);
+          const url = await getShareableUrl(eval_);
+          const shouldContinue = await confirm({
+            message: `This eval is already shared at ${url}. Sharing it again will overwrite the existing data. Continue?`,
+          });
+          if (!shouldContinue) {
+            process.exitCode = 0;
+            return;
+          }
         }
+
+        await createAndDisplayShareableUrl(eval_, cmdObj.showAuth);
       },
     );
 }

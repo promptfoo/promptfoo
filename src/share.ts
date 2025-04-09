@@ -463,38 +463,3 @@ export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
     return false;
   }
 }
-
-/**
- * Updates a shared eval by syncing the following fields:
- * - Eval Results -> Grading Results
- * @param eval_ The eval to update.
- */
-export async function updateSharedEval(eval_: Eval): Promise<void> {
-  // Send the payload to the server:
-  const { url } = await getApiConfig(eval_);
-
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-
-  if (cloudConfig.isEnabled()) {
-    headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
-  }
-
-  const res = await fetchWithProxy(`${url}/${eval_.id}/share`, {
-    method: 'PATCH',
-    headers,
-    body: JSON.stringify({
-      // TODO(Optimization): Only send the results that have changed!
-      gradingResults: eval_.results.reduce(
-        (acc, result) => ({
-          ...acc,
-          [result.id]: result.gradingResult,
-        }),
-        {} as Record<string, Eval['results'][number]['gradingResult']>,
-      ),
-    }),
-  });
-
-  if (!res.ok || res.status !== 204) {
-    throw new Error(`Failed to sync eval: ${res.status} ${res.statusText}`);
-  }
-}
