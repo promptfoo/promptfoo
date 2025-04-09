@@ -172,7 +172,12 @@ export async function readStandaloneTestsFile(
       feature: 'json tests file',
     });
     const fileContent = fs.readFileSync(resolvedVarsPath, 'utf-8');
-    return [yaml.load(fileContent)].flat() as TestCase[];
+    const jsonData = yaml.load(fileContent) as any;
+    const testCases: TestCase[] = Array.isArray(jsonData) ? jsonData : [jsonData];
+    return testCases.map((item, idx) => ({
+      ...item,
+      description: item.description || `Row #${idx + 1}`,
+    }));
   }
   // Handle .jsonl files
   else if (fileExtension === 'jsonl') {
