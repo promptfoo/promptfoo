@@ -7,6 +7,21 @@ import logger from '../../src/logger';
 import * as cliUtils from '../../src/util/cli';
 import { createMockResponse } from '../util/utils';
 
+// Mock modules first
+jest.mock('opener', () => jest.fn().mockImplementation(() => Promise.resolve()));
+jest.mock('../../src/globalConfig/accounts');
+jest.mock('../../src/globalConfig/cloud');
+jest.mock('../../src/logger');
+jest.mock('../../src/telemetry');
+jest.mock('../../src/fetch');
+jest.mock('../../src/util/cli');
+jest.mock('readline', () => ({
+  createInterface: jest.fn().mockReturnValue({
+    question: jest.fn((query, cb) => cb('test@example.com')),
+    close: jest.fn(),
+  }),
+}));
+
 const mockCloudUser = {
   id: '1',
   email: 'test@example.com',
@@ -30,33 +45,20 @@ const mockApp = {
   url: 'https://app.example.com',
 };
 
-jest.mock('../../src/globalConfig/accounts');
-jest.mock('../../src/globalConfig/cloud');
-jest.mock('../../src/logger');
-jest.mock('../../src/telemetry');
-jest.mock('../../src/fetch');
-jest.mock('../../src/util/cli');
-jest.mock('readline', () => ({
-  createInterface: jest.fn().mockReturnValue({
-    question: jest.fn((query, cb) => cb('test@example.com')),
-    close: jest.fn(),
-  }),
-}));
-
-// Mock opener
-const mockOpener = jest.fn().mockImplementation(() => Promise.resolve());
-jest.mock('opener', () => mockOpener);
-
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
 
 describe('auth command', () => {
   let program: Command;
+  let opener: jest.Mock;
 
   beforeEach(() => {
     jest.clearAllMocks();
     program = new Command();
     authCommand(program);
+    
+    // Get the mocked opener function
+    opener = require('opener');
 
     // Mock the cli utils
     jest.mocked(cliUtils.isInteractiveSession).mockReturnValue(true);
@@ -145,7 +147,7 @@ describe('auth command', () => {
         ?.commands.find((cmd) => cmd.name() === 'login');
       await loginCmd?.parseAsync(['node', 'test', '--browser']);
 
-      expect(mockOpener).toHaveBeenCalledWith(expect.stringContaining('/welcome'));
+      expect(opener).toHaveBeenCalledWith(expect.stringContaining('/welcome'));
       expect(setUserEmail).toHaveBeenCalledWith('test@example.com');
       expect(cloudConfig.validateAndSetApiToken).toHaveBeenCalledWith(
         expect.any(String),
@@ -154,8 +156,6 @@ describe('auth command', () => {
     });
 
     it('should not use browser-based auth when explicitly disabled', async () => {
-      jest.mocked(cliUtils.isInteractiveSession).mockReturnValue(true);
-
       jest.mocked(fetchWithProxy).mockResolvedValueOnce(
         createMockResponse({
           ok: true,
@@ -174,14 +174,14 @@ describe('auth command', () => {
         ?.commands.find((cmd) => cmd.name() === 'login');
       await loginCmd?.parseAsync(['node', 'test', '--no-browser']);
 
-      expect(mockOpener).not.toHaveBeenCalled();
+      expect(opener).not.toHaveBeenCalled();
       expect(fetchWithProxy).toHaveBeenCalledWith(expect.any(String), expect.any(Object));
       expect(setUserEmail).toHaveBeenCalledWith('test@example.com');
     });
 
     it('should fall back to email flow if opening browser fails', async () => {
-      // Mock opener to throw an error
-      mockOpener.mockImplementationOnce(() => {
+      // Mock opener to throw an error for this test only
+      opener.mockImplementationOnce(() => {
         throw new Error('Failed to open browser');
       });
       
@@ -203,7 +203,7 @@ describe('auth command', () => {
         ?.commands.find((cmd) => cmd.name() === 'login');
       await loginCmd?.parseAsync(['node', 'test']);
 
-      expect(mockOpener).toHaveBeenCalledWith(expect.stringContaining('/welcome'));
+      expect(opener).toHaveBeenCalledWith(expect.stringContaining('/welcome'));
       expect(fetchWithProxy).toHaveBeenCalledWith(expect.any(String), expect.any(Object));
       expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to open browser'));
       expect(setUserEmail).toHaveBeenCalledWith('test@example.com');
