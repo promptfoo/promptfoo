@@ -15,7 +15,7 @@ import type {
   ProviderResponse,
 } from '../types/providers';
 import type { TokenUsage } from '../types/shared';
-import { maybeLoadFromExternalFile } from '../util';
+import { maybeLoadFromExternalFile, maybeLoadToolsFromExternalFile } from '../util';
 import { outputFromMessage, parseMessages } from './anthropic/util';
 import { novaOutputFromMessage, novaParseMessages } from './bedrockUtil';
 import { parseChatPrompt } from './shared';
@@ -713,7 +713,7 @@ export const BEDROCK_MODEL = {
       addConfigParam(
         params,
         'tools',
-        maybeLoadFromExternalFile(config?.tools),
+        maybeLoadToolsFromExternalFile(config?.tools),
         undefined,
         undefined,
       );
@@ -901,7 +901,7 @@ export const BEDROCK_MODEL = {
       addConfigParam(params, 'presence_penalty', config?.presence_penalty);
       addConfigParam(params, 'seed', config?.seed);
       addConfigParam(params, 'return_prompt', config?.return_prompt);
-      addConfigParam(params, 'tools', maybeLoadFromExternalFile(config?.tools));
+      addConfigParam(params, 'tools', maybeLoadToolsFromExternalFile(config?.tools));
       addConfigParam(params, 'tool_results', config?.tool_results);
       addConfigParam(params, 'stop_sequences', stop);
       addConfigParam(params, 'raw_prompting', config?.raw_prompting);
