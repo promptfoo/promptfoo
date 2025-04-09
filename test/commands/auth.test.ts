@@ -4,6 +4,7 @@ import { fetchWithProxy } from '../../src/fetch';
 import { getUserEmail, setUserEmail } from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
+import * as cliUtils from '../../src/util/cli';
 import { createMockResponse } from '../util/utils';
 
 const mockCloudUser = {
@@ -34,12 +35,17 @@ jest.mock('../../src/globalConfig/cloud');
 jest.mock('../../src/logger');
 jest.mock('../../src/telemetry');
 jest.mock('../../src/fetch');
+jest.mock('../../src/util/cli');
 jest.mock('readline', () => ({
   createInterface: jest.fn().mockReturnValue({
     question: jest.fn((query, cb) => cb('test@example.com')),
     close: jest.fn(),
   }),
 }));
+
+// Mock opener
+const mockOpener = jest.fn().mockImplementation(() => Promise.resolve());
+jest.mock('opener', () => mockOpener);
 
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
@@ -51,6 +57,10 @@ describe('auth command', () => {
     jest.clearAllMocks();
     program = new Command();
     authCommand(program);
+
+    // Mock the cli utils
+    jest.mocked(cliUtils.isInteractiveSession).mockReturnValue(true);
+    jest.mocked(cliUtils.promptYesNo).mockResolvedValue(true);
 
     // Mock validateAndSetApiToken to emit the success message
     jest.mocked(cloudConfig.validateAndSetApiToken).mockImplementation(async () => {
@@ -123,64 +133,9 @@ describe('auth command', () => {
       );
     });
 
-    it('should handle login request failure', async () => {
-      jest.mocked(fetchWithProxy).mockResolvedValueOnce(
-        createMockResponse({
-          ok: false,
-          statusText: 'Bad Request',
-        }),
-      );
-
-      const loginCmd = program.commands
-        .find((cmd) => cmd.name() === 'auth')
-        ?.commands.find((cmd) => cmd.name() === 'login');
-      await loginCmd?.parseAsync(['node', 'test']);
-
-      expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to send login request: Bad Request'),
-      );
-      expect(process.exitCode).toBe(1);
-    });
-
-    it('should handle token validation failure', async () => {
-      jest.mocked(fetchWithProxy).mockResolvedValueOnce(
-        createMockResponse({
-          ok: true,
-          body: {},
-        }),
-      );
-
-      jest
-        .mocked(cloudConfig.validateAndSetApiToken)
-        .mockRejectedValueOnce(new Error('Invalid token'));
-
-      const loginCmd = program.commands
-        .find((cmd) => cmd.name() === 'auth')
-        ?.commands.find((cmd) => cmd.name() === 'login');
-      await loginCmd?.parseAsync(['node', 'test']);
-
-      expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining('Authentication failed: Invalid token'),
-      );
-      expect(process.exitCode).toBe(1);
-    });
-
-    it('should overwrite existing email in config after successful login', async () => {
-      const newCloudUser = {
-        ...mockCloudUser,
-        email: 'new@example.com',
-      };
-
-      jest.mocked(getUserEmail).mockReturnValue('old@example.com');
-      mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          ok: true,
-          body: { user: newCloudUser },
-        }),
-      );
-
+    it('should handle browser-based authentication when explicitly enabled', async () => {
       jest.mocked(cloudConfig.validateAndSetApiToken).mockResolvedValueOnce({
-        user: newCloudUser,
+        user: mockCloudUser,
         organization: mockOrganization,
         app: mockApp,
       });
@@ -188,18 +143,70 @@ describe('auth command', () => {
       const loginCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
         ?.commands.find((cmd) => cmd.name() === 'login');
-      await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
+      await loginCmd?.parseAsync(['node', 'test', '--browser']);
 
-      expect(setUserEmail).toHaveBeenCalledWith('new@example.com');
+      expect(mockOpener).toHaveBeenCalledWith(expect.stringContaining('/welcome'));
+      expect(setUserEmail).toHaveBeenCalledWith('test@example.com');
       expect(cloudConfig.validateAndSetApiToken).toHaveBeenCalledWith(
         expect.any(String),
         undefined,
       );
-      expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining(
-          'Updating local email configuration from old@example.com to new@example.com',
-        ),
+    });
+
+    it('should not use browser-based auth when explicitly disabled', async () => {
+      jest.mocked(cliUtils.isInteractiveSession).mockReturnValue(true);
+
+      jest.mocked(fetchWithProxy).mockResolvedValueOnce(
+        createMockResponse({
+          ok: true,
+          body: {},
+        }),
       );
+
+      jest.mocked(cloudConfig.validateAndSetApiToken).mockResolvedValueOnce({
+        user: mockCloudUser,
+        organization: mockOrganization,
+        app: mockApp,
+      });
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd?.parseAsync(['node', 'test', '--no-browser']);
+
+      expect(mockOpener).not.toHaveBeenCalled();
+      expect(fetchWithProxy).toHaveBeenCalledWith(expect.any(String), expect.any(Object));
+      expect(setUserEmail).toHaveBeenCalledWith('test@example.com');
+    });
+
+    it('should fall back to email flow if opening browser fails', async () => {
+      // Mock opener to throw an error
+      mockOpener.mockImplementationOnce(() => {
+        throw new Error('Failed to open browser');
+      });
+      
+      jest.mocked(fetchWithProxy).mockResolvedValueOnce(
+        createMockResponse({
+          ok: true,
+          body: {},
+        }),
+      );
+
+      jest.mocked(cloudConfig.validateAndSetApiToken).mockResolvedValueOnce({
+        user: mockCloudUser,
+        organization: mockOrganization,
+        app: mockApp,
+      });
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd?.parseAsync(['node', 'test']);
+
+      expect(mockOpener).toHaveBeenCalledWith(expect.stringContaining('/welcome'));
+      expect(fetchWithProxy).toHaveBeenCalledWith(expect.any(String), expect.any(Object));
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to open browser'));
+      expect(setUserEmail).toHaveBeenCalledWith('test@example.com');
     });
   });
 

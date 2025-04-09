@@ -1,29 +1,13 @@
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import dedent from 'dedent';
-import readline from 'readline';
+import opener from 'opener';
 import { fetchWithProxy } from '../fetch';
 import { getUserEmail, setUserEmail } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import telemetry from '../telemetry';
-
-async function promptForInput(question: string): Promise<string> {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  try {
-    return await new Promise((resolve) => {
-      rl.question(question, (answer) => {
-        resolve(answer.trim());
-      });
-    });
-  } finally {
-    rl.close();
-  }
-}
+import { isInteractiveSession, promptYesNo, promptForInput } from '../util/cli';
 
 async function promptForToken(): Promise<string> {
   return promptForInput('Please enter your API token: ');
@@ -45,45 +29,77 @@ export function authCommand(program: Command) {
       'The host of the promptfoo instance. This needs to be the url of the API if different from the app url.',
     )
     .option('-k, --api-key <apiKey>', 'Login using an API key.')
-    .action(async (cmdObj: { orgId: string; host: string; apiKey: string }) => {
+    .option('-b, --browser', 'Open browser for authentication.')
+    .option('-n, --no-browser', 'Do not open browser for authentication.')
+    .action(async (cmdObj: { orgId: string; host: string; apiKey: string; browser?: boolean }) => {
       let token: string | undefined;
       const apiHost = cmdObj.host || cloudConfig.getApiHost();
+      const appUrl = cloudConfig.getAppUrl();
 
       try {
         if (cmdObj.apiKey) {
           token = cmdObj.apiKey;
         } else {
-          const email = await promptForEmail();
+          // Check if browser-based auth should be offered
+          const interactive = isInteractiveSession();
+          const useBrowser =
+            cmdObj.browser !== false && // Not explicitly disabled
+            interactive && // In interactive session
+            (cmdObj.browser === true || // Explicitly enabled or
+              (await promptYesNo('Would you like to open a browser to authenticate?'))); // User confirms
 
-          // Send login request
+          if (useBrowser) {
+            // Open browser to auth page
+            const welcomeUrl = `${appUrl}/welcome`;
+            logger.info(chalk.green(`Opening browser to ${welcomeUrl} for authentication`));
 
-          const loginResponse = await fetchWithProxy(`${apiHost}/users/login?fromCLI=true`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ email, organizationId: cmdObj.orgId }),
-          });
+            try {
+              await opener(welcomeUrl);
+              logger.info(chalk.yellow('After authenticating in the browser, copy your API token'));
 
-          if (!loginResponse.ok) {
-            throw new Error('Failed to send login request: ' + loginResponse.statusText);
+              // Prompt for token after browser auth
+              token = await promptForToken();
+            } catch (error) {
+              logger.error(`Failed to open browser: ${String(error)}`);
+              // Fall back to email flow
+              logger.info(chalk.yellow('Falling back to email authentication...'));
+            }
           }
 
-          logger.info(
-            chalk.green(
-              `A login link has been sent to ${email}. Click the link to login and then copy your authentication token.`,
-            ),
-          );
+          // If browser auth wasn't selected or failed, use email flow
+          if (!token) {
+            const email = await promptForEmail();
 
-          logger.info(
-            chalk.yellow(
-              "If you did not get an email it's because the user does not exist or your not part of the the organization specified.",
-            ),
-          );
+            // Send login request
+            const loginResponse = await fetchWithProxy(`${apiHost}/users/login?fromCLI=true`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ email, organizationId: cmdObj.orgId }),
+            });
 
-          // Prompt for token
-          token = await promptForToken();
+            if (!loginResponse.ok) {
+              throw new Error('Failed to send login request: ' + loginResponse.statusText);
+            }
+
+            logger.info(
+              chalk.green(
+                `A login link has been sent to ${email}. Click the link to login and then copy your authentication token.`,
+              ),
+            );
+
+            logger.info(
+              chalk.yellow(
+                "If you did not get an email it's because the user does not exist or you're not part of the organization specified.",
+              ),
+            );
+
+            // Prompt for token
+            token = await promptForToken();
+          }
         }
+
         const { user } = await cloudConfig.validateAndSetApiToken(token, apiHost);
 
         // Store token in global config and handle email sync
@@ -96,6 +112,8 @@ export function authCommand(program: Command) {
           );
         }
         setUserEmail(user.email);
+
+        logger.info(chalk.green('Successfully logged in!'));
 
         telemetry.record('command_used', {
           name: 'auth login',
