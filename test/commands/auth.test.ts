@@ -1,4 +1,6 @@
 import { Command } from 'commander';
+// Import opener directly at the top level
+import opener from 'opener';
 import { authCommand } from '../../src/commands/auth';
 import { fetchWithProxy } from '../../src/fetch';
 import { getUserEmail, setUserEmail } from '../../src/globalConfig/accounts';
@@ -6,9 +8,6 @@ import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
 import * as cliUtils from '../../src/util/cli';
 import { createMockResponse } from '../util/utils';
-
-// Import opener directly at the top level
-import opener from 'opener';
 
 // Mock modules first
 jest.mock('opener', () => jest.fn().mockImplementation(() => Promise.resolve()));
@@ -68,7 +67,9 @@ describe('auth command', () => {
     jest.mocked(cliUtils.promptForInput).mockResolvedValue('test-token');
 
     // Reset readline mocks
-    readlineInterface.question.mockImplementation((_question: string, cb: (answer: string) => void) => cb('test-token'));
+    readlineInterface.question.mockImplementation(
+      (_question: string, cb: (answer: string) => void) => cb('test-token'),
+    );
 
     // Mock validateAndSetApiToken to emit the success message and return
     jest.mocked(cloudConfig.validateAndSetApiToken).mockImplementation(async () => {
@@ -126,9 +127,11 @@ describe('auth command', () => {
       });
 
       jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
-      
+
       // Set up specific response for this test
-      readlineInterface.question.mockImplementationOnce((_question: string, cb: (answer: string) => void) => cb('test-token'));
+      readlineInterface.question.mockImplementationOnce(
+        (_question: string, cb: (answer: string) => void) => cb('test-token'),
+      );
 
       // Run command with --no-browser to ensure email flow
       const loginCmd = program.commands
@@ -157,9 +160,11 @@ describe('auth command', () => {
 
       jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
       jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
-      
+
       // Set up specific response for this test
-      readlineInterface.question.mockImplementationOnce((_question: string, cb: (answer: string) => void) => cb('test-token'));
+      readlineInterface.question.mockImplementationOnce(
+        (_question: string, cb: (answer: string) => void) => cb('test-token'),
+      );
 
       // Run command
       const loginCmd = program.commands
@@ -218,7 +223,7 @@ describe('auth command', () => {
       jest.mocked(opener).mockImplementationOnce(() => {
         throw new Error('Failed to open browser');
       });
-      
+
       // Setup mocks
       jest.mocked(fetchWithProxy).mockResolvedValueOnce(
         createMockResponse({

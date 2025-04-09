@@ -58,7 +58,7 @@ describe('Auth CLI Integration Tests', () => {
       if (args[0] === 'auth' && args[1] === 'login') {
         args.push('--non-interactive');
       }
-      
+
       const command = `node -r ts-node/register ${path.resolve('./src/main.ts')} ${args.join(' ')}`;
       const { stdout, stderr } = await execAsync(command, { timeout: 5000 });
       return { stdout, stderr, exitCode: 0 };
@@ -102,21 +102,21 @@ describe('Auth CLI Integration Tests', () => {
 
     it('should accept --host parameter', async () => {
       const { exitCode } = await runCommand(['auth', 'login', '--host', 'https://example.com']);
-      
+
       // Exit code doesn't matter as much as the command not hanging
       expect(exitCode).toBeDefined();
     });
 
     it('should accept --browser parameter', async () => {
       const { exitCode } = await runCommand(['auth', 'login', '--browser']);
-      
+
       // Exit code doesn't matter as much as the command not hanging
       expect(exitCode).toBeDefined();
     });
 
     it('should accept --no-browser parameter', async () => {
       const { exitCode } = await runCommand(['auth', 'login', '--no-browser']);
-      
+
       // Exit code doesn't matter as much as the command not hanging
       expect(exitCode).toBeDefined();
     });

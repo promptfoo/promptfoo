@@ -32,113 +32,117 @@ export function authCommand(program: Command) {
     .option('-b, --browser', 'Open browser for authentication.')
     .option('-n, --no-browser', 'Do not open browser for authentication.')
     .option('--non-interactive', 'Non-interactive mode (for testing)')
-    .action(async (cmdObj: { 
-      orgId: string; 
-      host: string; 
-      apiKey: string; 
-      browser?: boolean;
-      nonInteractive?: boolean;
-    }) => {
-      let token: string | undefined;
-      const apiHost = cmdObj.host || cloudConfig.getApiHost();
-      const appUrl = cloudConfig.getAppUrl();
+    .action(
+      async (cmdObj: {
+        orgId: string;
+        host: string;
+        apiKey: string;
+        browser?: boolean;
+        nonInteractive?: boolean;
+      }) => {
+        let token: string | undefined;
+        const apiHost = cmdObj.host || cloudConfig.getApiHost();
+        const appUrl = cloudConfig.getAppUrl();
 
-      try {
-        if (cmdObj.apiKey) {
-          token = cmdObj.apiKey;
-        } else if (cmdObj.nonInteractive) {
-          // In non-interactive mode, exit early with a message
-          logger.info('Non-interactive mode enabled. Skipping authentication process.');
-          process.exitCode = 2; // Special exit code for testing
-          return;
-        } else {
-          // Check if browser-based auth should be offered
-          const interactive = isInteractiveSession();
-          const useBrowser = 
-            cmdObj.browser !== false && // Not explicitly disabled
-            interactive && // In interactive session
-            (cmdObj.browser === true || // Explicitly enabled or
-             (await promptYesNo('Would you like to open a browser to authenticate?'))); // User confirms
+        try {
+          if (cmdObj.apiKey) {
+            token = cmdObj.apiKey;
+          } else if (cmdObj.nonInteractive) {
+            // In non-interactive mode, exit early with a message
+            logger.info('Non-interactive mode enabled. Skipping authentication process.');
+            process.exitCode = 2; // Special exit code for testing
+            return;
+          } else {
+            // Check if browser-based auth should be offered
+            const interactive = isInteractiveSession();
+            const useBrowser =
+              cmdObj.browser !== false && // Not explicitly disabled
+              interactive && // In interactive session
+              (cmdObj.browser === true || // Explicitly enabled or
+                (await promptYesNo('Would you like to open a browser to authenticate?'))); // User confirms
 
-          if (useBrowser) {
-            // Open browser to auth page
-            const welcomeUrl = `${appUrl}/welcome`;
-            logger.info(chalk.green(`Opening browser to ${welcomeUrl} for authentication`));
-            
-            try {
-              await opener(welcomeUrl);
-              logger.info(chalk.yellow('After authenticating in the browser, copy your API token'));
-              
-              // Prompt for token after browser auth
+            if (useBrowser) {
+              // Open browser to auth page
+              const welcomeUrl = `${appUrl}/welcome`;
+              logger.info(chalk.green(`Opening browser to ${welcomeUrl} for authentication`));
+
+              try {
+                await opener(welcomeUrl);
+                logger.info(
+                  chalk.yellow('After authenticating in the browser, copy your API token'),
+                );
+
+                // Prompt for token after browser auth
+                token = await promptForToken();
+              } catch (error) {
+                logger.error(`Failed to open browser: ${String(error)}`);
+                // Fall back to email flow
+                logger.info(chalk.yellow('Falling back to email authentication...'));
+              }
+            }
+
+            // If browser auth wasn't selected or failed, use email flow
+            if (!token) {
+              const email = await promptForEmail();
+
+              // Send login request
+              const loginResponse = await fetchWithProxy(`${apiHost}/users/login?fromCLI=true`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ email, organizationId: cmdObj.orgId }),
+              });
+
+              if (!loginResponse.ok) {
+                throw new Error('Failed to send login request: ' + loginResponse.statusText);
+              }
+
+              logger.info(
+                chalk.green(
+                  `A login link has been sent to ${email}. Click the link to login and then copy your authentication token.`,
+                ),
+              );
+
+              logger.info(
+                chalk.yellow(
+                  "If you did not get an email it's because the user does not exist or you're not part of the organization specified.",
+                ),
+              );
+
+              // Prompt for token
               token = await promptForToken();
-            } catch (error) {
-              logger.error(`Failed to open browser: ${String(error)}`);
-              // Fall back to email flow
-              logger.info(chalk.yellow('Falling back to email authentication...'));
             }
           }
-          
-          // If browser auth wasn't selected or failed, use email flow
-          if (!token) {
-            const email = await promptForEmail();
 
-            // Send login request
-            const loginResponse = await fetchWithProxy(`${apiHost}/users/login?fromCLI=true`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({ email, organizationId: cmdObj.orgId }),
-            });
+          const { user } = await cloudConfig.validateAndSetApiToken(token, apiHost);
 
-            if (!loginResponse.ok) {
-              throw new Error('Failed to send login request: ' + loginResponse.statusText);
-            }
-
-            logger.info(
-              chalk.green(
-                `A login link has been sent to ${email}. Click the link to login and then copy your authentication token.`,
-              ),
-            );
-
+          // Store token in global config and handle email sync
+          const existingEmail = getUserEmail();
+          if (existingEmail && existingEmail !== user.email) {
             logger.info(
               chalk.yellow(
-                "If you did not get an email it's because the user does not exist or you're not part of the organization specified.",
+                `Updating local email configuration from ${existingEmail} to ${user.email}`,
               ),
             );
-
-            // Prompt for token
-            token = await promptForToken();
           }
+          setUserEmail(user.email);
+
+          logger.info(chalk.green('Successfully logged in!'));
+
+          telemetry.record('command_used', {
+            name: 'auth login',
+          });
+          await telemetry.send();
+          return;
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          logger.error(`Authentication failed: ${errorMessage}`);
+          process.exitCode = 1;
+          return;
         }
-
-        const { user } = await cloudConfig.validateAndSetApiToken(token, apiHost);
-
-        // Store token in global config and handle email sync
-        const existingEmail = getUserEmail();
-        if (existingEmail && existingEmail !== user.email) {
-          logger.info(
-            chalk.yellow(
-              `Updating local email configuration from ${existingEmail} to ${user.email}`,
-            ),
-          );
-        }
-        setUserEmail(user.email);
-
-        logger.info(chalk.green('Successfully logged in!'));
-
-        telemetry.record('command_used', {
-          name: 'auth login',
-        });
-        await telemetry.send();
-        return;
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        logger.error(`Authentication failed: ${errorMessage}`);
-        process.exitCode = 1;
-        return;
-      }
-    });
+      },
+    );
 
   authCommand
     .command('logout')
