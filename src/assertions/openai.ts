@@ -9,52 +9,6 @@ import {
 } from '../util';
 import invariant from '../util/invariant';
 
-export const handleIsValidOpenAiFunctionCall = ({
-  assertion,
-  output,
-  provider,
-  test,
-}: AssertionParams): GradingResult => {
-  if (typeof output === 'object' && 'function_call' in output) {
-    output = (output as { function_call: any }).function_call;
-  }
-  const functionOutput = output as { arguments: string; name: string };
-  if (
-    typeof functionOutput !== 'object' ||
-    typeof functionOutput.name !== 'string' ||
-    typeof functionOutput.arguments !== 'string'
-  ) {
-    return {
-      pass: false,
-      score: 0,
-      reason: `OpenAI did not return a valid-looking function call: ${JSON.stringify(
-        functionOutput,
-      )}`,
-      assertion,
-    };
-  }
-  try {
-    validateFunctionCall(
-      functionOutput,
-      (provider as OpenAiChatCompletionProvider).config.functions,
-      test.vars,
-    );
-    return {
-      pass: true,
-      score: 1,
-      reason: 'Assertion passed',
-      assertion,
-    };
-  } catch (err) {
-    return {
-      pass: false,
-      score: 0,
-      reason: (err as Error).message,
-      assertion,
-    };
-  }
-};
-
 export const handleIsValidOpenAiToolsCall = ({
   assertion,
   output,

@@ -5,10 +5,7 @@ import { getEnvInt, getEnvFloat } from '../../envars';
 import logger from '../../logger';
 import type { ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
-import {
-  maybeLoadFromExternalFile,
-  maybeLoadToolsFromExternalFile,
-} from '../../util';
+import { maybeLoadFromExternalFile, maybeLoadToolsFromExternalFile } from '../../util';
 import { AnthropicGenericProvider } from './generic';
 import type { AnthropicMessageOptions } from './types';
 import {

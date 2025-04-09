@@ -12,6 +12,7 @@ import type {
   TokenUsage,
 } from '../../types';
 import type { EnvOverrides } from '../../types/env';
+import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
 import { isValidJson } from '../../util/json';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import type { ClaudeRequest, ClaudeResponse, CompletionOptions } from './types';
@@ -28,10 +29,6 @@ import {
   maybeLoadToolsFromExternalFile,
   stringifyCandidateContents,
 } from './util';
-import {
-  maybeLoadFromExternalFile,
-  renderVarsInObject,
-} from '../../util';
 
 class VertexGenericProvider implements ApiProvider {
   modelName: string;
@@ -272,7 +269,9 @@ export class VertexChatProvider extends VertexGenericProvider {
       },
       ...(this.config.safetySettings ? { safetySettings: this.config.safetySettings } : {}),
       ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
-      ...(this.config.tools ? { tools: maybeLoadToolsFromExternalFile(this.config.tools, context?.vars) } : {}),
+      ...(this.config.tools
+        ? { tools: maybeLoadToolsFromExternalFile(this.config.tools, context?.vars) }
+        : {}),
       ...(systemInstruction ? { systemInstruction } : {}),
     };
     logger.debug(`Preparing to call Google Vertex API (Gemini) with body: ${JSON.stringify(body)}`);

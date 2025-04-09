@@ -33,6 +33,8 @@ import type {
   TokenUsage,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
+import { renderVarsInObject } from '../util';
+import { maybeLoadToolsFromExternalFile } from '../util';
 import { safeJsonStringify } from '../util/json';
 import { AnthropicMessagesProvider } from './anthropic/messages';
 import { calculateAnthropicCost } from './anthropic/util';
@@ -49,8 +51,6 @@ import type { OpenAiCompletionOptions } from './openai/types';
 import { calculateOpenAICost } from './openai/util';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 import { VoyageEmbeddingProvider } from './voyage';
-import { renderVarsInObject } from '../util';
-import { maybeLoadToolsFromExternalFile } from '../util';
 
 // Allows Adaline Gateway to R/W Promptfoo's cache
 class AdalineGatewayCachePlugin<T> implements GatewayCache<T> {
@@ -414,7 +414,9 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
         gatewayMessages = parseChatPrompt(prompt, [
           { role: 'user', content: [{ modality: 'text', value: prompt }] },
         ]);
-        gatewayTools = _config.tools ? maybeLoadToolsFromExternalFile(_config.tools) as GatewayToolType[] : undefined;
+        gatewayTools = _config.tools
+          ? (maybeLoadToolsFromExternalFile(_config.tools) as GatewayToolType[])
+          : undefined;
       }
 
       if (this.providerName === 'openai') {

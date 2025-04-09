@@ -516,14 +516,14 @@ export function isRunningUnderNpx(): boolean {
  * Renders variables in a tools object and loads from external file if applicable.
  * This function combines renderVarsInObject and maybeLoadFromExternalFile into a single step
  * specifically for handling tools configurations.
- * 
+ *
  * @param tools - The tools configuration object or array to process.
  * @param vars - Variables to use for rendering.
  * @returns The processed tools configuration with variables rendered and content loaded from files if needed.
  */
 export function maybeLoadToolsFromExternalFile(
   tools: any,
-  vars?: Record<string, string | object>
+  vars?: Record<string, string | object>,
 ): any {
   return maybeLoadFromExternalFile(renderVarsInObject(tools, vars));
 }

@@ -91,6 +91,37 @@ export async function loadApiProvider(
   throw new Error(errorMessage);
 }
 
+/**
+ * Helper function to load providers from a file path.
+ * This can handle both single provider and multiple providers in a file.
+ */
+async function loadProvidersFromFile(
+  filePath: string,
+  options: {
+    basePath?: string;
+    env?: EnvOverrides;
+  } = {},
+): Promise<ApiProvider[]> {
+  const { basePath, env } = options;
+  const relativePath = filePath.slice('file://'.length);
+  const modulePath = path.isAbsolute(relativePath)
+    ? relativePath
+    : path.join(basePath || process.cwd(), relativePath);
+
+  const fileContent = yaml.load(fs.readFileSync(modulePath, 'utf8')) as
+    | ProviderOptions
+    | ProviderOptions[];
+  invariant(fileContent, `Provider config ${relativePath} is undefined`);
+
+  const configs = [fileContent].flat() as ProviderOptions[];
+  return Promise.all(
+    configs.map((config) => {
+      invariant(config.id, `Provider config in ${relativePath} must have an id`);
+      return loadApiProvider(config.id, { options: config, basePath, env });
+    }),
+  );
+}
+
 export async function loadApiProviders(
   providerPaths: TestSuiteConfig['providers'],
   options: {
@@ -113,21 +144,7 @@ export async function loadApiProviders(
         providerPaths.endsWith('.yml') ||
         providerPaths.endsWith('.json'))
     ) {
-      const filePath = providerPaths.slice('file://'.length);
-      const modulePath = path.isAbsolute(filePath)
-        ? filePath
-        : path.join(basePath || process.cwd(), filePath);
-      const fileContent = yaml.load(fs.readFileSync(modulePath, 'utf8')) as
-        | ProviderOptions
-        | ProviderOptions[];
-      invariant(fileContent, `Provider config ${filePath} is undefined`);
-      const configs = [fileContent].flat() as ProviderOptions[];
-      return Promise.all(
-        configs.map((config) => {
-          invariant(config.id, `Provider config in ${filePath} must have an id`);
-          return loadApiProvider(config.id, { options: config, basePath, env });
-        }),
-      );
+      return loadProvidersFromFile(providerPaths, { basePath, env });
     }
     return [await loadApiProvider(providerPaths, { basePath, env })];
   } else if (typeof providerPaths === 'function') {
@@ -138,32 +155,43 @@ export async function loadApiProviders(
       },
     ];
   } else if (Array.isArray(providerPaths)) {
-    return Promise.all(
-      providerPaths.map((provider, idx) => {
+    const providersArrays = await Promise.all(
+      providerPaths.map(async (provider, idx) => {
         if (typeof provider === 'string') {
-          return loadApiProvider(provider, { basePath, env });
+          if (
+            provider.startsWith('file://') &&
+            (provider.endsWith('.yaml') || provider.endsWith('.yml') || provider.endsWith('.json'))
+          ) {
+            return loadProvidersFromFile(provider, { basePath, env });
+          }
+          return [await loadApiProvider(provider, { basePath, env })];
         }
         if (typeof provider === 'function') {
-          return {
-            id: provider.label ? () => provider.label! : () => `custom-function-${idx}`,
-            callApi: provider,
-          };
+          return [
+            {
+              id: provider.label ? () => provider.label! : () => `custom-function-${idx}`,
+              callApi: provider,
+            },
+          ];
         }
         if (provider.id) {
           // List of ProviderConfig objects
-          return loadApiProvider((provider as ProviderOptions).id!, {
-            options: provider,
-            basePath,
-            env,
-          });
+          return [
+            await loadApiProvider((provider as ProviderOptions).id!, {
+              options: provider,
+              basePath,
+              env,
+            }),
+          ];
         }
         // List of { id: string, config: ProviderConfig } objects
         const id = Object.keys(provider)[0];
         const providerObject = (provider as ProviderOptionsMap)[id];
         const context = { ...providerObject, id: providerObject.id || id };
-        return loadApiProvider(id, { options: context, basePath, env });
+        return [await loadApiProvider(id, { options: context, basePath, env })];
       }),
     );
+    return providersArrays.flat();
   }
   throw new Error('Invalid providers list');
 }

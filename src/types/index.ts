@@ -9,11 +9,12 @@ import type {
 } from '../redteam/types';
 import type { EnvOverrides } from '../types/env';
 import { ProviderEnvOverridesSchema } from '../types/env';
+import { TokenUsageSchema } from '../types/shared';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/file';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
 import { RedteamConfigSchema } from '../validators/redteam';
-import { NunjucksFilterMapSchema, TokenUsageSchema } from '../validators/shared';
+import { NunjucksFilterMapSchema } from '../validators/shared';
 import type { Prompt, PromptFunction } from './prompts';
 import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
@@ -407,6 +408,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'is-json',
   'is-refusal',
   'is-sql',
+  'is-valid-function-call',
   'is-valid-openai-function-call',
   'is-valid-openai-tools-call',
   'is-xml',
@@ -774,6 +776,7 @@ export const TestSuiteSchema = z.object({
           },
         ),
     )
+    .nullable()
     .optional(),
 
   // Redteam configuration - used only when generating redteam tests
@@ -855,7 +858,7 @@ export const TestSuiteConfigSchema = z.object({
   derivedMetrics: z.array(DerivedMetricSchema).optional(),
 
   // Extension that is called at various plugin points
-  extensions: z.array(z.string()).optional(),
+  extensions: z.array(z.string()).nullable().optional(),
 
   // Any other information about this configuration.
   metadata: MetadataSchema.optional(),
@@ -868,6 +871,7 @@ export const TestSuiteConfigSchema = z.object({
 });
 
 export type TestSuiteConfig = z.infer<typeof TestSuiteConfigSchema>;
+
 export const UnifiedConfigSchema = TestSuiteConfigSchema.extend({
   evaluateOptions: EvaluateOptionsSchema.optional(),
   commandLineOptions: CommandLineOptionsSchema.partial().optional(),
@@ -889,6 +893,16 @@ export const UnifiedConfigSchema = TestSuiteConfigSchema.extend({
       data.providers = data.targets;
       delete data.targets;
     }
+
+    // Handle null extensions, undefined extensions, or empty arrays by deleting the field
+    if (
+      data.extensions === null ||
+      data.extensions === undefined ||
+      (Array.isArray(data.extensions) && data.extensions.length === 0)
+    ) {
+      delete data.extensions;
+    }
+
     return data;
   });
 

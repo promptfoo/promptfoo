@@ -1,7 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import { generateUUIDv4 } from '../../util/auth';
-import { maybeLoadToolsFromExternalFile } from '../../util';
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
@@ -12,11 +10,10 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../types';
+import { maybeLoadToolsFromExternalFile } from '../../util';
+import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
+import { generateUUIDv4 } from '../../util/auth';
 import { REQUEST_TIMEOUT_MS } from '../shared';
-import {
-  maybeLoadFromExternalFile,
-  renderVarsInObject,
-} from '../../util';
 
 /**
  * Interface for Ollama chat message structure
@@ -285,7 +282,7 @@ export class OllamaChatProvider implements ApiProvider {
     if (this.config.tools && this.config.tools.length > 0) {
       // Add tools to the request
       requestBody.tools = maybeLoadToolsFromExternalFile(this.config.tools);
-      
+
       const toolNames = this.config.tools.map((tool) => tool.function.name).join(', ');
 
       // For some models, we may need to add a system message that instructs the model

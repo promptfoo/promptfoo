@@ -5,10 +5,10 @@ import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
-import { 
-  maybeLoadFromExternalFile, 
+import {
+  maybeLoadFromExternalFile,
   maybeLoadToolsFromExternalFile,
-  renderVarsInObject 
+  renderVarsInObject,
 } from '../../util';
 import { isJavascriptFile } from '../../util/file';
 import { sleep } from '../../util/time';
