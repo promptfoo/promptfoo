@@ -41,8 +41,6 @@ This creates a chat prompt with messages in the exact order specified in the con
 - **Markdown (.md)**: Formatted text with markdown syntax
 - **JSON (.json)**: Structured data that gets parsed
 - **JavaScript (.js)**: Dynamic content generation through functions
-- **Python (.py)**: Python functions for complex prompt generation
-- **YAML (.yaml/.yml)**: Structured data in YAML format
 
 ## Variables
 
@@ -68,7 +66,7 @@ cd examples/chat-messages-format
 promptfoo eval
 ```
 
-This will evaluate the prompts using the echo provider and the latest models to show the processed output.
+This will evaluate the prompts using the echo provider to show the processed output.
 
 ## Benefits
 

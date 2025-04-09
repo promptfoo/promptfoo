@@ -13,6 +13,7 @@ import { parsePathOrGlob } from '../util';
 import { isJavascriptFile } from '../util/file';
 import invariant from '../util/invariant';
 import { PromptSchema } from '../validators/prompts';
+import { processChatMessages } from './chat';
 import { processCsvPrompts } from './processors/csv';
 import { processJsFile } from './processors/javascript';
 import { processJinjaFile } from './processors/jinja';
@@ -23,7 +24,7 @@ import { processPythonFile } from './processors/python';
 import { processString } from './processors/string';
 import { processTxtFile } from './processors/text';
 import { processYamlFile } from './processors/yaml';
-import { maybeFilePath, normalizeInput, processChatMessages } from './utils';
+import { maybeFilePath, normalizeInput } from './utils';
 
 export * from './grading';
 
@@ -96,8 +97,14 @@ export async function processPrompt(
 ): Promise<Prompt[]> {
   // Handle chat messages format
   if (prompt.messages && Array.isArray(prompt.messages)) {
-    // Process the messages to resolve file references
-    const processedMessages = await processChatMessages(prompt.messages, basePath);
+    // Process the messages to resolve file references using a simple file processor
+    const fileProcessor = async (filePath: string, basePath: string): Promise<string> => {
+      const dummyPrompt: Partial<Prompt> = { raw: filePath };
+      const processedPrompts = await processPrompt(dummyPrompt, basePath);
+      return processedPrompts.length > 0 ? processedPrompts[0].raw : filePath;
+    };
+
+    const processedMessages = await processChatMessages(prompt.messages, basePath, fileProcessor);
 
     // Create a prompt with the processed messages as raw JSON
     return [

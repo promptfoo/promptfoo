@@ -69,7 +69,8 @@ For more structured chat prompts, you can use the chat messages format which all
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
-  - label: 'Chat Prompt'
+  - raw: '[{"role":"system","content":"Basic system content"},{"role":"user","content":"Basic user content"}]'
+    label: 'Chat Prompt'
     messages:
       - role: system
         content: file://system.j2
@@ -80,6 +81,8 @@ prompts:
       - role: user
         content: 'Follow-up question: Can you provide examples in {{language}}?'
 ```
+
+The required `raw` field provides a fallback version of the messages in case the file processing fails and is required by the schema validation.
 
 This format offers several advantages:
 

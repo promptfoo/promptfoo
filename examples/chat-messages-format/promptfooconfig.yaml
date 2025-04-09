@@ -1,12 +1,12 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Chat messages with multiple file formats
+description: Chat format using multiple file types
 prompts:
   # Traditional prompt format
   - raw: 'Explain {{ topic }} in simple terms.'
     label: 'Basic Text Prompt'
 
   # Chat format with J2 templates
-  - raw: '[{"role":"system","content":"You are a helpful assistant specialized in {{ domain }}. Always be concise and to the point."},{"role":"user","content":"Explain {{ topic }} in simple terms."}]'
+  - raw: '[{"role":"system","content":"You are a helpful assistant specialized in {{ domain }}."},{"role":"user","content":"Explain {{ topic }} in simple terms."}]'
     label: 'Chat with System and User (J2 Templates)'
     messages:
       - role: system
@@ -32,9 +32,9 @@ prompts:
 providers:
   # Use the echo provider to see rendered prompts without LLM calls
   - echo
-  # Latest models for testing with real providers
-  - openai:gpt-4o-mini
-  - anthropic:claude-3-7-sonnet-20250219
+  # Latest models (commented out to avoid API calls)
+  # - openai:o3-mini
+  # - anthropic:claude-3-7-sonnet-20250219
 
 tests:
   - vars:
