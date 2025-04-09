@@ -1,9 +1,17 @@
 import { spawn } from 'child_process';
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 
-// Helper function to run CLI commands - defined at the top to avoid "used before defined" errors
+// Setup mocks first
+jest.mock('child_process');
+jest.mock('fs');
+jest.mock('opener');
+
+// Define variables before using them
+const mockSpawn = jest.mocked(spawn);
+const cliPath = path.resolve(__dirname, '../../src/main.ts');
+
+// Helper function to run CLI commands
 async function runCli(
   args: string[],
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
@@ -34,14 +42,6 @@ async function runCli(
     });
   });
 }
-
-// Setup mocks first
-jest.mock('child_process');
-jest.mock('fs');
-jest.mock('opener');
-
-const mockSpawn = jest.mocked(spawn);
-const cliPath = path.resolve(__dirname, '../../src/main.ts');
 
 describe('auth CLI commands', () => {
   let originalEnv: NodeJS.ProcessEnv;
