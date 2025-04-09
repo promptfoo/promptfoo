@@ -54,7 +54,7 @@ export const VALID_SCHEMA_TYPES: ReadonlyArray<SchemaType> = [
   'INTEGER',
   'BOOLEAN',
   'ARRAY',
-  'OBJECT'
+  'OBJECT',
 ];
 
 interface FunctionDeclaration {

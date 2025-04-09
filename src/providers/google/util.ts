@@ -8,7 +8,7 @@ import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
 import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt } from '../shared';
 import { VALID_SCHEMA_TYPES } from './types';
-import type { Content, FunctionCall, Part, Schema, Tool } from './types';
+import type { Content, FunctionCall, Part, Tool } from './types';
 
 const ajv = new Ajv();
 const clone = Clone();
@@ -376,7 +376,10 @@ function normalizeSchemaTypes(schemaNode: any): any {
       const value = schemaNode[key];
 
       if (key === 'type') {
-        if (typeof value === 'string' && (VALID_SCHEMA_TYPES as ReadonlyArray<string>).includes(value)) {
+        if (
+          typeof value === 'string' &&
+          (VALID_SCHEMA_TYPES as ReadonlyArray<string>).includes(value)
+        ) {
           // Convert type value(s) to lowercase
           newNode[key] = value.toLowerCase();
         } else if (Array.isArray(value)) {
