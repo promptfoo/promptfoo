@@ -6,8 +6,7 @@ prompts:
     label: 'Basic Text Prompt'
 
   # Chat format with J2 templates
-  - raw: '[{"role":"system","content":"You are a helpful assistant specialized in {{ domain }}."},{"role":"user","content":"Explain {{ topic }} in simple terms."}]'
-    label: 'Chat with System and User (J2 Templates)'
+  - label: 'Chat with System and User (J2 Templates)'
     messages:
       - role: system
         content: file://system.j2
@@ -15,8 +14,7 @@ prompts:
         content: file://user1.j2
 
   # Using different file formats
-  - raw: '[{"role":"system","content":"You are a helpful assistant specialized in analyzing data."},{"role":"user","content":"Can you explain the concept of {{ topic }} in simple terms?"}]'
-    label: 'Mixed File Formats'
+  - label: 'Mixed File Formats'
     messages:
       - role: system
         content: file://system.txt

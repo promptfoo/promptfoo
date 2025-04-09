@@ -63,36 +63,6 @@ And in `personality1.json`:
 
 Learn more about [chat conversations with OpenAI message format](/docs/providers/openai#formatting-chat-messages).
 
-### Chat messages format
-
-For more structured chat prompts, you can use the chat messages format which allows you to define messages with specific roles and content:
-
-```yaml title="promptfooconfig.yaml"
-prompts:
-  - raw: '[{"role":"system","content":"Basic system content"},{"role":"user","content":"Basic user content"}]'
-    label: 'Chat Prompt'
-    messages:
-      - role: system
-        content: file://system.j2
-      - role: user
-        content: file://user.j2
-      - role: assistant
-        content: file://assistant.j2
-      - role: user
-        content: 'Follow-up question: Can you provide examples in {{language}}?'
-```
-
-The required `raw` field provides a fallback version of the messages in case the file processing fails and is required by the schema validation.
-
-This format offers several advantages:
-
-- Keep system, user, and assistant prompts in separate files
-- Create multi-turn conversations with precise control over message order
-- Mix file references with direct content
-- Support all file formats (.txt, .j2, .md, .json, etc.)
-
-Each message's content can be either a direct string or a file reference. Variables are processed using Nunjucks templating in both cases.
-
 ### Prompts from file
 
 For complex prompts that are difficult to maintain inline, reference external files. Filepaths are relative to the configuration file directory:
@@ -151,6 +121,36 @@ JSON prompts can configure multi-shot prompt formats:
   }
 ]
 ```
+
+### Chat messages format
+
+For more structured chat prompts, you can use the chat messages format:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - label: 'Chat Example'
+    messages:
+      - role: system
+        content: 'You are a helpful assistant'
+      - role: user
+        content: 'Hello'
+```
+
+You can also reference files for message content:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - label: 'Multi-format Chat'
+    messages:
+      - role: system
+        content: file://system.j2 # Jinja2 template
+      - role: user
+        content: file://question.md # Markdown
+      - role: assistant
+        content: "I'll help with {{topic}}"
+```
+
+Supported file formats include plain text (.txt), templates (.j2), markdown (.md), JSON (.json), JavaScript (.js), Python (.py), and YAML (.yaml/.yml).
 
 ### Multiple prompts in a single text file
 

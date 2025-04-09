@@ -14,12 +14,11 @@ This example demonstrates how to compose prompts from multiple files with specif
 
 ## How it Works
 
-The chat messages format allows you to specify messages with roles and content, while adding a required `raw` field to satisfy the schema validation:
+The chat messages format allows you to specify messages with roles and content:
 
 ```yaml
 prompts:
-  - raw: '[{"role":"system","content":"Basic content"}]'
-    label: 'Mixed File Formats'
+  - label: 'Mixed File Formats'
     messages:
       - role: system
         content: file://system.txt

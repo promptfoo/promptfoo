@@ -11,7 +11,12 @@ import type { EnvOverrides } from '../types/env';
 import { ProviderEnvOverridesSchema } from '../types/env';
 import { TokenUsageSchema } from '../types/shared';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/file';
-import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
+import {
+  PromptConfigSchema,
+  PromptSchema,
+  PromptFunctionSchema,
+  ChatMessageSchema,
+} from '../validators/prompts';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
 import { RedteamConfigSchema } from '../validators/redteam';
 import { NunjucksFilterMapSchema } from '../validators/shared';
@@ -203,10 +208,20 @@ const PromptMetricsSchema = z.object({
 export type PromptMetrics = z.infer<typeof PromptMetricsSchema>;
 
 // Used for final prompt display
-export const CompletedPromptSchema = PromptSchema.extend({
-  provider: z.string(),
-  metrics: PromptMetricsSchema.optional(),
-});
+export const CompletedPromptSchema = z
+  .object({
+    id: z.string().optional(),
+    raw: z.string(),
+    display: z.string().optional(),
+    label: z.string(),
+    function: PromptFunctionSchema.optional(),
+    config: z.any().optional(),
+    messages: z.array(ChatMessageSchema).optional(),
+    // Add provider and metrics
+    provider: z.string(),
+    metrics: PromptMetricsSchema.optional(),
+  })
+  .passthrough();
 
 export type CompletedPrompt = z.infer<typeof CompletedPromptSchema>;
 

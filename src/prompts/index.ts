@@ -97,6 +97,19 @@ export async function processPrompt(
 ): Promise<Prompt[]> {
   // Handle chat messages format
   if (prompt.messages && Array.isArray(prompt.messages)) {
+    // Generate a raw field if not provided
+    if (!prompt.raw) {
+      // Create a simplified version of messages with placeholders for file references
+      const simplifiedMessages = prompt.messages.map((message) => ({
+        role: message.role,
+        content:
+          typeof message.content === 'string' && !maybeFilePath(message.content)
+            ? message.content
+            : `Content for ${message.role} role`,
+      }));
+      prompt.raw = JSON.stringify(simplifiedMessages);
+    }
+
     // Process the messages to resolve file references using a simple file processor
     const fileProcessor = async (filePath: string, basePath: string): Promise<string> => {
       const dummyPrompt: Partial<Prompt> = { raw: filePath };
