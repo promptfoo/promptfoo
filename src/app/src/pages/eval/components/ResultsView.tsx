@@ -402,7 +402,7 @@ export default function ResultsView({
         },
       }
     );
-  }, [columnStates, currentEvalId, varColumnIds, promptColumnIds]);
+  }, [columnStates, currentEvalId, varColumnIds, promptColumnIds, descriptionColumnIds]);
 
   const updateColumnVisibility = React.useCallback(
     (columns: string[]) => {
