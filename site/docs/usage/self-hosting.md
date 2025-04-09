@@ -99,7 +99,9 @@ then promptfoo will use `/path/to/local_promptfoo` for its configuration and the
 When self-hosting, you need to set the environment variables so that the `promptfoo share` command knows how to reach your hosted application. Here's an example:
 
 ```sh
-PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:3000 PROMPTFOO_REMOTE_APP_BASE_URL=http://localhost:3000 promptfoo share -y
+export PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:3000
+export PROMPTFOO_REMOTE_APP_BASE_URL=http://localhost:3000
+promptfoo share
 ```
 
 This will create a shareable URL using your self-hosted service.
@@ -110,7 +112,7 @@ Similarly, the `PROMPTFOO_REMOTE_APP_BASE_URL` environment variable sets the bas
 
 These configuration options can also be set under the `sharing` property of your promptfoo config:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 sharing:
   apiBaseUrl: http://localhost:3000
   appBaseUrl: http://localhost:3000
@@ -125,7 +127,9 @@ When using a self-hosted instance, promptfoo resolves sharing URLs in this order
 3. Cloud configuration (if you've logged in with `promptfoo auth login`)
 4. Default values (api.promptfoo.app and promptfoo.app)
 
+:::tip
 If your shared URLs don't point to your self-hosted instance, ensure you're not logged into the cloud service or try setting the configuration directly in your config file.
+:::
 
 ### URL Format
 

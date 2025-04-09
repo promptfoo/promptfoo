@@ -1,144 +1,104 @@
 ---
 sidebar_position: 40
-description: Create a remote copy of your promptfoo evals and share them with your team.
-keywords:
-  [
-    eval sharing,
-    LLM testing,
-    promptfoo sharing,
-    collaboration,
-    team collaboration,
-    shareable URL,
-    prompt engineering,
-    AI evaluation,
-  ]
+description: Share your promptfoo evals with your team through cloud, enterprise, or self-hosted instances.
+keywords: [eval sharing, LLM testing, promptfoo sharing, collaboration, team sharing]
 ---
 
 # Sharing
 
-The CLI provides a `share` command to share your evaluation results from `promptfoo eval`.
+Share your eval results with others using the `share` command.
+
+## Quick Start (Cloud)
+
+Most users will share to promptfoo.app cloud:
 
 ```sh
+# Login (one-time setup)
+promptfoo auth login
+
+# Run an eval and share it
+promptfoo eval
 promptfoo share
 ```
 
-## Basic Usage
+:::note
+Cloud sharing creates private links only visible to you and your organization. If you don't have an account, visit https://promptfoo.app/welcome to create one.
+:::
 
-When you run `promptfoo share`, it will ask for a confirmation to create a URL.
-
-If you want to skip this confirmation, you can use the `-y` or `--yes` option like this:
-
-```sh
-promptfoo share -y
-```
-
-### Sharing Specific Evals
-
-By default, `promptfoo share` shares your most recent eval. To share a specific eval, provide its ID:
+## Sharing Specific Evals
 
 ```sh
+# List available evals
+promptfoo list
+
+# Share by ID
 promptfoo share my-eval-id
 ```
 
-You can find eval IDs by running `promptfoo list` to see your eval history.
+## Enterprise Sharing
 
-### Authentication in URLs
-
-If your URLs contain authentication information, use the `--show-auth` flag to preserve it:
+If you have a Promptfoo Enterprise account:
 
 ```sh
-promptfoo share --show-auth
+# Login to your enterprise instance
+promptfoo auth login --host https://your-company.promptfoo.app
+
+# Share your eval
+promptfoo share
 ```
 
-Without this flag, authentication information (username/password) is automatically stripped from URLs for security.
+Enterprise sharing includes additional features:
 
-## Sharing Destinations
+- Team-based access controls
+- Custom sharing policies
+- SSO integration
 
-promptfoo supports multiple sharing destinations depending on your setup:
+## CI/CD Integration
 
-### Default Cloud Sharing (Public)
-
-By default, evals are shared to the public promptfoo cloud service:
+### Using API Tokens (Cloud/Enterprise)
 
 ```sh
-$ promptfoo share
-View results: https://promptfoo.app/eval/abc123
+# Authenticate with API token
+export PROMPTFOO_API_KEY=your_api_token
+
+# Run and share
+promptfoo eval --share
 ```
 
-The URL is valid for 2 weeks and is publicly accessible to anyone with the link.
+Get your API token from the "CLI Login Information" section in your account settings.
 
-### Team Cloud Sharing (Private)
+## Advanced: Self-Hosted Sharing
 
-If you're logged in with `promptfoo auth login`, evals are shared privately with your organization:
+For users with self-hosted instances:
 
 ```sh
-$ promptfoo auth login  # One-time setup
-$ promptfoo share
-View results: https://promptfoo.app/eval/abc123
+# Configure sharing to your server
+export PROMPTFOO_REMOTE_API_BASE_URL=http://your-server:3000
+export PROMPTFOO_REMOTE_APP_BASE_URL=http://your-server:3000
+
+# Share your eval (no login required)
+promptfoo share
 ```
 
-These shared results are only visible to members of your organization.
+You can also add these settings to your `promptfooconfig.yaml`:
 
-### Self-Hosted Sharing
-
-For complete control over your data, you can share to your own self-hosted instance:
-
-#### Configuration Options
-
-##### Using Config File
-
-For persistent configuration, add to your `promptfooconfig.yaml`:
-
-```yaml
+```yaml title="promptfooconfig.yaml"
 sharing:
-  apiBaseUrl: http://your-server:3000 # Where to send data
-  appBaseUrl: http://your-server:3000 # Base for shared URLs
+  apiBaseUrl: http://your-server:3000
+  appBaseUrl: http://your-server:3000
 ```
 
-##### Using Environment Variables
-
-For temporary configuration:
-
-```sh
-PROMPTFOO_REMOTE_API_BASE_URL=http://your-server:3000 PROMPTFOO_REMOTE_APP_BASE_URL=http://your-server:3000 promptfoo share
-```
-
-Additional environment variables for self-hosted setup:
-
-| Variable                                | Description                                                               |
-| --------------------------------------- | ------------------------------------------------------------------------- |
-| `PROMPTFOO_SHARING_APP_BASE_URL`        | Alternative to `PROMPTFOO_REMOTE_APP_BASE_URL` with higher priority       |
-| `PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST` | Set to `true` to skip email collection during sharing                     |
-| `PROMPTFOO_SHARE_CHUNK_SIZE`            | Controls how many results are sent in each chunk when sharing large evals |
-
-:::note Configuration Precedence
-
-When multiple configuration methods are present, promptfoo uses this priority order:
-
-1. Config file settings
-2. Environment variables
-3. Cloud settings (if logged in)
-4. Default values
-
+:::tip
+Self-hosted sharing doesn't require `promptfoo auth login` when these environment variables or config settings are present.
 :::
-
-For more detailed instructions on setting up a self-hosted instance, see [Self-hosting](./self-hosting.md).
 
 ## Disabling Sharing
 
-The "share" button in the web UI can be explicitly disabled in `promptfooconfig.yaml`:
+To disable sharing completely:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 sharing: false
 ```
-
-## Privacy Considerations
-
-Please consider the following privacy aspects of each sharing method:
-
-- **Default Cloud Sharing**: Creates a publicly accessible URL visible to anyone with the link. Data is automatically deleted after 2 weeks.
-- **Team Cloud Sharing**: Creates a private URL only visible to your organization members.
-- **Self-Hosted Sharing**: Privacy and retention depend on your self-hosted configuration.
 
 ## See Also
 
