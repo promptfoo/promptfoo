@@ -340,6 +340,23 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
           path.resolve(path.dirname(configPath), relativePath.id.slice('file://'.length));
       }
       return relativePath;
+    } else if (typeof relativePath === 'object' && relativePath.messages) {
+      // Handle messages format (chat messages)
+      // Process file references in message content
+      if (Array.isArray(relativePath.messages)) {
+        for (const message of relativePath.messages) {
+          if (
+            message.content &&
+            typeof message.content === 'string' &&
+            message.content.startsWith('file://')
+          ) {
+            message.content =
+              'file://' +
+              path.resolve(path.dirname(configPath), message.content.slice('file://'.length));
+          }
+        }
+      }
+      return relativePath;
     } else if (PromptSchema.safeParse(relativePath).success) {
       return relativePath;
     } else {
@@ -352,6 +369,9 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     if (typeof prompt === 'string') {
       seenPrompts.add(prompt);
     } else if (typeof prompt === 'object' && prompt.id) {
+      seenPrompts.add(prompt);
+    } else if (typeof prompt === 'object' && prompt.messages) {
+      // Handle messages format
       seenPrompts.add(prompt);
     } else if (PromptSchema.safeParse(prompt).success) {
       seenPrompts.add(prompt);
@@ -370,8 +390,10 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
         invariant(
           typeof prompt === 'string' ||
             (typeof prompt === 'object' &&
-              (typeof prompt.raw === 'string' || typeof prompt.label === 'string')),
-          `Invalid prompt: ${JSON.stringify(prompt)}. Prompts must be either a string or an object with a 'raw' or 'label' string property.`,
+              (typeof prompt.raw === 'string' ||
+                typeof prompt.label === 'string' ||
+                (prompt.messages && Array.isArray(prompt.messages)))),
+          `Invalid prompt: ${JSON.stringify(prompt)}. Prompts must be either a string, an object with a 'raw' or 'label' string property, or an object with a 'messages' array.`,
         );
         addSeenPrompt(makeAbsolute(configPaths[idx], prompt as string | Prompt));
       });

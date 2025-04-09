@@ -1,0 +1,56 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Chat messages with multiple file formats
+prompts:
+  # Traditional prompt format
+  - raw: 'Explain {{ topic }} in simple terms.'
+    label: 'Basic Text Prompt'
+
+  # Chat format with J2 templates
+  - raw: '[{"role":"system","content":"You are a helpful assistant specialized in {{ domain }}. Always be concise and to the point."},{"role":"user","content":"Explain {{ topic }} in simple terms."}]'
+    label: 'Chat with System and User (J2 Templates)'
+    messages:
+      - role: system
+        content: file://system.j2
+      - role: user
+        content: file://user1.j2
+
+  # Using different file formats
+  - raw: '[{"role":"system","content":"You are a helpful assistant specialized in analyzing data."},{"role":"user","content":"Can you explain the concept of {{ topic }} in simple terms?"}]'
+    label: 'Mixed File Formats'
+    messages:
+      - role: system
+        content: file://system.txt
+      - role: user
+        content: file://user.md
+      - role: assistant
+        content: file://assistant.json
+      - role: user
+        content: 'Could you explain with a code example?'
+      - role: assistant
+        content: file://prompt.js
+
+providers:
+  # Use the echo provider to see rendered prompts without LLM calls
+  - echo
+  # Latest models for testing with real providers
+  - openai:gpt-4o-mini
+  - anthropic:claude-3-7-sonnet-20250219
+
+tests:
+  - vars:
+      domain: 'machine learning'
+      topic: 'neural networks'
+      language: 'Python'
+      definition: 'computational models inspired by the human brain'
+      concept1: 'They consist of layers of connected nodes (neurons)'
+      concept2: 'They learn by adjusting connection weights'
+      concept3: 'They excel at pattern recognition tasks'
+
+  - vars:
+      domain: 'web development'
+      topic: 'REST APIs'
+      language: 'JavaScript'
+      definition: 'architectural style for designing networked applications'
+      concept1: 'They use HTTP methods (GET, POST, PUT, DELETE)'
+      concept2: 'They are stateless and cacheable'
+      concept3: 'They typically return data in JSON format'

@@ -63,6 +63,33 @@ And in `personality1.json`:
 
 Learn more about [chat conversations with OpenAI message format](/docs/providers/openai#formatting-chat-messages).
 
+### Chat messages format
+
+For more structured chat prompts, you can use the chat messages format which allows you to define messages with specific roles and content:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - label: 'Chat Prompt'
+    messages:
+      - role: system
+        content: file://system.j2
+      - role: user
+        content: file://user.j2
+      - role: assistant
+        content: file://assistant.j2
+      - role: user
+        content: 'Follow-up question: Can you provide examples in {{language}}?'
+```
+
+This format offers several advantages:
+
+- Keep system, user, and assistant prompts in separate files
+- Create multi-turn conversations with precise control over message order
+- Mix file references with direct content
+- Support all file formats (.txt, .j2, .md, .json, etc.)
+
+Each message's content can be either a direct string or a file reference. Variables are processed using Nunjucks templating in both cases.
+
 ### Prompts from file
 
 For complex prompts that are difficult to maintain inline, reference external files. Filepaths are relative to the configuration file directory:

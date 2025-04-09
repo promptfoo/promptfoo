@@ -1,0 +1,5 @@
+{
+  "explanation": "I'll help explain {{ topic }} in simple terms.",
+  "key_points": ["{{ topic }} is {{ definition }}", "It's commonly used in {{ domain }}"],
+  "examples": ["One example is how {{ concept1 }}", "Another example is that {{ concept2 }}"]
+}

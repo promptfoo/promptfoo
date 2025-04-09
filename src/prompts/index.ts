@@ -23,7 +23,7 @@ import { processPythonFile } from './processors/python';
 import { processString } from './processors/string';
 import { processTxtFile } from './processors/text';
 import { processYamlFile } from './processors/yaml';
-import { maybeFilePath, normalizeInput } from './utils';
+import { maybeFilePath, normalizeInput, processChatMessages } from './utils';
 
 export * from './grading';
 
@@ -94,6 +94,21 @@ export async function processPrompt(
   basePath: string = '',
   maxRecursionDepth: number = 1,
 ): Promise<Prompt[]> {
+  // Handle chat messages format
+  if (prompt.messages && Array.isArray(prompt.messages)) {
+    // Process the messages to resolve file references
+    const processedMessages = await processChatMessages(prompt.messages, basePath);
+
+    // Create a prompt with the processed messages as raw JSON
+    return [
+      {
+        raw: JSON.stringify(processedMessages),
+        label: prompt.label || 'Chat Messages',
+        config: prompt.config,
+      },
+    ];
+  }
+
   invariant(
     typeof prompt.raw === 'string',
     `prompt.raw must be a string, but got ${JSON.stringify(prompt.raw)}`,
@@ -214,6 +229,13 @@ export async function processPrompts(
         } else if (typeof promptInput === 'string') {
           return readPrompts(promptInput);
         }
+
+        // Handle messages format separately
+        if (promptInput.messages && Array.isArray(promptInput.messages)) {
+          const processed = await processPrompt(promptInput as Partial<Prompt>);
+          return processed;
+        }
+
         try {
           return PromptSchema.parse(promptInput);
         } catch (error) {

@@ -41,6 +41,14 @@ export interface PromptFunction {
   }): Promise<PromptContent | PromptFunctionResult>;
 }
 
+/**
+ * Chat message format compatible with OpenAI and other chat-based providers
+ */
+export interface ChatMessage {
+  role: string;
+  content: string;
+}
+
 export interface Prompt {
   id?: string;
   raw: string;
@@ -50,4 +58,7 @@ export interface Prompt {
 
   // These config options are merged into the provider config.
   config?: any;
+
+  // Chat messages array for chat-based prompts
+  messages?: ChatMessage[];
 }
