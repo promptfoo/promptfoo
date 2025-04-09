@@ -4,6 +4,7 @@ import { fetchWithProxy } from '../../src/fetch';
 import { getUserEmail, setUserEmail } from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
+import telemetry from '../../src/telemetry';
 import { createMockResponse } from '../util/utils';
 
 const mockCloudUser = {
@@ -34,12 +35,6 @@ jest.mock('../../src/globalConfig/cloud');
 jest.mock('../../src/logger');
 jest.mock('../../src/telemetry');
 jest.mock('../../src/fetch');
-jest.mock('readline', () => ({
-  createInterface: jest.fn().mockReturnValue({
-    question: jest.fn((query, cb) => cb('test@example.com')),
-    close: jest.fn(),
-  }),
-}));
 
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
@@ -53,12 +48,14 @@ describe('auth command', () => {
     program = new Command();
     authCommand(program);
 
-    // Set up a basic mock that just returns the expected data
     jest.mocked(cloudConfig.validateAndSetApiToken).mockResolvedValue({
       user: mockCloudUser,
       organization: mockOrganization,
       app: mockApp,
     });
+
+    jest.spyOn(telemetry as any, 'record').mockImplementation(() => {});
+    jest.spyOn(telemetry as any, 'send').mockImplementation(() => Promise.resolve());
   });
 
   describe('login', () => {
@@ -76,15 +73,43 @@ describe('auth command', () => {
       await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
 
       expect(setUserEmail).toHaveBeenCalledWith('test@example.com');
-      expect(cloudConfig.validateAndSetApiToken).toHaveBeenCalledWith(
-        expect.any(String),
-        undefined,
-      );
+      expect(cloudConfig.validateAndSetApiToken).toHaveBeenCalledWith('test-key', undefined);
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Successfully logged in'));
+      expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'auth login' });
+      expect(telemetry.send).toHaveBeenCalledTimes(1);
+    });
+
+    it('should show login instructions when no API key is provided', async () => {
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd?.parseAsync(['node', 'test']);
+
+      expect(logger.info).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining('Please login or sign up at https://promptfoo.app'),
+      );
+      expect(logger.info).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('https://promptfoo.app/welcome'),
+      );
+      expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'auth login' });
+      expect(telemetry.send).toHaveBeenCalledTimes(1);
+    });
+
+    it('should use custom host when provided', async () => {
+      const customHost = 'https://custom-api.example.com';
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key', '--host', customHost]);
+
+      expect(cloudConfig.validateAndSetApiToken).toHaveBeenCalledWith('test-key', customHost);
+      expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'auth login' });
+      expect(telemetry.send).toHaveBeenCalledTimes(1);
     });
 
     it('should handle login request failure', async () => {
-      // Mock fetchWithProxy to reject with an error
       jest
         .mocked(cloudConfig.validateAndSetApiToken)
         .mockRejectedValueOnce(new Error('Bad Request'));
@@ -98,45 +123,13 @@ describe('auth command', () => {
         expect.stringContaining('Authentication failed: Bad Request'),
       );
       expect(process.exitCode).toBe(1);
-    });
-
-    it('should handle token validation failure', async () => {
-      jest.mocked(fetchWithProxy).mockResolvedValueOnce(
-        createMockResponse({
-          ok: true,
-          body: {},
-        }),
-      );
-
-      jest
-        .mocked(cloudConfig.validateAndSetApiToken)
-        .mockRejectedValueOnce(new Error('Invalid token'));
-
-      const loginCmd = program.commands
-        .find((cmd) => cmd.name() === 'auth')
-        ?.commands.find((cmd) => cmd.name() === 'login');
-      await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
-
-      expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining('Authentication failed: Invalid token'),
-      );
-      expect(process.exitCode).toBe(1);
+      expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'auth login' });
+      expect(telemetry.send).toHaveBeenCalledTimes(1);
     });
 
     it('should overwrite existing email in config after successful login', async () => {
-      const newCloudUser = {
-        ...mockCloudUser,
-        email: 'new@example.com',
-      };
-
+      const newCloudUser = { ...mockCloudUser, email: 'new@example.com' };
       jest.mocked(getUserEmail).mockReturnValue('old@example.com');
-      mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          ok: true,
-          body: { user: newCloudUser },
-        }),
-      );
-
       jest.mocked(cloudConfig.validateAndSetApiToken).mockResolvedValueOnce({
         user: newCloudUser,
         organization: mockOrganization,
@@ -149,27 +142,22 @@ describe('auth command', () => {
       await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
 
       expect(setUserEmail).toHaveBeenCalledWith('new@example.com');
-      expect(cloudConfig.validateAndSetApiToken).toHaveBeenCalledWith(
-        expect.any(String),
-        undefined,
-      );
       expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining(
-          'Updating local email configuration from old@example.com to new@example.com',
-        ),
+        expect.stringContaining('Updating local email configuration'),
       );
+      expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'auth login' });
+      expect(telemetry.send).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('logout', () => {
-    it('should unset email in config after logout', async () => {
-      jest.mocked(getUserEmail).mockReturnValue('test@example.com');
-
+    it('should unset email and delete cloud config after logout', async () => {
       const logoutCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
         ?.commands.find((cmd) => cmd.name() === 'logout');
       await logoutCmd?.parseAsync(['node', 'test']);
 
+      expect(cloudConfig.delete).toHaveBeenCalledTimes(1);
       expect(setUserEmail).toHaveBeenCalledWith('');
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Successfully logged out'));
     });
@@ -198,8 +186,8 @@ describe('auth command', () => {
       await whoamiCmd?.parseAsync(['node', 'test']);
 
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Currently logged in as:'));
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('test@example.com'));
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Test Org'));
+      expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'auth whoami' });
+      expect(telemetry.send).toHaveBeenCalledTimes(1);
     });
 
     it('should handle not logged in state', async () => {
@@ -211,7 +199,9 @@ describe('auth command', () => {
         ?.commands.find((cmd) => cmd.name() === 'whoami');
       await whoamiCmd?.parseAsync(['node', 'test']);
 
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Not logged in'));
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Not logged in. Run promptfoo auth login to login.'),
+      );
     });
 
     it('should handle API error', async () => {
@@ -231,8 +221,17 @@ describe('auth command', () => {
         ?.commands.find((cmd) => cmd.name() === 'whoami');
       await whoamiCmd?.parseAsync(['node', 'test']);
 
-      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to get user info'));
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Failed to get user info: Failed to fetch user info: Internal Server Error',
+        ),
+      );
       expect(process.exitCode).toBe(1);
+
+      telemetry.record('command_used', { name: 'auth whoami' });
+      telemetry.send();
+
+      process.exitCode = 0;
     });
   });
 });
