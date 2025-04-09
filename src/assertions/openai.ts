@@ -2,11 +2,7 @@ import type { OpenAiChatCompletionProvider } from '../providers/openai/chat';
 import { validateFunctionCall } from '../providers/openai/util';
 import type { AssertionParams } from '../types';
 import type { GradingResult } from '../types';
-import {
-  maybeLoadFromExternalFile,
-  maybeLoadToolsFromExternalFile,
-  renderVarsInObject,
-} from '../util';
+import { maybeLoadToolsFromExternalFile } from '../util';
 import invariant from '../util/invariant';
 
 export const handleIsValidOpenAiToolsCall = ({

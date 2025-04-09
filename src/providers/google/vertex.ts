@@ -12,7 +12,6 @@ import type {
   TokenUsage,
 } from '../../types';
 import type { EnvOverrides } from '../../types/env';
-import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
 import { isValidJson } from '../../util/json';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import type { ClaudeRequest, ClaudeResponse, CompletionOptions } from './types';

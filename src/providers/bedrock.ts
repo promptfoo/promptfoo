@@ -15,7 +15,7 @@ import type {
   ProviderResponse,
 } from '../types/providers';
 import type { TokenUsage } from '../types/shared';
-import { maybeLoadFromExternalFile, maybeLoadToolsFromExternalFile } from '../util';
+import { maybeLoadToolsFromExternalFile } from '../util';
 import { outputFromMessage, parseMessages } from './anthropic/util';
 import { novaOutputFromMessage, novaParseMessages } from './bedrockUtil';
 import { parseChatPrompt } from './shared';

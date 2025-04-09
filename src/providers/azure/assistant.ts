@@ -5,11 +5,7 @@ import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
-import {
-  maybeLoadFromExternalFile,
-  maybeLoadToolsFromExternalFile,
-  renderVarsInObject,
-} from '../../util';
+import { maybeLoadToolsFromExternalFile } from '../../util';
 import { isJavascriptFile } from '../../util/file';
 import { sleep } from '../../util/time';
 import { REQUEST_TIMEOUT_MS, toTitleCase } from '../shared';

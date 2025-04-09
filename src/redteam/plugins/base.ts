@@ -11,11 +11,7 @@ import type {
   TestCase,
 } from '../../types';
 import type { AtomicTestCase, GradingResult } from '../../types';
-import {
-  maybeLoadFromExternalFile,
-  maybeLoadToolsFromExternalFile,
-  renderVarsInObject,
-} from '../../util';
+import { maybeLoadToolsFromExternalFile } from '../../util';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';

@@ -8,11 +8,7 @@ import type {
   TokenUsage,
 } from '../../types';
 import type { EnvOverrides } from '../../types/env';
-import {
-  maybeLoadFromExternalFile,
-  maybeLoadToolsFromExternalFile,
-  renderVarsInObject,
-} from '../../util';
+import { maybeLoadToolsFromExternalFile } from '../../util';
 import type { OpenAiCompletionOptions } from './types';
 import { OPENAI_REALTIME_MODELS } from './util';
 

@@ -33,7 +33,6 @@ import type {
   TokenUsage,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { renderVarsInObject } from '../util';
 import { maybeLoadToolsFromExternalFile } from '../util';
 import { safeJsonStringify } from '../util/json';
 import { AnthropicMessagesProvider } from './anthropic/messages';

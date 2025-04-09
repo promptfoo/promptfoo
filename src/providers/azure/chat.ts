@@ -3,8 +3,6 @@ import { getEnvFloat, getEnvInt } from '../../envars';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import {
-  cliState,
-  getNunjucksEngine,
   maybeLoadFromExternalFile,
   maybeLoadToolsFromExternalFile,
   renderVarsInObject,
