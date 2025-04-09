@@ -14,7 +14,7 @@ import type {
 import '../../util';
 import type { CompletionOptions, FunctionCall } from './types';
 import type { GeminiFormat } from './util';
-import { geminiFormatAndSystemInstructions, maybeLoadToolsFromExternalFile } from './util';
+import { geminiFormatAndSystemInstructions, loadFile } from './util';
 
 const formatContentMessage = (contents: GeminiFormat, contentIndex: number) => {
   if (contents[contentIndex].role != 'user') {
@@ -270,9 +270,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
               ...this.config.generationConfig,
             },
             ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
-            ...(this.config.tools
-              ? { tools: maybeLoadToolsFromExternalFile(this.config.tools, context?.vars) }
-              : {}),
+            ...(this.config.tools ? { tools: loadFile(this.config.tools, context?.vars) } : {}),
             ...(systemInstruction ? { systemInstruction } : {}),
           },
         };

@@ -1,4 +1,3 @@
-/* eslint-disable jest/prefer-called-with */
 import dotenv from 'dotenv';
 import * as fs from 'fs';
 import { globSync } from 'glob';
