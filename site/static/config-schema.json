@@ -358,27 +358,84 @@
                     "additionalProperties": false
                   },
                   {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "display": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "config": {},
+                          "raw": {
+                            "type": "string"
+                          },
+                          "messages": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "role": {
+                                  "type": "string"
+                                },
+                                "content": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "role",
+                                "content"
+                              ],
+                              "additionalProperties": true
+                            }
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "raw"
+                        ],
+                        "additionalProperties": true
                       },
-                      "raw": {
-                        "type": "string"
-                      },
-                      "display": {
-                        "type": "string"
-                      },
-                      "label": {
-                        "type": "string"
-                      },
-                      "config": {}
-                    },
-                    "required": [
-                      "raw",
-                      "label"
-                    ],
-                    "additionalProperties": false
+                      {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "$ref": "#/definitions/PromptfooConfigSchema/properties/prompts/anyOf/1/items/anyOf/2/anyOf/0/properties/id"
+                          },
+                          "display": {
+                            "$ref": "#/definitions/PromptfooConfigSchema/properties/prompts/anyOf/1/items/anyOf/2/anyOf/0/properties/display"
+                          },
+                          "label": {
+                            "$ref": "#/definitions/PromptfooConfigSchema/properties/prompts/anyOf/1/items/anyOf/2/anyOf/0/properties/label"
+                          },
+                          "function": {
+                            "$ref": "#/definitions/PromptfooConfigSchema/properties/prompts/anyOf/1/items/anyOf/2/anyOf/0/properties/function"
+                          },
+                          "config": {
+                            "$ref": "#/definitions/PromptfooConfigSchema/properties/prompts/anyOf/1/items/anyOf/2/anyOf/0/properties/config"
+                          },
+                          "raw": {
+                            "type": "string"
+                          },
+                          "messages": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/definitions/PromptfooConfigSchema/properties/prompts/anyOf/1/items/anyOf/2/anyOf/0/properties/messages/items"
+                            }
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "messages"
+                        ],
+                        "additionalProperties": true
+                      }
+                    ]
                   }
                 ]
               }
