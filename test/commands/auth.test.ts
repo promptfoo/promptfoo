@@ -206,14 +206,32 @@ describe('auth command', () => {
   describe('logout', () => {
     it('should unset email in config after logout', async () => {
       jest.mocked(getUserEmail).mockReturnValue('test@example.com');
+      jest.mocked(cloudConfig.getApiKey).mockReturnValue('api-key');
 
       const logoutCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
         ?.commands.find((cmd) => cmd.name() === 'logout');
       await logoutCmd?.parseAsync(['node', 'test']);
 
+      expect(cloudConfig.delete).toHaveBeenCalledWith();
       expect(setUserEmail).toHaveBeenCalledWith('');
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Successfully logged out'));
+    });
+
+    it('should show "already logged out" message when no session exists', async () => {
+      jest.mocked(getUserEmail).mockReturnValue(null);
+      jest.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
+
+      const logoutCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'logout');
+      await logoutCmd?.parseAsync(['node', 'test']);
+
+      expect(cloudConfig.delete).not.toHaveBeenCalled();
+      expect(setUserEmail).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining("You're already logged out"),
+      );
     });
   });
 

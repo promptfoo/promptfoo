@@ -114,6 +114,14 @@ export function authCommand(program: Command) {
     .command('logout')
     .description('Logout')
     .action(async () => {
+      const email = getUserEmail();
+      const apiKey = cloudConfig.getApiKey();
+
+      if (!email && !apiKey) {
+        logger.info(chalk.yellow("You're already logged out - no active session to terminate"));
+        return;
+      }
+
       await cloudConfig.delete();
       // Always unset email on logout
       setUserEmail('');
