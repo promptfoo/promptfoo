@@ -31,16 +31,6 @@ export interface Content {
   role?: string;
 }
 
-export const VALID_SCHEMA_TYPES: ReadonlySet<Schema['type']> = new Set([
-  'TYPE_UNSPECIFIED',
-  'STRING',
-  'NUMBER',
-  'INTEGER',
-  'BOOLEAN',
-  'ARRAY',
-  'OBJECT',
-]);
-
 export interface Schema {
   type: 'TYPE_UNSPECIFIED' | 'STRING' | 'NUMBER' | 'INTEGER' | 'BOOLEAN' | 'ARRAY' | 'OBJECT';
   format?: string;
@@ -54,6 +44,18 @@ export interface Schema {
   propertyOrdering?: string[];
   items?: Schema;
 }
+
+type SchemaType = Schema['type']; // Create a type alias for convenience
+
+export const VALID_SCHEMA_TYPES: ReadonlyArray<SchemaType> = [
+  'TYPE_UNSPECIFIED',
+  'STRING',
+  'NUMBER',
+  'INTEGER',
+  'BOOLEAN',
+  'ARRAY',
+  'OBJECT'
+];
 
 interface FunctionDeclaration {
   name: string;

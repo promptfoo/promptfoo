@@ -376,13 +376,13 @@ function normalizeSchemaTypes(schemaNode: any): any {
       const value = schemaNode[key];
 
       if (key === 'type') {
-        if (typeof value === 'string' && VALID_SCHEMA_TYPES.has(value as Schema['type'])) {
+        if (typeof value === 'string' && (VALID_SCHEMA_TYPES as ReadonlyArray<string>).includes(value)) {
           // Convert type value(s) to lowercase
           newNode[key] = value.toLowerCase();
         } else if (Array.isArray(value)) {
           // Handle type arrays like ["STRING", "NULL"]
           newNode[key] = value.map((t) =>
-            typeof t === 'string' && VALID_SCHEMA_TYPES.has(t as Schema['type'])
+            typeof t === 'string' && (VALID_SCHEMA_TYPES as ReadonlyArray<string>).includes(t)
               ? t.toLowerCase()
               : t,
           );
