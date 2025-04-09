@@ -50,6 +50,8 @@ import { useStore as useResultsViewStore } from './store';
 import type { EvaluateTable, FilterMode, ResultLightweightWithLabel } from './types';
 import './ResultsView.css';
 
+const DEFAULT_COLUMN_VISIBILITY_COUNT = 5;
+
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
   maxWidth: '100%',
   flexWrap: 'wrap',
@@ -359,8 +361,18 @@ export default function ResultsView({
   );
 
   const currentColumnState = columnStates[currentEvalId] || {
-    selectedColumns: allColumns,
-    columnVisibility: allColumns.reduce((acc, col) => ({ ...acc, [col]: true }), {}),
+    // Fallback: if the column state is not set, show <=5 variable columns by default.
+    // If the user has already modified the column state (which will persist it to IndexedDB),
+    // this fallback will not be reached i.e. this fallback initializes the column visibility state.
+    // TODO: Instantiate the default column visibility state at the store-level rather than within view.
+    // see https://github.com/promptfoo/promptfoo/pull/3627.
+    selectedColumns: head.vars
+      .slice(0, DEFAULT_COLUMN_VISIBILITY_COUNT)
+      .map((v: any, index: number) => `Variable ${index + 1}`),
+    columnVisibility: head.vars.reduce((acc: any, v: any, index: number) => {
+      acc[`Variable ${index + 1}`] = index < DEFAULT_COLUMN_VISIBILITY_COUNT ? true : false;
+      return acc;
+    }, {}),
   };
 
   const updateColumnVisibility = React.useCallback(
