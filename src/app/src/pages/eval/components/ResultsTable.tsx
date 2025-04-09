@@ -846,6 +846,7 @@ function ResultsTable({
                   style={{
                     width: header.getSize(),
                   }}
+                  data-testid={`header-cell-${header.id}`}
                 >
                   {header.isPlaceholder
                     ? null
