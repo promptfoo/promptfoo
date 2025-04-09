@@ -351,29 +351,58 @@ export default function ResultsView({
   const [configModalOpen, setConfigModalOpen] = React.useState(false);
   const [viewSettingsModalOpen, setViewSettingsModalOpen] = React.useState(false);
 
-  const allColumns = React.useMemo(
-    () => [
-      ...(hasAnyDescriptions ? ['description'] : []),
-      ...head.vars.map((_, idx) => `Variable ${idx + 1}`),
-      ...head.prompts.map((_, idx) => `Prompt ${idx + 1}`),
-    ],
-    [hasAnyDescriptions, head.vars, head.prompts],
+  // ===== START: Column visibility =====
+
+  const descriptionColumnIds = React.useMemo(
+    () => (hasAnyDescriptions ? ['description'] : []),
+    [hasAnyDescriptions],
   );
 
-  const currentColumnState = columnStates[currentEvalId] || {
-    // Fallback: if the column state is not set, show <=5 variable columns by default.
-    // If the user has already modified the column state (which will persist it to IndexedDB),
-    // this fallback will not be reached i.e. this fallback initializes the column visibility state.
-    // TODO: Instantiate the default column visibility state at the store-level rather than within view.
-    // see https://github.com/promptfoo/promptfoo/pull/3627.
-    selectedColumns: head.vars
-      .slice(0, DEFAULT_COLUMN_VISIBILITY_COUNT)
-      .map((v: any, index: number) => `Variable ${index + 1}`),
-    columnVisibility: head.vars.reduce((acc: any, v: any, index: number) => {
-      acc[`Variable ${index + 1}`] = index < DEFAULT_COLUMN_VISIBILITY_COUNT ? true : false;
-      return acc;
-    }, {}),
-  };
+  const varColumnIds = React.useMemo(
+    () => head.vars.map((_, idx) => `Variable ${idx + 1}`) ?? [],
+    [head.vars],
+  );
+
+  const promptColumnIds = React.useMemo(
+    () => head.prompts.map((_, idx) => `Prompt ${idx + 1}`) ?? [],
+    [head.prompts],
+  );
+
+  const allColumns = [...descriptionColumnIds, ...varColumnIds, ...promptColumnIds];
+
+  const currentColumnState = React.useMemo(() => {
+    return (
+      columnStates[currentEvalId] || {
+        // Fallback: if the column state is not set, show <=5 variable columns by default.
+        // If the user has already modified the column state (which will persist it to IndexedDB),
+        // this fallback will not be reached i.e. this fallback initializes the column visibility state.
+        // TODO: Instantiate the default column visibility state at the store-level rather than within view.
+        // see https://github.com/promptfoo/promptfoo/pull/3627.
+        selectedColumns: [
+          ...descriptionColumnIds,
+          ...promptColumnIds,
+          ...varColumnIds.slice(0, DEFAULT_COLUMN_VISIBILITY_COUNT),
+        ],
+        columnVisibility: {
+          ...descriptionColumnIds.reduce(
+            (acc: Record<string, boolean>, id: string) => ({ ...acc, [id]: true }),
+            {},
+          ),
+          ...promptColumnIds.reduce(
+            (acc: Record<string, boolean>, id: string) => ({ ...acc, [id]: true }),
+            {},
+          ),
+          ...varColumnIds.reduce(
+            (acc: Record<string, boolean>, id: string, index: number) => ({
+              ...acc,
+              [id]: index < DEFAULT_COLUMN_VISIBILITY_COUNT,
+            }),
+            {},
+          ),
+        },
+      }
+    );
+  }, [columnStates, currentEvalId, varColumnIds, promptColumnIds]);
 
   const updateColumnVisibility = React.useCallback(
     (columns: string[]) => {
@@ -388,6 +417,8 @@ export default function ResultsView({
     },
     [allColumns, setColumnState, currentEvalId],
   );
+
+  // ===== END: Column visibility =====
 
   const handleChange = React.useCallback(
     (event: SelectChangeEvent<string[]>) => {
