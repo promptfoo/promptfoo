@@ -31,7 +31,14 @@ export function authCommand(program: Command) {
     .option('-k, --api-key <apiKey>', 'Login using an API key.')
     .option('-b, --browser', 'Open browser for authentication.')
     .option('-n, --no-browser', 'Do not open browser for authentication.')
-    .action(async (cmdObj: { orgId: string; host: string; apiKey: string; browser?: boolean }) => {
+    .option('--non-interactive', 'Non-interactive mode (for testing)')
+    .action(async (cmdObj: { 
+      orgId: string; 
+      host: string; 
+      apiKey: string; 
+      browser?: boolean;
+      nonInteractive?: boolean;
+    }) => {
       let token: string | undefined;
       const apiHost = cmdObj.host || cloudConfig.getApiHost();
       const appUrl = cloudConfig.getAppUrl();
@@ -39,24 +46,29 @@ export function authCommand(program: Command) {
       try {
         if (cmdObj.apiKey) {
           token = cmdObj.apiKey;
+        } else if (cmdObj.nonInteractive) {
+          // In non-interactive mode, exit early with a message
+          logger.info('Non-interactive mode enabled. Skipping authentication process.');
+          process.exitCode = 2; // Special exit code for testing
+          return;
         } else {
           // Check if browser-based auth should be offered
           const interactive = isInteractiveSession();
-          const useBrowser =
+          const useBrowser = 
             cmdObj.browser !== false && // Not explicitly disabled
             interactive && // In interactive session
             (cmdObj.browser === true || // Explicitly enabled or
-              (await promptYesNo('Would you like to open a browser to authenticate?'))); // User confirms
+             (await promptYesNo('Would you like to open a browser to authenticate?'))); // User confirms
 
           if (useBrowser) {
             // Open browser to auth page
             const welcomeUrl = `${appUrl}/welcome`;
             logger.info(chalk.green(`Opening browser to ${welcomeUrl} for authentication`));
-
+            
             try {
               await opener(welcomeUrl);
               logger.info(chalk.yellow('After authenticating in the browser, copy your API token'));
-
+              
               // Prompt for token after browser auth
               token = await promptForToken();
             } catch (error) {
@@ -65,7 +77,7 @@ export function authCommand(program: Command) {
               logger.info(chalk.yellow('Falling back to email authentication...'));
             }
           }
-
+          
           // If browser auth wasn't selected or failed, use email flow
           if (!token) {
             const email = await promptForEmail();
