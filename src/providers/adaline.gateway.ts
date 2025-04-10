@@ -33,6 +33,7 @@ import type {
   TokenUsage,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
+import { maybeLoadToolsFromExternalFile } from '../util';
 import { safeJsonStringify } from '../util/json';
 import { AnthropicMessagesProvider } from './anthropic/messages';
 import { calculateAnthropicCost } from './anthropic/util';
@@ -412,7 +413,9 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
         gatewayMessages = parseChatPrompt(prompt, [
           { role: 'user', content: [{ modality: 'text', value: prompt }] },
         ]);
-        gatewayTools = _config.tools as GatewayToolType[];
+        gatewayTools = _config.tools
+          ? (maybeLoadToolsFromExternalFile(_config.tools) as GatewayToolType[])
+          : undefined;
       }
 
       if (this.providerName === 'openai') {

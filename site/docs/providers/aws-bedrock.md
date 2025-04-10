@@ -50,11 +50,27 @@ The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to
 
 ## Authentication
 
-Configure Amazon Bedrock authentication in your provider's `config` section using one of these methods:
+Amazon Bedrock follows a specific credential resolution order that prioritizes explicitly configured credentials over default AWS mechanisms.
 
-1. Access key authentication:
+### Credential Resolution Order
 
-```yaml
+When authenticating with AWS Bedrock, credentials are resolved in this sequence:
+
+1. **Config file credentials**: Explicitly provided `accessKeyId` and `secretAccessKey` in your promptfoo configuration
+2. **SSO profile**: When a `profile` is specified in your config
+3. **AWS default credential chain**:
+   - Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
+   - Shared credentials file (`~/.aws/credentials`)
+   - EC2 instance profile or ECS task role
+   - SSO credentials from AWS CLI
+
+### Authentication Options
+
+#### 1. Explicit credentials (highest priority)
+
+Specify direct access keys in your config:
+
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
@@ -64,9 +80,13 @@ providers:
       region: 'us-east-1' # Optional, defaults to us-east-1
 ```
 
-2. SSO authentication:
+This method overrides all other credential sources, including EC2 instance roles.
 
-```yaml
+#### 2. SSO profile authentication
+
+Use a profile from your AWS configuration:
+
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
@@ -74,7 +94,18 @@ providers:
       region: 'us-east-1' # Optional, defaults to us-east-1
 ```
 
-The provider will automatically use AWS SSO credentials when a profile is specified. For access key authentication, both `accessKeyId` and `secretAccessKey` are required, while `sessionToken` is optional.
+#### 3. Default credentials (lowest priority)
+
+Rely on the AWS default credential chain:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+    config:
+      region: 'us-east-1' # Only region specified
+```
+
+This method is ideal when running on EC2 instances with IAM roles, as it automatically uses the instance's credentials.
 
 ## Example
 
