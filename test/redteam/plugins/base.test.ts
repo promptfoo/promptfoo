@@ -15,6 +15,13 @@ jest.mock('../../../src/matchers', () => ({
 
 jest.mock('../../../src/util', () => ({
   maybeLoadFromExternalFile: jest.fn(),
+  maybeLoadToolsFromExternalFile: jest.fn().mockImplementation((tools) => {
+    if (tools === 'file://tools.json') {
+      return [{ name: 'tool1' }, { name: 'tool2' }];
+    }
+    return tools;
+  }),
+  renderVarsInObject: jest.fn(),
 }));
 
 class TestPlugin extends RedteamPluginBase {

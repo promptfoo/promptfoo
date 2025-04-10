@@ -23,6 +23,7 @@ import {
   varsMatch,
   writeMultipleOutputs,
   writeOutput,
+  maybeLoadToolsFromExternalFile,
 } from '../../src/util';
 import { TestGrader } from './utils';
 
@@ -161,16 +162,96 @@ describe('maybeLoadFromExternalFile', () => {
   it('should handle list of paths', () => {
     const basePath = './relative/path';
     cliState.basePath = basePath;
-    jest.mocked(fs.readFileSync).mockReturnValue(mockJsonContent);
+    const input = ['file://test1.txt', 'file://test2.txt', 'file://test3.txt'];
 
-    maybeLoadFromExternalFile(['file://test1.txt', 'file://test2.txt', 'file://test3.txt']);
+    // Mock readFileSync to return consistent data
+    const mockFileData = 'test content';
+    jest.mocked(fs.readFileSync).mockReturnValue(mockFileData);
+
+    maybeLoadFromExternalFile(input);
 
     expect(fs.existsSync).toHaveBeenCalledTimes(3);
-    expect(fs.existsSync).toHaveBeenNthCalledWith(1, path.resolve(basePath, 'test1.txt'));
-    expect(fs.existsSync).toHaveBeenNthCalledWith(2, path.resolve(basePath, 'test2.txt'));
-    expect(fs.existsSync).toHaveBeenNthCalledWith(3, path.resolve(basePath, 'test3.txt'));
+    expect(fs.existsSync).toHaveBeenCalledWith(path.resolve(basePath, 'test1.txt'));
+    expect(fs.existsSync).toHaveBeenCalledWith(path.resolve(basePath, 'test2.txt'));
+    expect(fs.existsSync).toHaveBeenCalledWith(path.resolve(basePath, 'test3.txt'));
+
+    expect(fs.readFileSync).toHaveBeenCalledTimes(3);
+    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve(basePath, 'test1.txt'), 'utf8');
+    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve(basePath, 'test2.txt'), 'utf8');
+    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve(basePath, 'test3.txt'), 'utf8');
 
     cliState.basePath = undefined;
+  });
+});
+
+describe('maybeLoadToolsFromExternalFile', () => {
+  const mockFileContent = '{"name": "calculator", "parameters": {"type": "object"}}';
+  const mockToolsArray = [
+    { type: 'function', function: { name: 'calculator', parameters: { type: 'object' } } },
+  ];
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
+  });
+
+  it('should process tool objects directly', () => {
+    const tools = mockToolsArray;
+    const vars = { api_key: '123456' };
+    expect(maybeLoadToolsFromExternalFile(tools, vars)).toEqual(tools);
+  });
+
+  it('should load tools from external file', () => {
+    const tools = 'file://tools.json';
+    expect(maybeLoadToolsFromExternalFile(tools)).toEqual(JSON.parse(mockFileContent));
+  });
+
+  it('should render variables in tools object', () => {
+    const tools = [
+      {
+        type: 'function',
+        function: {
+          name: 'calculator',
+          parameters: { type: 'object' },
+          apiKey: '{{ api_key }}',
+        },
+      },
+    ];
+    const vars = { api_key: '123456' };
+
+    const expected = [
+      {
+        type: 'function',
+        function: {
+          name: 'calculator',
+          parameters: { type: 'object' },
+          apiKey: '123456',
+        },
+      },
+    ];
+
+    expect(maybeLoadToolsFromExternalFile(tools, vars)).toEqual(expected);
+  });
+
+  it('should render variables and load from external file', () => {
+    const tools = 'file://{{ file_path }}.json';
+    const vars = { file_path: 'tools' };
+
+    maybeLoadToolsFromExternalFile(tools, vars);
+
+    // Should resolve the file path with variables first
+    expect(fs.existsSync).toHaveBeenCalledWith(expect.stringContaining('tools.json'));
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('tools.json'), 'utf8');
+  });
+
+  it('should handle array of file paths', () => {
+    const tools = ['file://tools1.json', 'file://tools2.json'];
+
+    maybeLoadToolsFromExternalFile(tools);
+
+    expect(fs.existsSync).toHaveBeenCalledTimes(2);
+    expect(fs.readFileSync).toHaveBeenCalledTimes(2);
   });
 });
 
