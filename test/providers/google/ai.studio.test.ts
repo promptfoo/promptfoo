@@ -149,7 +149,7 @@ describe('AIStudioChatProvider', () => {
       });
 
       const response = await provider.callGemini('test prompt');
-      expect(response.error).toContain('Expected one candidate in AIStudio API response.');
+      expect(response.error).toContain('Error: Expected one candidate in API response.');
     });
 
     it('should handle malformed API responses', async () => {
@@ -186,7 +186,7 @@ describe('AIStudioChatProvider', () => {
       const response = await provider.callGemini('test prompt');
 
       expect(response).toEqual({
-        error: 'No output found in response: {"candidates":[{"content":{"parts":null}}]}',
+        error: 'Error: No output found in response: {"content":{"parts":null}}',
       });
     });
   });

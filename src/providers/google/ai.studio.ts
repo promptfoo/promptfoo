@@ -13,7 +13,12 @@ import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { CHAT_MODELS } from './shared';
 import type { CompletionOptions } from './types';
-import { loadFile, formatCandidateContents, geminiFormatAndSystemInstructions } from './util';
+import {
+  loadFile,
+  formatCandidateContents,
+  geminiFormatAndSystemInstructions,
+  getCandidate,
+} from './util';
 import type { GeminiResponseData } from './util';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
@@ -247,21 +252,13 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     }
 
     logger.debug(`\tGoogle API response: ${JSON.stringify(data)}`);
-
-    if (!(data && data.candidates && data.candidates.length === 1)) {
-      return {
-        error: 'Expected one candidate in AIStudio API response.',
-      };
-    }
-
-    const candidate = data.candidates[0];
-
-    let output;
-    if (candidate.content?.parts) {
+    let output, candidate;
+    try {
+      candidate = getCandidate(data);
       output = formatCandidateContents(candidate);
-    } else {
+    } catch (err) {
       return {
-        error: `No output found in response: ${JSON.stringify(data)}`,
+        error: `${String(err)}`,
       };
     }
 

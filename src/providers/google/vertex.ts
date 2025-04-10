@@ -24,8 +24,10 @@ import type {
 } from './util';
 import {
   geminiFormatAndSystemInstructions,
+  getCandidate,
   getGoogleClient,
   loadFile,
+  mergeParts,
   formatCandidateContents,
 } from './util';
 
@@ -328,7 +330,6 @@ export class VertexChatProvider extends VertexGenericProvider {
         };
       }
 
-      logger.debug(`Gemini API response: ${JSON.stringify(data)}`);
       try {
         const dataWithError = data as GeminiErrorResponse[];
         const error = dataWithError[0]?.error;
@@ -338,48 +339,35 @@ export class VertexChatProvider extends VertexGenericProvider {
           };
         }
         const dataWithResponse = data as GeminiResponseData[];
-
-        if (
-          !(
-            dataWithResponse &&
-            dataWithResponse.length === 1 &&
-            dataWithResponse[0].candidates &&
-            dataWithResponse[0].candidates.length === 1
-          )
-        ) {
-          return {
-            error:
-              'Expected one GeminiResponseData entry and one candidate in Vertex API response.',
-          };
-        }
-
-        const candidate = dataWithResponse[0].candidates[0];
         let output;
-        if (candidate.finishReason && candidate.finishReason === 'SAFETY') {
-          const finishReason = 'Content was blocked due to safety settings.';
-          if (cliState.config?.redteam) {
-            // Refusals are not errors during redteams, they're actually successes.
-            return { output: finishReason };
+        for (const datum of dataWithResponse) {
+          const candidate = getCandidate(datum);
+          if (candidate.finishReason && candidate.finishReason === 'SAFETY') {
+            const finishReason = 'Content was blocked due to safety settings.';
+            if (cliState.config?.redteam) {
+              // Refusals are not errors during redteams, they're actually successes.
+              return { output: finishReason };
+            }
+            return { error: finishReason };
+          } else if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+            // e.g. MALFORMED_FUNCTION_CALL
+            return {
+              error: `Finish reason ${candidate.finishReason}: ${JSON.stringify(data)}`,
+            };
+          } else if (datum.promptFeedback?.blockReason) {
+            const blockReason = `Content was blocked due to safety settings: ${datum.promptFeedback.blockReason}`;
+            if (cliState.config?.redteam) {
+              // Refusals are not errors during redteams, they're actually successes.
+              return { output: blockReason };
+            }
+            return { error: blockReason };
+          } else if (candidate.content?.parts) {
+            output = mergeParts(output, formatCandidateContents(candidate));
+          } else {
+            return {
+              error: `No output found in response: ${JSON.stringify(data)}`,
+            };
           }
-          return { error: finishReason };
-        } else if (candidate.finishReason && candidate.finishReason !== 'STOP') {
-          // e.g. MALFORMED_FUNCTION_CALL
-          return {
-            error: `Finish reason ${candidate.finishReason}: ${JSON.stringify(data)}`,
-          };
-        } else if (dataWithResponse[0].promptFeedback?.blockReason) {
-          const blockReason = `Content was blocked due to safety settings: ${dataWithResponse[0].promptFeedback.blockReason}`;
-          if (cliState.config?.redteam) {
-            // Refusals are not errors during redteams, they're actually successes.
-            return { output: blockReason };
-          }
-          return { error: blockReason };
-        } else if (candidate.content?.parts) {
-          output = formatCandidateContents(candidate);
-        } else {
-          return {
-            error: `No output found in response: ${JSON.stringify(data)}`,
-          };
         }
 
         const lastData = dataWithResponse[dataWithResponse.length - 1];
