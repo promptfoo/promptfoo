@@ -1,3 +1,9 @@
+---
+title: xAI (Grok) Provider
+description: Configure and use xAI's Grok models with promptfoo, including Grok-3 with reasoning capabilities
+keywords: [xai, grok, grok-3, grok-2, reasoning, vision, llm]
+---
+
 # xAI (Grok)
 
 The `xai` provider supports [xAI's Grok models](https://x.ai/) through an API interface compatible with OpenAI's format. The provider supports both text and vision capabilities depending on the model used.
@@ -39,7 +45,8 @@ You can also use specific versioned models:
 
 The provider supports all [OpenAI provider](/docs/providers/openai) configuration options plus Grok-specific options. Example usage:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: xai:grok-3-mini-beta
     config:
@@ -55,7 +62,11 @@ Grok-3 introduces reasoning capabilities for specific models. The `grok-3-mini-b
 - `reasoning_effort: "low"` - Minimal thinking time, using fewer tokens for quick responses
 - `reasoning_effort: "high"` - Maximum thinking time, leveraging more tokens for complex problems
 
-Note: Reasoning is only available for the mini variants. The standard `grok-3-beta` and `grok-3-fast-beta` models do not support reasoning.
+:::info
+
+Reasoning is only available for the mini variants. The standard `grok-3-beta` and `grok-3-fast-beta` models do not support reasoning.
+
+:::
 
 ### Region Support
 
@@ -74,7 +85,7 @@ This is equivalent to setting `base_url="https://us-west-1.api.x.ai/v1"` in the 
 
 For models with vision capabilities, you can include images in your prompts using the same format as OpenAI. Create a `prompt.yaml` file:
 
-```yaml
+```yaml title="prompt.yaml"
 - role: user
   content:
     - type: image_url
@@ -87,7 +98,8 @@ For models with vision capabilities, you can include images in your prompts usin
 
 Then reference it in your promptfoo config:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://prompt.yaml
 
@@ -101,3 +113,7 @@ tests:
 ```
 
 For more information on the available models and API usage, refer to the [xAI documentation](https://docs.x.ai/docs).
+
+## See Also
+
+- [OpenAI Provider](/docs/providers/openai)
