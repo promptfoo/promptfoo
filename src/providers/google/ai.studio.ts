@@ -258,7 +258,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
 
     let output;
     if (candidate.content?.parts) {
-      output = stringifyCandidateContents(candidate);
+      output = candidate; // stringifyCandidateContents(candidate);
     }
 
     try {

@@ -354,7 +354,7 @@ export class VertexChatProvider extends VertexGenericProvider {
         }
 
         const candidate = dataWithResponse[0].candidates[0];
-        let output = '';
+        let output;
         if (candidate.finishReason && candidate.finishReason === 'SAFETY') {
           const finishReason = 'Content was blocked due to safety settings.';
           if (cliState.config?.redteam) {
@@ -375,7 +375,7 @@ export class VertexChatProvider extends VertexGenericProvider {
           }
           return { error: blockReason };
         } else if (candidate.content?.parts) {
-          output += stringifyCandidateContents(candidate);
+          output = candidate; // stringifyCandidateContents(candidate);
         }
 
         if (!output) {
