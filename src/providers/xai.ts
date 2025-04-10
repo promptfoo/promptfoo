@@ -15,9 +15,8 @@ type XAIProviderOptions = Omit<ProviderOptions, 'config'> & {
   };
 };
 
-// Define models and their costs per million tokens
 export const XAI_CHAT_MODELS = [
-  // Grok-3 Models (New)
+  // Grok-3 Models
   {
     id: 'grok-3-beta',
     cost: {
@@ -91,7 +90,7 @@ const GROK_3_MINI_MODELS = ['grok-3-mini-beta', 'grok-3-mini-fast-beta'];
  */
 export function calculateXAICost(
   modelName: string,
-  config: any, // Use any type to avoid typing issues
+  config: any,
   promptTokens?: number,
   completionTokens?: number,
   reasoningTokens?: number,
@@ -100,7 +99,6 @@ export function calculateXAICost(
     return undefined;
   }
 
-  // Find the model in our list of models
   const model = XAI_CHAT_MODELS.find(
     (m) => m.id === modelName || (m.aliases && m.aliases.includes(modelName)),
   );
@@ -108,15 +106,12 @@ export function calculateXAICost(
     return undefined;
   }
 
-  // Get the cost per token from the model or from config if provided
   const inputCost = config.cost ?? model.cost.input;
   const outputCost = config.cost ?? model.cost.output;
 
-  // Calculate the total cost
   const inputCostTotal = inputCost * promptTokens;
   const outputCostTotal = outputCost * completionTokens;
 
-  // Log token usage for debugging
   logger.debug(
     `XAI cost calculation for ${modelName}: ` +
       `promptTokens=${promptTokens}, completionTokens=${completionTokens}, ` +
@@ -124,7 +119,6 @@ export function calculateXAICost(
       `inputCost=${inputCostTotal}, outputCost=${outputCostTotal}`,
   );
 
-  // Return the total cost
   return inputCostTotal + outputCostTotal;
 }
 
@@ -134,12 +128,11 @@ export class XAIProvider extends OpenAiChatCompletionProvider {
   }
 
   protected isReasoningModel(): boolean {
-    // Only Grok-3 mini models support reasoning
     return GROK_3_MINI_MODELS.includes(this.modelName);
   }
 
   protected supportsTemperature(): boolean {
-    return true; // All Grok models support temperature
+    return true;
   }
 
   constructor(modelName: string, providerOptions: XAIProviderOptions) {
@@ -177,51 +170,15 @@ export class XAIProvider extends OpenAiChatCompletionProvider {
   async callApi(prompt: string, context?: any, callApiOptions?: any): Promise<any> {
     const response = await super.callApi(prompt, context, callApiOptions);
 
-    // If the response is successful
-    if (response && !response.error) {
-      try {
-        // Check if we have a raw response to parse
-        if (typeof response.raw === 'string') {
-          try {
-            // Parse the raw JSON response
-            const rawData = JSON.parse(response.raw);
+    if (!response || response.error) {
+      return response;
+    }
 
-            // Extract reasoning tokens if available - only for mini models that support reasoning
-            if (
-              this.isReasoningModel() &&
-              rawData?.usage?.completion_tokens_details?.reasoning_tokens
-            ) {
-              // Get the reasoning tokens
-              const reasoningTokens = rawData.usage.completion_tokens_details.reasoning_tokens;
+    try {
+      if (typeof response.raw === 'string') {
+        try {
+          const rawData = JSON.parse(response.raw);
 
-              // Extract any other token details if available
-              const acceptedPredictions =
-                rawData.usage.completion_tokens_details.accepted_prediction_tokens || 0;
-              const rejectedPredictions =
-                rawData.usage.completion_tokens_details.rejected_prediction_tokens || 0;
-
-              // If we have token usage data, update it with the reasoning details
-              if (response.tokenUsage) {
-                response.tokenUsage.completionDetails = {
-                  reasoning: reasoningTokens,
-                  acceptedPrediction: acceptedPredictions,
-                  rejectedPrediction: rejectedPredictions,
-                };
-
-                logger.debug(
-                  `XAI reasoning token details for ${this.modelName}: ` +
-                    `reasoning=${reasoningTokens}, accepted=${acceptedPredictions}, rejected=${rejectedPredictions}`,
-                );
-              }
-            }
-          } catch (err) {
-            logger.error(`Failed to parse raw response JSON: ${err}`);
-          }
-        } else if (typeof response.raw === 'object' && response.raw !== null) {
-          // Raw response is already an object
-          const rawData = response.raw;
-
-          // Same logic as above but for pre-parsed object
           if (
             this.isReasoningModel() &&
             rawData?.usage?.completion_tokens_details?.reasoning_tokens
@@ -245,25 +202,50 @@ export class XAIProvider extends OpenAiChatCompletionProvider {
               );
             }
           }
+        } catch (err) {
+          logger.error(`Failed to parse raw response JSON: ${err}`);
         }
+      } else if (typeof response.raw === 'object' && response.raw !== null) {
+        const rawData = response.raw;
 
-        // Calculate cost if we have token usage data and it's not a cached response
-        if (response.tokenUsage && !response.cached) {
-          // Get reasoning tokens if available
-          const reasoningTokens = response.tokenUsage.completionDetails?.reasoning || 0;
+        if (
+          this.isReasoningModel() &&
+          rawData?.usage?.completion_tokens_details?.reasoning_tokens
+        ) {
+          const reasoningTokens = rawData.usage.completion_tokens_details.reasoning_tokens;
+          const acceptedPredictions =
+            rawData.usage.completion_tokens_details.accepted_prediction_tokens || 0;
+          const rejectedPredictions =
+            rawData.usage.completion_tokens_details.rejected_prediction_tokens || 0;
 
-          // Calculate the cost
-          response.cost = calculateXAICost(
-            this.modelName,
-            this.config || {},
-            response.tokenUsage.prompt,
-            response.tokenUsage.completion,
-            reasoningTokens,
-          );
+          if (response.tokenUsage) {
+            response.tokenUsage.completionDetails = {
+              reasoning: reasoningTokens,
+              acceptedPrediction: acceptedPredictions,
+              rejectedPrediction: rejectedPredictions,
+            };
+
+            logger.debug(
+              `XAI reasoning token details for ${this.modelName}: ` +
+                `reasoning=${reasoningTokens}, accepted=${acceptedPredictions}, rejected=${rejectedPredictions}`,
+            );
+          }
         }
-      } catch (err) {
-        logger.error(`Error processing XAI response: ${err}`);
       }
+
+      if (response.tokenUsage && !response.cached) {
+        const reasoningTokens = response.tokenUsage.completionDetails?.reasoning || 0;
+
+        response.cost = calculateXAICost(
+          this.modelName,
+          this.config || {},
+          response.tokenUsage.prompt,
+          response.tokenUsage.completion,
+          reasoningTokens,
+        );
+      }
+    } catch (err) {
+      logger.error(`Error processing XAI response: ${err}`);
     }
 
     return response;
