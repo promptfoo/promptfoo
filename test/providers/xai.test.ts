@@ -35,7 +35,9 @@ describe('xAI Provider', () => {
   it('uses region-specific API base URL when region is provided', () => {
     createXAIProvider('xai:grok-2', {
       config: {
-        region: 'us-west-1',
+        config: {
+          region: 'us-west-1',
+        },
       },
     });
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
@@ -70,5 +72,49 @@ describe('xAI Provider', () => {
         id: 'custom-id',
       }),
     );
+  });
+
+  describe('Grok-3 Models', () => {
+    it('identifies reasoning models correctly', () => {
+      const miniProvider = createXAIProvider(
+        'xai:grok-3-mini-beta',
+      ) as OpenAiChatCompletionProvider;
+      const fastMiniProvider = createXAIProvider(
+        'xai:grok-3-mini-fast-beta',
+      ) as OpenAiChatCompletionProvider;
+      const standardProvider = createXAIProvider('xai:grok-3-beta') as OpenAiChatCompletionProvider;
+      const fastProvider = createXAIProvider(
+        'xai:grok-3-fast-beta',
+      ) as OpenAiChatCompletionProvider;
+
+      expect(miniProvider['isReasoningModel']()).toBe(true);
+      expect(fastMiniProvider['isReasoningModel']()).toBe(true);
+      expect(standardProvider['isReasoningModel']()).toBe(false);
+      expect(fastProvider['isReasoningModel']()).toBe(false);
+    });
+
+    it('supports reasoning effort parameter for mini models', () => {
+      createXAIProvider('xai:grok-3-mini-beta', {
+        config: {
+          config: {
+            reasoning_effort: 'high',
+          },
+        },
+      });
+
+      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
+        'grok-3-mini-beta',
+        expect.objectContaining({
+          config: expect.objectContaining({
+            reasoning_effort: 'high',
+          }),
+        }),
+      );
+    });
+
+    it('supports temperature for all models', () => {
+      const provider = createXAIProvider('xai:grok-3-beta') as OpenAiChatCompletionProvider;
+      expect(provider['supportsTemperature']()).toBe(true);
+    });
   });
 });

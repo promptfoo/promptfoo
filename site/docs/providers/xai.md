@@ -14,13 +14,21 @@ export XAI_API_KEY=your_api_key_here
 
 The xAI provider includes support for the following model formats:
 
+### Grok-3 Models
+
+- `xai:grok-3-beta` - Latest flagship model for enterprise tasks (131K context)
+- `xai:grok-3-fast-beta` - Faster variant of grok-3-beta (131K context)
+- `xai:grok-3-mini-beta` - Lightweight reasoning model (131K context)
+- `xai:grok-3-mini-fast-beta` - Faster variant of grok-3-mini with reasoning (131K context)
+
+### Grok-2 and previous Models
+
 - `xai:grok-2-latest` - Latest Grok-2 model (131K context)
 - `xai:grok-2-vision-latest` - Latest Grok-2 vision model (32K context)
 - `xai:grok-2-vision-1212`
 - `xai:grok-2-1212`
 - `xai:grok-beta` - Beta version (131K context)
 - `xai:grok-vision-beta` - Vision beta version (8K context)
-- As well as grok-3 variants whenever they become generally available
 
 You can also use specific versioned models:
 
@@ -29,15 +37,25 @@ You can also use specific versioned models:
 
 ## Configuration
 
-The provider supports all [OpenAI provider](/docs/providers/openai) configuration options. Example usage:
+The provider supports all [OpenAI provider](/docs/providers/openai) configuration options plus Grok-specific options. Example usage:
 
 ```yaml
 providers:
-  - id: xai:grok-2-latest
+  - id: xai:grok-3-mini-beta
     config:
       temperature: 0.7
+      reasoning_effort: 'high' # Only for grok-3-mini models
       apiKey: your_api_key_here # Alternative to XAI_API_KEY
 ```
+
+### Reasoning Support
+
+Grok-3 introduces reasoning capabilities for specific models. The `grok-3-mini-beta` and `grok-3-mini-fast-beta` models support reasoning through the `reasoning_effort` parameter:
+
+- `reasoning_effort: "low"` - Minimal thinking time, using fewer tokens for quick responses
+- `reasoning_effort: "high"` - Maximum thinking time, leveraging more tokens for complex problems
+
+Note: Reasoning is only available for the mini variants. The standard `grok-3-beta` and `grok-3-fast-beta` models do not support reasoning.
 
 ### Region Support
 
