@@ -149,7 +149,7 @@ describe('AIStudioChatProvider', () => {
       });
 
       const response = await provider.callGemini('test prompt');
-      expect(response.error).toContain('Expected one GeminiResponseData entry and one candidate.');
+      expect(response.error).toContain('Expected one candidate in AIStudio API response.');
     });
 
     it('should handle malformed API responses', async () => {

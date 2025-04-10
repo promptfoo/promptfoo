@@ -347,7 +347,8 @@ export class VertexChatProvider extends VertexGenericProvider {
           )
         ) {
           return {
-            error: 'Expected one GeminiResponseData entry and one candidate.',
+            error:
+              'Expected one GeminiResponseData entry and one candidate in Vertex API response.',
           };
         }
 

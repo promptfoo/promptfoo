@@ -250,7 +250,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
 
     if (!(data.candidates && data.candidates.length == 1)) {
       return {
-        error: 'Expected one GeminiResponseData entry and one candidate.',
+        error: 'Expected one candidate in AIStudio API response.',
       };
     }
 
