@@ -1,10 +1,11 @@
+import confirm from '@inquirer/confirm';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import dedent from 'dedent';
 import { DEFAULT_SHARE_VIEW_BASE_URL } from '../constants';
 import logger from '../logger';
 import Eval from '../models/eval';
-import { createShareableUrl, isSharingEnabled } from '../share';
+import { createShareableUrl, hasEvalBeenShared, isSharingEnabled, getShareableUrl } from '../share';
 import telemetry from '../telemetry';
 import { setupEnv } from '../util';
 
@@ -79,6 +80,7 @@ export function shareCommand(program: Command) {
             process.exitCode = 1;
             return;
           }
+          logger.info(`Sharing latest eval (${eval_.id})`);
         }
 
         if (eval_.prompts.length === 0) {
@@ -92,6 +94,17 @@ export function shareCommand(program: Command) {
           );
           process.exitCode = 1;
           return;
+        }
+
+        if (await hasEvalBeenShared(eval_)) {
+          const url = await getShareableUrl(eval_, cmdObj.showAuth);
+          const shouldContinue = await confirm({
+            message: `This eval is already shared at ${url}. Sharing it again will overwrite the existing data. Continue?`,
+          });
+          if (!shouldContinue) {
+            process.exitCode = 0;
+            return;
+          }
         }
 
         await createAndDisplayShareableUrl(eval_, cmdObj.showAuth);
