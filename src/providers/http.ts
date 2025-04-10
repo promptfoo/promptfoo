@@ -841,6 +841,17 @@ export class HttpProvider implements ApiProvider {
     context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
     invariant(this.config.request, 'Expected request to be set in http provider config');
+
+    // Transform prompt using request transform
+    const prompt = vars.prompt;
+    const transformedPrompt = await (await this.transformRequest)(prompt);
+    logger.debug(
+      `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
+    );
+
+    // Update vars with the transformed prompt
+    vars.prompt = transformedPrompt;
+
     const renderedRequest = getNunjucksEngine().renderString(this.config.request, vars);
     const parsedRequest = parseRawRequest(renderedRequest.trim());
 
