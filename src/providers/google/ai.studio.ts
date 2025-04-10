@@ -247,18 +247,19 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     }
 
     logger.debug(`\tGoogle API response: ${JSON.stringify(data)}`);
-    let output;
-    if (data.candidates && data.candidates[0]?.content?.parts) {
-      output = stringifyCandidateContents(data);
-    }
 
-    if (!data?.candidates || data.candidates.length === 0) {
+    if (!(data.candidates && data.candidates.length == 1)) {
       return {
-        error: `API did not return any candidate responses: ${JSON.stringify(data)}`,
+        error: 'Expected one GeminiResponseData entry and one candidate.',
       };
     }
 
     const candidate = data.candidates[0];
+
+    let output;
+    if (candidate.content?.parts) {
+      output = stringifyCandidateContents(candidate);
+    }
 
     try {
       let guardrails: GuardrailResponse | undefined;

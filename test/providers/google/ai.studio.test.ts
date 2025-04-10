@@ -149,7 +149,7 @@ describe('AIStudioChatProvider', () => {
       });
 
       const response = await provider.callGemini('test prompt');
-      expect(response.error).toContain('API did not return any candidate responses');
+      expect(response.error).toContain('Expected one GeminiResponseData entry and one candidate.');
     });
 
     it('should handle malformed API responses', async () => {
