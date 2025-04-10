@@ -624,6 +624,64 @@ describe('HttpProvider', () => {
       );
       expect(result.output).toEqual({ result: 'success' });
     });
+
+    it('should apply transformRequest to raw HTTP requests', async () => {
+      // Create provider with raw request and transformRequest
+      const rawRequest = dedent`
+            POST /api/endpoint HTTP/1.1
+            Host: test.com
+            Content-Type: application/json
+    
+            {"prompt": "{{ prompt }}"}`;
+      
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          request: rawRequest,
+          transformRequest: 'return prompt.toUpperCase()',
+          useHttps: false
+        },
+      });
+      
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+        headers: {}
+      };
+      
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+      
+      // Call the API with a test prompt
+      await provider.callApi('test');
+      
+      // Verify the fetch call was made with the transformed data
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'http://test.com/api/endpoint',
+        {
+          method: 'POST',
+          headers: {
+            'host': 'test.com',
+            'content-type': 'application/json'
+          },
+          body: expect.any(String)
+        },
+        REQUEST_TIMEOUT_MS,
+        'text',
+        undefined,
+        undefined
+      );
+      
+      // Extract and parse the body to check the content regardless of formatting
+      const callArgs = jest.mocked(fetchWithCache).mock.calls[0];
+      const requestOptions = callArgs[1];
+      const bodyJson = JSON.parse(requestOptions.body);
+      
+      // Check that the body contains the expected transformed prompt
+      expect(bodyJson).toEqual({
+        prompt: 'TEST'
+      });
+    });
   });
 
   describe('processJsonBody', () => {
