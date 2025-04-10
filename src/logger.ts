@@ -84,7 +84,7 @@ function extractMessage(info: any): string {
       : String(info.message.message);
   }
 
-  return typeof info.message === 'string' ? info.message : String(info.message);
+  return typeof info.message === 'string' ? info.message : JSON.stringify(info.message);
 }
 
 export const consoleFormatter = winston.format.printf(
