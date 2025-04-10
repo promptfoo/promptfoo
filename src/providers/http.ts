@@ -844,7 +844,8 @@ export class HttpProvider implements ApiProvider {
 
     // Transform prompt using request transform
     const prompt = vars.prompt;
-    const transformedPrompt = await (await this.transformRequest)(prompt);
+    const transformFn = await this.transformRequest;
+    const transformedPrompt = await transformFn(prompt);
     logger.debug(
       `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
     );
