@@ -8,32 +8,32 @@ providers:
       temperature: 0.7
       max_completion_tokens: 1024
       response_format:
-        type: "json_schema"
+        type: 'json_schema'
         json_schema:
-          name: "recipe_schema"
+          name: 'recipe_schema'
           strict: true
           schema:
-            type: "object"
+            type: 'object'
             properties:
-              name: {"type": "string"}
-              cuisine: {"type": "string"}
-              difficulty: 
-                type: "string"
-                enum: ["easy", "medium", "hard"]
-              prepTime: {"type": "integer"}
-              cookTime: {"type": "integer"}
+              name: { 'type': 'string' }
+              cuisine: { 'type': 'string' }
+              difficulty:
+                type: 'string'
+                enum: ['easy', 'medium', 'hard']
+              prepTime: { 'type': 'integer' }
+              cookTime: { 'type': 'integer' }
               ingredients:
-                type: "array"
+                type: 'array'
                 items:
-                  type: "object"
+                  type: 'object'
                   properties:
-                    name: {"type": "string"}
-                    amount: {"type": "string"}
-                  required: ["name", "amount"]
+                    name: { 'type': 'string' }
+                    amount: { 'type': 'string' }
+                  required: ['name', 'amount']
               instructions:
-                type: "array"
-                items: {"type": "string"}
-            required: ["name", "cuisine", "difficulty", "ingredients", "instructions"]
+                type: 'array'
+                items: { 'type': 'string' }
+            required: ['name', 'cuisine', 'difficulty', 'ingredients', 'instructions']
             additionalProperties: false
 tests:
   - vars:
@@ -51,7 +51,7 @@ tests:
       dish: Okonomiyaki
     assert:
       - type: contains-json-property
-        value: ["ingredients", "instructions"]
+        value: ['ingredients', 'instructions']
       - type: javascript
         value: |
           return output.ingredients.length >= 5 ? 'pass' : 'fail: needs at least 5 ingredients'
@@ -60,9 +60,9 @@ tests:
       dish: Chiles en Nogada
     assert:
       - type: contains-json-property
-        value: ["difficulty"]
+        value: ['difficulty']
       - type: javascript
         value: |
           return output.instructions.length >= 3 ? 'pass' : 'fail: needs detailed instructions'
 outputs:
-  - type: json 
+  - type: json

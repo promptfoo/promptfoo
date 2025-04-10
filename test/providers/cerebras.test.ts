@@ -1,5 +1,5 @@
-import { createCerebrasProvider } from '../../src/providers/cerebras';
 import { loadApiProvider } from '../../src/providers';
+import { createCerebrasProvider } from '../../src/providers/cerebras';
 import type { ApiProvider } from '../../src/types';
 
 describe('Cerebras provider', () => {
@@ -32,4 +32,4 @@ describe('Cerebras provider', () => {
       expect(provider.getApiUrl()).toBe('https://api.cerebras.ai/v1');
     });
   });
-}); 
+});

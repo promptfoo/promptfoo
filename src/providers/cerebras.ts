@@ -22,20 +22,20 @@ export function createCerebrasProvider(
   const modelName = splits.slice(1).join(':');
 
   // Filter out basePath from config to avoid passing it to the API
-  const { basePath, ...configWithoutBasePath } = options.config?.config || {};
+  const { basePath: _, ...configWithoutBasePath } = options.config?.config || {};
 
   // Create a custom provider class that overrides the getOpenAiBody method
   class CerebrasProvider extends OpenAiChatCompletionProvider {
     getOpenAiBody(prompt: string, context?: any, callApiOptions?: any) {
       // Get the body from the parent method
       const { body, config } = super.getOpenAiBody(prompt, context, callApiOptions);
-      
+
       // Cerebras API doesn't support both max_tokens and max_completion_tokens
       // If max_completion_tokens is set, use it and remove max_tokens
       if (body.max_completion_tokens) {
         delete body.max_tokens;
       }
-      
+
       return { body, config };
     }
   }
@@ -52,4 +52,4 @@ export function createCerebrasProvider(
   };
 
   return new CerebrasProvider(modelName, cerebrasConfig);
-} 
+}

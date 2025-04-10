@@ -233,7 +233,7 @@ Many providers offer OpenAI-compatible APIs with their own unique models:
 - [DeepSeek](deepseek)
 - [Groq](groq)
 - [JFrog](jfrog)
-- [Lambda Labs](lambdalabs) 
+- [Lambda Labs](lambdalabs)
 - [LiteLLM](litellm)
 - [LocalAI](localai)
 - [OpenAI](openai)

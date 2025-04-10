@@ -67,17 +67,17 @@ providers:
   - id: cerebras:llama-4-scout-17b-16e-instruct
     config:
       response_format:
-        type: "json_schema"
+        type: 'json_schema'
         json_schema:
-          name: "movie_schema"
+          name: 'movie_schema'
           strict: true
           schema:
-            type: "object"
+            type: 'object'
             properties:
-              title: {"type": "string"}
-              director: {"type": "string"}
-              year: {"type": "integer"}
-            required: ["title", "director", "year"]
+              title: { 'type': 'string' }
+              director: { 'type': 'string' }
+              year: { 'type': 'integer' }
+            required: ['title', 'director', 'year']
             additionalProperties: false
 ```
 
@@ -92,17 +92,17 @@ providers:
   - id: cerebras:llama-4-scout-17b-16e-instruct
     config:
       tools:
-        - type: "function"
+        - type: 'function'
           function:
-            name: "calculate"
-            description: "A calculator that can perform basic arithmetic operations"
+            name: 'calculate'
+            description: 'A calculator that can perform basic arithmetic operations'
             parameters:
-              type: "object"
+              type: 'object'
               properties:
                 expression:
-                  type: "string"
-                  description: "The mathematical expression to evaluate"
-              required: ["expression"]
+                  type: 'string'
+                  description: 'The mathematical expression to evaluate'
+              required: ['expression']
             strict: true
 ```
 
@@ -145,4 +145,4 @@ tests:
 - [Configuration Reference](/docs/configuration/reference.md) - Full configuration options for providers
 - [Cerebras API Documentation](https://docs.cerebras.ai) - Official API reference
 - [Cerebras Structured Outputs Guide](https://docs.cerebras.ai/capabilities/structured-outputs/) - Learn more about JSON schema enforcement
-- [Cerebras Tool Use Guide](https://docs.cerebras.ai/capabilities/tool-use/) - Learn more about tool calling capabilities 
+- [Cerebras Tool Use Guide](https://docs.cerebras.ai/capabilities/tool-use/) - Learn more about tool calling capabilities

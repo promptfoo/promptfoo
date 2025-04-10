@@ -51,6 +51,7 @@ promptfoo eval -c promptfooconfig-structured.yaml
 **Expected output:** You'll receive structured JSON outputs for different recipes, with consistent fields like cuisine type, difficulty level, ingredients, and cooking instructions - all following the defined schema.
 
 Example output:
+
 ```json
 {
   "name": "Traditional Pasta Carbonara",
@@ -59,10 +60,10 @@ Example output:
   "prepTime": 15,
   "cookTime": 20,
   "ingredients": [
-    {"name": "spaghetti", "amount": "400g"},
-    {"name": "pancetta", "amount": "150g"},
-    {"name": "eggs", "amount": "3 large"},
-    {"name": "parmesan cheese", "amount": "50g"}
+    { "name": "spaghetti", "amount": "400g" },
+    { "name": "pancetta", "amount": "150g" },
+    { "name": "eggs", "amount": "3 large" },
+    { "name": "parmesan cheese", "amount": "50g" }
   ],
   "instructions": [
     "Bring a large pot of salted water to boil",
@@ -104,4 +105,4 @@ Cerebras Inference API offers competitive pricing compared to other inference se
 - [Cerebras Provider Documentation](https://promptfoo.dev/docs/providers/cerebras)
 - [Cerebras API Reference](https://docs.cerebras.ai/)
 - [Cerebras Structured Outputs Guide](https://docs.cerebras.ai/capabilities/structured-outputs/)
-- [Cerebras Tool Use Guide](https://docs.cerebras.ai/capabilities/tool-use/) 
+- [Cerebras Tool Use Guide](https://docs.cerebras.ai/capabilities/tool-use/)
