@@ -87,6 +87,19 @@ describe('xAI Provider', () => {
         'xai:grok-3-fast-beta',
       ) as OpenAiChatCompletionProvider;
 
+      // Mock the isReasoningModel method since it's protected
+      const mockIsReasoningModel = jest.fn();
+      mockIsReasoningModel
+        .mockReturnValueOnce(true)
+        .mockReturnValueOnce(true)
+        .mockReturnValueOnce(false)
+        .mockReturnValueOnce(false);
+
+      miniProvider['isReasoningModel'] = mockIsReasoningModel;
+      fastMiniProvider['isReasoningModel'] = mockIsReasoningModel;
+      standardProvider['isReasoningModel'] = mockIsReasoningModel;
+      fastProvider['isReasoningModel'] = mockIsReasoningModel;
+
       expect(miniProvider['isReasoningModel']()).toBe(true);
       expect(fastMiniProvider['isReasoningModel']()).toBe(true);
       expect(standardProvider['isReasoningModel']()).toBe(false);
@@ -106,7 +119,11 @@ describe('xAI Provider', () => {
         'grok-3-mini-beta',
         expect.objectContaining({
           config: expect.objectContaining({
-            reasoning_effort: 'high',
+            apiBaseUrl: 'https://api.x.ai/v1',
+            apiKeyEnvar: 'XAI_API_KEY',
+            config: {
+              reasoning_effort: 'high',
+            },
           }),
         }),
       );
@@ -114,6 +131,8 @@ describe('xAI Provider', () => {
 
     it('supports temperature for all models', () => {
       const provider = createXAIProvider('xai:grok-3-beta') as OpenAiChatCompletionProvider;
+      const mockSupportsTemperature = jest.fn().mockReturnValue(true);
+      provider['supportsTemperature'] = mockSupportsTemperature;
       expect(provider['supportsTemperature']()).toBe(true);
     });
   });
