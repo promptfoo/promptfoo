@@ -1,9 +1,9 @@
+import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { describe, it, expect, vi } from 'vitest';
 import { useStore } from './store';
-import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 
 vi.mock('@promptfoo/util/convertEvalResultsToTable', () => ({
-  convertResultsToTable: vi.fn()
+  convertResultsToTable: vi.fn(),
 }));
 
 describe('useStore', () => {
@@ -51,9 +51,9 @@ describe('useStore', () => {
     const testTable = {
       head: {
         prompts: [],
-        vars: []
+        vars: [],
       },
-      body: []
+      body: [],
     };
     store.setTable(testTable);
     expect(useStore.getState().table).toEqual(testTable);
@@ -64,9 +64,9 @@ describe('useStore', () => {
     const mockTable = {
       head: {
         prompts: [],
-        vars: []
+        vars: [],
       },
-      body: []
+      body: [],
     };
     vi.mocked(convertResultsToTable).mockReturnValue(mockTable);
 
@@ -75,7 +75,7 @@ describe('useStore', () => {
       createdAt: '2023-01-01T00:00:00.000Z',
       results: {},
       config: {},
-      author: null
+      author: null,
     } as any;
 
     store.setTableFromResultsFile(resultsFile);
@@ -88,19 +88,19 @@ describe('useStore', () => {
     const mockTable = {
       head: {
         prompts: [],
-        vars: []
+        vars: [],
       },
-      body: []
+      body: [],
     };
 
     const resultsFile = {
       version: 3,
       createdAt: '2023-01-01T00:00:00.000Z',
       results: {
-        table: mockTable
+        table: mockTable,
       },
       config: {},
-      author: null
+      author: null,
     } as any;
 
     store.setTableFromResultsFile(resultsFile);
@@ -173,7 +173,7 @@ describe('useStore', () => {
     const store = useStore.getState();
     const columnState = {
       selectedColumns: ['col1', 'col2'],
-      columnVisibility: { col1: true, col2: false }
+      columnVisibility: { col1: true, col2: false },
     };
     store.setColumnState('eval1', columnState);
     expect(useStore.getState().columnStates['eval1']).toEqual(columnState);
