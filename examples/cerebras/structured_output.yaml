@@ -3,7 +3,7 @@ description: Cerebras Structured Output Example
 prompts:
   - file://structured_prompts.txt
 providers:
-  - id: cerebras:chat:llama-4-scout-17b-16e-instruct
+  - id: cerebras:llama-4-scout-17b-16e-instruct
     config:
       temperature: 0.7
       max_completion_tokens: 1024

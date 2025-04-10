@@ -14,23 +14,7 @@ describe('Cerebras provider', () => {
   });
 
   describe('createCerebrasProvider', () => {
-    it('should create a chat provider when chat is specified', () => {
-      provider = createCerebrasProvider('cerebras:chat:llama3.1-8b');
-      expect(provider.id()).toBe('openai:llama3.1-8b');
-      expect(provider.toString()).toContain('OpenAI');
-      expect(provider.getApiKey()).toBe('test-key');
-      expect(provider.getApiUrl()).toBe('https://api.cerebras.ai/v1');
-    });
-
-    it('should create a completion provider when completion is specified', () => {
-      provider = createCerebrasProvider('cerebras:completion:llama3.1-8b');
-      expect(provider.id()).toBe('openai:llama3.1-8b');
-      expect(provider.toString()).toContain('OpenAI');
-      expect(provider.getApiKey()).toBe('test-key');
-      expect(provider.getApiUrl()).toBe('https://api.cerebras.ai/v1');
-    });
-
-    it('should default to chat provider when no type is specified', () => {
+    it('should create a chat provider', () => {
       provider = createCerebrasProvider('cerebras:llama3.1-8b');
       expect(provider.id()).toBe('openai:llama3.1-8b');
       expect(provider.toString()).toContain('OpenAI');
@@ -41,7 +25,7 @@ describe('Cerebras provider', () => {
 
   describe('loadApiProvider', () => {
     it('should load the provider from the registry', async () => {
-      provider = await loadApiProvider('cerebras:chat:llama3.1-8b');
+      provider = await loadApiProvider('cerebras:llama3.1-8b');
       expect(provider.id()).toBe('openai:llama3.1-8b');
       expect(provider.toString()).toContain('OpenAI');
       expect(provider.getApiKey()).toBe('test-key');

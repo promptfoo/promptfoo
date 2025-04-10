@@ -2,7 +2,7 @@
 
 This provider enables you to use Cerebras models through their [Inference API](https://docs.cerebras.ai).
 
-Cerebras offers an OpenAI-compatible API for various large language models including Llama models, DeepSeek, and more. You can use it as a drop-in replacement for applications currently using the [OpenAI API](/docs/providers/openai/).
+Cerebras offers an OpenAI-compatible API for various large language models including Llama models, DeepSeek, and more. You can use it as a drop-in replacement for applications currently using the [OpenAI API](/docs/providers/openai/) chat endpoints.
 
 ## Setup
 
@@ -16,18 +16,16 @@ Or in your config:
 
 ```yaml
 providers:
-  - id: cerebras:chat:llama3.1-8b
+  - id: cerebras:llama3.1-8b
     config:
       apiKey: your_api_key_here
 ```
 
 ## Provider Format
 
-The Cerebras provider supports the following formats:
+The Cerebras provider uses a simple format:
 
-- `cerebras:chat:<model name>` - Uses any model with the chat completion interface
-- `cerebras:completion:<model name>` - Uses any model with the completion interface
-- `cerebras:<model name>` - Defaults to the chat completion interface
+- `cerebras:<model name>` - Using the chat completion interface for all models
 
 ## Available Models
 
@@ -46,11 +44,10 @@ curl https://api.cerebras.ai/v1/models -H "Authorization: Bearer your_api_key_he
 
 ## Parameters
 
-The provider accepts standard OpenAI parameters:
+The provider accepts standard OpenAI chat parameters:
 
 - `temperature` - Controls randomness (0.0 to 1.5)
-- `max_completion_tokens` - Maximum number of tokens to generate in chat completions
-- `max_tokens` - Maximum number of tokens to generate in completions
+- `max_completion_tokens` - Maximum number of tokens to generate
 - `top_p` - Nucleus sampling parameter
 - `stop` - Sequences where the API will stop generating further tokens
 - `seed` - Seed for deterministic generation
@@ -67,7 +64,7 @@ To use structured outputs, set the `response_format` parameter to include a JSON
 
 ```yaml
 providers:
-  - id: cerebras:chat:llama-4-scout-17b-16e-instruct
+  - id: cerebras:llama-4-scout-17b-16e-instruct
     config:
       response_format:
         type: "json_schema"
@@ -92,7 +89,7 @@ Cerebras models support tool use (function calling), enabling LLMs to programmat
 
 ```yaml
 providers:
-  - id: cerebras:chat:llama-4-scout-17b-16e-instruct
+  - id: cerebras:llama-4-scout-17b-16e-instruct
     config:
       tools:
         - type: "function"
@@ -119,11 +116,11 @@ description: Cerebras model evaluation
 prompts:
   - You are an expert in {{topic}}. Explain {{question}} in simple terms.
 providers:
-  - id: cerebras:chat:llama3.1-8b
+  - id: cerebras:llama3.1-8b
     config:
       temperature: 0.7
       max_completion_tokens: 1024
-  - id: cerebras:chat:llama-3.3-70b
+  - id: cerebras:llama-3.3-70b
     config:
       temperature: 0.7
       max_completion_tokens: 1024
