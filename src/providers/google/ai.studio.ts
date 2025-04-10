@@ -13,7 +13,7 @@ import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { CHAT_MODELS } from './shared';
 import type { CompletionOptions } from './types';
-import { loadFile, stringifyCandidateContents, geminiFormatAndSystemInstructions } from './util';
+import { loadFile, formatCandidateContents, geminiFormatAndSystemInstructions } from './util';
 import type { GeminiResponseData } from './util';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
@@ -258,7 +258,11 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
 
     let output;
     if (candidate.content?.parts) {
-      output = candidate; // stringifyCandidateContents(candidate);
+      output = formatCandidateContents(candidate);
+    } else {
+      return {
+        error: `No output found in response: ${JSON.stringify(data)}`,
+      };
     }
 
     try {

@@ -249,16 +249,21 @@ export async function hasGoogleDefaultCredentials() {
   }
 }
 
-export function stringifyCandidateContents(data: Candidate) {
+export function formatCandidateContents(data: Candidate) {
   let output = '';
+  let is_text = true;
   for (const part of data.content.parts) {
     if ('text' in part) {
       output += part.text;
     } else {
-      output += JSON.stringify(part);
+      is_text = false;
     }
   }
-  return output;
+  if (is_text) {
+    return output;
+  } else {
+    return data.content.parts;
+  }
 }
 
 export function loadFile(

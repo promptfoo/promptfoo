@@ -26,7 +26,7 @@ import {
   geminiFormatAndSystemInstructions,
   getGoogleClient,
   loadFile,
-  stringifyCandidateContents,
+  formatCandidateContents,
 } from './util';
 
 class VertexGenericProvider implements ApiProvider {
@@ -375,10 +375,8 @@ export class VertexChatProvider extends VertexGenericProvider {
           }
           return { error: blockReason };
         } else if (candidate.content?.parts) {
-          output = candidate; // stringifyCandidateContents(candidate);
-        }
-
-        if (!output) {
+          output = formatCandidateContents(candidate);
+        } else {
           return {
             error: `No output found in response: ${JSON.stringify(data)}`,
           };

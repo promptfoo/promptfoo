@@ -186,15 +186,7 @@ describe('AIStudioChatProvider', () => {
       const response = await provider.callGemini('test prompt');
 
       expect(response).toEqual({
-        output: undefined,
-        tokenUsage: {
-          completion: undefined,
-          numRequests: 1,
-          prompt: undefined,
-          total: undefined,
-        },
-        raw: mockResponse,
-        cached: false,
+        error: 'No output found in response: {"candidates":[{"content":{"parts":null}}]}',
       });
     });
   });
@@ -708,12 +700,14 @@ describe('AIStudioChatProvider', () => {
 
       expect(response).toEqual({
         cached: false,
-        output: JSON.stringify({
-          functionCall: {
-            name: 'get_weather',
-            args: { location: 'San Francisco' },
+        output: [
+          {
+            functionCall: {
+              name: 'get_weather',
+              args: { location: 'San Francisco' },
+            },
           },
-        }),
+        ],
         raw: mockResponse.data,
         tokenUsage: {
           numRequests: 1,
