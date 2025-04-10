@@ -21,14 +21,16 @@ export function createCerebrasProvider(
   const splits = providerPath.split(':');
   const modelName = splits.slice(1).join(':');
 
-  const config = options.config?.config || {};
+  // Filter out basePath from config to avoid passing it to the API
+  const { basePath, ...configWithoutBasePath } = options.config?.config || {};
+
   const cerebrasConfig = {
     ...options,
     config: {
       apiBaseUrl: 'https://api.cerebras.ai/v1',
       apiKeyEnvar: 'CEREBRAS_API_KEY',
       passthrough: {
-        ...config,
+        ...configWithoutBasePath,
       },
     },
   };
