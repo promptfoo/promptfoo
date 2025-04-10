@@ -4,29 +4,22 @@ import dedent from 'dedent';
 import { DEFAULT_SHARE_VIEW_BASE_URL } from '../constants';
 import logger from '../logger';
 import Eval from '../models/eval';
-import {
-  createShareableUrl,
-  getShareableUrl,
-  hasEvalBeenShared,
-  isSharingEnabled,
-  updateSharedEval,
-} from '../share';
+import { createShareableUrl, isSharingEnabled } from '../share';
 import telemetry from '../telemetry';
 import { setupEnv } from '../util';
 
-export async function notCloudEnabledShareInstructions() {
-  logger.info(`» You need to have a cloud account to securely share your results.`);
-  logger.info('');
-
+export function notCloudEnabledShareInstructions(): void {
   const cloudUrl = DEFAULT_SHARE_VIEW_BASE_URL;
   const welcomeUrl = `${cloudUrl}/welcome`;
 
-  logger.info(`1. Please go to ${chalk.greenBright.bold(cloudUrl)} to sign up or login.`);
-
-  logger.info(
-    `2. Follow the instructions at ${chalk.greenBright.bold(welcomeUrl)} to login to the command line.`,
-  );
-  logger.info(`3. Run ${chalk.greenBright.bold('promptfoo share')}`);
+  logger.info(dedent`
+    
+    » You need to have a cloud account to securely share your results.
+    
+    1. Please go to ${chalk.greenBright.bold(cloudUrl)} to sign up or log in.
+    2. Follow the instructions at ${chalk.greenBright.bold(welcomeUrl)} to login to the command line.
+    3. Run ${chalk.greenBright.bold('promptfoo share')}
+  `);
 }
 
 export async function createAndDisplayShareableUrl(
@@ -86,7 +79,6 @@ export function shareCommand(program: Command) {
             process.exitCode = 1;
             return;
           }
-          logger.info(`Sharing latest eval (${eval_.id})`);
         }
 
         if (eval_.prompts.length === 0) {
@@ -102,15 +94,7 @@ export function shareCommand(program: Command) {
           return;
         }
 
-        // Sharing is idempotent; has this eval already been shared?
-        if (await hasEvalBeenShared(eval_)) {
-          logger.info('Eval has already been shared. Updating...');
-          await updateSharedEval(eval_);
-          const url = await getShareableUrl(eval_, cmdObj.showAuth);
-          logger.info(`View results: ${chalk.greenBright.bold(url)}`);
-        } else {
-          await createAndDisplayShareableUrl(eval_, cmdObj.showAuth);
-        }
+        await createAndDisplayShareableUrl(eval_, cmdObj.showAuth);
       },
     );
 }

@@ -7,7 +7,8 @@ import logger from '../../logger';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
 import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt } from '../shared';
-import type { Content, Part, Tool } from './types';
+import { VALID_SCHEMA_TYPES } from './types';
+import type { Content, FunctionCall, Part, Tool } from './types';
 
 const ajv = new Ajv();
 const clone = Clone();
@@ -375,16 +376,22 @@ function normalizeSchemaTypes(schemaNode: any): any {
       const value = schemaNode[key];
 
       if (key === 'type') {
-        // Convert type value(s) to lowercase
-        if (typeof value === 'string') {
+        if (
+          typeof value === 'string' &&
+          (VALID_SCHEMA_TYPES as ReadonlyArray<string>).includes(value)
+        ) {
+          // Convert type value(s) to lowercase
           newNode[key] = value.toLowerCase();
         } else if (Array.isArray(value)) {
           // Handle type arrays like ["STRING", "NULL"]
-          newNode[key] = value.map((t) => (typeof t === 'string' ? t.toLowerCase() : t));
-        } else {
-          throw new Error(
-            `Schema types must be string or array of string. Received: ${JSON.stringify(value)}`,
+          newNode[key] = value.map((t) =>
+            typeof t === 'string' && (VALID_SCHEMA_TYPES as ReadonlyArray<string>).includes(t)
+              ? t.toLowerCase()
+              : t,
           );
+        } else {
+          // Handle type used as function field rather than a schema type definition
+          newNode[key] = normalizeSchemaTypes(value);
         }
       } else {
         // Recursively process nested objects/arrays
@@ -396,42 +403,60 @@ function normalizeSchemaTypes(schemaNode: any): any {
   return newNode;
 }
 
+export function parseStringObject(input: string | object | undefined) {
+  if (typeof input === 'string') {
+    return JSON.parse(input);
+  }
+  return input;
+}
+
 export function validateFunctionCall(
   output: string | object,
   functions?: Tool[] | string,
   vars?: Record<string, string | object>,
 ) {
-  if (typeof output === 'object' && 'functionCall' in output) {
-    output = (output as { functionCall: any }).functionCall;
-  }
-  const functionCall = output as { args: string; name: string };
-  if (
-    typeof functionCall !== 'object' ||
-    typeof functionCall.name !== 'string' ||
-    typeof functionCall.args !== 'string'
-  ) {
-    throw new Error(
-      `Google did not return a valid-looking function call: ${JSON.stringify(functionCall)}`,
-    );
+  let functionCalls: FunctionCall[];
+  try {
+    let parsedOutput: object = parseStringObject(output);
+    if ('functionCall' in parsedOutput) {
+      // Vertex and AIS Format
+      functionCalls = [(parsedOutput as { functionCall: any }).functionCall];
+    } else if ('toolCall' in parsedOutput) {
+      // Live Format
+      parsedOutput = (parsedOutput as { toolCall: any }).toolCall;
+      functionCalls = (parsedOutput as { functionCalls: any }).functionCalls;
+    } else {
+      throw new Error();
+    }
+  } catch {
+    throw new Error(`Google did not return a valid-looking function call: ${output}`);
   }
 
-  // Parse function call and validate it against schema
   const interpolatedFunctions = loadFile(functions, vars) as Tool[];
-  const functionArgs = JSON.parse(functionCall.args);
-  const functionName = functionCall.name;
-  const functionDeclarations = interpolatedFunctions?.find((f) => 'functionDeclarations' in f);
-  let functionSchema = functionDeclarations?.functionDeclarations?.find(
-    (f) => f.name === functionName,
-  )?.parameters;
-  if (!functionSchema) {
-    throw new Error(`Called "${functionName}", but there is no function with that name`);
-  }
 
-  functionSchema = normalizeSchemaTypes(functionSchema);
-  const validate = ajv.compile(functionSchema as AnySchema);
-  if (!validate(functionArgs)) {
-    throw new Error(
-      `Call to "${functionName}" does not match schema: ${JSON.stringify(validate.errors)}`,
+  for (const functionCall of functionCalls) {
+    // Parse function call and validate it against schema
+    const functionName = functionCall.name;
+    const functionArgs = parseStringObject(functionCall.args);
+    const functionDeclarations = interpolatedFunctions?.find((f) => 'functionDeclarations' in f);
+    const functionSchema = functionDeclarations?.functionDeclarations?.find(
+      (f) => f.name === functionName,
     );
+    if (!functionSchema) {
+      throw new Error(`Called "${functionName}", but there is no function with that name`);
+    }
+    if (Object.keys(functionArgs).length !== 0 && functionSchema?.parameters) {
+      const parameterSchema = normalizeSchemaTypes(functionSchema.parameters);
+      const validate = ajv.compile(parameterSchema as AnySchema);
+      if (!validate(functionArgs)) {
+        throw new Error(
+          `Call to "${functionName}":\n${JSON.stringify(functionCall)}\ndoes not match schema:\n${JSON.stringify(validate.errors)}`,
+        );
+      }
+    } else if (!(JSON.stringify(functionArgs) === '{}' && !functionSchema?.parameters)) {
+      throw new Error(
+        `Call to "${functionName}":\n${JSON.stringify(functionCall)}\ndoes not match schema:\n${JSON.stringify(functionSchema)}`,
+      );
+    }
   }
 }
