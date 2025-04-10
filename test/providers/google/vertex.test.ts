@@ -274,12 +274,14 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
     expect(response).toEqual({
       cached: false,
-      output: JSON.stringify({
-        functionCall: {
-          name: 'get_weather',
-          args: { location: 'San Francisco' },
+      output: [
+        {
+          functionCall: {
+            name: 'get_weather',
+            args: { location: 'San Francisco' },
+          },
         },
-      }),
+      ],
       tokenUsage: {
         total: 15,
         prompt: 8,

@@ -2,7 +2,11 @@ import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt } from '../../envars';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
-import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
+import {
+  maybeLoadFromExternalFile,
+  maybeLoadToolsFromExternalFile,
+  renderVarsInObject,
+} from '../../util';
 import invariant from '../../util/invariant';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
@@ -76,7 +80,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       ...(config.function_call ? { function_call: config.function_call } : {}),
       ...(config.tools
         ? {
-            tools: maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)),
+            tools: maybeLoadToolsFromExternalFile(config.tools, context?.vars),
           }
         : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
