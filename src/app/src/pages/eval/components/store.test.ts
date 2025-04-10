@@ -48,20 +48,35 @@ describe('useStore', () => {
 
   it('should set table', () => {
     const store = useStore.getState();
-    const testTable = { rows: [], columns: [] };
+    const testTable = {
+      head: {
+        prompts: [],
+        vars: []
+      },
+      body: []
+    };
     store.setTable(testTable);
     expect(useStore.getState().table).toEqual(testTable);
   });
 
   it('should set table from results file v4+', () => {
     const store = useStore.getState();
-    const mockTable = { rows: [], columns: [] };
+    const mockTable = {
+      head: {
+        prompts: [],
+        vars: []
+      },
+      body: []
+    };
     vi.mocked(convertResultsToTable).mockReturnValue(mockTable);
 
     const resultsFile = {
       version: 4,
-      results: {}
-    };
+      createdAt: '2023-01-01T00:00:00.000Z',
+      results: {},
+      config: {},
+      author: null
+    } as any;
 
     store.setTableFromResultsFile(resultsFile);
     expect(useStore.getState().table).toEqual(mockTable);
@@ -70,14 +85,23 @@ describe('useStore', () => {
 
   it('should set table from results file < v4', () => {
     const store = useStore.getState();
-    const mockTable = { rows: [], columns: [] };
+    const mockTable = {
+      head: {
+        prompts: [],
+        vars: []
+      },
+      body: []
+    };
 
     const resultsFile = {
       version: 3,
+      createdAt: '2023-01-01T00:00:00.000Z',
       results: {
         table: mockTable
-      }
-    };
+      },
+      config: {},
+      author: null
+    } as any;
 
     store.setTableFromResultsFile(resultsFile);
     expect(useStore.getState().table).toEqual(mockTable);
@@ -86,7 +110,7 @@ describe('useStore', () => {
 
   it('should set config', () => {
     const store = useStore.getState();
-    const config = { test: 'config' };
+    const config = { prompts: ['test prompt'] };
     store.setConfig(config);
     expect(useStore.getState().config).toEqual(config);
   });
