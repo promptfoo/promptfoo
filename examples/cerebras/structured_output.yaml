@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Cerebras Structured Output Example
+description: Schema-enforced JSON recipe generation with Llama 4
 prompts:
   - file://structured_prompts.txt
 providers:
@@ -38,12 +38,31 @@ providers:
 tests:
   - vars:
       cuisine: Italian
-      dish: Pasta Carbonara
+      dish: Cacio e Pepe
+    assert:
+      - type: json-schema-valid
+        value: |
+          {
+            "type": "object",
+            "required": ["name", "cuisine", "difficulty", "ingredients", "instructions"]
+          }
   - vars:
       cuisine: Japanese
-      dish: Chicken Teriyaki
+      dish: Okonomiyaki
+    assert:
+      - type: contains-json-property
+        value: ["ingredients", "instructions"]
+      - type: javascript
+        value: |
+          return output.ingredients.length >= 5 ? 'pass' : 'fail: needs at least 5 ingredients'
   - vars:
       cuisine: Mexican
-      dish: Guacamole
+      dish: Chiles en Nogada
+    assert:
+      - type: contains-json-property
+        value: ["difficulty"]
+      - type: javascript
+        value: |
+          return output.instructions.length >= 3 ? 'pass' : 'fail: needs detailed instructions'
 outputs:
   - type: json 

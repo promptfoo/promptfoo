@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Cerebras Tool Use Example
+description: Function calling with Llama 4 for mathematical problem solving
 prompts:
   - file://tool_prompts.txt
 providers:
@@ -24,11 +24,26 @@ tests:
   - vars:
       problem: "15 × 7"
       explanation: "the product of fifteen and seven"
+    assert:
+      - type: contains
+        value: "105"
+      - type: contains-any
+        value: ["multiply", "multiplication", "multiplying", "product"]
   - vars:
-      problem: "128 ÷ 4"
-      explanation: "one hundred twenty-eight divided by four"
+      problem: "(42 × 3) ÷ 6"
+      explanation: "forty-two times three, divided by six"
+    assert:
+      - type: contains
+        value: "21"
+      - type: contains-any
+        value: ["order of operations", "PEMDAS", "parentheses", "brackets"]
   - vars:
-      problem: "(25 × 4) + 10"
-      explanation: "twenty-five multiplied by four, plus ten"
+      problem: "√(144) + 25²"
+      explanation: "the square root of one hundred forty-four plus twenty-five squared"
+    assert:
+      - type: contains
+        value: "637"
+      - type: contains-any
+        value: ["square root", "exponent", "power", "squared"]
 outputs:
   - type: text 
