@@ -10,7 +10,7 @@ import { cloudConfig } from './globalConfig/cloud';
 import logger from './logger';
 import type Eval from './models/eval';
 import type { SharedResults } from './types';
-import { cloudCanAcceptChunkedResults } from './util/cloud';
+import { cloudCanAcceptChunkedResults, makeRequest as makeCloudRequest } from './util/cloud';
 
 export interface ShareDomainResult {
   domain: string;
@@ -444,20 +444,8 @@ export async function createShareableUrl(
  */
 export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
   try {
-    const { url } = await getApiConfig(eval_);
-
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-
-    if (cloudConfig.isEnabled()) {
-      headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
-    }
-
-    const res = await fetchWithProxy(`${url}/${eval_.id}`, {
-      method: 'GET',
-      headers,
-    });
-
-    return res.status !== 404;
+    const { status } = await makeCloudRequest(`/${eval_.id}`, 'GET');
+    return status !== 404;
   } catch (e) {
     logger.error(`Error checking if eval has been shared: ${e}`);
     return false;
