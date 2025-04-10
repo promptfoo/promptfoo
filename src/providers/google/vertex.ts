@@ -340,10 +340,11 @@ export class VertexChatProvider extends VertexGenericProvider {
         const dataWithResponse = data as GeminiResponseData[];
 
         if (
-          !(dataWithResponse &&
-            dataWithResponse.length == 1 &&
+          !(
+            dataWithResponse &&
+            dataWithResponse.length === 1 &&
             dataWithResponse[0].candidates &&
-            dataWithResponse[0].candidates.length == 1
+            dataWithResponse[0].candidates.length === 1
           )
         ) {
           return {
