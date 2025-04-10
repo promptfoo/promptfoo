@@ -2,12 +2,15 @@ import * as fs from 'fs';
 import { GoogleAuth } from 'google-auth-library';
 import * as nunjucks from 'nunjucks';
 import logger from '../../../src/logger';
+import type { Tool } from '../../../src/providers/google/types';
 import {
   maybeCoerceToGeminiFormat,
   geminiFormatAndSystemInstructions,
   getGoogleClient,
   hasGoogleDefaultCredentials,
   loadFile,
+  parseStringObject,
+  validateFunctionCall,
 } from '../../../src/providers/google/util';
 
 jest.mock('google-auth-library');
@@ -27,6 +30,119 @@ describe('util', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     (global as any).cachedAuth = undefined;
+  });
+
+  describe('parseStringObject', () => {
+    it('should parse string input to object', () => {
+      const input = '{"key": "value"}';
+      expect(parseStringObject(input)).toEqual({ key: 'value' });
+    });
+
+    it('should return object input as-is', () => {
+      const input = { key: 'value' };
+      expect(parseStringObject(input)).toBe(input);
+    });
+
+    it('should return undefined as-is', () => {
+      expect(parseStringObject(undefined)).toBeUndefined();
+    });
+  });
+
+  describe('validateFunctionCall', () => {
+    const mockFunctions: Tool[] = [
+      {
+        functionDeclarations: [
+          {
+            name: 'testFunction',
+            parameters: {
+              type: 'OBJECT',
+              properties: {
+                param1: { type: 'STRING' },
+              },
+              required: ['param1'],
+            },
+          },
+          {
+            name: 'emptyFunction',
+          },
+        ],
+      },
+    ];
+
+    it('should validate Vertex/AIS format function call', () => {
+      const output = {
+        functionCall: {
+          name: 'testFunction',
+          args: '{"param1": "test"}',
+        },
+      };
+      expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
+    });
+
+    it('should validate Live format function call', () => {
+      const output = {
+        toolCall: {
+          functionCalls: [
+            {
+              name: 'testFunction',
+              args: '{"param1": "test"}',
+            },
+          ],
+        },
+      };
+      expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
+    });
+
+    it('should validate empty function args', () => {
+      const output = {
+        functionCall: {
+          name: 'emptyFunction',
+          args: '{}',
+        },
+      };
+      expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
+    });
+
+    it('should validate function with no parameters', () => {
+      const output = {
+        functionCall: {
+          name: 'emptyFunction',
+          args: '{}',
+        },
+      };
+      expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
+    });
+
+    it('should throw error for invalid function call format', () => {
+      const output = {
+        invalidFormat: true,
+      };
+      expect(() => validateFunctionCall(output, mockFunctions)).toThrow(
+        'Google did not return a valid-looking function call',
+      );
+    });
+
+    it('should throw error for non-existent function', () => {
+      const output = {
+        functionCall: {
+          name: 'nonExistentFunction',
+          args: '{}',
+        },
+      };
+      expect(() => validateFunctionCall(output, mockFunctions)).toThrow(
+        'Called "nonExistentFunction", but there is no function with that name',
+      );
+    });
+
+    it('should throw error for invalid args', () => {
+      const output = {
+        functionCall: {
+          name: 'testFunction',
+          args: '{}',
+        },
+      };
+      expect(() => validateFunctionCall(output, mockFunctions)).toThrow(/does not match schema/);
+    });
   });
 
   describe('maybeCoerceToGeminiFormat', () => {
@@ -131,6 +247,9 @@ describe('util', () => {
         coerced: false,
         systemInstruction: undefined,
       });
+      expect(logger.warn).toHaveBeenCalledWith(
+        `Unknown format for Gemini: ${JSON.stringify(input)}`,
+      );
     });
 
     it('should handle OpenAI chat format with mixed content types', () => {
@@ -364,7 +483,6 @@ describe('util', () => {
     });
 
     it('should handle string content', () => {
-      // This simulates the parsed YAML format
       const input = [
         {
           role: 'system',
@@ -475,7 +593,6 @@ describe('util', () => {
 
   describe('loadFile', () => {
     it('should load from variable', async () => {
-      // This configuration was required to get the unit test working as in the full script
       nunjucks.configure({ autoescape: false });
 
       const config_var = '{{tool_file}}';

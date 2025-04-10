@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type EvalResult from 'src/models/evalResult';
 import { getUserEmail } from '../src/globalConfig/accounts';
 import { cloudConfig } from '../src/globalConfig/cloud';
@@ -8,8 +7,6 @@ import {
   createShareableUrl,
   determineShareDomain,
   isSharingEnabled,
-  hasEvalBeenShared,
-  updateSharedEval,
 } from '../src/share';
 import { cloudCanAcceptChunkedResults } from '../src/util/cloud';
 
@@ -269,11 +266,10 @@ describe('createShareableUrl', () => {
       save: jest.fn().mockResolvedValue(undefined),
       toEvaluateSummary: jest.fn().mockResolvedValue({}),
       getTable: jest.fn().mockResolvedValue([]),
-      id: randomUUID(),
     };
 
     const result = await createShareableUrl(mockEval as Eval);
-    expect(result).toBe(`https://app.example.com/eval/${mockEval.id}`);
+    expect(result).toBe('https://app.example.com/eval/mock-eval-id');
   });
 
   describe('chunked vs regular sending', () => {
@@ -289,7 +285,6 @@ describe('createShareableUrl', () => {
         save: jest.fn().mockResolvedValue(undefined),
         toEvaluateSummary: jest.fn().mockResolvedValue({}),
         getTable: jest.fn().mockResolvedValue([]),
-        id: randomUUID(),
       };
 
       jest.mocked(getUserEmail).mockReturnValue('test@example.com');
@@ -378,7 +373,7 @@ describe('createShareableUrl', () => {
         })
         .mockResolvedValueOnce({
           ok: true,
-          json: () => Promise.resolve({ id: mockEval.id }),
+          json: () => Promise.resolve({ id: 'mock-eval-id' }),
         })
         .mockResolvedValueOnce({
           ok: true,
@@ -395,7 +390,7 @@ describe('createShareableUrl', () => {
           body: expect.stringContaining('"results":[{"id":"1"},{"id":"2"}]'),
         }),
       );
-      expect(result).toBe(`https://promptfoo.app/eval/${mockEval.id}`);
+      expect(result).toBe('https://promptfoo.app/eval/mock-eval-id');
     });
 
     it('sends chunked eval when open source version is newer than supported', async () => {
@@ -413,7 +408,7 @@ describe('createShareableUrl', () => {
         })
         .mockResolvedValueOnce({
           ok: true,
-          json: () => Promise.resolve({ id: mockEval.id }),
+          json: () => Promise.resolve({ id: 'mock-eval-id' }),
         })
         .mockResolvedValueOnce({
           ok: true,
@@ -431,13 +426,13 @@ describe('createShareableUrl', () => {
         }),
       );
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringMatching(`/api/eval/${mockEval.id}/results`),
+        expect.stringMatching(/\/api\/eval\/mock-eval-id\/results/),
         expect.objectContaining({
           method: 'POST',
           body: expect.stringContaining('[{"id":"1"},{"id":"2"}]'),
         }),
       );
-      expect(result).toBe(`https://promptfoo.app/eval/${mockEval.id}`);
+      expect(result).toBe('https://promptfoo.app/eval/mock-eval-id');
     });
   });
 
@@ -462,7 +457,6 @@ describe('createShareableUrl', () => {
       save: jest.fn().mockResolvedValue(undefined),
       toEvaluateSummary: jest.fn().mockResolvedValue({}),
       getTable: jest.fn().mockResolvedValue([]),
-      id: randomUUID(),
     };
 
     // Mock the health check and response
@@ -477,82 +471,12 @@ describe('createShareableUrl', () => {
       })
       .mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ id: mockEval.id }),
+        json: () => Promise.resolve({ id: 'mock-eval-id' }),
       });
 
     const result = await createShareableUrl(mockEval as Eval);
 
     // Verify the URL uses the custom domain
-    expect(result).toBe(`${customDomain}/eval/?evalId=${mockEval.id}`);
-  });
-});
-
-describe('hasEvalBeenShared', () => {
-  beforeAll(() => {
-    mockFetch.mockReset();
-  });
-
-  it('returns true if the server does not return 404', async () => {
-    const mockEval: Partial<Eval> = {
-      config: {},
-      id: randomUUID(),
-    };
-
-    mockFetch
-      // Mock `getApiConfig` internals
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ version: '0.103.7' }),
-      })
-      // Mock `fetchWithProxy` internals
-      .mockResolvedValueOnce({ status: 200 });
-
-    const result = await hasEvalBeenShared(mockEval as Eval);
-    expect(result).toBe(true);
-  });
-
-  it('returns false if the server returns 404', async () => {
-    const mockEval: Partial<Eval> = {
-      config: {},
-      id: randomUUID(),
-    };
-
-    mockFetch
-      // Mock `getApiConfig` internals
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ version: '0.103.7' }),
-      })
-      // Mock `fetchWithProxy` internals
-      .mockResolvedValueOnce({ status: 404 });
-
-    const result = await hasEvalBeenShared(mockEval as Eval);
-    expect(result).toBe(false);
-  });
-});
-
-describe('updateSharedEval', () => {
-  it('fails if 204 status is not returned by the server', async () => {
-    const mockEval: Partial<Eval> = {
-      config: {},
-      id: randomUUID(),
-      results: [
-        { id: '1', gradingResult: {} },
-        { id: '2', gradingResult: {} },
-      ] as EvalResult[],
-    };
-
-    mockFetch
-      // Mock `getApiConfig` internals
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ version: '0.103.7' }),
-      })
-      // Mock `fetchWithProxy` internals
-      .mockResolvedValueOnce({ status: 500, statusText: 'Foobar' });
-
-    await expect(updateSharedEval(mockEval as Eval)).rejects.toThrow(
-      'Failed to sync eval: 500 Foobar',
-    );
+    expect(result).toBe(`${customDomain}/eval/?evalId=mock-eval-id`);
   });
 });

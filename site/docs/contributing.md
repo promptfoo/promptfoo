@@ -238,6 +238,91 @@ Providers are defined in TypeScript. We also provide language bindings for Pytho
 
 6. Ensure all tests pass (`npm test`) and fix any linting issues (`npm run lint`).
 
+## Adding a New Assertion
+
+Assertions define different ways to compare and validate the output of an LLM against expected results. To contribute a new assertion:
+
+1. **Define the Assertion Type**:
+
+   - Add your new assertion type to the `BaseAssertionTypesSchema` enum in `src/types/index.ts`.
+   - Run `npm run jsonSchema:generate` to update the JSON schema located at `site/static/config-schema.json`
+
+2. **Implement the Assertion Handler**:
+
+   - Create a new file in `src/assertions/` for your assertion logic.
+   - Implement a handler function that takes `AssertionParams` and returns a `GradingResult`.
+
+   Basic handler structure:
+
+   ```typescript
+   import type { AssertionParams, GradingResult } from '../types';
+   import invariant from '../util/invariant';
+
+   export function handleYourAssertion({
+     assertion,
+     inverse,
+     outputString,
+     renderedValue,
+     provider, // Use if your assertion needs provider-specific logic
+     test,     // Access to test case data
+   }: AssertionParams): GradingResult {
+     // Validate inputs
+     invariant(
+       typeof renderedValue === 'string' || Array.isArray(renderedValue),
+       '"your-assertion" assertion must have a string or array value'
+     );
+
+     // Implementation logic
+     const threshold = assertion.threshold ?? 0.5; // Set a sensible default
+
+     // Calculate the score
+     const score = /* your scoring logic */;
+
+     // Determine if test passes
+     const pass = (score >= threshold) !== inverse;
+
+     return {
+       pass,
+       score: inverse ? 1 - score : score,
+       reason: pass
+         ? 'Assertion passed'
+         : `Your assertion scored ${score.toFixed(2)} vs threshold ${threshold}`,
+       assertion,
+     };
+   }
+   ```
+
+3. **Register the Assertion Handler**:
+
+   - In `src/assertions/index.ts`, import your handler function and add it to the handlers mapping.
+
+   ```typescript
+   import { handleYourAssertion } from './yourAssertion';
+
+   // In the handlers mapping
+   'your-assertion': handleYourAssertion,
+   ```
+
+4. **Document Your Assertion**:
+
+   - Update the appropriate documentation files:
+
+     - For standard assertions, add details to `site/docs/configuration/expected-outputs/deterministic.md`
+     - Include your assertion in the reference table in `site/docs/configuration/expected-outputs/index.md`
+
+   - For model-graded assertions:
+     - Add an entry to the list in `site/docs/configuration/expected-outputs/model-graded/index.md`
+     - Create a dedicated documentation page at `site/docs/configuration/expected-outputs/model-graded/your-assertion.md`
+
+5. **Write Tests**:
+   - Create a test file in `test/assertions/yourAssertion.test.ts`.
+   - Test scenarios including:
+     - Standard use cases
+     - Edge cases and error handling
+     - Provider-specific behavior (if applicable)
+     - Schema validation (if applicable)
+     - Backward compatibility (if refactoring existing assertions)
+
 ## Contributing to the Web UI
 
 The web UI is written as a React app. It is exported as a static site and hosted by a local express server when bundled.
