@@ -3,7 +3,7 @@ import path from 'path';
 import { runAssertion } from '../../src/assertions';
 import type { Tool } from '../../src/providers/google//types';
 import { AIStudioChatProvider } from '../../src/providers/google/ai.studio';
-import { GoogleMMLiveProvider } from '../../src/providers/google/live';
+import { GoogleLiveProvider } from '../../src/providers/google/live';
 import { validateFunctionCall } from '../../src/providers/google/util';
 import { VertexChatProvider } from '../../src/providers/google/vertex';
 import type { ApiProvider, AtomicTestCase, GradingResult } from '../../src/types';
@@ -438,7 +438,7 @@ describe('Google assertions', () => {
         toolCall: { functionCalls: [{ args: { x: 10, y: 20 }, name: 'add' }] },
       });
 
-      const provider = new GoogleMMLiveProvider('foo', {
+      const provider = new GoogleLiveProvider('foo', {
         config: {
           tools: [
             {
@@ -487,7 +487,7 @@ describe('Google assertions', () => {
 
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
-        provider: new GoogleMMLiveProvider('foo', {
+        provider: new GoogleLiveProvider('foo', {
           config: {
             tools: [
               {

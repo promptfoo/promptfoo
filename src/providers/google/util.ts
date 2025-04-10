@@ -7,6 +7,7 @@ import logger from '../../logger';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
 import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt } from '../shared';
+import { VALID_SCHEMA_TYPES } from './types';
 import type { Content, FunctionCall, Part, Tool } from './types';
 
 const ajv = new Ajv();
@@ -375,16 +376,22 @@ function normalizeSchemaTypes(schemaNode: any): any {
       const value = schemaNode[key];
 
       if (key === 'type') {
-        // Convert type value(s) to lowercase
-        if (typeof value === 'string') {
+        if (
+          typeof value === 'string' &&
+          (VALID_SCHEMA_TYPES as ReadonlyArray<string>).includes(value)
+        ) {
+          // Convert type value(s) to lowercase
           newNode[key] = value.toLowerCase();
         } else if (Array.isArray(value)) {
           // Handle type arrays like ["STRING", "NULL"]
-          newNode[key] = value.map((t) => (typeof t === 'string' ? t.toLowerCase() : t));
-        } else {
-          throw new Error(
-            `Schema types must be string or array of string. Received: ${JSON.stringify(value)}`,
+          newNode[key] = value.map((t) =>
+            typeof t === 'string' && (VALID_SCHEMA_TYPES as ReadonlyArray<string>).includes(t)
+              ? t.toLowerCase()
+              : t,
           );
+        } else {
+          // Handle type used as function field rather than a schema type definition
+          newNode[key] = normalizeSchemaTypes(value);
         }
       } else {
         // Recursively process nested objects/arrays
