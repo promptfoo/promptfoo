@@ -1,7 +1,12 @@
 import { Command } from 'commander';
-import { createAndDisplayShareableUrl, shareCommand } from '../../src/commands/share';
+import {
+  createAndDisplayShareableUrl,
+  notCloudEnabledShareInstructions,
+  shareCommand,
+} from '../../src/commands/share';
 import * as envars from '../../src/envars';
 import logger from '../../src/logger';
+import Eval from '../../src/models/eval';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
 
 jest.mock('../../src/share');
@@ -13,16 +18,31 @@ jest.mock('../../src/telemetry', () => ({
 jest.mock('../../src/envars');
 jest.mock('readline');
 jest.mock('../../src/models/eval');
+jest.mock('../../src/util', () => ({
+  setupEnv: jest.fn(),
+}));
 
 describe('Share Command', () => {
-  describe('createAndDisplayShareableUrl', () => {
-    beforeEach(() => {
-      jest.clearAllMocks();
-    });
+  beforeEach(() => {
+    jest.clearAllMocks();
+    process.exitCode = 0; // Reset exitCode before each test
+  });
 
+  describe('notCloudEnabledShareInstructions', () => {
+    it('should log instructions for cloud setup', () => {
+      notCloudEnabledShareInstructions();
+
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('You need to have a cloud account'),
+      );
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Please go to'));
+    });
+  });
+
+  describe('createAndDisplayShareableUrl', () => {
     it('should return a URL and log it when successful', async () => {
       jest.mocked(isSharingEnabled).mockReturnValue(true);
-      const mockEval = { id: 'test-eval-id' } as any;
+      const mockEval = { id: 'test-eval-id' } as Eval;
       const mockUrl = 'https://app.promptfoo.dev/eval/test-eval-id';
 
       jest.mocked(createShareableUrl).mockResolvedValue(mockUrl);
@@ -35,7 +55,7 @@ describe('Share Command', () => {
     });
 
     it('should pass showAuth parameter correctly', async () => {
-      const mockEval = { id: 'test-eval-id' } as any;
+      const mockEval = { id: 'test-eval-id' } as Eval;
       const mockUrl = 'https://app.promptfoo.dev/eval/test-eval-id';
 
       jest.mocked(createShareableUrl).mockResolvedValue(mockUrl);
@@ -45,9 +65,23 @@ describe('Share Command', () => {
       expect(createShareableUrl).toHaveBeenCalledWith(mockEval, true);
     });
 
-    it('should return null when createShareableUrl returns null', async () => {
-      const mockEval = { id: 'test-eval-id' } as any;
+    it('should show cloud instructions and return null when sharing is not enabled', async () => {
+      const mockEval = { id: 'test-eval-id' } as Eval;
+      jest.mocked(isSharingEnabled).mockReturnValue(false);
 
+      const result = await createAndDisplayShareableUrl(mockEval, false);
+
+      expect(result).toBeNull();
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('You need to have a cloud account'),
+      );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should return null when createShareableUrl returns null', async () => {
+      const mockEval = { id: 'test-eval-id' } as Eval;
+
+      jest.mocked(isSharingEnabled).mockReturnValue(true);
       jest.mocked(createShareableUrl).mockResolvedValue(null);
 
       const result = await createAndDisplayShareableUrl(mockEval, false);
@@ -77,11 +111,61 @@ describe('Share Command', () => {
       const options = cmd?.options;
       expect(options?.find((o) => o.long === '--show-auth')).toBeDefined();
       expect(options?.find((o) => o.long === '--env-path')).toBeDefined();
+      expect(options?.find((o) => o.long === '--yes')).toBeDefined();
     });
 
-    // Test just the hostname determination logic directly
+    it('should handle specific evalId not found', async () => {
+      jest.spyOn(Eval, 'findById').mockImplementation().mockResolvedValue(undefined);
+
+      const shareCmd = program.commands.find((c) => c.name() === 'share');
+      await shareCmd?.parseAsync(['node', 'test', 'non-existent-id']);
+
+      expect(Eval.findById).toHaveBeenCalledWith('non-existent-id');
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Could not find eval with ID'),
+      );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should handle no evals available', async () => {
+      jest.spyOn(Eval, 'latest').mockImplementation().mockResolvedValue(undefined);
+
+      const shareCmd = program.commands.find((c) => c.name() === 'share');
+      await shareCmd?.parseAsync(['node', 'test']);
+
+      expect(Eval.latest).toHaveBeenCalledWith();
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Could not load results'));
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should handle eval with empty prompts', async () => {
+      const mockEval = { prompts: [] } as unknown as Eval;
+      jest.spyOn(Eval, 'latest').mockImplementation().mockResolvedValue(mockEval);
+
+      const shareCmd = program.commands.find((c) => c.name() === 'share');
+      await shareCmd?.parseAsync(['node', 'test']);
+
+      expect(Eval.latest).toHaveBeenCalledWith();
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('cannot be shared'));
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should accept -y flag for backwards compatibility', async () => {
+      const mockEval = { prompts: ['test'] } as unknown as Eval;
+
+      jest.spyOn(Eval, 'latest').mockImplementation().mockResolvedValue(mockEval);
+      jest.mocked(isSharingEnabled).mockReturnValue(true);
+      jest.mocked(createShareableUrl).mockResolvedValue('https://example.com/share');
+
+      const shareCmd = program.commands.find((c) => c.name() === 'share');
+      await shareCmd?.parseAsync(['node', 'test', '-y']);
+
+      expect(Eval.latest).toHaveBeenCalledWith();
+      expect(createShareableUrl).toHaveBeenCalledWith(mockEval, false);
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('View results:'));
+    });
+
     it('should use promptfoo.app by default if no environment variables are set', () => {
-      // Mock environment variables to return undefined
       jest.mocked(envars.getEnvString).mockImplementation(() => '');
 
       const baseUrl =
@@ -93,7 +177,6 @@ describe('Share Command', () => {
     });
 
     it('should use PROMPTFOO_SHARING_APP_BASE_URL for hostname when set', () => {
-      // Mock PROMPTFOO_SHARING_APP_BASE_URL
       jest.mocked(envars.getEnvString).mockImplementation((key) => {
         if (key === 'PROMPTFOO_SHARING_APP_BASE_URL') {
           return 'https://custom-domain.com';
@@ -110,7 +193,6 @@ describe('Share Command', () => {
     });
 
     it('should use PROMPTFOO_REMOTE_APP_BASE_URL for hostname when PROMPTFOO_SHARING_APP_BASE_URL is not set', () => {
-      // Mock PROMPTFOO_REMOTE_APP_BASE_URL
       jest.mocked(envars.getEnvString).mockImplementation((key) => {
         if (key === 'PROMPTFOO_REMOTE_APP_BASE_URL') {
           return 'https://self-hosted-domain.com';
@@ -127,7 +209,6 @@ describe('Share Command', () => {
     });
 
     it('should prioritize PROMPTFOO_SHARING_APP_BASE_URL over PROMPTFOO_REMOTE_APP_BASE_URL', () => {
-      // Mock both environment variables
       jest.mocked(envars.getEnvString).mockImplementation((key) => {
         if (key === 'PROMPTFOO_SHARING_APP_BASE_URL') {
           return 'https://sharing-domain.com';
