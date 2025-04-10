@@ -655,7 +655,7 @@ describe('HttpProvider', () => {
       // Call the API with a test prompt
       await provider.callApi('test');
 
-      // Verify the fetch call was made with the transformed data
+      // Verify the fetch call was made
       expect(fetchWithCache).toHaveBeenCalledWith(
         'http://test.com/api/endpoint',
         {
@@ -674,10 +674,19 @@ describe('HttpProvider', () => {
 
       // Extract and parse the body to check the content regardless of formatting
       const callArgs = jest.mocked(fetchWithCache).mock.calls[0];
-      const requestOptions = callArgs[1];
-      const bodyJson = JSON.parse(requestOptions.body);
 
-      // Check that the body contains the expected transformed prompt
+      // Basic check that fetchWithCache was called
+      expect(callArgs.length).toBeGreaterThan(1);
+
+      // Extract first call
+      const requestOptions = callArgs[1] as {
+        method: string;
+        headers: Record<string, string>;
+        body: string;
+      };
+
+      // Parse and check the body
+      const bodyJson = JSON.parse(requestOptions.body as string);
       expect(bodyJson).toEqual({
         prompt: 'TEST',
       });
