@@ -142,7 +142,9 @@ export class AwsBedrockKnowledgeBaseProvider
     // Prepare the request parameters
     const modelArn =
       this.kbConfig.modelArn ||
-      `arn:aws:bedrock:${this.getRegion()}::foundation-model/${this.modelName}`;
+      (this.modelName.includes(':')
+        ? this.modelName // If modelName already has full ARN format, use as is
+        : `arn:aws:bedrock:${this.getRegion()}:aws:foundation-model/${this.modelName}`);
 
     const params: RetrieveAndGenerateCommandInput = {
       input: { text: prompt },
