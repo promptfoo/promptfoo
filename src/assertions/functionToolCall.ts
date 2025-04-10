@@ -1,5 +1,5 @@
 import { AIStudioChatProvider } from '../providers/google/ai.studio';
-import { GoogleMMLiveProvider } from '../providers/google/live';
+import { GoogleLiveProvider } from '../providers/google/live';
 import { validateFunctionCall as validateGoogleFunctionCall } from '../providers/google/util';
 import { VertexChatProvider } from '../providers/google/vertex';
 import { OpenAiChatCompletionProvider } from '../providers/openai/chat';
@@ -16,13 +16,12 @@ export const handleIsValidFunctionCall = ({
   try {
     if (
       provider instanceof AIStudioChatProvider ||
-      provider instanceof GoogleMMLiveProvider ||
+      provider instanceof GoogleLiveProvider ||
       provider instanceof VertexChatProvider
     ) {
       validateGoogleFunctionCall(
         output,
-        (provider as AIStudioChatProvider | GoogleMMLiveProvider | VertexChatProvider).config
-          ?.tools,
+        (provider as AIStudioChatProvider | GoogleLiveProvider | VertexChatProvider).config?.tools,
         test.vars,
       );
     } else if (provider instanceof OpenAiChatCompletionProvider) {
