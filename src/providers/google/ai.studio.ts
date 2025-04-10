@@ -248,7 +248,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
 
     logger.debug(`\tGoogle API response: ${JSON.stringify(data)}`);
 
-    if (!(data.candidates && data.candidates.length == 1)) {
+    if (!(data && data.candidates && data.candidates.length == 1)) {
       return {
         error: 'Expected one candidate in AIStudio API response.',
       };
