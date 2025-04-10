@@ -70,12 +70,14 @@ describe('util', () => {
     ];
 
     it('should validate Vertex/AIS format function call', () => {
-      const output = {
-        functionCall: {
-          name: 'testFunction',
-          args: '{"param1": "test"}',
+      const output = [
+        {
+          functionCall: {
+            name: 'testFunction',
+            args: '{"param1": "test"}',
+          },
         },
-      };
+      ];
       expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
     });
 
@@ -94,22 +96,26 @@ describe('util', () => {
     });
 
     it('should validate empty function args', () => {
-      const output = {
-        functionCall: {
-          name: 'emptyFunction',
-          args: '{}',
+      const output = [
+        {
+          functionCall: {
+            name: 'emptyFunction',
+            args: '{}',
+          },
         },
-      };
+      ];
       expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
     });
 
     it('should validate function with no parameters', () => {
-      const output = {
-        functionCall: {
-          name: 'emptyFunction',
-          args: '{}',
+      const output = [
+        {
+          functionCall: {
+            name: 'emptyFunction',
+            args: '{}',
+          },
         },
-      };
+      ];
       expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
     });
 
@@ -123,24 +129,28 @@ describe('util', () => {
     });
 
     it('should throw error for non-existent function', () => {
-      const output = {
-        functionCall: {
-          name: 'nonExistentFunction',
-          args: '{}',
+      const output = [
+        {
+          functionCall: {
+            name: 'nonExistentFunction',
+            args: '{}',
+          },
         },
-      };
+      ];
       expect(() => validateFunctionCall(output, mockFunctions)).toThrow(
         'Called "nonExistentFunction", but there is no function with that name',
       );
     });
 
     it('should throw error for invalid args', () => {
-      const output = {
-        functionCall: {
-          name: 'testFunction',
-          args: '{}',
+      const output = [
+        {
+          functionCall: {
+            name: 'testFunction',
+            args: '{}',
+          },
         },
-      };
+      ];
       expect(() => validateFunctionCall(output, mockFunctions)).toThrow(/does not match schema/);
     });
   });
