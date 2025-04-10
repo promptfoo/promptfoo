@@ -49,21 +49,15 @@ describe('auth command', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.resetAllMocks();
     program = new Command();
     authCommand(program);
 
-    // Mock validateAndSetApiToken to emit the success message
-    jest.mocked(cloudConfig.validateAndSetApiToken).mockImplementation(async () => {
-      logger.info(expect.stringContaining('Successfully logged in'));
-      logger.info(expect.any(String)); // 'Logged in as:'
-      logger.info(expect.any(String)); // User
-      logger.info(expect.any(String)); // Organization
-      logger.info(expect.any(String)); // App URL
-      return {
-        user: mockCloudUser,
-        organization: mockOrganization,
-        app: mockApp,
-      };
+    // Set up a basic mock that just returns the expected data
+    jest.mocked(cloudConfig.validateAndSetApiToken).mockResolvedValue({
+      user: mockCloudUser,
+      organization: mockOrganization,
+      app: mockApp,
     });
   });
 
@@ -76,12 +70,6 @@ describe('auth command', () => {
         }),
       );
 
-      jest.mocked(cloudConfig.validateAndSetApiToken).mockResolvedValueOnce({
-        user: mockCloudUser,
-        organization: mockOrganization,
-        app: mockApp,
-      });
-
       const loginCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
         ?.commands.find((cmd) => cmd.name() === 'login');
@@ -92,52 +80,22 @@ describe('auth command', () => {
         expect.any(String),
         undefined,
       );
-    });
-
-    it('should handle interactive login flow successfully', async () => {
-      jest.mocked(fetchWithProxy).mockResolvedValueOnce(
-        createMockResponse({
-          ok: true,
-          body: {},
-        }),
-      );
-
-      jest.mocked(cloudConfig.validateAndSetApiToken).mockResolvedValueOnce({
-        user: mockCloudUser,
-        organization: mockOrganization,
-        app: mockApp,
-      });
-
-      const loginCmd = program.commands
-        .find((cmd) => cmd.name() === 'auth')
-        ?.commands.find((cmd) => cmd.name() === 'login');
-      await loginCmd?.parseAsync(['node', 'test']);
-
-      expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('A login link has been sent'),
-      );
-      expect(setUserEmail).toHaveBeenCalledWith('test@example.com');
-      expect(cloudConfig.validateAndSetApiToken).toHaveBeenCalledWith(
-        expect.any(String),
-        undefined,
-      );
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Successfully logged in'));
     });
 
     it('should handle login request failure', async () => {
-      jest.mocked(fetchWithProxy).mockResolvedValueOnce(
-        createMockResponse({
-          ok: false,
-          statusText: 'Bad Request',
-        }),
-      );
+      // Mock fetchWithProxy to reject with an error
+      jest
+        .mocked(cloudConfig.validateAndSetApiToken)
+        .mockRejectedValueOnce(new Error('Bad Request'));
 
       const loginCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
         ?.commands.find((cmd) => cmd.name() === 'login');
-      await loginCmd?.parseAsync(['node', 'test']);
+      await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
 
       expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to send login request: Bad Request'),
+        expect.stringContaining('Authentication failed: Bad Request'),
       );
       expect(process.exitCode).toBe(1);
     });
@@ -157,7 +115,7 @@ describe('auth command', () => {
       const loginCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
         ?.commands.find((cmd) => cmd.name() === 'login');
-      await loginCmd?.parseAsync(['node', 'test']);
+      await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
 
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Authentication failed: Invalid token'),
@@ -206,14 +164,32 @@ describe('auth command', () => {
   describe('logout', () => {
     it('should unset email in config after logout', async () => {
       jest.mocked(getUserEmail).mockReturnValue('test@example.com');
+      jest.mocked(cloudConfig.getApiKey).mockReturnValue('api-key');
 
       const logoutCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
         ?.commands.find((cmd) => cmd.name() === 'logout');
       await logoutCmd?.parseAsync(['node', 'test']);
 
+      expect(cloudConfig.delete).toHaveBeenCalledWith();
       expect(setUserEmail).toHaveBeenCalledWith('');
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Successfully logged out'));
+    });
+
+    it('should show "already logged out" message when no session exists', async () => {
+      jest.mocked(getUserEmail).mockReturnValue(null);
+      jest.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
+
+      const logoutCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'logout');
+      await logoutCmd?.parseAsync(['node', 'test']);
+
+      expect(cloudConfig.delete).not.toHaveBeenCalled();
+      expect(setUserEmail).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining("You're already logged out"),
+      );
     });
   });
 
@@ -229,7 +205,7 @@ describe('auth command', () => {
           ok: true,
           body: {
             user: mockCloudUser,
-            organization: { name: 'Test Org' },
+            organization: mockOrganization,
           },
         }),
       );

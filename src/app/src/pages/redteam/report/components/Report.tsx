@@ -310,7 +310,7 @@ const App: React.FC = () => {
                 size="small"
                 label={
                   <>
-                    <strong>Model:</strong> {selectedPrompt.provider}
+                    <strong>Target:</strong> {selectedPrompt.provider}
                   </>
                 }
                 onClick={handlePromptChipClick}

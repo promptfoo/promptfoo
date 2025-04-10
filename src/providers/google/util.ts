@@ -7,6 +7,7 @@ import logger from '../../logger';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
 import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt } from '../shared';
+import { VALID_SCHEMA_TYPES } from './types';
 import type { Content, FunctionCall, Part, Tool } from './types';
 
 const ajv = new Ajv();
@@ -248,20 +249,51 @@ export async function hasGoogleDefaultCredentials() {
   }
 }
 
-export function stringifyCandidateContents(data: GeminiResponseData) {
-  let output = '';
-  for (const candidate of data.candidates) {
-    if (candidate.content?.parts) {
-      for (const part of candidate.content.parts) {
-        if ('text' in part) {
-          output += part.text;
-        } else {
-          output += JSON.stringify(part);
-        }
+export function getCandidate(data: GeminiResponseData) {
+  if (!(data && data.candidates && data.candidates.length === 1)) {
+    throw new Error('Expected one candidate in API response.');
+  }
+  const candidate = data.candidates[0];
+  return candidate;
+}
+
+export function formatCandidateContents(candidate: Candidate) {
+  if (candidate.content?.parts) {
+    let output = '';
+    let is_text = true;
+    for (const part of candidate.content.parts) {
+      if ('text' in part) {
+        output += part.text;
+      } else {
+        is_text = false;
       }
     }
+    if (is_text) {
+      return output;
+    } else {
+      return candidate.content.parts;
+    }
+  } else {
+    throw new Error(`No output found in response: ${JSON.stringify(candidate)}`);
   }
-  return output;
+}
+
+export function mergeParts(parts1: Part[] | string | undefined, parts2: Part[] | string) {
+  if (parts1 === undefined) {
+    return parts2;
+  }
+
+  if (typeof parts1 === 'string' && typeof parts2 === 'string') {
+    return parts1 + parts2;
+  }
+
+  const array1: Part[] = typeof parts1 === 'string' ? [{ text: parts1 }] : parts1;
+
+  const array2: Part[] = typeof parts2 === 'string' ? [{ text: parts2 }] : parts2;
+
+  array1.push(...array2);
+
+  return array1;
 }
 
 export function loadFile(
@@ -375,16 +407,22 @@ function normalizeSchemaTypes(schemaNode: any): any {
       const value = schemaNode[key];
 
       if (key === 'type') {
-        // Convert type value(s) to lowercase
-        if (typeof value === 'string') {
+        if (
+          typeof value === 'string' &&
+          (VALID_SCHEMA_TYPES as ReadonlyArray<string>).includes(value)
+        ) {
+          // Convert type value(s) to lowercase
           newNode[key] = value.toLowerCase();
         } else if (Array.isArray(value)) {
           // Handle type arrays like ["STRING", "NULL"]
-          newNode[key] = value.map((t) => (typeof t === 'string' ? t.toLowerCase() : t));
-        } else {
-          throw new Error(
-            `Schema types must be string or array of string. Received: ${JSON.stringify(value)}`,
+          newNode[key] = value.map((t) =>
+            typeof t === 'string' && (VALID_SCHEMA_TYPES as ReadonlyArray<string>).includes(t)
+              ? t.toLowerCase()
+              : t,
           );
+        } else {
+          // Handle type used as function field rather than a schema type definition
+          newNode[key] = normalizeSchemaTypes(value);
         }
       } else {
         // Recursively process nested objects/arrays
@@ -396,7 +434,7 @@ function normalizeSchemaTypes(schemaNode: any): any {
   return newNode;
 }
 
-export function parseStringObject(input: string | object | undefined) {
+export function parseStringObject(input: string | any) {
   if (typeof input === 'string') {
     return JSON.parse(input);
   }
@@ -410,19 +448,23 @@ export function validateFunctionCall(
 ) {
   let functionCalls: FunctionCall[];
   try {
-    let parsedOutput: object = parseStringObject(output);
-    if ('functionCall' in parsedOutput) {
-      // Vertex and AIS Format
-      functionCalls = [(parsedOutput as { functionCall: any }).functionCall];
-    } else if ('toolCall' in parsedOutput) {
+    let parsedOutput: object | Content = parseStringObject(output);
+    if ('toolCall' in parsedOutput) {
       // Live Format
       parsedOutput = (parsedOutput as { toolCall: any }).toolCall;
       functionCalls = (parsedOutput as { functionCalls: any }).functionCalls;
+    } else if (Array.isArray(parsedOutput)) {
+      // Vertex and AIS Format
+      functionCalls = parsedOutput
+        .filter((obj) => Object.prototype.hasOwnProperty.call(obj, 'functionCall'))
+        .map((obj) => obj.functionCall);
     } else {
       throw new Error();
     }
   } catch {
-    throw new Error(`Google did not return a valid-looking function call: ${output}`);
+    throw new Error(
+      `Google did not return a valid-looking function call: ${JSON.stringify(output)}`,
+    );
   }
 
   const interpolatedFunctions = loadFile(functions, vars) as Tool[];
