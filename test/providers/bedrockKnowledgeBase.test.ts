@@ -169,7 +169,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
         type: 'KNOWLEDGE_BASE',
         knowledgeBaseConfiguration: {
           knowledgeBaseId: 'kb-123',
-          modelArn: 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-v2',
+          modelArn: 'arn:aws:bedrock:us-east-1:aws:foundation-model/anthropic.claude-v2',
         },
       },
     };
@@ -259,7 +259,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
         type: 'KNOWLEDGE_BASE',
         knowledgeBaseConfiguration: {
           knowledgeBaseId: 'kb-123',
-          modelArn: 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-v2',
+          modelArn: 'arn:aws:bedrock:us-east-1:aws:foundation-model/anthropic.claude-v2',
         },
       },
     };
