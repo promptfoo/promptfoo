@@ -82,6 +82,7 @@ export type EnvVars = {
   AWS_BEDROCK_STOP?: string;
   AWS_BEDROCK_TEMPERATURE?: number;
   AWS_BEDROCK_TOP_P?: string;
+  CEREBRAS_API_KEY?: string;
   COHERE_CLIENT_NAME?: string;
   COHERE_K?: string;
   COHERE_MAX_TOKENS?: string;

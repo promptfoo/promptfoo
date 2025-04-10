@@ -220,3 +220,23 @@ providers:
       presence_penalty: 0.5
       stop: ["\n", 'Human:', 'AI:']
 ```
+
+## OpenAI-Compatible
+
+Many providers offer OpenAI-compatible APIs with their own unique models:
+
+- [Azure OpenAI](azure-openai)
+- [Cerebras](cerebras)
+- [Cloudera](cloudera)
+- [Databricks](databricks)
+- [DeepSeek](deepseek)
+- [Groq](groq)
+- [JFrog](jfrog)
+- [Lambda Labs](lambdalabs) 
+- [LiteLLM](litellm)
+- [LocalAI](localai)
+- [OpenAI](openai)
+- [Perplexity](perplexity)
+- [Together AI](togetherai)
+- [vLLM](vllm)
+- [xAI](xai)

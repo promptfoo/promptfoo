@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Cerebras Model Evaluation
+prompts:
+  - file://prompts.txt
+providers:
+  - id: cerebras:chat:llama3.1-8b
+    config:
+      temperature: 0.7
+      max_completion_tokens: 1024
+  - id: cerebras:chat:llama-3.3-70b
+    config:
+      temperature: 0.5
+      max_completion_tokens: 1024
+tests:
+  - vars:
+      topic: quantum computing
+      concept: superposition
+  - vars:
+      topic: machine learning
+      concept: neural networks
+  - vars:
+      topic: climate science
+      concept: carbon sequestration
+outputs:
+  - type: csv 
