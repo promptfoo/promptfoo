@@ -30,22 +30,22 @@ CEREBRAS_API_KEY=your-api-key-here
 
 This repository contains three example configurations demonstrating different Cerebras features:
 
-### 1. Basic Model Evaluation (`config.yaml`)
+### 1. Basic Model Evaluation (`promptfooconfig.yaml`)
 
 This configuration evaluates two Cerebras models on their ability to explain complex concepts in simple terms.
 
 ```bash
-promptfoo eval -c config.yaml
+promptfoo eval
 ```
 
 **Expected output:** You'll see a comparison of how each model explains concepts from different domains, with metrics on clarity, accuracy, and response time.
 
-### 2. Structured Outputs (`structured_output.yaml`)
+### 2. Structured Outputs (`promptfooconfig-structured.yaml`)
 
 The structured output example demonstrates Cerebras's JSON schema enforcement capabilities, ensuring the model returns consistent, structured recipe data with proper types and required fields.
 
 ```bash
-promptfoo eval -c structured_output.yaml
+promptfoo eval -c promptfooconfig-structured.yaml
 ```
 
 **Expected output:** You'll receive structured JSON outputs for different recipes, with consistent fields like cuisine type, difficulty level, ingredients, and cooking instructions - all following the defined schema.
@@ -76,12 +76,12 @@ Example output:
 }
 ```
 
-### 3. Tool Use (`tool_use.yaml`)
+### 3. Tool Use (`promptfooconfig-tools.yaml`)
 
 The tool use example demonstrates Cerebras's function calling capabilities with a calculator tool that the model can use to solve math problems.
 
 ```bash
-promptfoo eval -c tool_use.yaml
+promptfoo eval -c promptfooconfig-tools.yaml
 ```
 
 **Expected output:** The model will use the calculator tool to solve math problems and provide step-by-step explanations of the solution process. For example, when given "15 × 7", it will calculate 105 and explain multiplication concepts.
