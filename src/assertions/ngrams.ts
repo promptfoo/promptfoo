@@ -7,7 +7,8 @@
  */
 
 export function getNGrams(words: string[], n: number): string[] {
-  if (n > words.length) {
+  // Return empty array for invalid n values
+  if (n <= 0 || n > words.length) {
     return [];
   }
 
