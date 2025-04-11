@@ -219,7 +219,7 @@ export default function EvalsDataGrid({
   );
 
   return (
-    <Paper elevation={2} sx={{ height: '100%' }}>
+    <Paper elevation={2} sx={{ minHeight: 400 }}>
       <DataGrid
         rows={rows}
         columns={columns}
@@ -302,6 +302,7 @@ export default function EvalsDataGrid({
           '& .MuiDataGrid-selectedRow': {
             backgroundColor: 'action.selected',
           },
+          '--DataGrid-overlayHeight': '300px',
         }}
         onRowSelectionModelChange={setRowSelectionModel}
         rowSelectionModel={rowSelectionModel}
