@@ -423,7 +423,11 @@ function EvalOutputCell({
             provider={output.provider}
             gradingResults={output.gradingResult?.componentResults}
             output={text}
-            metadata={output.metadata}
+            metadata={{
+              ...output.metadata,
+              ...(output.response &&
+                'citations' in output.response && { citations: output.response.citations }),
+            }}
           />
         </>
       )}
