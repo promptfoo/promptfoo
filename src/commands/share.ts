@@ -90,11 +90,9 @@ export function shareCommand(program: Command) {
           logger.info(`Sharing latest eval (${eval_.id})`);
         }
 
-        // Load current config and merge it with the eval record
         try {
           const { defaultConfig: currentConfig } = await loadDefaultConfig();
           if (currentConfig && currentConfig.sharing) {
-            // Ensure sharing config from promptfooconfig.yaml is applied
             eval_.config.sharing = currentConfig.sharing;
             logger.debug(
               `Applied sharing config from promptfooconfig.yaml: ${JSON.stringify(currentConfig.sharing)}`,
