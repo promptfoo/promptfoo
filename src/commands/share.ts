@@ -8,6 +8,7 @@ import Eval from '../models/eval';
 import { createShareableUrl, hasEvalBeenShared, isSharingEnabled, getShareableUrl } from '../share';
 import telemetry from '../telemetry';
 import { setupEnv } from '../util';
+import { loadConfigFromOption } from '../util/config/load';
 
 export function notCloudEnabledShareInstructions(): void {
   const cloudUrl = DEFAULT_SHARE_VIEW_BASE_URL;
@@ -50,6 +51,10 @@ export function shareCommand(program: Command) {
     .description('Create a shareable URL of an eval (defaults to most recent)' + '\n\n')
     .option('--env-file, --env-path <path>', 'Path to .env file')
     .option(
+      '-c, --config <path>',
+      'Path to configuration file (automatically loads promptfooconfig.yaml if not specified)',
+    )
+    .option(
       '--show-auth',
       'Show username/password authentication information in the URL if exists',
       false,
@@ -63,7 +68,7 @@ export function shareCommand(program: Command) {
     .action(
       async (
         evalId: string | undefined,
-        cmdObj: { yes: boolean; envPath?: string; showAuth: boolean } & Command,
+        cmdObj: { yes: boolean; envPath?: string; showAuth: boolean; config?: string } & Command,
       ) => {
         setupEnv(cmdObj.envPath);
         telemetry.record('command_used', {
@@ -87,6 +92,19 @@ export function shareCommand(program: Command) {
             return;
           }
           logger.info(`Sharing latest eval (${eval_.id})`);
+        }
+
+        // Load config from the specified file or default location
+        try {
+          const { defaultConfig } = await loadConfigFromOption(cmdObj.config);
+
+          // Apply sharing config if available
+          if (defaultConfig?.sharing) {
+            eval_.config.sharing = defaultConfig.sharing;
+            logger.debug('Applied sharing config from config file');
+          }
+        } catch (err) {
+          logger.debug(`Could not apply sharing config: ${err}`);
         }
 
         if (eval_.prompts.length === 0) {

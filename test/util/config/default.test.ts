@@ -1,8 +1,8 @@
 import path from 'path';
 import { loadDefaultConfig, configCache } from '../../../src/util/config/default';
-import { maybeReadConfig } from '../../../src/util/config/load';
+import { maybeReadConfig } from '../../../src/util/config/shared';
 
-jest.mock('../../../src/util/config/load', () => ({
+jest.mock('../../../src/util/config/shared', () => ({
   maybeReadConfig: jest.fn(),
 }));
 
