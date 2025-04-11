@@ -10,6 +10,15 @@ import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
 import type { EvalOutputCellProps } from './EvalOutputCell';
 import EvalOutputCell from './EvalOutputCell';
 
+// Mock the EvalOutputPromptDialog component to check what props are passed to it
+vi.mock('./EvalOutputPromptDialog', () => ({
+  default: vi.fn(({ metadata }) => (
+    <div data-testid="dialog-component" data-metadata={JSON.stringify(metadata)}>
+      Mocked Dialog Component
+    </div>
+  )),
+}));
+
 const renderWithProviders = (ui: React.ReactElement) => {
   return render(<ShiftKeyProvider>{ui}</ShiftKeyProvider>);
 };
@@ -94,6 +103,7 @@ describe('EvalOutputCell', () => {
       score: 0.8,
       text: 'Test output text',
       testCase: {},
+      metadata: { testKey: 'testValue' },
     },
     promptIndex: 0,
     rowIndex: 0,
@@ -106,9 +116,104 @@ describe('EvalOutputCell', () => {
     vi.clearAllMocks();
   });
 
-  it('renders cell with output text', () => {
+  it('passes metadata correctly to the dialog', async () => {
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
-    expect(screen.getByText('Test output text')).toBeInTheDocument();
+    await userEvent.click(screen.getByText('🔎'));
+
+    const dialogComponent = screen.getByTestId('dialog-component');
+    expect(dialogComponent).toBeInTheDocument();
+
+    // Check that metadata is passed correctly
+    const passedMetadata = JSON.parse(dialogComponent.getAttribute('data-metadata') || '{}');
+    expect(passedMetadata.testKey).toBe('testValue');
+  });
+
+  it('copies citations from response to metadata when present', async () => {
+    const citations = [
+      {
+        retrievedReferences: [
+          {
+            content: { text: 'Citation text' },
+            location: { s3Location: { uri: 'https://example.com' } },
+          },
+        ],
+      },
+    ];
+
+    const propsWithCitations = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        response: {
+          output: 'Test response',
+          citations,
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithCitations} />);
+    await userEvent.click(screen.getByText('🔎'));
+
+    const dialogComponent = screen.getByTestId('dialog-component');
+    const passedMetadata = JSON.parse(dialogComponent.getAttribute('data-metadata') || '{}');
+
+    // Verify citations were added to metadata
+    expect(passedMetadata.citations).toEqual(citations);
+    // Original metadata should still be there
+    expect(passedMetadata.testKey).toBe('testValue');
+  });
+
+  it('preserves existing metadata citations if no response citations', async () => {
+    const propsWithMetadataCitations = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        metadata: {
+          testKey: 'testValue',
+          citations: [{ source: 'metadata source', content: 'metadata content' }],
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithMetadataCitations} />);
+    await userEvent.click(screen.getByText('🔎'));
+
+    const dialogComponent = screen.getByTestId('dialog-component');
+    const passedMetadata = JSON.parse(dialogComponent.getAttribute('data-metadata') || '{}');
+
+    // Metadata citations should be preserved
+    expect(passedMetadata.citations).toEqual([
+      { source: 'metadata source', content: 'metadata content' },
+    ]);
+  });
+
+  it('response citations take precedence over metadata citations', async () => {
+    const responseCitations = [{ source: 'response source', content: 'response content' }];
+    const metadataCitations = [{ source: 'metadata source', content: 'metadata content' }];
+
+    const propsWithBothCitations = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        metadata: {
+          testKey: 'testValue',
+          citations: metadataCitations,
+        },
+        response: {
+          output: 'Test response',
+          citations: responseCitations,
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithBothCitations} />);
+    await userEvent.click(screen.getByText('🔎'));
+
+    const dialogComponent = screen.getByTestId('dialog-component');
+    const passedMetadata = JSON.parse(dialogComponent.getAttribute('data-metadata') || '{}');
+
+    // Response citations should take precedence
+    expect(passedMetadata.citations).toEqual(responseCitations);
   });
 
   it('displays pass/fail status correctly', () => {
