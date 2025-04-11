@@ -219,7 +219,7 @@ export default function EvalsDataGrid({
   );
 
   return (
-    <Paper elevation={2} sx={{ minHeight: 400 }}>
+    <Paper elevation={2} sx={{ height: '100%' }}>
       <DataGrid
         rows={rows}
         columns={columns}
