@@ -13,6 +13,10 @@ dist
 .vite
 *.tsbuildinfo
 
+# pnpm-specific
+.pnpm-store/
+pnpm-debug.log
+
 # Python-related
 __pycache__
 
@@ -22,8 +26,9 @@ __pycache__
 
 # IDE-specific
 .idea/
+.vscode/
 
 # Examples-related
 examples/**/package-lock.json
+examples/huggingface-dataset-factuality/.cache
 examples/redteam-dalle/images
-

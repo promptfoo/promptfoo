@@ -7,14 +7,16 @@ import (
 	"reflect"
 )
 
+// Function type definitions for the API functions
+type ApiFunc func(string, map[string]interface{}, map[string]interface{}) (map[string]interface{}, error)
+
 func main() {
 	if len(os.Args) != 4 {
 		fmt.Println("Usage: golang_wrapper <script_path> <function_name> <json_args>")
 		os.Exit(1)
 	}
 
-	// scriptPath := os.Args[1]
-	// functionName := os.Args[2]
+	functionName := os.Args[2]
 	jsonArgs := os.Args[3]
 
 	// Parse the JSON arguments
@@ -25,8 +27,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Get the function from the provider package
-	f := reflect.ValueOf(CallApi)
+	// Get the function by name using reflection
+	f := reflect.ValueOf(nil)
+	switch functionName {
+	case "call_api", "CallApi":
+		// Use the CallApi function defined in the user's code
+		f = reflect.ValueOf(CallApi)
+	default:
+		fmt.Printf("Unknown function: %s\n", functionName)
+		os.Exit(1)
+	}
 
 	// Call the function
 	result := f.Call([]reflect.Value{

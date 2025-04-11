@@ -22,6 +22,7 @@ import type { ProviderOptions } from '../../types';
 import Prompts from '../Prompts';
 import { predefinedTargets, customTargetOption } from '../constants';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
+import CommonConfigurationOptions from './CommonConfigurationOptions';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
 import TestTargetConfiguration from './TestTargetConfiguration';
@@ -53,10 +54,6 @@ const validateUrl = (url: string, type: 'http' | 'websocket' = 'http'): boolean 
   }
 };
 
-const requiresTransformResponse = (target: ProviderOptions) => {
-  return target.id === 'http' || target.id === 'websocket';
-};
-
 const requiresPrompt = (target: ProviderOptions) => {
   return target.id !== 'http' && target.id !== 'websocket' && target.id !== 'browser';
 };
@@ -77,7 +74,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
     suggestions?: string[];
     providerResponse?: ProviderResponse;
   } | null>(null);
-  const [hasTestedTarget, setHasTestedTarget] = useState(false);
+
   const [bodyError, setBodyError] = useState<string | null>(null);
   const [urlError, setUrlError] = useState<string | null>(null);
   const [missingFields, setMissingFields] = useState<string[]>([]);
@@ -204,7 +201,9 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
     if (typeof selectedTarget === 'object') {
       const updatedTarget = { ...selectedTarget } as ProviderOptions;
 
-      if (field === 'url') {
+      if (field === 'id') {
+        updatedTarget.id = value;
+      } else if (field === 'url') {
         updatedTarget.config.url = value;
         if (validateUrl(value)) {
           setUrlError(null);
@@ -253,6 +252,8 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         }
       } else if (field === 'label') {
         updatedTarget.label = value;
+      } else if (field === 'delay') {
+        updatedTarget.delay = value;
       } else {
         updatedTarget.config[field] = value;
       }
@@ -316,7 +317,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
           message: 'Target configuration is valid!',
           providerResponse: data.providerResponse,
         });
-        setHasTestedTarget(true);
       }
     } catch (error) {
       console.error('Error testing target:', error);
@@ -474,15 +474,29 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         )}
       </Box>
 
+      <Typography variant="h6" gutterBottom>
+        Additional Configuration
+      </Typography>
+      <CommonConfigurationOptions
+        selectedTarget={selectedTarget}
+        updateCustomTarget={updateCustomTarget}
+        extensions={config.extensions}
+        onExtensionsChange={(extensions) => updateConfig('extensions', extensions)}
+        onValidationChange={(hasErrors) => {
+          setMissingFields((prev) =>
+            hasErrors
+              ? [...prev.filter((f) => f !== 'Extensions'), 'Extensions']
+              : prev.filter((f) => f !== 'Extensions'),
+          );
+        }}
+      />
+
       {testingEnabled && (
         <TestTargetConfiguration
           testingTarget={testingTarget}
           handleTestTarget={handleTestTarget}
           selectedTarget={selectedTarget}
           testResult={testResult}
-          requiresTransformResponse={requiresTransformResponse}
-          updateCustomTarget={updateCustomTarget}
-          hasTestedTarget={hasTestedTarget}
         />
       )}
 

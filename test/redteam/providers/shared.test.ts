@@ -1,6 +1,6 @@
 import cliState from '../../../src/cliState';
 import { loadApiProviders } from '../../../src/providers';
-import { OpenAiChatCompletionProvider } from '../../../src/providers/openai';
+import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 import {
   ATTACKER_MODEL,
   ATTACKER_MODEL_SMALL,
@@ -329,7 +329,7 @@ describe('shared redteam provider utilities', () => {
       };
 
       await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
-        'Expected target output or error to be set',
+        /Target returned malformed response: expected either `output` or `error` to be set./,
       );
     });
 

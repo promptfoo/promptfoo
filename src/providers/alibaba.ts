@@ -1,5 +1,6 @@
 import type { ProviderOptions } from '../types';
-import { OpenAiChatCompletionProvider, OpenAiEmbeddingProvider } from './openai';
+import { OpenAiChatCompletionProvider } from './openai/chat';
+import { OpenAiEmbeddingProvider } from './openai/embedding';
 
 const KNOWN_MODELS = new Set([
   // Flagship models
@@ -53,7 +54,7 @@ export class AlibabaChatCompletionProvider extends OpenAiChatCompletionProvider 
       ...options,
       config: {
         ...options.config,
-        apiBaseUrl: API_BASE_URL,
+        apiBaseUrl: options.config?.API_BASE_URL || API_BASE_URL,
         apiKeyEnvar: 'DASHSCOPE_API_KEY',
       },
     });
@@ -72,7 +73,7 @@ export class AlibabaEmbeddingProvider extends OpenAiEmbeddingProvider {
       ...options,
       config: {
         ...options.config,
-        apiBaseUrl: API_BASE_URL,
+        apiBaseUrl: options.config?.API_BASE_URL || API_BASE_URL,
         apiKeyEnvar: 'DASHSCOPE_API_KEY',
       },
     });

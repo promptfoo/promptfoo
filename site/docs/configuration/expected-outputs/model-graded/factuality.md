@@ -1,8 +1,8 @@
 # Factuality
 
-The `factuality` assertion evaluates the factual consistency between an LLM output and a reference answer. It uses OpenAI's public evals prompt to determine if the output is factually consistent with the reference.
+The `factuality` assertion evaluates the factual consistency between an LLM output and a reference answer. It uses a structured prompt based on [OpenAI's evals](https://github.com/openai/evals/blob/main/evals/registry/modelgraded/fact.yaml) to determine if the output is factually consistent with the reference.
 
-### How to use it
+## How to use it
 
 To use the `factuality` assertion type, add it to your test configuration like this:
 
@@ -13,27 +13,28 @@ assert:
     value: The Earth orbits around the Sun
 ```
 
-### How it works
+## How it works
 
 The factuality checker evaluates whether completion A (the LLM output) and reference B (the value) are factually consistent. It categorizes the relationship as one of:
 
-- (A) Output is a subset of the reference and is fully consistent
-- (B) Output is a superset of the reference and is fully consistent
-- (C) Output contains all the same details as the reference
-- (D) Output and reference disagree
-- (E) Output and reference differ, but differences don't matter for factuality
+- **(A)** Output is a subset of the reference and is fully consistent
+- **(B)** Output is a superset of the reference and is fully consistent
+- **(C)** Output contains all the same details as the reference
+- **(D)** Output and reference disagree
+- **(E)** Output and reference differ, but differences don't matter for factuality
 
 By default, options A, B, C, and E are considered passing grades, while D is considered failing.
 
-### Example Configuration
+## Example Configuration
 
 Here's a complete example showing how to use factuality checks:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   - 'What is the capital of {{state}}?'
 providers:
-  - openai:gpt-4
+  - openai:gpt-4o
+  - anthropic:claude-3-7-sonnet-20250219
 tests:
   - vars:
       state: California
@@ -47,7 +48,7 @@ tests:
         value: Albany is the capital city of New York state
 ```
 
-### Customizing Score Thresholds
+## Customizing Score Thresholds
 
 You can customize which factuality categories are considered passing by setting scores in your test configuration:
 
@@ -62,7 +63,7 @@ defaultTest:
       differButFactual: 1 # Score for category E (default: 1)
 ```
 
-### Overriding the Grader
+## Overriding the Grader
 
 Like other model-graded assertions, you can override the default grader:
 
@@ -77,10 +78,11 @@ Like other model-graded assertions, you can override the default grader:
    ```yaml
    defaultTest:
      options:
-       provider: openai:gpt-4o-mini
+       provider: anthropic:claude-3-7-sonnet-20250219
    ```
 
 3. Using assertion-level override:
+
    ```yaml
    assert:
      - type: factuality
@@ -88,9 +90,20 @@ Like other model-graded assertions, you can override the default grader:
        provider: openai:gpt-4o-mini
    ```
 
-### Customizing the Prompt
+## Customizing the Prompt
 
-You can customize the evaluation prompt using the `rubricPrompt` property:
+You can customize the evaluation prompt using the `rubricPrompt` property. The prompt has access to the following Nunjucks template variables:
+
+- `{{input}}`: The original prompt/question
+- `{{ideal}}`: The reference answer (from the `value` field)
+- `{{completion}}`: The LLM's actual response
+
+Your custom prompt should instruct the model to either:
+
+1. Return a single letter (A, B, C, D, or E) corresponding to the category, or
+2. Return a JSON object with `category` and `reason` fields
+
+Here's an example of a custom prompt:
 
 ```yaml
 defaultTest:
@@ -111,7 +124,12 @@ defaultTest:
       Answer with a single letter (A/B/C/D/E).
 ```
 
-# Further reading
+The factuality checker will parse either format:
 
-- See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options
-- Check out the [guide on LLM factuality](/docs/guides/factuality-eval)
+- A single letter response like "A" or "(A)"
+- A JSON object: `{"category": "A", "reason": "Detailed explanation..."}`
+
+## See Also
+
+- [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options
+- [Guide on LLM factuality](/docs/guides/factuality-eval)

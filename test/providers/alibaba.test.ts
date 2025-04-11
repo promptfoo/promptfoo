@@ -3,7 +3,8 @@ import {
   AlibabaChatCompletionProvider,
   AlibabaEmbeddingProvider,
 } from '../../src/providers/alibaba';
-import { OpenAiChatCompletionProvider, OpenAiEmbeddingProvider } from '../../src/providers/openai';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import type { ProviderOptions } from '../../src/types';
 
 jest.mock('../../src/logger');
@@ -78,6 +79,25 @@ describe('Alibaba Cloud Provider', () => {
         }),
       );
     });
+
+    it('should allow custom API base URL', () => {
+      const customBaseUrl = 'https://dashscope.aliyuncs.com/api/v1';
+      const provider = new AlibabaChatCompletionProvider('qwen-max', {
+        config: {
+          API_BASE_URL: customBaseUrl,
+        },
+      });
+
+      expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
+        'qwen-max',
+        expect.objectContaining({
+          config: expect.objectContaining({
+            apiBaseUrl: customBaseUrl,
+          }),
+        }),
+      );
+    });
   });
 
   describe('AlibabaEmbeddingProvider', () => {
@@ -121,6 +141,25 @@ describe('Alibaba Cloud Provider', () => {
         expect.objectContaining({
           env: expect.objectContaining({
             DASHSCOPE_API_KEY: 'test-key',
+          }),
+        }),
+      );
+    });
+
+    it('should allow custom API base URL', () => {
+      const customBaseUrl = 'https://dashscope.aliyuncs.com/api/v1';
+      const provider = new AlibabaEmbeddingProvider('text-embedding-v3', {
+        config: {
+          API_BASE_URL: customBaseUrl,
+        },
+      });
+
+      expect(provider).toBeInstanceOf(OpenAiEmbeddingProvider);
+      expect(OpenAiEmbeddingProvider).toHaveBeenCalledWith(
+        'text-embedding-v3',
+        expect.objectContaining({
+          config: expect.objectContaining({
+            apiBaseUrl: customBaseUrl,
           }),
         }),
       );

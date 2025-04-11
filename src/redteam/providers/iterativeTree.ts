@@ -36,9 +36,8 @@ import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import type { BaseRedteamMetadata } from '../types';
-import { PENALIZED_PHRASES } from './constants';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
-import { getTargetResponse, redteamProviderManager } from './shared';
+import { getTargetResponse, redteamProviderManager, checkPenalizedPhrases } from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -543,9 +542,7 @@ export async function runRedteamConversation({
           totalTokenUsage.cached += targetResponse.tokenUsage.cached || 0;
         }
 
-        const containsPenalizedPhrase = PENALIZED_PHRASES.some((phrase) =>
-          targetResponse.output.toLowerCase().includes(phrase),
-        );
+        const containsPenalizedPhrase = checkPenalizedPhrases(targetResponse.output);
 
         const { score, explanation } = await evaluateResponse(
           redteamProvider,

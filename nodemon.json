@@ -1,0 +1,5 @@
+{
+  "legacyWatch": true,
+  "watch": ["src"],
+  "ignore": ["src/app/*", "dist/*", "node_modules/*", ".git/*", "site/*"]
+}

@@ -581,7 +581,7 @@ export default function RedTeamSetupPage() {
                 <StyledTab
                   icon={<AppIcon />}
                   iconPosition="start"
-                  label="Application"
+                  label="Usage Details"
                   {...a11yProps(0)}
                 />
                 <StyledTab

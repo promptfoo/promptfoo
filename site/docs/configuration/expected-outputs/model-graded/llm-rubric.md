@@ -124,6 +124,19 @@ defaultTest:
     ]
 ```
 
+## Threshold Support
+
+The `llm-rubric` assertion type supports an optional `threshold` property that sets a minimum score requirement. When specified, the output must achieve a score greater than or equal to the threshold to pass. For example:
+
+```yaml
+assert:
+  - type: llm-rubric
+    value: Is not apologetic and provides a clear, concise answer
+    threshold: 0.8 # Requires a score of 0.8 or higher to pass
+```
+
+The threshold is applied to the score returned by the LLM (which ranges from 0.0 to 1.0). If the LLM returns an explicit pass/fail status, the threshold will still be enforced - both conditions must be met for the assertion to pass.
+
 ## Further reading
 
 See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options.

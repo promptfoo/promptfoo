@@ -1,6 +1,6 @@
 import * as path from 'path';
 import { runAssertion } from '../../src/assertions';
-import { OpenAiChatCompletionProvider } from '../../src/providers/openai';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { runPython } from '../../src/python/pythonUtils';
 import { runPythonCode } from '../../src/python/wrapper';
 import type { Assertion, AtomicTestCase, GradingResult } from '../../src/types';
@@ -258,7 +258,7 @@ describe('Python file references', () => {
       // This score is less than the assertion threshold in the test
       `{"pass": true, "score": 0.4, "reason": "Foo bar"}`,
       0.4,
-      'Python score 0.4 is less than threshold 0.5',
+      'Python score 0.4 is less than threshold 0.5: Foo bar',
       false,
       0.5,
     ],

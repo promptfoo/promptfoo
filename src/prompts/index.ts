@@ -3,14 +3,19 @@ import logger from '../logger';
 import type {
   UnifiedConfig,
   Prompt,
+  PromptFunction,
   ProviderOptionsMap,
   TestSuite,
   ProviderOptions,
+  EvaluateTestSuite,
 } from '../types';
 import { parsePathOrGlob } from '../util';
 import { isJavascriptFile } from '../util/file';
 import invariant from '../util/invariant';
+import { PromptSchema } from '../validators/prompts';
+import { processCsvPrompts } from './processors/csv';
 import { processJsFile } from './processors/javascript';
+import { processJinjaFile } from './processors/jinja';
 import { processJsonFile } from './processors/json';
 import { processJsonlFile } from './processors/jsonl';
 import { processMarkdownFile } from './processors/markdown';
@@ -141,6 +146,12 @@ export async function processPrompt(
     return prompts;
   }
 
+  if (extension === '.csv') {
+    return processCsvPrompts(filePath, prompt);
+  }
+  if (extension === '.j2') {
+    return processJinjaFile(filePath, prompt);
+  }
   if (extension === '.json') {
     return processJsonFile(filePath, prompt);
   }
@@ -186,4 +197,35 @@ export async function readPrompts(
     prompts.push(...promptBatch);
   }
   return prompts;
+}
+
+export async function processPrompts(
+  prompts: EvaluateTestSuite['prompts'],
+): Promise<TestSuite['prompts']> {
+  return (
+    await Promise.all(
+      prompts.map(async (promptInput: EvaluateTestSuite['prompts'][number]) => {
+        if (typeof promptInput === 'function') {
+          return {
+            raw: promptInput.toString(),
+            label: promptInput?.name ?? promptInput.toString(),
+            function: promptInput as PromptFunction,
+          };
+        } else if (typeof promptInput === 'string') {
+          return readPrompts(promptInput);
+        }
+        try {
+          return PromptSchema.parse(promptInput);
+        } catch (error) {
+          logger.warn(
+            `Prompt input is not a valid prompt schema: ${error}\nFalling back to serialized JSON as raw prompt.`,
+          );
+          return {
+            raw: JSON.stringify(promptInput),
+            label: JSON.stringify(promptInput),
+          };
+        }
+      }),
+    )
+  ).flat();
 }

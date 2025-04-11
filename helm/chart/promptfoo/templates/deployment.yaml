@@ -30,14 +30,6 @@ spec:
       serviceAccountName: {{ include "promptfoo.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
-      initContainers:
-      - name: take-data-dir-ownership
-        image: alpine:latest
-        command: [ "sh", "-c", "mkdir -p /home/promptfoo/.promptfoo && chmod -R 777 /home/promptfoo/.promptfoo" ]
-
-        volumeMounts:
-        - name: config
-          mountPath: /home/promptfoo/.promptfoo
       containers:
         - name: {{ .Chart.Name }}
           securityContext:

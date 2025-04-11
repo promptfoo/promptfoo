@@ -34,6 +34,12 @@ export class PromptMetrics {
       prompt: 0,
       completion: 0,
       cached: 0,
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+      },
     };
     this.namedScores = {};
     this.namedScoresCount = {};
@@ -124,6 +130,15 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
       pass: result.success,
       failureReason: result.failureReason,
       cost: result.cost || 0,
+      audio: result.response?.audio
+        ? {
+            id: result.response.audio.id,
+            expiresAt: result.response.audio.expiresAt,
+            data: result.response.audio.data,
+            transcript: result.response.audio.transcript,
+            format: result.response.audio.format,
+          }
+        : undefined,
     };
     invariant(result.promptId, 'Prompt ID is required');
     if (!completedPrompts[result.promptIdx]) {
@@ -133,6 +148,8 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
         metrics: new PromptMetrics(),
       };
     }
+
+    row.testIdx = result.testIdx;
     const prompt = completedPrompts[result.promptIdx];
     invariant(prompt.metrics, 'Prompt metrics are required');
     prompt.metrics.score += result.score;
@@ -155,8 +172,8 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   }
   const rows = Object.values(rowMap);
   const sortedVars = [...varsForHeader].sort();
-  for (const [rowIdx, row] of rows.entries()) {
-    row.vars = sortedVars.map((varName) => varValuesForRow.get(rowIdx)?.[varName] || '');
+  for (const row of rows) {
+    row.vars = sortedVars.map((varName) => varValuesForRow.get(row.testIdx)?.[varName] || '');
   }
 
   return {

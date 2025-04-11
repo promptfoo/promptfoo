@@ -87,7 +87,7 @@ describe('getRemoteGenerationUrl', () => {
       },
     });
 
-    expect(getRemoteGenerationUrl()).toBe('https://cloud.api.com/task');
+    expect(getRemoteGenerationUrl()).toBe('https://cloud.api.com/api/v1/task');
   });
 
   it('should return default URL when cloud is disabled and no env URL is set', () => {
@@ -99,7 +99,7 @@ describe('getRemoteGenerationUrl', () => {
       },
     });
 
-    expect(getRemoteGenerationUrl()).toBe('https://api.promptfoo.app/task');
+    expect(getRemoteGenerationUrl()).toBe('https://api.promptfoo.app/api/v1/task');
   });
 });
 
@@ -168,7 +168,7 @@ describe('getRemoteGenerationUrlForUnaligned', () => {
         apiHost: 'https://cloud.api.com',
       },
     });
-    expect(getRemoteGenerationUrlForUnaligned()).toBe('https://cloud.api.com/task/harmful');
+    expect(getRemoteGenerationUrlForUnaligned()).toBe('https://cloud.api.com/api/v1/task/harmful');
   });
 
   it('should return default harmful URL when cloud is disabled', () => {
@@ -179,6 +179,8 @@ describe('getRemoteGenerationUrlForUnaligned', () => {
         apiHost: 'https://cloud.api.com',
       },
     });
-    expect(getRemoteGenerationUrlForUnaligned()).toBe('https://api.promptfoo.app/task/harmful');
+    expect(getRemoteGenerationUrlForUnaligned()).toBe(
+      'https://api.promptfoo.app/api/v1/task/harmful',
+    );
   });
 });

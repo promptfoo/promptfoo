@@ -18,7 +18,7 @@ function HomepageHeader({ getStartedUrl }: { getStartedUrl: string }) {
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className="container">
         <h1>Test & secure your LLM apps</h1>
-        <p>Open-source LLM testing used by 51,000+ developers</p>
+        <p>Open-source LLM testing used by 75,000+ developers</p>
         <div className={styles.buttons}>
           <Link className="button button--primary button--lg" to={getStartedUrl}>
             Get Started
@@ -94,14 +94,12 @@ function HomepageWalkthrough() {
             <li>Harmful content</li>
             <li>Specialized medical and legal advice</li>
             <li>
-              and <Link to="/docs/red-team/llm-vulnerability-types/">much more</Link>
+              and <Link to="/docs/red-team/llm-vulnerability-types/">much more</Link>.
             </li>
           </ul>
           <p>
             <strong>
-              <Link to="/docs/red-team/quickstart/">
-                &raquo; Scan for vulnerabilities in your LLM app
-              </Link>
+              <Link to="/docs/red-team/quickstart/">&raquo; Find exploits in your LLM app</Link>
             </strong>
           </p>
         </>
@@ -252,7 +250,7 @@ export default function Home(): JSX.Element {
   return (
     <Layout
       title="Secure & reliable LLMs"
-      description="Eliminate risk with AI red-teaming and evals used by 51,000 developers. Find and fix vulnerabilities, maximize output quality, catch regressions."
+      description="Eliminate risk with AI red-teaming and evals used by 75,000+ developers. Find and fix vulnerabilities, maximize output quality, catch regressions."
       wrapperClassName="homepage-wrapper"
     >
       <Head>
@@ -276,7 +274,7 @@ export default function Home(): JSX.Element {
           <h2>Make your LLM app reliable & secure</h2>
           <div className={styles.buttons}>
             <Link className="button button--primary button--lg" to={getStartedUrl}>
-              Read Start Guide
+              Getting Started
             </Link>
             <Link
               className={clsx('button button--secondary button--lg', styles.buttonSecondary)}

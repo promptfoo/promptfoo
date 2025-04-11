@@ -20,18 +20,21 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
 import {
-  HARM_PLUGINS,
-  DEFAULT_PLUGINS,
   ALL_PLUGINS,
+  DEFAULT_PLUGINS,
+  FOUNDATION_PLUGINS,
+  HARM_PLUGINS,
+  MITRE_ATLAS_MAPPING,
   NIST_AI_RMF_MAPPING,
   OWASP_LLM_TOP_10_MAPPING,
   OWASP_API_TOP_10_MAPPING,
-  MITRE_ATLAS_MAPPING,
+  PLUGIN_PRESET_DESCRIPTIONS,
   displayNameOverrides,
   subCategoryDescriptions,
   categoryAliases,
   type Plugin,
   riskCategories,
+  OWASP_LLM_RED_TEAM_MAPPING,
 } from '@promptfoo/redteam/constants';
 import { useDebounce } from 'use-debounce';
 import { useRedTeamConfig, useRecentlyUsedPlugins } from '../hooks/useRedTeamConfig';
@@ -191,12 +194,25 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     });
   }, [searchTerm]);
 
-  const presets: { name: string; plugins: Set<Plugin> | ReadonlySet<Plugin> }[] = [
-    { name: 'Recommended', plugins: DEFAULT_PLUGINS },
-    { name: 'Minimal Test', plugins: new Set(['harmful:hate', 'harmful:self-harm']) },
+  const presets: {
+    name: keyof typeof PLUGIN_PRESET_DESCRIPTIONS;
+    plugins: Set<Plugin> | ReadonlySet<Plugin>;
+  }[] = [
+    {
+      name: 'Recommended',
+      plugins: DEFAULT_PLUGINS,
+    },
+    {
+      name: 'Minimal Test',
+      plugins: new Set(['harmful:hate', 'harmful:self-harm']),
+    },
     {
       name: 'RAG',
       plugins: new Set([...DEFAULT_PLUGINS, 'bola', 'bfla', 'rbac']),
+    },
+    {
+      name: 'Foundation',
+      plugins: new Set(FOUNDATION_PLUGINS),
     },
     {
       name: 'NIST',
@@ -205,6 +221,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     {
       name: 'OWASP LLM',
       plugins: new Set(Object.values(OWASP_LLM_TOP_10_MAPPING).flatMap((v) => v.plugins)),
+    },
+    {
+      name: 'OWASP Gen AI Red Team',
+      plugins: new Set(Object.values(OWASP_LLM_RED_TEAM_MAPPING).flatMap((v) => v.plugins)),
     },
     {
       name: 'OWASP API',
@@ -287,6 +307,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   const renderPluginCategory = (category: string, plugins: readonly Plugin[]) => {
     const pluginsToShow = plugins
       .filter((plugin) => plugin !== 'intent') // Skip intent because we have a dedicated section for it
+      .filter((plugin) => plugin !== 'policy') // Skip policy because we have a dedicated section for it
       .filter((plugin) => filteredPlugins.includes(plugin));
     if (pluginsToShow.length === 0) {
       return null;
@@ -378,7 +399,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                   sx={{
                     p: 2,
                     height: '100%',
-                    borderRadius: 2,
                     border: (theme) => {
                       if (selectedPlugins.has(plugin)) {
                         if (
@@ -389,7 +409,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                         }
                         return `1px solid ${theme.palette.primary.main}`;
                       }
-                      return '1px solid transparent';
+                      return undefined;
                     },
                     backgroundColor: (theme) =>
                       selectedPlugins.has(plugin)
@@ -545,6 +565,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                   >
                     <PresetCard
                       name={preset.name}
+                      description={PLUGIN_PRESET_DESCRIPTIONS[preset.name] || ''}
                       isSelected={isSelected}
                       onClick={() => handlePresetSelect(preset)}
                     />
@@ -647,11 +668,32 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           </Accordion>
         </Box>
 
-        {selectedPlugins.has('policy') && (
-          <Box sx={{ mb: 4 }}>
+        <Accordion
+          expanded={expandedCategories.has('Custom Policies')}
+          onChange={(event, expanded) => {
+            setExpandedCategories((prev) => {
+              const newSet = new Set(prev);
+              if (expanded) {
+                newSet.add('Custom Policies');
+              } else {
+                newSet.delete('Custom Policies');
+              }
+              return newSet;
+            });
+          }}
+        >
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
+              Custom Policies (
+              {config.plugins.filter((p) => typeof p === 'object' && 'id' in p && p.id === 'policy')
+                .length || 0}
+              )
+            </Typography>
+          </AccordionSummary>
+          <AccordionDetails>
             <CustomPoliciesSection />
-          </Box>
-        )}
+          </AccordionDetails>
+        </Accordion>
 
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
           <Button

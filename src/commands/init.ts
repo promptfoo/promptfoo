@@ -23,17 +23,31 @@ export async function downloadFile(url: string, filePath: string): Promise<void>
 }
 
 export async function downloadDirectory(dirPath: string, targetDir: string): Promise<void> {
+  // First try with VERSION
   const url = `${GITHUB_API_BASE}/repos/promptfoo/promptfoo/contents/examples/${dirPath}?ref=${VERSION}`;
-  const response = await fetch(url, {
+  let response = await fetch(url, {
     headers: {
       Accept: 'application/vnd.github.v3+json',
       'User-Agent': 'promptfoo-cli',
     },
   });
 
+  // If VERSION fails, try with 'main'
   if (!response.ok) {
-    throw new Error(`Failed to fetch directory contents: ${response.statusText}`);
+    const mainUrl = `${GITHUB_API_BASE}/repos/promptfoo/promptfoo/contents/examples/${dirPath}?ref=main`;
+    response = await fetch(mainUrl, {
+      headers: {
+        Accept: 'application/vnd.github.v3+json',
+        'User-Agent': 'promptfoo-cli',
+      },
+    });
+
+    // If both attempts fail, throw an error
+    if (!response.ok) {
+      throw new Error(`Failed to fetch directory contents: ${response.statusText}`);
+    }
   }
+
   const contents = await response.json();
 
   for (const item of contents) {

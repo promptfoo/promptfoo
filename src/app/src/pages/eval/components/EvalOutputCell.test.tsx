@@ -10,6 +10,15 @@ import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
 import type { EvalOutputCellProps } from './EvalOutputCell';
 import EvalOutputCell from './EvalOutputCell';
 
+// Mock the EvalOutputPromptDialog component to check what props are passed to it
+vi.mock('./EvalOutputPromptDialog', () => ({
+  default: vi.fn(({ metadata }) => (
+    <div data-testid="dialog-component" data-metadata={JSON.stringify(metadata)}>
+      Mocked Dialog Component
+    </div>
+  )),
+}));
+
 const renderWithProviders = (ui: React.ReactElement) => {
   return render(<ShiftKeyProvider>{ui}</ShiftKeyProvider>);
 };
@@ -94,6 +103,7 @@ describe('EvalOutputCell', () => {
       score: 0.8,
       text: 'Test output text',
       testCase: {},
+      metadata: { testKey: 'testValue' },
     },
     promptIndex: 0,
     rowIndex: 0,
@@ -106,9 +116,40 @@ describe('EvalOutputCell', () => {
     vi.clearAllMocks();
   });
 
-  it('renders cell with output text', () => {
+  it('passes metadata correctly to the dialog', async () => {
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
-    expect(screen.getByText('Test output text')).toBeInTheDocument();
+    await userEvent.click(screen.getByText('🔎'));
+
+    const dialogComponent = screen.getByTestId('dialog-component');
+    expect(dialogComponent).toBeInTheDocument();
+
+    // Check that metadata is passed correctly
+    const passedMetadata = JSON.parse(dialogComponent.getAttribute('data-metadata') || '{}');
+    expect(passedMetadata.testKey).toBe('testValue');
+  });
+
+  it('preserves existing metadata citations', async () => {
+    const propsWithMetadataCitations = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        metadata: {
+          testKey: 'testValue',
+          citations: [{ source: 'metadata source', content: 'metadata content' }],
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithMetadataCitations} />);
+    await userEvent.click(screen.getByText('🔎'));
+
+    const dialogComponent = screen.getByTestId('dialog-component');
+    const passedMetadata = JSON.parse(dialogComponent.getAttribute('data-metadata') || '{}');
+
+    // Metadata citations should be preserved
+    expect(passedMetadata.citations).toEqual([
+      { source: 'metadata source', content: 'metadata content' },
+    ]);
   });
 
   it('displays pass/fail status correctly', () => {
@@ -212,6 +253,69 @@ describe('EvalOutputCell', () => {
 
     const dialogContent = screen.getByTestId('context-text');
     expect(dialogContent).toHaveTextContent('Test output text');
+  });
+
+  it('renders audio player when audio data is present', () => {
+    const propsWithAudio: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        audio: {
+          data: 'base64audiodata',
+          format: 'wav',
+          transcript: 'Test audio transcript',
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithAudio} />);
+
+    const audioElement = screen.getByTestId('audio-player');
+    expect(audioElement).toBeInTheDocument();
+
+    const sourceElement = screen.getByTestId('audio-player').querySelector('source');
+    expect(sourceElement).toHaveAttribute('src', 'data:audio/wav;base64,base64audiodata');
+    expect(sourceElement).toHaveAttribute('type', 'audio/wav');
+
+    expect(screen.getByText('Test audio transcript')).toBeInTheDocument();
+  });
+
+  it('handles audio without transcript', () => {
+    const propsWithAudioNoTranscript: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        audio: {
+          data: 'base64audiodata',
+          format: 'wav',
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithAudioNoTranscript} />);
+
+    const audioElement = screen.getByTestId('audio-player');
+    expect(audioElement).toBeInTheDocument();
+
+    expect(screen.queryByText(/transcript/i)).not.toBeInTheDocument();
+  });
+
+  it('uses default wav format when format is not specified', () => {
+    const propsWithAudioNoFormat: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        audio: {
+          data: 'base64audiodata',
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithAudioNoFormat} />);
+
+    const sourceElement = screen.getByTestId('audio-player').querySelector('source');
+    expect(sourceElement).toHaveAttribute('src', 'data:audio/wav;base64,base64audiodata');
+    expect(sourceElement).toHaveAttribute('type', 'audio/wav');
   });
 });
 

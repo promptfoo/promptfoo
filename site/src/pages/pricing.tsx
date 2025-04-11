@@ -38,7 +38,11 @@ function PricingTable() {
     {
       name: 'Enterprise',
       price: 'Custom',
-      description: 'For teams that need advanced features and cloud-based support',
+      description: (
+        <>
+          For teams that need advanced features. <Link to="/docs/enterprise/">Learn more</Link>
+        </>
+      ),
       features: [
         'All Community features',
         'Team sharing & collaboration',
@@ -182,6 +186,21 @@ function FAQSection() {
   );
 }
 
+function DemoCTA() {
+  return (
+    <section className={styles.demoCTA}>
+      <h2>Ready to get started?</h2>
+      <p>Schedule a demo to see how Promptfoo can help secure your LLM applications</p>
+      <Link
+        to="https://cal.com/team/promptfoo/intro2"
+        className={clsx('button', 'button--lg', 'button--primary', styles.demoButton)}
+      >
+        Schedule a Demo
+      </Link>
+    </section>
+  );
+}
+
 export default function Pricing(): JSX.Element {
   return (
     <Layout
@@ -193,6 +212,7 @@ export default function Pricing(): JSX.Element {
         <PricingTable />
         <EnterpriseFeatures />
         <FAQSection />
+        <DemoCTA />
       </main>
     </Layout>
   );

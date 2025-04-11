@@ -137,6 +137,28 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Static (Single-Turn)',
+    strategy: 'image',
+    displayName: 'Image Encoding',
+    description: 'Text-to-image encoding bypass',
+    longDescription:
+      'Tests handling of text embedded in images and encoded as base64 to potentially bypass text-based content filters',
+    cost: 'Low',
+    asrIncrease: '20-30%',
+    link: '/docs/red-team/strategies/image/',
+  },
+  {
+    category: 'Static (Single-Turn)',
+    strategy: 'audio',
+    displayName: 'Audio Encoding',
+    description: 'Text-to-speech encoding bypass',
+    longDescription:
+      'Tests handling of text converted to speech audio and encoded as base64 to potentially bypass text-based content filters',
+    cost: 'Low',
+    asrIncrease: '20-30%',
+    link: '/docs/red-team/strategies/audio/',
+  },
+  {
+    category: 'Static (Single-Turn)',
     strategy: 'base64',
     displayName: 'Base64',
     description: 'Base64 encoding bypass',
@@ -145,6 +167,17 @@ export const strategies: Strategy[] = [
     cost: 'Low',
     asrIncrease: '20-30%',
     link: '/docs/red-team/strategies/base64/',
+  },
+  {
+    category: 'Static (Single-Turn)',
+    strategy: 'hex',
+    displayName: 'Hex',
+    description: 'Hex encoding bypass',
+    longDescription:
+      'Tests detection and handling of hex-encoded malicious payloads to bypass content filters',
+    cost: 'Low',
+    asrIncrease: '20-30%',
+    link: '/docs/red-team/strategies/hex/',
   },
   {
     category: 'Static (Single-Turn)',
@@ -200,5 +233,17 @@ export const strategies: Strategy[] = [
     cost: 'Low',
     asrIncrease: '20-30%',
     link: '/docs/red-team/strategies/rot13/',
+  },
+  {
+    category: 'Regression',
+    strategy: 'retry',
+    displayName: 'Retry',
+    description: 'Historical failure testing',
+    longDescription:
+      'Automatically incorporates previously failed test cases into your test suite, creating a regression testing system that learns from past failures',
+    cost: 'Low',
+    asrIncrease: '50-70%',
+    link: '/docs/red-team/strategies/retry/',
+    recommended: false,
   },
 ];

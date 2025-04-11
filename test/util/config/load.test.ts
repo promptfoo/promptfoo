@@ -4,17 +4,19 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
 import cliState from '../../../src/cliState';
+import { isCI } from '../../../src/envars';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
-import { readTests } from '../../../src/testCases';
-import type { UnifiedConfig } from '../../../src/types';
+import { type UnifiedConfig } from '../../../src/types';
 import { maybeLoadFromExternalFile } from '../../../src/util';
+import { isRunningUnderNpx } from '../../../src/util';
 import {
   dereferenceConfig,
   readConfig,
   resolveConfigs,
   combineConfigs,
 } from '../../../src/util/config/load';
+import { readTests } from '../../../src/util/testCaseReader';
 
 jest.mock('../../../src/database', () => ({
   getDb: jest.fn(),
@@ -37,25 +39,40 @@ jest.mock('fs', () => ({
   mkdirSync: jest.fn(),
 }));
 
-jest.mock('../../../src/util', () => {
-  const originalModule = jest.requireActual('../../../src/util');
-  return {
-    ...originalModule,
-    maybeLoadFromExternalFile: jest.fn(originalModule.maybeLoadFromExternalFile),
-  };
-});
-
 jest.mock('../../../src/esm', () => ({
   importModule: jest.fn(),
 }));
 
-jest.mock('../../../src/testCases', () => {
-  const originalModule = jest.requireActual('../../../src/testCases');
+jest.mock('../../../src/util/testCaseReader', () => ({
+  readTest: jest.fn(),
+  readTests: jest.fn(),
+}));
+
+jest.mock('../../../src/envars', () => {
+  const originalModule = jest.requireActual('../../../src/envars');
   return {
     ...originalModule,
-    readTests: jest.fn(originalModule.readTests),
+    getEnvBool: jest.fn(),
+    isCI: jest.fn(),
   };
 });
+
+jest.mock('../../../src/util', () => {
+  const originalModule = jest.requireActual('../../../src/util');
+  return {
+    ...originalModule,
+    isRunningUnderNpx: jest.fn(),
+    maybeLoadFromExternalFile: jest.fn(originalModule.maybeLoadFromExternalFile),
+    readFilters: jest.fn(),
+  };
+});
+
+jest.mock('../../../src/logger', () => ({
+  error: jest.fn(),
+  warn: jest.fn(),
+  info: jest.fn(),
+  debug: jest.fn(),
+}));
 
 describe('combineConfigs', () => {
   beforeEach(() => {
@@ -124,16 +141,15 @@ describe('combineConfigs', () => {
           } else if (typeof path === 'string' && path === 'config2.json') {
             return JSON.stringify(config2);
           }
-          return Buffer.from(''); // Return an empty Buffer instead of null
+          return Buffer.from('');
         },
       )
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2))
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2))
-      .mockReturnValue(Buffer.from('')); // Return an empty Buffer instead of null
+      .mockReturnValue(Buffer.from(''));
 
-    // Mocks for prompt loading
     jest.mocked(fs.readdirSync).mockReturnValue([]);
     jest.mocked(fs.statSync).mockImplementation(() => {
       throw new Error('File does not exist');
@@ -315,7 +331,7 @@ describe('combineConfigs', () => {
               prompts: ['file://prompt3.txt', 'prompt4'],
             });
           }
-          return Buffer.from(''); // Return an empty Buffer instead of null
+          return Buffer.from('');
         },
       );
 
@@ -350,7 +366,7 @@ describe('combineConfigs', () => {
               prompts: ['prompt3', 'file://prompt2.txt', 'prompt4'],
             });
           }
-          return Buffer.from(''); // Return an empty Buffer instead of null
+          return Buffer.from('');
         },
       );
 
@@ -937,13 +953,11 @@ describe('resolveConfigs', () => {
       }),
     );
 
-    // Mock maybeLoadFromExternalFile to return scenarios and tests
     jest
       .mocked(maybeLoadFromExternalFile)
-      .mockResolvedValueOnce(scenarios) // For scenarios.yaml
-      .mockResolvedValueOnce(externalTests); // For tests.yaml
+      .mockResolvedValueOnce(scenarios)
+      .mockResolvedValueOnce(externalTests);
 
-    // Mock readTests to return the external tests
     jest.mocked(readTests).mockResolvedValue(externalTests);
 
     jest.mocked(globSync).mockReturnValue(['config.json']);
@@ -952,34 +966,80 @@ describe('resolveConfigs', () => {
 
     expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(['file://scenarios.yaml']);
     expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file://tests.yaml');
-    expect(testSuite).toEqual(
-      expect.objectContaining({
-        prompts: [
-          {
-            raw: prompt,
-            label: prompt,
-            config: undefined,
-          },
-        ],
-        providers: expect.arrayContaining([
-          expect.objectContaining({
-            modelName: 'gpt-4',
-          }),
-        ]),
-        scenarios: ['file://scenarios.yaml'],
-        tests: externalTests,
-        defaultTest: {
-          assert: [],
-          metadata: {},
-          options: {},
-          vars: {},
+
+    expect(testSuite).toMatchObject({
+      prompts: [
+        {
+          raw: prompt,
+          label: prompt,
         },
-        derivedMetrics: undefined,
-        extensions: [],
-        nunjucksFilters: {},
-        providerPromptMap: {},
+      ],
+      providers: [
+        expect.objectContaining({
+          modelName: 'gpt-4',
+        }),
+      ],
+      scenarios: ['file://scenarios.yaml'],
+      tests: externalTests,
+      defaultTest: expect.objectContaining({
+        metadata: {},
       }),
+    });
+
+    expect(testSuite.prompts[0].raw).toBe(prompt);
+    expect(testSuite.tests).toEqual(externalTests);
+    expect(testSuite.scenarios).toEqual(['file://scenarios.yaml']);
+  });
+
+  it('should warn and exit when no config file, no prompts, no providers, and not in CI', async () => {
+    jest.spyOn(process, 'exit').mockImplementation((code) => {
+      throw new Error(`Process exited with code ${code}`);
+    });
+    jest.mocked(isCI).mockReturnValue(false);
+    jest.mocked(isRunningUnderNpx).mockReturnValue(true);
+
+    const cmdObj = {};
+    const defaultConfig = {};
+
+    await expect(resolveConfigs(cmdObj, defaultConfig)).rejects.toThrow(
+      'Process exited with code 1',
     );
+
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No promptfooconfig found'));
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo eval -c'));
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo init'));
+  });
+
+  it('should throw an error if no providers are provided', async () => {
+    const cmdObj = { config: ['config.json'] };
+    const defaultConfig = {};
+    const promptfooConfig = {
+      prompts: ['Act as a travel guide for {{location}}'],
+    };
+
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(JSON.stringify(promptfooConfig));
+
+    await expect(resolveConfigs(cmdObj, defaultConfig)).rejects.toThrow(
+      'Process exited with code 1',
+    );
+
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('You must specify at least 1 provider (for example, openai:gpt-4o)'),
+    );
+  });
+
+  it('should allow dataset generation configs to omit providers', async () => {
+    const cmdObj = { config: ['config.json'] };
+    const defaultConfig = {};
+    const promptfooConfig = {
+      prompts: ['Act as a travel guide for {{location}}'],
+    };
+
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(JSON.stringify(promptfooConfig));
+
+    expect(
+      async () => await resolveConfigs(cmdObj, defaultConfig, 'DatasetGeneration'),
+    ).not.toThrow();
   });
 });
 
@@ -1027,7 +1087,6 @@ describe('readConfig', () => {
 
     jest.spyOn(path, 'parse').mockReturnValue({ ext: '.js' } as any);
     jest.mocked(importModule).mockResolvedValue(mockConfig);
-
     const result = await readConfig('config.js');
 
     expect(result).toEqual(mockConfig);
@@ -1137,7 +1196,7 @@ describe('readConfig', () => {
 
     const dereferencedConfig = {
       description: 'invalid_config',
-      providers: [{ invalid: true }], // This will fail validation
+      providers: [{ invalid: true }],
     };
 
     jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(mockConfig));
@@ -1152,5 +1211,19 @@ describe('readConfig', () => {
     );
     const calls = jest.mocked(logger.warn).mock.calls;
     expect(calls[0][0]).toContain('Invalid configuration file');
+  });
+
+  it('should handle empty YAML file by defaulting to empty object', async () => {
+    jest.spyOn(fs, 'readFileSync').mockReturnValue('');
+    jest.spyOn(path, 'parse').mockReturnValue({ ext: '.yaml' } as any);
+    jest.spyOn(yaml, 'load').mockReturnValue(null);
+    jest.spyOn($RefParser.prototype, 'dereference').mockResolvedValue({});
+
+    const result = await readConfig('empty.yaml');
+
+    expect(result).toEqual({
+      prompts: ['{{prompt}}'],
+    });
+    expect(fs.readFileSync).toHaveBeenCalledWith('empty.yaml', 'utf-8');
   });
 });

@@ -57,6 +57,35 @@ More details on using assertions, including examples [here](/docs/configuration/
 | provider  | string | No       | Some assertions (type = similar, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers) |
 | metric    | string | No       | The label for this result. Assertions with the same `metric` will be aggregated together                 |
 
+### AssertionValueFunctionContext
+
+When using JavaScript or Python assertions, your function receives a context object with the following interface:
+
+```typescript
+interface AssertionValueFunctionContext {
+  // Raw prompt sent to LLM
+  prompt: string | undefined;
+
+  // Test case variables
+  vars: Record<string, string | object>;
+
+  // The complete test case
+  test: AtomicTestCase;
+
+  // Log probabilities from the LLM response, if available
+  logProbs: number[] | undefined;
+
+  // Configuration passed to the assertion
+  config?: Record<string, any>;
+
+  // The provider that generated the response
+  provider: ApiProvider | undefined;
+
+  // The complete provider response
+  providerResponse: ProviderResponse | undefined;
+}
+```
+
 :::note
 
 promptfoo supports `.js` and `.json` file extensions in addition to `.yaml`.
@@ -146,6 +175,18 @@ These hooks provide powerful extensibility to your promptfoo evaluations, allowi
 
 ## Provider-related types
 
+### Guardrails
+
+GuardrailResponse is an object that represents the GuardrailResponse from a provider. It includes flags indicating if prompt or output failed guardrails.
+
+```typescript
+interface GuardrailResponse {
+  flagged?: boolean;
+  flaggedInput?: boolean;
+  flaggedOutput?: boolean;
+}
+```
+
 ### ProviderFunction
 
 A ProviderFunction is a function that takes a prompt as an argument and returns a Promise that resolves to a ProviderResponse. It allows you to define custom logic for calling an API.
@@ -178,18 +219,6 @@ interface ProviderOptions {
 
   // Sleep this long before each request
   delay?: number;
-}
-```
-
-### Guardrails
-
-GuardrailResponse is an object that represents the GuardrailResponse from a provider. It includes flags indicating if prompt or output failed guardrails.
-
-```typescript
-interface GuardrailResponse {
-  flagged?: boolean;
-  flaggedInput?: boolean;
-  flaggedOutput?: boolean;
 }
 ```
 

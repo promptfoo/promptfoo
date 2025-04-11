@@ -1,7 +1,7 @@
 import * as path from 'path';
 import { runAssertion } from '../../src/assertions';
 import { importModule } from '../../src/esm';
-import { OpenAiChatCompletionProvider } from '../../src/providers/openai';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { isPackagePath, loadFromPackage } from '../../src/providers/packageParser';
 import type { Assertion, AtomicTestCase, GradingResult } from '../../src/types';
 

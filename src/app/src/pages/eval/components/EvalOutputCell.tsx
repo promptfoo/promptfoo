@@ -3,8 +3,8 @@ import { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useShiftKey } from '@app/hooks/useShiftKey';
 import Tooltip from '@mui/material/Tooltip';
-import { ResultFailureReason, type EvaluateTableOutput } from '@promptfoo/types';
-import { diffSentences, diffJson, diffWords } from 'diff';
+import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
+import { diffJson, diffSentences, diffWords } from 'diff';
 import remarkGfm from 'remark-gfm';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
@@ -52,6 +52,19 @@ function EvalOutputCell({
   const { renderMarkdown, prettifyJson, showPrompts, showPassFail, maxImageWidth, maxImageHeight } =
     useResultsViewStore();
   const [openPrompt, setOpen] = React.useState(false);
+  const [activeRating, setActiveRating] = React.useState<boolean | null>(
+    output.gradingResult?.componentResults?.find((result) => result.assertion?.type === 'human')
+      ?.pass ?? null,
+  );
+
+  // Update activeRating when output changes
+  React.useEffect(() => {
+    const humanRating = output.gradingResult?.componentResults?.find(
+      (result) => result.assertion?.type === 'human',
+    )?.pass;
+    setActiveRating(humanRating ?? null);
+  }, [output]);
+
   const handlePromptOpen = () => {
     setOpen(true);
   };
@@ -197,6 +210,23 @@ function EvalOutputCell({
         onClick={() => toggleLightbox(text)}
       />
     );
+  } else if (output.audio) {
+    node = (
+      <div className="audio-output">
+        <audio controls style={{ width: '100%' }} data-testid="audio-player">
+          <source
+            src={`data:audio/${output.audio.format || 'wav'};base64,${output.audio.data}`}
+            type={`audio/${output.audio.format || 'wav'}`}
+          />
+          Your browser does not support the audio element.
+        </audio>
+        {output.audio.transcript && (
+          <div className="transcript">
+            <strong>Transcript:</strong> {output.audio.transcript}
+          </div>
+        )}
+      </div>
+    );
   } else if (renderMarkdown && !showDiffs) {
     node = (
       <ReactMarkdown
@@ -226,6 +256,7 @@ function EvalOutputCell({
 
   const handleRating = React.useCallback(
     (isPass: boolean) => {
+      setActiveRating(isPass);
       onRating(isPass, undefined, output.gradingResult?.comment);
     },
     [onRating, output.gradingResult?.comment],
@@ -396,12 +427,18 @@ function EvalOutputCell({
           />
         </>
       )}
-      <span className="action" onClick={() => handleRating(true)}>
+      <span
+        className={`action ${activeRating === true ? 'active' : ''}`}
+        onClick={() => handleRating(true)}
+      >
         <Tooltip title="Mark test passed (score 1.0)">
           <span>👍</span>
         </Tooltip>
       </span>
-      <span className="action" onClick={() => handleRating(false)}>
+      <span
+        className={`action ${activeRating === false ? 'active' : ''}`}
+        onClick={() => handleRating(false)}
+      >
         <Tooltip title="Mark test failed (score 0.0)">
           <span>👎</span>
         </Tooltip>

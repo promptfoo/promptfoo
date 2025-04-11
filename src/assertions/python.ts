@@ -81,7 +81,10 @@ ${
       const pythonGradingResult = result as Omit<GradingResult, 'assertion'>;
       if (assertion.threshold && pythonGradingResult.score < assertion.threshold) {
         pythonGradingResult.pass = false;
-        pythonGradingResult.reason = `Python score ${pythonGradingResult.score} is less than threshold ${assertion.threshold}`;
+        const scoreMessage = `Python score ${pythonGradingResult.score} is less than threshold ${assertion.threshold}`;
+        pythonGradingResult.reason = pythonGradingResult.reason
+          ? `${scoreMessage}: ${pythonGradingResult.reason}`
+          : scoreMessage;
       }
       return {
         ...pythonGradingResult,

@@ -11,10 +11,10 @@ export function getRemoteGenerationUrl(): string {
   // If logged into cloud use that url + /task
   const cloudConfig = new CloudConfig();
   if (cloudConfig.isEnabled()) {
-    return cloudConfig.getApiHost() + '/task';
+    return cloudConfig.getApiHost() + '/api/v1/task';
   }
   // otherwise use the default
-  return 'https://api.promptfoo.app/task';
+  return 'https://api.promptfoo.app/api/v1/task';
 }
 
 export function neverGenerateRemote(): boolean {
@@ -63,8 +63,8 @@ export function getRemoteGenerationUrlForUnaligned(): string {
   // If logged into cloud use that url + /task
   const cloudConfig = new CloudConfig();
   if (cloudConfig.isEnabled()) {
-    return cloudConfig.getApiHost() + '/task/harmful';
+    return cloudConfig.getApiHost() + '/api/v1/task/harmful';
   }
   // otherwise use the default
-  return 'https://api.promptfoo.app/task/harmful';
+  return 'https://api.promptfoo.app/api/v1/task/harmful';
 }
