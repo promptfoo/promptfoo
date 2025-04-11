@@ -1,6 +1,3 @@
-/**
- * 
- */
 import type { AssertionParams, GradingResult } from '../types';
 import invariant from '../util/invariant';
 import { getNGrams } from './ngrams';
