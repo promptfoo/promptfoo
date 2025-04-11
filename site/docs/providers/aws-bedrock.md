@@ -616,4 +616,4 @@ When using the Knowledge Base provider, the response will include:
 - [Configuration Reference](../configuration/reference.md) - Complete configuration options for promptfoo
 - [Command Line Interface](../usage/command-line.md) - How to use promptfoo from the command line
 - [Provider Options](../providers/index.md) - Overview of all supported providers
-- [Amazon Bedrock Examples](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) - Runnable examples of Bedrock integration
+- [Amazon Bedrock Examples](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) - Runnable examples of Bedrock integration, including Knowledge Base examples
