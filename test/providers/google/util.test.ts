@@ -582,6 +582,87 @@ describe('util', () => {
         systemInstruction: { parts: [{ text: 'You are a helpful assistant' }] },
       });
     });
+
+    it('should handle native Gemini format with system_instruction but no contents field', () => {
+      const input = {
+        system_instruction: { parts: [{ text: 'You are a helpful assistant' }] },
+      };
+
+      const result = maybeCoerceToGeminiFormat(input);
+
+      expect(result).toEqual({
+        contents: [],
+        coerced: true,
+        systemInstruction: { parts: [{ text: 'You are a helpful assistant' }] },
+      });
+    });
+
+    it('should handle native Gemini format with system_instruction and empty contents array', () => {
+      const input = {
+        system_instruction: { parts: [{ text: 'You are a helpful assistant' }] },
+        contents: [],
+      };
+
+      const result = maybeCoerceToGeminiFormat(input);
+
+      expect(result).toEqual({
+        contents: [],
+        coerced: true,
+        systemInstruction: { parts: [{ text: 'You are a helpful assistant' }] },
+      });
+    });
+
+    it('should handle valid GeminiFormat array with system_instruction field', () => {
+      const input = {
+        system_instruction: { parts: [{ text: 'You are a helpful assistant' }] },
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: 'Hello, Gemini!' }],
+          },
+        ],
+      };
+
+      const result = maybeCoerceToGeminiFormat(input);
+
+      expect(result).toEqual({
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: 'Hello, Gemini!' }],
+          },
+        ],
+        coerced: true,
+        systemInstruction: { parts: [{ text: 'You are a helpful assistant' }] },
+      });
+    });
+
+    it('should handle system_instruction with different formats', () => {
+      const input = {
+        system_instruction: {
+          parts: [{ text: 'You are a helpful assistant' }, { text: 'Be concise and accurate' }],
+        },
+        contents: [
+          {
+            parts: [{ text: 'Hello' }],
+          },
+        ],
+      };
+
+      const result = maybeCoerceToGeminiFormat(input);
+
+      expect(result).toEqual({
+        contents: [
+          {
+            parts: [{ text: 'Hello' }],
+          },
+        ],
+        coerced: true,
+        systemInstruction: {
+          parts: [{ text: 'You are a helpful assistant' }, { text: 'Be concise and accurate' }],
+        },
+      });
+    });
   });
 
   describe('getGoogleClient', () => {
