@@ -687,7 +687,14 @@ tests:
 
 ### GLEU
 
-The BLEU score has some undesirable properties when used for single sentences, as it was designed to be a corpus measure. To address these concerns ‘GLEU (Google-BLEU) score’ was introduced. For the GLEU score, we record all sub-sequences of 1, 2, 3 or 4 tokens in output and target sequence (n-grams). We then compute a recall, which is the ratio of the number of matching n-grams to the number of total n-grams in the target (ground truth) sequence, and a precision, which is the ratio of the number of matching n-grams to the number of total n-grams in the generated output sequence. Then GLEU score is simply the minimum of recall and precision. This GLEU score’s range is always between 0 (no matches) and 1 (all match) and it is symmetrical when switching output and target. According to our experiments, GLEU score correlates quite well with the BLEU metric on a corpus level but does not have its drawbacks for our per sentence reward objective.
+The BLEU score has some undesirable properties when used for single sentences, as it was designed to be a corpus measure. To address these concerns, the 'GLEU (Google-BLEU) score' was introduced as a variant that better correlates with human judgments on sentence-level evaluation.
+
+For the GLEU score, we record all sub-sequences of 1, 2, 3 or 4 tokens in output and target sequence (n-grams). We then compute:
+
+- A recall: the ratio of matching n-grams to total n-grams in the target (ground truth) sequence
+- A precision: the ratio of matching n-grams to total n-grams in the generated output sequence
+
+The GLEU score is the minimum of recall and precision. The score's range is always between 0 (no matches) and 1 (all match) and it is symmetrical when switching output and target.
 
 ```yaml
 assert:
@@ -710,6 +717,17 @@ tests:
     assert:
       - type: gleu
         value: '{{expected}}'
+```
+
+You can also provide multiple reference strings for evaluation:
+
+```yaml
+assert:
+  - type: gleu
+    value:
+      - 'Hello world'
+      - 'Hi there world'
+    threshold: 0.6
 ```
 
 ### F-Score

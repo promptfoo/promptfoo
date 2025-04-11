@@ -89,7 +89,7 @@ export function calculateGleuScore(
  * Handles GLEU (Google-BLEU) score calculation and evaluation for assertions.
  * GLEU is a variant of BLEU that correlates better with human judgments on sentence-level evaluation.
  *
- * @param {Object} params - The parameters for GLEU score evaluation
+ * @param {AssertionParams} params - The parameters for GLEU score evaluation
  * @param {Object} params.assertion - The assertion configuration object
  * @param {boolean} params.inverse - Whether to invert the pass condition
  * @param {string} params.outputString - The candidate string to evaluate
@@ -98,19 +98,18 @@ export function calculateGleuScore(
  * @param {Object} params.test - The test case data (unused)
  * @returns {GradingResult} Object containing:
  *   - pass: boolean indicating if assertion passed
- *   - score: normalized GLEU score (0-1)
+ *   - score: GLEU score (0-1)
  *   - reason: explanation of the result
  *   - assertion: original assertion config
  * @throws {Error} If renderedValue is not a string or array of strings
  */
-
 export function handleGleuScore({
   assertion,
   inverse,
   outputString,
   renderedValue,
-  provider, // Use if your assertion needs provider-specific logic
-  test, // Access to test case data
+  provider,
+  test,
 }: AssertionParams): GradingResult {
   // Validate inputs
   invariant(
@@ -129,7 +128,7 @@ export function handleGleuScore({
     score: inverse ? 1 - score : score,
     reason: pass
       ? 'Assertion passed'
-      : `GLEU score ${score.toFixed(2)} is ${inverse ? 'greater' : 'less'} than threshold ${threshold}`,
+      : `GLEU score ${score.toFixed(4)} is ${inverse ? 'greater' : 'less'} than threshold ${threshold}`,
     assertion,
   };
 }

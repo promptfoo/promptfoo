@@ -142,7 +142,7 @@ export function handleBleuScore({
     score: inverse ? 1 - score : score,
     reason: pass
       ? 'Assertion passed'
-      : `BLEU score ${score.toFixed(2)} is ${inverse ? 'greater' : 'less'} than threshold ${threshold}`,
+      : `BLEU score ${score.toFixed(4)} is ${inverse ? 'greater' : 'less'} than threshold ${threshold}`,
     assertion,
   };
 }
