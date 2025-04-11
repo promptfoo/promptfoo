@@ -69,31 +69,78 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
 
   const isOverLength = textLength(text) > maxLength;
   return (
-    <div
-      style={{ cursor: isOverLength ? 'pointer' : 'normal' }}
-      onMouseDown={(e) => {
-        // TODO(ian): This is madness. But the purpose is to make it easier to copy text while preserving the toggle capability.
-        // Maybe instead, let's make cells fixed height and remove this visibility toggle.
-        const startX = e.clientX;
-        const startY = e.clientY;
-
-        const handleMouseUp = (e: MouseEvent) => {
-          const endX = e.clientX;
-          const endY = e.clientY;
-
-          // If the mouse hasn't moved (or moved very little), consider it a click
-          if (Math.abs(endX - startX) < 5 && Math.abs(endY - startY) < 5) {
-            toggleTruncate();
-          }
-
-          document.removeEventListener('mouseup', handleMouseUp);
-        };
-
-        document.addEventListener('mouseup', handleMouseUp);
-      }}
-    >
-      {truncatedText}
-      {isTruncated && textLength(text) > maxLength && <span>...</span>}
+    <div style={{ position: 'relative' }}>
+      <div
+        style={{
+          cursor: isOverLength ? 'pointer' : 'normal',
+          position: 'relative',
+        }}
+        onClick={isOverLength ? toggleTruncate : undefined}
+      >
+        {truncatedText}
+        {isTruncated && isOverLength && (
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              marginLeft: '4px',
+              color: '#3b82f6',
+              fontWeight: 'bold',
+              fontSize: '0.85em',
+              padding: '0 4px',
+              borderRadius: '4px',
+              background: 'rgba(59, 130, 246, 0.1)',
+              letterSpacing: '0.1rem',
+            }}
+          >
+            <span>...</span>
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ marginLeft: '4px' }}
+            >
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </span>
+        )}
+        {!isTruncated && isOverLength && (
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              marginLeft: '4px',
+              color: '#3b82f6',
+              fontWeight: 'bold',
+              fontSize: '0.85em',
+              padding: '0 4px',
+              borderRadius: '4px',
+              background: 'rgba(59, 130, 246, 0.1)',
+            }}
+            onClick={toggleTruncate}
+          >
+            <span>Show less</span>
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ marginLeft: '4px' }}
+            >
+              <polyline points="18 15 12 9 6 15"></polyline>
+            </svg>
+          </span>
+        )}
+      </div>
     </div>
   );
 }
