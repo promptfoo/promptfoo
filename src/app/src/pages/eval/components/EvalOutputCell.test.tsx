@@ -24,7 +24,7 @@ const renderWithProviders = (ui: React.ReactElement) => {
 };
 
 vi.mock('./store', () => ({
-  useStore: () => ({
+  useResultsViewSettingsStore: () => ({
     prettifyJson: false,
     renderMarkdown: true,
     showPassFail: true,

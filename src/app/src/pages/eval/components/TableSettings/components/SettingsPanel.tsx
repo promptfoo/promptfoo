@@ -9,7 +9,7 @@ import TextFormatIcon from '@mui/icons-material/TextFormat';
 import ViewListIcon from '@mui/icons-material/ViewList';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import { Box, alpha } from '@mui/material';
-import { useStore as useResultsViewStore } from '../../store';
+import { useResultsViewSettingsStore } from '../../store';
 import { tokens } from '../tokens';
 import EnhancedRangeSlider from './EnhancedRangeSlider';
 import SettingItem from './SettingItem';
@@ -25,7 +25,6 @@ const SettingsPanel: React.FC = () => {
     setShowPassFail,
     showInferenceDetails,
     setShowInferenceDetails,
-
     maxTextLength,
     setMaxTextLength,
     renderMarkdown,
@@ -38,7 +37,7 @@ const SettingsPanel: React.FC = () => {
     setMaxImageHeight,
     wordBreak,
     setWordBreak,
-  } = useResultsViewStore();
+  } = useResultsViewSettingsStore();
 
   // Local state for slider
   const [localMaxTextLength, setLocalMaxTextLength] = useState(
