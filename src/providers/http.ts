@@ -850,10 +850,10 @@ export class HttpProvider implements ApiProvider {
       `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
     );
 
-    // Update vars with the transformed prompt
-    vars.prompt = transformedPrompt;
-
-    const renderedRequest = getNunjucksEngine().renderString(this.config.request, vars);
+    const renderedRequest = getNunjucksEngine().renderString(this.config.request, {
+      ...vars,
+      prompt: transformedPrompt,
+    });
     const parsedRequest = parseRawRequest(renderedRequest.trim());
 
     const protocol = this.url.startsWith('https') || this.config.useHttps ? 'https' : 'http';
