@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
-import { useStore } from './store';
+import { useResultsViewSettingsStore, useStore } from './store';
 
 vi.mock('./store', () => ({
   useStore: vi.fn(() => ({
@@ -210,11 +210,15 @@ describe('ResultsTable Metrics Display', () => {
       vi.mocked(useStore).mockImplementation(() => ({
         config: {},
         evalId: '123',
-        inComparisonMode: false,
+
         setTable: vi.fn(),
         table: mockTableWithObjectVar,
         version: 4,
+      }));
+
+      vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
         renderMarkdown: false,
+        inComparisonMode: false,
       }));
 
       renderWithProviders(<ResultsTable {...defaultProps} />);
@@ -230,11 +234,14 @@ describe('ResultsTable Metrics Display', () => {
       vi.mocked(useStore).mockImplementation(() => ({
         config: {},
         evalId: '123',
-        inComparisonMode: false,
         setTable: vi.fn(),
         table: mockTableWithLongVar,
         version: 4,
+      }));
+
+      vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
         renderMarkdown: true,
+        inComparisonMode: false,
       }));
 
       renderWithProviders(<ResultsTable {...defaultProps} maxTextLength={50} />);
