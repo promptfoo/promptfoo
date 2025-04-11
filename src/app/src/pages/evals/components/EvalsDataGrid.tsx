@@ -118,7 +118,20 @@ export default function EvalsDataGrid({
           headerName: 'ID',
           flex: 1,
           renderCell: (params: GridRenderCellParams<Eval>) => (
-            <Link href={`/eval/${params.row.evalId}`}>{params.row.evalId}</Link>
+            <Link
+              href={`/eval/${params.row.evalId}`}
+              /**
+               * Prevent the default behavior of the link, which is to navigate to the href.
+               * Instead, we want to call the onEvalSelected callback which may or may not navigate.
+               */
+              onClick={(e) => {
+                e.preventDefault();
+                onEvalSelected(params.row.evalId);
+                return false;
+              }}
+            >
+              {params.row.evalId}
+            </Link>
           ),
         },
         {
