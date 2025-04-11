@@ -417,15 +417,17 @@ function EvalOutputCell({
               <span>🔎</span>
             </Tooltip>
           </span>
-          <EvalOutputPromptDialog
-            open={openPrompt}
-            onClose={handlePromptClose}
-            prompt={output.prompt}
-            provider={output.provider}
-            gradingResults={output.gradingResult?.componentResults}
-            output={text}
-            metadata={output.metadata}
-          />
+          {openPrompt && (
+            <EvalOutputPromptDialog
+              open={openPrompt}
+              onClose={handlePromptClose}
+              prompt={output.prompt}
+              provider={output.provider}
+              gradingResults={output.gradingResult?.componentResults}
+              output={text}
+              metadata={output.metadata}
+            />
+          )}
         </>
       )}
       <span
@@ -608,14 +610,16 @@ function EvalOutputCell({
           <img src={lightboxImage} alt="Lightbox" />
         </div>
       )}
-      <CommentDialog
-        open={commentDialogOpen}
-        contextText={getCombinedContextText()}
-        commentText={commentText}
-        onClose={handleCommentClose}
-        onSave={handleCommentSave}
-        onChange={setCommentText}
-      />
+      {commentDialogOpen && (
+        <CommentDialog
+          open={commentDialogOpen}
+          contextText={getCombinedContextText()}
+          commentText={commentText}
+          onClose={handleCommentClose}
+          onSave={handleCommentSave}
+          onChange={setCommentText}
+        />
+      )}
     </div>
   );
 }

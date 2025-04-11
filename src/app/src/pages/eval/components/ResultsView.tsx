@@ -174,9 +174,9 @@ export default function ResultsView({
   const { showToast } = useToast();
   const [searchText, setSearchText] = React.useState(searchParams.get('search') || '');
   const [debouncedSearchText] = useDebounce(searchText, 200);
-  const handleSearchTextChange = (text: string) => {
+  const handleSearchTextChange = React.useCallback((text: string) => {
     setSearchText(text);
-  };
+  }, []);
 
   const [failureFilter, setFailureFilter] = React.useState<{ [key: string]: boolean }>({});
   const handleFailureFilterToggle = React.useCallback(

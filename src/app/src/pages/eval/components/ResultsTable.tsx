@@ -89,11 +89,13 @@ function TableHeader({
               🔎
             </span>
           </Tooltip>
-          <EvalOutputPromptDialog
-            open={promptOpen}
-            onClose={handlePromptClose}
-            prompt={expandedText}
-          />
+          {promptOpen && (
+            <EvalOutputPromptDialog
+              open={promptOpen}
+              onClose={handlePromptClose}
+              prompt={expandedText}
+            />
+          )}
           {resourceId && (
             <Tooltip title="View other evals and datasets for this prompt">
               <span className="action">
