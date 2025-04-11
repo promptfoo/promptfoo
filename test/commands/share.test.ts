@@ -8,6 +8,7 @@ import * as envars from '../../src/envars';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
+import { loadDefaultConfig } from '../../src/util/config/default';
 
 jest.mock('../../src/share');
 jest.mock('../../src/logger');
@@ -21,6 +22,7 @@ jest.mock('../../src/models/eval');
 jest.mock('../../src/util', () => ({
   setupEnv: jest.fn(),
 }));
+jest.mock('../../src/util/config/default');
 
 describe('Share Command', () => {
   beforeEach(() => {
@@ -225,6 +227,58 @@ describe('Share Command', () => {
       const hostname = baseUrl ? new URL(baseUrl).hostname : 'app.promptfoo.dev';
 
       expect(hostname).toBe('sharing-domain.com');
+    });
+
+    it('should use sharing config from promptfooconfig.yaml', async () => {
+      // Mock the eval object
+      const mockEval = {
+        id: 'test-eval-id',
+        prompts: ['test prompt'],
+        config: {},
+        save: jest.fn().mockResolvedValue(undefined),
+      } as unknown as Eval;
+
+      // Mock Eval.latest to return our mock
+      jest.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
+
+      // Mock loadDefaultConfig to return sharing config
+      const mockSharing = {
+        apiBaseUrl: 'https://custom-api.example.com',
+        appBaseUrl: 'https://custom-app.example.com',
+      };
+
+      jest.mocked(loadDefaultConfig).mockResolvedValue({
+        defaultConfig: {
+          sharing: mockSharing,
+        },
+        defaultConfigPath: 'promptfooconfig.yaml',
+      });
+
+      // Mock isSharingEnabled to return true when it gets the config
+      jest.mocked(isSharingEnabled).mockImplementation((evalObj) => {
+        return !!evalObj.config.sharing;
+      });
+
+      // Mock createShareableUrl
+      jest
+        .mocked(createShareableUrl)
+        .mockResolvedValue('https://custom-app.example.com/eval/test-eval-id');
+
+      // Run the share command
+      const shareCmd = program.commands.find((c) => c.name() === 'share');
+      await shareCmd?.parseAsync(['node', 'test']);
+
+      // Verify loadDefaultConfig was called
+      expect(loadDefaultConfig).toHaveBeenCalledTimes(1);
+
+      // Verify the sharing config was applied to the eval object
+      expect(mockEval.config.sharing).toEqual(mockSharing);
+
+      // Verify isSharingEnabled was called with the updated eval object
+      expect(isSharingEnabled).toHaveBeenCalledWith(mockEval);
+
+      // Verify createShareableUrl was called
+      expect(createShareableUrl).toHaveBeenCalledWith(mockEval, false);
     });
   });
 });
