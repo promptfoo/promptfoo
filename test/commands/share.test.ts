@@ -9,6 +9,8 @@ import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
 import { loadDefaultConfig } from '../../src/util/config/default';
+import fs from 'fs';
+import path from 'path';
 
 jest.mock('../../src/share');
 jest.mock('../../src/logger');
@@ -23,6 +25,8 @@ jest.mock('../../src/util', () => ({
   setupEnv: jest.fn(),
 }));
 jest.mock('../../src/util/config/default');
+jest.mock('fs');
+jest.mock('path');
 
 describe('Share Command', () => {
   beforeEach(() => {
@@ -263,6 +267,48 @@ describe('Share Command', () => {
       await shareCmd?.parseAsync(['node', 'test']);
 
       expect(loadDefaultConfig).toHaveBeenCalledTimes(1);
+      expect(mockEval.config.sharing).toEqual(mockSharing);
+      expect(isSharingEnabled).toHaveBeenCalledWith(mockEval);
+      expect(createShareableUrl).toHaveBeenCalledWith(mockEval, false);
+    });
+
+    it('should use sharing config from specified configuration file', async () => {
+      const mockEval = {
+        id: 'test-eval-id',
+        prompts: ['test prompt'],
+        config: {},
+        save: jest.fn().mockResolvedValue(undefined),
+      } as unknown as Eval;
+
+      jest.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
+
+      const mockSharing = {
+        apiBaseUrl: 'https://custom-api.example.com',
+        appBaseUrl: 'https://custom-app.example.com',
+      };
+      
+      jest.mocked(fs.existsSync).mockReturnValue(true);
+      jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as any);
+
+      jest.mocked(loadDefaultConfig).mockResolvedValue({
+        defaultConfig: {
+          sharing: mockSharing,
+        },
+        defaultConfigPath: 'custom-config.yaml',
+      });
+
+      jest.mocked(isSharingEnabled).mockImplementation((evalObj) => {
+        return !!evalObj.config.sharing;
+      });
+
+      jest
+        .mocked(createShareableUrl)
+        .mockResolvedValue('https://custom-app.example.com/eval/test-eval-id');
+
+      const shareCmd = program.commands.find((c) => c.name() === 'share');
+      await shareCmd?.parseAsync(['node', 'test', '--config', 'custom-config.yaml']);
+
+      expect(loadDefaultConfig).toHaveBeenCalledWith(path.dirname('custom-config.yaml'), 'custom-config');
       expect(mockEval.config.sharing).toEqual(mockSharing);
       expect(isSharingEnabled).toHaveBeenCalledWith(mockEval);
       expect(createShareableUrl).toHaveBeenCalledWith(mockEval, false);
