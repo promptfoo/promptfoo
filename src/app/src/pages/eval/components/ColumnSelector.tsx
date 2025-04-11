@@ -84,7 +84,7 @@ export const ColumnSelector: React.FC<ColumnSelectorProps> = ({
   return (
     <>
       <Button onClick={handleOpen} startIcon={<ViewColumnIcon />} variant="text">
-        Columns ({selectedColumns.length})
+        Columns ({selectedColumns.length} / {columnData.length})
       </Button>
 
       <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>

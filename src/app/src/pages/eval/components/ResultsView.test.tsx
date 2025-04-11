@@ -26,15 +26,10 @@ const mockRecentEvals = [
   },
 ];
 
-const mockColumnState = {
-  selectedColumns: ['Variable 1', 'Prompt 1'],
-  columnVisibility: { 'Variable 1': true, 'Prompt 1': true },
-};
-
 vi.mock('./store', () => ({
   useStore: vi.fn().mockImplementation(() => ({
     table: {
-      head: { prompts: [], vars: [] },
+      head: { prompts: [], vars: ['a', 'b', 'c', 'd', 'e', 'f'] },
       body: [],
     },
     setTable: vi.fn(),
@@ -45,9 +40,7 @@ vi.mock('./store', () => ({
     setInComparisonMode: vi.fn(),
     author: '',
     recentEvals: mockRecentEvals,
-    columnStates: {
-      '1': mockColumnState,
-    },
+    columnStates: {},
     setColumnState: vi.fn(),
   })),
 }));
@@ -79,5 +72,17 @@ describe('ResultsView', () => {
     );
     expect(screen.getByText('Table Settings')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Search or select an eval...')).toBeInTheDocument();
+  });
+
+  it('<=5 variable columns are visible by default', () => {
+    renderWithToastProvider(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+    expect(screen.queryByTestId('header-cell-Variable 1')).toBeInTheDocument();
+    expect(screen.queryByTestId('header-cell-Variable 2')).toBeInTheDocument();
+    expect(screen.queryByTestId('header-cell-Variable 3')).toBeInTheDocument();
+    expect(screen.queryByTestId('header-cell-Variable 4')).toBeInTheDocument();
+    expect(screen.queryByTestId('header-cell-Variable 5')).toBeInTheDocument();
+    expect(screen.queryByTestId('header-cell-Variable 6')).not.toBeInTheDocument();
   });
 });
