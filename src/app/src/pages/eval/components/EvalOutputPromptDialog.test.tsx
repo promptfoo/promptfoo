@@ -5,6 +5,15 @@ import userEvent from '@testing-library/user-event';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 
+// Mock the Citations component to verify it receives the correct props
+vi.mock('./Citations', () => ({
+  default: vi.fn(({ citations }) => (
+    <div data-testid="citations-component" data-citations={JSON.stringify(citations)}>
+      Mocked Citations Component
+    </div>
+  )),
+}));
+
 const mockOnClose = vi.fn();
 const defaultProps = {
   open: true,
@@ -150,6 +159,60 @@ describe('EvalOutputPromptDialog', () => {
     const truncatedCell = screen.getByText(/^a+\.\.\.$/);
     await userEvent.click(truncatedCell);
     expect(screen.getByText(longValue)).toBeInTheDocument();
+  });
+
+  it('displays the Citations component when citations are in metadata', () => {
+    const propsWithCitations = {
+      ...defaultProps,
+      metadata: {
+        ...defaultProps.metadata,
+        citations: [
+          {
+            retrievedReferences: [
+              {
+                content: { text: 'Citation content' },
+                location: { s3Location: { uri: 'https://example.com' } },
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithCitations} />);
+
+    // Check if Citations component is rendered with correct props
+    const citationsComponent = screen.getByTestId('citations-component');
+    expect(citationsComponent).toBeInTheDocument();
+
+    // Verify citations data was passed correctly
+    const passedCitations = JSON.parse(citationsComponent.getAttribute('data-citations') || '[]');
+    expect(passedCitations).toEqual(propsWithCitations.metadata.citations);
+  });
+
+  it('does not display the Citations component when no citations in metadata', () => {
+    render(<EvalOutputPromptDialog {...defaultProps} />);
+    expect(screen.queryByTestId('citations-component')).not.toBeInTheDocument();
+  });
+
+  it('excludes citations from metadata table to avoid duplication', () => {
+    const propsWithCitations = {
+      ...defaultProps,
+      metadata: {
+        regularKey: 'regular value',
+        citations: [{ source: 'test', content: 'test content' }],
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithCitations} />);
+
+    // Regular metadata should be in the table
+    expect(screen.getByText('regularKey')).toBeInTheDocument();
+    expect(screen.getByText('regular value')).toBeInTheDocument();
+
+    // Citations shouldn't appear in the metadata table
+    const metadataTable = screen.getByText('Metadata').closest('div');
+    expect(metadataTable?.textContent).not.toContain('citations');
   });
 });
 
