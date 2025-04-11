@@ -42,6 +42,7 @@ import { transform } from '../util/transform';
 import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
 import { handleBleuScore } from './bleu';
+import { handleGleuScore } from './gleu';
 import { handleClassifier } from './classifier';
 import {
   handleContains,
@@ -248,6 +249,7 @@ export async function runAssertion({
     cost: handleCost,
     equals: handleEquals,
     factuality: handleFactuality,
+    gleu: handleGleuScore,
     guardrails: handleGuardrails,
     'g-eval': handleGEval,
     icontains: handleIContains,
