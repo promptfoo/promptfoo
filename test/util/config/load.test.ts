@@ -10,11 +10,7 @@ import logger from '../../../src/logger';
 import { type UnifiedConfig } from '../../../src/types';
 import { maybeLoadFromExternalFile } from '../../../src/util';
 import { isRunningUnderNpx } from '../../../src/util';
-import {
-  combineConfigs,
-  readConfig,
-  resolveConfigs,
-} from '../../../src/util/config/load';
+import { combineConfigs, readConfig, resolveConfigs } from '../../../src/util/config/load';
 import { dereferenceConfig } from '../../../src/util/config/shared';
 import { readTests } from '../../../src/util/testCaseReader';
 
