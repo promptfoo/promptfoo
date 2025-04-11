@@ -178,8 +178,9 @@ export class OpenAiModerationProvider
   }
 
   async callModerationApi(
-    userPrompt: string,
-    assistantResponse: string | (TextInput | ImageInput)[],
+    prompt: string,
+    response: string,
+    categories?: string[],
   ): Promise<ProviderModerationResponse> {
     const apiKey = this.getApiKey();
     if (this.requiresApiKey() && !apiKey) {
@@ -192,7 +193,7 @@ export class OpenAiModerationProvider
     let cacheKey = '';
 
     if (useCache) {
-      cacheKey = getModerationCacheKey(this.modelName, this.config, assistantResponse);
+      cacheKey = getModerationCacheKey(this.modelName, this.config, response);
       const cache = await getCache();
       const cachedResponse = await cache.get(cacheKey);
 
@@ -205,7 +206,7 @@ export class OpenAiModerationProvider
     logger.debug(`Calling OpenAI moderation API with model ${this.modelName}`);
 
     const supportsImages = supportsImageInput(this.modelName);
-    const input = formatModerationInput(assistantResponse, supportsImages);
+    const input = formatModerationInput(response, supportsImages);
     const requestBody = JSON.stringify({
       model: this.modelName,
       input,

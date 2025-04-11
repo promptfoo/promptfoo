@@ -200,7 +200,11 @@ export class ReplicateModerationProvider
   extends ReplicateProvider
   implements ApiModerationProvider
 {
-  async callModerationApi(prompt: string, assistant: string): Promise<ProviderModerationResponse> {
+  async callModerationApi(
+    userPrompt: string,
+    assistantResponse: string,
+    categories?: string[],
+  ): Promise<ProviderModerationResponse> {
     if (!this.apiKey) {
       throw new Error(
         'Replicate API key is not set. Set the REPLICATE_API_TOKEN environment variable or or add `apiKey` to the provider config.',
@@ -213,13 +217,13 @@ export class ReplicateModerationProvider
       cache = await getCache();
       cacheKey = `replicate:${this.modelName}:${JSON.stringify(
         this.config,
-      )}:${prompt}:${assistant}`;
+      )}:${userPrompt}:${assistantResponse}`;
 
       // Try to get the cached response
       const cachedResponse = await cache.get(cacheKey);
 
       if (cachedResponse) {
-        logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
+        logger.debug(`Returning cached response for ${userPrompt}: ${cachedResponse}`);
         return JSON.parse(cachedResponse as string);
       }
     }
@@ -230,13 +234,15 @@ export class ReplicateModerationProvider
       fetch: fetch as any,
     });
 
-    logger.debug(`Calling Replicate moderation API: prompt [${prompt}] assistant [${assistant}]`);
+    logger.debug(
+      `Calling Replicate moderation API: prompt [${userPrompt}] assistant [${assistantResponse}]`,
+    );
     let output: string | undefined;
     try {
       const data = {
         input: {
-          prompt,
-          assistant,
+          prompt: userPrompt,
+          assistant: assistantResponse,
         },
       };
       const resp = await replicate.run(this.modelName as any, data);

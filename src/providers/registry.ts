@@ -30,12 +30,17 @@ import { ClouderaAiChatCompletionProvider } from './cloudera';
 import * as CloudflareAiProviders from './cloudflare-ai';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere';
 import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
+import { DeepInfraChatCompletionProvider } from './deepinfra';
 import { EchoProvider } from './echo';
+import { EngeneLMChatProvider } from './engene';
 import { FalImageGenerationProvider } from './fal';
+import { createFireworksPlatformProvider } from './fireworks';
+import { GeminiChatProvider, GeminiEmbeddingProvider } from './gemini';
 import { GolangProvider } from './golangCompletion';
 import { AIStudioChatProvider } from './google/ai.studio';
 import { GoogleLiveProvider } from './google/live';
 import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
+import createGraniteGuardianProvider from './granite/guardian';
 import { GroqProvider } from './groq';
 import { HttpProvider } from './http';
 import {
@@ -1174,6 +1179,61 @@ export const providerMap: ProviderFactory[] = [
         config: providerOptions,
         env: context.env,
       });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'deepinfra',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const modelName = providerPath.split(':')[1];
+      return new DeepInfraChatCompletionProvider(modelName, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'engene',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const modelName = providerPath.split(':')[1];
+      return new EngeneLMChatProvider(modelName, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'fireworks',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const modelName = providerPath.split(':')[1];
+      return createFireworksPlatformProvider(modelName, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'gemini',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const modelName = providerPath.split(':')[1];
+      return new GeminiChatProvider(modelName, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) =>
+      providerPath === 'granite' || providerPath.startsWith('granite:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createGraniteGuardianProvider();
     },
   },
 ];

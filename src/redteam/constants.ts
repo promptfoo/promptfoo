@@ -3,7 +3,15 @@ export const DEFAULT_NUM_TESTS_PER_PLUGIN = 5;
 export const REDTEAM_MODEL = 'openai:chat:gpt-4o';
 
 export const LLAMA_GUARD_REPLICATE_PROVIDER =
-  'replicate:moderation:meta/llama-guard-3-8b:146d1220d447cdcc639bc17c5f6137416042abee6ae153a2615e6ef5749205c8';
+  'replicate:moderation:meta/llama-guard-3:efee6e30dc180bc3349a33b9944aa4a91f3ee74e19074abbade90adaf765e123';
+
+export const GRANITE_GUARDIAN_PROVIDER = 'granite:guardian';
+
+export const MODERATION_PROVIDERS = [
+  LLAMA_GUARD_REPLICATE_PROVIDER,
+  GRANITE_GUARDIAN_PROVIDER,
+  'openai:moderation',
+];
 
 export const LLAMA_GUARD_ENABLED_CATEGORIES: string[] = [
   'S1', // Violent Crimes

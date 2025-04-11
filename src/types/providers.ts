@@ -88,7 +88,11 @@ export interface ApiClassificationProvider extends ApiProvider {
 }
 
 export interface ApiModerationProvider extends ApiProvider {
-  callModerationApi: (prompt: string, response: string) => Promise<ProviderModerationResponse>;
+  callModerationApi: (
+    prompt: string,
+    response: string,
+    categories?: string[],
+  ) => Promise<ProviderModerationResponse>;
 }
 
 export interface GuardrailResponse {

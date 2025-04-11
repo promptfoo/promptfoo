@@ -17,6 +17,7 @@ export const handleModeration = async ({
     !assertion.value || (Array.isArray(assertion.value) && typeof assertion.value[0] === 'string'),
     'moderation assertion value must be a string array if set',
   );
+  let promptContent = promptToModerate;
   if (promptToModerate[0] === '[' || promptToModerate[0] === '{') {
     // Try to extract the last user message from OpenAI-style prompts.
     try {
@@ -25,7 +26,8 @@ export const handleModeration = async ({
         null,
       );
       if (parsedPrompt && parsedPrompt.length > 0) {
-        prompt = parsedPrompt[parsedPrompt.length - 1].content;
+        const lastUserMessage = parsedPrompt.filter((msg) => msg.role === 'user').pop();
+        promptContent = lastUserMessage?.content || promptToModerate;
       }
     } catch {
       // Ignore error
@@ -34,7 +36,7 @@ export const handleModeration = async ({
 
   const moderationResult = await matchesModeration(
     {
-      userPrompt: promptToModerate,
+      userPrompt: promptContent,
       assistantResponse: outputString,
       categories: Array.isArray(assertion.value) ? assertion.value : [],
     },

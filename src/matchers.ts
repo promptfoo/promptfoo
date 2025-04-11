@@ -19,7 +19,7 @@ import {
 } from './prompts';
 import { loadApiProvider } from './providers';
 import { getDefaultProviders } from './providers/defaults';
-import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
+import { LLAMA_GUARD_REPLICATE_PROVIDER, GRANITE_GUARDIAN_PROVIDER } from './redteam/constants';
 import { shouldGenerateRemote } from './redteam/remoteGeneration';
 import { doRemoteGrading } from './remoteGrading';
 import type {
@@ -1236,13 +1236,28 @@ export async function matchesModeration(
   // Get default providers
   const defaultProviders = await getDefaultProviders();
 
-  // Only try to use Replicate if OpenAI is not available
+  // Determine which moderation provider to use
   const hasOpenAiKey = getEnvString('OPENAI_API_KEY');
   const hasReplicateKey =
     !hasOpenAiKey && (getEnvString('REPLICATE_API_KEY') || getEnvString('REPLICATE_API_TOKEN'));
-  const defaultModerationProvider = hasReplicateKey
-    ? await loadApiProvider(LLAMA_GUARD_REPLICATE_PROVIDER)
-    : defaultProviders.moderationProvider;
+
+  let defaultModerationProvider;
+
+  if (hasOpenAiKey) {
+    // Use OpenAI if available
+    defaultModerationProvider = defaultProviders.moderationProvider;
+  } else if (hasReplicateKey) {
+    // Use Llama Guard via Replicate if OpenAI is not available
+    defaultModerationProvider = await loadApiProvider(LLAMA_GUARD_REPLICATE_PROVIDER);
+  } else {
+    // Try to use Granite Guardian as a last resort
+    try {
+      defaultModerationProvider = await loadApiProvider(GRANITE_GUARDIAN_PROVIDER);
+    } catch (error) {
+      logger.warn(`Failed to load Granite Guardian: ${error}. Using default moderation provider.`);
+      defaultModerationProvider = defaultProviders.moderationProvider;
+    }
+  }
 
   const moderationProvider = (await getAndCheckProvider(
     'moderation',
@@ -1253,7 +1268,12 @@ export async function matchesModeration(
 
   invariant(moderationProvider, 'Moderation provider must be defined');
 
-  const resp = await moderationProvider.callModerationApi(userPrompt, assistantResponse);
+  // Check if provider supports categories as third parameter
+  const acceptsCategories = moderationProvider.id() === 'granite-guardian';
+  const resp = acceptsCategories
+    ? await moderationProvider.callModerationApi(userPrompt, assistantResponse, categories)
+    : await moderationProvider.callModerationApi(userPrompt, assistantResponse);
+
   if (resp.error) {
     return {
       pass: false,

@@ -154,8 +154,9 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
   }
 
   async callModerationApi(
-    userPrompt: string,
-    assistantResponse: string,
+    prompt: string,
+    response: string,
+    categories?: string[],
   ): Promise<ProviderModerationResponse> {
     await this.ensureInitialized();
 
@@ -187,7 +188,7 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
     let cacheKey = '';
 
     if (useCache) {
-      cacheKey = getModerationCacheKey(this.modelName, this.configWithHeaders, assistantResponse);
+      cacheKey = getModerationCacheKey(this.modelName, this.configWithHeaders, response);
       const cache = await getCache();
       const cachedResponse = await cache.get(cacheKey);
 
@@ -208,8 +209,8 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
       };
 
       const body = {
-        text: assistantResponse,
-        categories: ['Hate', 'Sexual', 'SelfHarm', 'Violence'],
+        text: response,
+        categories: categories || ['Hate', 'Sexual', 'SelfHarm', 'Violence'],
         blocklistNames: this.configWithHeaders.blocklistNames || [],
         haltOnBlocklistHit: this.configWithHeaders.haltOnBlocklistHit ?? false,
         outputType: 'FourSeverityLevels',

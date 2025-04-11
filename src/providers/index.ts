@@ -12,6 +12,7 @@ import type { ApiProvider, ProviderOptions, ProviderOptionsMap } from '../types/
 import { getProviderFromCloud } from '../util/cloud';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
+import createGraniteGuardianProvider from './granite/guardian';
 import { providerMap } from './registry';
 
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
