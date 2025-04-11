@@ -7,10 +7,12 @@ vi.mock('./store', () => ({
   useStore: vi.fn(() => ({
     config: {},
     evalId: '123',
-    inComparisonMode: false,
     setTable: vi.fn(),
     table: null,
     version: 4,
+  })),
+  useResultsViewSettingsStore: vi.fn(() => ({
+    inComparisonMode: false,
     renderMarkdown: true,
   })),
 }));
