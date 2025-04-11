@@ -18,6 +18,11 @@ export interface BedrockKnowledgeBaseOptions {
   sessionToken?: string;
   knowledgeBaseId: string;
   modelArn?: string;
+  // Additional parameters that affect the response
+  temperature?: number;
+  max_tokens?: number;
+  top_p?: number;
+  top_k?: number;
 }
 
 // Define citation types for metadata
@@ -139,7 +144,9 @@ export class AwsBedrockKnowledgeBaseProvider
     const modelArn =
       this.kbConfig.modelArn ||
       (this.modelName.includes(':')
-        ? this.modelName // If modelName already has full ARN format, use as is
+        ? this.modelName.includes('arn:aws:bedrock')
+          ? this.modelName // Already has full ARN format
+          : `arn:aws:bedrock:${this.getRegion()}:aws:foundation-model/${this.modelName}`
         : `arn:aws:bedrock:${this.getRegion()}:aws:foundation-model/${this.modelName}`);
 
     const params: RetrieveAndGenerateCommandInput = {
@@ -156,7 +163,21 @@ export class AwsBedrockKnowledgeBaseProvider
     logger.debug(`Calling Amazon Bedrock Knowledge Base API: ${JSON.stringify(params)}`);
 
     const cache = await getCache();
-    const cacheKey = `bedrock-kb:${this.kbConfig.knowledgeBaseId}:${this.modelName}:${prompt}`;
+
+    // Create a clean version of the config for caching by removing sensitive data
+    const sensitiveKeys = ['accessKeyId', 'secretAccessKey', 'sessionToken'];
+    const cacheConfig = {
+      region: this.getRegion(),
+      modelName: this.modelName,
+      // Spread the entire config but filter out sensitive information
+      ...Object.fromEntries(
+        Object.entries(this.kbConfig).filter(([key]) => !sensitiveKeys.includes(key)),
+      ),
+    };
+
+    // Create a deterministic stringified version of the config for the cache key
+    const configStr = JSON.stringify(cacheConfig, Object.keys(cacheConfig).sort());
+    const cacheKey = `bedrock-kb:${Buffer.from(configStr).toString('base64')}:${prompt}`;
 
     if (isCacheEnabled()) {
       // Try to get the cached response

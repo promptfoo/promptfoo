@@ -46,19 +46,22 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
   it('should throw an error if knowledgeBaseId is not provided', () => {
     expect(() => {
-      new AwsBedrockKnowledgeBaseProvider('anthropic.claude-v2', {
+      new AwsBedrockKnowledgeBaseProvider('us.anthropic.claude-3-7-sonnet-20241022-v2:0', {
         config: {} as any,
       });
     }).toThrow('Knowledge Base ID is required');
   });
 
   it('should create provider with required options', () => {
-    const provider = new AwsBedrockKnowledgeBaseProvider('anthropic.claude-v2', {
-      config: {
-        knowledgeBaseId: 'kb-123',
-        region: 'us-east-1',
+    const provider = new AwsBedrockKnowledgeBaseProvider(
+      'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
+      {
+        config: {
+          knowledgeBaseId: 'kb-123',
+          region: 'us-east-1',
+        },
       },
-    });
+    );
 
     expect(provider).toBeDefined();
     expect(provider.kbConfig.knowledgeBaseId).toBe('kb-123');
@@ -66,12 +69,15 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
   });
 
   it('should create knowledge base client without proxy settings', async () => {
-    const provider = new AwsBedrockKnowledgeBaseProvider('anthropic.claude-v2', {
-      config: {
-        knowledgeBaseId: 'kb-123',
-        region: 'us-east-1',
+    const provider = new AwsBedrockKnowledgeBaseProvider(
+      'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
+      {
+        config: {
+          knowledgeBaseId: 'kb-123',
+          region: 'us-east-1',
+        },
       },
-    });
+    );
 
     await provider.getKnowledgeBaseClient();
 
@@ -83,14 +89,17 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
   });
 
   it('should create knowledge base client with credentials', async () => {
-    const provider = new AwsBedrockKnowledgeBaseProvider('anthropic.claude-v2', {
-      config: {
-        knowledgeBaseId: 'kb-123',
-        region: 'us-east-1',
-        accessKeyId: 'test-access-key',
-        secretAccessKey: 'test-secret-key',
+    const provider = new AwsBedrockKnowledgeBaseProvider(
+      'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
+      {
+        config: {
+          knowledgeBaseId: 'kb-123',
+          region: 'us-east-1',
+          accessKeyId: 'test-access-key',
+          secretAccessKey: 'test-secret-key',
+        },
       },
-    });
+    );
 
     await provider.getKnowledgeBaseClient();
 
@@ -107,12 +116,15 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
   it('should respect AWS_BEDROCK_MAX_RETRIES environment variable', async () => {
     process.env.AWS_BEDROCK_MAX_RETRIES = '5';
-    const provider = new AwsBedrockKnowledgeBaseProvider('anthropic.claude-v2', {
-      config: {
-        knowledgeBaseId: 'kb-123',
-        region: 'us-east-1',
+    const provider = new AwsBedrockKnowledgeBaseProvider(
+      'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
+      {
+        config: {
+          knowledgeBaseId: 'kb-123',
+          region: 'us-east-1',
+        },
       },
-    });
+    );
 
     await provider.getKnowledgeBaseClient();
 
@@ -158,12 +170,15 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     mockSend.mockResolvedValueOnce(mockResponse);
 
-    const provider = new AwsBedrockKnowledgeBaseProvider('anthropic.claude-v2', {
-      config: {
-        knowledgeBaseId: 'kb-123',
-        region: 'us-east-1',
+    const provider = new AwsBedrockKnowledgeBaseProvider(
+      'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
+      {
+        config: {
+          knowledgeBaseId: 'kb-123',
+          region: 'us-east-1',
+        },
       },
-    });
+    );
 
     const result = await provider.callApi('What is the capital of France?');
 
@@ -173,7 +188,8 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
         type: 'KNOWLEDGE_BASE',
         knowledgeBaseConfiguration: {
           knowledgeBaseId: 'kb-123',
-          modelArn: 'arn:aws:bedrock:us-east-1:aws:foundation-model/anthropic.claude-v2',
+          modelArn:
+            'arn:aws:bedrock:us-east-1:aws:foundation-model/us.anthropic.claude-3-7-sonnet-20241022-v2:0',
         },
       },
     };
@@ -190,12 +206,15 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
   it('should handle API errors gracefully', async () => {
     mockSend.mockRejectedValueOnce(new Error('API error'));
 
-    const provider = new AwsBedrockKnowledgeBaseProvider('anthropic.claude-v2', {
-      config: {
-        knowledgeBaseId: 'kb-123',
-        region: 'us-east-1',
+    const provider = new AwsBedrockKnowledgeBaseProvider(
+      'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
+      {
+        config: {
+          knowledgeBaseId: 'kb-123',
+          region: 'us-east-1',
+        },
       },
-    });
+    );
 
     const result = await provider.callApi('What is the capital of France?');
 
@@ -214,7 +233,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     mockSend.mockResolvedValueOnce(mockResponse);
 
-    const provider = new AwsBedrockKnowledgeBaseProvider('anthropic.claude-v2', {
+    const provider = new AwsBedrockKnowledgeBaseProvider('amazon.nova-lite-v1:0', {
       config: {
         knowledgeBaseId: 'kb-123',
         region: 'us-east-1',
@@ -248,7 +267,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     mockSend.mockResolvedValueOnce(mockResponse);
 
-    const provider = new AwsBedrockKnowledgeBaseProvider('anthropic.claude-v2', {
+    const provider = new AwsBedrockKnowledgeBaseProvider('amazon.nova-lite-v1:0', {
       config: {
         knowledgeBaseId: 'kb-123',
         region: 'us-east-1',
@@ -263,7 +282,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
         type: 'KNOWLEDGE_BASE',
         knowledgeBaseConfiguration: {
           knowledgeBaseId: 'kb-123',
-          modelArn: 'arn:aws:bedrock:us-east-1:aws:foundation-model/anthropic.claude-v2',
+          modelArn: 'arn:aws:bedrock:us-east-1:aws:foundation-model/amazon.nova-lite-v1:0',
         },
       },
     };
@@ -292,17 +311,22 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     mockGet.mockResolvedValueOnce(cachedResponse);
 
-    const provider = new AwsBedrockKnowledgeBaseProvider('anthropic.claude-v2', {
-      config: {
-        knowledgeBaseId: 'kb-123',
-        region: 'us-east-1',
+    const provider = new AwsBedrockKnowledgeBaseProvider(
+      'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
+      {
+        config: {
+          knowledgeBaseId: 'kb-123',
+          region: 'us-east-1',
+        },
       },
-    });
+    );
 
     const result = await provider.callApi('What is the capital of France?');
 
     // Check that the cache was queried
-    expect(mockGet).toHaveBeenCalled();
+    expect(mockGet).toHaveBeenCalledWith(
+      expect.stringMatching(/^bedrock-kb:.*:What is the capital of France\?$/),
+    );
 
     // Check that the response contains the cached data with citations in metadata
     expect(result).toEqual({
@@ -322,6 +346,47 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
       tokenUsage: {},
       cached: true,
     });
+
+    // Reset the mock for other tests
+    mockIsCacheEnabled.mockReturnValue(false);
+  });
+
+  it('should use custom modelArn in cache key when provided', async () => {
+    // Enable cache for this test
+    mockIsCacheEnabled.mockReturnValue(true);
+
+    const provider = new AwsBedrockKnowledgeBaseProvider('amazon.nova-lite-v1:0', {
+      config: {
+        knowledgeBaseId: 'kb-123',
+        region: 'us-east-1',
+        modelArn: 'custom:model:arn',
+      },
+    });
+
+    // Cache miss scenario, should try to get from cache first
+    mockGet.mockResolvedValueOnce(null);
+
+    // Mock API response
+    const mockResponse = {
+      output: {
+        text: 'Response with custom model ARN',
+      },
+      citations: [],
+    };
+    mockSend.mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('What is the capital of France?');
+
+    // Check that the cache was queried
+    expect(mockGet).toHaveBeenCalledWith(
+      expect.stringMatching(/^bedrock-kb:.*:What is the capital of France\?$/),
+    );
+
+    // Check that the cache was set with the custom modelArn
+    expect(mockSet).toHaveBeenCalledWith(
+      expect.stringMatching(/^bedrock-kb:.*:What is the capital of France\?$/),
+      expect.any(String),
+    );
 
     // Reset the mock for other tests
     mockIsCacheEnabled.mockReturnValue(false);
