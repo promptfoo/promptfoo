@@ -31,7 +31,7 @@ import { OutputFileExtension, TestSuiteSchema } from '../types';
 import { CommandLineOptionsSchema } from '../types';
 import { isRunningUnderNpx, maybeLoadFromExternalFile } from '../util';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
-import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
+import { clearConfigCache } from '../util/config/default';
 import { resolveConfigs, loadConfigFromOption } from '../util/config/load';
 import invariant from '../util/invariant';
 import { filterProviders } from './eval/filterProviders';
@@ -130,7 +130,7 @@ export async function doEval(
       const configPaths: string[] = Array.isArray(cmdObj.config) ? cmdObj.config : [cmdObj.config];
       for (const configPath of configPaths) {
         if (fs.existsSync(configPath) && fs.statSync(configPath).isDirectory()) {
-          const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } = 
+          const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } =
             await loadConfigFromOption(configPath);
           if (newConfigPath) {
             cmdObj.config = cmdObj.config.filter((path: string) => path !== configPath);
