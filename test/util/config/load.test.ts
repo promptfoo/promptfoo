@@ -11,11 +11,11 @@ import { type UnifiedConfig } from '../../../src/types';
 import { maybeLoadFromExternalFile } from '../../../src/util';
 import { isRunningUnderNpx } from '../../../src/util';
 import {
-  dereferenceConfig,
+  combineConfigs,
   readConfig,
   resolveConfigs,
-  combineConfigs,
 } from '../../../src/util/config/load';
+import { dereferenceConfig } from '../../../src/util/config/shared';
 import { readTests } from '../../../src/util/testCaseReader';
 
 jest.mock('../../../src/database', () => ({
