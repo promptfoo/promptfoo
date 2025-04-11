@@ -1,6 +1,6 @@
 import path from 'path';
 import type { UnifiedConfig } from '../../types';
-import { maybeReadConfigFile } from './shared';
+import { maybeReadConfig } from './shared';
 
 /**
  * Cache to store loaded configurations for different directories.
@@ -41,7 +41,7 @@ export async function loadDefaultConfig(
 
   for (const ext of extensions) {
     const configPath = path.join(dir, `${configName}.${ext}`);
-    const maybeConfig = await maybeReadConfigFile(configPath);
+    const maybeConfig = await maybeReadConfig(configPath);
     if (maybeConfig) {
       defaultConfig = maybeConfig;
       defaultConfigPath = configPath;

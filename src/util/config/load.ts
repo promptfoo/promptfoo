@@ -26,20 +26,13 @@ import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
 import { readTest, readTests } from '../testCaseReader';
 import { loadDefaultConfig } from './default';
-import { readConfigFile, maybeReadConfigFile } from './shared';
+import { readConfigFile } from './shared';
 
 /**
  * Reads a configuration from the specified path.
  */
 export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   return readConfigFile(configPath);
-}
-
-/**
- * Checks if a configuration file exists at the specified path and reads it if it does.
- */
-export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig | undefined> {
-  return maybeReadConfigFile(configPath);
 }
 
 /**

@@ -209,7 +209,7 @@ export async function readConfigFile(configPath: string): Promise<UnifiedConfig>
  * @param configPath - The path to the configuration file.
  * @returns A Promise that resolves to the configuration object, or undefined if the file doesn't exist.
  */
-export async function maybeReadConfigFile(configPath: string): Promise<UnifiedConfig | undefined> {
+export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig | undefined> {
   if (!fs.existsSync(configPath)) {
     return undefined;
   }
