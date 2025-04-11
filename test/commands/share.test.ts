@@ -8,8 +8,7 @@ import * as envars from '../../src/envars';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
-import { loadDefaultConfig } from '../../src/util/config/default';
-import { loadConfigFromOption } from '../../src/util/config/manage';
+import { loadConfigFromOption } from '../../src/util/config/load';
 
 jest.mock('../../src/share');
 jest.mock('../../src/logger');
@@ -24,7 +23,7 @@ jest.mock('../../src/util', () => ({
   setupEnv: jest.fn(),
 }));
 jest.mock('../../src/util/config/default');
-jest.mock('../../src/util/config/manage');
+jest.mock('../../src/util/config/load');
 
 describe('Share Command', () => {
   beforeEach(() => {
@@ -245,12 +244,12 @@ describe('Share Command', () => {
         apiBaseUrl: 'https://custom-api.example.com',
         appBaseUrl: 'https://custom-app.example.com',
       };
-
-      jest.mocked(loadDefaultConfig).mockResolvedValue({
+      
+      jest.mocked(loadConfigFromOption).mockResolvedValue({
         defaultConfig: {
           sharing: mockSharing,
         },
-        defaultConfigPath: 'promptfooconfig.yaml',
+        defaultConfigPath: 'custom-config.yaml',
       });
 
       jest.mocked(isSharingEnabled).mockImplementation((evalObj) => {
@@ -264,7 +263,7 @@ describe('Share Command', () => {
       const shareCmd = program.commands.find((c) => c.name() === 'share');
       await shareCmd?.parseAsync(['node', 'test']);
 
-      expect(loadDefaultConfig).toHaveBeenCalledTimes(1);
+      expect(loadConfigFromOption).toHaveBeenCalledTimes(1);
       expect(mockEval.config.sharing).toEqual(mockSharing);
       expect(isSharingEnabled).toHaveBeenCalledWith(mockEval);
       expect(createShareableUrl).toHaveBeenCalledWith(mockEval, false);
