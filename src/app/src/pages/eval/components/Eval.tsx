@@ -9,7 +9,7 @@ import type { SharedResults, ResultLightweightWithLabel, ResultsFile } from '@pr
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
-import { useStore } from './store';
+import { useResultsViewSettingsStore, useStore } from './store';
 import './Eval.css';
 
 interface EvalOptions {
@@ -37,8 +37,10 @@ export default function Eval({
     evalId,
     setEvalId,
     setAuthor,
-    setInComparisonMode,
   } = useStore();
+
+  const { setInComparisonMode } = useResultsViewSettingsStore();
+
   const [loaded, setLoaded] = React.useState(false);
   const [failed, setFailed] = React.useState(false);
   const [recentEvals, setRecentEvals] = React.useState<ResultLightweightWithLabel[]>(

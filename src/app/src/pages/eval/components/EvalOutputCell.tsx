@@ -11,7 +11,7 @@ import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
-import { useStore as useResultsViewStore } from './store';
+import { useResultsViewSettingsStore } from './store';
 
 type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
@@ -50,7 +50,8 @@ function EvalOutputCell({
   searchText: string;
 }) {
   const { renderMarkdown, prettifyJson, showPrompts, showPassFail, maxImageWidth, maxImageHeight } =
-    useResultsViewStore();
+    useResultsViewSettingsStore();
+
   const [openPrompt, setOpen] = React.useState(false);
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
     output.gradingResult?.componentResults?.find((result) => result.assertion?.type === 'human')

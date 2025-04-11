@@ -46,7 +46,7 @@ import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
 import SettingsModal from './TableSettings/TableSettingsModal';
-import { useStore as useResultsViewStore } from './store';
+import { useStore as useResultsViewStore, useResultsViewSettingsStore } from './store';
 import type { EvaluateTable, FilterMode, ResultLightweightWithLabel } from './types';
 import './ResultsView.css';
 
@@ -159,21 +159,17 @@ export default function ResultsView({
 }: ResultsViewProps) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { author, table, setTable, config, setConfig, evalId, setAuthor } = useResultsViewStore();
+
   const {
-    author,
-    table,
-    setTable,
-    config,
-    setConfig,
-    maxTextLength,
-    wordBreak,
-    showInferenceDetails,
-    evalId,
     setInComparisonMode,
     columnStates,
     setColumnState,
-    setAuthor,
-  } = useResultsViewStore();
+    maxTextLength,
+    wordBreak,
+    showInferenceDetails,
+  } = useResultsViewSettingsStore();
+
   const { setStateFromConfig } = useMainStore();
   const { showToast } = useToast();
   const [searchText, setSearchText] = React.useState(searchParams.get('search') || '');
