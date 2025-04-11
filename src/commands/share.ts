@@ -2,15 +2,13 @@ import confirm from '@inquirer/confirm';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import dedent from 'dedent';
-import * as fs from 'fs';
-import path from 'path';
 import { DEFAULT_SHARE_VIEW_BASE_URL } from '../constants';
 import logger from '../logger';
 import Eval from '../models/eval';
 import { createShareableUrl, hasEvalBeenShared, isSharingEnabled, getShareableUrl } from '../share';
 import telemetry from '../telemetry';
 import { setupEnv } from '../util';
-import { loadDefaultConfig } from '../util/config/default';
+import { loadConfigFromOption } from '../util/config/manage';
 
 export function notCloudEnabledShareInstructions(): void {
   const cloudUrl = DEFAULT_SHARE_VIEW_BASE_URL;
@@ -54,7 +52,7 @@ export function shareCommand(program: Command) {
     .option('--env-file, --env-path <path>', 'Path to .env file')
     .option(
       '-c, --config <path>',
-      'Path to configuration file (automatically loads promptfooconfig.yaml if not specified)'
+      'Path to configuration file (automatically loads promptfooconfig.yaml if not specified)',
     )
     .option(
       '--show-auth',
@@ -98,24 +96,13 @@ export function shareCommand(program: Command) {
 
         // Load config from the specified file or default location
         try {
-          let configPath = cmdObj.config;
-          
-          // If a path is provided but it's a directory, look for config file in the directory
-          if (configPath && fs.existsSync(configPath) && fs.statSync(configPath).isDirectory()) {
-            const { defaultConfigPath } = await loadDefaultConfig(configPath);
-            configPath = defaultConfigPath;
-          }
-          
-          // Load the config
-          const { defaultConfig } = configPath 
-            ? await loadDefaultConfig(path.dirname(configPath), path.basename(configPath, path.extname(configPath)))
-            : await loadDefaultConfig();
+          const { defaultConfig } = await loadConfigFromOption(cmdObj.config);
             
           // Apply sharing config if available
           if (defaultConfig && defaultConfig.sharing) {
             eval_.config.sharing = defaultConfig.sharing;
             logger.debug(
-              `Applied sharing config from ${configPath || 'promptfooconfig.yaml'}: ${JSON.stringify(defaultConfig.sharing)}`,
+              `Applied sharing config from ${cmdObj.config || 'promptfooconfig.yaml'}: ${JSON.stringify(defaultConfig.sharing)}`,
             );
           }
         } catch (err) {
