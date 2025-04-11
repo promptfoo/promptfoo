@@ -1,79 +1,71 @@
 import { SingleBar, Presets } from 'cli-progress';
+import { fetchWithCache } from '../../cache';
+import { VERSION } from '../../constants';
+import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
+import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { TestCase } from '../../types';
 import invariant from '../../util/invariant';
-
-// Types for the node-gtts module
-type GttsInstance = {
-  stream(text: string): NodeJS.ReadableStream;
-};
-
-type GttsModule = {
-  default(lang: string): GttsInstance;
-};
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
 /**
- * Dynamically imports the node-gtts library
- * @returns The gTTS module or null if not available
+ * Converts text to audio using the remote API
+ * @throws Error if remote generation is disabled or if the API call fails
  */
-async function importGtts(): Promise<GttsModule | null> {
-  try {
-    // Dynamic import of gtts
-    return (await import('node-gtts')) as GttsModule;
-  } catch (error) {
-    logger.warn(`node-gtts library not available: ${error}`);
-    return null;
+export async function textToAudio(text: string, language: string = 'en'): Promise<string> {
+  // Check if remote generation is disabled
+  if (neverGenerateRemote()) {
+    throw new Error(
+      'Remote generation is disabled but required for audio strategy. Please enable remote generation to use this strategy.',
+    );
   }
-}
 
-/**
- * Converts text to an audio stream and then to base64 encoded string
- * using the node-gtts library which provides text-to-speech functionality
- */
-export async function textToAudio(text: string): Promise<string> {
   try {
-    // Dynamically import gtts
-    const gttsModule = await importGtts();
+    logger.debug(`Using remote generation for audio task`);
 
-    if (!gttsModule) {
-      throw new Error(
-        `Please install node-gtts to use audio-based strategies: npm install node-gtts`,
-      );
+    const payload = {
+      task: 'audio',
+      text,
+      language,
+      version: VERSION,
+      email: getUserEmail(),
+    };
+
+    const { data } = await fetchWithCache(
+      getRemoteGenerationUrl(),
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      },
+      REQUEST_TIMEOUT_MS,
+    );
+
+    if (data.error) {
+      throw new Error(`Error in remote audio generation: ${data.error}`);
     }
 
-    // Initialize gtts with English language
-    const gtts = gttsModule.default('en');
-
-    // Get audio stream
-    const audioStream = gtts.stream(text);
-
-    // Collect stream data in chunks
-    const chunks: Buffer[] = [];
-
-    // Convert stream to buffer using promises
-    const buffer = await new Promise<Buffer>((resolve, reject) => {
-      audioStream.on('data', (chunk: Buffer) => chunks.push(chunk));
-      audioStream.on('error', reject);
-      audioStream.on('end', () => resolve(Buffer.concat(chunks)));
-    });
-
-    // Convert to base64
-    return buffer.toString('base64');
+    logger.debug(`Received audio base64 from remote API (${data.audioBase64.length} chars)`);
+    return data.audioBase64;
   } catch (error) {
     logger.error(`Error generating audio from text: ${error}`);
-    // Fallback to base64 encoding of the original text if audio generation fails
-    return Buffer.from(text).toString('base64');
+    throw new Error(
+      `Failed to generate audio: ${error instanceof Error ? error.message : String(error)}. This strategy requires an active internet connection and access to the remote API.`,
+    );
   }
 }
 
 /**
  * Adds audio encoding to test cases
+ * @throws Error if the remote API for audio conversion is unavailable
  */
 export async function addAudioToBase64(
   testCases: TestCase[],
   injectVar: string,
+  config: Record<string, any> = {},
 ): Promise<TestCase[]> {
   const audioTestCases: TestCase[] = [];
+  const language = config.language || 'en';
 
   let progressBar: SingleBar | undefined;
   if (logger.level !== 'debug') {
@@ -95,8 +87,8 @@ export async function addAudioToBase64(
 
     const originalText = String(testCase.vars[injectVar]);
 
-    // Convert text to audio and then to base64
-    const base64Audio = await textToAudio(originalText);
+    // Convert text to audio using the remote API
+    const base64Audio = await textToAudio(originalText, language);
 
     audioTestCases.push({
       ...testCase,
@@ -128,60 +120,4 @@ export async function addAudioToBase64(
   }
 
   return audioTestCases;
-}
-
-// Main function for direct testing via: npx tsx simpleAudio.ts "Text to convert to audio"
-async function main() {
-  // Get text from command line arguments or use default
-  const textToConvert = process.argv[2] || 'This is a test of the audio encoding strategy.';
-
-  logger.info(`Converting text to audio: "${textToConvert}"`);
-
-  try {
-    // Convert text to audio
-    const base64Audio = await textToAudio(textToConvert);
-
-    // Log the first 100 characters of the base64 audio to avoid terminal clutter
-    logger.info(`Base64 audio (first 100 chars): ${base64Audio.substring(0, 100)}...`);
-    logger.info(`Total base64 audio length: ${base64Audio.length} characters`);
-
-    // Create a simple test case
-    const testCase = {
-      vars: {
-        prompt: textToConvert,
-      },
-    };
-
-    // Process the test case
-    const processedTestCases = await addAudioToBase64([testCase], 'prompt');
-
-    logger.info('Test case processed successfully.');
-    logger.info(`Original prompt length: ${textToConvert.length} characters`);
-    // Add type assertion to ensure TypeScript knows this is a string
-    const processedPrompt = processedTestCases[0].vars?.prompt as string;
-    logger.info(`Processed prompt length: ${processedPrompt.length} characters`);
-
-    // Check if we're running this directly (not being imported)
-    if (require.main === module) {
-      // Write to a file for testing with audio players
-      const fs = await import('fs');
-      const outputFilePath = 'test-audio.mp3';
-
-      // Decode base64 back to binary
-      const audioBuffer = Buffer.from(base64Audio, 'base64');
-
-      // Write binary data to file
-      fs.writeFileSync(outputFilePath, audioBuffer);
-
-      logger.info(`Audio file written to: ${outputFilePath}`);
-      logger.info(`You can play it using any audio player to verify the conversion.`);
-    }
-  } catch (error) {
-    logger.error(`Error generating audio from text: ${error}`);
-  }
-}
-
-// Run the main function if this file is executed directly
-if (require.main === module) {
-  main();
 }
