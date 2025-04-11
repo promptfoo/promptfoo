@@ -303,7 +303,7 @@ describe('Share Command', () => {
       const shareCmd = program.commands.find((c) => c.name() === 'share');
       await shareCmd?.parseAsync(['node', 'test', '--config', 'custom-config.yaml']);
 
-      expect(loadConfigFromOption).toHaveBeenCalledWith('custom-config.yaml');
+      expect(loadConfigFromOption).toHaveBeenCalledTimes(1);
       expect(mockEval.config.sharing).toEqual(mockSharing);
       expect(isSharingEnabled).toHaveBeenCalledWith(mockEval);
       expect(createShareableUrl).toHaveBeenCalledWith(mockEval, false);

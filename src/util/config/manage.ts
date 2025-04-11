@@ -6,7 +6,6 @@ import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import type { UnifiedConfig } from '../../types';
 import { orderKeys } from '../json';
-import { loadDefaultConfig } from './default';
 
 let configDirectoryPath: string | undefined = getEnvString('PROMPTFOO_CONFIG_DIR');
 
@@ -56,6 +55,9 @@ export function writePromptfooConfig(
  * @returns The loaded configuration and its path
  */
 export async function loadConfigFromOption(configOption?: string) {
+  // Forward declaration to avoid circular dependencies
+  const loadDefaultConfig = require('./default').loadDefaultConfig;
+  
   let configPath = configOption;
   
   // If a path is provided but it's a directory, look for config file in the directory
