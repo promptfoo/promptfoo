@@ -427,6 +427,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'similar',
   'starts-with',
   'webhook',
+  'gleu',
 ]);
 
 export type BaseAssertionTypes = z.infer<typeof BaseAssertionTypesSchema>;

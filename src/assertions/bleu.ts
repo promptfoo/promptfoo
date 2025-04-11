@@ -10,22 +10,7 @@
  */
 import type { AssertionParams, GradingResult } from '../types';
 import invariant from '../util/invariant';
-
-/**
- * Generates n-grams from an array of words
- *
- * @param words - Array of words to generate n-grams from
- * @param n - Length of each n-gram
- * @returns Array of n-grams as strings
- * @internal
- */
-function getNGrams(words: string[], n: number): string[] {
-  const ngrams: string[] = [];
-  for (let i = 0; i <= words.length - n; i++) {
-    ngrams.push(words.slice(i, i + n).join(' '));
-  }
-  return ngrams;
-}
+import { getNGrams } from './ngrams';
 
 /**
  * Calculates the brevity penalty for BLEU score.
@@ -67,6 +52,9 @@ export function calculateBleuScore(
   const candidateWords = candidate.toLowerCase().trim().split(/\s+/);
 
   // Find reference with closest length to candidate
+  // For GLEU we don't need to find closest reference length
+  // GLEU uses max(candidate_total, reference_total) as denominator
+  // This brevity penalty calculation is specific to BLEU
   const refLengths = references.map((ref) => ref.toLowerCase().trim().split(/\s+/).length);
   const closestRefLength = refLengths.reduce((prev, curr) =>
     Math.abs(curr - candidateWords.length) < Math.abs(prev - candidateWords.length) ? curr : prev,
@@ -75,7 +63,8 @@ export function calculateBleuScore(
   const maxN = 4;
   const precisions: number[] = [];
 
-  for (let n = 1; n <= maxN; n++) {
+  for (let n = 1; n <= maxN; n++) { // assuming this is a loop for calculating n grams for 
+    // n values starting 1 to 4. 
     const candidateNGrams = getNGrams(candidateWords, n);
     let maxClippedCount = 0;
     const totalCount = candidateNGrams.length;
