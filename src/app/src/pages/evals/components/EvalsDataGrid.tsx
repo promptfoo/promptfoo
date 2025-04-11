@@ -118,7 +118,9 @@ export default function EvalsDataGrid({
   }, []);
 
   /**
-   * Apply optional filter by dataset ID if enabled.
+   * Construct dataset rows:
+   * 1. Filter out the focused eval from the list.
+   * 2. Filter by dataset ID if enabled.
    */
   const rows = useMemo(() => {
     let rows_ = evals;
