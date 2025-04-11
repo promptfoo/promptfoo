@@ -14,7 +14,6 @@ import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
 import { ellipsize } from '../../../../../util/text';
 
-// URL detection function
 const isValidUrl = (str: string): boolean => {
   try {
     new URL(str);
@@ -24,7 +23,6 @@ const isValidUrl = (str: string): boolean => {
   }
 };
 
-// Get source icon based on source type
 const getSourceIcon = (source: string) => {
   if (isValidUrl(source)) {
     return <LanguageIcon fontSize="small" />;
@@ -35,7 +33,6 @@ const getSourceIcon = (source: string) => {
   return <LinkIcon fontSize="small" />;
 };
 
-// Get source type from source
 const getSourceType = (source: string): string => {
   if (isValidUrl(source)) {
     try {
@@ -58,9 +55,7 @@ const getSourceType = (source: string): string => {
   return 'DOCUMENT';
 };
 
-// Extract source and content from citation reference - handles different citation formats
 const extractCitationInfo = (citation: any): { source: string; content: string } => {
-  // For Bedrock Knowledge Base format
   if (citation.retrievedReferences?.length > 0) {
     const reference = citation.retrievedReferences[0];
     return {
@@ -71,7 +66,6 @@ const extractCitationInfo = (citation: any): { source: string; content: string }
     };
   }
 
-  // For Anthropic Messages citation format
   if (citation.source?.title || citation.source?.url) {
     return {
       source: citation.source.url || citation.source.title || 'Unknown source',
@@ -79,9 +73,7 @@ const extractCitationInfo = (citation: any): { source: string; content: string }
     };
   }
 
-  // For general citation objects
   if (typeof citation === 'object') {
-    // Check for common source field patterns
     const source =
       citation.url ||
       citation.source ||
@@ -90,7 +82,6 @@ const extractCitationInfo = (citation: any): { source: string; content: string }
       citation.path ||
       'Unknown source';
 
-    // Check for common content field patterns
     const content =
       citation.content ||
       citation.text ||
@@ -102,27 +93,22 @@ const extractCitationInfo = (citation: any): { source: string; content: string }
     return { source, content };
   }
 
-  // Fallback for unexpected formats
   return {
     source: 'Unknown source',
     content: typeof citation === 'string' ? citation : JSON.stringify(citation, null, 2),
   };
 };
 
-// Process the raw citations array into a standardized format
 const processCitations = (citations: any[]): Array<{ source: string; content: string }> => {
   const results: Array<{ source: string; content: string }> = [];
 
-  // Handle array of citation objects
   if (Array.isArray(citations)) {
     for (const citation of citations) {
-      // If citation contains retrievedReferences (like Bedrock KB)
       if (citation.retrievedReferences && Array.isArray(citation.retrievedReferences)) {
         for (const reference of citation.retrievedReferences) {
           results.push(extractCitationInfo({ retrievedReferences: [reference] }));
         }
       } else {
-        // Direct citation object
         results.push(extractCitationInfo(citation));
       }
     }
@@ -142,7 +128,6 @@ export default function Citations({ citations }: { citations: any }) {
     return null;
   }
 
-  // Process citations into a standard format
   const processedCitations = processCitations(Array.isArray(citations) ? citations : [citations]);
 
   if (processedCitations.length === 0) {

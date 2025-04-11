@@ -164,23 +164,19 @@ export class AwsBedrockKnowledgeBaseProvider
 
     const cache = await getCache();
 
-    // Create a clean version of the config for caching by removing sensitive data
     const sensitiveKeys = ['accessKeyId', 'secretAccessKey', 'sessionToken'];
     const cacheConfig = {
       region: this.getRegion(),
       modelName: this.modelName,
-      // Spread the entire config but filter out sensitive information
       ...Object.fromEntries(
         Object.entries(this.kbConfig).filter(([key]) => !sensitiveKeys.includes(key)),
       ),
     };
 
-    // Create a deterministic stringified version of the config for the cache key
     const configStr = JSON.stringify(cacheConfig, Object.keys(cacheConfig).sort());
     const cacheKey = `bedrock-kb:${Buffer.from(configStr).toString('base64')}:${prompt}`;
 
     if (isCacheEnabled()) {
-      // Try to get the cached response
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}`);
@@ -195,7 +191,6 @@ export class AwsBedrockKnowledgeBaseProvider
     }
 
     try {
-      // Import the command here to ensure it's only loaded when needed
       const { RetrieveAndGenerateCommand } = await import('@aws-sdk/client-bedrock-agent-runtime');
       const command = new RetrieveAndGenerateCommand(params);
 
@@ -203,19 +198,16 @@ export class AwsBedrockKnowledgeBaseProvider
 
       logger.debug(`Amazon Bedrock Knowledge Base API response: ${JSON.stringify(response)}`);
 
-      // Extract output from response
       let output = '';
       if (response && response.output && response.output.text) {
         output = response.output.text;
       }
 
-      // Extract citations from response and add to metadata
       let citations: Citation[] = [];
       if (response && response.citations && Array.isArray(response.citations)) {
         citations = response.citations;
       }
 
-      // Cache the response
       if (isCacheEnabled()) {
         try {
           await cache.set(
@@ -236,7 +228,6 @@ export class AwsBedrockKnowledgeBaseProvider
         tokenUsage: {},
       };
     } catch (err) {
-      // For error cases, return only the error property without other fields
       return {
         error: `Bedrock Knowledge Base API error: ${String(err)}`,
       };

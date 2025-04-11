@@ -291,10 +291,8 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
   });
 
   it('should retrieve citations from cache when available', async () => {
-    // Enable cache for this test
     mockIsCacheEnabled.mockReturnValue(true);
 
-    // Mock cache response
     const cachedResponse = JSON.stringify({
       output: 'Cached response from knowledge base',
       citations: [
@@ -323,12 +321,10 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     const result = await provider.callApi('What is the capital of France?');
 
-    // Check that the cache was queried
     expect(mockGet).toHaveBeenCalledWith(
       expect.stringMatching(/^bedrock-kb:.*:What is the capital of France\?$/),
     );
 
-    // Check that the response contains the cached data with citations in metadata
     expect(result).toEqual({
       output: 'Cached response from knowledge base',
       metadata: {
@@ -347,12 +343,10 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
       cached: true,
     });
 
-    // Reset the mock for other tests
     mockIsCacheEnabled.mockReturnValue(false);
   });
 
   it('should use custom modelArn in cache key when provided', async () => {
-    // Enable cache for this test
     mockIsCacheEnabled.mockReturnValue(true);
 
     const provider = new AwsBedrockKnowledgeBaseProvider('amazon.nova-lite-v1:0', {
@@ -363,10 +357,8 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
       },
     });
 
-    // Cache miss scenario, should try to get from cache first
     mockGet.mockResolvedValueOnce(null);
 
-    // Mock API response
     const mockResponse = {
       output: {
         text: 'Response with custom model ARN',
@@ -377,18 +369,15 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     await provider.callApi('What is the capital of France?');
 
-    // Check that the cache was queried
     expect(mockGet).toHaveBeenCalledWith(
       expect.stringMatching(/^bedrock-kb:.*:What is the capital of France\?$/),
     );
 
-    // Check that the cache was set with the custom modelArn
     expect(mockSet).toHaveBeenCalledWith(
       expect.stringMatching(/^bedrock-kb:.*:What is the capital of France\?$/),
       expect.any(String),
     );
 
-    // Reset the mock for other tests
     mockIsCacheEnabled.mockReturnValue(false);
   });
 });

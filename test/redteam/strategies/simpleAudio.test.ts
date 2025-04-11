@@ -103,7 +103,6 @@ describe('audio strategy', () => {
 
   describe('addAudioToBase64', () => {
     it('should convert test cases with the specified variable', async () => {
-      // Setup mock to return a predictable response
       mockFetchWithCache.mockResolvedValue({
         data: { audioBase64: 'bW9ja2VkLWF1ZGlv' },
         cached: false,
@@ -212,19 +211,15 @@ describe('audio strategy', () => {
         },
       };
 
-      // Save original level
       const originalLevel = logger.level;
-      // Set level to info to enable progress bar
       logger.level = 'info';
 
-      // Create mock for SingleBar
       const mockBarInstance = {
         increment: jest.fn(),
         start: jest.fn(),
         stop: jest.fn(),
       };
 
-      // Cast SingleBar to any to avoid TypeScript errors with mocking
       const mockSingleBar = SingleBar as any;
       const originalImplementation = mockSingleBar.mockImplementation;
       mockSingleBar.mockImplementation(() => mockBarInstance);
@@ -234,7 +229,6 @@ describe('audio strategy', () => {
       expect(mockBarInstance.increment).toHaveBeenCalledWith(1);
       expect(mockBarInstance.stop).toHaveBeenCalledWith();
 
-      // Restore original implementation and logger level
       mockSingleBar.mockImplementation = originalImplementation;
       logger.level = originalLevel;
     });
