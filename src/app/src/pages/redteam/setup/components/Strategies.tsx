@@ -3,6 +3,7 @@ import { useTelemetry } from '@app/hooks/useTelemetry';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import { Box, Typography, Button, Tooltip } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import {
@@ -292,6 +293,33 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     [config.strategies, updateConfig],
   );
 
+  const handleReset = useCallback(() => {
+    recordEvent('feature_used', {
+      feature: 'redteam_config_strategy_reset',
+    });
+
+    // Reset to Quick preset
+    setSelectedPreset(PRESET_IDS.QUICK);
+    setIsMultiTurnEnabled(false);
+    setIsStatefulValue(false);
+
+    // Reset strategies to Quick preset
+    const quickStrategies = STRATEGY_PRESETS[PRESET_IDS.QUICK].strategies;
+    updateConfig(
+      'strategies',
+      quickStrategies.map((id) => ({ id })),
+    );
+
+    // Reset target config
+    updateConfig('target', {
+      ...config.target,
+      config: {
+        ...config.target.config,
+        stateful: false,
+      },
+    });
+  }, [config.target, recordEvent, updateConfig]);
+
   // ----------------------------------------------
   // Derived states
   // ----------------------------------------------
@@ -390,14 +418,25 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
       {/* Footer Buttons */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
-        <Button
-          variant="outlined"
-          onClick={onBack}
-          startIcon={<KeyboardArrowLeftIcon />}
-          sx={{ px: 4, py: 1 }}
-        >
-          Back
-        </Button>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button
+            variant="outlined"
+            onClick={onBack}
+            startIcon={<KeyboardArrowLeftIcon />}
+            sx={{ px: 4, py: 1 }}
+          >
+            Back
+          </Button>
+          <Button
+            variant="outlined"
+            color="secondary"
+            onClick={handleReset}
+            startIcon={<RestartAltIcon />}
+            sx={{ px: 4, py: 1 }}
+          >
+            Reset
+          </Button>
+        </Box>
         <Button
           variant="contained"
           onClick={onNext}
