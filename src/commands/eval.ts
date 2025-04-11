@@ -32,7 +32,7 @@ import { CommandLineOptionsSchema } from '../types';
 import { isRunningUnderNpx, maybeLoadFromExternalFile } from '../util';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
-import { resolveConfigs } from '../util/config/load';
+import { resolveConfigs, loadConfigFromOption } from '../util/config/load';
 import invariant from '../util/invariant';
 import { filterProviders } from './eval/filterProviders';
 import type { FilterOptions } from './eval/filterTests';
@@ -122,9 +122,7 @@ export async function doEval(
 
     // Reload default config - because it may have changed.
     if (defaultConfigPath) {
-      const configDir = path.dirname(defaultConfigPath);
-      const configName = path.basename(defaultConfigPath, path.extname(defaultConfigPath));
-      const { defaultConfig: newDefaultConfig } = await loadDefaultConfig(configDir, configName);
+      const { defaultConfig: newDefaultConfig } = await loadConfigFromOption(defaultConfigPath);
       defaultConfig = newDefaultConfig;
     }
 
@@ -132,8 +130,8 @@ export async function doEval(
       const configPaths: string[] = Array.isArray(cmdObj.config) ? cmdObj.config : [cmdObj.config];
       for (const configPath of configPaths) {
         if (fs.existsSync(configPath) && fs.statSync(configPath).isDirectory()) {
-          const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } =
-            await loadDefaultConfig(configPath);
+          const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } = 
+            await loadConfigFromOption(configPath);
           if (newConfigPath) {
             cmdObj.config = cmdObj.config.filter((path: string) => path !== configPath);
             cmdObj.config.push(newConfigPath);
