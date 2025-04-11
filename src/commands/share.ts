@@ -99,11 +99,9 @@ export function shareCommand(program: Command) {
           const { defaultConfig } = await loadConfigFromOption(cmdObj.config);
 
           // Apply sharing config if available
-          if (defaultConfig && defaultConfig.sharing) {
+          if (defaultConfig?.sharing) {
             eval_.config.sharing = defaultConfig.sharing;
-            logger.debug(
-              `Applied sharing config from ${cmdObj.config || 'promptfooconfig.yaml'}: ${JSON.stringify(defaultConfig.sharing)}`,
-            );
+            logger.debug('Applied sharing config from config file');
           }
         } catch (err) {
           logger.debug(`Could not apply sharing config: ${err}`);

@@ -451,27 +451,20 @@ export async function resolveConfigs(
 
 /**
  * Loads configuration from a specified path or uses the default configuration.
- * Handles cases where the config path is a directory.
- *
- * @param configOption - Path to the configuration file from command line options
- * @returns The loaded configuration and its path
  */
 export async function loadConfigFromOption(configOption?: string) {
-  let configPath = configOption;
-
-  // If a path is provided but it's a directory, look for config file in the directory
-  if (configPath && fs.existsSync(configPath) && fs.statSync(configPath).isDirectory()) {
-    const { defaultConfigPath } = await loadDefaultConfig(configPath);
-    configPath = defaultConfigPath;
+  // If path is a directory, find default config in that directory
+  if (configOption && fs.existsSync(configOption) && fs.statSync(configOption).isDirectory()) {
+    return loadDefaultConfig(configOption);
   }
 
-  // Load the config
-  const result = configPath
-    ? await loadDefaultConfig(
-        path.dirname(configPath),
-        path.basename(configPath, path.extname(configPath)),
-      )
-    : await loadDefaultConfig();
+  // If specific file provided, parse path components and load
+  if (configOption) {
+    const dir = path.dirname(configOption);
+    const base = path.basename(configOption, path.extname(configOption));
+    return loadDefaultConfig(dir, base);
+  }
 
-  return result;
+  // Default case - load from current directory
+  return loadDefaultConfig();
 }

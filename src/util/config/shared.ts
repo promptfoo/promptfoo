@@ -9,6 +9,10 @@ import logger from '../../logger';
 import { UnifiedConfigSchema, type UnifiedConfig, type ProviderOptions } from '../../types';
 import { isJavascriptFile } from '../../util/file';
 
+/**
+ * Dereferences a configuration object, resolving $ref values.
+ * Returns the original config if PROMPTFOO_DISABLE_REF_PARSER is set.
+ */
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
   if (getEnvBool('PROMPTFOO_DISABLE_REF_PARSER')) {
     return rawConfig;
@@ -121,7 +125,7 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
 }
 
 /**
- * Reads a configuration file from the specified path.
+ * Reads a configuration file and handles legacy format conversions.
  *
  * @param configPath - The path to the configuration file.
  * @returns A Promise that resolves to the configuration object.
@@ -204,7 +208,7 @@ export async function readConfigFile(configPath: string): Promise<UnifiedConfig>
 }
 
 /**
- * Checks if a configuration file exists at the specified path and reads it if it does.
+ * Checks if a configuration file exists and reads it if present.
  *
  * @param configPath - The path to the configuration file.
  * @returns A Promise that resolves to the configuration object, or undefined if the file doesn't exist.

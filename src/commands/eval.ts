@@ -126,18 +126,15 @@ export async function doEval(
       defaultConfig = newDefaultConfig;
     }
 
-    if (cmdObj.config !== undefined) {
+    // If some of the config paths are directories, find the config file in the directory.
+    if (cmdObj.config && cmdObj.config.length > 0) {
       const configPaths: string[] = Array.isArray(cmdObj.config) ? cmdObj.config : [cmdObj.config];
       for (const configPath of configPaths) {
         if (fs.existsSync(configPath) && fs.statSync(configPath).isDirectory()) {
-          const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } =
-            await loadConfigFromOption(configPath);
+          const { defaultConfigPath: newConfigPath } = await loadConfigFromOption(configPath);
           if (newConfigPath) {
             cmdObj.config = cmdObj.config.filter((path: string) => path !== configPath);
             cmdObj.config.push(newConfigPath);
-            defaultConfig = { ...defaultConfig, ...dirConfig };
-          } else {
-            logger.warn(`No configuration file found in directory: ${configPath}`);
           }
         }
       }
