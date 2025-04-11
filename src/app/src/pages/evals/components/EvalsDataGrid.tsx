@@ -14,6 +14,7 @@ import {
   GridToolbarExportContainer,
   GridCsvExportMenuItem,
 } from '@mui/x-data-grid';
+import invariant from '@promptfoo/util/invariant';
 
 type Eval = {
   createdAt: number;
@@ -69,16 +70,24 @@ function CustomToolbar({ showUtilityButtons }: { showUtilityButtons: boolean }) 
  *
  * @param onEvalSelected - Callback to handle when an eval is selected (via clicking on its id cell).
  * @param focusedEvalId - An optional ID of the eval to focus when the grid loads.
+ * @param filterByDatasetId - Whether to filter the evals by dataset ID. If true, will only show evals with the
+ * same dataset ID as the focused eval.
  */
 export default function EvalsDataGrid({
   onEvalSelected,
   focusedEvalId,
   showUtilityButtons = false,
+  filterByDatasetId = false,
 }: {
   onEvalSelected: (evalId: string) => void;
   focusedEvalId?: string;
   showUtilityButtons?: boolean;
+  filterByDatasetId?: boolean;
 }) {
+  if (filterByDatasetId) {
+    invariant(focusedEvalId, 'focusedEvalId is required when filterByDatasetId is true');
+  }
+
   const [evals, setEvals] = useState<Eval[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -107,6 +116,28 @@ export default function EvalsDataGrid({
     };
     fetchEvals();
   }, []);
+
+  /**
+   * Apply optional filter by dataset ID if enabled.
+   */
+  const rows = useMemo(() => {
+    let rows_ = evals;
+
+    if (focusedEvalId && rows_.length > 0) {
+      // Filter out the focused eval from the list; first find it for downstream filtering.
+      const focusedEval = rows_.find(({ evalId }: Eval) => evalId === focusedEvalId);
+      invariant(focusedEval, 'focusedEvalId is not a valid eval ID');
+
+      rows_ = rows_.filter(({ evalId }: Eval) => evalId !== focusedEvalId);
+
+      // Filter by dataset ID if enabled
+      if (filterByDatasetId) {
+        rows_ = rows_.filter(({ datasetId }: Eval) => datasetId === focusedEval.datasetId);
+      }
+    }
+
+    return rows_;
+  }, [evals, filterByDatasetId, focusedEvalId]);
 
   const handleCellClick = (params: any) => onEvalSelected(params.row.evalId);
 
@@ -188,7 +219,7 @@ export default function EvalsDataGrid({
   return (
     <Paper elevation={2} sx={{ height: '100%' }}>
       <DataGrid
-        rows={evals}
+        rows={rows}
         columns={columns}
         loading={isLoading}
         getRowId={(row) => row.evalId}
