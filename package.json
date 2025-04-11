@@ -101,7 +101,6 @@
     "google-auth-library": "^9.7.0",
     "ibm-cloud-sdk-core": "^5.0.2",
     "langfuse": "^3.7.0",
-    "node-gtts": "^2.0.2",
     "node-sql-parser": "^5.2.0",
     "pdf-parse": "^1.1.1",
     "playwright": "^1.47.2",
