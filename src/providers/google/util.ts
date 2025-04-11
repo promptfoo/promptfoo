@@ -140,7 +140,7 @@ export function maybeCoerceToGeminiFormat(contents: any): {
       }
       coerced = true;
     }
-    
+
     return {
       contents: parseResult.data,
       coerced,
@@ -151,16 +151,20 @@ export function maybeCoerceToGeminiFormat(contents: any): {
   let coercedContents: GeminiFormat;
 
   // Handle native Gemini format with system_instruction
-  if (typeof contents === 'object' && !Array.isArray(contents) && 'system_instruction' in contents) {
+  if (
+    typeof contents === 'object' &&
+    !Array.isArray(contents) &&
+    'system_instruction' in contents
+  ) {
     const systemInst = contents.system_instruction;
-    
+
     if ('contents' in contents) {
       coercedContents = contents.contents;
     } else {
       // If contents field is not present, use an empty array
       coercedContents = [];
     }
-    
+
     return {
       contents: coercedContents,
       coerced: true,
