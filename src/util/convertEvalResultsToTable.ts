@@ -73,7 +73,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
             .map((varName) => {
               const varValue = result.vars?.[varName] || '';
               if (typeof varValue === 'string') {
-                return varValue.slice(0, 5000) + '...';
+                return varValue;
               }
               return JSON.stringify(varValue);
             })
@@ -125,7 +125,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
       id: result.id || `${result.testIdx}-${result.promptIdx}`,
       ...result,
       text: resultText || '',
-      prompt: result.prompt.raw.slice(0, 5000) + '...',
+      prompt: result.prompt.raw,
       provider: result.provider?.label || result.provider?.id || 'unknown provider',
       pass: result.success,
       failureReason: result.failureReason,
@@ -173,13 +173,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   const rows = Object.values(rowMap);
   const sortedVars = [...varsForHeader].sort();
   for (const row of rows) {
-    row.vars = sortedVars.map((varName) => {
-      const varValue = varValuesForRow.get(row.testIdx)?.[varName];
-      if (typeof varValue === 'string') {
-        return varValue.slice(0, 5000) + '...';
-      }
-      return varValue || '';
-    });
+    row.vars = sortedVars.map((varName) => varValuesForRow.get(row.testIdx)?.[varName] || '');
   }
 
   return {
