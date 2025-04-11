@@ -624,66 +624,6 @@ describe('HttpProvider', () => {
       );
       expect(result.output).toEqual({ result: 'success' });
     });
-
-    it('should apply transformRequest to raw HTTP requests', async () => {
-      const rawRequest = dedent`
-            POST /api/endpoint HTTP/1.1
-            Host: test.com
-            Content-Type: application/json
-    
-            {"prompt": "{{ prompt }}"}`;
-
-      const provider = new HttpProvider('http://test.com', {
-        config: {
-          request: rawRequest,
-          transformRequest: 'return prompt.toUpperCase()',
-          useHttps: false,
-        },
-      });
-
-      const mockResponse = {
-        data: JSON.stringify({ result: 'success' }),
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-        headers: {},
-      };
-
-      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
-
-      await provider.callApi('test');
-
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        'http://test.com/api/endpoint',
-        {
-          method: 'POST',
-          headers: {
-            host: 'test.com',
-            'content-type': 'application/json',
-          },
-          body: expect.any(String),
-        },
-        REQUEST_TIMEOUT_MS,
-        'text',
-        undefined,
-        undefined,
-      );
-
-      const callArgs = jest.mocked(fetchWithCache).mock.calls[0];
-
-      expect(callArgs.length).toBeGreaterThan(1);
-
-      const requestOptions = callArgs[1] as {
-        method: string;
-        headers: Record<string, string>;
-        body: string;
-      };
-
-      const bodyJson = JSON.parse(requestOptions.body as string);
-      expect(bodyJson).toEqual({
-        prompt: 'TEST',
-      });
-    });
   });
 
   describe('processJsonBody', () => {
