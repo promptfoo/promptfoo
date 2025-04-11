@@ -129,14 +129,44 @@ export function maybeCoerceToGeminiFormat(contents: any): {
   const parseResult = GeminiFormatSchema.safeParse(contents);
 
   if (parseResult.success) {
+    // Check for native Gemini system_instruction format
+    let systemInst = undefined;
+    if (typeof contents === 'object' && 'system_instruction' in contents) {
+      systemInst = contents.system_instruction;
+      // We need to modify the contents to remove system_instruction
+      // since it's already extracted to systemInst
+      if (typeof contents === 'object' && 'contents' in contents) {
+        contents = contents.contents;
+      }
+      coerced = true;
+    }
+    
     return {
       contents: parseResult.data,
       coerced,
-      systemInstruction: undefined,
+      systemInstruction: systemInst,
     };
   }
 
   let coercedContents: GeminiFormat;
+
+  // Handle native Gemini format with system_instruction
+  if (typeof contents === 'object' && !Array.isArray(contents) && 'system_instruction' in contents) {
+    const systemInst = contents.system_instruction;
+    
+    if ('contents' in contents) {
+      coercedContents = contents.contents;
+    } else {
+      // If contents field is not present, use an empty array
+      coercedContents = [];
+    }
+    
+    return {
+      contents: coercedContents,
+      coerced: true,
+      systemInstruction: systemInst,
+    };
+  }
 
   if (typeof contents === 'string') {
     coercedContents = [

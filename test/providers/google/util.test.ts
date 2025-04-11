@@ -559,6 +559,29 @@ describe('util', () => {
         systemInstruction: undefined,
       });
     });
+
+    it('should handle native Gemini format with system_instruction field', () => {
+      const input = {
+        system_instruction: { parts: [{ text: 'You are a helpful assistant' }] },
+        contents: [
+          {
+            parts: [{ text: 'Hello' }],
+          },
+        ],
+      };
+
+      const result = maybeCoerceToGeminiFormat(input);
+
+      expect(result).toEqual({
+        contents: [
+          {
+            parts: [{ text: 'Hello' }],
+          },
+        ],
+        coerced: true,
+        systemInstruction: { parts: [{ text: 'You are a helpful assistant' }] },
+      });
+    });
   });
 
   describe('getGoogleClient', () => {
