@@ -1,6 +1,6 @@
 import { useMemo, useEffect, useState } from 'react';
 import { callApi } from '@app/utils/api';
-import { Box, Typography, Paper, CircularProgress, useTheme } from '@mui/material';
+import { Box, Typography, Paper, CircularProgress, useTheme, Link } from '@mui/material';
 import {
   DataGrid,
   type GridColDef,
@@ -117,6 +117,9 @@ export default function EvalsDataGrid({
           field: 'evalId',
           headerName: 'ID',
           flex: 1,
+          renderCell: (params: GridRenderCellParams<Eval>) => (
+            <Link href={`/eval/${params.row.evalId}`}>{params.row.evalId}</Link>
+          ),
         },
         {
           field: 'createdAt',
