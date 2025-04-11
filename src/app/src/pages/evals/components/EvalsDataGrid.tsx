@@ -1,6 +1,6 @@
 import { useMemo, useEffect, useState } from 'react';
 import { callApi } from '@app/utils/api';
-import { Box, Typography, Paper, CircularProgress, useTheme } from '@mui/material';
+import { Box, Typography, Paper, CircularProgress, useTheme, Link } from '@mui/material';
 import {
   DataGrid,
   type GridColDef,
@@ -14,6 +14,7 @@ import {
   GridToolbarExportContainer,
   GridCsvExportMenuItem,
 } from '@mui/x-data-grid';
+import invariant from '@promptfoo/util/invariant';
 
 type Eval = {
   createdAt: number;
@@ -69,16 +70,24 @@ function CustomToolbar({ showUtilityButtons }: { showUtilityButtons: boolean }) 
  *
  * @param onEvalSelected - Callback to handle when an eval is selected (via clicking on its id cell).
  * @param focusedEvalId - An optional ID of the eval to focus when the grid loads.
+ * @param filterByDatasetId - Whether to filter the evals by dataset ID. If true, will only show evals with the
+ * same dataset ID as the focused eval.
  */
 export default function EvalsDataGrid({
   onEvalSelected,
   focusedEvalId,
   showUtilityButtons = false,
+  filterByDatasetId = false,
 }: {
   onEvalSelected: (evalId: string) => void;
   focusedEvalId?: string;
   showUtilityButtons?: boolean;
+  filterByDatasetId?: boolean;
 }) {
+  if (filterByDatasetId) {
+    invariant(focusedEvalId, 'focusedEvalId is required when filterByDatasetId is true');
+  }
+
   const [evals, setEvals] = useState<Eval[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -108,6 +117,30 @@ export default function EvalsDataGrid({
     fetchEvals();
   }, []);
 
+  /**
+   * Construct dataset rows:
+   * 1. Filter out the focused eval from the list.
+   * 2. Filter by dataset ID if enabled.
+   */
+  const rows = useMemo(() => {
+    let rows_ = evals;
+
+    if (focusedEvalId && rows_.length > 0) {
+      // Filter out the focused eval from the list; first find it for downstream filtering.
+      const focusedEval = rows_.find(({ evalId }: Eval) => evalId === focusedEvalId);
+      invariant(focusedEval, 'focusedEvalId is not a valid eval ID');
+
+      rows_ = rows_.filter(({ evalId }: Eval) => evalId !== focusedEvalId);
+
+      // Filter by dataset ID if enabled
+      if (filterByDatasetId) {
+        rows_ = rows_.filter(({ datasetId }: Eval) => datasetId === focusedEval.datasetId);
+      }
+    }
+
+    return rows_;
+  }, [evals, filterByDatasetId, focusedEvalId]);
+
   const handleCellClick = (params: any) => onEvalSelected(params.row.evalId);
 
   const columns: GridColDef<Eval>[] = useMemo(
@@ -117,6 +150,22 @@ export default function EvalsDataGrid({
           field: 'evalId',
           headerName: 'ID',
           flex: 1,
+          renderCell: (params: GridRenderCellParams<Eval>) => (
+            <Link
+              href={`/eval/${params.row.evalId}`}
+              /**
+               * Prevent the default behavior of the link, which is to navigate to the href.
+               * Instead, we want to call the onEvalSelected callback which may or may not navigate.
+               */
+              onClick={(e) => {
+                e.preventDefault();
+                onEvalSelected(params.row.evalId);
+                return false;
+              }}
+            >
+              {params.row.evalId}
+            </Link>
+          ),
         },
         {
           field: 'createdAt',
@@ -172,7 +221,7 @@ export default function EvalsDataGrid({
   return (
     <Paper elevation={2} sx={{ height: '100%' }}>
       <DataGrid
-        rows={evals}
+        rows={rows}
         columns={columns}
         loading={isLoading}
         getRowId={(row) => row.evalId}
@@ -253,6 +302,7 @@ export default function EvalsDataGrid({
           '& .MuiDataGrid-selectedRow': {
             backgroundColor: 'action.selected',
           },
+          '--DataGrid-overlayHeight': '300px',
         }}
         onRowSelectionModelChange={setRowSelectionModel}
         rowSelectionModel={rowSelectionModel}
