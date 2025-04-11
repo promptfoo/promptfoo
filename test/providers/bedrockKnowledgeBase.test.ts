@@ -22,12 +22,16 @@ jest.mock('@smithy/node-http-handler', () => {
 
 jest.mock('proxy-agent', () => jest.fn());
 
+const mockGet = jest.fn();
+const mockSet = jest.fn();
+const mockIsCacheEnabled = jest.fn().mockReturnValue(false);
+
 jest.mock('../../src/cache', () => ({
   getCache: jest.fn().mockImplementation(() => ({
-    get: jest.fn(),
-    set: jest.fn(),
+    get: mockGet,
+    set: mockSet,
   })),
-  isCacheEnabled: jest.fn().mockReturnValue(false),
+  isCacheEnabled: () => mockIsCacheEnabled(),
 }));
 
 describe('AwsBedrockKnowledgeBaseProvider', () => {
@@ -178,7 +182,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     expect(mockSend).toHaveBeenCalledWith(expectedCommand);
     expect(result).toEqual({
       output: 'This is the response from the knowledge base',
-      citations: mockResponse.citations,
+      metadata: { citations: mockResponse.citations },
       tokenUsage: {},
     });
   });
@@ -265,5 +269,61 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     };
 
     expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(expectedCommand);
+  });
+
+  it('should retrieve citations from cache when available', async () => {
+    // Enable cache for this test
+    mockIsCacheEnabled.mockReturnValue(true);
+
+    // Mock cache response
+    const cachedResponse = JSON.stringify({
+      output: 'Cached response from knowledge base',
+      citations: [
+        {
+          retrievedReferences: [
+            {
+              content: { text: 'Citation from cache' },
+              location: { s3Location: { uri: 'https://example.com/cached' } },
+            },
+          ],
+        },
+      ],
+    });
+
+    mockGet.mockResolvedValueOnce(cachedResponse);
+
+    const provider = new AwsBedrockKnowledgeBaseProvider('anthropic.claude-v2', {
+      config: {
+        knowledgeBaseId: 'kb-123',
+        region: 'us-east-1',
+      },
+    });
+
+    const result = await provider.callApi('What is the capital of France?');
+
+    // Check that the cache was queried
+    expect(mockGet).toHaveBeenCalled();
+
+    // Check that the response contains the cached data with citations in metadata
+    expect(result).toEqual({
+      output: 'Cached response from knowledge base',
+      metadata: {
+        citations: [
+          {
+            retrievedReferences: [
+              {
+                content: { text: 'Citation from cache' },
+                location: { s3Location: { uri: 'https://example.com/cached' } },
+              },
+            ],
+          },
+        ],
+      },
+      tokenUsage: {},
+      cached: true,
+    });
+
+    // Reset the mock for other tests
+    mockIsCacheEnabled.mockReturnValue(false);
   });
 });

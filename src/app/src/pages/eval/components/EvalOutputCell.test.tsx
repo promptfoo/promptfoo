@@ -128,42 +128,7 @@ describe('EvalOutputCell', () => {
     expect(passedMetadata.testKey).toBe('testValue');
   });
 
-  it('copies citations from response to metadata when present', async () => {
-    const citations = [
-      {
-        retrievedReferences: [
-          {
-            content: { text: 'Citation text' },
-            location: { s3Location: { uri: 'https://example.com' } },
-          },
-        ],
-      },
-    ];
-
-    const propsWithCitations = {
-      ...defaultProps,
-      output: {
-        ...defaultProps.output,
-        response: {
-          output: 'Test response',
-          citations,
-        },
-      },
-    };
-
-    renderWithProviders(<EvalOutputCell {...propsWithCitations} />);
-    await userEvent.click(screen.getByText('🔎'));
-
-    const dialogComponent = screen.getByTestId('dialog-component');
-    const passedMetadata = JSON.parse(dialogComponent.getAttribute('data-metadata') || '{}');
-
-    // Verify citations were added to metadata
-    expect(passedMetadata.citations).toEqual(citations);
-    // Original metadata should still be there
-    expect(passedMetadata.testKey).toBe('testValue');
-  });
-
-  it('preserves existing metadata citations if no response citations', async () => {
+  it('preserves existing metadata citations', async () => {
     const propsWithMetadataCitations = {
       ...defaultProps,
       output: {
@@ -185,35 +150,6 @@ describe('EvalOutputCell', () => {
     expect(passedMetadata.citations).toEqual([
       { source: 'metadata source', content: 'metadata content' },
     ]);
-  });
-
-  it('response citations take precedence over metadata citations', async () => {
-    const responseCitations = [{ source: 'response source', content: 'response content' }];
-    const metadataCitations = [{ source: 'metadata source', content: 'metadata content' }];
-
-    const propsWithBothCitations = {
-      ...defaultProps,
-      output: {
-        ...defaultProps.output,
-        metadata: {
-          testKey: 'testValue',
-          citations: metadataCitations,
-        },
-        response: {
-          output: 'Test response',
-          citations: responseCitations,
-        },
-      },
-    };
-
-    renderWithProviders(<EvalOutputCell {...propsWithBothCitations} />);
-    await userEvent.click(screen.getByText('🔎'));
-
-    const dialogComponent = screen.getByTestId('dialog-component');
-    const passedMetadata = JSON.parse(dialogComponent.getAttribute('data-metadata') || '{}');
-
-    // Response citations should take precedence
-    expect(passedMetadata.citations).toEqual(responseCitations);
   });
 
   it('displays pass/fail status correctly', () => {

@@ -20,7 +20,7 @@ export interface BedrockKnowledgeBaseOptions {
   modelArn?: string;
 }
 
-// Define citation types to extend ProviderResponse
+// Define citation types for metadata
 export interface CitationReference {
   content?: {
     text?: string;
@@ -51,10 +51,6 @@ export interface Citation {
     [key: string]: any;
   };
   [key: string]: any;
-}
-
-export interface BedrockKnowledgeBaseResponse extends ProviderResponse {
-  citations?: Citation[];
 }
 
 /**
@@ -136,7 +132,7 @@ export class AwsBedrockKnowledgeBaseProvider
     return this.knowledgeBaseClient;
   }
 
-  async callApi(prompt: string): Promise<BedrockKnowledgeBaseResponse> {
+  async callApi(prompt: string): Promise<ProviderResponse> {
     const client = await this.getKnowledgeBaseClient();
 
     // Prepare the request parameters
@@ -170,7 +166,7 @@ export class AwsBedrockKnowledgeBaseProvider
         const parsedResponse = JSON.parse(cachedResponse as string);
         return {
           output: parsedResponse.output,
-          citations: parsedResponse.citations,
+          metadata: { citations: parsedResponse.citations },
           tokenUsage: {},
           cached: true,
         };
@@ -192,7 +188,7 @@ export class AwsBedrockKnowledgeBaseProvider
         output = response.output.text;
       }
 
-      // Extract citations from response
+      // Extract citations from response and add to metadata
       let citations: Citation[] = [];
       if (response && response.citations && Array.isArray(response.citations)) {
         citations = response.citations;
@@ -215,14 +211,14 @@ export class AwsBedrockKnowledgeBaseProvider
 
       return {
         output,
-        citations,
+        metadata: { citations },
         tokenUsage: {},
       };
     } catch (err) {
       // For error cases, return only the error property without other fields
       return {
         error: `Bedrock Knowledge Base API error: ${String(err)}`,
-      } as BedrockKnowledgeBaseResponse;
+      };
     }
   }
 }
