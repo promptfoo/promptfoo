@@ -651,20 +651,20 @@ export async function resolveConfigs(
  */
 export async function loadConfigFromOption(configOption?: string) {
   let configPath = configOption;
-  
+
   // If a path is provided but it's a directory, look for config file in the directory
   if (configPath && fs.existsSync(configPath) && fs.statSync(configPath).isDirectory()) {
     const { defaultConfigPath } = await loadDefaultConfig(configPath);
     configPath = defaultConfigPath;
   }
-  
+
   // Load the config
-  const result = configPath 
+  const result = configPath
     ? await loadDefaultConfig(
         path.dirname(configPath),
         path.basename(configPath, path.extname(configPath)),
       )
     : await loadDefaultConfig();
-  
+
   return result;
 }

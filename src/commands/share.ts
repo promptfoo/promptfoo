@@ -8,7 +8,7 @@ import Eval from '../models/eval';
 import { createShareableUrl, hasEvalBeenShared, isSharingEnabled, getShareableUrl } from '../share';
 import telemetry from '../telemetry';
 import { setupEnv } from '../util';
-import { loadConfigFromOption } from '../util/config/manage';
+import { loadConfigFromOption } from '../util/config/load';
 
 export function notCloudEnabledShareInstructions(): void {
   const cloudUrl = DEFAULT_SHARE_VIEW_BASE_URL;
@@ -97,7 +97,7 @@ export function shareCommand(program: Command) {
         // Load config from the specified file or default location
         try {
           const { defaultConfig } = await loadConfigFromOption(cmdObj.config);
-            
+
           // Apply sharing config if available
           if (defaultConfig && defaultConfig.sharing) {
             eval_.config.sharing = defaultConfig.sharing;

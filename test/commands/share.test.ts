@@ -244,7 +244,7 @@ describe('Share Command', () => {
         apiBaseUrl: 'https://custom-api.example.com',
         appBaseUrl: 'https://custom-app.example.com',
       };
-      
+
       jest.mocked(loadConfigFromOption).mockResolvedValue({
         defaultConfig: {
           sharing: mockSharing,
@@ -283,7 +283,7 @@ describe('Share Command', () => {
         apiBaseUrl: 'https://custom-api.example.com',
         appBaseUrl: 'https://custom-app.example.com',
       };
-      
+
       jest.mocked(loadConfigFromOption).mockResolvedValue({
         defaultConfig: {
           sharing: mockSharing,

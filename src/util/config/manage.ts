@@ -46,33 +46,3 @@ export function writePromptfooConfig(
   );
   return orderedConfig;
 }
-
-/**
- * Loads configuration from a specified path or uses the default configuration.
- * Handles cases where the config path is a directory.
- *
- * @param configOption - Path to the configuration file from command line options
- * @returns The loaded configuration and its path
- */
-export async function loadConfigFromOption(configOption?: string) {
-  // Forward declaration to avoid circular dependencies
-  const loadDefaultConfig = require('./default').loadDefaultConfig;
-  
-  let configPath = configOption;
-  
-  // If a path is provided but it's a directory, look for config file in the directory
-  if (configPath && fs.existsSync(configPath) && fs.statSync(configPath).isDirectory()) {
-    const { defaultConfigPath } = await loadDefaultConfig(configPath);
-    configPath = defaultConfigPath;
-  }
-  
-  // Load the config
-  const result = configPath 
-    ? await loadDefaultConfig(
-        path.dirname(configPath),
-        path.basename(configPath, path.extname(configPath)),
-      )
-    : await loadDefaultConfig();
-  
-  return result;
-}
