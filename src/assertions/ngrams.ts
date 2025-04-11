@@ -10,10 +10,10 @@ export function getNGrams(words: string[], n: number): string[] {
   if (n > words.length) {
     return [];
   }
-  
+
   const ngrams: string[] = [];
   for (let i = 0; i <= words.length - n; i++) {
     ngrams.push(words.slice(i, i + n).join(' '));
   }
   return ngrams;
-} 
+}

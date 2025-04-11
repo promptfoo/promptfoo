@@ -2,10 +2,9 @@ import type { AssertionParams, GradingResult } from '../types';
 import invariant from '../util/invariant';
 import { getNGrams } from './ngrams';
 
-
 /**
  * Calculates the Google-BLEU (GLEU) score for a candidate string against reference strings.
- * 
+ *
  * GLEU is a variant of BLEU that shows better correlation with human judgments on sentence-level
  * evaluation. It calculates n-gram matches between the candidate and reference texts.
  *
@@ -20,58 +19,68 @@ export function calculateGleuScore(
   candidate: string,
   references: string[],
   minN: number = 1,
-  maxN: number = 4
+  maxN: number = 4,
 ): number {
   if (!candidate || references.length === 0) {
     throw new Error('Invalid inputs');
   }
 
-  const candidateWords = candidate.toLowerCase().trim().split(/\s+/).map(word => word.replace(/\.+$/, ''));
-  
+  const candidateWords = candidate
+    .toLowerCase()
+    .trim()
+    .split(/\s+/)
+    .map((word) => word.replace(/\.+$/, ''));
+
   // For each reference, calculate a GLEU score and later take the maximum
-  const referenceScores = references.map(reference => {
-    const referenceWords = reference.toLowerCase().trim().split(/\s+/).map(word => word.replace(/\.+$/, ''));
-    
+  const referenceScores = references.map((reference) => {
+    const referenceWords = reference
+      .toLowerCase()
+      .trim()
+      .split(/\s+/)
+      .map((word) => word.replace(/\.+$/, ''));
+
     // Initialize counters for all n-grams
     let matchCount = 0;
     let candidateTotal = 0;
     let referenceTotal = 0;
-    
+
     // Consider all n-gram orders from 1 to maxN
     for (let n = minN; n <= maxN; n++) {
-      
       // Get n-grams from both texts
-      const candidateNGrams = getNGrams(candidateWords, n); // calculate the n-gram for candidate words list. 
-      const referenceNGrams = getNGrams(referenceWords, n); // calculate the n-gram for this specific list generated reference words.   
-      
+      const candidateNGrams = getNGrams(candidateWords, n); // calculate the n-gram for candidate words list.
+      const referenceNGrams = getNGrams(referenceWords, n); // calculate the n-gram for this specific list generated reference words.
+
       // Count occurrences of each n-gram
       const candidateNGramCounts = new Map<string, number>();
       const referenceNGramCounts = new Map<string, number>();
-      
-      for (const gram of candidateNGrams) { // Calculate the count of each element in the candidate n-gram string. 
+
+      for (const gram of candidateNGrams) {
+        // Calculate the count of each element in the candidate n-gram string.
         candidateNGramCounts.set(gram, (candidateNGramCounts.get(gram) || 0) + 1);
       }
-      
-      for (const gram of referenceNGrams) { // Calculate the count of each element in the reference n-gram string
-          referenceNGramCounts.set(gram, (referenceNGramCounts.get(gram) || 0) + 1);
+
+      for (const gram of referenceNGrams) {
+        // Calculate the count of each element in the reference n-gram string
+        referenceNGramCounts.set(gram, (referenceNGramCounts.get(gram) || 0) + 1);
       }
-      
-      // Calculate matching n-grams 
-      for (const [gram, candidateCount] of candidateNGramCounts.entries()) { //
-        const referenceCount = referenceNGramCounts.get(gram) || 0; // calculate the count of matching elements from the candidate n-gram string & the reference n-gram string. 
-        matchCount += Math.min(candidateCount, referenceCount);  
+
+      // Calculate matching n-grams
+      for (const [gram, candidateCount] of candidateNGramCounts.entries()) {
+        //
+        const referenceCount = referenceNGramCounts.get(gram) || 0; // calculate the count of matching elements from the candidate n-gram string & the reference n-gram string.
+        matchCount += Math.min(candidateCount, referenceCount);
       }
-      
+
       // Update totals elements.
       candidateTotal += candidateNGrams.length;
       referenceTotal += referenceNGrams.length;
     }
-    
-    // Calculate GLEU as (matches) / max(candidate_total, reference_total) to reduce the number of division operations. 
+
+    // Calculate GLEU as (matches) / max(candidate_total, reference_total) to reduce the number of division operations.
     const denominator = Math.max(candidateTotal, referenceTotal);
     return denominator > 0 ? matchCount / denominator : 0;
   });
-  
+
   // Return the maximum score across all references
   return Math.max(...referenceScores);
 }
@@ -79,7 +88,7 @@ export function calculateGleuScore(
 /**
  * Handles GLEU (Google-BLEU) score calculation and evaluation for assertions.
  * GLEU is a variant of BLEU that correlates better with human judgments on sentence-level evaluation.
- * 
+ *
  * @param {Object} params - The parameters for GLEU score evaluation
  * @param {Object} params.assertion - The assertion configuration object
  * @param {boolean} params.inverse - Whether to invert the pass condition
@@ -101,19 +110,19 @@ export function handleGleuScore({
   outputString,
   renderedValue,
   provider, // Use if your assertion needs provider-specific logic
-  test,     // Access to test case data
+  test, // Access to test case data
 }: AssertionParams): GradingResult {
   // Validate inputs
   invariant(
     typeof renderedValue === 'string' ||
-    (Array.isArray(renderedValue) && renderedValue.every((v) => typeof v === 'string')),
-    '"gleu" assertion must have a string or array of strings value'
+      (Array.isArray(renderedValue) && renderedValue.every((v) => typeof v === 'string')),
+    '"gleu" assertion must have a string or array of strings value',
   );
 
   const threshold = assertion.threshold ?? 0.5;
   const references = Array.isArray(renderedValue) ? renderedValue : [renderedValue];
   const score = calculateGleuScore(outputString, references);
-  const pass = (score >= threshold) !== inverse;
+  const pass = score >= threshold !== inverse;
 
   return {
     pass,
