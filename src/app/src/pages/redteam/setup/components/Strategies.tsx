@@ -203,6 +203,20 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     [config.strategies, recordEvent, updateConfig, isStatefulValue],
   );
 
+  const handleSelectNoneInSection = useCallback(
+    (strategyIds: string[]) => {
+      // Once user deselects all, it's definitely "Custom" preset
+      setSelectedPreset('Custom');
+
+      // Remove all strategies in the given section
+      updateConfig(
+        'strategies',
+        config.strategies.filter((s) => !strategyIds.includes(getStrategyId(s))),
+      );
+    },
+    [config.strategies, updateConfig, recordEvent],
+  );
+
   const handleMultiTurnChange = useCallback(
     (checked: boolean) => {
       setIsMultiTurnEnabled(checked);
@@ -368,6 +382,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         selectedIds={selectedStrategyIds}
         onToggle={handleStrategyToggle}
         onConfigClick={handleConfigClick}
+        onSelectNone={handleSelectNoneInSection}
       />
 
       {/* Multi-turn strategies */}
@@ -377,6 +392,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         selectedIds={selectedStrategyIds}
         onToggle={handleStrategyToggle}
         onConfigClick={handleConfigClick}
+        onSelectNone={handleSelectNoneInSection}
       />
 
       {/* Additional system config section, if needed */}
