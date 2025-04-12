@@ -214,7 +214,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         config.strategies.filter((s) => !strategyIds.includes(getStrategyId(s))),
       );
     },
-    [config.strategies, updateConfig, recordEvent],
+    [config.strategies, updateConfig],
   );
 
   const handleMultiTurnChange = useCallback(
