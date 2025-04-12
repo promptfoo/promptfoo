@@ -122,7 +122,7 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
               borderRadius: '4px',
               background: 'rgba(59, 130, 246, 0.1)',
             }}
-            onClick={toggleTruncate}
+            onClick={(e) => { e.stopPropagation(); toggleTruncate(); }}
           >
             <span>Show less</span>
             <svg
