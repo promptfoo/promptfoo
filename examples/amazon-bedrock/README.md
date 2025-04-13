@@ -53,8 +53,6 @@ For working with images, we provide two multimodal examples:
 - [`promptfooconfig.nova.multimodal.yaml`](promptfooconfig.nova.multimodal.yaml) - Nova with images
 - [`promptfooconfig.llama.multimodal.yaml`](promptfooconfig.llama.multimodal.yaml) - Llama with images
 
-For a more comprehensive multimodal example, see the separate [amazon-bedrock-multimodal](../amazon-bedrock-multimodal) directory.
-
 ## Knowledge Base Example
 
 The Knowledge Base example (`promptfooconfig.kb.yaml`) demonstrates how to use AWS Bedrock Knowledge Base for Retrieval Augmented Generation (RAG).

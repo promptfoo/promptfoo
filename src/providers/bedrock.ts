@@ -360,25 +360,27 @@ export const formatPromptLlama3Instruct = (messages: LlamaMessage[]): string => 
   let formattedPrompt = '<|begin_of_text|>';
 
   for (const message of messages) {
+    // Get the content as string, preserving the original behavior
+    let textContent = '';
+    if (typeof message.content === 'string') {
+      textContent = message.content.trim();
+    } else if (Array.isArray(message.content)) {
+      // Handle array content (should be text items in this branch)
+      textContent = message.content
+        .filter((item) => typeof item.text === 'string')
+        .map((item) => item.text)
+        .join('\n')
+        .trim();
+    } else {
+      // Fallback for unexpected content type
+      textContent = String(message.content).trim();
+    }
+
+    // Use the original formatting with dedent and proper newlines
     formattedPrompt += dedent`
       <|start_header_id|>${message.role}<|end_header_id|>
 
-      `;
-
-    // Handle text content safely
-    if (typeof message.content === 'string') {
-      formattedPrompt += `${message.content.trim()}<|eot_id|>`;
-    } else if (Array.isArray(message.content)) {
-      // Handle array content (should be text items in this branch)
-      const textContent = message.content
-        .filter((item) => typeof item.text === 'string')
-        .map((item) => item.text)
-        .join('\n');
-      formattedPrompt += `${textContent}<|eot_id|>`;
-    } else {
-      // Fallback for unexpected content type
-      formattedPrompt += `${String(message.content)}<|eot_id|>`;
-    }
+      ${textContent}<|eot_id|>`;
   }
 
   formattedPrompt += '<|start_header_id|>assistant<|end_header_id|>';

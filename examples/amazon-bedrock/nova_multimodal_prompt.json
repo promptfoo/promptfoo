@@ -5,7 +5,9 @@
       {
         "image": {
           "format": "jpg",
-          "source": { "bytes": "{{image}}" }
+          "source": {
+            "bytes": "{{image}}"
+          }
         }
       },
       {

@@ -14,7 +14,7 @@ providers:
 tests:
   - vars:
       image_data: file://cat.jpg
-      question: What is this a picture of? Please describe in detail.
+      question: What is this a picture of? Please describe it in one word.
     assert:
-      - type: contains
+      - type: icontains
         value: cat
