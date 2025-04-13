@@ -37,7 +37,7 @@ This directory contains several example configurations for different Bedrock mod
 
 - [`promptfooconfig.claude.yaml`](promptfooconfig.claude.yaml) - Claude 3.7 Sonnet
 - [`promptfooconfig.llama.yaml`](promptfooconfig.llama.yaml) - Llama3
-- [`promptfooconfig.llama3.2.multimodal.yaml`](promptfooconfig.llama3.2.multimodal.yaml) - Llama 3.2 with multimodal capabilities
+- [`promptfooconfig.llama.multimodal.yaml`](promptfooconfig.llama.multimodal.yaml) - Llama 3.2 with multimodal capabilities
 - [`promptfooconfig.mistral.yaml`](promptfooconfig.mistral.yaml) - Mistral
 - [`promptfooconfig.nova.yaml`](promptfooconfig.nova.yaml) - Amazon's Nova models
 - [`promptfooconfig.nova.tool.yaml`](promptfooconfig.nova.tool.yaml) - Nova with tool usage examples
@@ -51,7 +51,7 @@ This directory contains several example configurations for different Bedrock mod
 For working with images, we provide two multimodal examples:
 
 - [`promptfooconfig.nova.multimodal.yaml`](promptfooconfig.nova.multimodal.yaml) - Nova with images
-- [`promptfooconfig.llama3.2.multimodal.yaml`](promptfooconfig.llama3.2.multimodal.yaml) - Llama 3.2 with images
+- [`promptfooconfig.llama.multimodal.yaml`](promptfooconfig.llama.multimodal.yaml) - Llama with images
 
 For a more comprehensive multimodal example, see the separate [amazon-bedrock-multimodal](../amazon-bedrock-multimodal) directory.
 
