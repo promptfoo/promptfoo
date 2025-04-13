@@ -1,4 +1,18 @@
-# amazon-bedrock (Amazon Bedrock Examples)
+# Amazon Bedrock Example
+
+This example demonstrates how to use the Amazon Bedrock service with promptfoo for model evaluation and comparison.
+
+## Prerequisites
+
+In order to use this example, the following prerequisites must be met:
+
+1. You must have an AWS account with access to the Amazon Bedrock service.
+2. You must have set up the necessary AWS credentials. You can either:
+   - Configure AWS credentials through the AWS CLI (`aws configure`)
+   - Set environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`)
+   - Use SSO authentication with the `AWS_PROFILE` environment variable
+
+## Setup
 
 You can run this example with:
 
@@ -6,84 +20,98 @@ You can run this example with:
 npx promptfoo@latest init --example amazon-bedrock
 ```
 
-## Prerequisites
+## Quick Start
 
-1. Set up your AWS credentials:
+To run this example, execute the following command:
 
-   ```bash
-   export AWS_ACCESS_KEY_ID="your_access_key"
-   export AWS_SECRET_ACCESS_KEY="your_secret_key"
-   ```
+```bash
+cd amazon-bedrock
+npm install
+npm test
+```
 
-   See [authentication docs](https://www.promptfoo.dev/docs/providers/aws-bedrock/#authentication) for other auth methods, including SSO profiles.
+To run just one of the configuration files:
 
-2. Request model access in your AWS region:
-   - Visit the [AWS Bedrock Model Access page](https://us-west-2.console.aws.amazon.com/bedrock/home?region=us-west-2#/modelaccess)
-   - Switch to your desired region. We recommend us-west-2 and us-east-1 which tend to have the most models available.
-   - Enable the models you want to use.
-3. Install required dependencies:
+```bash
+npx promptfoo eval -c promptfooconfig.mistral.yaml
+```
 
-   ```bash
-   # For basic Bedrock models
-   npm install @aws-sdk/client-bedrock-runtime
-
-   # For Knowledge Base examples
-   npm install @aws-sdk/client-bedrock-agent-runtime
-   ```
-
-## Available Examples
+## Included Examples
 
 This directory contains several example configurations for different Bedrock models:
 
 - [`promptfooconfig.claude.yaml`](promptfooconfig.claude.yaml) - Claude 3.7 Sonnet
 - [`promptfooconfig.llama.yaml`](promptfooconfig.llama.yaml) - Llama3
+- [`promptfooconfig.llama3.2.multimodal.yaml`](promptfooconfig.llama3.2.multimodal.yaml) - Llama 3.2 with multimodal capabilities
 - [`promptfooconfig.mistral.yaml`](promptfooconfig.mistral.yaml) - Mistral
 - [`promptfooconfig.nova.yaml`](promptfooconfig.nova.yaml) - Amazon's Nova models
 - [`promptfooconfig.nova.tool.yaml`](promptfooconfig.nova.tool.yaml) - Nova with tool usage examples
 - [`promptfooconfig.nova.multimodal.yaml`](promptfooconfig.nova.multimodal.yaml) - Nova with multimodal capabilities
-- [`promptfooconfig.titan-text.yaml`](promptfooconfig.titan-text.yaml) - Titan text generation examples
+- [`promptfooconfig.a21.yaml`](promptfooconfig.a21.yaml) - AI21's Jamba models
 - [`promptfooconfig.kb.yaml`](promptfooconfig.kb.yaml) - Knowledge Base RAG example with citations
 - [`promptfooconfig.yaml`](promptfooconfig.yaml) - Combined evaluation across multiple providers
+
+## Multimodal Examples
+
+This repository includes two multimodal examples:
+
+### Amazon Nova Multimodal Example
+
+The Nova multimodal example (`promptfooconfig.nova.multimodal.yaml`) demonstrates how to use Amazon Nova models with image inputs.
+
+### Llama 3.2 Multimodal Example
+
+The Llama 3.2 multimodal example (`promptfooconfig.llama3.2.multimodal.yaml`) showcases Meta's Llama 3.2 vision capabilities. This example includes various vision tasks such as:
+
+- Image captioning
+- Visual question answering 
+- Entity extraction from images
+
+To use this example, ensure you have the US West (Oregon) region enabled for Llama 3.2 models.
+
+For the most reliable multimodal support in Bedrock, Amazon's Nova models (`promptfooconfig.nova.multimodal.yaml`) may provide more consistent results.
 
 ## Knowledge Base Example
 
 The Knowledge Base example (`promptfooconfig.kb.yaml`) demonstrates how to use AWS Bedrock Knowledge Base for Retrieval Augmented Generation (RAG).
 
-### Knowledge Base Setup
+This demonstrates how to:
 
-For this example, you'll need to:
+1. Request knowledge base retrievals from AWS Bedrock
+2. Pass retrieved citations to LLMs in the context
+3. Compare different RAG approaches
 
-1. Create a Knowledge Base in AWS Bedrock
-2. Configure it to crawl or ingest content (the example uses promptfoo.dev content)
-3. Use the Amazon Titan Embeddings model for vector embeddings
-4. Update the config with your Knowledge Base ID:
+### Running the KB Example
 
-```yaml
-providers:
-  - id: bedrock:kb:us.anthropic.claude-3-7-sonnet-20250219-v1:0
-    config:
-      region: 'us-east-2' # Change to your region
-      knowledgeBaseId: 'YOUR_KNOWLEDGE_BASE_ID' # Replace with your KB ID
-```
+Before running the Knowledge Base example, you'll need to:
 
-When running the Knowledge Base example, you'll see:
+1. Create a Knowledge Base in the AWS console
+2. Update `promptfooconfig.kb.yaml` with your Knowledge Base ID
+3. Set the AWS_BEDROCK_KB_REGION environment variable (if different from your standard AWS region)
 
-- Responses from a Knowledge Base-enhanced model with citations
-- Responses from a standard model for comparison
-- Citations from source documents that show where information was retrieved from
+## Environment Configuration
 
-For detailed Knowledge Base setup instructions, see the [AWS Bedrock Knowledge Base Documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/knowledge-base.html).
+The example can be configured through environment variables:
 
-## Getting Started
+- `AWS_BEDROCK_REGION`: The AWS region where your Bedrock models are available (default: `us-east-1`)
+- `AWS_BEDROCK_MAX_TOKENS`: Maximum tokens to generate (default: model-specific)
+- `AWS_BEDROCK_TEMPERATURE`: Temperature setting for text generation (default: `0`)
+- `AWS_BEDROCK_STOP`: JSON array of stop sequences (example: `["##", "END"]`)
 
-1. Run the evaluation:
+## Configuration Details
 
-   ```bash
-   promptfoo eval -c [path/to/config.yaml]
-   ```
+Each YAML file contains a variety of examples that showcase:
 
-2. View the results:
+1. Different models available on Amazon Bedrock
+2. Assertions to verify outputs meet expectations
+3. Various question types and scenarios to test
 
-   ```bash
-   promptfoo view
-   ```
+### Nova Tool Usage
+
+The `promptfooconfig.nova.tool.yaml` file demonstrates how to invoke tools using Nova models.
+
+## Additional Resources
+
+- [Amazon Bedrock Documentation](https://docs.aws.amazon.com/bedrock/)
+- [promptfoo Provider Documentation](https://www.promptfoo.dev/docs/providers/bedrock)
+- [AWS SDK for JavaScript](https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/clients/client-bedrock-runtime/)
