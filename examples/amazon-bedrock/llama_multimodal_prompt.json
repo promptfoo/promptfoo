@@ -7,12 +7,10 @@
       },
       {
         "image": {
-          "source": {
-            "type": "localFile",
-            "path": "{{image_path}}"
-          }
+          "format": "jpeg",
+          "source": "{{image_data}}"
         }
       }
     ]
   }
-] 
+]

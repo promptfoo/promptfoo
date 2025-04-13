@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Llama 3.2 multimodal test with Amazon Bedrock
+
+prompts:
+  - label: multimodal prompt
+    raw: file://llama_multimodal_prompt.json
+
+providers:
+  - id: bedrock:us.meta.llama3-2-90b-instruct-v1:0
+    label: Llama 3.2 90B
+    config:
+      region: us-west-2
+
+tests:
+  - vars:
+      image_data: file://cat.jpg
+      question: What is this a picture of? Please describe in detail.
+    assert:
+      - type: contains
+        value: cat

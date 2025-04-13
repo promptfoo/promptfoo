@@ -2,9 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
 import dedent from 'dedent';
-import * as fs from 'fs';
 import type { Agent } from 'http';
-import * as path from 'path';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
@@ -308,7 +306,8 @@ export const formatPromptLlama2Chat = (messages: LlamaMessage[]): string => {
         ? message.content.trim()
         : Array.isArray(message.content)
           ? message.content
-              .map((c) => (typeof c === 'string' ? c : c.text || ''))
+              .filter((c) => typeof c.text === 'string')
+              .map((c) => c.text)
               .join('\n')
               .trim()
           : String(message.content).trim();
@@ -348,27 +347,13 @@ export const formatPromptLlama2Chat = (messages: LlamaMessage[]): string => {
 export const formatPromptLlama3Instruct = (messages: LlamaMessage[]): string => {
   // Check if any message has multimodal content
   const hasMultimodalContent = messages.some(
-    (message) => Array.isArray(message.content) && message.content.length > 0,
+    (message) => Array.isArray(message.content) && message.content.some((item) => item.image),
   );
 
   // For multimodal content (Converse API), return structured message format
   if (hasMultimodalContent) {
-    // Prepare messages for the Converse API format
-    const converseMessages = messages.map((message) => {
-      return {
-        role: message.role,
-        content: Array.isArray(message.content)
-          ? message.content
-          : [
-              {
-                text:
-                  typeof message.content === 'string' ? message.content : String(message.content),
-              },
-            ],
-      };
-    });
-
-    return JSON.stringify(converseMessages);
+    // For the Converse API, just return the messages as is - they're already in the right format
+    return JSON.stringify(messages);
   }
 
   // For text-only content, use the standard Llama 3 format
@@ -433,8 +418,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
           // Detect if any message has multimodal content
           hasMultimodalContent = messages.some(
             (message) =>
-              Array.isArray(message.content) &&
-              message.content.some((item: any) => item.image || item.type === 'image'),
+              Array.isArray(message.content) && message.content.some((item: any) => item.image),
           );
         } else {
           // Not a message array, use default parsing
@@ -453,97 +437,64 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
       ) {
         logger.debug('Preparing multimodal content for Converse API');
 
-        // Format messages for the converse API - ensure text content is in the expected format
-        const converseMessages = messages.map((message: any) => {
-          if (typeof message.content === 'string') {
+        // Process the messages to properly format image data for the Converse API
+        const processedMessages = messages.map((message: any) => {
+          if (!Array.isArray(message.content)) {
             return {
               role: message.role,
-              content: [{ text: message.content }],
-            };
-          } else if (Array.isArray(message.content)) {
-            // Format content items properly for the API
-            return {
-              role: message.role,
-              content: message.content.map((item: any) => {
-                if (typeof item === 'string') {
-                  return { text: item };
-                }
-
-                // Process image items for converse API
-                if (item.image) {
-                  // Handle image source properly
-                  if (item.image.source?.type === 'localFile' && item.image.source?.path) {
-                    // First try from the current working directory
-                    let imagePath = path.resolve(process.cwd(), item.image.source.path);
-
-                    // Check if file exists, if not try from the config directory
-                    if (!fs.existsSync(imagePath)) {
-                      const configPath = process.env.PROMPTFOO_CONFIG_PATH || '';
-                      const configDir = path.dirname(configPath);
-                      imagePath = path.resolve(configDir, item.image.source.path);
-
-                      // If still not found, try from a few other possible locations
-                      if (!fs.existsSync(imagePath)) {
-                        // Try just the relative path from examples dir
-                        imagePath = path.resolve(
-                          process.cwd(),
-                          'examples/amazon-bedrock-multimodal',
-                          item.image.source.path,
-                        );
-
-                        if (!fs.existsSync(imagePath)) {
-                          throw new Error(
-                            `Image file not found: ${item.image.source.path}. Tried paths: ${[
-                              path.resolve(process.cwd(), item.image.source.path),
-                              path.resolve(configDir, item.image.source.path),
-                              path.resolve(
-                                process.cwd(),
-                                'examples/amazon-bedrock-multimodal',
-                                item.image.source.path,
-                              ),
-                            ].join(', ')}`,
-                          );
-                        }
-                      }
-                    }
-
-                    logger.debug(`Loading image from ${imagePath}`);
-                    try {
-                      const imageBytes = fs.readFileSync(imagePath);
-
-                      // Get format from file extension
-                      const ext = path.extname(imagePath).toLowerCase().substring(1);
-                      const format =
-                        ext === 'jpg'
-                          ? 'jpeg'
-                          : ['jpeg', 'png', 'gif', 'webp'].includes(ext)
-                            ? ext
-                            : 'jpeg';
-
-                      return {
-                        image: {
-                          format,
-                          source: {
-                            bytes: imageBytes,
-                          },
-                        },
-                      };
-                    } catch (err) {
-                      logger.error(`Error loading image: ${err}`);
-                      throw err;
-                    }
-                  } else {
-                    // Return the item unchanged if image source is not a local file
-                    return item;
-                  }
-                }
-
-                return item;
-              }),
+              content: [{ text: String(message.content) }],
             };
           }
 
-          return message;
+          // Handle array content with possible images
+          const processedContent = message.content.map((item: any) => {
+            // Text items can be passed through directly
+            if (item.text) {
+              return { text: String(item.text) };
+            }
+
+            // Process image items
+            if (item.image) {
+              const format = item.image.format || 'jpeg';
+              const source = item.image.source;
+
+              // If source is a base64 string (from file:// reference), convert to bytes
+              if (typeof source === 'string' && source.startsWith('/')) {
+                try {
+                  // Convert base64 to binary
+                  const binaryString = atob(source);
+                  const len = binaryString.length;
+                  const bytes = new Uint8Array(len);
+                  for (let i = 0; i < len; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                  }
+
+                  return {
+                    image: {
+                      format,
+                      source: {
+                        bytes,
+                      },
+                    },
+                  };
+                } catch (err) {
+                  logger.error(`Error processing image data: ${err}`);
+                  throw new Error(`Failed to process image data: ${err}`);
+                }
+              }
+
+              // Return item as is if it's not a base64 string
+              return item;
+            }
+
+            // Pass through other item types
+            return item;
+          });
+
+          return {
+            role: message.role,
+            content: processedContent,
+          };
         });
 
         const inferenceConfig: any = {};
@@ -566,7 +517,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
         // Return special object to signal that we need to use the converse API
         return {
           __useConverseApi: true,
-          messages: converseMessages,
+          messages: processedMessages,
           inferenceConfig,
         };
       }
