@@ -2,7 +2,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
 import dedent from 'dedent';
+import * as fs from 'fs';
 import type { Agent } from 'http';
+import * as path from 'path';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
@@ -19,8 +21,6 @@ import { maybeLoadToolsFromExternalFile } from '../util';
 import { outputFromMessage, parseMessages } from './anthropic/util';
 import { novaOutputFromMessage, novaParseMessages } from './bedrockUtil';
 import { parseChatPrompt } from './shared';
-import * as fs from 'fs';
-import * as path from 'path';
 
 // Type for the combined response types
 type BedrockResponse = {
@@ -303,11 +303,15 @@ export const formatPromptLlama2Chat = (messages: LlamaMessage[]): string => {
 
   for (let i = 0; i < messages.length; i++) {
     const message = messages[i];
-    const contentStr = typeof message.content === 'string' 
-      ? message.content.trim() 
-      : (Array.isArray(message.content) 
-          ? message.content.map(c => (typeof c === 'string' ? c : (c.text || ''))).join('\n').trim()
-          : String(message.content).trim());
+    const contentStr =
+      typeof message.content === 'string'
+        ? message.content.trim()
+        : Array.isArray(message.content)
+          ? message.content
+              .map((c) => (typeof c === 'string' ? c : c.text || ''))
+              .join('\n')
+              .trim()
+          : String(message.content).trim();
 
     switch (message.role) {
       case 'system':
@@ -344,21 +348,26 @@ export const formatPromptLlama2Chat = (messages: LlamaMessage[]): string => {
 export const formatPromptLlama3Instruct = (messages: LlamaMessage[]): string => {
   // Check if any message has multimodal content
   const hasMultimodalContent = messages.some(
-    (message) => Array.isArray(message.content) && message.content.length > 0
+    (message) => Array.isArray(message.content) && message.content.length > 0,
   );
 
   // For multimodal content (Converse API), return structured message format
   if (hasMultimodalContent) {
     // Prepare messages for the Converse API format
-    const converseMessages = messages.map(message => {
+    const converseMessages = messages.map((message) => {
       return {
         role: message.role,
-        content: Array.isArray(message.content) 
-          ? message.content 
-          : [{ text: typeof message.content === 'string' ? message.content : String(message.content) }]
+        content: Array.isArray(message.content)
+          ? message.content
+          : [
+              {
+                text:
+                  typeof message.content === 'string' ? message.content : String(message.content),
+              },
+            ],
       };
     });
-    
+
     return JSON.stringify(converseMessages);
   }
 
@@ -370,16 +379,16 @@ export const formatPromptLlama3Instruct = (messages: LlamaMessage[]): string => 
       <|start_header_id|>${message.role}<|end_header_id|>
 
       `;
-      
+
     // Handle text content safely
     if (typeof message.content === 'string') {
       formattedPrompt += `${message.content.trim()}<|eot_id|>`;
     } else if (Array.isArray(message.content)) {
       // Handle array content (should be text items in this branch)
       const textContent = message.content
-        .filter(item => typeof item.text === 'string')
-        .map(item => item.text)
-        .join("\n");
+        .filter((item) => typeof item.text === 'string')
+        .map((item) => item.text)
+        .join('\n');
       formattedPrompt += `${textContent}<|eot_id|>`;
     } else {
       // Fallback for unexpected content type
@@ -420,11 +429,12 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
         const parsed = JSON.parse(prompt);
         if (Array.isArray(parsed)) {
           messages = parsed;
-          
+
           // Detect if any message has multimodal content
           hasMultimodalContent = messages.some(
-            (message) => Array.isArray(message.content) && 
-              message.content.some((item: any) => item.image || item.type === 'image')
+            (message) =>
+              Array.isArray(message.content) &&
+              message.content.some((item: any) => item.image || item.type === 'image'),
           );
         } else {
           // Not a message array, use default parsing
@@ -437,15 +447,18 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
       }
 
       // If this is a Llama 3.2+ model and has multimodal content, prepare for converse API
-      if ((version === LlamaVersion.V3_2 || version === LlamaVersion.V3_3) && hasMultimodalContent) {
+      if (
+        (version === LlamaVersion.V3_2 || version === LlamaVersion.V3_3) &&
+        hasMultimodalContent
+      ) {
         logger.debug('Preparing multimodal content for Converse API');
-        
+
         // Format messages for the converse API - ensure text content is in the expected format
         const converseMessages = messages.map((message: any) => {
           if (typeof message.content === 'string') {
             return {
               role: message.role,
-              content: [{ text: message.content }]
+              content: [{ text: message.content }],
             };
           } else if (Array.isArray(message.content)) {
             // Format content items properly for the API
@@ -455,52 +468,65 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
                 if (typeof item === 'string') {
                   return { text: item };
                 }
-                
+
                 // Process image items for converse API
                 if (item.image) {
                   // Handle image source properly
                   if (item.image.source?.type === 'localFile' && item.image.source?.path) {
                     // First try from the current working directory
                     let imagePath = path.resolve(process.cwd(), item.image.source.path);
-                    
+
                     // Check if file exists, if not try from the config directory
                     if (!fs.existsSync(imagePath)) {
                       const configPath = process.env.PROMPTFOO_CONFIG_PATH || '';
                       const configDir = path.dirname(configPath);
                       imagePath = path.resolve(configDir, item.image.source.path);
-                      
+
                       // If still not found, try from a few other possible locations
                       if (!fs.existsSync(imagePath)) {
                         // Try just the relative path from examples dir
-                        imagePath = path.resolve(process.cwd(), 'examples/amazon-bedrock-multimodal', item.image.source.path);
-                        
+                        imagePath = path.resolve(
+                          process.cwd(),
+                          'examples/amazon-bedrock-multimodal',
+                          item.image.source.path,
+                        );
+
                         if (!fs.existsSync(imagePath)) {
-                          throw new Error(`Image file not found: ${item.image.source.path}. Tried paths: ${[
-                            path.resolve(process.cwd(), item.image.source.path),
-                            path.resolve(configDir, item.image.source.path),
-                            path.resolve(process.cwd(), 'examples/amazon-bedrock-multimodal', item.image.source.path)
-                          ].join(', ')}`);
+                          throw new Error(
+                            `Image file not found: ${item.image.source.path}. Tried paths: ${[
+                              path.resolve(process.cwd(), item.image.source.path),
+                              path.resolve(configDir, item.image.source.path),
+                              path.resolve(
+                                process.cwd(),
+                                'examples/amazon-bedrock-multimodal',
+                                item.image.source.path,
+                              ),
+                            ].join(', ')}`,
+                          );
                         }
                       }
                     }
-                    
+
                     logger.debug(`Loading image from ${imagePath}`);
                     try {
                       const imageBytes = fs.readFileSync(imagePath);
-                      
+
                       // Get format from file extension
                       const ext = path.extname(imagePath).toLowerCase().substring(1);
-                      const format = ext === 'jpg' ? 'jpeg' : (
-                        ['jpeg', 'png', 'gif', 'webp'].includes(ext) ? ext : 'jpeg'
-                      );
-                      
+                      const format =
+                        ext === 'jpg'
+                          ? 'jpeg'
+                          : ['jpeg', 'png', 'gif', 'webp'].includes(ext)
+                            ? ext
+                            : 'jpeg';
+
                       return {
                         image: {
                           format,
                           source: {
-                            bytes: imageBytes
-                          }
-                        }
+                            bytes: imageBytes,
+                          },
+                        },
                       };
                     } catch (err) {
                       logger.error(`Error loading image: ${err}`);
@@ -511,22 +537,22 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
                     return item;
                   }
                 }
-                
+
                 return item;
-              })
+              }),
             };
           }
-          
+
           return message;
         });
-        
+
         const inferenceConfig: any = {};
         addConfigParam(
           inferenceConfig,
           'maxTokens',
           config?.max_new_tokens || config?.max_gen_len,
           getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
-          2048
+          2048,
         );
         addConfigParam(
           inferenceConfig,
@@ -535,19 +561,13 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
           getEnvFloat('AWS_BEDROCK_TEMPERATURE'),
           0,
         );
-        addConfigParam(
-          inferenceConfig,
-          'topP',
-          config?.top_p,
-          getEnvFloat('AWS_BEDROCK_TOP_P'),
-          1,
-        );
-        
+        addConfigParam(inferenceConfig, 'topP', config?.top_p, getEnvFloat('AWS_BEDROCK_TOP_P'), 1);
+
         // Return special object to signal that we need to use the converse API
         return {
           __useConverseApi: true,
           messages: converseMessages,
-          inferenceConfig
+          inferenceConfig,
         };
       }
 
@@ -595,7 +615,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
           return content[0].text;
         }
       }
-      
+
       // Handle standard response format
       return responseJson?.generation;
     },
@@ -1630,7 +1650,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       // Check if we need to use the Converse API for multimodal content
       if (params?.__useConverseApi) {
         logger.debug('Using Converse API for multimodal content');
-        
+
         // Extract params for the converse API
         const converseParams = {
           modelId: this.modelName,
@@ -1642,11 +1662,11 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
           ...(this.config.guardrailVersion
             ? { guardrailVersion: String(this.config.guardrailVersion) }
             : {}),
-          ...(this.config.trace ? { trace: this.config.trace } : {})
+          ...(this.config.trace ? { trace: this.config.trace } : {}),
         };
-        
+
         logger.debug(`Converse API params: ${JSON.stringify(converseParams)}`);
-        
+
         // Call the converse API method
         response = await bedrockInstance.converse(converseParams);
       } else {
@@ -1672,28 +1692,34 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
     }
 
     // Safe response handling with type guards
-    const responseLog = params?.__useConverseApi 
+    const responseLog = params?.__useConverseApi
       ? JSON.stringify(response)
-      : response.body ? response.body.transformToString() : JSON.stringify(response);
-    
+      : response.body
+        ? response.body.transformToString()
+        : JSON.stringify(response);
+
     logger.debug(`Amazon Bedrock API response: ${responseLog}`);
-    
+
     if (isCacheEnabled()) {
       try {
-        const cacheContent = params?.__useConverseApi 
+        const cacheContent = params?.__useConverseApi
           ? JSON.stringify(response)
-          : response.body ? new TextDecoder().decode(response.body) : JSON.stringify(response);
-        
+          : response.body
+            ? new TextDecoder().decode(response.body)
+            : JSON.stringify(response);
+
         await cache.set(cacheKey, cacheContent);
       } catch (err) {
         logger.error(`Failed to cache response: ${String(err)}`);
       }
     }
-    
+
     try {
-      const output = params?.__useConverseApi 
+      const output = params?.__useConverseApi
         ? response
-        : response.body ? JSON.parse(new TextDecoder().decode(response.body)) : response;
+        : response.body
+          ? JSON.parse(new TextDecoder().decode(response.body))
+          : response;
 
       let tokenUsage: Partial<TokenUsage> = {};
       if (model.tokenUsage) {

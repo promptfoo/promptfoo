@@ -1,0 +1,18 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "text": "{{question}}"
+      },
+      {
+        "image": {
+          "source": {
+            "type": "localFile",
+            "path": "{{image_path}}"
+          }
+        }
+      }
+    ]
+  }
+] 

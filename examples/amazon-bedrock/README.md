@@ -64,7 +64,7 @@ The Nova multimodal example (`promptfooconfig.nova.multimodal.yaml`) demonstrate
 The Llama 3.2 multimodal example (`promptfooconfig.llama3.2.multimodal.yaml`) showcases Meta's Llama 3.2 vision capabilities. This example includes various vision tasks such as:
 
 - Image captioning
-- Visual question answering 
+- Visual question answering
 - Entity extraction from images
 
 To use this example, ensure you have the US West (Oregon) region enabled for Llama 3.2 models.
