@@ -283,7 +283,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <Container>
+    <Container maxWidth="xl">
       <Stack spacing={4} pb={8} pt={2}>
         <Card className="report-header" sx={{ position: 'relative' }}>
           <Box sx={{ position: 'absolute', top: 8, right: 8, display: 'flex' }}>
