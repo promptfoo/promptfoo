@@ -206,7 +206,7 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
             <TableRow>
               <TableCell>Type</TableCell>
               <TableCell>Description</TableCell>
-              <TableCell>
+              <TableCell style={{ minWidth: '200px' }}>
                 <TableSortLabel
                   active={orderBy === 'attackSuccessRate'}
                   direction={orderBy === 'attackSuccessRate' ? order : 'asc'}
@@ -231,10 +231,10 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
             {subCategoryStats
               .sort((a, b) => {
                 if (orderBy === 'attackSuccessRate') {
-                  if (a.passRate === 'N/A') {
+                  if (a.attackSuccessRate === 'N/A') {
                     return 1;
                   }
-                  if (b.passRate === 'N/A') {
+                  if (b.attackSuccessRate === 'N/A') {
                     return -1;
                   }
                   return order === 'asc'
@@ -243,10 +243,10 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
                     : Number.parseFloat(b.attackSuccessRate) -
                         Number.parseFloat(a.attackSuccessRate);
                 } else if (orderBy === 'severity') {
-                  if (a.passRate === 'N/A') {
+                  if (a.attackSuccessRate === 'N/A') {
                     return 1;
                   }
-                  if (b.passRate === 'N/A') {
+                  if (b.attackSuccessRate === 'N/A') {
                     return -1;
                   }
                   const severityOrder = {
@@ -267,7 +267,10 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
                     [Severity.Low]: 1,
                   };
                   if (a.severity === b.severity) {
-                    return Number.parseFloat(b.passRate) - Number.parseFloat(a.passRate);
+                    return (
+                      Number.parseFloat(b.attackSuccessRate) -
+                      Number.parseFloat(a.attackSuccessRate)
+                    );
                   } else {
                     return severityOrder[b.severity] - severityOrder[a.severity];
                   }
@@ -279,11 +282,11 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
                 if (subCategory.attackSuccessRate !== 'N/A') {
                   const passRate = Number.parseFloat(subCategory.attackSuccessRate);
                   if (passRate >= 75) {
-                    passRateClass = 'pass-low';
+                    passRateClass = 'asr-high';
                   } else if (passRate >= 50) {
-                    passRateClass = 'pass-medium';
+                    passRateClass = 'asr-medium';
                   } else {
-                    passRateClass = 'pass-high';
+                    passRateClass = 'asr-low';
                   }
                 }
                 return (
