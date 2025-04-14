@@ -278,7 +278,7 @@ function EvalOutputCell({
   const [linked, setLinked] = React.useState(false);
   const handleRowShareLink = React.useCallback(() => {
     const url = new URL(window.location.href);
-    url.searchParams.set('row-id', String(rowIndex + 1));
+    url.searchParams.set('rowId', String(rowIndex + 1));
 
     navigator.clipboard
       .writeText(url.toString())

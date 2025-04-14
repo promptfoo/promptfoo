@@ -804,15 +804,15 @@ function ResultsTable({
 
   const clearRowIdFromUrl = React.useCallback(() => {
     const url = new URL(window.location.href);
-    if (url.searchParams.has('row-id')) {
-      url.searchParams.delete('row-id');
+    if (url.searchParams.has('rowId')) {
+      url.searchParams.delete('rowId');
       window.history.replaceState({}, '', url);
     }
   }, []);
 
   useEffect(() => {
     const params = parseQueryParams(window.location.search);
-    const rowId = params['row-id'];
+    const rowId = params['rowId'];
 
     if (rowId) {
       const parsedRowId = Number(rowId);

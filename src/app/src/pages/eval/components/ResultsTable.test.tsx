@@ -369,7 +369,7 @@ describe('ResultsTable Metadata Search', () => {
 
 describe('ResultsTable Row Navigation', () => {
   it('clears row-id URL parameter when changing pages', () => {
-    const mockURL = new URL('http://localhost/?row-id=3');
+    const mockURL = new URL('http://localhost/?rowId=3');
 
     const mockReplaceState = vi.fn();
     const originalHistory = window.history;
@@ -381,8 +381,8 @@ describe('ResultsTable Row Navigation', () => {
 
     const clearRowIdFromUrl = () => {
       const url = new URL(mockURL);
-      if (url.searchParams.has('row-id')) {
-        url.searchParams.delete('row-id');
+      if (url.searchParams.has('rowId')) {
+        url.searchParams.delete('rowId');
         window.history.replaceState({}, '', url);
       }
     };

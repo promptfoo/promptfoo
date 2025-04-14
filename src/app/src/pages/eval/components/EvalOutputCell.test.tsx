@@ -331,7 +331,7 @@ describe('EvalOutputCell', () => {
 
     const originalURL = global.URL;
     const mockUrl = {
-      toString: vi.fn().mockReturnValue('https://example.com/?row-id=1'),
+      toString: vi.fn().mockReturnValue('https://example.com/?rowId=1'),
       searchParams: {
         set: vi.fn(),
       },
@@ -345,7 +345,7 @@ describe('EvalOutputCell', () => {
 
     await userEvent.click(shareButton);
 
-    expect(mockUrl.searchParams.set).toHaveBeenCalledWith('row-id', '1');
+    expect(mockUrl.searchParams.set).toHaveBeenCalledWith('rowId', '1');
 
     expect(mockClipboard.writeText).toHaveBeenCalled();
 
@@ -369,7 +369,7 @@ describe('EvalOutputCell', () => {
     });
 
     const mockUrl = {
-      toString: vi.fn().mockReturnValue('https://example.com/?row-id=1'),
+      toString: vi.fn().mockReturnValue('https://example.com/?rowId=1'),
       searchParams: {
         set: vi.fn(),
       },
