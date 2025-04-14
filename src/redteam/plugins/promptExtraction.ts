@@ -24,13 +24,13 @@ const DEFAULT_EXAMPLES = dedent`
 export class PromptExtractionPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
 
-  private systemPrompt: string;
+  private systemPrompt: string | undefined;
 
   constructor(
     provider: ApiProvider,
     purpose: string,
     injectVar: string,
-    config: { systemPrompt: string },
+    config: { systemPrompt?: string },
   ) {
     super(provider, purpose, injectVar);
     this.systemPrompt = config.systemPrompt;
