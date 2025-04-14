@@ -64,8 +64,7 @@
     "test:watch": "jest --watch",
     "test:redteam:integration": "npm run build && ./test/redteam/integration/test.sh",
     "test": "jest",
-    "tsc": "tsc",
-    "safe-update": "npm install --legacy-peer-deps @apidevtools/json-schema-ref-parser@^12.0.1 @aws-sdk/client-bedrock-runtime@^3.787.0 @aws-sdk/credential-provider-sso@^3.787.0 @eslint/js@^9.24.0 @swc/core@^1.11.21 @types/better-sqlite3@^7.6.13 @types/pdf-parse@^1.1.5 @types/ws@^8.18.1 @typescript-eslint/eslint-plugin@^8.29.1 @typescript-eslint/parser@^8.29.1 dotenv@^16.5.0 drizzle-kit@^0.30.6 eslint@^9.24.0 mathjs@^14.4.0 nock@^14.0.3 openai@^4.93.0 typescript@^5.8.3 typescript-eslint@^8.29.1 undici@^7.8.0 uuid@^11.1.0"
+    "tsc": "tsc"
   },
   "overrides": {
     "uri-js": "npm:uri-js-replace",
