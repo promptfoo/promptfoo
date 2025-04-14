@@ -4,7 +4,7 @@ prompts:
   - file://prompt.image.json
 
 providers:
-  - id: openai:responses:gpt-4.1-2025-04-14
+  - id: openai:responses:gpt-4.1-mini
     config:
       temperature: 0.7
       max_output_tokens: 300

@@ -129,29 +129,41 @@ interface OpenAiConfig {
 
 ### GPT-4.1
 
-GPT-4.1 is OpenAI's flagship model for complex tasks with the following specifications:
+GPT-4.1 is OpenAI's flagship model for complex tasks with a 1,047,576 token context window and 32,768 max output tokens. Available in three variants with different price points:
 
-- 1,047,576 token context window
-- 32,768 max output tokens
-- May 31, 2024 knowledge cutoff
-- Supports text and image input, text output
-- Pricing: $2.00 per 1M input tokens, $8.00 per 1M output tokens
+| Model        | Description                                  | Input Price         | Output Price        |
+| ------------ | -------------------------------------------- | ------------------- | ------------------- |
+| GPT-4.1      | Flagship model for complex tasks             | $2.00 per 1M tokens | $8.00 per 1M tokens |
+| GPT-4.1 Mini | More affordable, strong general capabilities | $0.40 per 1M tokens | $1.60 per 1M tokens |
+| GPT-4.1 Nano | Most economical, good for high-volume tasks  | $0.10 per 1M tokens | $0.40 per 1M tokens |
 
-To use GPT-4.1, specify `openai:chat:gpt-4.1` or `openai:responses:gpt-4.1` as the provider ID:
+All variants support text and image input with text output and have a May 31, 2024 knowledge cutoff.
 
-```yaml title="promptfooconfig.yaml"
-providers:
-  - id: openai:chat:gpt-4.1
-    config:
-      temperature: 0.7
-      max_tokens: 1024
-```
+#### Usage Examples
 
-You can also use the specific version with a snapshot date:
+Standard model:
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-4.1-2025-04-14
+  - id: openai:chat:gpt-4.1 # or openai:responses:gpt-4.1
+    config:
+      temperature: 0.7
+```
+
+More affordable variants:
+
+```yaml
+providers:
+  - id: openai:chat:gpt-4.1-mini # or -nano variant
+```
+
+Specific snapshot versions are also available:
+
+```yaml
+providers:
+  - id: openai:chat:gpt-4.1-2025-04-14 # Standard
+  - id: openai:chat:gpt-4.1-mini-2025-04-14 # Mini
+  - id: openai:chat:gpt-4.1-nano-2025-04-14 # Nano
 ```
 
 ### Reasoning Models (o1, o3-mini)
