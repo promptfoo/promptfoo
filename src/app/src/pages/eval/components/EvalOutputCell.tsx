@@ -282,7 +282,6 @@ function EvalOutputCell({
     navigator.clipboard
       .writeText(url.toString())
       .then(() => {
-        // Show checkmark for 3 seconds then reset
         setLinked(true);
         setTimeout(() => setLinked(false), 3000);
       })

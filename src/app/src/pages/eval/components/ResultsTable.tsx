@@ -800,7 +800,6 @@ function ResultsTable({
   const { isCollapsed } = useScrollHandler();
   const { stickyHeader, setStickyHeader } = useResultsViewStore();
 
-  // Helper function to clear row-id from URL
   const clearRowIdFromUrl = React.useCallback(() => {
     const url = new URL(window.location.href);
     if (url.searchParams.has('row-id')) {
@@ -809,44 +808,36 @@ function ResultsTable({
     }
   }, []);
 
-  // Handle row link navigation
   useEffect(() => {
     const params = parseQueryParams(window.location.search);
     const rowId = params['row-id'];
 
     if (rowId) {
-      // Convert from 1-based (user-friendly) to 0-based (internal) with validation
       const parsedRowId = Number(rowId);
-      // Ensure rowIndex is valid, non-negative, and exists in the dataset
       const rowIndex = Math.max(0, Math.min(parsedRowId - 1, filteredBody.length - 1));
 
       let hasScrolled = false;
 
-      // Calculate the page number where the row is located
       const rowPageIndex = Math.floor(rowIndex / pagination.pageSize);
 
-      // Make sure the pageIndex doesn't exceed the total number of pages
       const maxPageIndex = reactTable.getPageCount() - 1;
       const safeRowPageIndex = Math.min(rowPageIndex, maxPageIndex);
 
-      // If the current page isn't the correct page, set the pagination
       if (pagination.pageIndex !== safeRowPageIndex) {
         setPagination((prev) => ({ ...prev, pageIndex: safeRowPageIndex }));
       }
 
-      // Wait for the correct page to load and scroll to the correct row
       const scrollToRow = () => {
         if (hasScrolled) {
           return;
         }
 
-        const localRowIndex = rowIndex % pagination.pageSize; // Calculate the local row index on the page
+        const localRowIndex = rowIndex % pagination.pageSize;
         const rowElement = document.querySelector(`#row-${localRowIndex}`);
 
         if (rowElement) {
           hasScrolled = true;
 
-          // Use requestAnimationFrame to ensure DOM is fully rendered
           requestAnimationFrame(() => {
             rowElement.scrollIntoView({
               behavior: 'smooth',
@@ -856,11 +847,9 @@ function ResultsTable({
         }
       };
 
-      // Get a more specific container to observe for better performance
       const tableContainer =
         document.querySelector('.results-table')?.parentElement || document.body;
 
-      // Observe DOM changes and trigger scrolling once the page is ready
       const observer = new MutationObserver(() => {
         if (hasScrolled) {
           observer.disconnect();
@@ -871,7 +860,7 @@ function ResultsTable({
         const rowElement = document.querySelector(`#row-${localRowIndex}`);
         if (rowElement) {
           scrollToRow();
-          observer.disconnect(); // Disconnect the observer once scrolling is done
+          observer.disconnect();
         }
       });
 
@@ -880,7 +869,6 @@ function ResultsTable({
         subtree: true,
       });
 
-      // Add a fallback timeout to disconnect the observer if the row is never found
       const timeoutId = setTimeout(() => {
         if (!hasScrolled) {
           console.warn('Timeout reached while waiting for row to be rendered');
@@ -888,7 +876,6 @@ function ResultsTable({
         }
       }, 5000);
 
-      // Cleanup the observer when the component unmounts
       return () => {
         observer.disconnect();
         clearTimeout(timeoutId);

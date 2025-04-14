@@ -359,14 +359,9 @@ describe('ResultsTable Metadata Search', () => {
 });
 
 describe('ResultsTable Row Navigation', () => {
-  // Remove unused variables
   it('clears row-id URL parameter when changing pages', () => {
-    // This is a simplified test that just checks the clearRowIdFromUrl function
-
-    // Mock window.location and history
     const mockURL = new URL('http://localhost/?row-id=3');
 
-    // Create a spy for replaceState
     const mockReplaceState = vi.fn();
     const originalHistory = window.history;
     Object.defineProperty(window, 'history', {
@@ -375,7 +370,6 @@ describe('ResultsTable Row Navigation', () => {
       writable: true,
     });
 
-    // Create a standalone version of clearRowIdFromUrl
     const clearRowIdFromUrl = () => {
       const url = new URL(mockURL);
       if (url.searchParams.has('row-id')) {
@@ -384,13 +378,10 @@ describe('ResultsTable Row Navigation', () => {
       }
     };
 
-    // Call the function
     clearRowIdFromUrl();
 
-    // Verify replaceState was called, indicating the URL was updated
     expect(mockReplaceState).toHaveBeenCalled();
 
-    // Clean up
     Object.defineProperty(window, 'history', {
       value: originalHistory,
       configurable: true,
