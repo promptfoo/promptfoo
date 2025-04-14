@@ -14,15 +14,15 @@ export OPENAI_API_KEY=your_api_key_here
 
 The OpenAI provider supports the following model formats:
 
-- `openai:chat` - defaults to `gpt-4o-mini`
-- `openai:chat:gpt-4.1` - uses the GPT-4.1 model
-- `openai:completion` - defaults to `text-davinci-003`
-- `openai:<model name>` - uses a specific model name (mapped automatically to chat or completion endpoint)
 - `openai:chat:<model name>` - uses any model name against the `/v1/chat/completions` endpoint
+- `openai:responses:<model name>` - uses responses API models over HTTP connections
+- `openai:assistant:<assistant id>` - use an assistant
+- `openai:<model name>` - uses a specific model name (mapped automatically to chat or completion endpoint)
+- `openai:chat` - defaults to `gpt-4o-mini`
 - `openai:chat:ft:gpt-4o-mini:company-name:ID` - example of a fine-tuned chat completion model
+- `openai:completion` - defaults to `text-davinci-003`
 - `openai:completion:<model name>` - uses any model name against the `/v1/completions` endpoint
 - `openai:embeddings:<model name>` - uses any model name against the `/v1/embeddings` endpoint
-- `openai:assistant:<assistant id>` - use an assistant
 - `openai:realtime:<model name>` - uses realtime API models over WebSocket connections
 
 The `openai:<endpoint>:<model name>` construction is useful if OpenAI releases a new model,
