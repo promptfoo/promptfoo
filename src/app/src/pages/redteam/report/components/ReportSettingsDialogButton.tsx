@@ -44,17 +44,6 @@ const ReportSettingsDialogButton: React.FC = () => {
             <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
               <input
                 type="checkbox"
-                checked={showComplianceSection}
-                onChange={(e) => setShowComplianceSection(e.target.checked)}
-                style={{ marginRight: '10px' }}
-              />
-              Show compliance section (NIST, OWASP)
-            </label>
-          </Typography>
-          <Typography component="div" sx={{ padding: '16px 0' }}>
-            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
                 checked={showPercentagesOnRiskCards}
                 onChange={(e) => setShowPercentagesOnRiskCards(e.target.checked)}
                 style={{ marginRight: '10px' }}
