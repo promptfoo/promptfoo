@@ -8,6 +8,7 @@ import Eval from '../models/eval';
 import { createShareableUrl, hasEvalBeenShared, isSharingEnabled, getShareableUrl } from '../share';
 import telemetry from '../telemetry';
 import { setupEnv } from '../util';
+import { loadDefaultConfig } from '../util/config/default';
 
 export function notCloudEnabledShareInstructions(): void {
   const cloudUrl = DEFAULT_SHARE_VIEW_BASE_URL;
@@ -87,6 +88,18 @@ export function shareCommand(program: Command) {
             return;
           }
           logger.info(`Sharing latest eval (${eval_.id})`);
+        }
+
+        try {
+          const { defaultConfig: currentConfig } = await loadDefaultConfig();
+          if (currentConfig && currentConfig.sharing) {
+            eval_.config.sharing = currentConfig.sharing;
+            logger.debug(
+              `Applied sharing config from promptfooconfig.yaml: ${JSON.stringify(currentConfig.sharing)}`,
+            );
+          }
+        } catch (err) {
+          logger.debug(`Could not load config: ${err}`);
         }
 
         if (eval_.prompts.length === 0) {
