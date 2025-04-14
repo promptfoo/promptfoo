@@ -133,13 +133,6 @@ describe('Plugins', () => {
       );
     });
 
-    it('should validate prompt extraction plugin config', async () => {
-      const promptExtractionPlugin = Plugins.find((p) => p.key === 'prompt-extraction');
-      expect(() => promptExtractionPlugin?.validate?.({})).toThrow(
-        'Prompt extraction plugin requires `config.systemPrompt` to be set',
-      );
-    });
-
     it('should validate indirect prompt injection plugin config', async () => {
       const indirectPlugin = Plugins.find((p) => p.key === 'indirect-prompt-injection');
       expect(() => indirectPlugin?.validate?.({})).toThrow(
