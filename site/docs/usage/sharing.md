@@ -92,6 +92,30 @@ sharing:
 Self-hosted sharing doesn't require `promptfoo auth login` when these environment variables or config settings are present.
 :::
 
+### Troubleshooting Upload Issues
+
+#### Handling "413 Request Entity Too Large" Errors
+
+When sharing large evaluation results, you may encounter "413 Request Entity Too Large" errors from NGINX or other proxies. This happens when the request payload exceeds the server's configured limit.
+
+You can solve this in two ways:
+
+1. **Reduce chunk size** (client-side):
+
+   ```sh
+   # Reduce the number of results per upload chunk (default is calculated automatically)
+   # Start with a small value like 10-20 for very large evals
+   export PROMPTFOO_SHARE_CHUNK_SIZE=10
+   ```
+
+2. **Increase NGINX max body size** (server-side):
+   ```nginx
+   # In your nginx.conf or site config
+   client_max_body_size 20M; # Adjust as needed
+   ```
+
+For multi-tenant environments, reducing the chunk size on the client is usually safer than increasing server limits.
+
 ## Disabling Sharing
 
 To disable sharing completely:
