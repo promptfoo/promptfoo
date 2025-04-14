@@ -31,6 +31,10 @@ The end result is a comprehensive report card that enumerates the OWASP Top 10 v
 
 ![Promptfoo OWASP LLM Top 10](/img/docs/compliance.png)
 
+To set up the scan through the Promptfoo UI, select the OWASP LLM Top 10 option in the list of presets on the Plugins page.
+
+![Promptfoo OWASP LLM Top 10 configuration](/img/docs/owasp-selection.png)
+
 ## 1. Prompt Injection (LLM01)
 
 OWASP defines two types of prompt injection vulnerabilities:
