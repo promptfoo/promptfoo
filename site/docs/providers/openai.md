@@ -15,6 +15,7 @@ export OPENAI_API_KEY=your_api_key_here
 The OpenAI provider supports the following model formats:
 
 - `openai:chat` - defaults to `gpt-4o-mini`
+- `openai:chat:gpt-4.1` - uses the GPT-4.1 model
 - `openai:completion` - defaults to `text-davinci-003`
 - `openai:<model name>` - uses a specific model name (mapped automatically to chat or completion endpoint)
 - `openai:chat:<model name>` - uses any model name against the `/v1/chat/completions` endpoint
@@ -125,6 +126,33 @@ interface OpenAiConfig {
 ```
 
 ## Models
+
+### GPT-4.1
+
+GPT-4.1 is OpenAI's flagship model for complex tasks with the following specifications:
+
+- 1,047,576 token context window
+- 32,768 max output tokens
+- May 31, 2024 knowledge cutoff
+- Supports text and image input, text output
+- Pricing: $2.00 per 1M input tokens, $8.00 per 1M output tokens
+
+To use GPT-4.1, specify `openai:chat:gpt-4.1` or `openai:responses:gpt-4.1` as the provider ID:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:chat:gpt-4.1
+    config:
+      temperature: 0.7
+      max_tokens: 1024
+```
+
+You can also use the specific version with a snapshot date:
+
+```yaml
+providers:
+  - id: openai:chat:gpt-4.1-2025-04-14
+```
 
 ### Reasoning Models (o1, o3-mini)
 
