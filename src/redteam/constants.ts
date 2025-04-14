@@ -210,7 +210,7 @@ export const OWASP_LLM_TOP_10_NAMES = [
   'System Prompt Leakage',
   'Insecure Plugin Design',
   'Overreliance',
-  'Training Data Poisoning'
+  'Training Data Poisoning',
 ];
 
 export const OWASP_API_TOP_10_NAMES = [
@@ -223,7 +223,7 @@ export const OWASP_API_TOP_10_NAMES = [
   'Server Side Request Forgery',
   'Security Misconfiguration',
   'Improper Inventory Management',
-  'Unsafe Consumption of APIs'
+  'Unsafe Consumption of APIs',
 ];
 
 export const OWASP_LLM_TOP_10_MAPPING: Record<
